@@ -33,6 +33,25 @@ describe("Today dashboard components", () => {
     expect(screen.getByText("1 overdue")).toBeVisible();
   });
 
+  it("does not call a same-Chicago-day follow-up overdue after stored noon", () => {
+    render(
+      <FollowUpList
+        followUps={[
+          {
+            ...followUps[0]!,
+            id: "due-today",
+            bookingName: "Due Today Fair",
+            dueAt: new Date("2026-08-03T17:00:00Z"),
+          },
+        ]}
+        now={new Date("2026-08-03T23:30:00Z")}
+      />,
+    );
+
+    expect(screen.getByText("0 overdue")).toBeVisible();
+    expect(screen.getByText("Due Aug 3, 2026")).toBeVisible();
+  });
+
   it("renders all four command-center summary counts", () => {
     render(
       <SummaryCards

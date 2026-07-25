@@ -15,6 +15,13 @@ if [[ -z "${BACKUP_ENCRYPTION_PASSPHRASE:-}" ]]; then
   printf 'BACKUP_ENCRYPTION_PASSPHRASE must be set.\n' >&2
   exit 64
 fi
+required_restore_confirmation="I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE"
+if [[ "${CONFIRM_DISPOSABLE_DATABASE_RESTORE:-}" != "$required_restore_confirmation" ]]; then
+  printf \
+    'Restore refused. Set CONFIRM_DISPOSABLE_DATABASE_RESTORE exactly to %s for this disposable database restore.\n' \
+    "$required_restore_confirmation" >&2
+  exit 64
+fi
 if [[ ! -f "$1" || -L "$1" ]]; then
   printf 'Backup path must name an existing, non-symlink regular file.\n' >&2
   exit 66

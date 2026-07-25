@@ -50,7 +50,11 @@ import operations log.
 
 If the Apply request fails, do not upload the file again until you inspect the
 existing run. Apply is transactional: the intended result is all approved rows
-or none. A run that has already been applied must not be applied again.
+or none. A run that has already been applied must not be applied again. The
+application locks matched contacts and claims each Act! record ID uniquely
+during Apply. If another preview wins either race, the losing run remains
+unapplied and reports deterministic conflict rows; review and preview fresh
+data instead of forcing those rows.
 
 ## Stop and investigate when
 

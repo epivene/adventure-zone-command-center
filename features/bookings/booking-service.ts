@@ -12,6 +12,7 @@ export type { Booking, BookingRepository, BookingTransaction, FollowUp };
 
 export type DomainError =
   | { code: "FOLLOW_UP_NOT_FOUND" }
+  | { code: "ALREADY_COMPLETED" }
   | { code: "NEXT_ACTION_REQUIRED" };
 
 export type CompleteFollowUpInput = {
@@ -86,6 +87,12 @@ export class BookingService {
         input.followUpId,
       );
       if (!context) return err({ code: "FOLLOW_UP_NOT_FOUND" });
+      if (
+        context.followUp.completedAt !== null ||
+        context.followUp.nextFollowUpId !== null
+      ) {
+        return err({ code: "ALREADY_COMPLETED" });
+      }
 
       const resultingStatus = input.status ?? context.booking.status;
       if (
@@ -135,7 +142,7 @@ export class BookingService {
         entityId: completed.id,
         action: "completed",
         before: {
-          completedAt: context.followUp.completedAt?.toISOString() ?? null,
+          completedAt: null,
           outcome: context.followUp.outcome,
           nextFollowUpId: context.followUp.nextFollowUpId,
         },

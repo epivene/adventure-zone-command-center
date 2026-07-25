@@ -86,8 +86,15 @@ class SelectBuilder implements PromiseLike<unknown[]> {
   }
 
   private rows() {
-    if (this.joined || this.selection) {
+    if (this.joined) {
       return [{ booking: bookingRow, followUp: followUpRow }];
+    }
+    if (this.source === followUps) {
+      return this.database.openFollowUps.map((followUp) =>
+        this.selection
+          ? { dueAt: followUp.dueAt, completedAt: followUp.completedAt }
+          : followUp,
+      );
     }
     return [bookingRow];
   }
@@ -96,6 +103,8 @@ class SelectBuilder implements PromiseLike<unknown[]> {
 class RecordingDrizzleDatabase {
   readonly locks: { source: unknown; strength: string }[] = [];
   readonly audits: Record<string, unknown>[] = [];
+  readonly bookingUpdates: Record<string, unknown>[] = [];
+  openFollowUps: FollowUpRow[] = [followUpRow];
 
   select(selection?: unknown) {
     return new SelectBuilder(this, selection);
@@ -103,12 +112,15 @@ class RecordingDrizzleDatabase {
 
   update(table: unknown) {
     return {
-      set: (values: Record<string, unknown>) => ({
-        where: () => ({
-          returning: async () =>
-            table === bookings ? [{ ...bookingRow, ...values }] : [],
-        }),
-      }),
+      set: (values: Record<string, unknown>) => {
+        if (table === bookings) this.bookingUpdates.push(values);
+        return {
+          where: () => ({
+            returning: async () =>
+              table === bookings ? [{ ...bookingRow, ...values }] : [],
+          }),
+        };
+      },
     };
   }
 
@@ -139,16 +151,87 @@ describe("DrizzleBookingRepository audit snapshots", () => {
   it("locks a booking before capturing its edit snapshot", async () => {
     const database = new RecordingDrizzleDatabase();
 
-    await repository(database).updateBookingDetails(bookingRow.id, {
-      name: "Updated adventure",
-      city: "Austin",
-      region: "TX",
-      probability: "likely",
-    });
+    await repository(database).updateBookingDetails(
+      bookingRow.id,
+      {
+        name: "Updated adventure",
+        venueName: "River Grounds",
+        address1: "10 Main St",
+        city: "Austin",
+        region: "TX",
+        postalCode: "78701",
+        latitude: 30.2672,
+        longitude: -97.7431,
+        startsAt: new Date("2026-08-10T17:00:00.000Z"),
+        endsAt: new Date("2026-08-12T17:00:00.000Z"),
+        status: "confirmed",
+        probability: "likely",
+        travelLegId: null,
+        notes: "Updated logistics",
+      },
+      new Date("2026-07-25T12:00:00.000Z"),
+    );
 
     expect(database.locks).toEqual([
       { source: bookings, strength: "update" },
+      { source: followUps, strength: "share" },
     ]);
+    expect(database.bookingUpdates[0]).toMatchObject({
+      venueName: "River Grounds",
+      latitude: 30.2672,
+      longitude: -97.7431,
+      status: "confirmed",
+      notes: "Updated logistics",
+    });
+    expect(database.audits[0]).toMatchObject({
+      entityType: "booking",
+      action: "update",
+      before: {
+        venueName: null,
+        latitude: null,
+        longitude: null,
+        status: "possible",
+        notes: null,
+      },
+      after: {
+        venueName: "River Grounds",
+        latitude: 30.2672,
+        longitude: -97.7431,
+        status: "confirmed",
+        notes: "Updated logistics",
+      },
+    });
+  });
+
+  it("rejects an active edit before mutation when no future follow-up remains", async () => {
+    const database = new RecordingDrizzleDatabase();
+    database.openFollowUps = [];
+
+    await expect(
+      repository(database).updateBookingDetails(
+        bookingRow.id,
+        {
+          name: bookingRow.name,
+          venueName: null,
+          address1: null,
+          city: bookingRow.city,
+          region: bookingRow.region,
+          postalCode: null,
+          latitude: null,
+          longitude: null,
+          startsAt: null,
+          endsAt: null,
+          status: "possible",
+          probability: "likely",
+          travelLegId: null,
+          notes: null,
+        },
+        new Date("2026-07-25T12:00:00.000Z"),
+      ),
+    ).rejects.toThrow("NEXT_ACTION_REQUIRED");
+
+    expect(database.bookingUpdates).toHaveLength(0);
+    expect(database.audits).toHaveLength(0);
   });
 
   it("loads the follow-up and booking under a transaction row lock", async () => {

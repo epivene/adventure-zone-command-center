@@ -1,4 +1,5 @@
 import {
+  check,
   doublePrecision,
   integer,
   jsonb,
@@ -6,9 +7,11 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 import {
   bookingStatusValues,
@@ -38,14 +41,27 @@ export const contacts = pgTable("contacts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const travelLegs = pgTable("travel_legs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: text("name").notNull(),
-  color: text("color").notNull(),
-  sortOrder: integer("sort_order").notNull().unique(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const travelLegs = pgTable(
+  "travel_legs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    color: text("color").notNull(),
+    sortOrder: integer("sort_order").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "travel_legs_sort_order_between_1_and_4",
+      sql`${table.sortOrder} between 1 and 4`,
+    ),
+  ],
+);
 
 export const bookings = pgTable("bookings", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -107,12 +123,25 @@ export const actImportRuns = pgTable("act_import_runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const actExternalLinks = pgTable("act_external_links", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  entityType: text("entity_type").notNull(),
-  entityId: uuid("entity_id").notNull(),
-  actRecordId: text("act_record_id").notNull(),
-  importRunId: uuid("import_run_id").references(() => actImportRuns.id),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const actExternalLinks = pgTable(
+  "act_external_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    actRecordId: text("act_record_id").notNull(),
+    importRunId: uuid("import_run_id").references(() => actImportRuns.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_external_links_entity_external_id_unique").on(
+      table.entityType,
+      table.actRecordId,
+    ),
+  ],
+);

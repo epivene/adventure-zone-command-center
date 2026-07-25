@@ -1,11 +1,15 @@
 import Link from "next/link";
 
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
+import {
+  BUSINESS_TIME_ZONE,
+  classifyBusinessDueDate,
+} from "@/lib/business-date";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(value);
 }
 
@@ -20,7 +24,10 @@ export function FollowUpList({
   followUps: FollowUpSummary[];
   now: Date;
 }) {
-  const overdueCount = followUps.filter((followUp) => followUp.dueAt < now).length;
+  const overdueCount = followUps.filter(
+    (followUp) =>
+      classifyBusinessDueDate(followUp.dueAt, now) === "overdue",
+  ).length;
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -41,7 +48,8 @@ export function FollowUpList({
       {followUps.length ? (
         <ol className="mt-4 grid gap-3">
           {followUps.map((followUp) => {
-            const overdue = followUp.dueAt < now;
+            const overdue =
+              classifyBusinessDueDate(followUp.dueAt, now) === "overdue";
             return (
               <li
                 className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"

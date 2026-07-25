@@ -15,6 +15,13 @@
       "when": 1785017334647,
       "tag": "0001_audit_undo_link",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785021959735,
+      "tag": "0002_stage_one_final_guards",
+      "breakpoints": true
     }
   ]
 }

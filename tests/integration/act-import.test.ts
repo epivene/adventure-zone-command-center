@@ -35,6 +35,7 @@ class InMemoryActImportRepository implements ActImportRepository {
   public readonly auditEntries: ImportAuditEntry[] = [];
   public transactionCount = 0;
   public failAuditWrite = false;
+  private transactionTail: Promise<void> = Promise.resolve();
   private nextContactNumber = 10;
   private nextOrganizationNumber = 10;
   private nextRunNumber = 1;
@@ -89,39 +90,49 @@ class InMemoryActImportRepository implements ActImportRepository {
     operation: (transaction: ActImportTransaction) => Promise<T>,
   ): Promise<T> {
     this.transactionCount += 1;
-    const contacts = structuredClone(this.contacts);
-    const links = structuredClone(this.externalLinks);
-    const linkRunIds = structuredClone(this.externalLinkRunIds);
-    const audits = structuredClone(this.auditEntries);
-    const runs = structuredClone(this.importRuns);
-    const transaction = new InMemoryActImportTransaction(
-      contacts,
-      links,
-      linkRunIds,
-      audits,
-      runs,
-      () => `contact-${this.nextContactNumber++}`,
-      () => `organization-${this.nextOrganizationNumber++}`,
-      () => this.failAuditWrite,
-    );
+    const previous = this.transactionTail;
+    let release = () => {};
+    this.transactionTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      const contacts = structuredClone(this.contacts);
+      const links = structuredClone(this.externalLinks);
+      const linkRunIds = structuredClone(this.externalLinkRunIds);
+      const audits = structuredClone(this.auditEntries);
+      const runs = structuredClone(this.importRuns);
+      const transaction = new InMemoryActImportTransaction(
+        contacts,
+        links,
+        linkRunIds,
+        audits,
+        runs,
+        () => `contact-${this.nextContactNumber++}`,
+        () => `organization-${this.nextOrganizationNumber++}`,
+        () => this.failAuditWrite,
+      );
 
-    const result = await operation(transaction);
+      const result = await operation(transaction);
 
-    this.contacts.clear();
-    contacts.forEach((contact, id) => this.contacts.set(id, contact));
-    this.externalLinks.clear();
-    links.forEach((ids, externalId) =>
-      this.externalLinks.set(externalId, ids),
-    );
-    this.externalLinkRunIds.clear();
-    linkRunIds.forEach((runId, externalId) =>
-      this.externalLinkRunIds.set(externalId, runId),
-    );
-    this.auditEntries.length = 0;
-    this.auditEntries.push(...audits);
-    this.importRuns.clear();
-    runs.forEach((run, id) => this.importRuns.set(id, run));
-    return result;
+      this.contacts.clear();
+      contacts.forEach((contact, id) => this.contacts.set(id, contact));
+      this.externalLinks.clear();
+      links.forEach((ids, externalId) =>
+        this.externalLinks.set(externalId, ids),
+      );
+      this.externalLinkRunIds.clear();
+      linkRunIds.forEach((runId, externalId) =>
+        this.externalLinkRunIds.set(externalId, runId),
+      );
+      this.auditEntries.length = 0;
+      this.auditEntries.push(...audits);
+      this.importRuns.clear();
+      runs.forEach((run, id) => this.importRuns.set(id, run));
+      return result;
+    } finally {
+      release();
+    }
   }
 }
 
@@ -159,7 +170,9 @@ class InMemoryActImportTransaction implements ActImportTransaction {
     const current = this.contacts.get(contactId);
     if (!current) throw new Error("Contact disappeared during import.");
     if (JSON.stringify(current) !== JSON.stringify(expected)) {
-      throw new Error("Contact changed after the import preview.");
+      const error = new Error("Contact changed after the import preview.");
+      error.name = "ActImportContactConflictError";
+      throw error;
     }
     const updated = {
       ...current,
@@ -178,12 +191,17 @@ class InMemoryActImportTransaction implements ActImportTransaction {
     importRunId?: string,
   ) {
     const contactIds = this.links.get(externalId) ?? [];
+    if (contactIds.some((id) => id !== contactId)) {
+      return "conflict" as const;
+    }
     if (!contactIds.includes(contactId)) {
       this.links.set(externalId, [...contactIds, contactId]);
+      if (importRunId) {
+        this.externalLinkRunIds.set(externalId, importRunId);
+      }
+      return "linked" as const;
     }
-    if (importRunId) {
-      this.externalLinkRunIds.set(externalId, importRunId);
-    }
+    return "already_owned" as const;
   }
 
   async createAuditEntry(entry: ImportAuditEntry) {
@@ -450,14 +468,108 @@ describe("applyActImport", () => {
       contact("existing", { phone: "newer local phone" }),
     );
 
-    await expect(
-      applyActImport(preview.runId, [preview.rows[0]!.rowId], { repository }),
-    ).rejects.toThrow("Contact changed after the import preview.");
+    const result = await applyActImport(
+      preview.runId,
+      [preview.rows[0]!.rowId],
+      { repository },
+    );
 
+    expect(result.appliedRowIds).toEqual([]);
+    expect(result.failedRows).toEqual([
+      {
+        rowId: preview.rows[0]!.rowId,
+        message: "Contact changed after the import preview.",
+      },
+    ]);
     expect(repository.contacts.get("existing")?.phone).toBe(
       "newer local phone",
     );
     expect(repository.auditEntries).toHaveLength(0);
     expect(repository.importRuns.get(preview.runId)?.status).toBe("previewed");
+  });
+
+  it("returns a deterministic conflict when sequential previews compete for one Act ID", async () => {
+    const repository = new InMemoryActImportRepository();
+    const record = {
+      ...baseRecord,
+      recordId: "ACT-COMPETING",
+      email: "first@example.com",
+    };
+    const firstPreview = await previewActImport([record], { repository });
+    const secondPreview = await previewActImport(
+      [{ ...record, email: "second@example.com" }],
+      { repository },
+    );
+
+    const first = await applyActImport(
+      firstPreview.runId,
+      [firstPreview.rows[0]!.rowId],
+      { repository },
+    );
+    const second = await applyActImport(
+      secondPreview.runId,
+      [secondPreview.rows[0]!.rowId],
+      { repository },
+    );
+
+    expect(first.appliedRowIds).toEqual([firstPreview.rows[0]!.rowId]);
+    expect(second).toMatchObject({
+      appliedRowIds: [],
+      failedRows: [
+        {
+          rowId: secondPreview.rows[0]!.rowId,
+          message: "Act record is already linked to another local contact.",
+        },
+      ],
+    });
+    expect(repository.contacts).toHaveLength(1);
+    expect(repository.externalLinks.get("ACT-COMPETING")).toHaveLength(1);
+    expect(repository.auditEntries).toHaveLength(1);
+    expect(repository.importRuns.get(secondPreview.runId)?.status).toBe(
+      "previewed",
+    );
+  });
+
+  it("serializes concurrent competing imports so only one contact owns the external ID", async () => {
+    const repository = new InMemoryActImportRepository();
+    const firstPreview = await previewActImport(
+      [
+        {
+          ...baseRecord,
+          recordId: "ACT-CONCURRENT",
+          email: "first@example.com",
+        },
+      ],
+      { repository },
+    );
+    const secondPreview = await previewActImport(
+      [
+        {
+          ...baseRecord,
+          recordId: "ACT-CONCURRENT",
+          email: "second@example.com",
+        },
+      ],
+      { repository },
+    );
+
+    const results = await Promise.all([
+      applyActImport(firstPreview.runId, [firstPreview.rows[0]!.rowId], {
+        repository,
+      }),
+      applyActImport(secondPreview.runId, [secondPreview.rows[0]!.rowId], {
+        repository,
+      }),
+    ]);
+
+    expect(results.filter((result) => result.appliedRowIds.length === 1)).toHaveLength(
+      1,
+    );
+    expect(results.filter((result) => result.failedRows.length === 1)).toHaveLength(
+      1,
+    );
+    expect(repository.contacts).toHaveLength(1);
+    expect(repository.externalLinks.get("ACT-CONCURRENT")).toHaveLength(1);
+    expect(repository.auditEntries).toHaveLength(1);
   });
 });

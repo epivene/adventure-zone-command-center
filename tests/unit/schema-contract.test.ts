@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import {
   actExternalLinks,
   actImportRuns,
@@ -53,6 +54,14 @@ describe("database schema contract", () => {
       "id", "entityType", "entityId", "actRecordId", "importRunId", "createdAt", "updatedAt",
     ]));
   });
+
+  it("enforces one contact owner for each Act external identifier", () => {
+    expect(
+      getTableConfig(actExternalLinks).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("act_external_links_entity_external_id_unique");
+  });
 });
 
 describe("travel-leg seed contract", () => {
@@ -63,5 +72,11 @@ describe("travel-leg seed contract", () => {
       { name: "Leg 3", color: "#7B4DDB", sortOrder: 3 },
       { name: "Leg 4", color: "#15956B", sortOrder: 4 },
     ]);
+  });
+
+  it("enforces the fixed four sort-order slots in PostgreSQL", () => {
+    expect(
+      getTableConfig(travelLegs).checks.map((constraint) => constraint.name),
+    ).toContain("travel_legs_sort_order_between_1_and_4");
   });
 });

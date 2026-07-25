@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "act_external_links_entity_external_id_unique" ON "act_external_links" USING btree ("entity_type","act_record_id");--> statement-breakpoint
+ALTER TABLE "travel_legs" ADD CONSTRAINT "travel_legs_sort_order_between_1_and_4" CHECK ("travel_legs"."sort_order" between 1 and 4);

@@ -85,6 +85,27 @@ describe("EventCalendar", () => {
     expect(screen.getByRole("heading", { name: "August 2026" })).toBeVisible();
     expect(screen.getByRole("link", { name: /Pending Contract/ })).toBeVisible();
   });
+
+  it("groups a late-UTC event under its Chicago business date", async () => {
+    const user = userEvent.setup();
+    render(
+      <EventCalendar
+        events={[
+          {
+            ...events[0]!,
+            id: "chicago-boundary",
+            name: "Chicago Boundary Fair",
+            startsAt: new Date("2026-08-11T04:30:00.000Z"),
+          },
+        ]}
+        initialMonth="2026-08"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Agenda view" }));
+
+    expect(screen.getByText("Aug 10", { selector: "time" })).toBeVisible();
+  });
 });
 
 describe("EventMap", () => {

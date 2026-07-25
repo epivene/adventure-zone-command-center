@@ -13,6 +13,7 @@ import type {
   Probability,
 } from "@/features/bookings/booking-types";
 import type { BookingEditInput } from "@/features/bookings/booking-input";
+import { bookingEditPreservesFollowUpPlan } from "@/features/bookings/booking-edit-policy";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 
 export type Booking = {
@@ -119,6 +120,41 @@ function toFollowUp(record: typeof followUps.$inferSelect): FollowUp {
     outcome: record.outcome,
     nextFollowUpId: record.nextFollowUpId,
   };
+}
+
+const editableBookingFields = [
+  "name",
+  "venueName",
+  "address1",
+  "city",
+  "region",
+  "postalCode",
+  "latitude",
+  "longitude",
+  "startsAt",
+  "endsAt",
+  "status",
+  "probability",
+  "travelLegId",
+  "notes",
+] as const;
+
+function bookingEditSnapshot(
+  record: Pick<
+    typeof bookings.$inferSelect,
+    (typeof editableBookingFields)[number]
+  >,
+) {
+  return Object.fromEntries(
+    editableBookingFields.map((field) => [field, record[field]]),
+  );
+}
+
+export class BookingEditInvariantError extends Error {
+  constructor() {
+    super("NEXT_ACTION_REQUIRED");
+    this.name = "BookingEditInvariantError";
+  }
 }
 
 class DrizzleBookingTransaction implements BookingTransaction {
@@ -303,6 +339,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   async updateBookingDetails(
     bookingId: string,
     input: BookingEditInput,
+    now: Date = new Date(),
   ): Promise<Booking | null> {
     return this.database.transaction(async (transaction) => {
       const [before] = await transaction
@@ -312,6 +349,29 @@ export class DrizzleBookingRepository implements BookingRepository {
         .limit(1)
         .for("update");
       if (!before) return null;
+
+      const openFollowUps = await transaction
+        .select({
+          dueAt: followUps.dueAt,
+          completedAt: followUps.completedAt,
+        })
+        .from(followUps)
+        .where(
+          and(
+            eq(followUps.bookingId, bookingId),
+            isNull(followUps.completedAt),
+          ),
+        )
+        .for("share");
+      if (
+        !bookingEditPreservesFollowUpPlan(
+          input.status,
+          openFollowUps,
+          now,
+        )
+      ) {
+        throw new BookingEditInvariantError();
+      }
 
       const [updated] = await transaction
         .update(bookings)
@@ -324,18 +384,8 @@ export class DrizzleBookingRepository implements BookingRepository {
         entityType: "booking",
         entityId: bookingId,
         action: "update",
-        before: {
-          name: before.name,
-          city: before.city,
-          region: before.region,
-          probability: before.probability,
-        },
-        after: {
-          name: updated.name,
-          city: updated.city,
-          region: updated.region,
-          probability: updated.probability,
-        },
+        before: bookingEditSnapshot(before),
+        after: bookingEditSnapshot(updated),
       });
 
       return toBooking(updated);

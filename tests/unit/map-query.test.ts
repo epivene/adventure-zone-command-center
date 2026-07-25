@@ -90,6 +90,33 @@ describe("getMapEvents", () => {
 
     expect(result.map((event) => event.id)).toEqual(["pending-leg-2"]);
   });
+
+  it("filters dates by the Chicago business day around the UTC evening boundary", async () => {
+    const boundaryEvent: MapEvent = {
+      ...events[0]!,
+      id: "chicago-evening",
+      startsAt: new Date("2026-08-04T04:30:00.000Z"),
+    };
+    const boundaryRepository: TravelLegRepository = {
+      listMapEvents: async () => [boundaryEvent],
+      listTravelLegs: async () => [],
+    };
+
+    const augustThird = await getMapEvents(
+      {
+        statuses: [],
+        travelLegIds: [],
+        dateFrom: "2026-08-03",
+        dateTo: "2026-08-03",
+        regions: [],
+      },
+      boundaryRepository,
+    );
+
+    expect(augustThird.map((event) => event.id)).toEqual([
+      "chicago-evening",
+    ]);
+  });
 });
 
 describe("toMapDataset", () => {

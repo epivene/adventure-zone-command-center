@@ -2,6 +2,19 @@ import { z } from "zod";
 
 import { bookingStatusValues } from "@/features/bookings/booking-types";
 import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
+import { parseBusinessDateInput } from "@/lib/business-date";
+
+const requiredBusinessDateSchema = z
+  .union([z.string(), z.date()])
+  .transform((value, context) => {
+    const parsed = parseBusinessDateInput(value);
+    if (parsed) return parsed;
+    context.addIssue({
+      code: "custom",
+      message: "Choose a valid next-action date.",
+    });
+    return z.NEVER;
+  });
 
 export const followUpCompletionInputSchema = z
   .object({
@@ -11,7 +24,7 @@ export const followUpCompletionInputSchema = z
     nextAction: z
       .object({
         kind: z.string().trim().min(1),
-        dueAt: z.coerce.date(),
+        dueAt: requiredBusinessDateSchema,
       })
       .nullable(),
   })

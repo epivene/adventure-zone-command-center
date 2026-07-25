@@ -20,6 +20,7 @@ import {
   type BookingStatus,
   type Probability,
 } from "@/features/bookings/booking-types";
+import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 import { deleteDraft, loadDraft, saveDraft } from "@/lib/offline/draft-store";
 
 type BookingSubmissionResult =
@@ -29,10 +30,19 @@ type BookingSubmissionResult =
 
 type BookingFormValues = {
   name: string;
+  venueName: string;
+  address1: string;
   city: string;
   region: string;
+  postalCode: string;
+  latitude: string;
+  longitude: string;
+  startsAt: string;
+  endsAt: string;
   status: BookingStatus;
   probability: Probability;
+  travelLegId: string;
+  notes: string;
   nextActionKind: string;
   nextActionDueAt: string;
 };
@@ -41,6 +51,7 @@ type SharedBookingFormProps = {
   draftKey?: string;
   initialValues?: Partial<BookingFormValues>;
   successPath?: string;
+  travelLegs?: TravelLeg[];
 };
 
 type CreateBookingFormProps = SharedBookingFormProps & {
@@ -61,10 +72,19 @@ type BookingFormProps = CreateBookingFormProps | EditBookingFormProps;
 
 const defaultValues: BookingFormValues = {
   name: "",
+  venueName: "",
+  address1: "",
   city: "",
   region: "",
+  postalCode: "",
+  latitude: "",
+  longitude: "",
+  startsAt: "",
+  endsAt: "",
   status: "new_lead",
   probability: "possible",
+  travelLegId: "",
+  notes: "",
   nextActionKind: "",
   nextActionDueAt: "",
 };
@@ -78,6 +98,7 @@ export function BookingForm(props: BookingFormProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submissionError, setSubmissionError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [serverSaveConfirmed, setServerSaveConfirmed] = useState(false);
   const [values, setValues] = useState<BookingFormValues>(() => ({
     ...defaultValues,
     ...initialValues,
@@ -110,7 +131,9 @@ export function BookingForm(props: BookingFormProps) {
   }
 
   function handleChange(
-    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+    event: ChangeEvent<
+      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+    >,
   ) {
     const { name, value } = event.currentTarget;
     const nextValues = { ...values, [name]: value };
@@ -130,6 +153,7 @@ export function BookingForm(props: BookingFormProps) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (serverSaveConfirmed) return;
     const formData = new FormData(event.currentTarget);
     const rawInput = Object.fromEntries(formData);
     const result =
@@ -168,14 +192,17 @@ export function BookingForm(props: BookingFormProps) {
         persistDraft(values);
         setSubmissionError(submissionResult.error);
       } else {
+        setServerSaveConfirmed(true);
+        setIsLocalDraft(false);
+        setRestorableDraft(null);
         const deletion = deleteDraft(draftKey);
         if (deletion.ok) {
-          setIsLocalDraft(false);
-          setRestorableDraft(null);
           navigateTo = props.successPath;
         } else {
-          setIsLocalDraft(true);
-          setDraftError("Draft could not be removed from this device");
+          setDraftError(
+            "Saved on the server, but the stale local draft could not be removed from this device. It will not be offered for restore in this session.",
+          );
+          navigateTo = props.successPath;
         }
       }
     } catch {
@@ -238,6 +265,30 @@ export function BookingForm(props: BookingFormProps) {
         {errors.name ? <span role="alert">{errors.name}</span> : null}
       </label>
 
+      {props.variant === "edit" ? (
+        <>
+          <label className="grid gap-1.5 font-medium">
+            Venue
+            <input
+              name="venueName"
+              onChange={handleChange}
+              type="text"
+              value={values.venueName}
+            />
+          </label>
+
+          <label className="grid gap-1.5 font-medium">
+            Street address
+            <input
+              name="address1"
+              onChange={handleChange}
+              type="text"
+              value={values.address1}
+            />
+          </label>
+        </>
+      ) : null}
+
       <label className="grid gap-1.5 font-medium">
         City
         <input
@@ -261,18 +312,55 @@ export function BookingForm(props: BookingFormProps) {
         {errors.region ? <span role="alert">{errors.region}</span> : null}
       </label>
 
-      {props.variant !== "edit" ? (
-        <label className="grid gap-1.5 font-medium">
-          Status
-          <select name="status" onChange={handleChange} value={values.status}>
-            {bookingStatusValues.map((status) => (
-              <option key={status} value={status}>
-                {status.replaceAll("_", " ")}
-              </option>
-            ))}
-          </select>
-        </label>
+      {props.variant === "edit" ? (
+        <>
+          <label className="grid gap-1.5 font-medium">
+            Postal code
+            <input
+              name="postalCode"
+              onChange={handleChange}
+              type="text"
+              value={values.postalCode}
+            />
+          </label>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="grid gap-1.5 font-medium">
+              Start date
+              <input
+                name="startsAt"
+                onChange={handleChange}
+                type="date"
+                value={values.startsAt}
+              />
+              {errors.startsAt ? (
+                <span role="alert">{errors.startsAt}</span>
+              ) : null}
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              End date
+              <input
+                name="endsAt"
+                onChange={handleChange}
+                type="date"
+                value={values.endsAt}
+              />
+              {errors.endsAt ? <span role="alert">{errors.endsAt}</span> : null}
+            </label>
+          </div>
+        </>
       ) : null}
+
+      <label className="grid gap-1.5 font-medium">
+        Status
+        <select name="status" onChange={handleChange} value={values.status}>
+          {bookingStatusValues.map((status) => (
+            <option key={status} value={status}>
+              {status.replaceAll("_", " ")}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <label className="grid gap-1.5 font-medium">
         Probability
@@ -288,6 +376,65 @@ export function BookingForm(props: BookingFormProps) {
           ))}
         </select>
       </label>
+
+      {props.variant === "edit" ? (
+        <>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <label className="grid gap-1.5 font-medium">
+              Latitude
+              <input
+                inputMode="decimal"
+                name="latitude"
+                onChange={handleChange}
+                type="text"
+                value={values.latitude}
+              />
+              {errors.latitude ? (
+                <span role="alert">{errors.latitude}</span>
+              ) : null}
+            </label>
+            <label className="grid gap-1.5 font-medium">
+              Longitude
+              <input
+                inputMode="decimal"
+                name="longitude"
+                onChange={handleChange}
+                type="text"
+                value={values.longitude}
+              />
+              {errors.longitude ? (
+                <span role="alert">{errors.longitude}</span>
+              ) : null}
+            </label>
+          </div>
+
+          <label className="grid gap-1.5 font-medium">
+            Travel leg
+            <select
+              name="travelLegId"
+              onChange={handleChange}
+              value={values.travelLegId}
+            >
+              <option value="">Unassigned</option>
+              {(props.travelLegs ?? []).map((leg) => (
+                <option key={leg.id} value={leg.id}>
+                  {leg.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1.5 font-medium">
+            Notes
+            <textarea
+              name="notes"
+              onChange={handleChange}
+              rows={5}
+              value={values.notes}
+            />
+          </label>
+        </>
+      ) : null}
 
       {props.variant !== "edit" ? (
         <>
@@ -324,12 +471,14 @@ export function BookingForm(props: BookingFormProps) {
         </>
       ) : null}
 
-      <button disabled={isSubmitting} type="submit">
-        {isSubmitting
-          ? "Saving…"
-          : props.variant === "edit"
-            ? "Save changes"
-            : "Save lead"}
+      <button disabled={isSubmitting || serverSaveConfirmed} type="submit">
+        {serverSaveConfirmed
+          ? "Saved"
+          : isSubmitting
+            ? "Saving…"
+            : props.variant === "edit"
+              ? "Save changes"
+              : "Save lead"}
       </button>
     </form>
   );

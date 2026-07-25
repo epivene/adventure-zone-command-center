@@ -9,6 +9,11 @@ import {
   bookingStatusValues,
   probabilityValues,
 } from "@/features/bookings/booking-types";
+import {
+  BUSINESS_TIME_ZONE,
+  businessDateKey,
+  classifyBusinessDueDate,
+} from "@/lib/business-date";
 
 export type BookingListItem = BookingListRecord;
 
@@ -17,7 +22,7 @@ function formatShortDate(value: Date) {
     month: "short",
     day: "numeric",
     year: "numeric",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(value);
 }
 
@@ -59,14 +64,14 @@ export function BookingList({
     if (
       startsAfter &&
       (!booking.startsAt ||
-        booking.startsAt < new Date(`${startsAfter}T00:00:00.000Z`))
+        businessDateKey(booking.startsAt) < startsAfter)
     ) {
       return false;
     }
     if (
       startsBefore &&
       (!booking.startsAt ||
-        booking.startsAt > new Date(`${startsBefore}T23:59:59.999Z`))
+        businessDateKey(booking.startsAt) > startsBefore)
     ) {
       return false;
     }
@@ -169,7 +174,9 @@ export function BookingList({
         <ul className="grid gap-3">
           {filteredBookings.map((booking) => {
             const isOverdue =
-              booking.nextAction !== null && booking.nextAction.dueAt < now;
+              booking.nextAction !== null &&
+              classifyBusinessDueDate(booking.nextAction.dueAt, now) ===
+                "overdue";
             return (
               <li
                 className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"

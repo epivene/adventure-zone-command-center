@@ -14,6 +14,28 @@ describe("isActiveStatus", () => {
 });
 
 describe("needsFollowUpPlan", () => {
+  it("treats a date-only action as future only before its Chicago calendar day", () => {
+    const nextAction = {
+      dueAt: new Date("2026-08-04T17:00:00.000Z"),
+      completedAt: null,
+    };
+
+    expect(
+      needsFollowUpPlan(
+        { status: "possible" },
+        nextAction,
+        new Date("2026-08-04T04:59:59.999Z"),
+      ),
+    ).toBe(false);
+    expect(
+      needsFollowUpPlan(
+        { status: "possible" },
+        nextAction,
+        new Date("2026-08-04T05:00:00.000Z"),
+      ),
+    ).toBe(true);
+  });
+
   it("flags an active lead without a future action", () => {
     expect(needsFollowUpPlan({ status: "possible" }, null)).toBe(true);
   });
@@ -26,7 +48,7 @@ describe("needsFollowUpPlan", () => {
     expect(
       needsFollowUpPlan(
         { status: "quote_sent" },
-        { dueAt: new Date("2026-08-01T15:00:00Z"), completedAt: null },
+        { dueAt: new Date("2026-08-02T17:00:00Z"), completedAt: null },
         new Date("2026-08-01T14:00:00Z"),
       ),
     ).toBe(false);

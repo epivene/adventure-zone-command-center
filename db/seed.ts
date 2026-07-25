@@ -1,7 +1,6 @@
 import { pathToFileURL } from "node:url";
 
-import { sql } from "drizzle-orm";
-
+import type { db as database } from "@/db/client";
 import { travelLegs } from "@/db/schema";
 
 export const initialTravelLegs = [
@@ -11,20 +10,20 @@ export const initialTravelLegs = [
   { name: "Leg 4", color: "#15956B", sortOrder: 4 },
 ] as const;
 
-export async function seedTravelLegs() {
-  const { db } = await import("@/db/client");
+type SeedDatabase = Pick<typeof database, "insert">;
 
-  await db
+export async function seedTravelLegDefaults(database: SeedDatabase) {
+  await database
     .insert(travelLegs)
     .values([...initialTravelLegs])
-    .onConflictDoUpdate({
+    .onConflictDoNothing({
       target: travelLegs.sortOrder,
-      set: {
-        name: sql`excluded.name`,
-        color: sql`excluded.color`,
-        updatedAt: sql`now()`,
-      },
     });
+}
+
+export async function seedTravelLegs() {
+  const { db } = await import("@/db/client");
+  await seedTravelLegDefaults(db);
 }
 
 const invokedFile = process.argv[1];

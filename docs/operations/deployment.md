@@ -54,11 +54,12 @@ npx drizzle-kit migrate
 npm run db:seed
 ```
 
-The seed is a repeatable upsert keyed by `sort_order`. It ensures sort orders
-1–4 exist and resets their names and colors to the committed `Leg 1` through
-`Leg 4` defaults. It does not delete or reject additional rows, so running the
-seed alone does not prove that the database contains exactly four legs. It
-also does not turn advertised packages into routes.
+The seed inserts missing defaults for sort orders 1–4 and does nothing when a
+slot already exists. Reseeding therefore preserves operator-configured names
+and colors. The migration enforces unique sort orders and rejects values
+outside 1–4; together with the four required seed slots, that gives the
+application exactly four independently configurable travel legs. Advertised
+packages are not routes.
 
 Verify both the count and the complete ordered list:
 
@@ -73,13 +74,22 @@ ORDER BY sort_order;
 
 The count must be exactly `4`, and the list must contain sort orders `1`, `2`,
 `3`, and `4`, once each. If either check differs, stop the release and
-escalate for an explicit data review. Do not delete extra operational or
-reference rows automatically. Resolve their ownership and migration through a
-separately reviewed data-change procedure, then rerun both queries and the
-release gate. Confirm the verified four legs are visible in the application
-before accepting bookings or creating the release tag. Renaming or recoloring
-a leg after seeding is operational data management and must not change the
-verified count.
+escalate for an explicit data review. Do not delete operational data
+automatically. Resolve it through a separately reviewed data-change procedure,
+then rerun both queries and the release gate. Confirm the four legs are
+visible and editable on Routes before accepting bookings. Renaming or
+recoloring a leg is operational data management; a later seed run must leave
+those values unchanged.
+
+## Business-date policy
+
+Stage 1 interprets booking dates, follow-up due dates, Today sections, calendar
+days, and map date filters in the `America/Chicago` business time zone.
+Date-only form values are stored as Chicago-local noon instants so they keep
+the same calendar date through UTC conversion and daylight-saving changes.
+Day boundaries are Chicago midnights and can therefore span 23, 24, or 25
+hours. Do not replace this policy with server-local or browser-local date
+comparisons.
 
 ## Build and deploy
 
@@ -128,7 +138,9 @@ Follow [backup-and-restore.md](./backup-and-restore.md) for command details.
 Perform a restore into an explicitly disposable database at least quarterly,
 after backup-script changes, and before the initial Stage 1 release. Compare
 all table counts and inspect sample records. A created backup is not proven
-restorable until that drill succeeds.
+restorable until that drill succeeds. The restore command additionally
+requires the one-off exact confirmation phrase documented there; do not store
+that confirmation in application configuration or a shared environment file.
 
 ## Rollback
 

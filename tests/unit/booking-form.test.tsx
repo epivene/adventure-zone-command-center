@@ -17,16 +17,49 @@ import {
   type BookingListItem,
 } from "@/components/bookings/booking-list";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
+import { bookingInputSchema } from "@/features/bookings/booking-input";
 import { followUpCompletionInputSchema } from "@/features/bookings/follow-up-completion-input";
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  sessionStorage.clear();
   routerPush.mockReset();
   vi.restoreAllMocks();
 });
 
 describe("BookingForm", () => {
+  it("parses create and completion date fields with the same business-date policy", () => {
+    const create = bookingInputSchema.safeParse({
+      name: "Chicago Fair",
+      city: "Chicago",
+      region: "IL",
+      status: "new_lead",
+      probability: "possible",
+      nextActionKind: "call",
+      nextActionDueAt: "2026-11-01",
+    });
+    const completion = followUpCompletionInputSchema.safeParse({
+      followUpId: "follow-up-1",
+      outcome: "call_again",
+      status: "possible",
+      nextAction: {
+        kind: "call",
+        dueAt: "2026-11-01",
+      },
+    });
+
+    expect(create.success).toBe(true);
+    expect(completion.success).toBe(true);
+    if (!create.success || !completion.success) return;
+    expect(create.data.nextActionDueAt?.toISOString()).toBe(
+      "2026-11-01T18:00:00.000Z",
+    );
+    expect(completion.data.nextAction?.dueAt.toISOString()).toBe(
+      "2026-11-01T18:00:00.000Z",
+    );
+  });
+
   it("requires event name, city, state, status, and next action for an active lead", async () => {
     const user = userEvent.setup();
     render(<BookingForm onSubmit={vi.fn()} />);
@@ -60,12 +93,14 @@ describe("BookingForm", () => {
     await user.type(screen.getByLabelText("Event name"), "Updated Fair");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(onSubmit).toHaveBeenCalledWith({
-      name: "Updated Fair",
-      city: "Fargo",
-      region: "ND",
-      probability: "possible",
-    });
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Updated Fair",
+        city: "Fargo",
+        region: "ND",
+        probability: "possible",
+      }),
+    );
   });
 
   it("restores a local draft only after the user explicitly chooses it", async () => {
@@ -250,9 +285,17 @@ describe("BookingForm", () => {
     ).toMatchObject({ name: "Saved Fair" });
   });
 
-  it("does not claim a draft was removed when device storage rejects deletion", async () => {
+  it("keeps server confirmation authoritative when local draft cleanup fails", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: true });
+    localStorage.setItem(
+      "azcc:draft:booking:edit:123",
+      JSON.stringify({
+        version: 1,
+        savedAt: "2026-07-25T15:30:00.000Z",
+        data: { name: "Stale local copy" },
+      }),
+    );
     vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
       throw new DOMException("Storage unavailable", "SecurityError");
     });
@@ -266,16 +309,22 @@ describe("BookingForm", () => {
           probability: "possible",
         }}
         onSubmit={onSubmit}
+        successPath="/bookings/123"
         variant="edit"
       />,
     );
 
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+    expect(screen.queryByText("Local draft — not saved")).not.toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Draft could not be removed from this device",
+      "Saved on the server, but the stale local draft could not be removed",
     );
+    expect(screen.getByRole("button", { name: "Saved" })).toBeDisabled();
+    expect(routerPush).toHaveBeenCalledWith("/bookings/123");
+    expect(onSubmit).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Saved" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
   });
 });
 
@@ -329,9 +378,105 @@ describe("BookingList", () => {
     expect(screen.getByRole("link", { name: "Interested Festival" })).toBeVisible();
     expect(screen.queryByRole("link", { name: "Overdue County Fair" })).not.toBeInTheDocument();
   });
+
+  it("uses Chicago calendar dates for overdue badges and date filters", async () => {
+    const user = userEvent.setup();
+    const chicagoLateEvent: BookingListItem = {
+      ...bookings[0]!,
+      id: "booking-chicago-boundary",
+      name: "Chicago Boundary Fair",
+      startsAt: new Date("2026-08-11T04:30:00Z"),
+      nextAction: {
+        ...bookings[0]!.nextAction!,
+        dueAt: new Date("2026-08-10T17:00:00Z"),
+      },
+    };
+    render(
+      <BookingList
+        bookings={[chicagoLateEvent]}
+        now={new Date("2026-08-10T23:30:00Z")}
+      />,
+    );
+
+    expect(screen.queryByText("Overdue")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Starts before"), "2026-08-10");
+    expect(
+      screen.getByRole("link", { name: "Chicago Boundary Fair" }),
+    ).toBeVisible();
+  });
 });
 
 describe("FollowUpCompletionDialog", () => {
+  it("explains an idempotent already-completed response and prevents another submit", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn().mockResolvedValue({
+      ok: false,
+      error: { code: "ALREADY_COMPLETED" as const },
+    });
+    render(
+      <FollowUpCompletionDialog
+        bookingStatus="interested"
+        followUpId="follow-up-1"
+        onComplete={onComplete}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Complete call" }));
+    await user.selectOptions(screen.getByLabelText("Call outcome"), "call_again");
+    await user.selectOptions(screen.getByLabelText("Next action type"), "call");
+    await user.type(screen.getByLabelText("Next action date"), "2026-08-03");
+    await user.click(screen.getByRole("button", { name: "Save call outcome" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This follow-up was already completed.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Save call outcome" }),
+    ).toBeDisabled();
+    await user.click(
+      screen.getByRole("button", { name: "Save call outcome" }),
+    );
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it("submits a date-only next action at Chicago noon", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn().mockResolvedValue({
+      ok: true,
+      value: {
+        id: "follow-up-1",
+        bookingId: "booking-1",
+        kind: "call",
+        dueAt: new Date("2026-10-31T17:00:00.000Z"),
+        completedAt: new Date("2026-10-31T18:00:00.000Z"),
+        outcome: "call_again",
+        nextFollowUpId: "follow-up-2",
+      },
+    });
+    render(
+      <FollowUpCompletionDialog
+        bookingStatus="interested"
+        followUpId="follow-up-1"
+        onComplete={onComplete}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Complete call" }));
+    await user.selectOptions(screen.getByLabelText("Call outcome"), "call_again");
+    await user.selectOptions(screen.getByLabelText("Next action type"), "call");
+    await user.type(screen.getByLabelText("Next action date"), "2026-11-01");
+    await user.click(screen.getByRole("button", { name: "Save call outcome" }));
+
+    expect(onComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nextAction: {
+          kind: "call",
+          dueAt: new Date("2026-11-01T18:00:00.000Z"),
+        },
+      }),
+    );
+  });
+
   it("rejects an empty outcome at the server-action validation boundary", () => {
     const result = followUpCompletionInputSchema.safeParse({
       followUpId: "follow-up-1",

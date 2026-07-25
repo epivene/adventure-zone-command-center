@@ -20,6 +20,7 @@ import type {
 import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
 import type { FollowUpCompletionActionError } from "@/features/bookings/follow-up-completion-input";
 import type { Result } from "@/lib/result";
+import { parseBusinessDate } from "@/lib/business-date";
 
 type CompletionHandler = (
   input: CompleteFollowUpInput,
@@ -37,6 +38,7 @@ export function FollowUpCompletionDialog({
   const [isOpen, setIsOpen] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAlreadyCompleted, setIsAlreadyCompleted] = useState(false);
   const [resultingStatus, setResultingStatus] = useState<BookingStatus>(bookingStatus);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLFormElement>(null);
@@ -78,6 +80,7 @@ export function FollowUpCompletionDialog({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isAlreadyCompleted) return;
     const formData = new FormData(event.currentTarget);
     const outcome = String(formData.get("outcome") ?? "");
     const nextActionKind = String(formData.get("nextActionKind") ?? "");
@@ -94,6 +97,13 @@ export function FollowUpCompletionDialog({
       setError("Choose a next action and date before completing this call.");
       return;
     }
+    const parsedNextActionDueAt = nextActionDueAt
+      ? parseBusinessDate(nextActionDueAt)
+      : null;
+    if (nextActionDueAt && !parsedNextActionDueAt) {
+      setError("Choose a valid next-action date.");
+      return;
+    }
 
     setError("");
     setIsSubmitting(true);
@@ -106,15 +116,20 @@ export function FollowUpCompletionDialog({
           nextActionKind && nextActionDueAt
             ? {
                 kind: nextActionKind,
-                dueAt: new Date(`${nextActionDueAt}T12:00:00`),
+                dueAt: parsedNextActionDueAt!,
               }
             : null,
       });
 
       if (!result.ok) {
+        if (result.error.code === "ALREADY_COMPLETED") {
+          setIsAlreadyCompleted(true);
+        }
         setError(
           result.error.code === "NEXT_ACTION_REQUIRED"
             ? "Choose a next action and date before completing this call."
+            : result.error.code === "ALREADY_COMPLETED"
+              ? "This follow-up was already completed. Refresh to see its saved outcome."
             : result.error.code === "INVALID_COMPLETION_INPUT"
               ? "Choose an outcome and a valid next action."
               : "This follow-up could not be found. Refresh and try again.",
@@ -229,7 +244,11 @@ export function FollowUpCompletionDialog({
               >
                 Cancel
               </button>
-              <button className="button-primary" disabled={isSubmitting} type="submit">
+              <button
+                className="button-primary"
+                disabled={isSubmitting || isAlreadyCompleted}
+                type="submit"
+              >
                 {isSubmitting ? "Saving…" : "Save call outcome"}
               </button>
             </div>

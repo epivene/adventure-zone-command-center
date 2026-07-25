@@ -5,13 +5,14 @@ import { NextCallCard } from "@/components/today/next-call-card";
 import { SummaryCards } from "@/components/today/summary-cards";
 import { getTodayDashboard } from "@/features/follow-ups/today-query";
 import { requireOwner } from "@/lib/auth/require-owner";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 export const dynamic = "force-dynamic";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(value);
 }
 

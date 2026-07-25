@@ -32,7 +32,7 @@ export interface ActImportTransaction {
     externalId: string,
     contactId: string,
     importRunId: string,
-  ): Promise<void>;
+  ): Promise<"linked" | "already_owned" | "conflict">;
   createAuditEntry(entry: ImportAuditEntry): Promise<void>;
   completeImportRun(
     runId: string,
@@ -290,6 +290,23 @@ function auditSnapshot(contact: LocalContact) {
   };
 }
 
+class ActImportRowConflictError extends Error {
+  constructor(
+    readonly rowId: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ActImportRowConflictError";
+  }
+}
+
+function isContactConflict(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.name === "ActImportContactConflictError"
+  );
+}
+
 export async function applyActImport(
   runId: string,
   approvedRowIds: readonly string[],
@@ -325,41 +342,73 @@ export async function applyActImport(
 
   const appliedRowIds: string[] = [];
   if (safeRows.length > 0) {
-    await repository.transaction(async (transaction) => {
-      for (const row of safeRows) {
-        const before = row.localContact
-          ? auditSnapshot(row.localContact)
-          : null;
-        const updated =
-          row.category === "new"
-            ? await transaction.createContact(row.record)
-            : await transaction.updateContact(
-                row.localContactId!,
-                row.record,
-                row.localContact!,
+    const transactionAppliedRowIds: string[] = [];
+    try {
+      await repository.transaction(async (transaction) => {
+        for (const row of safeRows) {
+          const before = row.localContact
+            ? auditSnapshot(row.localContact)
+            : null;
+          let updated: LocalContact;
+          try {
+            updated =
+              row.category === "new"
+                ? await transaction.createContact(row.record)
+                : await transaction.updateContact(
+                    row.localContactId!,
+                    row.record,
+                    row.localContact!,
+                  );
+          } catch (error) {
+            if (isContactConflict(error)) {
+              throw new ActImportRowConflictError(
+                row.rowId,
+                "Contact changed after the import preview.",
               );
+            }
+            throw error;
+          }
 
-        if (row.record.recordId) {
-          await transaction.ensureExternalLink(
-            row.record.recordId,
-            updated.id,
-            runId,
-          );
+          if (row.record.recordId) {
+            const claim = await transaction.ensureExternalLink(
+              row.record.recordId,
+              updated.id,
+              runId,
+            );
+            if (claim === "conflict") {
+              throw new ActImportRowConflictError(
+                row.rowId,
+                "Act record is already linked to another local contact.",
+              );
+            }
+          }
+          await transaction.createAuditEntry({
+            entityType: "contact",
+            entityId: updated.id,
+            action:
+              row.category === "new"
+                ? "act_import_created"
+                : "act_import_updated",
+            before,
+            after: auditSnapshot(updated),
+          });
+          transactionAppliedRowIds.push(row.rowId);
         }
-        await transaction.createAuditEntry({
-          entityType: "contact",
-          entityId: updated.id,
-          action:
-            row.category === "new"
-              ? "act_import_created"
-              : "act_import_updated",
-          before,
-          after: auditSnapshot(updated),
+        await transaction.completeImportRun(runId, transactionAppliedRowIds);
+      });
+      appliedRowIds.push(...transactionAppliedRowIds);
+    } catch (error) {
+      if (!(error instanceof ActImportRowConflictError)) throw error;
+      for (const row of safeRows) {
+        failedRows.push({
+          rowId: row.rowId,
+          message:
+            row.rowId === error.rowId
+              ? error.message
+              : "Import batch was rolled back because another approved row conflicted.",
         });
-        appliedRowIds.push(row.rowId);
       }
-      await transaction.completeImportRun(runId, appliedRowIds);
-    });
+    }
   }
 
   const requestedSet = new Set(requestedIds);
@@ -441,14 +490,17 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         eq(contacts.organizationId, organizations.id),
       )
       .where(eq(contacts.id, contactId))
-      .limit(1);
+      .limit(1)
+      .for("update", { of: contacts });
     if (!current) throw new Error("Contact disappeared during import.");
     const currentContact = toLocalContact(current);
     if (
       JSON.stringify(auditSnapshot(currentContact)) !==
       JSON.stringify(auditSnapshot(expected))
     ) {
-      throw new Error("Contact changed after the import preview.");
+      const error = new Error("Contact changed after the import preview.");
+      error.name = "ActImportContactConflictError";
+      throw error;
     }
 
     let organization = current.organization;
@@ -488,26 +540,36 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     contactId: string,
     importRunId: string,
   ) {
-    const existing = await this.database
-      .select()
-      .from(actExternalLinks)
-      .where(eq(actExternalLinks.actRecordId, externalId));
-    if (
-      existing.some(
-        (link) =>
-          link.entityType !== "contact" || link.entityId !== contactId,
-      )
-    ) {
-      throw new Error("Act record became linked to another local entity.");
-    }
-    if (existing.length === 0) {
-      await this.database.insert(actExternalLinks).values({
+    const [created] = await this.database
+      .insert(actExternalLinks)
+      .values({
         entityType: "contact",
         entityId: contactId,
         actRecordId: externalId,
         importRunId,
-      });
-    }
+      })
+      .onConflictDoNothing({
+        target: [actExternalLinks.entityType, actExternalLinks.actRecordId],
+      })
+      .returning({ entityId: actExternalLinks.entityId });
+    if (created) return "linked" as const;
+
+    const [existing] = await this.database
+      .select({
+        entityType: actExternalLinks.entityType,
+        entityId: actExternalLinks.entityId,
+      })
+      .from(actExternalLinks)
+      .where(
+        and(
+          eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.actRecordId, externalId),
+        ),
+      )
+      .limit(1);
+    return existing?.entityId === contactId
+      ? ("already_owned" as const)
+      : ("conflict" as const);
   }
 
   async createAuditEntry(entry: ImportAuditEntry) {

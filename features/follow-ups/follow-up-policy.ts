@@ -1,4 +1,5 @@
 import type { BookingStatus } from "@/features/bookings/booking-types";
+import { isFutureBusinessDate } from "@/lib/business-date";
 
 const closedStatuses = new Set<BookingStatus>([
   "declined",
@@ -19,7 +20,7 @@ export function needsFollowUpPlan(
     nextFollowUp !== null &&
     nextFollowUp.completedAt === null &&
     Number.isFinite(nextFollowUp.dueAt.getTime()) &&
-    nextFollowUp.dueAt > now;
+    isFutureBusinessDate(nextFollowUp.dueAt, now);
 
   return isActiveStatus(booking.status) && !hasFutureIncompleteAction;
 }

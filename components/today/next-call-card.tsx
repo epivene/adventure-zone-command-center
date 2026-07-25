@@ -1,11 +1,12 @@
 import Link from "next/link";
 
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(value);
 }
 

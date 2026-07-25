@@ -27,6 +27,23 @@ function item(
 }
 
 describe("sortFollowUpsForToday", () => {
+  it("uses Chicago dates when separating overdue, due-today, and future work", () => {
+    const result = sortFollowUpsForToday(
+      [
+        item("future", "2026-08-04T17:00:00Z", "due"),
+        item("today", "2026-08-03T17:00:00Z", "due"),
+        item("overdue", "2026-08-02T17:00:00Z", "due"),
+      ],
+      new Date("2026-08-04T04:30:00Z"),
+    );
+
+    expect(result.map((entry) => entry.id)).toEqual([
+      "overdue",
+      "today",
+      "future",
+    ]);
+  });
+
   it("orders overdue calls before calls due today and quiet leads", () => {
     const result = sortFollowUpsForToday(
       [
@@ -67,7 +84,7 @@ describe("sortFollowUpsForToday", () => {
     ]);
   });
 
-  it("treats a passed due time as overdue even before the calendar day ends", () => {
+  it("orders same-day follow-ups by their stored instant within the today bucket", () => {
     const result = sortFollowUpsForToday(
       [
         item("today", "2026-08-03T15:00:00Z", "due"),

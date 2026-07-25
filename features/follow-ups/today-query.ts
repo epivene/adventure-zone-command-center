@@ -3,6 +3,11 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { bookings, followUps } from "@/db/schema";
 import type { BookingStatus, Probability } from "@/features/bookings/booking-types";
 import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
+import {
+  businessDayBounds,
+  classifyBusinessDueDate,
+  isFutureBusinessDate,
+} from "@/lib/business-date";
 
 export type FollowUpPriorityStatus = "due" | "deadline" | "quiet_lead" | "other";
 
@@ -54,16 +59,10 @@ const contractStatuses = new Set<BookingStatus>([
   "contract_received",
 ]);
 
-function startOfUtcDay(date: Date) {
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
 function priorityBucket(item: FollowUpSummary, now: Date) {
-  const today = startOfUtcDay(now);
-  const dueDay = startOfUtcDay(item.dueAt);
-
-  if (item.dueAt < now) return 0;
-  if (dueDay === today) return 1;
+  const due = classifyBusinessDueDate(item.dueAt, now);
+  if (due === "overdue") return 0;
+  if (due === "today") return 1;
   if (item.status === "deadline") return 2;
   if (item.probability === "likely") return 3;
   if (item.status === "quiet_lead") return 4;
@@ -79,7 +78,7 @@ export function selectFutureIncompleteFollowUp<
         (item) =>
           item.completedAt === null &&
           Number.isFinite(item.dueAt.getTime()) &&
-          item.dueAt > now,
+          isFutureBusinessDate(item.dueAt, now),
       )
       .sort(
         (left, right) =>
@@ -169,8 +168,7 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
   }
 
   const sortedFollowUps = sortFollowUpsForToday(openFollowUps, now);
-  const startToday = startOfUtcDay(now);
-  const endToday = startToday + 24 * 60 * 60 * 1000;
+  const { start: startToday, end: endToday } = businessDayBounds(now);
   const bookingList = [...bookingRows.values()];
   const futureFollowUpByBooking = new Map(
     [...openFollowUpsByBooking].flatMap(([bookingId, bookingFollowUps]) => {
@@ -181,7 +179,7 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
 
   return {
     followUpCount: sortedFollowUps.filter(
-      (followUp) => followUp.dueAt.getTime() < endToday,
+      (followUp) => followUp.dueAt.getTime() < endToday.getTime(),
     ).length,
     newLeadCount: bookingList.filter((booking) => booking.status === "new_lead").length,
     contractCount: bookingList.filter((booking) => contractStatuses.has(booking.status))
@@ -204,7 +202,11 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
         probability: booking.probability,
       })),
     upcomingEvents: bookingList
-      .filter((booking) => booking.startsAt && booking.startsAt.getTime() >= startToday)
+      .filter(
+        (booking) =>
+          booking.startsAt &&
+          booking.startsAt.getTime() >= startToday.getTime(),
+      )
       .sort(
         (left, right) =>
           left.startsAt!.getTime() - right.startsAt!.getTime() ||

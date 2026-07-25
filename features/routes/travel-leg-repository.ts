@@ -6,6 +6,11 @@ import type {
   BookingStatus,
   Probability,
 } from "@/features/bookings/booking-types";
+import { recordAuditEntry } from "@/features/audit/audit-service";
+import type {
+  TravelLegAuditChange,
+  TravelLegEditorTransaction,
+} from "@/features/routes/travel-leg-editor";
 
 export type TravelLeg = {
   id: string;
@@ -74,5 +79,47 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
       })
       .from(travelLegs)
       .orderBy(asc(travelLegs.sortOrder));
+  }
+
+  transaction<T>(
+    operation: (transaction: TravelLegEditorTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.database.transaction((transaction) =>
+      operation({
+        listForUpdate: async () =>
+          transaction
+            .select({
+              id: travelLegs.id,
+              name: travelLegs.name,
+              color: travelLegs.color,
+              sortOrder: travelLegs.sortOrder,
+            })
+            .from(travelLegs)
+            .orderBy(asc(travelLegs.sortOrder))
+            .for("update"),
+        update: async (id, values) => {
+          const [updated] = await transaction
+            .update(travelLegs)
+            .set({ ...values, updatedAt: new Date() })
+            .where(eq(travelLegs.id, id))
+            .returning({
+              id: travelLegs.id,
+              name: travelLegs.name,
+              color: travelLegs.color,
+              sortOrder: travelLegs.sortOrder,
+            });
+          if (!updated) throw new Error("Travel leg is missing.");
+          return updated;
+        },
+        audit: (change: TravelLegAuditChange) =>
+          recordAuditEntry(transaction, {
+            entityType: "travel_leg",
+            entityId: change.entityId,
+            action: "update",
+            before: change.before,
+            after: change.after,
+          }),
+      }),
+    );
   }
 }

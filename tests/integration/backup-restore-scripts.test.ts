@@ -124,6 +124,8 @@ printf '%s\\n' "$@" > "$COMMAND_LOG/pg_restore.args"
       COMMAND_LOG: commandLog,
       DATABASE_URL: "postgresql://backup-user@example.test/adventure_zone",
       BACKUP_ENCRYPTION_PASSPHRASE: "correct horse battery staple",
+      CONFIRM_DISPOSABLE_DATABASE_RESTORE:
+        "I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE",
     },
   };
 }
@@ -270,6 +272,44 @@ printf '%s\\n' "$output" > "$COMMAND_LOG/success-output"
 });
 
 describe("database restore command", () => {
+  it("refuses before decryption when disposable confirmation is absent or wrong", async () => {
+    const context = await fixture();
+    const backupPath = path.join(
+      context.backupDirectory,
+      "adventure-zone-20260725T120000Z.dump.gpg",
+    );
+    await writeFile(backupPath, "encrypted custom dump");
+    const absentConfirmation: NodeJS.ProcessEnv = { ...context.env };
+    delete absentConfirmation.CONFIRM_DISPOSABLE_DATABASE_RESTORE;
+
+    const absent = spawnSync("bash", [restoreScript, backupPath], {
+      env: absentConfirmation,
+      encoding: "utf8",
+    });
+    const wrong = spawnSync("bash", [restoreScript, backupPath], {
+      env: {
+        ...context.env,
+        CONFIRM_DISPOSABLE_DATABASE_RESTORE: "yes",
+      },
+      encoding: "utf8",
+    });
+
+    expect(absent.status).not.toBe(0);
+    expect(wrong.status).not.toBe(0);
+    expect(`${absent.stdout}${absent.stderr}`).toContain(
+      "I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE",
+    );
+    expect(`${wrong.stdout}${wrong.stderr}`).toContain(
+      "I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE",
+    );
+    await expect(
+      readFile(path.join(context.commandLog, "gpg.args"), "utf8"),
+    ).rejects.toThrow();
+    await expect(
+      readFile(path.join(context.commandLog, "pg_restore.args"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   it("decrypts an explicit file, restores it, and removes plaintext", async () => {
     const context = await fixture();
     const backupPath = path.join(

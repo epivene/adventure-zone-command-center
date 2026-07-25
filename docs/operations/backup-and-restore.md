@@ -59,11 +59,18 @@ backup file:
 
 ```bash
 BACKUP_FILE=/secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.UNIQUEID.dump.gpg
+export CONFIRM_DISPOSABLE_DATABASE_RESTORE=I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE
 ./scripts/restore-database.sh "$BACKUP_FILE"
+unset CONFIRM_DISPOSABLE_DATABASE_RESTORE
 ```
 
 The script requires `DATABASE_URL` and `BACKUP_ENCRYPTION_PASSPHRASE` in its
-environment. It refuses a missing path, directory, or symlink. On success it
+environment. It also refuses to decrypt anything unless the independent
+`CONFIRM_DISPOSABLE_DATABASE_RESTORE` variable exactly equals
+`I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE`. Set that value only for the single
+verified drill and unset it immediately afterward; do not put it in
+`.env.example`, application configuration, or a shared shell profile. The
+script also refuses a missing path, directory, or symlink. On success it
 prints:
 
 ```text
@@ -130,7 +137,9 @@ prerequisites:
 shellcheck scripts/backup-database.sh scripts/restore-database.sh
 bash -n scripts/backup-database.sh scripts/restore-database.sh
 ./scripts/backup-database.sh "$BACKUP_DIRECTORY"
+export CONFIRM_DISPOSABLE_DATABASE_RESTORE=I_CONFIRM_THIS_DATABASE_IS_DISPOSABLE
 ./scripts/restore-database.sh "$BACKUP_FILE"
+unset CONFIRM_DISPOSABLE_DATABASE_RESTORE
 ```
 
 Then run the row-count query above against the source and disposable restore,

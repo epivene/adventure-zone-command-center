@@ -11,6 +11,7 @@ import {
 describe("booking draft storage", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.useRealTimers();
   });
 
@@ -82,5 +83,26 @@ describe("booking draft storage", () => {
     expect(deleteDraft("booking:new")).toEqual({ ok: true });
     expect(loadDraft("booking:new")).toBeNull();
     expect(loadDraft("booking:edit:123")).toEqual({ name: "Edit" });
+  });
+
+  it("suppresses only the stale server-saved copy when deletion is unavailable", () => {
+    saveDraft("booking:edit:123", { name: "Stale local copy" });
+    const removeItem = vi
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw new DOMException("Storage unavailable", "SecurityError");
+      });
+
+    expect(deleteDraft("booking:edit:123")).toEqual({
+      ok: false,
+      error: "storage_unavailable",
+    });
+    expect(loadDraft("booking:edit:123")).toBeNull();
+
+    removeItem.mockRestore();
+    saveDraft("booking:edit:123", { name: "New offline work" });
+    expect(loadDraft("booking:edit:123")).toEqual({
+      name: "New offline work",
+    });
   });
 });

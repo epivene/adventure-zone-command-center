@@ -56,8 +56,10 @@ const expected: LocalContact = {
 type ThenableRows = PromiseLike<
   { contact: ContactRow; organization: OrganizationRow | null }[]
 > & {
-  limit: (
-    count: number,
+  limit: (count: number) => ThenableRows;
+  for: (
+    strength: string,
+    options?: unknown,
   ) => Promise<
     { contact: ContactRow; organization: OrganizationRow | null }[]
   >;
@@ -66,12 +68,13 @@ type ThenableRows = PromiseLike<
 class RecordingDrizzleDatabase {
   readonly conditions: SQL[] = [];
   readonly contactUpdates: Record<string, unknown>[] = [];
+  readonly locks: { source: unknown; strength: string }[] = [];
   organizationInsertCount = 0;
 
   select() {
-    const { conditions } = this;
+    const { conditions, locks } = this;
     return {
-      from() {
+      from(source: unknown) {
         const rows = [{ contact: contactRow, organization }];
         const builder = {
           innerJoin() {
@@ -83,10 +86,15 @@ class RecordingDrizzleDatabase {
           where(condition: SQL) {
             conditions.push(condition);
             const promise = Promise.resolve(rows);
-            return {
-              limit: async () => rows,
+            const terminal = {
+              limit: () => terminal,
+              for: async (strength: string) => {
+                locks.push({ source, strength });
+                return rows;
+              },
               then: promise.then.bind(promise),
             } as ThenableRows;
+            return terminal;
           },
         };
         return builder;
@@ -142,6 +150,18 @@ function repository(database: RecordingDrizzleDatabase) {
 }
 
 describe("DrizzleActImportRepository", () => {
+  it("locks the matched contact before comparing the preview snapshot", async () => {
+    const database = new RecordingDrizzleDatabase();
+
+    await repository(database).transaction((transaction) =>
+      transaction.updateContact(contactRow.id, record, expected),
+    );
+
+    expect(database.locks).toEqual([
+      { source: contacts, strength: "update" },
+    ]);
+  });
+
   it("preserves an unchanged organization during a phone-only update", async () => {
     const database = new RecordingDrizzleDatabase();
 

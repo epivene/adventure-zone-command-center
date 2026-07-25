@@ -2,6 +2,7 @@ import type {
   BookingStatus,
   Probability,
 } from "@/features/bookings/booking-types";
+import { businessDateKey, parseBusinessDate } from "@/lib/business-date";
 
 export type MapEvent = {
   id: string;
@@ -66,23 +67,16 @@ const emptyFilters: MapFilters = {
   regions: [],
 };
 
-function startOfUtcDate(value: string | null): number | null {
-  if (!value) return null;
-  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
-  return Number.isFinite(timestamp) ? timestamp : null;
-}
-
-function endOfUtcDate(value: string | null): number | null {
-  const start = startOfUtcDate(value);
-  return start === null ? null : start + 24 * 60 * 60 * 1000 - 1;
+function validBusinessDate(value: string | null): string | null {
+  return value && parseBusinessDate(value) ? value : null;
 }
 
 export function filterMapEvents(
   events: MapEvent[],
   filters: MapFilters = emptyFilters,
 ): MapEvent[] {
-  const from = startOfUtcDate(filters.dateFrom);
-  const to = endOfUtcDate(filters.dateTo);
+  const from = validBusinessDate(filters.dateFrom);
+  const to = validBusinessDate(filters.dateTo);
 
   return events.filter((event) => {
     if (filters.statuses.length && !filters.statuses.includes(event.status)) {
@@ -98,10 +92,10 @@ export function filterMapEvents(
       return false;
     }
     if (from !== null || to !== null) {
-      const startsAt = event.startsAt?.getTime();
-      if (startsAt === undefined) return false;
-      if (from !== null && startsAt < from) return false;
-      if (to !== null && startsAt > to) return false;
+      if (!event.startsAt) return false;
+      const startsOn = businessDateKey(event.startsAt);
+      if (from !== null && startsOn < from) return false;
+      if (to !== null && startsOn > to) return false;
     }
     return true;
   });

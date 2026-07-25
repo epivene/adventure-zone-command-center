@@ -4,12 +4,12 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { MapEvent } from "@/features/routes/map-data";
+import {
+  BUSINESS_TIME_ZONE,
+  businessDateKey,
+} from "@/lib/business-date";
 
 type CalendarView = "month" | "agenda";
-
-function monthKey(date: Date) {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 function parseMonth(value: string) {
   const [year, month] = value.split("-").map(Number);
@@ -32,7 +32,7 @@ function formatDay(date: Date) {
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(date);
 }
 
@@ -76,7 +76,7 @@ function EventLink({ event, compact = false }: { event: MapEvent; compact?: bool
 
 export function EventCalendar({
   events,
-  initialMonth = monthKey(new Date()),
+  initialMonth = businessDateKey(new Date()).slice(0, 7),
 }: {
   events: MapEvent[];
   initialMonth?: string;
@@ -108,7 +108,7 @@ export function EventCalendar({
   const agendaGroups = useMemo(() => {
     const groups = new Map<string, typeof datedEvents>();
     for (const event of datedEvents) {
-      const key = monthKey(event.startsAt);
+      const key = businessDateKey(event.startsAt).slice(0, 7);
       groups.set(key, [...(groups.get(key) ?? []), event]);
     }
     return [...groups.entries()];
@@ -183,11 +183,9 @@ export function EventCalendar({
           </div>
           <div className="grid gap-px bg-slate-200 sm:grid-cols-7">
             {monthDays.map((date) => {
+              const dateKey = date.toISOString().slice(0, 10);
               const dayEvents = datedEvents.filter(
-                (event) =>
-                  event.startsAt.getUTCFullYear() === date.getUTCFullYear() &&
-                  event.startsAt.getUTCMonth() === date.getUTCMonth() &&
-                  event.startsAt.getUTCDate() === date.getUTCDate(),
+                (event) => businessDateKey(event.startsAt) === dateKey,
               );
               const inMonth = date.getUTCMonth() === activeMonth.getUTCMonth();
 

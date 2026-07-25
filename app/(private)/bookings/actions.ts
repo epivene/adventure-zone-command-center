@@ -8,7 +8,10 @@ import {
   type BookingEditInput,
   type BookingFormInput,
 } from "@/features/bookings/booking-input";
-import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
+import {
+  BookingEditInvariantError,
+  DrizzleBookingRepository,
+} from "@/features/bookings/booking-repository";
 import {
   BookingService,
   type CompleteFollowUpInput,
@@ -76,14 +79,28 @@ export async function updateBookingAction(
   }
 
   const { db } = await import("@/db/client");
-  const updated = await new DrizzleBookingRepository(db).updateBookingDetails(
-    bookingId,
-    parsed.data,
-  );
+  let updated;
+  try {
+    updated = await new DrizzleBookingRepository(db).updateBookingDetails(
+      bookingId,
+      parsed.data,
+    );
+  } catch (error) {
+    if (error instanceof BookingEditInvariantError) {
+      return {
+        ok: false,
+        error:
+          "This active booking needs an incomplete future follow-up before it can be edited.",
+      };
+    }
+    throw error;
+  }
   if (!updated) return { ok: false, error: "This booking could not be found." };
 
   revalidatePath("/bookings");
   revalidatePath(`/bookings/${bookingId}`);
+  revalidatePath("/calendar");
+  revalidatePath("/routes");
   return { ok: true };
 }
 

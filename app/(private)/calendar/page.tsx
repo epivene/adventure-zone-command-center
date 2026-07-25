@@ -1,6 +1,7 @@
 import { EventCalendar } from "@/components/calendar/event-calendar";
 import { getMapEvents, type MapFilters } from "@/features/routes/map-query";
 import { requireOwner } from "@/lib/auth/require-owner";
+import { businessDateKey } from "@/lib/business-date";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,7 @@ async function loadEvents() {
 export default async function CalendarPage() {
   const events = await loadEvents();
   const now = new Date();
-  const initialMonth = `${now.getUTCFullYear()}-${String(
-    now.getUTCMonth() + 1,
-  ).padStart(2, "0")}`;
+  const initialMonth = businessDateKey(now).slice(0, 7);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">

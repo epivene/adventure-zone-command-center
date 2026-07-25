@@ -7,6 +7,7 @@ import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-comple
 import { StatusBadge } from "@/components/bookings/status-badge";
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
+import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ function formatDate(value: Date | null) {
   if (!value) return "Not set";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
-    timeZone: "UTC",
+    timeZone: BUSINESS_TIME_ZONE,
   }).format(value);
 }
 

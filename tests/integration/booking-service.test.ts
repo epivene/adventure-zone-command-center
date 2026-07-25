@@ -41,6 +41,7 @@ class InMemoryBookingRepository implements BookingRepository {
   public beforeTransaction: (() => void) | null = null;
   private nextBookingNumber = 2;
   private nextFollowUpNumber = 2;
+  private transactionTail: Promise<void> = Promise.resolve();
 
   constructor() {
     this.bookings.set(initialBooking.id, { ...initialBooking });
@@ -55,33 +56,43 @@ class InMemoryBookingRepository implements BookingRepository {
 
   async transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T> {
     this.transactionCount += 1;
-    this.beforeTransaction?.();
-    const bookings = new Map(
-      [...this.bookings].map(([id, booking]) => [id, { ...booking }]),
-    );
-    const followUps = new Map(
-      [...this.followUps].map(([id, followUp]) => [id, { ...followUp }]),
-    );
-    const auditEntries = this.auditEntries.map((entry) => ({ ...entry }));
-    const transaction = new InMemoryBookingTransaction(
-      bookings,
-      followUps,
-      auditEntries,
-      () => `booking-${this.nextBookingNumber++}`,
-      () => `follow-up-${this.nextFollowUpNumber++}`,
-      () => this.failAuditWrite,
-    );
+    const previous = this.transactionTail;
+    let release = () => {};
+    this.transactionTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      this.beforeTransaction?.();
+      const bookings = new Map(
+        [...this.bookings].map(([id, booking]) => [id, { ...booking }]),
+      );
+      const followUps = new Map(
+        [...this.followUps].map(([id, followUp]) => [id, { ...followUp }]),
+      );
+      const auditEntries = this.auditEntries.map((entry) => ({ ...entry }));
+      const transaction = new InMemoryBookingTransaction(
+        bookings,
+        followUps,
+        auditEntries,
+        () => `booking-${this.nextBookingNumber++}`,
+        () => `follow-up-${this.nextFollowUpNumber++}`,
+        () => this.failAuditWrite,
+      );
 
-    const result = await operation(transaction);
+      const result = await operation(transaction);
 
-    this.bookings.clear();
-    this.followUps.clear();
-    this.auditEntries.length = 0;
-    bookings.forEach((booking, id) => this.bookings.set(id, booking));
-    followUps.forEach((followUp, id) => this.followUps.set(id, followUp));
-    this.auditEntries.push(...auditEntries);
+      this.bookings.clear();
+      this.followUps.clear();
+      this.auditEntries.length = 0;
+      bookings.forEach((booking, id) => this.bookings.set(id, booking));
+      followUps.forEach((followUp, id) => this.followUps.set(id, followUp));
+      this.auditEntries.push(...auditEntries);
 
-    return result;
+      return result;
+    } finally {
+      release();
+    }
   }
 }
 
@@ -155,6 +166,71 @@ class InMemoryBookingTransaction implements BookingTransaction {
 }
 
 describe("BookingService.completeFollowUp", () => {
+  it("returns ALREADY_COMPLETED on a retry without changing the stable link or audit history", async () => {
+    const repository = new InMemoryBookingRepository();
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+    const input = {
+      followUpId: initialFollowUp.id,
+      outcome: "send_quote",
+      status: "quote_sent" as const,
+      nextAction: {
+        kind: "prepare_quote",
+        dueAt: new Date("2026-08-02T17:00:00Z"),
+      },
+    };
+
+    const first = await service.completeFollowUp(input);
+    const stableFollowUp = structuredClone(
+      repository.followUps.get(initialFollowUp.id),
+    );
+    const stableNext = structuredClone(repository.followUps.get("follow-up-2"));
+    const stableAudits = structuredClone(repository.auditEntries);
+    const retry = await service.completeFollowUp(input);
+
+    expect(first.ok).toBe(true);
+    expect(retry).toEqual({
+      ok: false,
+      error: { code: "ALREADY_COMPLETED" },
+    });
+    expect(repository.followUps).toHaveLength(2);
+    expect(repository.followUps.get(initialFollowUp.id)).toEqual(stableFollowUp);
+    expect(repository.followUps.get("follow-up-2")).toEqual(stableNext);
+    expect(repository.auditEntries).toEqual(stableAudits);
+  });
+
+  it("serializes concurrent completions so exactly one next action and audit pair exist", async () => {
+    const repository = new InMemoryBookingRepository();
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+    const input = {
+      followUpId: initialFollowUp.id,
+      outcome: "send_quote",
+      status: "quote_sent" as const,
+      nextAction: {
+        kind: "prepare_quote",
+        dueAt: new Date("2026-08-02T17:00:00Z"),
+      },
+    };
+
+    const results = await Promise.all([
+      service.completeFollowUp(input),
+      service.completeFollowUp(input),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([
+      { ok: false, error: { code: "ALREADY_COMPLETED" } },
+    ]);
+    expect(repository.followUps).toHaveLength(2);
+    expect(repository.followUps.get(initialFollowUp.id)?.nextFollowUpId).toBe(
+      "follow-up-2",
+    );
+    expect(repository.auditEntries).toHaveLength(2);
+  });
+
   it("audits the locked state immediately before the mutation", async () => {
     const repository = new InMemoryBookingRepository();
     repository.beforeTransaction = () => {
