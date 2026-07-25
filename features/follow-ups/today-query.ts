@@ -62,12 +62,33 @@ function priorityBucket(item: FollowUpSummary, now: Date) {
   const today = startOfUtcDay(now);
   const dueDay = startOfUtcDay(item.dueAt);
 
-  if (item.dueAt.getTime() < today) return 0;
+  if (item.dueAt < now) return 0;
   if (dueDay === today) return 1;
   if (item.status === "deadline") return 2;
   if (item.probability === "likely") return 3;
   if (item.status === "quiet_lead") return 4;
   return 5;
+}
+
+export function selectFutureIncompleteFollowUp<
+  T extends { dueAt: Date; completedAt: Date | null },
+>(items: T[], now: Date): T | null {
+  return (
+    items
+      .filter(
+        (item) =>
+          item.completedAt === null &&
+          Number.isFinite(item.dueAt.getTime()) &&
+          item.dueAt > now,
+      )
+      .sort(
+        (left, right) =>
+          left.dueAt.getTime() - right.dueAt.getTime() ||
+          ("id" in left && "id" in right
+            ? String(left.id).localeCompare(String(right.id))
+            : 0),
+      )[0] ?? null
+  );
 }
 
 export function sortFollowUpsForToday(
@@ -117,7 +138,10 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
     .orderBy(asc(bookings.createdAt), asc(followUps.dueAt), asc(followUps.createdAt));
 
   const openFollowUps: FollowUpSummary[] = [];
-  const nextActionByBooking = new Map<string, { dueAt: Date; completedAt: Date | null }>();
+  const openFollowUpsByBooking = new Map<
+    string,
+    { dueAt: Date; completedAt: Date | null }[]
+  >();
   const bookingRows = new Map<string, (typeof records)[number]["booking"]>();
 
   for (const { booking, followUp } of records) {
@@ -136,19 +160,24 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
     };
     openFollowUps.push(summary);
 
-    const current = nextActionByBooking.get(booking.id);
-    if (!current || followUp.dueAt < current.dueAt) {
-      nextActionByBooking.set(booking.id, {
-        dueAt: followUp.dueAt,
-        completedAt: followUp.completedAt,
-      });
-    }
+    const bookingFollowUps = openFollowUpsByBooking.get(booking.id) ?? [];
+    bookingFollowUps.push({
+      dueAt: followUp.dueAt,
+      completedAt: followUp.completedAt,
+    });
+    openFollowUpsByBooking.set(booking.id, bookingFollowUps);
   }
 
   const sortedFollowUps = sortFollowUpsForToday(openFollowUps, now);
   const startToday = startOfUtcDay(now);
   const endToday = startToday + 24 * 60 * 60 * 1000;
   const bookingList = [...bookingRows.values()];
+  const futureFollowUpByBooking = new Map(
+    [...openFollowUpsByBooking].flatMap(([bookingId, bookingFollowUps]) => {
+      const futureFollowUp = selectFutureIncompleteFollowUp(bookingFollowUps, now);
+      return futureFollowUp ? [[bookingId, futureFollowUp] as const] : [];
+    }),
+  );
 
   return {
     followUpCount: sortedFollowUps.filter(
@@ -164,7 +193,9 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
       sortedFollowUps.find((followUp) => followUp.kind === "call") ?? null,
     followUps: sortedFollowUps,
     needsFollowUpPlan: bookingList
-      .filter((booking) => needsFollowUpPlan(booking, nextActionByBooking.get(booking.id) ?? null, now))
+      .filter((booking) =>
+        needsFollowUpPlan(booking, futureFollowUpByBooking.get(booking.id) ?? null, now),
+      )
       .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id))
       .map((booking) => ({
         id: booking.id,

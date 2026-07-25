@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  selectFutureIncompleteFollowUp,
   sortFollowUpsForToday,
   type FollowUpSummary,
 } from "@/features/follow-ups/today-query";
+import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
 
 function item(
   id: string,
@@ -80,5 +82,49 @@ describe("sortFollowUpsForToday", () => {
       "today",
       "future-deadline",
     ]);
+  });
+
+  it("keeps an earlier same-day follow-up ahead of a later one", () => {
+    const result = sortFollowUpsForToday(
+      [
+        item("later-today", "2026-08-03T15:00:00Z", "due"),
+        item("earlier-today", "2026-08-03T13:59:59Z", "due"),
+      ],
+      new Date("2026-08-03T14:00:00Z"),
+    );
+
+    expect(result.map((entry) => entry.id)).toEqual([
+      "earlier-today",
+      "later-today",
+    ]);
+  });
+});
+
+describe("selectFutureIncompleteFollowUp", () => {
+  it("keeps a booking planned when it has both overdue and future open follow-ups", () => {
+    const result = selectFutureIncompleteFollowUp(
+      [
+        {
+          id: "overdue",
+          dueAt: new Date("2026-08-03T13:00:00Z"),
+          completedAt: null,
+        },
+        {
+          id: "future",
+          dueAt: new Date("2026-08-06T15:00:00Z"),
+          completedAt: null,
+        },
+      ],
+      new Date("2026-08-03T14:00:00Z"),
+    );
+
+    expect(result?.id).toBe("future");
+    expect(
+      needsFollowUpPlan(
+        { status: "interested" },
+        result,
+        new Date("2026-08-03T14:00:00Z"),
+      ),
+    ).toBe(false);
   });
 });
