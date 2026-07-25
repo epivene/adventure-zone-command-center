@@ -1,0 +1,153 @@
+import type {
+  BookingStatus,
+  Probability,
+} from "@/features/bookings/booking-types";
+
+export type MapEvent = {
+  id: string;
+  name: string;
+  city: string;
+  region: string;
+  latitude: number | null;
+  longitude: number | null;
+  status: BookingStatus;
+  probability: Probability;
+  travelLegId: string | null;
+  travelLegName: string | null;
+  travelLegColor: string | null;
+  startsAt: Date | null;
+  endsAt: Date | null;
+};
+
+export type MapFilters = {
+  statuses: MapEvent["status"][];
+  travelLegIds: string[];
+  dateFrom: string | null;
+  dateTo: string | null;
+  regions: string[];
+};
+
+export type MapFeatureProperties = {
+  id: string;
+  name: string;
+  status: MapEvent["status"];
+  probability: MapEvent["probability"];
+  travelLegId: string | null;
+  travelLegColor: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+};
+
+export type MapFeature = {
+  type: "Feature";
+  id: string;
+  geometry: {
+    type: "Point";
+    coordinates: [number, number];
+  };
+  properties: MapFeatureProperties;
+};
+
+export type MapFeatureCollection = {
+  type: "FeatureCollection";
+  features: MapFeature[];
+};
+
+export type MapDataset = {
+  geoJson: MapFeatureCollection;
+  unmappedEvents: MapEvent[];
+};
+
+const emptyFilters: MapFilters = {
+  statuses: [],
+  travelLegIds: [],
+  dateFrom: null,
+  dateTo: null,
+  regions: [],
+};
+
+function startOfUtcDate(value: string | null): number | null {
+  if (!value) return null;
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function endOfUtcDate(value: string | null): number | null {
+  const start = startOfUtcDate(value);
+  return start === null ? null : start + 24 * 60 * 60 * 1000 - 1;
+}
+
+export function filterMapEvents(
+  events: MapEvent[],
+  filters: MapFilters = emptyFilters,
+): MapEvent[] {
+  const from = startOfUtcDate(filters.dateFrom);
+  const to = endOfUtcDate(filters.dateTo);
+
+  return events.filter((event) => {
+    if (filters.statuses.length && !filters.statuses.includes(event.status)) {
+      return false;
+    }
+    if (
+      filters.travelLegIds.length &&
+      (!event.travelLegId || !filters.travelLegIds.includes(event.travelLegId))
+    ) {
+      return false;
+    }
+    if (filters.regions.length && !filters.regions.includes(event.region)) {
+      return false;
+    }
+    if (from !== null || to !== null) {
+      const startsAt = event.startsAt?.getTime();
+      if (startsAt === undefined) return false;
+      if (from !== null && startsAt < from) return false;
+      if (to !== null && startsAt > to) return false;
+    }
+    return true;
+  });
+}
+
+function hasValidCoordinates(
+  event: MapEvent,
+): event is MapEvent & { latitude: number; longitude: number } {
+  return (
+    event.latitude !== null &&
+    event.longitude !== null &&
+    Number.isFinite(event.latitude) &&
+    Number.isFinite(event.longitude) &&
+    event.latitude >= -90 &&
+    event.latitude <= 90 &&
+    event.longitude >= -180 &&
+    event.longitude <= 180
+  );
+}
+
+export function toMapDataset(events: MapEvent[]): MapDataset {
+  const mappedEvents = events.filter(hasValidCoordinates);
+  const unmappedEvents = events.filter((event) => !hasValidCoordinates(event));
+
+  return {
+    geoJson: {
+      type: "FeatureCollection",
+      features: mappedEvents.map((event) => ({
+        type: "Feature",
+        id: event.id,
+        geometry: {
+          type: "Point",
+          coordinates: [event.longitude, event.latitude],
+        },
+        properties: {
+          id: event.id,
+          name: event.name,
+          status: event.status,
+          probability: event.probability,
+          travelLegId: event.travelLegId,
+          travelLegColor: event.travelLegColor,
+          startsAt: event.startsAt?.toISOString() ?? null,
+          endsAt: event.endsAt?.toISOString() ?? null,
+        },
+      })),
+    },
+    unmappedEvents,
+  };
+}
