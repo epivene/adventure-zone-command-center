@@ -45,6 +45,7 @@ export type UpdateBookingStatusInput = {
 };
 
 export interface BookingTransaction {
+  createBooking(input: Omit<Booking, "id">): Promise<Booking>;
   completeFollowUp(
     followUpId: string,
     input: { outcome: string; completedAt: Date },
@@ -91,6 +92,12 @@ function toFollowUp(record: typeof followUps.$inferSelect): FollowUp {
 
 class DrizzleBookingTransaction implements BookingTransaction {
   constructor(private readonly database: DrizzleWriter) {}
+
+  async createBooking(input: Omit<Booking, "id">): Promise<Booking> {
+    const [booking] = await this.database.insert(bookings).values(input).returning();
+    if (!booking) throw new Error("Could not create booking.");
+    return toBooking(booking);
+  }
 
   async completeFollowUp(
     followUpId: string,

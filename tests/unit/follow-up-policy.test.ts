@@ -27,8 +27,29 @@ describe("needsFollowUpPlan", () => {
       needsFollowUpPlan(
         { status: "quote_sent" },
         { dueAt: new Date("2026-08-01T15:00:00Z"), completedAt: null },
+        new Date("2026-08-01T14:00:00Z"),
       ),
     ).toBe(false);
+  });
+
+  it("flags an active lead when its next action is past due", () => {
+    expect(
+      needsFollowUpPlan(
+        { status: "quote_sent" },
+        { dueAt: new Date("2026-08-01T13:59:59Z"), completedAt: null },
+        new Date("2026-08-01T14:00:00Z"),
+      ),
+    ).toBe(true);
+  });
+
+  it("flags an active lead when its next action has an invalid date", () => {
+    expect(
+      needsFollowUpPlan(
+        { status: "quote_sent" },
+        { dueAt: new Date("not a date"), completedAt: null },
+        new Date("2026-08-01T14:00:00Z"),
+      ),
+    ).toBe(true);
   });
 
   it("flags an active lead when its supplied next action is already complete", () => {

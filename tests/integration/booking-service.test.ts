@@ -38,6 +38,7 @@ class InMemoryBookingRepository implements BookingRepository {
   public readonly auditEntries: AuditEntry[] = [];
   public transactionCount = 0;
   public failAuditWrite = false;
+  private nextBookingNumber = 2;
   private nextFollowUpNumber = 2;
 
   constructor() {
@@ -74,6 +75,7 @@ class InMemoryBookingRepository implements BookingRepository {
       bookings,
       followUps,
       auditEntries,
+      () => `booking-${this.nextBookingNumber++}`,
       () => `follow-up-${this.nextFollowUpNumber++}`,
       () => this.failAuditWrite,
     );
@@ -96,9 +98,16 @@ class InMemoryBookingTransaction implements BookingTransaction {
     private readonly bookings: Map<string, Booking>,
     private readonly followUps: Map<string, FollowUp>,
     private readonly auditEntries: AuditEntry[],
+    private readonly nextBookingId: () => string,
     private readonly nextFollowUpId: () => string,
     private readonly shouldFailAuditWrite: () => boolean,
   ) {}
+
+  async createBooking(input: Omit<Booking, "id">): Promise<Booking> {
+    const booking = { ...input, id: this.nextBookingId() };
+    this.bookings.set(booking.id, booking);
+    return booking;
+  }
 
   async completeFollowUp(
     followUpId: string,
@@ -264,9 +273,11 @@ describe("BookingService.completeFollowUp", () => {
 });
 
 describe("BookingService.createBooking", () => {
-  it("creates a booking through the repository", async () => {
+  it("atomically creates an active booking with its future next action", async () => {
     const repository = new InMemoryBookingRepository();
-    const service = new BookingService(repository);
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
 
     const booking = await service.createBooking({
       name: "New adventure",
@@ -274,6 +285,10 @@ describe("BookingService.createBooking", () => {
       region: "TX",
       status: "new_lead",
       probability: "possible",
+      nextAction: {
+        kind: "call",
+        dueAt: new Date("2026-08-02T15:00:00Z"),
+      },
     });
 
     expect(booking).toEqual({
@@ -284,5 +299,73 @@ describe("BookingService.createBooking", () => {
       status: "new_lead",
       probability: "possible",
     });
+    expect(repository.followUps.get("follow-up-2")).toEqual({
+      id: "follow-up-2",
+      bookingId: booking.id,
+      kind: "call",
+      dueAt: new Date("2026-08-02T15:00:00Z"),
+      completedAt: null,
+      outcome: null,
+      nextFollowUpId: null,
+    });
+  });
+
+  it("rejects an active booking without a future next action", async () => {
+    const repository = new InMemoryBookingRepository();
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+
+    await expect(
+      service.createBooking({
+        name: "New adventure",
+        city: "Dallas",
+        region: "TX",
+        status: "new_lead",
+        probability: "possible",
+        nextAction: { kind: "call", dueAt: new Date("2026-08-01T16:00:00Z") },
+      }),
+    ).rejects.toThrow("NEXT_ACTION_REQUIRED");
+
+    expect(repository.bookings.has("booking-2")).toBe(false);
+    expect(repository.followUps.has("follow-up-2")).toBe(false);
+  });
+
+  it("rejects an active booking without a next action", async () => {
+    const repository = new InMemoryBookingRepository();
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+
+    await expect(
+      service.createBooking({
+        name: "New adventure",
+        city: "Dallas",
+        region: "TX",
+        status: "new_lead",
+        probability: "possible",
+      }),
+    ).rejects.toThrow("NEXT_ACTION_REQUIRED");
+
+    expect(repository.transactionCount).toBe(0);
+    expect(repository.bookings.has("booking-2")).toBe(false);
+  });
+
+  it("allows a closed booking without a next action", async () => {
+    const repository = new InMemoryBookingRepository();
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+
+    const booking = await service.createBooking({
+      name: "Closed adventure",
+      city: "Dallas",
+      region: "TX",
+      status: "declined",
+      probability: "unlikely",
+    });
+
+    expect(booking.status).toBe("declined");
+    expect(repository.followUps.has("follow-up-2")).toBe(false);
   });
 });

@@ -13,6 +13,13 @@ export function isActiveStatus(status: BookingStatus): boolean {
 export function needsFollowUpPlan(
   booking: { status: BookingStatus },
   nextFollowUp: { dueAt: Date; completedAt: Date | null } | null,
+  now: Date = new Date(),
 ): boolean {
-  return isActiveStatus(booking.status) && (!nextFollowUp || nextFollowUp.completedAt !== null);
+  const hasFutureIncompleteAction =
+    nextFollowUp !== null &&
+    nextFollowUp.completedAt === null &&
+    Number.isFinite(nextFollowUp.dueAt.getTime()) &&
+    nextFollowUp.dueAt > now;
+
+  return isActiveStatus(booking.status) && !hasFutureIncompleteAction;
 }

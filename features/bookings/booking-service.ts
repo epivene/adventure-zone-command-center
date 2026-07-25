@@ -27,6 +27,7 @@ export type CreateBookingInput = {
   region: string;
   status?: BookingStatus;
   probability?: Probability;
+  nextAction?: { kind: string; dueAt: Date } | null;
 };
 
 type BookingServiceOptions = {
@@ -44,10 +45,35 @@ export class BookingService {
   }
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
-    return this.repository.createBooking({
-      ...input,
-      status: input.status ?? "new_lead",
-      probability: input.probability ?? "possible",
+    const status = input.status ?? "new_lead";
+    const now = this.now();
+    if (
+      needsFollowUpPlan(
+        { status },
+        input.nextAction ? { ...input.nextAction, completedAt: null } : null,
+        now,
+      )
+    ) {
+      throw new Error("NEXT_ACTION_REQUIRED");
+    }
+
+    return this.repository.transaction(async (transaction) => {
+      const booking = await transaction.createBooking({
+        name: input.name,
+        city: input.city,
+        region: input.region,
+        status,
+        probability: input.probability ?? "possible",
+      });
+
+      if (input.nextAction) {
+        await transaction.createFollowUp({
+          bookingId: booking.id,
+          ...input.nextAction,
+        });
+      }
+
+      return booking;
     });
   }
 
@@ -58,17 +84,19 @@ export class BookingService {
     if (!context) return err({ code: "FOLLOW_UP_NOT_FOUND" });
 
     const resultingStatus = input.status ?? context.booking.status;
+    const now = this.now();
     if (
       needsFollowUpPlan(
         { status: resultingStatus },
         input.nextAction ? { ...input.nextAction, completedAt: null } : null,
+        now,
       )
     ) {
       return err({ code: "NEXT_ACTION_REQUIRED" });
     }
 
     const followUp = await this.repository.transaction(async (transaction) => {
-      const completedAt = this.now();
+      const completedAt = now;
       const completed = await transaction.completeFollowUp(input.followUpId, {
         outcome: input.outcome,
         completedAt,
