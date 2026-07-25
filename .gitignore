@@ -1,0 +1,11 @@
+node_modules/
+.next/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.local
+.worktrees/
+.superpowers/
+dashboard-options.svg
+dashboard-options.png
