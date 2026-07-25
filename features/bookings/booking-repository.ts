@@ -1,10 +1,18 @@
-import { eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { db as database } from "@/db/client";
-import { auditEntries, bookings, followUps } from "@/db/schema";
+import {
+  auditEntries,
+  bookings,
+  contacts,
+  followUps,
+  organizations,
+  travelLegs,
+} from "@/db/schema";
 import type {
   BookingStatus,
   Probability,
 } from "@/features/bookings/booking-types";
+import type { BookingEditInput } from "@/features/bookings/booking-input";
 
 export type Booking = {
   id: string;
@@ -42,6 +50,28 @@ export type CreateFollowUpInput = {
 export type UpdateBookingStatusInput = {
   bookingId: string;
   status: BookingStatus;
+};
+
+export type BookingListRecord = {
+  id: string;
+  name: string;
+  city: string;
+  region: string;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  status: BookingStatus;
+  probability: Probability;
+  travelLeg: { id: string; name: string; color: string } | null;
+  nextAction: { id: string; kind: string; dueAt: Date } | null;
+};
+
+export type BookingDetail = {
+  booking: typeof bookings.$inferSelect;
+  organization: typeof organizations.$inferSelect | null;
+  contact: typeof contacts.$inferSelect | null;
+  travelLeg: typeof travelLegs.$inferSelect | null;
+  followUps: (typeof followUps.$inferSelect)[];
+  auditEntries: (typeof auditEntries.$inferSelect)[];
 };
 
 export interface BookingTransaction {
@@ -169,5 +199,142 @@ export class DrizzleBookingRepository implements BookingRepository {
     return this.database.transaction((transaction) =>
       operation(new DrizzleBookingTransaction(transaction)),
     );
+  }
+
+  async listBookings(): Promise<BookingListRecord[]> {
+    const [records, openFollowUps] = await Promise.all([
+      this.database
+        .select({ booking: bookings, travelLeg: travelLegs })
+        .from(bookings)
+        .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .orderBy(desc(bookings.updatedAt)),
+      this.database
+        .select()
+        .from(followUps)
+        .where(isNull(followUps.completedAt))
+        .orderBy(asc(followUps.dueAt)),
+    ]);
+
+    const nextActionByBooking = new Map<
+      string,
+      { id: string; kind: string; dueAt: Date }
+    >();
+    for (const followUp of openFollowUps) {
+      if (!nextActionByBooking.has(followUp.bookingId)) {
+        nextActionByBooking.set(followUp.bookingId, {
+          id: followUp.id,
+          kind: followUp.kind,
+          dueAt: followUp.dueAt,
+        });
+      }
+    }
+
+    return records.map(({ booking, travelLeg }) => ({
+      id: booking.id,
+      name: booking.name,
+      city: booking.city,
+      region: booking.region,
+      startsAt: booking.startsAt,
+      endsAt: booking.endsAt,
+      status: booking.status,
+      probability: booking.probability,
+      travelLeg: travelLeg
+        ? { id: travelLeg.id, name: travelLeg.name, color: travelLeg.color }
+        : null,
+      nextAction: nextActionByBooking.get(booking.id) ?? null,
+    }));
+  }
+
+  async getBookingDetail(bookingId: string): Promise<BookingDetail | null> {
+    const [record] = await this.database
+      .select({
+        booking: bookings,
+        organization: organizations,
+        contact: contacts,
+        travelLeg: travelLegs,
+      })
+      .from(bookings)
+      .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
+      .leftJoin(contacts, eq(bookings.primaryContactId, contacts.id))
+      .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+
+    if (!record) return null;
+
+    const bookingFollowUps = await this.database
+      .select()
+      .from(followUps)
+      .where(eq(followUps.bookingId, bookingId))
+      .orderBy(desc(followUps.dueAt));
+    const followUpIds = bookingFollowUps.map((followUp) => followUp.id);
+    const auditFilter =
+      followUpIds.length > 0
+        ? or(
+            and(
+              eq(auditEntries.entityType, "booking"),
+              eq(auditEntries.entityId, bookingId),
+            ),
+            and(
+              eq(auditEntries.entityType, "follow_up"),
+              inArray(auditEntries.entityId, followUpIds),
+            ),
+          )
+        : and(
+            eq(auditEntries.entityType, "booking"),
+            eq(auditEntries.entityId, bookingId),
+          );
+    const history = await this.database
+      .select()
+      .from(auditEntries)
+      .where(auditFilter)
+      .orderBy(desc(auditEntries.createdAt));
+
+    return {
+      ...record,
+      followUps: bookingFollowUps,
+      auditEntries: history,
+    };
+  }
+
+  async updateBookingDetails(
+    bookingId: string,
+    input: BookingEditInput,
+  ): Promise<Booking | null> {
+    return this.database.transaction(async (transaction) => {
+      const [before] = await transaction
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, bookingId))
+        .limit(1);
+      if (!before) return null;
+
+      const [updated] = await transaction
+        .update(bookings)
+        .set({ ...input, updatedAt: new Date() })
+        .where(eq(bookings.id, bookingId))
+        .returning();
+      if (!updated) return null;
+
+      await transaction.insert(auditEntries).values({
+        entityType: "booking",
+        entityId: bookingId,
+        action: "updated",
+        before: {
+          name: before.name,
+          city: before.city,
+          region: before.region,
+          probability: before.probability,
+        },
+        after: {
+          name: updated.name,
+          city: updated.city,
+          region: updated.region,
+          probability: updated.probability,
+        },
+      });
+
+      return toBooking(updated);
+    });
   }
 }
