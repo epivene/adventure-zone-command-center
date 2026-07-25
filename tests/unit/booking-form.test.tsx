@@ -13,7 +13,11 @@ import {
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
 import { followUpCompletionInputSchema } from "@/features/bookings/follow-up-completion-input";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+  vi.restoreAllMocks();
+});
 
 describe("BookingForm", () => {
   it("requires event name, city, state, status, and next action for an active lead", async () => {
@@ -55,6 +59,149 @@ describe("BookingForm", () => {
       region: "ND",
       probability: "possible",
     });
+  });
+
+  it("restores a local draft only after the user explicitly chooses it", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem(
+      "azcc:draft:booking:new",
+      JSON.stringify({
+        version: 1,
+        savedAt: "2026-07-25T15:30:00.000Z",
+        data: {
+          name: "Draft Fair",
+          city: "Fargo",
+          region: "ND",
+          status: "new_lead",
+          probability: "possible",
+          nextActionKind: "call",
+          nextActionDueAt: "2026-08-01",
+        },
+      }),
+    );
+
+    render(<BookingForm draftKey="booking:new" onSubmit={vi.fn()} />);
+
+    expect(screen.getByLabelText("Event name")).toHaveValue("");
+    await user.click(await screen.findByRole("button", { name: "Restore draft" }));
+    expect(screen.getByLabelText("Event name")).toHaveValue("Draft Fair");
+    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+  });
+
+  it("saves offline edits as a clearly labeled local draft", async () => {
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    const user = userEvent.setup();
+    render(<BookingForm draftKey="booking:new" onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Event name"), "Offline Fair");
+
+    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+    expect(
+      JSON.parse(localStorage.getItem("azcc:draft:booking:new") ?? "{}").data,
+    ).toMatchObject({ name: "Offline Fair" });
+  });
+
+  it("explains when an offline draft cannot be saved on the device", async () => {
+    vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    });
+    const user = userEvent.setup();
+    render(<BookingForm draftKey="booking:new" onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Event name"), "Offline Fair");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Draft could not be saved on this device",
+    );
+  });
+
+  it("deletes a local draft only after the server confirms the save", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true });
+    localStorage.setItem(
+      "azcc:draft:booking:edit:123",
+      JSON.stringify({
+        version: 1,
+        savedAt: "2026-07-25T15:30:00.000Z",
+        data: { name: "Old draft" },
+      }),
+    );
+    render(
+      <BookingForm
+        draftKey="booking:edit:123"
+        initialValues={{
+          name: "Saved Fair",
+          city: "Fargo",
+          region: "ND",
+          probability: "possible",
+        }}
+        onSubmit={onSubmit}
+        variant="edit"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onSubmit).toHaveBeenCalledOnce();
+    expect(localStorage.getItem("azcc:draft:booking:edit:123")).toBeNull();
+  });
+
+  it("keeps a local draft when the server rejects the save", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({ ok: false, error: "Try again." });
+    const storedDraft = JSON.stringify({
+      version: 1,
+      savedAt: "2026-07-25T15:30:00.000Z",
+      data: { name: "Keep me" },
+    });
+    localStorage.setItem("azcc:draft:booking:edit:123", storedDraft);
+    render(
+      <BookingForm
+        draftKey="booking:edit:123"
+        initialValues={{
+          name: "Saved Fair",
+          city: "Fargo",
+          region: "ND",
+          probability: "possible",
+        }}
+        onSubmit={onSubmit}
+        variant="edit"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Try again.");
+    expect(localStorage.getItem("azcc:draft:booking:edit:123")).toBe(storedDraft);
+  });
+
+  it("does not claim a draft was removed when device storage rejects deletion", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true });
+    vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+      throw new DOMException("Storage unavailable", "SecurityError");
+    });
+    render(
+      <BookingForm
+        draftKey="booking:edit:123"
+        initialValues={{
+          name: "Saved Fair",
+          city: "Fargo",
+          region: "ND",
+          probability: "possible",
+        }}
+        onSubmit={onSubmit}
+        variant="edit"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Draft could not be removed from this device",
+    );
   });
 });
 

@@ -1,6 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 
 import {
   bookingEditInputSchema,
@@ -14,6 +19,7 @@ import {
   type BookingStatus,
   type Probability,
 } from "@/features/bookings/booking-types";
+import { deleteDraft, loadDraft, saveDraft } from "@/lib/offline/draft-store";
 
 type BookingSubmissionResult =
   | { ok: true }
@@ -31,6 +37,7 @@ type BookingFormValues = {
 };
 
 type SharedBookingFormProps = {
+  draftKey?: string;
   initialValues?: Partial<BookingFormValues>;
 };
 
@@ -62,10 +69,61 @@ const defaultValues: BookingFormValues = {
 
 export function BookingForm(props: BookingFormProps) {
   const { initialValues } = props;
+  const draftKey =
+    props.draftKey ??
+    (props.variant === "edit" ? "booking:edit" : "booking:new");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submissionError, setSubmissionError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const values = { ...defaultValues, ...initialValues };
+  const [values, setValues] = useState<BookingFormValues>(() => ({
+    ...defaultValues,
+    ...initialValues,
+  }));
+  const [restorableDraft, setRestorableDraft] =
+    useState<BookingFormValues | null>(null);
+  const [isLocalDraft, setIsLocalDraft] = useState(false);
+  const [draftError, setDraftError] = useState("");
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const draft = loadDraft<Partial<BookingFormValues>>(draftKey);
+      if (draft) {
+        setRestorableDraft({ ...defaultValues, ...draft });
+      }
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [draftKey]);
+
+  function persistDraft(nextValues: BookingFormValues) {
+    const result = saveDraft(draftKey, nextValues);
+    if (result.ok) {
+      setIsLocalDraft(true);
+      setDraftError("");
+      return true;
+    }
+
+    setDraftError("Draft could not be saved on this device");
+    return false;
+  }
+
+  function handleChange(
+    event: ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) {
+    const { name, value } = event.currentTarget;
+    const nextValues = { ...values, [name]: value };
+    setValues(nextValues);
+    if (!navigator.onLine) {
+      persistDraft(nextValues);
+    }
+  }
+
+  function restoreDraft() {
+    if (!restorableDraft) return;
+    setValues(restorableDraft);
+    setRestorableDraft(null);
+    setIsLocalDraft(true);
+    setDraftError("");
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,6 +156,21 @@ export function BookingForm(props: BookingFormProps) {
           : await props.onSubmit(result.data as BookingFormInput);
       if (submissionResult && !submissionResult.ok) {
         setSubmissionError(submissionResult.error);
+      } else {
+        const deletion = deleteDraft(draftKey);
+        if (deletion.ok) {
+          setIsLocalDraft(false);
+          setRestorableDraft(null);
+        } else {
+          setIsLocalDraft(true);
+          setDraftError("Draft could not be removed from this device");
+        }
+      }
+    } catch {
+      if (persistDraft(values)) {
+        setSubmissionError(
+          "Connection lost. Your changes are saved as a local draft, not on the server.",
+        );
       }
     } finally {
       setIsSubmitting(false);
@@ -106,6 +179,31 @@ export function BookingForm(props: BookingFormProps) {
 
   return (
     <form className="grid gap-5" noValidate onSubmit={handleSubmit}>
+      {restorableDraft ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950 sm:flex-row sm:items-center sm:justify-between">
+          <p>A local unsaved draft is available on this device.</p>
+          <button
+            className="button-secondary shrink-0"
+            onClick={restoreDraft}
+            type="button"
+          >
+            Restore draft
+          </button>
+        </div>
+      ) : null}
+      {isLocalDraft ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-950">
+          Local draft — not saved
+        </p>
+      ) : null}
+      {draftError ? (
+        <p
+          className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800"
+          role="alert"
+        >
+          {draftError}
+        </p>
+      ) : null}
       {submissionError ? (
         <p
           className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800"
@@ -116,26 +214,42 @@ export function BookingForm(props: BookingFormProps) {
       ) : null}
       <label className="grid gap-1.5 font-medium">
         Event name
-        <input defaultValue={values.name} name="name" type="text" />
+        <input
+          name="name"
+          onChange={handleChange}
+          type="text"
+          value={values.name}
+        />
         {errors.name ? <span role="alert">{errors.name}</span> : null}
       </label>
 
       <label className="grid gap-1.5 font-medium">
         City
-        <input defaultValue={values.city} name="city" type="text" />
+        <input
+          name="city"
+          onChange={handleChange}
+          type="text"
+          value={values.city}
+        />
         {errors.city ? <span role="alert">{errors.city}</span> : null}
       </label>
 
       <label className="grid gap-1.5 font-medium">
         State
-        <input defaultValue={values.region} maxLength={2} name="region" type="text" />
+        <input
+          maxLength={2}
+          name="region"
+          onChange={handleChange}
+          type="text"
+          value={values.region}
+        />
         {errors.region ? <span role="alert">{errors.region}</span> : null}
       </label>
 
       {props.variant !== "edit" ? (
         <label className="grid gap-1.5 font-medium">
           Status
-          <select defaultValue={values.status} name="status">
+          <select name="status" onChange={handleChange} value={values.status}>
             {bookingStatusValues.map((status) => (
               <option key={status} value={status}>
                 {status.replaceAll("_", " ")}
@@ -147,7 +261,11 @@ export function BookingForm(props: BookingFormProps) {
 
       <label className="grid gap-1.5 font-medium">
         Probability
-        <select defaultValue={values.probability} name="probability">
+        <select
+          name="probability"
+          onChange={handleChange}
+          value={values.probability}
+        >
           {probabilityValues.map((probability) => (
             <option key={probability} value={probability}>
               {probability}
@@ -160,7 +278,11 @@ export function BookingForm(props: BookingFormProps) {
         <>
           <label className="grid gap-1.5 font-medium">
             Next action
-            <select defaultValue={values.nextActionKind} name="nextActionKind">
+            <select
+              name="nextActionKind"
+              onChange={handleChange}
+              value={values.nextActionKind}
+            >
               <option value="">Choose an action</option>
               <option value="call">Call</option>
               <option value="send_information">Send information</option>
@@ -175,9 +297,10 @@ export function BookingForm(props: BookingFormProps) {
           <label className="grid gap-1.5 font-medium">
             Follow-up date
             <input
-              defaultValue={values.nextActionDueAt}
               name="nextActionDueAt"
+              onChange={handleChange}
               type="date"
+              value={values.nextActionDueAt}
             />
             {errors.nextActionDueAt ? (
               <span role="alert">{errors.nextActionDueAt}</span>
