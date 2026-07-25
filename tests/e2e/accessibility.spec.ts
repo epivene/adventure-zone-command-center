@@ -138,9 +138,12 @@ test("mobile navigation items have distinct accessible names", async ({
   await expect(
     navigation.getByRole("link", { name: "Routes", exact: true }),
   ).toHaveCount(1);
-  await expect(
-    navigation.getByText("Settings", { exact: true }),
-  ).toHaveCount(1);
+  const settingsControl = navigation.getByRole("button", {
+    name: "Settings",
+    exact: true,
+  });
+  await expect(settingsControl).toHaveCount(1);
+  await expect(settingsControl).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Quick Add", exact: true }),
   ).toHaveCount(1);

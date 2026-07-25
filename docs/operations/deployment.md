@@ -54,21 +54,32 @@ npx drizzle-kit migrate
 npm run db:seed
 ```
 
-The seed is repeatable and must leave exactly four configurable rows named
-`Leg 1` through `Leg 4`. It updates those seed rows by `sort_order`; it does
-not turn advertised packages into routes.
+The seed is a repeatable upsert keyed by `sort_order`. It ensures sort orders
+1–4 exist and resets their names and colors to the committed `Leg 1` through
+`Leg 4` defaults. It does not delete or reject additional rows, so running the
+seed alone does not prove that the database contains exactly four legs. It
+also does not turn advertised packages into routes.
 
-Verify the result:
+Verify both the count and the complete ordered list:
 
 ```sql
+SELECT count(*) AS travel_leg_count
+FROM travel_legs;
+
 SELECT name, color, sort_order
 FROM travel_legs
 ORDER BY sort_order;
 ```
 
-Expected sort orders are `1`, `2`, `3`, and `4`, once each. Confirm the four
-legs are visible in the application before accepting bookings. Renaming or
-recoloring a leg is operational data management and must not change the count.
+The count must be exactly `4`, and the list must contain sort orders `1`, `2`,
+`3`, and `4`, once each. If either check differs, stop the release and
+escalate for an explicit data review. Do not delete extra operational or
+reference rows automatically. Resolve their ownership and migration through a
+separately reviewed data-change procedure, then rerun both queries and the
+release gate. Confirm the verified four legs are visible in the application
+before accepting bookings or creating the release tag. Renaming or recoloring
+a leg after seeding is operational data management and must not change the
+verified count.
 
 ## Build and deploy
 
