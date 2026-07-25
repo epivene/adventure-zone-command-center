@@ -14,7 +14,9 @@ type WorkerEvent = {
   waitUntil?: (work: Promise<unknown>) => void;
 };
 
-function loadServiceWorker() {
+function loadServiceWorker(
+  networkResponse?: Response,
+) {
   const listeners = new Map<string, (event: WorkerEvent) => void>();
   const added: string[][] = [];
   const stored: string[] = [];
@@ -23,8 +25,8 @@ function loadServiceWorker() {
       added.push(urls);
     }),
     match: vi.fn(async () => undefined),
-    put: vi.fn(async (request: { url: string }) => {
-      stored.push(request.url);
+    put: vi.fn(async (request: { url: string } | string) => {
+      stored.push(typeof request === "string" ? request : request.url);
     }),
   };
   const caches = {
@@ -33,7 +35,19 @@ function loadServiceWorker() {
     match: vi.fn(async () => undefined),
     open: vi.fn(async () => cache),
   };
-  const fetch = vi.fn(async () => new Response("network"));
+  const fetch = vi.fn(async (request: { url?: string } | string) => {
+    if (networkResponse) return networkResponse;
+    const url =
+      typeof request === "string" ? request : (request.url ?? request.toString());
+    const contentType = url.endsWith(".png")
+      ? "image/png"
+      : url.endsWith(".webmanifest")
+        ? "application/manifest+json"
+        : "application/javascript";
+    return new Response("network", {
+      headers: { "content-type": contentType },
+    });
+  });
   const self = {
     addEventListener: (
       type: string,
@@ -84,13 +98,25 @@ describe("service worker cache boundary", () => {
 
     await dispatchInstall(worker);
 
-    expect(worker.added).toEqual([
-      [
-        "/manifest.webmanifest",
-        "/icons/icon-192.png",
-        "/icons/icon-512.png",
-      ],
+    expect(worker.stored).toEqual([
+      "/manifest.webmanifest",
+      "/icons/icon-192.png",
+      "/icons/icon-512.png",
     ]);
+  });
+
+  it("does not pre-cache HTML fallbacks for declared public assets", async () => {
+    const worker = loadServiceWorker(
+      new Response("<html>sign in</html>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+        status: 200,
+      }),
+    );
+
+    await dispatchInstall(worker);
+
+    expect(worker.stored).toEqual([]);
+    expect(worker.added).toEqual([]);
   });
 
   it("never intercepts private API or document requests", async () => {
@@ -137,6 +163,53 @@ describe("service worker cache boundary", () => {
       method: "GET",
       mode: "cors",
       url: "https://command-center.test/sign-in/session.js",
+    });
+
+    expect(worker.fetch).not.toHaveBeenCalled();
+    expect(worker.stored).toEqual([]);
+  });
+
+  it("does not intercept a navigation even when its path looks allowlisted", async () => {
+    const worker = loadServiceWorker();
+
+    await dispatchFetch(worker, {
+      destination: "document",
+      method: "GET",
+      mode: "navigate",
+      url: "https://command-center.test/icons/icon-192.png",
+    });
+
+    expect(worker.fetch).not.toHaveBeenCalled();
+    expect(worker.stored).toEqual([]);
+  });
+
+  it("does not cache an HTML rewrite returned for a static-looking path", async () => {
+    const worker = loadServiceWorker(
+      new Response("<html>private fallback</html>", {
+        headers: { "content-type": "text/html; charset=utf-8" },
+        status: 200,
+      }),
+    );
+
+    await dispatchFetch(worker, {
+      destination: "script",
+      method: "GET",
+      mode: "cors",
+      url: "https://command-center.test/_next/static/chunks/missing.js",
+    });
+
+    expect(worker.fetch).toHaveBeenCalledOnce();
+    expect(worker.stored).toEqual([]);
+  });
+
+  it("does not intercept undeclared files under the icon directory", async () => {
+    const worker = loadServiceWorker();
+
+    await dispatchFetch(worker, {
+      destination: "image",
+      method: "GET",
+      mode: "cors",
+      url: "https://command-center.test/icons/private-export.png",
     });
 
     expect(worker.fetch).not.toHaveBeenCalled();

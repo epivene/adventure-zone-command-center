@@ -55,6 +55,7 @@ export default async function EditBookingPage({
             probability: detail.booking.probability,
           }}
           onSubmit={updateAction}
+          successPath={`/bookings/${bookingId}`}
           variant="edit"
         />
       </section>

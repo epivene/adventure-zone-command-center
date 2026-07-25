@@ -5,6 +5,12 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const { routerPush } = vi.hoisted(() => ({ routerPush: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: routerPush }),
+}));
+
 import { BookingForm } from "@/components/bookings/booking-form";
 import {
   BookingList,
@@ -16,6 +22,7 @@ import { followUpCompletionInputSchema } from "@/features/bookings/follow-up-com
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  routerPush.mockReset();
   vi.restoreAllMocks();
 });
 
@@ -116,7 +123,7 @@ describe("BookingForm", () => {
     );
   });
 
-  it("deletes a local draft only after the server confirms the save", async () => {
+  it("deletes a local draft and navigates only after explicit server success", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: true });
     localStorage.setItem(
@@ -137,6 +144,7 @@ describe("BookingForm", () => {
           probability: "possible",
         }}
         onSubmit={onSubmit}
+        successPath="/bookings/123"
         variant="edit"
       />,
     );
@@ -145,17 +153,78 @@ describe("BookingForm", () => {
 
     expect(onSubmit).toHaveBeenCalledOnce();
     expect(localStorage.getItem("azcc:draft:booking:edit:123")).toBeNull();
+    expect(routerPush).toHaveBeenCalledWith("/bookings/123");
+  });
+
+  it("retains and labels the draft when submission returns undefined", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    render(
+      <BookingForm
+        draftKey="booking:edit:123"
+        initialValues={{
+          name: "Unconfirmed Fair",
+          city: "Fargo",
+          region: "ND",
+          probability: "possible",
+        }}
+        onSubmit={onSubmit}
+        successPath="/bookings/123"
+        variant="edit"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+    expect(
+      JSON.parse(
+        localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
+      ).data,
+    ).toMatchObject({ name: "Unconfirmed Fair" });
+    expect(routerPush).not.toHaveBeenCalled();
+  });
+
+  it("retains and labels the draft when submission rejects", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockRejectedValue(new Error("Connection lost"));
+    render(
+      <BookingForm
+        draftKey="booking:edit:123"
+        initialValues={{
+          name: "Rejected Fair",
+          city: "Fargo",
+          region: "ND",
+          probability: "possible",
+        }}
+        onSubmit={onSubmit}
+        successPath="/bookings/123"
+        variant="edit"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+    expect(
+      JSON.parse(
+        localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
+      ).data,
+    ).toMatchObject({ name: "Rejected Fair" });
+    expect(routerPush).not.toHaveBeenCalled();
   });
 
   it("keeps a local draft when the server rejects the save", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: false, error: "Try again." });
-    const storedDraft = JSON.stringify({
-      version: 1,
-      savedAt: "2026-07-25T15:30:00.000Z",
-      data: { name: "Keep me" },
-    });
-    localStorage.setItem("azcc:draft:booking:edit:123", storedDraft);
+    localStorage.setItem(
+      "azcc:draft:booking:edit:123",
+      JSON.stringify({
+        version: 1,
+        savedAt: "2026-07-25T15:30:00.000Z",
+        data: { name: "Keep me" },
+      }),
+    );
     render(
       <BookingForm
         draftKey="booking:edit:123"
@@ -173,7 +242,12 @@ describe("BookingForm", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Try again.");
-    expect(localStorage.getItem("azcc:draft:booking:edit:123")).toBe(storedDraft);
+    expect(screen.getByText("Local draft — not saved")).toBeVisible();
+    expect(
+      JSON.parse(
+        localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
+      ).data,
+    ).toMatchObject({ name: "Saved Fair" });
   });
 
   it("does not claim a draft was removed when device storage rejects deletion", async () => {

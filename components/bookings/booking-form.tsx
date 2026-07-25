@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useState,
@@ -39,6 +40,7 @@ type BookingFormValues = {
 type SharedBookingFormProps = {
   draftKey?: string;
   initialValues?: Partial<BookingFormValues>;
+  successPath?: string;
 };
 
 type CreateBookingFormProps = SharedBookingFormProps & {
@@ -69,6 +71,7 @@ const defaultValues: BookingFormValues = {
 
 export function BookingForm(props: BookingFormProps) {
   const { initialValues } = props;
+  const router = useRouter();
   const draftKey =
     props.draftKey ??
     (props.variant === "edit" ? "booking:edit" : "booking:new");
@@ -149,18 +152,27 @@ export function BookingForm(props: BookingFormProps) {
     setErrors({});
     setSubmissionError("");
     setIsSubmitting(true);
+    let navigateTo: string | undefined;
     try {
       const submissionResult =
         props.variant === "edit"
           ? await props.onSubmit(result.data as BookingEditInput)
           : await props.onSubmit(result.data as BookingFormInput);
-      if (submissionResult && !submissionResult.ok) {
+      if (!submissionResult) {
+        if (persistDraft(values)) {
+          setSubmissionError(
+            "Save was not confirmed. Your changes are saved as a local draft, not on the server.",
+          );
+        }
+      } else if (!submissionResult.ok) {
+        persistDraft(values);
         setSubmissionError(submissionResult.error);
       } else {
         const deletion = deleteDraft(draftKey);
         if (deletion.ok) {
           setIsLocalDraft(false);
           setRestorableDraft(null);
+          navigateTo = props.successPath;
         } else {
           setIsLocalDraft(true);
           setDraftError("Draft could not be removed from this device");
@@ -174,6 +186,9 @@ export function BookingForm(props: BookingFormProps) {
       }
     } finally {
       setIsSubmitting(false);
+    }
+    if (navigateTo) {
+      router.push(navigateTo);
     }
   }
 

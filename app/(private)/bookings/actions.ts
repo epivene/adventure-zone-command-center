@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 
 import {
   bookingEditInputSchema,
@@ -63,7 +62,7 @@ export async function createBookingAction(
   }
 
   revalidatePath("/bookings");
-  redirect("/bookings");
+  return { ok: true };
 }
 
 export async function updateBookingAction(
@@ -85,7 +84,7 @@ export async function updateBookingAction(
 
   revalidatePath("/bookings");
   revalidatePath(`/bookings/${bookingId}`);
-  redirect(`/bookings/${bookingId}`);
+  return { ok: true };
 }
 
 export async function completeFollowUpAction(input: CompleteFollowUpInput) {
