@@ -90,3 +90,43 @@ retain explicit `requireOwner` protection.
 - The existing Clerk middleware emits a deprecation warning for
   `createRouteMatcher`; Task 5 keeps page/action owner checks in place and does
   not alter that pre-existing middleware.
+
+## Fix Round 1
+
+Commit:
+
+- `2a4a914 test: strengthen booking follow-up flow`
+
+Changes:
+
+- The E2E event name now includes `Date.now()` and the Playwright worker index,
+  preventing ambiguous locators when the database retains earlier test records.
+- Follow-up dates are generated at seven and eight UTC days from execution, so
+  they continue to satisfy the domain's future-date policy.
+- Completion is now proven by four distinct observations: the dialog closes,
+  the original call displays its `call again` outcome and `Completed` state, the
+  newly dated follow-up displays `Open`, and the unique lead remains linked on
+  `/bookings`.
+
+Exact verification commands and output:
+
+- `git diff --check`
+  - Exit `0`; no output.
+- `npm run lint`
+  - Exit `0`; ESLint reported no findings.
+- `npm run typecheck`
+  - Exit `0`; `tsc --noEmit` reported no errors.
+- `npm test`
+  - Exit `0`; `Test Files 7 passed (7)`, `Tests 29 passed (29)`.
+- `npm run build`
+  - Exit `0`; Next.js compiled successfully, finished TypeScript, generated all
+    static pages, and listed dynamic booking routes for list, detail, edit, and
+    new booking.
+- `npm run test:e2e -- --list tests/e2e/booking-flow.spec.ts`
+  - Exit `0`; listed
+    `booking-flow.spec.ts:21:1 › new lead remains visible after its first call`;
+    `Total: 1 test in 1 file`.
+
+The full browser execution remains subject to the environment blockers recorded
+above. This fix round intentionally changed only E2E test/support assertions and
+data generation; production authentication and application code were unchanged.
