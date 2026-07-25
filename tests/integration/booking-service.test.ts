@@ -213,6 +213,13 @@ describe("BookingService.completeFollowUp", () => {
     });
     expect(repository.auditEntries).toEqual([
       {
+        entityType: "booking",
+        entityId: initialBooking.id,
+        action: "update",
+        before: { status: "possible" },
+        after: { status: "quote_sent" },
+      },
+      {
         entityType: "follow_up",
         entityId: initialFollowUp.id,
         action: "completed",

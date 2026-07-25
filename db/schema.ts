@@ -91,6 +91,9 @@ export const auditEntries = pgTable("audit_entries", {
   action: text("action").notNull(),
   before: jsonb("before").$type<Record<string, unknown>>(),
   after: jsonb("after").$type<Record<string, unknown>>(),
+  reversesEntryId: uuid("reverses_entry_id")
+    .unique()
+    .references((): AnyPgColumn => auditEntries.id),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

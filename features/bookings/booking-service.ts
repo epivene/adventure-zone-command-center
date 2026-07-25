@@ -113,10 +113,19 @@ export class BookingService {
       }
 
       if (input.status) {
-        await transaction.updateBookingStatus({
+        const updatedBooking = await transaction.updateBookingStatus({
           bookingId: context.booking.id,
           status: input.status,
         });
+        if (updatedBooking.status !== context.booking.status) {
+          await transaction.createAuditEntry({
+            entityType: "booking",
+            entityId: context.booking.id,
+            action: "update",
+            before: { status: context.booking.status },
+            after: { status: updatedBooking.status },
+          });
+        }
       }
 
       await transaction.createAuditEntry({

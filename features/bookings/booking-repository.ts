@@ -13,6 +13,7 @@ import type {
   Probability,
 } from "@/features/bookings/booking-types";
 import type { BookingEditInput } from "@/features/bookings/booking-input";
+import { recordAuditEntry } from "@/features/audit/audit-service";
 
 export type Booking = {
   id: string;
@@ -168,7 +169,7 @@ class DrizzleBookingTransaction implements BookingTransaction {
   }
 
   async createAuditEntry(input: AuditEntry): Promise<void> {
-    await this.database.insert(auditEntries).values(input);
+    await recordAuditEntry(this.database, input);
   }
 }
 
@@ -316,10 +317,10 @@ export class DrizzleBookingRepository implements BookingRepository {
         .returning();
       if (!updated) return null;
 
-      await transaction.insert(auditEntries).values({
+      await recordAuditEntry(transaction, {
         entityType: "booking",
         entityId: bookingId,
-        action: "updated",
+        action: "update",
         before: {
           name: before.name,
           city: before.city,

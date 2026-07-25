@@ -4,7 +4,6 @@ import type { db as database } from "@/db/client";
 import {
   actExternalLinks,
   actImportRuns,
-  auditEntries,
   contacts,
   organizations,
 } from "@/db/schema";
@@ -20,6 +19,7 @@ import type {
   ImportSummary,
   LocalContact,
 } from "@/features/import/act-types";
+import { recordAuditEntry } from "@/features/audit/audit-service";
 
 export interface ActImportTransaction {
   createContact(record: ActCsvRecord): Promise<LocalContact>;
@@ -511,7 +511,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
   }
 
   async createAuditEntry(entry: ImportAuditEntry) {
-    await this.database.insert(auditEntries).values(entry);
+    await recordAuditEntry(this.database, entry);
   }
 
   async completeImportRun(runId: string) {
