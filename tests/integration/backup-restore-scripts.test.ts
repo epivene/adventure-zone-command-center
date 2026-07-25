@@ -1,4 +1,5 @@
 import {
+  access,
   chmod,
   mkdir,
   mkdtemp,
@@ -9,7 +10,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
 
 const projectRoot = path.resolve(import.meta.dirname, "../..");
@@ -20,6 +21,43 @@ const temporaryRoots: string[] = [];
 async function executable(filePath: string, source: string) {
   await writeFile(filePath, source, { mode: 0o700 });
   await chmod(filePath, 0o700);
+}
+
+function runScript(
+  script: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ status: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("bash", [script, ...args], {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (status) => resolve({ status, stdout, stderr }));
+  });
+}
+
+async function waitForFile(filePath: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    try {
+      await access(filePath);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Timed out waiting for ${filePath}`);
 }
 
 async function fixture() {
@@ -68,6 +106,10 @@ set -euo pipefail
 printf '%s\\n' "$@" > "$COMMAND_LOG/pg_restore.args"
 `,
   );
+  await executable(
+    path.join(binaryDirectory, "date"),
+    "#!/usr/bin/env bash\nprintf '20260725T120000Z\\n'\n",
+  );
 
   return {
     root,
@@ -95,6 +137,65 @@ afterEach(async () => {
 });
 
 describe("database backup command", () => {
+  it("keeps a successful same-second backup when another invocation fails", async () => {
+    const context = await fixture();
+    await executable(
+      path.join(context.binaryDirectory, "gpg"),
+      `#!/usr/bin/env bash
+set -euo pipefail
+output=
+previous=
+for argument in "$@"; do
+  if [[ "$previous" == "--output" ]]; then output="$argument"; fi
+  previous="$argument"
+done
+input="\${@: -1}"
+if [[ "\${GPG_MODE:-success}" == "fail-after-success" ]]; then
+  printf '%s\\n' "$output" > "$COMMAND_LOG/failing-output"
+  : > "$COMMAND_LOG/failing-ready"
+  for _ in {1..500}; do
+    [[ -f "$COMMAND_LOG/success-done" ]] && exit 27
+    sleep 0.01
+  done
+  exit 28
+fi
+cp -- "$input" "$output"
+printf '%s\\n' "$output" > "$COMMAND_LOG/success-output"
+: > "$COMMAND_LOG/success-done"
+`,
+    );
+
+    const failing = runScript(
+      backupScript,
+      [context.backupDirectory],
+      { ...context.env, GPG_MODE: "fail-after-success" },
+    );
+    await waitForFile(path.join(context.commandLog, "failing-ready"));
+    const successful = runScript(
+      backupScript,
+      [context.backupDirectory],
+      context.env,
+    );
+
+    const [failure, success] = await Promise.all([failing, successful]);
+
+    expect(failure.status).not.toBe(0);
+    expect(success.status, success.stderr).toBe(0);
+    const files = await readdir(context.backupDirectory);
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatch(
+      /^adventure-zone-20260725T120000Z\.[A-Za-z0-9]+\.dump\.gpg$/,
+    );
+    expect(
+      await readFile(path.join(context.backupDirectory, files[0]!), "utf8"),
+    ).toBe("custom dump");
+    const [failingOutput, successfulOutput] = await Promise.all([
+      readFile(path.join(context.commandLog, "failing-output"), "utf8"),
+      readFile(path.join(context.commandLog, "success-output"), "utf8"),
+    ]);
+    expect(failingOutput.trim()).not.toBe(successfulOutput.trim());
+  });
+
   it("creates a UTC-named encrypted custom dump and removes plaintext", async () => {
     const context = await fixture();
 
@@ -107,7 +208,7 @@ describe("database backup command", () => {
     const files = await readdir(context.backupDirectory);
     expect(files).toHaveLength(1);
     expect(files[0]).toMatch(
-      /^adventure-zone-\d{8}T\d{6}Z\.dump\.gpg$/,
+      /^adventure-zone-\d{8}T\d{6}Z\.[A-Za-z0-9]+\.dump\.gpg$/,
     );
     expect(
       await readFile(path.join(context.backupDirectory, files[0]!), "utf8"),

@@ -31,19 +31,20 @@ The script requires `DATABASE_URL` and `BACKUP_ENCRYPTION_PASSPHRASE` in its
 environment. On success it prints:
 
 ```text
-Encrypted backup created: /secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.dump.gpg
+Encrypted backup created: /secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.UNIQUEID.dump.gpg
 ```
 
 The timestamp is UTC. The script exits nonzero if `pg_dump` or GnuPG fails,
 removes its plaintext temporary dump through an exit trap, removes a partial
-encrypted output, and refuses to overwrite an existing timestamped backup.
+encrypted output, and atomically reserves a unique timestamped output name so
+concurrent same-second invocations cannot overwrite or remove one another.
 
 Record the encrypted file's path, byte size, SHA-256 digest, database
 environment, and creation time in the operations log. Store the digest
 separately from the backup:
 
 ```bash
-sha256sum "$BACKUP_DIRECTORY"/adventure-zone-YYYYMMDDTHHMMSSZ.dump.gpg
+sha256sum "$BACKUP_DIRECTORY"/adventure-zone-YYYYMMDDTHHMMSSZ.UNIQUEID.dump.gpg
 ```
 
 ## Restore only to a disposable test database
@@ -57,7 +58,7 @@ Set `DATABASE_URL` to that disposable target, then name one explicit regular
 backup file:
 
 ```bash
-BACKUP_FILE=/secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.dump.gpg
+BACKUP_FILE=/secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.UNIQUEID.dump.gpg
 ./scripts/restore-database.sh "$BACKUP_FILE"
 ```
 
@@ -66,7 +67,7 @@ environment. It refuses a missing path, directory, or symlink. On success it
 prints:
 
 ```text
-Restore completed successfully from /secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.dump.gpg.
+Restore completed successfully from /secure/adventure-zone-backups/adventure-zone-YYYYMMDDTHHMMSSZ.UNIQUEID.dump.gpg.
 ```
 
 `pg_restore` may print notices while `--clean --if-exists` drops objects that

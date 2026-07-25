@@ -34,13 +34,8 @@ for required_command in pg_dump gpg mktemp date; do
 done
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-backup_path="$backup_directory/adventure-zone-$timestamp.dump.gpg"
-if [[ -e "$backup_path" ]]; then
-  printf 'Refusing to overwrite an existing backup.\n' >&2
-  exit 73
-fi
-
 temporary_dump=""
+backup_path=""
 backup_complete=0
 cleanup() {
   if [[ -n "$temporary_dump" && -f "$temporary_dump" ]]; then
@@ -52,6 +47,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
+backup_path="$(
+  mktemp "$backup_directory/adventure-zone-$timestamp.XXXXXX.dump.gpg"
+)"
 temporary_dump="$(
   mktemp "${TMPDIR:-/tmp}/adventure-zone-backup.XXXXXX.dump"
 )"

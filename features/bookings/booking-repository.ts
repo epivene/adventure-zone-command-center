@@ -76,6 +76,9 @@ export type BookingDetail = {
 };
 
 export interface BookingTransaction {
+  findFollowUpWithBookingForUpdate(
+    followUpId: string,
+  ): Promise<{ followUp: FollowUp; booking: Booking } | null>;
   createBooking(input: Omit<Booking, "id">): Promise<Booking>;
   completeFollowUp(
     followUpId: string,
@@ -89,14 +92,11 @@ export interface BookingTransaction {
 
 export interface BookingRepository {
   createBooking(input: Omit<Booking, "id">): Promise<Booking>;
-  findFollowUpWithBooking(
-    followUpId: string,
-  ): Promise<{ followUp: FollowUp; booking: Booking } | null>;
   transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T>;
 }
 
 type DrizzleDatabase = typeof database;
-type DrizzleWriter = Pick<DrizzleDatabase, "insert" | "update">;
+type DrizzleWriter = Pick<DrizzleDatabase, "select" | "insert" | "update">;
 
 function toBooking(record: typeof bookings.$inferSelect): Booking {
   return {
@@ -123,6 +123,22 @@ function toFollowUp(record: typeof followUps.$inferSelect): FollowUp {
 
 class DrizzleBookingTransaction implements BookingTransaction {
   constructor(private readonly database: DrizzleWriter) {}
+
+  async findFollowUpWithBookingForUpdate(followUpId: string) {
+    const [record] = await this.database
+      .select({ followUp: followUps, booking: bookings })
+      .from(followUps)
+      .innerJoin(bookings, eq(followUps.bookingId, bookings.id))
+      .where(eq(followUps.id, followUpId))
+      .limit(1)
+      .for("update");
+
+    if (!record) return null;
+    return {
+      followUp: toFollowUp(record.followUp),
+      booking: toBooking(record.booking),
+    };
+  }
 
   async createBooking(input: Omit<Booking, "id">): Promise<Booking> {
     const [booking] = await this.database.insert(bookings).values(input).returning();
@@ -180,20 +196,6 @@ export class DrizzleBookingRepository implements BookingRepository {
     const [booking] = await this.database.insert(bookings).values(input).returning();
     if (!booking) throw new Error("Could not create booking.");
     return toBooking(booking);
-  }
-
-  async findFollowUpWithBooking(
-    followUpId: string,
-  ): Promise<{ followUp: FollowUp; booking: Booking } | null> {
-    const [record] = await this.database
-      .select({ followUp: followUps, booking: bookings })
-      .from(followUps)
-      .innerJoin(bookings, eq(followUps.bookingId, bookings.id))
-      .where(eq(followUps.id, followUpId))
-      .limit(1);
-
-    if (!record) return null;
-    return { followUp: toFollowUp(record.followUp), booking: toBooking(record.booking) };
   }
 
   transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T> {
@@ -307,7 +309,8 @@ export class DrizzleBookingRepository implements BookingRepository {
         .select()
         .from(bookings)
         .where(eq(bookings.id, bookingId))
-        .limit(1);
+        .limit(1)
+        .for("update");
       if (!before) return null;
 
       const [updated] = await transaction

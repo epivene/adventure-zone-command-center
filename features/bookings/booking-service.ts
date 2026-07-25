@@ -80,22 +80,24 @@ export class BookingService {
   async completeFollowUp(
     input: CompleteFollowUpInput,
   ): Promise<Result<FollowUp, DomainError>> {
-    const context = await this.repository.findFollowUpWithBooking(input.followUpId);
-    if (!context) return err({ code: "FOLLOW_UP_NOT_FOUND" });
-
-    const resultingStatus = input.status ?? context.booking.status;
     const now = this.now();
-    if (
-      needsFollowUpPlan(
-        { status: resultingStatus },
-        input.nextAction ? { ...input.nextAction, completedAt: null } : null,
-        now,
-      )
-    ) {
-      return err({ code: "NEXT_ACTION_REQUIRED" });
-    }
+    return this.repository.transaction(async (transaction) => {
+      const context = await transaction.findFollowUpWithBookingForUpdate(
+        input.followUpId,
+      );
+      if (!context) return err({ code: "FOLLOW_UP_NOT_FOUND" });
 
-    const followUp = await this.repository.transaction(async (transaction) => {
+      const resultingStatus = input.status ?? context.booking.status;
+      if (
+        needsFollowUpPlan(
+          { status: resultingStatus },
+          input.nextAction ? { ...input.nextAction, completedAt: null } : null,
+          now,
+        )
+      ) {
+        return err({ code: "NEXT_ACTION_REQUIRED" });
+      }
+
       const completedAt = now;
       const completed = await transaction.completeFollowUp(input.followUpId, {
         outcome: input.outcome,
@@ -144,9 +146,7 @@ export class BookingService {
         },
       });
 
-      return { ...completed, nextFollowUpId };
+      return ok({ ...completed, nextFollowUpId });
     });
-
-    return ok(followUp);
   }
 }

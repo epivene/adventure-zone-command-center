@@ -38,6 +38,7 @@ class InMemoryBookingRepository implements BookingRepository {
   public readonly auditEntries: AuditEntry[] = [];
   public transactionCount = 0;
   public failAuditWrite = false;
+  public beforeTransaction: (() => void) | null = null;
   private nextBookingNumber = 2;
   private nextFollowUpNumber = 2;
 
@@ -52,18 +53,9 @@ class InMemoryBookingRepository implements BookingRepository {
     return booking;
   }
 
-  async findFollowUpWithBooking(followUpId: string) {
-    const followUp = this.followUps.get(followUpId);
-    if (!followUp) return null;
-
-    const booking = this.bookings.get(followUp.bookingId);
-    if (!booking) throw new Error("Fixture is missing the follow-up booking.");
-
-    return { followUp: { ...followUp }, booking: { ...booking } };
-  }
-
   async transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T> {
     this.transactionCount += 1;
+    this.beforeTransaction?.();
     const bookings = new Map(
       [...this.bookings].map(([id, booking]) => [id, { ...booking }]),
     );
@@ -107,6 +99,14 @@ class InMemoryBookingTransaction implements BookingTransaction {
     const booking = { ...input, id: this.nextBookingId() };
     this.bookings.set(booking.id, booking);
     return booking;
+  }
+
+  async findFollowUpWithBookingForUpdate(followUpId: string) {
+    const followUp = this.followUps.get(followUpId);
+    if (!followUp) return null;
+    const booking = this.bookings.get(followUp.bookingId);
+    if (!booking) throw new Error("Fixture is missing the follow-up booking.");
+    return { followUp: { ...followUp }, booking: { ...booking } };
   }
 
   async completeFollowUp(
@@ -155,6 +155,48 @@ class InMemoryBookingTransaction implements BookingTransaction {
 }
 
 describe("BookingService.completeFollowUp", () => {
+  it("audits the locked state immediately before the mutation", async () => {
+    const repository = new InMemoryBookingRepository();
+    repository.beforeTransaction = () => {
+      repository.bookings.set(initialBooking.id, {
+        ...initialBooking,
+        status: "interested",
+      });
+      repository.followUps.set(initialFollowUp.id, {
+        ...initialFollowUp,
+        outcome: "newer outcome",
+      });
+    };
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+
+    await service.completeFollowUp({
+      followUpId: initialFollowUp.id,
+      outcome: "send_quote",
+      status: "quote_sent",
+      nextAction: {
+        kind: "prepare_quote",
+        dueAt: new Date("2026-08-02T15:00:00Z"),
+      },
+    });
+
+    expect(repository.auditEntries).toEqual([
+      expect.objectContaining({
+        entityType: "booking",
+        before: { status: "interested" },
+      }),
+      expect.objectContaining({
+        entityType: "follow_up",
+        before: {
+          completedAt: null,
+          outcome: "newer outcome",
+          nextFollowUpId: null,
+        },
+      }),
+    ]);
+  });
+
   it("rejects completing an active lead call without a next action", async () => {
     const repository = new InMemoryBookingRepository();
     const service = new BookingService(repository, {
@@ -171,7 +213,7 @@ describe("BookingService.completeFollowUp", () => {
       ok: false,
       error: { code: "NEXT_ACTION_REQUIRED" },
     });
-    expect(repository.transactionCount).toBe(0);
+    expect(repository.transactionCount).toBe(1);
     expect(repository.followUps.get(initialFollowUp.id)?.completedAt).toBeNull();
     expect(repository.auditEntries).toHaveLength(0);
   });
