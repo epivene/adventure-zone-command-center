@@ -110,6 +110,11 @@ export function parseActCsv(csv: string): ActCsvRecord[] {
     const contact = nullable(get("contact")) ?? "";
     const validationErrors: string[] = [];
     if (!parsed.ok) validationErrors.push(parsed.message);
+    if (parsed.ok && parsed.values.length !== header.values.length) {
+      validationErrors.push(
+        `Row has ${parsed.values.length} columns; expected ${header.values.length}.`,
+      );
+    }
     if (contact.length === 0 && parsed.ok) {
       validationErrors.push("Contact is required.");
     }

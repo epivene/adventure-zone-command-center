@@ -66,4 +66,31 @@ describe("parseActCsv", () => {
       validationErrors: [],
     });
   });
+
+  it("marks inconsistent column counts as malformed without losing later rows", () => {
+    const records = parseActCsv(
+      [
+        "Record ID,Company,Contact,Email,Phone,City,State",
+        "ACT-1,Marias Fair,Avery, Jr.,avery@example.com,406-555-0101,Shelby,MT",
+        "ACT-2,Crook County Fair,Casey Example,casey@example.com,Sundance,WY",
+        "ACT-3,Valid Fair,Jordan Example,jordan@example.com,,Fargo,ND",
+      ].join("\n"),
+    );
+
+    expect(records).toHaveLength(3);
+    expect(records[0]).toMatchObject({
+      rowNumber: 2,
+      validationErrors: ["Row has 8 columns; expected 7."],
+    });
+    expect(records[1]).toMatchObject({
+      rowNumber: 3,
+      validationErrors: ["Row has 6 columns; expected 7."],
+    });
+    expect(records[2]).toMatchObject({
+      rowNumber: 4,
+      recordId: "ACT-3",
+      contact: "Jordan Example",
+      validationErrors: [],
+    });
+  });
 });

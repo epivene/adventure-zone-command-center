@@ -452,10 +452,11 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     }
 
     let organization = current.organization;
-    if (
-      record.company &&
-      (!organization ||
-        normalize(organization.name) !== normalize(record.company))
+    if (!record.company) {
+      organization = null;
+    } else if (
+      !organization ||
+      normalize(organization.name) !== normalize(record.company)
     ) {
       const [createdOrganization] = await this.database
         .insert(organizations)
@@ -465,8 +466,6 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         throw new Error("Could not create imported organization.");
       }
       organization = createdOrganization;
-    } else {
-      organization = null;
     }
 
     const [updated] = await this.database
@@ -580,8 +579,8 @@ export class DrizzleActImportRepository implements ActImportRepository {
   ) {
     return this.contactsWhere(
       and(
-        sql`lower(trim(${organizations.name})) = ${normalizedOrganization}`,
-        sql`lower(trim(concat_ws(' ', ${contacts.firstName}, ${contacts.lastName}))) = ${normalizedContact}`,
+        sql`lower(regexp_replace(trim(${organizations.name}), '\\s+', ' ', 'g')) = ${normalizedOrganization}`,
+        sql`lower(regexp_replace(trim(concat_ws(' ', ${contacts.firstName}, ${contacts.lastName})), '\\s+', ' ', 'g')) = ${normalizedContact}`,
       ),
     );
   }
