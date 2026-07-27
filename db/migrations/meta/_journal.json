@@ -22,6 +22,13 @@
       "when": 1785021959735,
       "tag": "0002_stage_one_final_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785178945653,
+      "tag": "0003_act_contact_sync",
+      "breakpoints": true
     }
   ]
 }
