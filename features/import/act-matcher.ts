@@ -66,8 +66,123 @@ function normalize(value: string) {
   return value.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
 }
 
+function displayValue(value: string) {
+  return value.trim().replace(/\s+/g, " ");
+}
+
 function comparable(value: string | null) {
   return value === null ? null : normalize(value);
+}
+
+function formatCsvRows(rowNumbers: readonly number[]) {
+  const labels = rowNumbers.map(String);
+  if (labels.length === 1) return labels[0];
+  if (labels.length === 2) return `${labels[0]} and ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+}
+
+type IndexedRecord = {
+  index: number;
+  record: ActCsvRecord;
+};
+
+function repeatedGroups(
+  records: readonly IndexedRecord[],
+  keyFor: (record: ActCsvRecord) => string | null,
+) {
+  const groups = new Map<string, IndexedRecord[]>();
+  for (const indexedRecord of records) {
+    const key = keyFor(indexedRecord.record);
+    if (!key) continue;
+    const group = groups.get(key) ?? [];
+    group.push(indexedRecord);
+    groups.set(key, group);
+  }
+  return [...groups.values()].filter((group) => group.length > 1);
+}
+
+function fileCollisionMessages(records: readonly ActCsvRecord[]) {
+  const messagesByIndex = new Map<number, string[]>();
+  const validRecords = records
+    .map((record, index) => ({ index, record }))
+    .filter(({ record }) => record.validationErrors.length === 0);
+
+  const markGroup = (
+    group: readonly IndexedRecord[],
+    message: string,
+  ) => {
+    for (const { index } of group) {
+      messagesByIndex.set(index, [
+        ...(messagesByIndex.get(index) ?? []),
+        message,
+      ]);
+    }
+  };
+
+  for (const group of repeatedGroups(validRecords, ({ recordId }) =>
+    recordId ? normalize(recordId) : null,
+  )) {
+    const rowNumbers = group.map(({ record }) => record.rowNumber);
+    markGroup(
+      group,
+      `CSV rows ${formatCsvRows(rowNumbers)} share the Act! record ID ${displayValue(group[0]!.record.recordId!)}.`,
+    );
+  }
+
+  const recordsWithoutCollisions = () =>
+    validRecords.filter(({ index }) => !messagesByIndex.has(index));
+
+  for (const group of repeatedGroups(
+    recordsWithoutCollisions(),
+    ({ email }) => (email ? normalize(email) : null),
+  )) {
+    const stableIds = group.map(({ record }) => record.recordId).filter(Boolean);
+    const everyRowHasDistinctStableId =
+      stableIds.length === group.length &&
+      new Set(stableIds.map((recordId) => normalize(recordId!))).size ===
+        group.length;
+    if (everyRowHasDistinctStableId) continue;
+
+    const rowNumbers = group.map(({ record }) => record.rowNumber);
+    markGroup(
+      group,
+      `CSV rows ${formatCsvRows(rowNumbers)} share the email ${normalize(group[0]!.record.email!)}.`,
+    );
+  }
+
+  for (const group of repeatedGroups(
+    recordsWithoutCollisions().filter(
+      ({ record }) => !record.recordId && !record.email,
+    ),
+    ({ company, contact }) =>
+      company ? `${normalize(company)}\u0000${normalize(contact)}` : null,
+  )) {
+    const rowNumbers = group.map(({ record }) => record.rowNumber);
+    const first = group[0]!.record;
+    markGroup(
+      group,
+      `CSV rows ${formatCsvRows(rowNumbers)} share the organization and contact ${displayValue(first.company!)} / ${displayValue(first.contact)}.`,
+    );
+  }
+
+  return messagesByIndex;
+}
+
+function fileCollisionRow(
+  record: ActCsvRecord,
+  messages: readonly string[],
+): ImportPreviewRow {
+  return {
+    rowId: `row-${record.rowNumber}`,
+    record,
+    category: "conflict",
+    matchReason: "none",
+    localContactId: null,
+    localContact: null,
+    candidateContactIds: [],
+    changes: [],
+    messages: [...messages],
+  };
 }
 
 function changesFor(
@@ -234,8 +349,14 @@ export async function previewActImport(
 ): Promise<ImportPreview> {
   const repository = options.repository ?? (await defaultRepository());
   const rows: ImportPreviewRow[] = [];
-  for (const record of records) {
-    rows.push(await classifyRecord(record, repository));
+  const collisionMessages = fileCollisionMessages(records);
+  for (const [index, record] of records.entries()) {
+    const messages = collisionMessages.get(index);
+    rows.push(
+      messages
+        ? fileCollisionRow(record, messages)
+        : await classifyRecord(record, repository),
+    );
   }
 
   const run = await repository.createPreviewRun(

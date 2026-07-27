@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: adventure-zone-command-center
+    runtime: node
+    buildCommand: npm ci && npx drizzle-kit migrate && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: OWNER_CLERK_USER_ID
+        sync: false
+      - key: NEXT_PUBLIC_MAP_STYLE_URL
+        sync: false
+      - key: BACKUP_ENCRYPTION_PASSPHRASE
+        sync: false
+      - key: ACT_API_BASE_URL
+        value: https://apius.act.com/act.web.api
+      - key: ACT_DATABASE_NAME
+        sync: false
+      - key: ACT_USERNAME
+        sync: false
+      - key: ACT_PASSWORD
+        sync: false

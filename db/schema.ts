@@ -1,4 +1,5 @@
 import {
+  boolean,
   check,
   doublePrecision,
   integer,
@@ -36,6 +37,12 @@ export const contacts = pgTable("contacts", {
   lastName: text("last_name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  jobTitle: text("job_title"),
+  address1: text("address_1"),
+  address2: text("address_2"),
+  city: text("city"),
+  region: text("region"),
+  postalCode: text("postal_code"),
   actRecordId: text("act_record_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
@@ -142,6 +149,90 @@ export const actExternalLinks = pgTable(
     uniqueIndex("act_external_links_entity_external_id_unique").on(
       table.entityType,
       table.actRecordId,
+    ),
+  ],
+);
+
+export const actContactSyncStates = pgTable(
+  "act_contact_sync_states",
+  {
+    contactId: uuid("contact_id")
+      .primaryKey()
+      .references(() => contacts.id),
+    baseSnapshot: jsonb("base_snapshot").$type<Record<string, string | null>>(),
+    actEditedAt: timestamp("act_edited_at", { withTimezone: true }),
+    lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+    localDirty: boolean("local_dirty").default(false).notNull(),
+    state: text("state").default("unlinked").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "act_contact_sync_states_state_valid",
+      sql`${table.state} in ('unlinked', 'synced', 'waiting', 'conflict')`,
+    ),
+  ],
+);
+
+export const actSyncRuns = pgTable(
+  "act_sync_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    status: text("status").default("previewing").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    summary: jsonb("summary").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "act_sync_runs_status_valid",
+      sql`${table.status} in ('previewing', 'previewed', 'applying', 'completed', 'failed')`,
+    ),
+  ],
+);
+
+export const actSyncOperations = pgTable(
+  "act_sync_operations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actSyncRuns.id),
+    rowKey: text("row_key").notNull(),
+    localContactId: uuid("local_contact_id").references(() => contacts.id),
+    actRecordId: text("act_record_id"),
+    category: text("category").notNull(),
+    decision: text("decision"),
+    status: text("status").default("pending").notNull(),
+    baseSnapshot: jsonb("base_snapshot").$type<Record<string, string | null>>(),
+    localSnapshot: jsonb("local_snapshot").$type<Record<string, string | null>>(),
+    actSnapshot: jsonb("act_snapshot").$type<Record<string, string | null>>(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_sync_operations_run_row_unique").on(
+      table.runId,
+      table.rowKey,
+    ),
+    check(
+      "act_sync_operations_status_valid",
+      sql`${table.status} in ('pending', 'approved', 'applying', 'completed', 'failed', 'skipped')`,
     ),
   ],
 );

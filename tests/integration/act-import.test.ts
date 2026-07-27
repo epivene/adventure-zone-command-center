@@ -338,6 +338,120 @@ describe("previewActImport", () => {
     });
   });
 
+  it("marks every row with a repeated email as conflict when record IDs are absent", async () => {
+    const repository = new InMemoryActImportRepository();
+
+    const preview = await previewActImport(
+      [
+        { ...baseRecord, rowNumber: 4, recordId: null },
+        {
+          ...baseRecord,
+          rowNumber: 9,
+          recordId: null,
+          contact: "Another Person",
+          email: " AVERY@EXAMPLE.COM ",
+        },
+      ],
+      { repository },
+    );
+
+    expect(preview.rows.map((row) => row.category)).toEqual([
+      "conflict",
+      "conflict",
+    ]);
+    expect(preview.rows[0]?.messages).toContain(
+      "CSV rows 4 and 9 share the email avery@example.com.",
+    );
+    expect(preview.rows[1]?.messages).toContain(
+      "CSV rows 4 and 9 share the email avery@example.com.",
+    );
+  });
+
+  it("marks every repeated Act record ID as conflict", async () => {
+    const repository = new InMemoryActImportRepository();
+
+    const preview = await previewActImport(
+      [
+        { ...baseRecord, rowNumber: 2 },
+        {
+          ...baseRecord,
+          rowNumber: 7,
+          contact: "Different Person",
+          email: "different@example.com",
+        },
+      ],
+      { repository },
+    );
+
+    expect(preview.rows.map((row) => row.category)).toEqual([
+      "conflict",
+      "conflict",
+    ]);
+    expect(preview.rows[0]?.messages).toContain(
+      "CSV rows 2 and 7 share the Act! record ID ACT-001.",
+    );
+  });
+
+  it("allows a shared email when distinct Act record IDs identify the rows", async () => {
+    const repository = new InMemoryActImportRepository();
+
+    const preview = await previewActImport(
+      [
+        { ...baseRecord, rowNumber: 2, recordId: "ACT-001" },
+        {
+          ...baseRecord,
+          rowNumber: 3,
+          recordId: "ACT-002",
+          contact: "Another Person",
+        },
+      ],
+      { repository },
+    );
+
+    expect(preview.rows.map((row) => row.category)).toEqual(["new", "new"]);
+  });
+
+  it("reports all conflicting CSV row numbers for a repeated organization and contact", async () => {
+    const repository = new InMemoryActImportRepository();
+
+    const preview = await previewActImport(
+      [
+        {
+          ...baseRecord,
+          rowNumber: 3,
+          recordId: null,
+          email: null,
+        },
+        {
+          ...baseRecord,
+          rowNumber: 8,
+          recordId: null,
+          email: null,
+          company: "  MARIAS   FAIR ",
+          contact: " AVERY   EXAMPLE ",
+        },
+        {
+          ...baseRecord,
+          rowNumber: 11,
+          recordId: null,
+          email: null,
+        },
+      ],
+      { repository },
+    );
+
+    expect(preview.rows.map((row) => row.category)).toEqual([
+      "conflict",
+      "conflict",
+      "conflict",
+    ]);
+    for (const row of preview.rows) {
+      expect(row.messages).toContain(
+        "CSV rows 3, 8, and 11 share the organization and contact Marias Fair / Avery Example.",
+      );
+    }
+  });
+
   it("isolates malformed rows and performs no contact or booking writes", async () => {
     const repository = new InMemoryActImportRepository();
     repository.bookings.set("booking-1", { id: "booking-1" });
