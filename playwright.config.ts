@@ -7,7 +7,7 @@ export default defineConfig({
     storageState: process.env.PLAYWRIGHT_AUTH_STATE,
   },
   webServer: {
-    command: "npm run dev -- --webpack --hostname 127.0.0.1 --port 3105",
+    command: "npm run start -- --hostname 127.0.0.1 --port 3105",
     reuseExistingServer: true,
     url: "http://127.0.0.1:3105/api/health",
   },

@@ -15,7 +15,7 @@
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run build && playwright test",
     "db:preflight": "bash scripts/preflight-stage-one-migration.sh",
     "db:seed": "node --import tsx db/seed.ts"
   },
