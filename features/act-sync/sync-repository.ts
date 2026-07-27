@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -43,6 +43,7 @@ export interface SyncRepository {
     summary: SyncSummary,
   ): Promise<StoredSyncPreview>;
   getPreview(runId: string): Promise<StoredSyncPreview | null>;
+  getLatestPreview(): Promise<StoredSyncPreview | null>;
 }
 
 export type ApplyOperationStatus =
@@ -117,6 +118,29 @@ function storedSummary(value: unknown) {
   return {
     counts: record.counts,
     rows: record.rows as SyncComparisonRow[],
+  };
+}
+
+function storedPreview(
+  run: typeof actSyncRuns.$inferSelect,
+): StoredSyncPreview {
+  const summary = storedSummary(run.summary);
+  if (!summary) throw new Error("Stored Act! sync preview is malformed.");
+  if (
+    run.status !== "previewed" &&
+    run.status !== "applying" &&
+    run.status !== "completed" &&
+    run.status !== "failed"
+  ) {
+    throw new Error("Stored Act! sync run has an unsupported status.");
+  }
+  return {
+    id: run.id,
+    status: run.status,
+    rows: structuredClone(summary.rows),
+    summary: structuredClone(summary.counts),
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
   };
 }
 
@@ -234,24 +258,16 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .where(eq(actSyncRuns.id, runId))
       .limit(1);
     if (!run) return null;
-    const summary = storedSummary(run.summary);
-    if (!summary) throw new Error("Stored Act! sync preview is malformed.");
-    if (
-      run.status !== "previewed" &&
-      run.status !== "applying" &&
-      run.status !== "completed" &&
-      run.status !== "failed"
-    ) {
-      throw new Error("Stored Act! sync run has an unsupported status.");
-    }
-    return {
-      id: run.id,
-      status: run.status,
-      rows: structuredClone(summary.rows),
-      summary: structuredClone(summary.counts),
-      startedAt: run.startedAt,
-      completedAt: run.completedAt,
-    };
+    return storedPreview(run);
+  }
+
+  async getLatestPreview(): Promise<StoredSyncPreview | null> {
+    const [run] = await this.database
+      .select()
+      .from(actSyncRuns)
+      .orderBy(desc(actSyncRuns.startedAt))
+      .limit(1);
+    return run ? storedPreview(run) : null;
   }
 
   async claimOperation(
