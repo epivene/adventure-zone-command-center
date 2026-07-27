@@ -72,6 +72,10 @@ export class ActSyncService {
     return this.repository.getPreview(runId);
   }
 
+  getLatestPreview() {
+    return this.repository.getLatestPreview();
+  }
+
   async apply(
     runId: string,
     decisions: readonly SyncApplyDecision[],
