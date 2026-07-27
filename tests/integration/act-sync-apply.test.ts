@@ -178,6 +178,11 @@ class InMemoryApplyRepository implements SyncApplyRepository {
     return preview ? structuredClone(preview) : null;
   }
 
+  async getLatestPreview() {
+    const preview = [...this.previews.values()].at(-1);
+    return preview ? structuredClone(preview) : null;
+  }
+
   async claimOperation(
     runId: string,
     rowId: string,

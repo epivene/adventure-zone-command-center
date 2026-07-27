@@ -5,11 +5,10 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const routerPush = vi.fn();
 const routerRefresh = vi.fn();
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: routerPush, refresh: routerRefresh }),
+  useRouter: () => ({ refresh: routerRefresh }),
 }));
 
 import { ActSyncReview } from "@/components/act-sync/act-sync-review";
@@ -123,6 +122,7 @@ describe("ActSyncReview", () => {
       ok: true as const,
       runId: "run-2",
     }));
+    const openPreview = vi.fn();
     const apply = vi.fn();
     render(
       <ActSyncReview
@@ -131,6 +131,7 @@ describe("ActSyncReview", () => {
         applyAction={apply}
         initialPreview={null}
         maskedDatabase="••••3125"
+        openPreview={openPreview}
       />,
     );
 
@@ -138,9 +139,33 @@ describe("ActSyncReview", () => {
 
     expect(createPreview).toHaveBeenCalledOnce();
     expect(apply).not.toHaveBeenCalled();
-    expect(routerPush).toHaveBeenCalledWith(
-      "/settings/act-sync?runId=run-2",
+    expect(openPreview).toHaveBeenCalledWith("run-2");
+  });
+
+  it("shows a recoverable error when preview creation unexpectedly fails", async () => {
+    const user = userEvent.setup();
+    const createPreview = vi.fn(async () => {
+      throw new Error("network disconnected");
+    });
+    render(
+      <ActSyncReview
+        configured
+        createPreviewAction={createPreview}
+        initialPreview={null}
+        maskedDatabase="••••3125"
+      />,
     );
+
+    await user.click(screen.getByRole("button", { name: "Sync with Act!" }));
+
+    expect(
+      screen.getByText(
+        "The Act! review could not be prepared. Your contacts were not changed. Try again.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Sync with Act!" }),
+    ).toBeEnabled();
   });
 
   it("bulk-approves only safe default decisions before apply", async () => {
