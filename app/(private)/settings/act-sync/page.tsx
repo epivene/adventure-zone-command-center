@@ -35,9 +35,12 @@ export default async function ActSyncPage({
 
   const runId = firstValue((await searchParams).runId);
   let preview: StoredSyncPreview | null = null;
-  if (configured && runId) {
+  if (configured) {
     try {
-      preview = await (await createDefaultActSyncService()).getPreview(runId);
+      const service = await createDefaultActSyncService();
+      preview = runId
+        ? await service.getPreview(runId)
+        : await service.getLatestPreview();
     } catch {
       preview = null;
     }
