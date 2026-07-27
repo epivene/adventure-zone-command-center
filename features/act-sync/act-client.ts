@@ -42,11 +42,12 @@ function remoteContact(value: unknown): RemoteActContact {
   const fullNameParts = fullName.split(/\s+/).filter(Boolean);
   const firstName =
     optionalString(record.firstName) ??
-    (fullNameParts.length === 1 ? fullNameParts[0] : fullNameParts.slice(0, -1).join(" "));
+    (fullNameParts.length === 1
+      ? (fullNameParts[0] ?? "")
+      : fullNameParts.slice(0, -1).join(" "));
   const lastName =
     optionalString(record.lastName) ??
     (fullNameParts.length > 1 ? fullNameParts.at(-1)! : "");
-  if (!firstName) throw new ActApiError("invalid_response", false);
 
   return {
     id: requiredString(record.id),
