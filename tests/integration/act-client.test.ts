@@ -138,6 +138,35 @@ describe("ActClient", () => {
     expect(fetcher.mock.calls[2]?.[0]).toContain("%24top=10");
   });
 
+  it("accepts company-only Act contacts without a first name", async () => {
+    const companyOnlyContact = {
+      ...remoteContact,
+      id: "act-company-only",
+      firstName: "",
+      lastName: "",
+      fullName: "",
+      company: "Example Fair Association",
+    };
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ token: "safe-test-token" }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([companyOnlyContact]))
+      .mockResolvedValueOnce(jsonResponse([]));
+    const client = new ActClient(config, { fetcher, pageSize: 10 });
+
+    const contacts = await client.listContacts();
+
+    expect(contacts).toEqual([
+      expect.objectContaining({
+        id: "act-company-only",
+        firstName: "",
+        lastName: "",
+        organizationName: "Example Fair Association",
+      }),
+    ]);
+  });
+
   it("creates and updates contacts with Act field names", async () => {
     const fetcher = vi
       .fn()
