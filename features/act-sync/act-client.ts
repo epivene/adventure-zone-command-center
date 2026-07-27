@@ -127,17 +127,20 @@ export class ActClient {
   async listContacts() {
     const records: RemoteActContact[] = [];
     let skip = 0;
+    let compatibilityQuery = false;
     for (;;) {
       const url = new URL(`${this.config.baseUrl}/api/contacts`);
-      url.searchParams.set(
-        "$select",
-        "id,firstName,lastName,fullName,company,jobTitle,emailAddress,businessPhone,edited",
-      );
-      url.searchParams.set(
-        "$expand",
-        "businessAddress($select=line1,line2,city,state,postalCode)",
-      );
-      url.searchParams.set("$orderby", "id");
+      if (!compatibilityQuery) {
+        url.searchParams.set(
+          "$select",
+          "id,firstName,lastName,fullName,company,jobTitle,emailAddress,businessPhone,edited",
+        );
+        url.searchParams.set(
+          "$expand",
+          "businessAddress($select=line1,line2,city,state,postalCode)",
+        );
+        url.searchParams.set("$orderby", "id");
+      }
       url.searchParams.set("$skip", String(skip));
       url.searchParams.set("$top", String(this.pageSize));
       const value = await this.authenticatedJson(url.toString(), {
@@ -149,7 +152,13 @@ export class ActClient {
           ? (asRecord(value).value as unknown[])
           : null;
       if (!page) throw new ActApiError("invalid_response", false);
-      if (page.length === 0) break;
+      if (page.length === 0) {
+        if (skip === 0 && !compatibilityQuery) {
+          compatibilityQuery = true;
+          continue;
+        }
+        break;
+      }
       records.push(...page.map(remoteContact));
       skip += page.length;
     }
