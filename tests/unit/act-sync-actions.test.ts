@@ -22,7 +22,7 @@ vi.mock("@/lib/env", () => ({
     configured: true,
     config: {
       baseUrl: "https://apius.act.com/act.web.api",
-      databaseName: "V72122203125",
+      databaseName: "TEST-ACT-DATABASE",
       username: "shared",
       password: "secret",
     },

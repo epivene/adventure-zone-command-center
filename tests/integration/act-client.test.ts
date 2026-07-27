@@ -6,7 +6,7 @@ import type { ActConfig } from "@/features/act-sync/act-types";
 
 const config: ActConfig = {
   baseUrl: "https://apius.act.com/act.web.api",
-  databaseName: "V72122203125",
+  databaseName: "TEST-ACT-DATABASE",
   username: "shared-user",
   password: "private-password",
 };
@@ -55,7 +55,7 @@ describe("ActClient", () => {
           Authorization: `Basic ${Buffer.from(
             "shared-user:private-password",
           ).toString("base64")}`,
-          "Act-Database-Name": "V72122203125",
+          "Act-Database-Name": "TEST-ACT-DATABASE",
         }),
       }),
     );
@@ -90,7 +90,7 @@ describe("ActClient", () => {
     expect(fetcher.mock.calls[1]?.[1]).toMatchObject({
       headers: expect.objectContaining({
         Authorization: "Bearer safe-test-token",
-        "Act-Database-Name": "V72122203125",
+        "Act-Database-Name": "TEST-ACT-DATABASE",
       }),
     });
   });

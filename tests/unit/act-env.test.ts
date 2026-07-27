@@ -11,7 +11,7 @@ describe("Act environment", () => {
     expect(
       parseActEnvironment({
         ACT_API_BASE_URL: "https://apius.act.com/act.web.api",
-        ACT_DATABASE_NAME: "V72122203125",
+        ACT_DATABASE_NAME: "TEST-ACT-DATABASE",
         ACT_USERNAME: "shared-user",
         ACT_PASSWORD: "private-password",
       }),
@@ -19,7 +19,7 @@ describe("Act environment", () => {
       configured: true,
       config: {
         baseUrl: "https://apius.act.com/act.web.api",
-        databaseName: "V72122203125",
+        databaseName: "TEST-ACT-DATABASE",
         username: "shared-user",
         password: "private-password",
       },
@@ -30,7 +30,7 @@ describe("Act environment", () => {
     expect(() =>
       parseActEnvironment({
         ACT_API_BASE_URL: "https://example.com/act.web.api",
-        ACT_DATABASE_NAME: "V72122203125",
+        ACT_DATABASE_NAME: "TEST-ACT-DATABASE",
         ACT_USERNAME: "shared-user",
         ACT_PASSWORD: "private-password",
       }),
@@ -41,7 +41,7 @@ describe("Act environment", () => {
     expect(() =>
       parseActEnvironment({
         ACT_API_BASE_URL: "https://apius.act.com/act.web.api",
-        ACT_DATABASE_NAME: "V72122203125",
+        ACT_DATABASE_NAME: "TEST-ACT-DATABASE",
       }),
     ).toThrow();
   });

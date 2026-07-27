@@ -32,6 +32,10 @@ Never commit values to `.env.example`, logs, screenshots, or support tickets.
 | `OWNER_CLERK_USER_ID` | Exact Clerk user ID allowed into private routes | Secret configuration |
 | `NEXT_PUBLIC_MAP_STYLE_URL` | MapLibre-compatible style URL | Public by design |
 | `BACKUP_ENCRYPTION_PASSPHRASE` | AES-256 database-backup encryption | Secret; store separately from backups |
+| `ACT_API_BASE_URL` | Fixed Act! US Web API endpoint | Server-only configuration |
+| `ACT_DATABASE_NAME` | Act! database identifier | Secret configuration |
+| `ACT_USERNAME` | Shared Act! login | Secret |
+| `ACT_PASSWORD` | Shared Act! password | Secret |
 
 Set `OWNER_CLERK_USER_ID` to the owner's exact Clerk user ID, not an email
 address or display name. Sign in as the owner and confirm `/today` loads. Then
@@ -43,6 +47,12 @@ tiles and glyphs permit the deployed origin. Because this name begins with
 `NEXT_PUBLIC_`, never place a private provider token in it unless that token is
 specifically designed for browser exposure and restricted by origin and quota.
 If the value is empty, the app uses its plain local fallback style.
+
+Set the four Act! values directly in Render's Environment page. The base URL
+must be exactly `https://apius.act.com/act.web.api`; do not substitute the Act!
+browser URL. Never put Act! values in `NEXT_PUBLIC_` variables. See
+[act-sync.md](./act-sync.md) for connection testing, preview/apply safety,
+recovery, and password rotation.
 
 ## Database migration and four-leg seed
 
@@ -165,8 +175,8 @@ deployment. After deployment:
    `/today`.
 3. Confirm an unauthenticated request to a private page is sent to sign-in.
 4. Confirm a non-owner authenticated user cannot open a private page.
-5. Open Today, Bookings, Calendar, Routes, Import, and Quick Add at phone and
-   desktop widths.
+5. Open Today, Bookings, Contacts, Calendar, Routes, Act! Sync, Import
+   fallback, and Quick Add at phone and desktop widths.
 6. Confirm no private API, HTML, booking, contact, contract, or route response
    appears in Cache Storage.
 

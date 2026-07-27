@@ -1,7 +1,9 @@
 # Act! CSV Import Procedure
 
-Act! remains the authoritative CRM in Stage 1. This application performs a
-reviewed one-way CSV import only and never writes back to Act!.
+This procedure is the fallback when the live, manually triggered Act! sync is
+unavailable. The CSV workflow imports into the Command Center only and never
+writes back to Act!. For normal operation, use
+[the reviewed Act! sync](./act-sync.md).
 
 ## Before exporting
 
@@ -19,7 +21,7 @@ reviewed one-way CSV import only and never writes back to Act!.
    contacts. Include at least one known new record, one existing record with a
    safe change, and—when available—a duplicate or ambiguous match. Save the
    export as a `.csv` file no larger than 5 MB.
-2. **Upload the CSV to Preview.** Open Settings → Import, choose the file, and
+2. **Upload the CSV to Preview.** Open Settings → Import fallback, choose the file, and
    select **Preview CSV**. Preview may store review-run metadata, but it must
    not change contact fields or send anything to Act!.
 3. **Review every category.** Inspect **New**, **Changes**, **Duplicates**,

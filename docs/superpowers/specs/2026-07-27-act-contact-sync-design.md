@@ -15,7 +15,7 @@ The first integration phase provides complete two-way synchronization for contac
 - Product: Act! Premium Cloud, U.S. region
 - Act! version: APC 26.14 Hotfix 1
 - Web API version: 1.1.1272.1
-- Database name: `V72122203125`
+- Database name: `TEST-ACT-DATABASE`
 - API base URL: `https://apius.act.com/act.web.api`
 - Authentication: Act! username/password exchanged server-side for a bearer token
 - Account model: a shared Act! account
@@ -227,7 +227,7 @@ The existing imported test contacts are not silently merged or removed. The firs
 Render encrypted environment variables:
 
 - `ACT_API_BASE_URL=https://apius.act.com/act.web.api`
-- `ACT_DATABASE_NAME=V72122203125`
+- `ACT_DATABASE_NAME=TEST-ACT-DATABASE`
 - `ACT_USERNAME`
 - `ACT_PASSWORD`
 
