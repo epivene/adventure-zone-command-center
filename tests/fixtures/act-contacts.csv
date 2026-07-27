@@ -1,0 +1,4 @@
+Record ID,Company,Contact,Email,Phone,City,State
+ACT-001,Marias Fair,Avery Example,avery@example.com,406-555-0101,Shelby,MT
+ACT-002,Crook County Fair,Casey Example,casey@example.com,307-555-0102,Sundance,WY
+,Duplicate Email,Casey Example,casey@example.com,307-555-0102,Sundance,WY

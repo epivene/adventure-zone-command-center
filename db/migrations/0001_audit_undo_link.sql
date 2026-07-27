@@ -1,0 +1,3 @@
+ALTER TABLE "audit_entries" ADD COLUMN "reverses_entry_id" uuid;--> statement-breakpoint
+ALTER TABLE "audit_entries" ADD CONSTRAINT "audit_entries_reverses_entry_id_audit_entries_id_fk" FOREIGN KEY ("reverses_entry_id") REFERENCES "public"."audit_entries"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audit_entries" ADD CONSTRAINT "audit_entries_reverses_entry_id_unique" UNIQUE("reverses_entry_id");
