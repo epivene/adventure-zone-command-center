@@ -47,12 +47,59 @@ If the value is empty, the app uses its plain local fallback style.
 ## Database migration and four-leg seed
 
 Take and verify an encrypted backup before changing an existing production
-database. Apply committed migrations from a trusted operations runner:
+database.
+
+### Existing-database preflight
+
+Before applying migration `0002_stage_one_final_guards` to any database that
+already contains Adventure Zone data, restore the current encrypted backup to
+an explicitly disposable database. Point `DATABASE_URL` at that disposable
+copy and run:
+
+```bash
+npm run db:preflight
+```
+
+The command executes the equivalent of these read-only checks:
+
+```sql
+SELECT entity_type, act_record_id, count(*) AS link_count
+FROM act_external_links
+GROUP BY entity_type, act_record_id
+HAVING count(*) > 1;
+
+SELECT id, name, color, sort_order
+FROM travel_legs
+WHERE sort_order NOT BETWEEN 1 AND 4
+ORDER BY sort_order, id;
+```
+
+Both result sets must contain zero rows. Duplicate Act! link owners would block
+the new unique index, and out-of-range travel-leg rows would block the new check
+constraint. If either query returns rows, stop. Do not delete, merge, renumber,
+or otherwise rewrite the rows automatically. Preserve the query results and
+use a separately reviewed data-remediation procedure that identifies the
+correct records from business evidence and records an audit trail.
+
+After a zero-result preflight, rehearse the migration and seed against the
+disposable copy:
 
 ```bash
 npx drizzle-kit migrate
 npm run db:seed
 ```
+
+Run the verification queries below and the release gate against that migrated
+copy. Only after the rehearsal succeeds may the production maintenance window
+proceed. Immediately before the production migration, take a fresh encrypted
+backup and run `npm run db:preflight` again against production. A nonzero result
+or any preflight error stops the production migration.
+
+For a brand-new, verified-empty database, the existing-data preflight does not
+apply because the application tables do not exist yet; apply the committed
+migrations, seed, and then run all post-migration verification. If there is any
+uncertainty about whether a database is empty, treat it as an existing database
+and stop for operator review.
 
 The seed inserts missing defaults for sort orders 1–4 and does nothing when a
 slot already exists. Reseeding therefore preserves operator-configured names

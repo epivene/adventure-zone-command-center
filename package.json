@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "db:preflight": "bash scripts/preflight-stage-one-migration.sh",
     "db:seed": "node --import tsx db/seed.ts"
   },
   "keywords": [],

@@ -16,6 +16,10 @@ import { afterEach, describe, expect, it } from "vitest";
 const projectRoot = path.resolve(import.meta.dirname, "../..");
 const backupScript = path.join(projectRoot, "scripts/backup-database.sh");
 const restoreScript = path.join(projectRoot, "scripts/restore-database.sh");
+const migrationPreflightScript = path.join(
+  projectRoot,
+  "scripts/preflight-stage-one-migration.sh",
+);
 const temporaryRoots: string[] = [];
 
 async function executable(filePath: string, source: string) {
@@ -104,6 +108,21 @@ cp -- "$input" "$output"
     `#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\\n' "$@" > "$COMMAND_LOG/pg_restore.args"
+`,
+  );
+  await executable(
+    path.join(binaryDirectory, "psql"),
+    `#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$COMMAND_LOG/psql.calls"
+if [[ "$*" == *"act_external_links"* ]]; then
+  printf '%s\\n' "\${ACT_DUPLICATE_GROUPS:-0}"
+elif [[ "$*" == *"travel_legs"* ]]; then
+  printf '%s\\n' "\${INVALID_TRAVEL_LEGS:-0}"
+else
+  printf 'Unexpected preflight query.\\n' >&2
+  exit 71
+fi
 `,
   );
   await executable(
@@ -358,5 +377,60 @@ describe("database restore command", () => {
     await expect(
       readFile(path.join(context.commandLog, "gpg.args"), "utf8"),
     ).rejects.toThrow();
+  });
+});
+
+describe("Stage 1 migration preflight command", () => {
+  it("passes only after checking both validating migration constraints", async () => {
+    const context = await fixture();
+
+    const result = spawnSync("bash", [migrationPreflightScript], {
+      env: context.env,
+      encoding: "utf8",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Migration preflight passed");
+    const calls = await readFile(
+      path.join(context.commandLog, "psql.calls"),
+      "utf8",
+    );
+    expect(calls).toContain("act_external_links");
+    expect(calls).toContain("GROUP BY entity_type, act_record_id");
+    expect(calls).toContain("HAVING count(*) > 1");
+    expect(calls).toContain("travel_legs");
+    expect(calls).toContain("sort_order NOT BETWEEN 1 AND 4");
+  });
+
+  it("fails closed when duplicate Act identifiers would block the unique index", async () => {
+    const context = await fixture();
+
+    const result = spawnSync("bash", [migrationPreflightScript], {
+      env: { ...context.env, ACT_DUPLICATE_GROUPS: "2" },
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "2 duplicate Act external-identifier group(s)",
+    );
+    expect(result.stderr).toContain("Do not delete or merge these rows automatically");
+    expect(result.stderr).toContain("GROUP BY entity_type, act_record_id");
+  });
+
+  it("fails closed when travel-leg sort orders would block the check constraint", async () => {
+    const context = await fixture();
+
+    const result = spawnSync("bash", [migrationPreflightScript], {
+      env: { ...context.env, INVALID_TRAVEL_LEGS: "1" },
+      encoding: "utf8",
+    });
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "1 travel-leg row(s) with sort_order outside 1-4",
+    );
+    expect(result.stderr).toContain("Do not rewrite or delete these rows automatically");
+    expect(result.stderr).toContain("sort_order NOT BETWEEN 1 AND 4");
   });
 });
