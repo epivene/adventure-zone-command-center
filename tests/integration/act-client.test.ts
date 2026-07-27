@@ -95,6 +95,31 @@ describe("ActClient", () => {
     });
   });
 
+  it("continues paging when Act returns fewer contacts than requested", async () => {
+    const firstPage = Array.from({ length: 10 }, (_, index) => ({
+      ...remoteContact,
+      id: `act-contact-${index + 1}`,
+    }));
+    const secondPage = Array.from({ length: 2 }, (_, index) => ({
+      ...remoteContact,
+      id: `act-contact-${index + 11}`,
+    }));
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ token: "safe-test-token" }))
+      .mockResolvedValueOnce(jsonResponse(firstPage))
+      .mockResolvedValueOnce(jsonResponse(secondPage))
+      .mockResolvedValueOnce(jsonResponse([]));
+    const client = new ActClient(config, { fetcher, pageSize: 200 });
+
+    const contacts = await client.listContacts();
+
+    expect(contacts).toHaveLength(12);
+    expect(fetcher.mock.calls[1]?.[0]).toContain("%24skip=0");
+    expect(fetcher.mock.calls[2]?.[0]).toContain("%24skip=10");
+    expect(fetcher.mock.calls[3]?.[0]).toContain("%24skip=12");
+  });
+
   it("creates and updates contacts with Act field names", async () => {
     const fetcher = vi
       .fn()
