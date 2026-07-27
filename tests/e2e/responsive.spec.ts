@@ -31,6 +31,7 @@ for (const viewport of viewports) {
       const primaryScreens = [
         { path: "/today", heading: "Today" },
         { path: "/bookings", heading: "Bookings" },
+        { path: "/contacts", heading: "Contacts" },
         { path: "/calendar", heading: "Calendar" },
         { path: "/routes", heading: "Routes" },
       ] as const;

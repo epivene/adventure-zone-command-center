@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 const navigation = [
   { href: "/today", label: "Today" },
   { href: "/bookings", label: "Bookings" },
+  { href: "/contacts", label: "Contacts" },
   { href: "/calendar", label: "Calendar" },
   { href: "/routes", label: "Routes" },
 ];
@@ -43,12 +44,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             <summary className="cursor-pointer rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
               Settings
             </summary>
-            <Link
-              className="mt-1 block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-              href="/settings/import"
-            >
-              Import
-            </Link>
+            <div className="mt-1 grid">
+              <Link
+                className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+                href="/settings/act-sync"
+              >
+                Act! Sync
+              </Link>
+              <Link
+                className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+                href="/settings/import"
+              >
+                Import fallback
+              </Link>
+            </div>
           </details>
         </nav>
         <QuickAddButton className="mt-auto" />
@@ -60,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-slate-200 bg-white p-2 shadow-[0_-4px_12px_rgba(15,23,42,0.08)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-7 border-t border-slate-200 bg-white p-2 shadow-[0_-4px_12px_rgba(15,23,42,0.08)] md:hidden"
       >
         {navigation.map((item) => (
           <Link
@@ -75,12 +84,20 @@ export function AppShell({ children }: { children: ReactNode }) {
           <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center rounded-md px-1 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
             Settings
           </summary>
-          <Link
-            className="absolute bottom-14 right-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-            href="/settings/import"
-          >
-            Import
-          </Link>
+          <div className="absolute bottom-14 right-0 grid min-w-40 rounded-md border border-slate-200 bg-white p-1 text-sm font-semibold text-slate-700 shadow-lg">
+            <Link
+              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+              href="/settings/act-sync"
+            >
+              Act! Sync
+            </Link>
+            <Link
+              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+              href="/settings/import"
+            >
+              Import fallback
+            </Link>
+          </div>
         </details>
         <QuickAddButton className="flex items-center" />
       </nav>
