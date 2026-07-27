@@ -120,6 +120,24 @@ describe("ActClient", () => {
     expect(fetcher.mock.calls[3]?.[0]).toContain("%24skip=12");
   });
 
+  it("retries the plain contacts endpoint when Act rejects the projected query", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ token: "safe-test-token" }))
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([remoteContact]))
+      .mockResolvedValueOnce(jsonResponse([]));
+    const client = new ActClient(config, { fetcher, pageSize: 10 });
+
+    const contacts = await client.listContacts();
+
+    expect(contacts).toHaveLength(1);
+    expect(fetcher.mock.calls[1]?.[0]).toContain("%24select=");
+    expect(fetcher.mock.calls[2]?.[0]).not.toContain("%24select=");
+    expect(fetcher.mock.calls[2]?.[0]).toContain("%24skip=0");
+    expect(fetcher.mock.calls[2]?.[0]).toContain("%24top=10");
+  });
+
   it("creates and updates contacts with Act field names", async () => {
     const fetcher = vi
       .fn()
