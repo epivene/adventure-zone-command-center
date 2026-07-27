@@ -74,6 +74,11 @@ class InMemorySyncRepository implements SyncRepository {
     const preview = this.previews.get(runId);
     return preview ? structuredClone(preview) : null;
   }
+
+  async getLatestPreview() {
+    const preview = [...this.previews.values()].at(-1);
+    return preview ? structuredClone(preview) : null;
+  }
 }
 
 function local(overrides: Partial<LocalSyncContact> = {}): LocalSyncContact {
@@ -145,6 +150,27 @@ describe("ActSyncService preview", () => {
 
     expect(reopened).toEqual(created);
     expect(client.listCalls).toBe(1);
+  });
+
+  it("recovers the latest stored preview without another Act request", async () => {
+    const client = new FakeActClient([remote()]);
+    const repository = new InMemorySyncRepository([local()]);
+    const service = new ActSyncService(client, repository);
+    await service.createPreview();
+    client.remoteContacts = [
+      remote({
+        id: "act-new",
+        firstName: "New",
+        lastName: "Person",
+        email: "new@example.com",
+      }),
+    ];
+    const latest = await service.createPreview();
+
+    const recovered = await service.getLatestPreview();
+
+    expect(recovered).toEqual(latest);
+    expect(client.listCalls).toBe(2);
   });
 
   it("preserves a sanitized permission error and stores no partial preview", async () => {
