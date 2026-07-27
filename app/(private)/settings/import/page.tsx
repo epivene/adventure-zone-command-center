@@ -13,12 +13,12 @@ export default async function ImportPage() {
           Settings
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">
-          Controlled Act! import
+          Act! CSV import fallback
         </h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Upload an Act! contact export, review deterministic matches, and
-          apply only the rows you approve. This Stage 1 workflow never writes
-          back to Act!.
+          Use a contact export when the live Act! connection is unavailable.
+          Review deterministic matches and apply only the rows you approve.
+          This fallback never writes back to Act!.
         </p>
       </header>
 
