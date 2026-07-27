@@ -126,7 +126,8 @@ export class ActClient {
 
   async listContacts() {
     const records: RemoteActContact[] = [];
-    for (let skip = 0; ; skip += this.pageSize) {
+    let skip = 0;
+    for (;;) {
       const url = new URL(`${this.config.baseUrl}/api/contacts`);
       url.searchParams.set(
         "$select",
@@ -148,8 +149,9 @@ export class ActClient {
           ? (asRecord(value).value as unknown[])
           : null;
       if (!page) throw new ActApiError("invalid_response", false);
+      if (page.length === 0) break;
       records.push(...page.map(remoteContact));
-      if (page.length < this.pageSize) break;
+      skip += page.length;
     }
     return records;
   }
