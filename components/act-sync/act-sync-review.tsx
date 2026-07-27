@@ -63,6 +63,7 @@ type Props = {
     runId: string,
     decisions: readonly SyncApplyDecision[],
   ) => Promise<ActSyncApplyActionResult>;
+  openPreview?: (runId: string) => void;
 };
 
 function contactName(row: SyncComparisonRow) {
@@ -223,6 +224,9 @@ export function ActSyncReview({
   testConnectionAction = testActConnectionAction,
   createPreviewAction = createActSyncPreviewAction,
   applyAction = applyActSyncAction,
+  openPreview = (runId) => {
+    window.location.assign(`/settings/act-sync?runId=${runId}`);
+  },
 }: Props) {
   const router = useRouter();
   const [activeCategory, setActiveCategory] =
@@ -276,14 +280,21 @@ export function ActSyncReview({
   async function createPreview() {
     setBusy(true);
     setStatus("Reading Act! contacts and preparing a review…");
-    const result = await createPreviewAction();
-    if (result.ok) {
-      router.push(`/settings/act-sync?runId=${result.runId}`);
-      router.refresh();
-    } else {
-      setStatus(result.error);
+    try {
+      const result = await createPreviewAction();
+      if (result.ok) {
+        setStatus("Review ready. Opening it now…");
+        openPreview(result.runId);
+      } else {
+        setStatus(result.error);
+      }
+    } catch {
+      setStatus(
+        "The Act! review could not be prepared. Your contacts were not changed. Try again.",
+      );
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
   }
 
   async function applyApproved() {
