@@ -20,6 +20,7 @@ import type {
   LocalContact,
 } from "@/features/import/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 
 export interface ActImportTransaction {
   createContact(record: ActCsvRecord): Promise<LocalContact>;
@@ -68,14 +69,6 @@ function normalize(value: string) {
 
 function displayValue(value: string) {
   return value.trim().replace(/\s+/g, " ");
-}
-
-function normalizeUsPhone(phone: string | null) {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (/^\d{10}$/.test(digits)) return `+1${digits}`;
-  if (/^1\d{10}$/.test(digits)) return `+${digits}`;
-  return null;
 }
 
 function comparable(value: string | null) {
@@ -600,7 +593,9 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
-        normalizedPhone: normalizeUsPhone(record.phone),
+        normalizedPhone: record.phone
+          ? normalizeNorthAmericanPhone(record.phone)
+          : null,
       })
       .returning();
     if (!created) throw new Error("Could not create imported contact.");
@@ -657,7 +652,9 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
-        normalizedPhone: normalizeUsPhone(record.phone),
+        normalizedPhone: record.phone
+          ? normalizeNorthAmericanPhone(record.phone)
+          : null,
         updatedAt: new Date(),
       })
       .where(eq(contacts.id, contactId))

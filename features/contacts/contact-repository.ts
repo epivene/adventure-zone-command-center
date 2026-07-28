@@ -13,6 +13,7 @@ import {
 import type { db as database } from "@/db/client";
 import {
   actContactSyncStates,
+  activities,
   auditEntries,
   bookings,
   contacts,
@@ -20,6 +21,7 @@ import {
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import type { ContactInput } from "@/features/contacts/contact-input";
+import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import {
   contactSyncStateValues,
   type ContactDetail,
@@ -28,7 +30,10 @@ import {
   type ContactListQuery,
   type ContactListRecord,
   type ContactSyncState,
+  type PhoneMatch,
+  type QuickCallerInput,
 } from "@/features/contacts/contact-types";
+import { requireOwner } from "@/lib/auth/require-owner";
 
 type DrizzleDatabase = typeof database;
 type OrganizationWriter = Pick<DrizzleDatabase, "select" | "insert">;
@@ -117,11 +122,16 @@ export function contactAuditSnapshot(
 }
 
 export function normalizeUsPhone(phone: string | null) {
-  if (!phone) return null;
-  const digits = phone.replace(/\D/g, "");
-  if (/^\d{10}$/.test(digits)) return `+1${digits}`;
-  if (/^1\d{10}$/.test(digits)) return `+${digits}`;
-  return null;
+  return phone ? normalizeNorthAmericanPhone(phone) : null;
+}
+
+export function phoneMatch(
+  normalizedPhone: string,
+  records: ContactListRecord[],
+): PhoneMatch {
+  if (records.length === 1) return { kind: "one", contact: records[0]! };
+  if (records.length > 1) return { kind: "many", contacts: records };
+  return { kind: "none", normalizedPhone };
 }
 
 export async function patchContactInTransaction(
@@ -266,6 +276,31 @@ export class DrizzleContactRepository {
     };
   }
 
+  async findContactsByPhone(phone: string): Promise<PhoneMatch> {
+    const normalizedPhone = normalizeNorthAmericanPhone(phone);
+    if (!normalizedPhone) return { kind: "none", normalizedPhone: "" };
+
+    const records = await this.database
+      .select({
+        contact: contacts,
+        organizationName: organizations.name,
+        organizationLastResort: organizations.lastResort,
+        organizationLastResortReason: organizations.lastResortReason,
+        syncState: actContactSyncStates.state,
+        lastSyncedAt: actContactSyncStates.lastSyncedAt,
+      })
+      .from(contacts)
+      .leftJoin(organizations, eq(contacts.organizationId, organizations.id))
+      .leftJoin(
+        actContactSyncStates,
+        eq(contacts.id, actContactSyncStates.contactId),
+      )
+      .where(eq(contacts.normalizedPhone, normalizedPhone))
+      .orderBy(asc(contacts.lastName), asc(contacts.firstName), asc(contacts.id));
+
+    return phoneMatch(normalizedPhone, records.map(listRecord));
+  }
+
   async createContact(input: ContactInput, now = new Date()) {
     return this.database.transaction(async (transaction) => {
       const organizationId = await this.resolveOrganizationId(
@@ -309,6 +344,80 @@ export class DrizzleContactRepository {
         after: contactAuditSnapshot(created, input.organizationName),
       });
       return created.id;
+    });
+  }
+
+  async createQuickCaller(input: QuickCallerInput, now = new Date()) {
+    return this.database.transaction(async (transaction) => {
+      const organizationId = await this.resolveOrganizationId(
+        transaction,
+        input.organizationName,
+        now,
+      );
+      const [contact] = await transaction
+        .insert(contacts)
+        .values({
+          organizationId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email,
+          phone: input.phone,
+          normalizedPhone: normalizeUsPhone(input.phone),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!contact) throw new Error("Could not create caller contact.");
+
+      await transaction.insert(actContactSyncStates).values({
+        contactId: contact.id,
+        localDirty: true,
+        state: "waiting",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await recordAuditEntry(transaction, {
+        entityType: "contact",
+        entityId: contact.id,
+        action: "create",
+        before: null,
+        after: contactAuditSnapshot(contact, input.organizationName),
+      });
+
+      const note = [
+        `Reason for calling: ${input.reason}`,
+        input.eventDate ? `Event date: ${input.eventDate}` : null,
+        input.eventLocation ? `Event location: ${input.eventLocation}` : null,
+      ].filter(Boolean).join("\n");
+      const [activity] = await transaction
+        .insert(activities)
+        .values({
+          organizationId,
+          contactId: contact.id,
+          kind: "note",
+          body: note,
+          occurredAt: now,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (!activity) throw new Error("Could not create caller note.");
+      await recordAuditEntry(transaction, {
+        entityType: "activity",
+        entityId: activity.id,
+        action: "create",
+        before: null,
+        after: {
+          organizationId: activity.organizationId,
+          contactId: activity.contactId,
+          bookingId: activity.bookingId,
+          kind: activity.kind,
+          body: activity.body,
+          occurredAt: activity.occurredAt.toISOString(),
+        },
+      });
+
+      return contact.id;
     });
   }
 
@@ -408,4 +517,10 @@ export class DrizzleContactRepository {
     if (!created) throw new Error("Could not create contact organization.");
     return created.id;
   }
+}
+
+export async function findContactsByPhone(phone: string): Promise<PhoneMatch> {
+  await requireOwner();
+  const { db } = await import("@/db/client");
+  return new DrizzleContactRepository(db).findContactsByPhone(phone);
 }

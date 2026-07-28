@@ -37,6 +37,22 @@ export type ContactListRecord = ContactFields & {
   organizationLastResortReason?: string | null;
 };
 
+export type PhoneMatch =
+  | { kind: "one"; contact: ContactListRecord }
+  | { kind: "many"; contacts: ContactListRecord[] }
+  | { kind: "none"; normalizedPhone: string };
+
+export type QuickCallerInput = {
+  firstName: string;
+  lastName: string;
+  organizationName: string;
+  phone: string | null;
+  email: string | null;
+  reason: string;
+  eventDate: string | null;
+  eventLocation: string | null;
+};
+
 export type ContactListPage = {
   records: ContactListRecord[];
   total: number;

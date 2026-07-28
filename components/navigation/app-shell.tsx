@@ -12,14 +12,13 @@ const navigation = [
 
 function QuickAddButton({ className }: { className: string }) {
   return (
-    <form action="/bookings/new" className={className} method="get">
-      <button
-        className="w-full rounded-lg bg-orange-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-        type="submit"
-      >
-        Quick Add
-      </button>
-    </form>
+    <Link
+      aria-label="Quick Add caller"
+      className={`${className} w-full rounded-lg bg-orange-600 px-4 py-3 text-center font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600`}
+      href="/quick-add"
+    >
+      Quick Add
+    </Link>
   );
 }
 
