@@ -87,12 +87,20 @@ export default async function BookingDetailPage({
             <h1 className="text-3xl font-bold tracking-tight">{booking.name}</h1>
             <StatusBadge status={booking.status} />
           </div>
-          <Link
-            className="button-secondary text-center"
-            href={`/bookings/${booking.id}/edit`}
-          >
-            Edit booking
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              className="button-secondary text-center"
+              href={`/calls/new?bookingId=${booking.id}${contact ? `&contactId=${contact.id}` : ""}`}
+            >
+              Call Workspace
+            </Link>
+            <Link
+              className="button-secondary text-center"
+              href={`/bookings/${booking.id}/edit`}
+            >
+              Edit booking
+            </Link>
+          </div>
         </div>
         <p className="mt-2 text-slate-600">
           {booking.city}, {booking.region}

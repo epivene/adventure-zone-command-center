@@ -73,12 +73,20 @@ export default async function ContactDetailPage({
               {contact.jobTitle ? ` · ${contact.jobTitle}` : ""}
             </p>
           </div>
-          <Link
-            className="button-secondary text-center"
-            href={`/contacts/${contact.id}/edit`}
-          >
-            Edit contact
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              className="button-secondary text-center"
+              href={`/calls/new?contactId=${contact.id}`}
+            >
+              Call Workspace
+            </Link>
+            <Link
+              className="button-secondary text-center"
+              href={`/contacts/${contact.id}/edit`}
+            >
+              Edit contact
+            </Link>
+          </div>
         </div>
       </header>
 
