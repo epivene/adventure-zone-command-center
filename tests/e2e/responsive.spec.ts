@@ -54,6 +54,13 @@ for (const viewport of viewports) {
       await page.getByRole("button", { name: "Complete call" }).click();
       await expect(page.getByRole("dialog", { name: "Complete call" })).toBeVisible();
       await expectNoHorizontalOverflow(page);
+
+      await page.goto(`/calls/new?bookingId=${fixture.followUpBookingId}`);
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Call Workspace" }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Start call note" }).click();
+      await expectNoHorizontalOverflow(page);
     } finally {
       await fixture.cleanup();
     }

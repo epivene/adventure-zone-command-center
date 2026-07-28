@@ -105,6 +105,7 @@ describe("loadCallWorkspaceContext", () => {
   it("accepts Today-generated booking follow-up queries for both primary fallback and explicit same-org contacts", async () => {
     const primarySummary: FollowUpSummary = {
       id: followUpId,
+      organizationId,
       contactId,
       bookingId,
       bookingName: "Marias Fair 2026",

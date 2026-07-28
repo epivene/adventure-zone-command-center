@@ -1,6 +1,6 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 
-import { bookings, followUps } from "@/db/schema";
+import { bookings, contacts, followUps, organizations } from "@/db/schema";
 import type { BookingStatus, Probability } from "@/features/bookings/booking-types";
 import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
 import {
@@ -13,8 +13,9 @@ export type FollowUpPriorityStatus = "due" | "deadline" | "quiet_lead" | "other"
 
 export type FollowUpSummary = {
   id: string;
+  organizationId: string | null;
   contactId: string | null;
-  bookingId: string;
+  bookingId: string | null;
   bookingName: string;
   kind: string;
   dueAt: Date;
@@ -110,16 +111,16 @@ export function sortFollowUpsForToday(
 }
 
 function classifyFollowUp(
-  booking: { status: BookingStatus; updatedAt: Date },
+  booking: { status: BookingStatus; updatedAt: Date } | null,
   followUp: { kind: string },
   now: Date,
 ): FollowUpPriorityStatus {
-  if (deadlineStatuses.has(booking.status) || followUp.kind.includes("deadline")) {
+  if ((booking && deadlineStatuses.has(booking.status)) || followUp.kind.includes("deadline")) {
     return "deadline";
   }
 
   const fourteenDays = 14 * 24 * 60 * 60 * 1000;
-  if (now.getTime() - booking.updatedAt.getTime() >= fourteenDays) {
+  if (booking && now.getTime() - booking.updatedAt.getTime() >= fourteenDays) {
     return "quiet_lead";
   }
 
@@ -128,50 +129,59 @@ function classifyFollowUp(
 
 export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
   const { db } = await import("@/db/client");
-  const records = await db
-    .select({ booking: bookings, followUp: followUps })
-    .from(bookings)
-    .leftJoin(
-      followUps,
-      and(eq(followUps.bookingId, bookings.id), isNull(followUps.completedAt)),
-    )
-    .orderBy(asc(bookings.createdAt), asc(followUps.dueAt), asc(followUps.createdAt));
+  const [records, bookingList] = await Promise.all([
+    db
+      .select({
+        booking: bookings,
+        contact: contacts,
+        followUp: followUps,
+        organization: organizations,
+      })
+      .from(followUps)
+      .leftJoin(bookings, eq(followUps.bookingId, bookings.id))
+      .leftJoin(contacts, eq(followUps.contactId, contacts.id))
+      .leftJoin(organizations, eq(followUps.organizationId, organizations.id))
+      .where(isNull(followUps.completedAt))
+      .orderBy(asc(followUps.dueAt), asc(followUps.createdAt)),
+    db.select().from(bookings).orderBy(asc(bookings.createdAt)),
+  ]);
 
   const openFollowUps: FollowUpSummary[] = [];
   const openFollowUpsByBooking = new Map<
     string,
     { dueAt: Date; completedAt: Date | null }[]
   >();
-  const bookingRows = new Map<string, (typeof records)[number]["booking"]>();
-
-  for (const { booking, followUp } of records) {
-    bookingRows.set(booking.id, booking);
-    if (!followUp) continue;
-
+  for (const { booking, contact, followUp, organization } of records) {
     const summary: FollowUpSummary = {
       id: followUp.id,
-      contactId: followUp.contactId ?? booking.primaryContactId,
-      bookingId: booking.id,
-      bookingName: booking.name,
+      organizationId: followUp.organizationId ?? booking?.organizationId ?? contact?.organizationId ?? null,
+      contactId: followUp.contactId ?? booking?.primaryContactId ?? null,
+      bookingId: booking?.id ?? null,
+      bookingName:
+        booking?.name ??
+        (`${contact?.firstName ?? ""} ${contact?.lastName ?? ""}`.trim() ||
+          organization?.name ||
+          "Follow-up"),
       kind: followUp.kind,
       dueAt: followUp.dueAt,
       createdAt: followUp.createdAt,
       status: classifyFollowUp(booking, followUp, now),
-      probability: booking.probability,
+      probability: booking?.probability ?? "possible",
     };
     openFollowUps.push(summary);
 
-    const bookingFollowUps = openFollowUpsByBooking.get(booking.id) ?? [];
-    bookingFollowUps.push({
-      dueAt: followUp.dueAt,
-      completedAt: followUp.completedAt,
-    });
-    openFollowUpsByBooking.set(booking.id, bookingFollowUps);
+    if (booking) {
+      const bookingFollowUps = openFollowUpsByBooking.get(booking.id) ?? [];
+      bookingFollowUps.push({
+        dueAt: followUp.dueAt,
+        completedAt: followUp.completedAt,
+      });
+      openFollowUpsByBooking.set(booking.id, bookingFollowUps);
+    }
   }
 
   const sortedFollowUps = sortFollowUpsForToday(openFollowUps, now);
   const { start: startToday, end: endToday } = businessDayBounds(now);
-  const bookingList = [...bookingRows.values()];
   const futureFollowUpByBooking = new Map(
     [...openFollowUpsByBooking].flatMap(([bookingId, bookingFollowUps]) => {
       const futureFollowUp = selectFutureIncompleteFollowUp(bookingFollowUps, now);

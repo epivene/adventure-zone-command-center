@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { callWorkspaceHref } from "@/components/today/next-call-card";
+import { followUpHref } from "@/components/today/next-call-card";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
 import {
   BUSINESS_TIME_ZONE,
@@ -59,7 +59,7 @@ export function FollowUpList({
                 <div>
                   <Link
                     className="font-bold text-slate-950 hover:text-orange-700"
-                    href={callWorkspaceHref(followUp)}
+                    href={followUpHref(followUp)}
                   >
                     {followUp.bookingName}
                   </Link>

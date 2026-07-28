@@ -13,9 +13,16 @@ function formatDate(value: Date) {
 export function callWorkspaceHref(followUp: FollowUpSummary) {
   const parameters = new URLSearchParams();
   if (followUp.contactId) parameters.set("contactId", followUp.contactId);
-  parameters.set("bookingId", followUp.bookingId);
+  if (followUp.bookingId) parameters.set("bookingId", followUp.bookingId);
   parameters.set("followUpId", followUp.id);
   return `/calls/new?${parameters.toString()}`;
+}
+
+export function followUpHref(followUp: FollowUpSummary) {
+  if (followUp.kind === "call") return callWorkspaceHref(followUp);
+  if (followUp.bookingId) return `/bookings/${followUp.bookingId}`;
+  if (followUp.contactId) return `/contacts/${followUp.contactId}`;
+  return `/organizations/${followUp.organizationId}`;
 }
 
 export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null }) {

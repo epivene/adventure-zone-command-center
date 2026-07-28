@@ -15,6 +15,7 @@ const now = new Date("2026-08-03T14:00:00Z");
 const followUps: (FollowUpSummary & { contactId: string | null })[] = [
   {
     id: "overdue-call",
+    organizationId: "organization-1",
     contactId: "contact-1",
     bookingId: "booking-1",
     bookingName: "Overdue County Fair",
@@ -44,6 +45,62 @@ describe("Today dashboard components", () => {
     expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
       "href",
       "/calls/new?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call",
+    );
+  });
+
+  it("keeps a non-call booking follow-up on its booking record", () => {
+    render(
+      <FollowUpList
+        followUps={[{ ...followUps[0]!, kind: "send_information" }]}
+        now={now}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
+      "href",
+      "/bookings/booking-1",
+    );
+  });
+
+  it("opens a contact-only call in the workspace without inventing a booking", () => {
+    render(
+      <FollowUpList
+        followUps={[
+          {
+            ...followUps[0]!,
+            bookingId: null,
+            bookingName: "Jordan Caller",
+          },
+        ]}
+        now={now}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Jordan Caller" })).toHaveAttribute(
+      "href",
+      "/calls/new?contactId=contact-1&followUpId=overdue-call",
+    );
+  });
+
+  it("keeps an organization-only non-call follow-up on its organization record", () => {
+    render(
+      <FollowUpList
+        followUps={[
+          {
+            ...followUps[0]!,
+            contactId: null,
+            bookingId: null,
+            bookingName: "County Fair Office",
+            kind: "send_information",
+          },
+        ]}
+        now={now}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "County Fair Office" })).toHaveAttribute(
+      "href",
+      "/organizations/organization-1",
     );
   });
 

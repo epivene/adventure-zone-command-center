@@ -119,6 +119,36 @@ test("follow-up dialog traps focus and returns it to the trigger", async ({
   }
 });
 
+test("Call Workspace is keyboard-completable with labeled controls and visible focus", async ({ page }) => {
+  const fixture = await arrangeReleaseBookings();
+
+  try {
+    await page.goto(`/calls/new?bookingId=${fixture.followUpBookingId}`);
+    const start = page.getByRole("button", { name: "Start call note" });
+    await start.focus();
+    await expect(start).toBeFocused();
+    await expect(start).toHaveCSS("outline-style", "solid");
+    await start.press("Enter");
+
+    for (const label of [
+      "Call note",
+      "Call disposition",
+      "Next action",
+      "Next action date",
+    ]) {
+      await expect(page.getByLabel(label, { exact: true })).toBeVisible();
+    }
+    await page.getByLabel("Call note").fill("Keyboard entry.");
+    await page.getByLabel("Call disposition").selectOption("no_answer");
+    const save = page.getByRole("button", { name: "Save call note" });
+    await save.focus();
+    await expect(save).toBeFocused();
+    await expect(save).toHaveCSS("outline-style", "solid");
+  } finally {
+    await fixture.cleanup();
+  }
+});
+
 test("mobile navigation items have distinct accessible names", async ({
   page,
 }) => {
