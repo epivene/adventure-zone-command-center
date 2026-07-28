@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { submitQuickCaller } from "@/app/(private)/quick-add/actions";
+import { submitQuickCaller } from "@/features/contacts/quick-caller-service";
 import type { PhoneMatch, QuickCallerInput } from "@/features/contacts/contact-types";
 
 const input = {
