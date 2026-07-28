@@ -32,6 +32,7 @@ import {
 
 type DrizzleDatabase = typeof database;
 type OrganizationWriter = Pick<DrizzleDatabase, "select" | "insert">;
+export type ContactPatchWriter = Pick<DrizzleDatabase, "insert" | "update">;
 
 export function contactSyncState(value: string | null): ContactSyncState {
   return contactSyncStateValues.includes(value as ContactSyncState)
@@ -70,7 +71,7 @@ function syncStateCondition(state: ContactListQuery["state"]) {
   return eq(actContactSyncStates.state, state);
 }
 
-function contactFields(
+export function contactFields(
   contact: typeof contacts.$inferSelect,
   organizationName: string | null,
 ): ContactFields {
@@ -108,11 +109,53 @@ function listRecord(record: {
   };
 }
 
-function auditSnapshot(
+export function contactAuditSnapshot(
   contact: typeof contacts.$inferSelect,
   organizationName: string | null,
 ) {
   return contactFields(contact, organizationName);
+}
+
+export function normalizeUsPhone(phone: string | null) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (/^\d{10}$/.test(digits)) return `+1${digits}`;
+  if (/^1\d{10}$/.test(digits)) return `+${digits}`;
+  return null;
+}
+
+export async function patchContactInTransaction(
+  writer: ContactPatchWriter,
+  before: typeof contacts.$inferSelect,
+  organizationName: string | null,
+  updates: Partial<Omit<ContactFields, "organizationName">>,
+  now: Date,
+) {
+  const contactUpdates: Record<string, unknown> = { ...updates, updatedAt: now };
+  if (Object.hasOwn(updates, "phone")) {
+    contactUpdates.normalizedPhone = normalizeUsPhone(updates.phone ?? null);
+  }
+  const [updated] = await writer
+    .update(contacts)
+    .set(contactUpdates)
+    .where(eq(contacts.id, before.id))
+    .returning();
+  if (!updated) throw new Error("Contact is missing.");
+
+  await writer
+    .insert(actContactSyncStates)
+    .values({
+      contactId: updated.id,
+      localDirty: true,
+      state: "waiting",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: actContactSyncStates.contactId,
+      set: { localDirty: true, state: "waiting", updatedAt: now },
+    });
+  return { contact: updated, snapshot: contactFields(updated, organizationName) };
 }
 
 export class DrizzleContactRepository {
@@ -239,6 +282,7 @@ export class DrizzleContactRepository {
           jobTitle: input.jobTitle,
           email: input.email,
           phone: input.phone,
+          normalizedPhone: normalizeUsPhone(input.phone),
           address1: input.address1,
           address2: input.address2,
           city: input.city,
@@ -262,7 +306,7 @@ export class DrizzleContactRepository {
         entityId: created.id,
         action: "create",
         before: null,
-        after: auditSnapshot(created, input.organizationName),
+        after: contactAuditSnapshot(created, input.organizationName),
       });
       return created.id;
     });
@@ -291,9 +335,11 @@ export class DrizzleContactRepository {
         input.organizationName,
         now,
       );
-      const [updated] = await transaction
-        .update(contacts)
-        .set({
+      const { snapshot } = await patchContactInTransaction(
+        transaction,
+        before.contact,
+        input.organizationName,
+        {
           organizationId,
           firstName: input.firstName,
           lastName: input.lastName,
@@ -305,35 +351,15 @@ export class DrizzleContactRepository {
           city: input.city,
           region: input.region,
           postalCode: input.postalCode,
-          updatedAt: now,
-        })
-        .where(eq(contacts.id, contactId))
-        .returning();
-      if (!updated) return false;
-
-      await transaction
-        .insert(actContactSyncStates)
-        .values({
-          contactId,
-          localDirty: true,
-          state: "waiting",
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: actContactSyncStates.contactId,
-          set: {
-            localDirty: true,
-            state: "waiting",
-            updatedAt: now,
-          },
-        });
+        } as Partial<Omit<ContactFields, "organizationName">>,
+        now,
+      );
       await recordAuditEntry(transaction, {
         entityType: "contact",
         entityId: contactId,
         action: "update",
-        before: auditSnapshot(before.contact, before.organizationName),
-        after: auditSnapshot(updated, input.organizationName),
+        before: contactAuditSnapshot(before.contact, before.organizationName),
+        after: snapshot,
       });
       return true;
     });

@@ -10,6 +10,10 @@ import {
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import {
+  patchContactInTransaction,
+  type ContactPatchWriter,
+} from "@/features/contacts/contact-repository";
 import type { ContactFields } from "@/features/contacts/contact-types";
 import type {
   CallBooking,
@@ -57,7 +61,12 @@ export interface CallTransaction {
   }): Promise<{ id: string }>;
   linkNextFollowUp(followUpId: string, nextFollowUpId: string): Promise<void>;
   updateBooking(bookingId: string, updates: Record<string, unknown>): Promise<CallBooking>;
-  updateContact(contactId: string, updates: Partial<ContactFields>): Promise<void>;
+  updateContact(input: {
+    contact: NonNullable<CallContext["contact"]>;
+    organizationName: string;
+    updates: Partial<ContactFields>;
+    now: Date;
+  }): Promise<Record<string, unknown>>;
   setLastResort(organizationId: string, reason: string, changedAt: Date): Promise<void>;
   createAuditEntry(input: CallAuditEntry): Promise<void>;
 }
@@ -72,13 +81,19 @@ type DrizzleWriter = Pick<DrizzleDatabase, "select" | "insert" | "update">;
 function organizationSnapshot(record: typeof organizations.$inferSelect): CallOrganization {
   return {
     id: record.id,
+    name: record.name,
     lastResort: record.lastResort,
     lastResortReason: record.lastResortReason,
   };
 }
 
 function bookingSnapshot(record: typeof bookings.$inferSelect): CallBooking {
-  return { ...record, status: record.status };
+  return {
+    ...record,
+    organizationId: record.organizationId,
+    primaryContactId: record.primaryContactId,
+    status: record.status,
+  };
 }
 
 function followUpSnapshot(record: typeof followUps.$inferSelect): CallFollowUp {
@@ -99,7 +114,7 @@ class DrizzleCallTransaction implements CallTransaction {
   async lockContext(input: CompleteCallInput): Promise<CallContext> {
     const [organization] = await this.database.select().from(organizations)
       .where(eq(organizations.id, input.organizationId)).limit(1).for("update");
-    const [contact] = input.contactId
+    let [contact] = input.contactId
       ? await this.database.select().from(contacts).where(eq(contacts.id, input.contactId)).limit(1).for("update")
       : [];
     let [booking] = input.bookingId
@@ -112,9 +127,13 @@ class DrizzleCallTransaction implements CallTransaction {
       [booking] = await this.database.select().from(bookings)
         .where(eq(bookings.id, followUp.bookingId)).limit(1).for("update");
     }
+    if (!contact && followUp?.contactId) {
+      [contact] = await this.database.select().from(contacts)
+        .where(eq(contacts.id, followUp.contactId)).limit(1).for("update");
+    }
     return {
       organization: organization ? organizationSnapshot(organization) : null,
-      contact: contact ?? null,
+      contact: contact ? { ...contact, organizationId: contact.organizationId } : null,
       booking: booking ? bookingSnapshot(booking) : null,
       followUp: followUp ? followUpSnapshot(followUp) : null,
     };
@@ -166,12 +185,22 @@ class DrizzleCallTransaction implements CallTransaction {
     return bookingSnapshot(booking);
   }
 
-  async updateContact(contactId: string, updates: Partial<ContactFields>) {
-    const contactUpdates = { ...updates } as Record<string, unknown>;
-    if (!Object.keys(contactUpdates).length) return;
-    const [contact] = await this.database.update(contacts).set({ ...contactUpdates, updatedAt: new Date() })
-      .where(eq(contacts.id, contactId)).returning({ id: contacts.id });
-    if (!contact) throw new Error("Contact is missing.");
+  async updateContact(input: {
+    contact: NonNullable<CallContext["contact"]>;
+    organizationName: string;
+    updates: Partial<ContactFields>;
+    now: Date;
+  }): Promise<Record<string, unknown>> {
+    const updates = { ...input.updates };
+    delete updates.organizationName;
+    const patched = await patchContactInTransaction(
+      this.database as ContactPatchWriter,
+      input.contact as typeof contacts.$inferSelect,
+      input.organizationName,
+      updates,
+      input.now,
+    );
+    return patched.snapshot;
   }
 
   async setLastResort(organizationId: string, reason: string, changedAt: Date) {

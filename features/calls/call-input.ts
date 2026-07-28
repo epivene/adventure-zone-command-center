@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-import { bookingStatusValues, probabilityValues } from "@/features/bookings/booking-types";
+import { bookingEditInputSchema } from "@/features/bookings/booking-input";
+import { bookingStatusValues, probabilityValues, type BookingStatus } from "@/features/bookings/booking-types";
 import type { CompleteCallInput } from "@/features/calls/call-types";
 
 const callDispositionSchema = z.enum([
@@ -84,4 +85,12 @@ export type ParsedCompleteCallInput = z.output<typeof completeCallInputSchema>;
 
 export function parseCompleteCallInput(input: CompleteCallInput) {
   return completeCallInputSchema.safeParse(input);
+}
+
+export function validateApprovedBookingPatch(
+  lockedBooking: Record<string, unknown>,
+  updates: Record<string, unknown>,
+  status: BookingStatus,
+) {
+  return bookingEditInputSchema.safeParse({ ...lockedBooking, ...updates, status });
 }

@@ -33,17 +33,21 @@ export type CompleteCallInput = {
 
 export type CallOrganization = {
   id: string;
+  name: string;
   lastResort: boolean;
   lastResortReason: string | null;
 };
 
 export type CallContact = {
   id: string;
+  organizationId: string | null;
   [key: string]: unknown;
 };
 
 export type CallBooking = {
   id: string;
+  organizationId: string | null;
+  primaryContactId: string | null;
   status: BookingStatus;
   [key: string]: unknown;
 };
@@ -80,6 +84,10 @@ export type CallError =
   | { code: "BOOKING_NOT_FOUND" }
   | { code: "FOLLOW_UP_NOT_FOUND" }
   | { code: "FOLLOW_UP_BOOKING_MISMATCH" }
+  | { code: "CONTACT_ORGANIZATION_MISMATCH" }
+  | { code: "BOOKING_ORGANIZATION_MISMATCH" }
+  | { code: "FOLLOW_UP_ORGANIZATION_MISMATCH" }
+  | { code: "FOLLOW_UP_CONTACT_MISMATCH" }
   | { code: "ALREADY_COMPLETED" }
   | { code: "NEXT_ACTION_REQUIRED" }
   | { code: "RESULTING_STATUS_MISMATCH" };

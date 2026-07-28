@@ -1,4 +1,7 @@
-import { completeCallInputSchema } from "@/features/calls/call-input";
+import {
+  completeCallInputSchema,
+  validateApprovedBookingPatch,
+} from "@/features/calls/call-input";
 import type { BookingStatus } from "@/features/bookings/booking-types";
 import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
 import {
@@ -18,6 +21,7 @@ type CallServiceOptions = { now?: () => Date };
 function activityAudit(
   input: CompleteCallInput,
   activityId: string,
+  contactId: string | null,
   bookingId: string | null,
 ) {
   return {
@@ -27,7 +31,7 @@ function activityAudit(
     before: null,
     after: {
       organizationId: input.organizationId,
-      contactId: input.contactId,
+      contactId,
       bookingId,
       kind: "call",
       body: input.note,
@@ -65,13 +69,31 @@ export class CallService {
       if (context.followUp?.bookingId && value.bookingId && context.followUp.bookingId !== value.bookingId) {
         return err({ code: "FOLLOW_UP_BOOKING_MISMATCH" });
       }
+      if (context.contact && context.contact.organizationId !== value.organizationId) {
+        return err({ code: "CONTACT_ORGANIZATION_MISMATCH" });
+      }
+      if (context.booking && context.booking.organizationId !== value.organizationId) {
+        return err({ code: "BOOKING_ORGANIZATION_MISMATCH" });
+      }
+      if (context.followUp?.organizationId && context.followUp.organizationId !== value.organizationId) {
+        return err({ code: "FOLLOW_UP_ORGANIZATION_MISMATCH" });
+      }
+      if (context.followUp?.contactId && value.contactId && context.followUp.contactId !== value.contactId) {
+        return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
+      }
       if (context.followUp && (context.followUp.completedAt || context.followUp.nextFollowUpId)) {
         return err({ code: "ALREADY_COMPLETED" });
       }
 
       const mappedStatus = dispositionBookingStatus[value.disposition];
-      const requestedBookingStatus = value.resultingBookingStatus
-        ?? mappedStatus
+      if (
+        mappedStatus && (
+          (value.resultingBookingStatus && value.resultingBookingStatus !== mappedStatus) ||
+          (value.approvedBookingUpdates?.status && value.approvedBookingUpdates.status !== mappedStatus)
+        )
+      ) return err({ code: "RESULTING_STATUS_MISMATCH" });
+      const requestedBookingStatus = mappedStatus
+        ?? value.resultingBookingStatus
         ?? value.approvedBookingUpdates?.status;
       const resultingBookingStatus: BookingStatus | null = context.booking
         ? requestedBookingStatus ?? context.booking.status
@@ -87,18 +109,35 @@ export class CallService {
         return err({ code: "NEXT_ACTION_REQUIRED" });
       }
       if (value.approvedContactUpdates && !context.contact) return err({ code: "CONTACT_NOT_FOUND" });
+      const contactId = context.contact?.id ?? value.contactId;
+      const bookingId = context.booking?.id ?? value.bookingId;
+      const bookingPatch = context.booking && (
+        mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates
+      )
+        ? validateApprovedBookingPatch(
+          context.booking as Record<string, unknown>,
+          value.approvedBookingUpdates ?? {},
+          resultingBookingStatus!,
+        )
+        : null;
+      if (bookingPatch && !bookingPatch.success) {
+        return err({
+          code: "INVALID_CALL_INPUT",
+          message: bookingPatch.error.issues[0]?.message ?? "Review the booking updates.",
+        });
+      }
 
       const activity = await transaction.createActivity({
         organizationId: value.organizationId,
-        contactId: value.contactId,
-        bookingId: context.booking?.id ?? value.bookingId,
+        contactId,
+        bookingId,
         body: value.note,
         occurredAt: value.endedAt,
       });
       const session = await transaction.createCallSession({
         organizationId: value.organizationId,
-        contactId: value.contactId,
-        bookingId: context.booking?.id ?? value.bookingId,
+        contactId,
+        bookingId,
         followUpId: value.followUpId,
         disposition: persistedCallDisposition[value.disposition],
         noteActivityId: activity.id,
@@ -116,7 +155,7 @@ export class CallService {
       if (value.nextAction) {
         const next = await transaction.createFollowUp({
           organizationId: value.organizationId,
-          contactId: value.contactId,
+          contactId,
           bookingId: context.booking?.id ?? null,
           ...value.nextAction,
         });
@@ -129,7 +168,7 @@ export class CallService {
           before: null,
           after: {
             organizationId: value.organizationId,
-            contactId: value.contactId,
+            contactId,
             bookingId: context.booking?.id ?? null,
             ...value.nextAction,
           },
@@ -139,11 +178,7 @@ export class CallService {
       if (context.booking && (
         mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates
       )) {
-        const updates = {
-          ...(value.approvedBookingUpdates ?? {}),
-          status: resultingBookingStatus,
-        };
-        const updated = await transaction.updateBooking(context.booking.id, updates);
+        const updated = await transaction.updateBooking(context.booking.id, bookingPatch!.data);
         await transaction.createAuditEntry({
           entityType: "booking",
           entityId: context.booking.id,
@@ -153,13 +188,18 @@ export class CallService {
         });
       }
       if (value.approvedContactUpdates && context.contact) {
-        await transaction.updateContact(context.contact.id, value.approvedContactUpdates);
+        const updated = await transaction.updateContact({
+          contact: context.contact,
+          organizationName: context.organization.name,
+          updates: value.approvedContactUpdates,
+          now: completedAt,
+        });
         await transaction.createAuditEntry({
           entityType: "contact",
           entityId: context.contact.id,
           action: "update",
           before: context.contact as Record<string, unknown>,
-          after: value.approvedContactUpdates as Record<string, unknown>,
+          after: updated,
         });
       }
       if (value.disposition === "move_to_last_resort") {
@@ -186,7 +226,7 @@ export class CallService {
         });
       }
       await transaction.createAuditEntry(
-        activityAudit(value, activity.id, context.booking?.id ?? value.bookingId),
+        activityAudit(value, activity.id, contactId, bookingId),
       );
       await transaction.createAuditEntry({
         entityType: "call_session",
