@@ -144,7 +144,6 @@ test("Call Workspace is keyboard-completable with labeled controls and visible f
     await page.keyboard.press("Tab");
     await expect(page.getByLabel("Call disposition")).toBeFocused();
     await page.keyboard.press("End");
-    await page.keyboard.press("ArrowUp");
     await expect(page.getByLabel("Call disposition")).toHaveValue("declined");
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");

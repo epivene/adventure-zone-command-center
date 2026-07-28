@@ -125,3 +125,9 @@ FAIL — 2 failures
 ### Round 2 self-review
 
 The parent rule is implemented as schema cross-field validation, so the server action already returns its existing readable invalid-input response without a database transaction. Nullable organization support remains limited to contexts with another real parent; no parentless activity/session/follow-up can now reach the database constraint. The query seam has no server action or mutation and production reads still originate from the owner-gated Today page. The booking-only fixture validates the same no-overflow, label, focus, and keyboard-submit paths without manufacturing organization data.
+
+## Round 3 — keyboard Declined selection
+
+The booking-only accessibility scenario now uses the native select’s `End` key only. Because Last Resort is omitted without an organization, this deterministically selects the final `declined` option; the test explicitly asserts that value, tabs to Save, submits with Enter, and asserts the saved status.
+
+Verification: Playwright discovery passed with 12 tests; lint, typecheck, and build passed. The exact E2E command remains blocked at app startup by `@clerk/nextjs: Missing publishableKey`; the realistic booking-only fixture and browser assertions were not weakened.
