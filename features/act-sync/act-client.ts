@@ -175,12 +175,21 @@ export class ActClient {
   }
 
   async createContact(input: ActContactInput) {
+    let token: string;
+    try {
+      token = await this.getToken();
+    } catch (error) {
+      throw error instanceof ActApiError
+        ? error.withWriteOutcome("not_applied")
+        : error;
+    }
     const value = await this.authenticatedJson(
       `${this.config.baseUrl}/api/contacts`,
       {
         method: "POST",
         body: JSON.stringify(payload(input)),
       },
+      token,
     );
     return remoteContact(value);
   }
@@ -216,8 +225,12 @@ export class ActClient {
     return this.token;
   }
 
-  private async authenticatedJson(url: string, init: RequestInit) {
-    const token = await this.getToken();
+  private async authenticatedJson(
+    url: string,
+    init: RequestInit,
+    existingToken?: string,
+  ) {
+    const token = existingToken ?? (await this.getToken());
     return this.requestJson(url, {
       ...init,
       headers: {
@@ -249,16 +262,27 @@ export class ActClient {
     };
     if (!response.ok) {
       if (response.status === 401) {
-        throw new ActApiError("authentication_failed", false);
+        throw new ActApiError(
+          "authentication_failed",
+          false,
+          null,
+          "not_applied",
+        );
       }
       if (response.status === 403) {
-        throw new ActApiError("permission_denied", false);
+        throw new ActApiError(
+          "permission_denied",
+          false,
+          null,
+          "not_applied",
+        );
       }
       if (response.status === 429) {
         throw new ActApiError(
           "rate_limited",
           true,
           response.headers.get("x-ratelimit-reset"),
+          "not_applied",
         );
       }
       throw new ActApiError("unavailable", response.status >= 500);

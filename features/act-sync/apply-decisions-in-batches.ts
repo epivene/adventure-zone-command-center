@@ -37,6 +37,7 @@ type ApplyBatchResult =
       ok: false;
       error: string;
       interruptedRow?: SyncApplyRowResult;
+      processedRows?: SyncApplyRowResult[];
     };
 
 type ApplyBatch = (
@@ -157,16 +158,50 @@ export async function applyDecisionsInBatches({
       };
     }
     if (!response.ok) {
-      const interruptedBatchIndex = response.interruptedRow
-        ? batch.findIndex(
-            (decision) => decision.rowId === response.interruptedRow?.rowId,
-          )
-        : -1;
-      if (interruptedBatchIndex >= 0 && response.interruptedRow) {
-        failed.push({
-          decision: { ...batch[interruptedBatchIndex]! },
-          error: response.interruptedRow.error ?? response.error,
-          retryable: response.interruptedRow.retryable !== false,
+      const reportedRows = [...(response.processedRows ?? [])];
+      if (
+        response.interruptedRow &&
+        !reportedRows.some(
+          ({ rowId }) => rowId === response.interruptedRow?.rowId,
+        )
+      ) {
+        reportedRows.push(response.interruptedRow);
+      }
+      const results = new Map(
+        reportedRows.map((row) => [row.rowId, row]),
+      );
+      const processedRowIds = new Set<string>();
+      let processedInBatch = 0;
+      for (const [index, decision] of batch.entries()) {
+        const result = results.get(decision.rowId);
+        if (!result) continue;
+        processedRowIds.add(decision.rowId);
+        processedInBatch = index + 1;
+        if (result.status === "completed") {
+          completed += 1;
+          settledRowIds.push(decision.rowId);
+        } else if (result.status === "skipped") {
+          skipped += 1;
+          settledRowIds.push(decision.rowId);
+        } else {
+          failed.push({
+            decision: { ...decision },
+            error: result.error ?? response.error,
+            retryable: result.retryable !== false,
+          });
+        }
+      }
+      if (processedRowIds.size > 0) {
+        onProgress?.({
+          processed: Math.min(
+            offset + processedInBatch,
+            queuedDecisions.length,
+          ),
+          total: queuedDecisions.length,
+          completed,
+          skipped,
+          failed: failed.length,
+          settledRowIds: [...settledRowIds],
         });
       }
       return {
@@ -175,7 +210,7 @@ export async function applyDecisionsInBatches({
         failed,
         pending: queuedDecisions
           .slice(offset)
-          .filter((_, index) => index !== interruptedBatchIndex)
+          .filter(({ rowId }) => !processedRowIds.has(rowId))
           .map((decision) => ({ ...decision })),
         interruptedError: response.error,
       };

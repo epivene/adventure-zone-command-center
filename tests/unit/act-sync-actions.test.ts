@@ -21,6 +21,13 @@ vi.mock("@/features/act-sync/sync-service", () => ({
         error: string;
         retryable: boolean;
       },
+      _cause?: unknown,
+      readonly processedRows: Array<{
+        rowId: string;
+        status: "completed" | "failed" | "skipped";
+        error: string | null;
+        retryable?: boolean;
+      }> = [row],
     ) {
       super(message);
     }
@@ -175,7 +182,12 @@ describe("Act sync actions", () => {
     expect(service.stage).not.toHaveBeenCalled();
   });
 
-  it("returns sanitized interrupted-row metadata to the batch coordinator", async () => {
+  it("returns sanitized processed-row metadata to the batch coordinator", async () => {
+    const completedRow = {
+      rowId: "row-0",
+      status: "completed" as const,
+      error: null,
+    };
     const interruptedRow = {
       rowId: "row-1",
       status: "failed" as const,
@@ -186,6 +198,8 @@ describe("Act sync actions", () => {
       new ActSyncInterruptedError(
         "Act! rejected the shared account credentials.",
         interruptedRow,
+        undefined,
+        [completedRow, interruptedRow],
       ),
     );
 
@@ -197,6 +211,7 @@ describe("Act sync actions", () => {
       ok: false,
       error: "Act! rejected the shared account credentials.",
       interruptedRow,
+      processedRows: [completedRow, interruptedRow],
     });
   });
 });

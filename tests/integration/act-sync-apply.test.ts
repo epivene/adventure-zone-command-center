@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { ActClient } from "@/features/act-sync/act-client";
 import type {
   ActContactInput,
   RemoteActContact,
@@ -152,6 +153,7 @@ class InMemoryApplyRepository implements SyncApplyRepository {
   linked: { localContactId: string; actRecordId: string }[] = [];
   failFinishOnce = false;
   failRememberOnce = false;
+  rememberFailureOnce: Error | null = null;
   localLockHeld = false;
   activeQueueToken: string | null = null;
   private nextLocal = 10;
@@ -343,6 +345,11 @@ class InMemoryApplyRepository implements SyncApplyRepository {
   }
 
   async rememberCreatedActId(runId: string, rowId: string, actRecordId: string) {
+    if (this.rememberFailureOnce) {
+      const error = this.rememberFailureOnce;
+      this.rememberFailureOnce = null;
+      throw error;
+    }
     if (this.failRememberOnce) {
       this.failRememberOnce = false;
       throw new Error("Could not remember the created Act id.");
@@ -980,6 +987,82 @@ describe("ActSyncService apply", () => {
     expect(repository.operations.get(rows[1]!.rowId)?.status).toBe("pending");
   });
 
+  it("returns the attempted row prefix when a later row is interrupted", async () => {
+    const first = local({
+      id: "first",
+      actRecordId: "act-1",
+      phone: "406-555-1001",
+    });
+    const second = local({
+      id: "second",
+      actRecordId: "act-2",
+      phone: "406-555-1002",
+    });
+    const third = local({
+      id: "third",
+      actRecordId: "act-3",
+      phone: "406-555-1003",
+    });
+    const fourth = local({
+      id: "fourth",
+      actRecordId: "act-4",
+      phone: "406-555-1004",
+    });
+    const rows = compareContactSets(
+      [first, second, third, fourth],
+      [
+        remote({ id: "act-1" }),
+        remote({ id: "act-2" }),
+        remote({ id: "act-3" }),
+        remote({ id: "act-4" }),
+      ],
+    );
+    const repository = new InMemoryApplyRepository(
+      rows,
+      [first, second, third, fourth],
+    );
+    const client = new FakeApplyClient([
+      remote({ id: "act-1" }),
+      remote({ id: "act-2" }),
+      remote({ id: "act-3" }),
+      remote({ id: "act-4" }),
+    ]);
+    client.getFailureFor.set(
+      "act-3",
+      new ActApiError("rate_limited", true),
+    );
+
+    await expect(
+      new ActSyncService(client, repository).apply(
+        "run-1",
+        rows.map((value, index) => ({
+          rowId: value.rowId,
+          decision: index === 1 ? ("skip" as const) : ("push" as const),
+        })),
+      ),
+    ).rejects.toMatchObject({
+      processedRows: [
+        {
+          rowId: rows[0]!.rowId,
+          status: "completed",
+          error: null,
+        },
+        {
+          rowId: rows[1]!.rowId,
+          status: "skipped",
+          error: null,
+        },
+        {
+          rowId: rows[2]!.rowId,
+          status: "failed",
+          retryable: true,
+        },
+      ],
+    });
+
+    expect(repository.operations.get(rows[3]!.rowId)?.status).toBe("pending");
+  });
+
   it("preserves a systemic Act error's non-retryable state", async () => {
     const first = local({
       id: "first",
@@ -1020,6 +1103,157 @@ describe("ActSyncService apply", () => {
       retryable: false,
     });
     expect(repository.operations.get(rows[1]!.rowId)?.status).toBe("pending");
+  });
+
+  it.each([
+    {
+      status: 401,
+      code: "authentication_failed",
+      error:
+        "Act! rejected the shared account credentials. Check the Render settings.",
+      retryable: false,
+    },
+    {
+      status: 403,
+      code: "permission_denied",
+      error: "This Act! account does not currently have Web API permission.",
+      retryable: false,
+    },
+    {
+      status: 429,
+      code: "rate_limited",
+      error: "Act! is temporarily rate limiting requests. Try again later.",
+      retryable: true,
+    },
+  ] as const)(
+    "preserves retryability when Act rejects a create with $status",
+    async ({ status, code, error, retryable }) => {
+      const newLocal = local({
+        actRecordId: null,
+        baseSnapshot: null,
+        actEditedAt: null,
+      });
+      const rows = compareContactSets([newLocal], []);
+      const repository = new InMemoryApplyRepository(rows, [newLocal]);
+      const fetcher = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ token: "safe-test-token" }), {
+            status: 200,
+          }),
+        )
+        .mockResolvedValueOnce(new Response("", { status }));
+      const client = new ActClient(
+        {
+          baseUrl: "https://apius.act.com/act.web.api",
+          databaseName: "TEST-ACT-DATABASE",
+          username: "shared",
+          password: "secret",
+        },
+        { fetcher },
+      );
+
+      await expect(
+        new ActSyncService(client, repository).apply("run-1", [
+          { rowId: rows[0]!.rowId, decision: "push" },
+        ]),
+      ).rejects.toMatchObject({
+        code,
+        row: {
+          error,
+          rowId: rows[0]!.rowId,
+          status: "failed",
+          retryable,
+        },
+      });
+      expect(repository.operations.get(rows[0]!.rowId)).toMatchObject({
+        error,
+        status: "failed",
+        retryable,
+      });
+    },
+  );
+
+  it("preserves retryable unavailability before dispatching a create", async () => {
+    const newLocal = local({
+      actRecordId: null,
+      baseSnapshot: null,
+      actEditedAt: null,
+    });
+    const rows = compareContactSets([newLocal], []);
+    const repository = new InMemoryApplyRepository(rows, [newLocal]);
+    const fetcher = vi.fn().mockRejectedValueOnce(new Error("network details"));
+    const client = new ActClient(
+      {
+        baseUrl: "https://apius.act.com/act.web.api",
+        databaseName: "TEST-ACT-DATABASE",
+        username: "shared",
+        password: "secret",
+      },
+      { fetcher },
+    );
+
+    await expect(
+      new ActSyncService(client, repository).apply("run-1", [
+        { rowId: rows[0]!.rowId, decision: "push" },
+      ]),
+    ).rejects.toMatchObject({
+      code: "unavailable",
+      row: {
+        error: "Act! could not be reached. Try again later.",
+        retryable: true,
+      },
+    });
+    expect(repository.operations.get(rows[0]!.rowId)).toMatchObject({
+      error: "Act! could not be reached. Try again later.",
+      retryable: true,
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it("blocks retry when a create receives an ambiguous server failure", async () => {
+    const newLocal = local({
+      actRecordId: null,
+      baseSnapshot: null,
+      actEditedAt: null,
+    });
+    const rows = compareContactSets([newLocal], []);
+    const repository = new InMemoryApplyRepository(rows, [newLocal]);
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ token: "safe-test-token" }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response("", { status: 503 }));
+    const client = new ActClient(
+      {
+        baseUrl: "https://apius.act.com/act.web.api",
+        databaseName: "TEST-ACT-DATABASE",
+        username: "shared",
+        password: "secret",
+      },
+      { fetcher },
+    );
+    const service = new ActSyncService(client, repository);
+    const decision = { rowId: rows[0]!.rowId, decision: "push" as const };
+
+    await expect(service.apply("run-1", [decision])).rejects.toMatchObject({
+      code: "unavailable",
+      row: {
+        error:
+          "A previous Act! create may have completed. Create a new preview before trying again.",
+        retryable: false,
+      },
+    });
+    const retry = await service.apply("run-1", [decision]);
+
+    expect(retry.rows[0]).toMatchObject({
+      status: "failed",
+      retryable: false,
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
   it("marks a category-only apply partial while other rows remain pending", async () => {
@@ -1170,6 +1404,43 @@ describe("ActSyncService apply", () => {
     await service.apply("run-1", [decision]);
 
     expect(repository.operations.get(decision.rowId)).toMatchObject({
+      status: "failed",
+      retryable: false,
+    });
+    expect(client.createCalls).toBe(1);
+  });
+
+  it("keeps Act id persistence failures ambiguous regardless of error metadata", async () => {
+    const newLocal = local({
+      actRecordId: null,
+      baseSnapshot: null,
+      actEditedAt: null,
+    });
+    const comparisonRows = compareContactSets([newLocal], []);
+    const repository = new InMemoryApplyRepository(comparisonRows, [newLocal]);
+    repository.rememberFailureOnce = new ActApiError(
+      "rate_limited",
+      true,
+      null,
+      "not_applied",
+    );
+    const client = new FakeApplyClient([]);
+    const service = new ActSyncService(client, repository);
+    const decision = {
+      rowId: comparisonRows[0]!.rowId,
+      decision: "push" as const,
+    };
+
+    await expect(service.apply("run-1", [decision])).rejects.toThrow();
+    const retry = await service.apply("run-1", [decision]);
+
+    expect(repository.operations.get(decision.rowId)).toMatchObject({
+      status: "failed",
+      retryable: false,
+      error:
+        "A previous Act! create may have completed. Create a new preview before trying again.",
+    });
+    expect(retry.rows[0]).toMatchObject({
       status: "failed",
       retryable: false,
     });

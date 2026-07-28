@@ -32,6 +32,7 @@ export type ActSyncApplyActionResult =
       ok: false;
       error: string;
       interruptedRow?: SyncApplyRowResult;
+      processedRows?: SyncApplyRowResult[];
     };
 
 const applyInputSchema = z.object({
@@ -185,6 +186,7 @@ export async function applyActSyncAction(
         ok: false,
         error: error.message,
         interruptedRow: error.row,
+        processedRows: error.processedRows,
       };
     }
     if (error instanceof ActSyncQueueChangedError) {

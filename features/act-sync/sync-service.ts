@@ -56,6 +56,7 @@ export class ActSyncInterruptedError extends Error {
     message: string,
     readonly row: SyncApplyRowResult,
     cause?: ActApiError,
+    readonly processedRows: SyncApplyRowResult[] = [row],
   ) {
     super(message, cause ? { cause } : undefined);
     this.name = "ActSyncInterruptedError";
@@ -272,6 +273,7 @@ export class ActSyncService {
               "The approved Act! changes could not be applied.",
             interruptedRow,
             originalActError,
+            [...results, interruptedRow],
           );
         }
         if (error instanceof ActApiError) {
@@ -291,6 +293,7 @@ export class ActSyncService {
             error.message,
             interruptedRow,
             error,
+            [...results, interruptedRow],
           );
         }
         result = {
@@ -398,17 +401,28 @@ export class ActSyncService {
             contact: await client.getContact(operation.actRecordId),
           };
         } else {
+          let remote: RemoteActContact;
           try {
-            const remote = await client.createContact(row.localSnapshot!);
+            remote = await client.createContact(row.localSnapshot!);
+          } catch (error) {
+            if (
+              error instanceof ActApiError &&
+              error.writeOutcome === "not_applied"
+            ) {
+              throw error;
+            }
+            throw new AmbiguousActCreateError(error);
+          }
+          try {
             await repository.rememberCreatedActId(
               runId,
               row.rowId,
               remote.id,
             );
-            return { ok: true as const, contact: remote };
           } catch (error) {
             throw new AmbiguousActCreateError(error);
           }
+          return { ok: true as const, contact: remote };
         }
       });
       if (!push.ok) return push.result;

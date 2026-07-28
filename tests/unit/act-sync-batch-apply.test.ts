@@ -224,6 +224,76 @@ describe("applyDecisionsInBatches", () => {
     expect(outcome.pending).toEqual([input[1], input[2]]);
   });
 
+  it("retains rows settled earlier in an interrupted server batch", async () => {
+    const input = decisions(4);
+    const progress = vi.fn();
+    const outcome = await applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: input,
+      onProgress: progress,
+      applyBatch: async () => ({
+        ok: false as const,
+        error: "Act! is temporarily rate limiting requests. Try again later.",
+        interruptedRow: {
+          rowId: "row-3",
+          status: "failed" as const,
+          error:
+            "Act! is temporarily rate limiting requests. Try again later.",
+          retryable: true,
+        },
+        processedRows: [
+          {
+            rowId: "row-1",
+            status: "completed" as const,
+            error: null,
+          },
+          {
+            rowId: "row-2",
+            status: "skipped" as const,
+            error: null,
+          },
+          {
+            rowId: "row-3",
+            status: "failed" as const,
+            error:
+              "Act! is temporarily rate limiting requests. Try again later.",
+            retryable: true,
+          },
+        ],
+      }),
+    });
+
+    expect(outcome).toEqual({
+      completed: 1,
+      skipped: 1,
+      failed: [
+        {
+          decision: input[2],
+          error:
+            "Act! is temporarily rate limiting requests. Try again later.",
+          retryable: true,
+        },
+      ],
+      pending: [input[3]],
+      interruptedError:
+        "Act! is temporarily rate limiting requests. Try again later.",
+    });
+    expect([
+      ...outcome.failed
+        .filter(({ retryable }) => retryable)
+        .map(({ decision }) => decision),
+      ...outcome.pending,
+    ]).toEqual([input[2], input[3]]);
+    expect(progress).toHaveBeenLastCalledWith({
+      processed: 3,
+      total: 4,
+      completed: 1,
+      skipped: 1,
+      failed: 1,
+      settledRowIds: ["row-1", "row-2"],
+    });
+  });
+
   it("treats a thrown request as an interruption without exposing the exception", async () => {
     const input = decisions(2);
     const outcome = await applyDecisionsInBatches({
