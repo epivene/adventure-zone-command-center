@@ -91,3 +91,37 @@ FAIL — 4 failures
 ### Round 1 accessibility and responsive self-review
 
 The nullable-organization notice is visible text in the existing caller panel and removes the unavailable action from the disposition control, so keyboard users cannot reach a nonfunctional Last Resort path. The strengthened keyboard browser scenario verifies labels, focus outlines, keyboard entry, keyboard selection of Declined, keyboard navigation to Save, keyboard activation, and the saved status. The responsive workspace check remains at phone and desktop widths with the `minmax(0, ...)` grid intact.
+
+## Round 2 — parent validation and realistic Today query
+
+### Findings addressed
+
+- `completeCallInputSchema` now requires at least one organization, contact, booking, or follow-up ID. Parentless input returns `INVALID_CALL_INPUT` before `CallService` opens a repository transaction or locks context.
+- `getTodayDashboard` now accepts a small query repository seam while preserving its owner-gated page usage. The direct Drizzle query implementation remains the default production source.
+- A test invokes the actual `BookingService` with a normal booking-only repository, passes that created follow-up through `getTodayDashboard`, verifies the generated `/calls/new` context URL, and resolves those IDs through `loadCallWorkspaceContext` with a nullable organization.
+- The shared release browser fixture is again genuinely booking-only: its booking and follow-up rows omit organization/contact fields. It still powers the responsive and keyboard Call Workspace scenarios.
+
+### Round 2 RED evidence
+
+```text
+npx vitest run tests/unit/call-input.test.ts tests/integration/call-service.test.ts
+FAIL — 2 failures
+- parentless input parsed successfully
+- parentless service call reached relationship validation (CONTACT_ORGANIZATION_MISMATCH) instead of typed invalid input before repository access
+```
+
+### Round 2 verification
+
+| Command | Outcome |
+| --- | --- |
+| Focused call-input/service/BookingService/Today/context tests | PASS — 80 passed, 2 database-environment skips |
+| `npm test` | PASS — 375 passed, 11 skipped |
+| `npm run lint` | PASS |
+| `npm run typecheck` | PASS |
+| `npm run build` | PASS |
+| Playwright discovery | PASS — 12 tests discovered |
+| Exact E2E command | BLOCKED — app startup continues to report `@clerk/nextjs: Missing publishableKey`; browser assertions remain unchanged. |
+
+### Round 2 self-review
+
+The parent rule is implemented as schema cross-field validation, so the server action already returns its existing readable invalid-input response without a database transaction. Nullable organization support remains limited to contexts with another real parent; no parentless activity/session/follow-up can now reach the database constraint. The query seam has no server action or mutation and production reads still originate from the owner-gated Today page. The booking-only fixture validates the same no-overflow, label, focus, and keyboard-submit paths without manufacturing organization data.

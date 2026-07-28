@@ -12,6 +12,15 @@ import type {
   CreateFollowUpInput,
   UpdateBookingStatusInput,
 } from "@/features/bookings/booking-repository";
+import { callWorkspaceHref } from "@/components/today/next-call-card";
+import {
+  getTodayDashboard,
+  type TodayDashboardRepository,
+} from "@/features/follow-ups/today-query";
+import {
+  loadCallWorkspaceContext,
+  type CallWorkspaceContextRepository,
+} from "@/features/calls/call-workspace-context";
 
 const initialBooking: Booking = {
   id: "booking-1",
@@ -93,6 +102,49 @@ class InMemoryBookingRepository implements BookingRepository {
     } finally {
       release();
     }
+  }
+}
+
+const todayBookingId = "33333333-3333-4333-8333-333333333333";
+const todayFollowUpId = "44444444-4444-4444-8444-444444444444";
+
+class NormalBookingOnlyRepository implements BookingRepository {
+  booking: Booking | null = null;
+  followUp: FollowUp | null = null;
+
+  async createBooking(input: Omit<Booking, "id">): Promise<Booking> {
+    const booking = { ...input, id: todayBookingId };
+    this.booking = booking;
+    return booking;
+  }
+
+  async transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T> {
+    const transaction: BookingTransaction = {
+      findFollowUpWithBookingForUpdate: async () => null,
+      createBooking: (input) => this.createBooking(input),
+      completeFollowUp: async () => {
+        throw new Error("Not used while creating a booking.");
+      },
+      createFollowUp: async (input) => {
+        const followUp: FollowUp = {
+          id: todayFollowUpId,
+          bookingId: input.bookingId,
+          kind: input.kind,
+          dueAt: input.dueAt,
+          completedAt: null,
+          outcome: null,
+          nextFollowUpId: null,
+        };
+        this.followUp = followUp;
+        return followUp;
+      },
+      linkNextFollowUp: async () => {},
+      updateBookingStatus: async () => {
+        throw new Error("Not used while creating a booking.");
+      },
+      createAuditEntry: async () => {},
+    };
+    return operation(transaction);
   }
 }
 
@@ -454,6 +506,90 @@ describe("BookingService.createBooking", () => {
     expect(followUp).toMatchObject({ bookingId: booking.id, kind: "call" });
     expect("organizationId" in booking).toBe(false);
     expect(followUp && "organizationId" in followUp).toBe(false);
+  });
+
+  it("runs Today query data from a normal booking-only follow-up through Call Workspace context", async () => {
+    const repository = new NormalBookingOnlyRepository();
+    const now = new Date("2026-08-01T16:00:00Z");
+    const booking = await new BookingService(repository, { now: () => now }).createBooking({
+      name: "Normal booking-only follow-up",
+      city: "Dallas",
+      region: "TX",
+      status: "new_lead",
+      nextAction: { kind: "call", dueAt: new Date("2026-08-02T15:00:00Z") },
+    });
+    const followUp = repository.followUp!;
+    const dashboardRepository: TodayDashboardRepository = {
+      listOpenFollowUps: async () => [{
+        booking: {
+          ...booking,
+          organizationId: null,
+          primaryContactId: null,
+          startsAt: null,
+          createdAt: now,
+          updatedAt: now,
+        },
+        contact: null,
+        followUp: {
+          ...followUp,
+          organizationId: null,
+          contactId: null,
+          createdAt: now,
+        },
+        organization: null,
+      }],
+      listBookings: async () => [{
+        ...booking,
+        organizationId: null,
+        primaryContactId: null,
+        startsAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }],
+    };
+
+    const dashboard = await getTodayDashboard(now, dashboardRepository);
+    const summary = dashboard.nextCall!;
+    expect(summary).toMatchObject({
+      id: todayFollowUpId,
+      organizationId: null,
+      contactId: null,
+      bookingId: todayBookingId,
+      bookingName: booking.name,
+    });
+    expect(callWorkspaceHref(summary)).toBe(
+      `/calls/new?bookingId=${todayBookingId}&followUpId=${todayFollowUpId}`,
+    );
+
+    const parameters = new URL(callWorkspaceHref(summary), "https://example.test").searchParams;
+    const contextRepository: CallWorkspaceContextRepository = {
+      findOrganization: async () => null,
+      findContact: async () => null,
+      findBooking: async (id) => id === todayBookingId ? {
+        id,
+        organizationId: null,
+        primaryContactId: null,
+        name: booking.name,
+        city: booking.city,
+        region: booking.region,
+        status: booking.status,
+        startsAt: null,
+      } : null,
+      findFollowUp: async (id) => id === todayFollowUpId ? {
+        id,
+        organizationId: null,
+        contactId: null,
+        bookingId: todayBookingId,
+      } : null,
+    };
+
+    await expect(loadCallWorkspaceContext({
+      bookingId: parameters.get("bookingId") ?? undefined,
+      followUpId: parameters.get("followUpId") ?? undefined,
+    }, contextRepository)).resolves.toMatchObject({
+      ok: true,
+      value: { organization: null, booking: { id: todayBookingId } },
+    });
   });
 
   it("rejects an active booking without a future next action", async () => {

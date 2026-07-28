@@ -31,9 +31,30 @@ describe("completeCallInputSchema", () => {
   });
 
   it("accepts a call without an organization so local booking and contact history can be preserved", () => {
-    expect(completeCallInputSchema.parse({ ...validInput(), organizationId: null })).toMatchObject({
+    expect(completeCallInputSchema.parse({
+      ...validInput(),
       organizationId: null,
+      bookingId: "33333333-3333-4333-8333-333333333333",
+    })).toMatchObject({ organizationId: null });
+  });
+
+  it("requires a parent record before a call can be submitted", () => {
+    const result = completeCallInputSchema.safeParse({
+      ...validInput(),
+      organizationId: null,
+      contactId: null,
+      bookingId: null,
+      followUpId: null,
     });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: ["organizationId"],
+        message: "Link this call to an organization, contact, booking, or follow-up.",
+      }),
+    ]));
   });
 
   it("rejects a call whose end precedes its start", () => {

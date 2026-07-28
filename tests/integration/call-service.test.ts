@@ -96,6 +96,7 @@ class InMemoryCallRepository implements CallRepository {
   public readonly payloads: Record<string, unknown[]> = {};
   public failWrite: string | null = null;
   public transactions = 0;
+  public lockContextCalls = 0;
   private next = 1;
 
   async transaction<T>(operation: (transaction: CallTransaction) => Promise<T>): Promise<T> {
@@ -103,7 +104,10 @@ class InMemoryCallRepository implements CallRepository {
     const writes = [...this.writes];
     const context = structuredClone(this.context);
     const transaction: CallTransaction = {
-      lockContext: async () => context,
+      lockContext: async () => {
+        this.lockContextCalls += 1;
+        return context;
+      },
       createActivity: async (input) => this.write(writes, "activity", { id: `activity-${this.next++}` }, input),
       createCallSession: async (input) => this.write(writes, "call_session", { id: `call-${this.next++}` }, input),
       completeFollowUp: async (id, input) => this.write(writes, "complete_follow_up", undefined, { id, input }),
@@ -173,6 +177,30 @@ describe("CallService.complete", () => {
       ok: false,
       error: { code: "NEXT_ACTION_REQUIRED" },
     });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("rejects a parentless call before opening the repository transaction", async () => {
+    const repository = new InMemoryCallRepository();
+
+    await expect(new CallService(repository).complete(input({
+      organizationId: null,
+      contactId: null,
+      bookingId: null,
+      followUpId: null,
+      disposition: "no_answer",
+      nextAction: null,
+      approvedContactUpdates: null,
+      approvedBookingUpdates: null,
+    }))).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "INVALID_CALL_INPUT",
+        message: "Link this call to an organization, contact, booking, or follow-up.",
+      },
+    });
+    expect(repository.transactions).toBe(0);
+    expect(repository.lockContextCalls).toBe(0);
     expect(repository.writes).toEqual([]);
   });
 

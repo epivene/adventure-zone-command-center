@@ -24,6 +24,41 @@ export type FollowUpSummary = {
   probability: Probability;
 };
 
+export type TodayDashboardBookingRecord = {
+  id: string;
+  organizationId: string | null;
+  primaryContactId: string | null;
+  name: string;
+  city: string;
+  region: string;
+  startsAt: Date | null;
+  status: BookingStatus;
+  probability: Probability;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type TodayDashboardFollowUpRecord = {
+  id: string;
+  organizationId: string | null;
+  contactId: string | null;
+  bookingId: string | null;
+  kind: string;
+  dueAt: Date;
+  completedAt: Date | null;
+  createdAt: Date;
+};
+
+export interface TodayDashboardRepository {
+  listOpenFollowUps(): Promise<{
+    booking: TodayDashboardBookingRecord | null;
+    contact: { organizationId: string | null; firstName: string; lastName: string } | null;
+    followUp: TodayDashboardFollowUpRecord;
+    organization: { name: string } | null;
+  }[]>;
+  listBookings(): Promise<TodayDashboardBookingRecord[]>;
+}
+
 export type FollowUpPlanItem = {
   id: string;
   name: string;
@@ -127,10 +162,11 @@ function classifyFollowUp(
   return "due";
 }
 
-export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
+async function getDrizzleTodayDashboardRepository(): Promise<TodayDashboardRepository> {
   const { db } = await import("@/db/client");
-  const [records, bookingList] = await Promise.all([
-    db
+  return {
+    listOpenFollowUps: () =>
+      db
       .select({
         booking: bookings,
         contact: contacts,
@@ -143,7 +179,18 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
       .leftJoin(organizations, eq(followUps.organizationId, organizations.id))
       .where(isNull(followUps.completedAt))
       .orderBy(asc(followUps.dueAt), asc(followUps.createdAt)),
-    db.select().from(bookings).orderBy(asc(bookings.createdAt)),
+    listBookings: () => db.select().from(bookings).orderBy(asc(bookings.createdAt)),
+  };
+}
+
+export async function getTodayDashboard(
+  now: Date,
+  repository: TodayDashboardRepository | null = null,
+): Promise<TodayDashboard> {
+  const source = repository ?? await getDrizzleTodayDashboardRepository();
+  const [records, bookingList] = await Promise.all([
+    source.listOpenFollowUps(),
+    source.listBookings(),
   ]);
 
   const openFollowUps: FollowUpSummary[] = [];

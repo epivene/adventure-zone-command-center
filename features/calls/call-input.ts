@@ -80,6 +80,13 @@ export const completeCallInputSchema = z.object({
       message: "Add a Last Resort reason",
     });
   }
+  if (!value.organizationId && !value.contactId && !value.bookingId && !value.followUpId) {
+    context.addIssue({
+      code: "custom",
+      path: ["organizationId"],
+      message: "Link this call to an organization, contact, booking, or follow-up.",
+    });
+  }
 });
 
 export type ParsedCompleteCallInput = z.output<typeof completeCallInputSchema>;

@@ -22,8 +22,6 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
 
   const sql = postgres(databaseUrl, { max: 1 });
   const runId = randomUUID();
-  const organizationId = randomUUID();
-  const contactId = randomUUID();
   const followUpBookingId = randomUUID();
   const pendingBookingId = randomUUID();
   const possibleBookingId = randomUUID();
@@ -39,18 +37,8 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
   try {
     await sql.begin(async (transaction) => {
       await transaction`
-        insert into organizations (id, name)
-        values (${organizationId}, ${`E2E Release Organization ${runId}`})
-      `;
-      await transaction`
-        insert into contacts (id, organization_id, first_name, last_name)
-        values (${contactId}, ${organizationId}, 'Release', 'Caller')
-      `;
-      await transaction`
         insert into bookings (
           id,
-          organization_id,
-          primary_contact_id,
           name,
           city,
           region,
@@ -63,8 +51,6 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
         values
           (
             ${followUpBookingId},
-            ${organizationId},
-            ${contactId},
             ${followUpBookingName},
             'Fargo',
             'ND',
@@ -76,8 +62,6 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
           ),
           (
             ${pendingBookingId},
-            ${organizationId},
-            ${contactId},
             ${pendingBookingName},
             'Bismarck',
             'ND',
@@ -89,8 +73,6 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
           ),
           (
             ${possibleBookingId},
-            ${organizationId},
-            ${contactId},
             ${possibleBookingName},
             'Austin',
             'TX',
@@ -104,16 +86,12 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
       await transaction`
         insert into follow_ups (
           id,
-          organization_id,
-          contact_id,
           booking_id,
           kind,
           due_at
         )
         values (
           ${randomUUID()},
-          ${organizationId},
-          ${contactId},
           ${followUpBookingId},
           'call',
           '2026-08-01T15:00:00.000Z'
@@ -135,12 +113,10 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
     cleanup: async () => {
       if (cleaned) return;
       try {
-        await sql`delete from call_sessions where organization_id = ${organizationId}`;
-        await sql`delete from activities where organization_id = ${organizationId}`;
+        await sql`delete from call_sessions where booking_id in ${sql(bookingIds)}`;
+        await sql`delete from activities where booking_id in ${sql(bookingIds)}`;
         await sql`delete from follow_ups where booking_id in ${sql(bookingIds)}`;
         await sql`delete from bookings where id in ${sql(bookingIds)}`;
-        await sql`delete from contacts where id = ${contactId}`;
-        await sql`delete from organizations where id = ${organizationId}`;
       } finally {
         cleaned = true;
         await sql.end({ timeout: 5 });
