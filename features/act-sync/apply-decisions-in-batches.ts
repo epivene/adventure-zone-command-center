@@ -50,6 +50,16 @@ export async function applyDecisionsInBatches({
   onProgress?: (progress: BatchApplyProgress) => void;
   batchSize?: number;
 }): Promise<BatchApplyOutcome> {
+  if (
+    !Number.isInteger(batchSize) ||
+    batchSize < 1 ||
+    batchSize > ACT_SYNC_BATCH_SIZE
+  ) {
+    throw new RangeError(
+      `Batch size must be a positive integer no greater than ${ACT_SYNC_BATCH_SIZE}.`,
+    );
+  }
+
   const failed: FailedSyncDecision[] = [];
   const completedRowIds: string[] = [];
   let completed = 0;
