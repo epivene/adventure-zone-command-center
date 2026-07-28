@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -99,6 +105,27 @@ const preview: StoredSyncPreview = {
   startedAt: new Date("2026-07-27T12:00:00.000Z"),
   completedAt: null,
 };
+
+function previewWithNewActRows(count: number): StoredSyncPreview {
+  const newRows = Array.from({ length: count }, (_, index) =>
+    row("new_in_act", `new-act-${index + 1}`),
+  );
+  return {
+    ...preview,
+    rows: newRows,
+    summary: {
+      new_in_act: count,
+      new_in_app: 0,
+      changed_in_act: 0,
+      changed_in_app: 0,
+      changed_in_both: 0,
+      possible_match: 0,
+      already_matched: 0,
+      missing_from_act: 0,
+      error: 0,
+    },
+  };
+}
 
 describe("ActSyncReview", () => {
   it("shows only masked Act connection details", () => {
@@ -270,5 +297,146 @@ describe("ActSyncReview", () => {
     expect(apply).toHaveBeenCalledWith("run-1", [
       { rowId: "conflict", decision: "keep_app" },
     ]);
+  });
+
+  it("applies approved contacts in 50-row batches and reports completion", async () => {
+    const user = userEvent.setup();
+    const largePreview = previewWithNewActRows(51);
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
+      ok: true as const,
+      result: {
+        runId,
+        rows: decisions.map((decision) => ({
+          rowId: decision.rowId,
+          status: "completed" as const,
+          error: null,
+        })),
+      },
+    }));
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={largePreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (51)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 51 approved" }));
+
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls[0]![1]).toHaveLength(50);
+    expect(apply.mock.calls[1]![1]).toHaveLength(1);
+    expect(await screen.findByText("51 contacts imported.")).toBeVisible();
+  });
+
+  it("continues after a contact failure and retries only the failed contact", async () => {
+    const user = userEvent.setup();
+    const largePreview = previewWithNewActRows(51);
+    let shouldFail = true;
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
+      ok: true as const,
+      result: {
+        runId,
+        rows: decisions.map((decision) => ({
+          rowId: decision.rowId,
+          status:
+            shouldFail && decision.rowId === "new-act-2"
+              ? "failed" as const
+              : "completed" as const,
+          error:
+            shouldFail && decision.rowId === "new-act-2"
+              ? "Try this contact again."
+              : null,
+        })),
+      },
+    }));
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={largePreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (51)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 51 approved" }));
+
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("50 imported · 1 needs retry.")).toBeVisible();
+    expect(screen.getByText("Try this contact again.")).toBeVisible();
+
+    shouldFail = false;
+    await user.click(
+      screen.getByRole("button", { name: "Retry failed contacts" }),
+    );
+
+    expect(apply).toHaveBeenCalledTimes(3);
+    expect(apply.mock.calls[2]![1]).toEqual([
+      { rowId: "new-act-2", decision: "pull" },
+    ]);
+  });
+
+  it("disables review controls and shows live progress while importing", async () => {
+    const user = userEvent.setup();
+    const largePreview = previewWithNewActRows(51);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => {
+      await gate;
+      return {
+        ok: true as const,
+        result: {
+          runId,
+          rows: decisions.map((decision) => ({
+            rowId: decision.rowId,
+            status: "completed" as const,
+            error: null,
+          })),
+        },
+      };
+    });
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={largePreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (51)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 51 approved" }));
+    await waitFor(() => expect(apply).toHaveBeenCalledOnce());
+
+    expect(screen.getByText("Importing 0 of 51…")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Changed in both 0" })).toBeDisabled();
+    expect(
+      screen.getByRole("combobox", { name: "Decision for new-act-1" }),
+    ).toBeDisabled();
+
+    await act(async () => {
+      release();
+    });
+    expect(await screen.findByText("51 contacts imported.")).toBeVisible();
   });
 });

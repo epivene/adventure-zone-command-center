@@ -16,6 +16,10 @@ import {
   safeDecisionForCategory,
 } from "@/features/act-sync/category-approval";
 import {
+  applyDecisionsInBatches,
+  type BatchApplyProgress,
+} from "@/features/act-sync/apply-decisions-in-batches";
+import {
   syncComparisonCategories,
   type SyncComparisonCategory,
   type SyncComparisonRow,
@@ -117,10 +121,14 @@ function Snapshot({
 }
 
 function SyncRow({
+  disabled,
+  error,
   row,
   selected,
   onDecision,
 }: {
+  disabled: boolean;
+  error: string | undefined;
   row: SyncComparisonRow;
   selected: DecisionState | undefined;
   onDecision: (rowId: string, value: DecisionState | undefined) => void;
@@ -142,6 +150,7 @@ function SyncRow({
             <select
               aria-label={`Decision for ${row.rowId}`}
               className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2"
+              disabled={disabled}
               onChange={(event) => {
                 const decision = event.target.value as SyncDecision | "";
                 onDecision(
@@ -181,6 +190,7 @@ function SyncRow({
           Local contact to link
           <select
             className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2"
+            disabled={disabled}
             onChange={(event) =>
               onDecision(row.rowId, {
                 decision: "link",
@@ -196,6 +206,12 @@ function SyncRow({
             ))}
           </select>
         </label>
+      ) : null}
+
+      {error ? (
+        <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-800">
+          {error}
+        </p>
       ) : null}
 
       <div className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-2">
@@ -233,6 +249,14 @@ export function ActSyncReview({
   );
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [applyProgress, setApplyProgress] =
+    useState<BatchApplyProgress | null>(null);
+  const [applySummary, setApplySummary] = useState<string | null>(null);
+  const [rowErrors, setRowErrors] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+  const [retryMode, setRetryMode] =
+    useState<"failed" | "remaining" | null>(null);
 
   const visibleRows = useMemo(
     () =>
@@ -253,6 +277,13 @@ export function ActSyncReview({
       else next.delete(rowId);
       return next;
     });
+    setRowErrors((current) => {
+      const next = new Map(current);
+      next.delete(rowId);
+      return next;
+    });
+    setApplySummary(null);
+    setRetryMode(null);
   }
 
   function approveActiveCategory() {
@@ -266,6 +297,9 @@ export function ActSyncReview({
         approved.map(({ rowId, ...decision }) => [rowId, decision]),
       ),
     );
+    setRowErrors(new Map());
+    setApplySummary(null);
+    setRetryMode(null);
   }
 
   async function testConnection() {
@@ -300,26 +334,75 @@ export function ActSyncReview({
     if (!initialPreview || decisions.size === 0) return;
     setBusy(true);
     setStatus(null);
+    setApplySummary(null);
+    setRowErrors(new Map());
     const input = [...decisions].map(([rowId, value]) => ({
       rowId,
       ...value,
     }));
-    const result = await applyAction(initialPreview.id, input);
-    if (!result.ok) {
-      setStatus(result.error);
-    } else {
-      const failures = result.result.rows.filter(
-        (row) => row.status === "failed",
-      ).length;
-      setStatus(
-        failures
-          ? `${result.result.rows.length - failures} changes completed; ${failures} need review.`
-          : `${result.result.rows.length} approved changes completed.`,
+    const rowsById = new Map(
+      initialPreview.rows.map((row) => [row.rowId, row]),
+    );
+    const newActOnly = input.every(
+      (decision) => rowsById.get(decision.rowId)?.category === "new_in_act",
+    );
+
+    const outcome = await applyDecisionsInBatches({
+      runId: initialPreview.id,
+      decisions: input,
+      applyBatch: applyAction,
+      onProgress: (progress) => {
+        setApplyProgress(progress);
+        setDecisions((current) => {
+          const next = new Map(current);
+          progress.completedRowIds.forEach((rowId) => next.delete(rowId));
+          return next;
+        });
+      },
+    });
+    const retryDecisions = [
+      ...outcome.failed.map((failure) => failure.decision),
+      ...outcome.pending,
+    ];
+    setDecisions(
+      new Map(
+        retryDecisions.map(({ rowId, ...decision }) => [rowId, decision]),
+      ),
+    );
+    setRowErrors(
+      new Map(
+        outcome.failed.map((failure) => [
+          failure.decision.rowId,
+          failure.error,
+        ]),
+      ),
+    );
+
+    if (outcome.interruptedError) {
+      setApplySummary(outcome.interruptedError);
+      setRetryMode("remaining");
+    } else if (outcome.failed.length > 0) {
+      setApplySummary(
+        newActOnly
+          ? `${outcome.completed} imported · ${outcome.failed.length} ${
+              outcome.failed.length === 1 ? "needs" : "need"
+            } retry.`
+          : `${outcome.completed} completed · ${outcome.failed.length} ${
+              outcome.failed.length === 1 ? "needs" : "need"
+            } retry.`,
       );
-      setDecisions(new Map());
-      router.refresh();
+      setRetryMode("failed");
+    } else {
+      setApplySummary(
+        newActOnly
+          ? `${outcome.completed} contacts imported.`
+          : `${outcome.completed} approved changes completed.`,
+      );
+      setRetryMode(null);
     }
+    setApplyProgress(null);
     setBusy(false);
+    router.refresh();
   }
 
   return (
@@ -374,6 +457,7 @@ export function ActSyncReview({
                 aria-controls={`sync-panel-${category}`}
                 aria-selected={activeCategory === category}
                 className="min-h-11 shrink-0 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 aria-selected:border-orange-600 aria-selected:bg-orange-50 aria-selected:text-orange-800"
+                disabled={busy}
                 id={`sync-tab-${category}`}
                 key={category}
                 onClick={() => setActiveCategory(category)}
@@ -394,6 +478,8 @@ export function ActSyncReview({
               <ul className="grid gap-3">
                 {visibleRows.map((row) => (
                   <SyncRow
+                    disabled={busy}
+                    error={rowErrors.get(row.rowId)}
                     key={row.rowId}
                     onDecision={setRowDecision}
                     row={row}
@@ -411,7 +497,12 @@ export function ActSyncReview({
           <div className="sticky bottom-20 z-[1] flex flex-col gap-3 rounded-xl border border-slate-300 bg-white p-4 shadow-lg sm:flex-row sm:items-center sm:justify-between md:bottom-4">
             <div>
               <p aria-live="polite" className="font-bold">
-                {decisions.size} {decisions.size === 1 ? "row" : "rows"} approved
+                {applyProgress
+                  ? `Importing ${applyProgress.processed} of ${applyProgress.total}…`
+                  : applySummary ??
+                    `${decisions.size} ${
+                      decisions.size === 1 ? "row" : "rows"
+                    } approved`}
               </p>
               <p className="text-sm text-slate-600">
                 Conflicts stay unselected until you choose what to keep.
@@ -434,7 +525,11 @@ export function ActSyncReview({
                 onClick={applyApproved}
                 type="button"
               >
-                Apply {decisions.size} approved
+                {retryMode === "failed"
+                  ? "Retry failed contacts"
+                  : retryMode === "remaining"
+                    ? "Retry remaining contacts"
+                    : `Apply ${decisions.size} approved`}
               </button>
             </div>
           </div>
