@@ -17,6 +17,7 @@ import type {
   SyncComparisonCategory,
   SyncComparisonRow,
 } from "@/features/act-sync/sync-comparison";
+import type { SyncApplyDecision } from "@/features/act-sync/sync-service";
 
 afterEach(() => {
   cleanup();
@@ -168,20 +169,20 @@ describe("ActSyncReview", () => {
     ).toBeEnabled();
   });
 
-  it("bulk-approves only safe default decisions before apply", async () => {
+  it("bulk-approves only the category being viewed and clears hidden choices", async () => {
     const user = userEvent.setup();
-    const apply = vi.fn(async () => ({
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
       ok: true as const,
       result: {
-        runId: "run-1",
-        rows: [
-          { rowId: "new-act", status: "completed" as const, error: null },
-          {
-            rowId: "changed-app",
-            status: "completed" as const,
-            error: null,
-          },
-        ],
+        runId,
+        rows: decisions.map((decision) => ({
+          rowId: decision.rowId,
+          status: "completed" as const,
+          error: null,
+        })),
       },
     }));
     render(
@@ -193,17 +194,39 @@ describe("ActSyncReview", () => {
       />,
     );
 
-    await user.click(
-      screen.getByRole("button", { name: "Approve safe defaults" }),
+    await user.click(screen.getByRole("tab", { name: "Changed in app 1" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Decision for changed-app" }),
+      "push",
     );
-    expect(screen.getByText("2 rows approved")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "New in Act! 1" }));
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (1)" }),
+    );
+    expect(screen.getByText("1 row approved")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Apply 2 approved" }));
+    await user.click(screen.getByRole("button", { name: "Apply 1 approved" }));
 
     expect(apply).toHaveBeenCalledWith("run-1", [
       { rowId: "new-act", decision: "pull" },
-      { rowId: "changed-app", decision: "push" },
     ]);
+  });
+
+  it("does not offer bulk approval for a conflict category", async () => {
+    const user = userEvent.setup();
+    render(
+      <ActSyncReview
+        configured
+        initialPreview={preview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(screen.getByRole("tab", { name: "Changed in both 1" }));
+
+    expect(
+      screen.queryByRole("button", { name: /Approve only/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("requires an explicit conflict choice", async () => {

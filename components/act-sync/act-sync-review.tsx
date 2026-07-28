@@ -12,6 +12,10 @@ import {
 } from "@/app/(private)/settings/act-sync/actions";
 import type { StoredSyncPreview } from "@/features/act-sync/sync-repository";
 import {
+  decisionsForCategory,
+  safeDecisionForCategory,
+} from "@/features/act-sync/category-approval";
+import {
   syncComparisonCategories,
   type SyncComparisonCategory,
   type SyncComparisonRow,
@@ -39,13 +43,6 @@ const decisionLabels: Record<SyncDecision, string> = {
   link: "Link these contacts",
   keep_separate: "Keep separate",
   skip: "Skip",
-};
-
-const safeDefaults: Partial<Record<SyncComparisonCategory, SyncDecision>> = {
-  new_in_act: "pull",
-  new_in_app: "push",
-  changed_in_act: "pull",
-  changed_in_app: "push",
 };
 
 type DecisionState = {
@@ -244,6 +241,7 @@ export function ActSyncReview({
       ) ?? [],
     [activeCategory, initialPreview],
   );
+  const activeSafeDecision = safeDecisionForCategory(activeCategory);
 
   function setRowDecision(
     rowId: string,
@@ -257,14 +255,15 @@ export function ActSyncReview({
     });
   }
 
-  function approveSafeDefaults() {
+  function approveActiveCategory() {
     if (!initialPreview) return;
+    const approved = decisionsForCategory(
+      initialPreview.rows,
+      activeCategory,
+    );
     setDecisions(
       new Map(
-        initialPreview.rows.flatMap((row) => {
-          const decision = safeDefaults[row.category];
-          return decision ? [[row.rowId, { decision }] as const] : [];
-        }),
+        approved.map(({ rowId, ...decision }) => [rowId, decision]),
       ),
     );
   }
@@ -419,14 +418,16 @@ export function ActSyncReview({
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                className="button-secondary"
-                disabled={busy}
-                onClick={approveSafeDefaults}
-                type="button"
-              >
-                Approve safe defaults
-              </button>
+              {activeSafeDecision && visibleRows.length > 0 ? (
+                <button
+                  className="button-secondary"
+                  disabled={busy}
+                  onClick={approveActiveCategory}
+                  type="button"
+                >
+                  Approve only {categoryLabels[activeCategory]} ({visibleRows.length})
+                </button>
+              ) : null}
               <button
                 className="button-primary"
                 disabled={busy || decisions.size === 0}
