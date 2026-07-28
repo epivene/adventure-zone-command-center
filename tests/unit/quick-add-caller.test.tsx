@@ -95,6 +95,32 @@ describe("QuickAddCaller", () => {
     expect(choices[0]).toHaveAttribute("href", "/calls/new?contactId=caller-1");
   });
 
+  it("stops a typed duplicate submission at the fresh server match and preserves the caller details", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({
+      ok: false,
+      match: { kind: "many", contacts: [caller, { ...caller, id: "caller-2" }] },
+    });
+    render(<QuickAddCaller match={{ kind: "none", normalizedPhone: "" }} onSubmit={onSubmit} />);
+
+    await user.type(screen.getByLabelText("Name"), "Avery Example");
+    await user.type(screen.getByLabelText("Organization or event"), "Marias Fair");
+    await user.type(screen.getByLabelText("Phone"), "406-555-0101");
+    await user.type(screen.getByLabelText("Reason for calling"), "Asked about an August event.");
+    await user.click(screen.getByRole("button", { name: "Create caller" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ phone: "406-555-0101" }));
+    expect(screen.getByRole("heading", { name: "Choose the caller" })).toBeVisible();
+    expect(screen.getAllByRole("link", { name: /Open .* in Call Workspace/ })).toHaveLength(2);
+    expect(routerPush).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Back to caller details" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("Avery Example");
+    expect(screen.getByLabelText("Organization or event")).toHaveValue("Marias Fair");
+    expect(screen.getByLabelText("Phone")).toHaveValue("406-555-0101");
+    expect(screen.getByLabelText("Reason for calling")).toHaveValue("Asked about an August event.");
+  });
+
   it("makes Quick Add reachable from both responsive navigation variants", () => {
     render(<AppShell><p>Page content</p></AppShell>);
 

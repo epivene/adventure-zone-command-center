@@ -10,7 +10,8 @@ import type {
 
 type QuickAddSubmission =
   | { ok: true; contactId: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string }
+  | { ok: false; match: PhoneMatch };
 
 type QuickAddCallerForm = {
   name: string;
@@ -26,6 +27,10 @@ function callerName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim() || "Unnamed caller";
 }
 
+function emptyMatch(): PhoneMatch {
+  return { kind: "none", normalizedPhone: "" };
+}
+
 export function QuickAddCaller({
   match,
   initialPhone = "",
@@ -38,11 +43,24 @@ export function QuickAddCaller({
   const router = useRouter();
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resolvedMatch, setResolvedMatch] = useState(match);
+  const [values, setValues] = useState<QuickAddCallerForm>({
+    name: "",
+    organizationName: "",
+    phone: initialPhone,
+    email: "",
+    reason: "",
+    eventDate: "",
+    eventLocation: "",
+  });
+
+  function updateValue(name: keyof QuickAddCallerForm, value: string) {
+    setValues((current) => ({ ...current, [name]: value }));
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const values = Object.fromEntries(new FormData(event.currentTarget)) as Record<string, string>;
-    if (!values.phone?.trim() && !values.email?.trim()) {
+    if (!values.phone.trim() && !values.email.trim()) {
       setError("Enter a phone number or email address.");
       return;
     }
@@ -54,15 +72,19 @@ export function QuickAddCaller({
     setIsSubmitting(true);
     try {
       const result = await onSubmit({
-        name: values.name ?? "",
-        organizationName: values.organizationName ?? "",
-        phone: values.phone?.trim() ?? "",
-        email: values.email?.trim() ?? "",
-        reason: values.reason ?? "",
-        eventDate: values.eventDate?.trim() ?? "",
-        eventLocation: values.eventLocation?.trim() ?? "",
+        name: values.name,
+        organizationName: values.organizationName,
+        phone: values.phone.trim(),
+        email: values.email.trim(),
+        reason: values.reason,
+        eventDate: values.eventDate.trim(),
+        eventLocation: values.eventLocation.trim(),
       });
       if (!result.ok) {
+        if ("match" in result) {
+          setResolvedMatch(result.match);
+          return;
+        }
         setError(result.error);
         return;
       }
@@ -74,25 +96,26 @@ export function QuickAddCaller({
     }
   }
 
-  if (match.kind === "one") {
+  if (resolvedMatch.kind === "one") {
     return (
       <section aria-labelledby="caller-match-title" className="grid gap-4">
         <h2 className="text-xl font-bold" id="caller-match-title">Caller match found</h2>
-        <p className="text-slate-600">This phone number belongs to {callerName(match.contact.firstName, match.contact.lastName)}.</p>
-        <Link className="button-primary w-fit" href={`/calls/new?contactId=${match.contact.id}`}>
-          Open {callerName(match.contact.firstName, match.contact.lastName)} in Call Workspace
+        <p className="text-slate-600">This phone number belongs to {callerName(resolvedMatch.contact.firstName, resolvedMatch.contact.lastName)}.</p>
+        <Link className="button-primary w-fit" href={`/calls/new?contactId=${resolvedMatch.contact.id}`}>
+          Open {callerName(resolvedMatch.contact.firstName, resolvedMatch.contact.lastName)} in Call Workspace
         </Link>
+        <button className="button-secondary w-fit" onClick={() => setResolvedMatch(emptyMatch())} type="button">Back to caller details</button>
       </section>
     );
   }
 
-  if (match.kind === "many") {
+  if (resolvedMatch.kind === "many") {
     return (
       <section aria-labelledby="caller-chooser-title" className="grid gap-4">
         <h2 className="text-xl font-bold" id="caller-chooser-title">Choose the caller</h2>
         <p className="text-slate-600">More than one contact has this exact phone number.</p>
         <ul className="grid gap-2">
-          {match.contacts.map((contact) => (
+          {resolvedMatch.contacts.map((contact) => (
             <li key={contact.id}>
               <Link className="block rounded-lg border border-slate-200 p-4 font-semibold hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" href={`/calls/new?contactId=${contact.id}`}>
                 Open {callerName(contact.firstName, contact.lastName)} in Call Workspace
@@ -100,6 +123,7 @@ export function QuickAddCaller({
             </li>
           ))}
         </ul>
+        <button className="button-secondary w-fit" onClick={() => setResolvedMatch(emptyMatch())} type="button">Back to caller details</button>
       </section>
     );
   }
@@ -114,31 +138,31 @@ export function QuickAddCaller({
       <div className="grid gap-5 sm:grid-cols-2">
         <label className="grid gap-1.5 font-medium sm:col-span-2">
           Name
-          <input autoComplete="name" name="name" required />
+          <input autoComplete="name" name="name" onChange={(event) => updateValue("name", event.target.value)} required value={values.name} />
         </label>
         <label className="grid gap-1.5 font-medium sm:col-span-2">
           Organization or event
-          <input autoComplete="organization" name="organizationName" required />
+          <input autoComplete="organization" name="organizationName" onChange={(event) => updateValue("organizationName", event.target.value)} required value={values.organizationName} />
         </label>
         <label className="grid gap-1.5 font-medium">
           Phone
-          <input autoComplete="tel" defaultValue={initialPhone} name="phone" type="tel" />
+          <input autoComplete="tel" name="phone" onChange={(event) => updateValue("phone", event.target.value)} type="tel" value={values.phone} />
         </label>
         <label className="grid gap-1.5 font-medium">
           Email
-          <input autoComplete="email" name="email" type="email" />
+          <input autoComplete="email" name="email" onChange={(event) => updateValue("email", event.target.value)} type="email" value={values.email} />
         </label>
         <label className="grid gap-1.5 font-medium sm:col-span-2">
           Reason for calling
-          <textarea name="reason" required rows={3} />
+          <textarea name="reason" onChange={(event) => updateValue("reason", event.target.value)} required rows={3} value={values.reason} />
         </label>
         <label className="grid gap-1.5 font-medium">
           Event date (optional)
-          <input name="eventDate" type="date" />
+          <input name="eventDate" onChange={(event) => updateValue("eventDate", event.target.value)} type="date" value={values.eventDate} />
         </label>
         <label className="grid gap-1.5 font-medium">
           Event location (optional)
-          <input autoComplete="address-level2" name="eventLocation" />
+          <input autoComplete="address-level2" name="eventLocation" onChange={(event) => updateValue("eventLocation", event.target.value)} value={values.eventLocation} />
         </label>
       </div>
       <div><button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Creating…" : "Create caller"}</button></div>

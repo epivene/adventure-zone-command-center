@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
-import type { QuickCallerInput } from "@/features/contacts/contact-types";
+import type { PhoneMatch, QuickCallerInput } from "@/features/contacts/contact-types";
 import { requireOwner } from "@/lib/auth/require-owner";
 
 const optionalText = z.string().trim().transform((value) => value || null);
@@ -28,7 +28,13 @@ const quickCallerSchema = z.object({
 export type QuickCallerFormInput = z.input<typeof quickCallerSchema>;
 export type QuickCallerActionResult =
   | { ok: true; contactId: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string }
+  | { ok: false; match: PhoneMatch };
+
+export type QuickCallerRepository = Pick<
+  DrizzleContactRepository,
+  "findContactsByPhone" | "createQuickCaller"
+>;
 
 function splitName(name: string) {
   const parts = name.trim().split(/\s+/);
@@ -38,10 +44,10 @@ function splitName(name: string) {
   };
 }
 
-export async function createQuickCallerAction(
+export async function submitQuickCaller(
   input: QuickCallerFormInput,
+  repository: QuickCallerRepository,
 ): Promise<QuickCallerActionResult> {
-  await requireOwner();
   const parsed = quickCallerSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -52,9 +58,25 @@ export async function createQuickCallerAction(
 
   const { name, ...fields } = parsed.data;
   const caller: QuickCallerInput = { ...splitName(name), ...fields };
+  if (caller.phone) {
+    const match = await repository.findContactsByPhone(caller.phone);
+    if (match.kind !== "none") return { ok: false, match };
+  }
+  const contactId = await repository.createQuickCaller(caller);
+  return { ok: true, contactId };
+}
+
+export async function createQuickCallerAction(
+  input: QuickCallerFormInput,
+): Promise<QuickCallerActionResult> {
+  await requireOwner();
   const { db } = await import("@/db/client");
-  const contactId = await new DrizzleContactRepository(db).createQuickCaller(caller);
+  const result = await submitQuickCaller(
+    input,
+    new DrizzleContactRepository(db),
+  );
+  if (!result.ok) return result;
   revalidatePath("/contacts");
   revalidatePath("/organizations");
-  return { ok: true, contactId };
+  return result;
 }
