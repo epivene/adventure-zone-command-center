@@ -435,6 +435,27 @@ describe("BookingService.createBooking", () => {
     });
   });
 
+  it("keeps the normal booking and follow-up shape organization-neutral for Call Workspace", async () => {
+    const repository = new InMemoryBookingRepository();
+    const service = new BookingService(repository, {
+      now: () => new Date("2026-08-01T16:00:00Z"),
+    });
+
+    const booking = await service.createBooking({
+      name: "Unorganized adventure",
+      city: "Dallas",
+      region: "TX",
+      status: "new_lead",
+      nextAction: { kind: "call", dueAt: new Date("2026-08-02T15:00:00Z") },
+    });
+    const followUp = repository.followUps.get("follow-up-2");
+
+    expect(booking).toMatchObject({ id: "booking-2", name: "Unorganized adventure" });
+    expect(followUp).toMatchObject({ bookingId: booking.id, kind: "call" });
+    expect("organizationId" in booking).toBe(false);
+    expect(followUp && "organizationId" in followUp).toBe(false);
+  });
+
   it("rejects an active booking without a future next action", async () => {
     const repository = new InMemoryBookingRepository();
     const service = new BookingService(repository, {

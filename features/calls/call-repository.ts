@@ -35,14 +35,14 @@ export type CallAuditEntry = {
 export interface CallTransaction {
   lockContext(input: CompleteCallInput): Promise<CallContext>;
   createActivity(input: {
-    organizationId: string;
+    organizationId: string | null;
     contactId: string | null;
     bookingId: string | null;
     body: string;
     occurredAt: Date;
   }): Promise<{ id: string }>;
   createCallSession(input: {
-    organizationId: string;
+    organizationId: string | null;
     contactId: string | null;
     bookingId: string | null;
     followUpId: string | null;
@@ -53,7 +53,7 @@ export interface CallTransaction {
   }): Promise<{ id: string }>;
   completeFollowUp(followUpId: string, input: { outcome: string; completedAt: Date }): Promise<void>;
   createFollowUp(input: {
-    organizationId: string;
+    organizationId: string | null;
     contactId: string | null;
     bookingId: string | null;
     kind: string;
@@ -63,7 +63,7 @@ export interface CallTransaction {
   updateBooking(bookingId: string, updates: Record<string, unknown>): Promise<CallBooking>;
   updateContact(input: {
     contact: NonNullable<CallContext["contact"]>;
-    organizationName: string;
+    organizationName: string | null;
     updates: Partial<ContactFields>;
     now: Date;
   }): Promise<Record<string, unknown>>;
@@ -112,8 +112,10 @@ class DrizzleCallTransaction implements CallTransaction {
   constructor(private readonly database: DrizzleWriter) {}
 
   async lockContext(input: CompleteCallInput): Promise<CallContext> {
-    const [organization] = await this.database.select().from(organizations)
-      .where(eq(organizations.id, input.organizationId)).limit(1).for("update");
+    const [organization] = input.organizationId
+      ? await this.database.select().from(organizations)
+        .where(eq(organizations.id, input.organizationId)).limit(1).for("update")
+      : [];
     let [contact] = input.contactId
       ? await this.database.select().from(contacts).where(eq(contacts.id, input.contactId)).limit(1).for("update")
       : [];

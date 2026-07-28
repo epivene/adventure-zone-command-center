@@ -29,7 +29,7 @@ class RecordingContextRepository implements CallWorkspaceContextRepository {
     organizationId,
     contactId: null,
     bookingId: null,
-  }) {}
+  }, private readonly relatedOrganizationId: string | null = organizationId) {}
 
   async findOrganization(id: string) {
     this.calls.push(`organization:${id}`);
@@ -40,15 +40,15 @@ class RecordingContextRepository implements CallWorkspaceContextRepository {
 
   async findContact(id: string) {
     this.calls.push(`contact:${id}`);
-    if (id === contactId) return { id, organizationId, firstName: "Avery", lastName: "Example", email: null, phone: null };
-    if (id === secondaryContactId) return { id, organizationId, firstName: "Bailey", lastName: "Example", email: null, phone: null };
+    if (id === contactId) return { id, organizationId: this.relatedOrganizationId, firstName: "Avery", lastName: "Example", email: null, phone: null };
+    if (id === secondaryContactId) return { id, organizationId: this.relatedOrganizationId, firstName: "Bailey", lastName: "Example", email: null, phone: null };
     return null;
   }
 
   async findBooking(id: string) {
     this.calls.push(`booking:${id}`);
     return id === bookingId
-      ? { id, organizationId, primaryContactId: contactId, name: "Marias Fair 2026", city: "Shelby", region: "MT", status: "interested" as const, startsAt: null }
+      ? { id, organizationId: this.relatedOrganizationId, primaryContactId: contactId, name: "Marias Fair 2026", city: "Shelby", region: "MT", status: "interested" as const, startsAt: null }
       : null;
   }
 
@@ -137,6 +137,64 @@ describe("loadCallWorkspaceContext", () => {
       queryFromToday(explicitSummary),
       explicitRepository,
     )).resolves.toMatchObject({ ok: true, value: { contact: { id: secondaryContactId } } });
+  });
+
+  it("opens the normal BookingService booking-only follow-up without inventing an organization", async () => {
+    const repository = new RecordingContextRepository({
+      id: followUpId,
+      organizationId: null,
+      contactId: null,
+      bookingId,
+    }, null);
+    const summary: FollowUpSummary = {
+      id: followUpId,
+      organizationId: null,
+      contactId: null,
+      bookingId,
+      bookingName: "Marias Fair 2026",
+      kind: "call",
+      dueAt: new Date("2026-08-01T17:00:00Z"),
+      createdAt: new Date("2026-07-28T17:00:00Z"),
+      status: "due",
+      probability: "likely",
+    };
+
+    expect(callWorkspaceHref(summary)).toBe(
+      `/calls/new?bookingId=${bookingId}&followUpId=${followUpId}`,
+    );
+    await expect(loadCallWorkspaceContext(queryFromToday(summary), repository)).resolves.toMatchObject({
+      ok: true,
+      value: { organization: null, booking: { id: bookingId } },
+    });
+  });
+
+  it("opens an unorganized contact-only follow-up without inventing an organization", async () => {
+    const repository = new RecordingContextRepository({
+      id: followUpId,
+      organizationId: null,
+      contactId,
+      bookingId: null,
+    }, null);
+    const summary: FollowUpSummary = {
+      id: followUpId,
+      organizationId: null,
+      contactId,
+      bookingId: null,
+      bookingName: "Avery Example",
+      kind: "call",
+      dueAt: new Date("2026-08-01T17:00:00Z"),
+      createdAt: new Date("2026-07-28T17:00:00Z"),
+      status: "due",
+      probability: "possible",
+    };
+
+    expect(callWorkspaceHref(summary)).toBe(
+      `/calls/new?contactId=${contactId}&followUpId=${followUpId}`,
+    );
+    await expect(loadCallWorkspaceContext(queryFromToday(summary), repository)).resolves.toMatchObject({
+      ok: true,
+      value: { organization: null, contact: { id: contactId }, booking: null },
+    });
   });
 
   it("uses booking scope before contact scope before organization scope for recent history", () => {

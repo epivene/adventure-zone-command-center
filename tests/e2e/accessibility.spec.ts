@@ -138,12 +138,22 @@ test("Call Workspace is keyboard-completable with labeled controls and visible f
     ]) {
       await expect(page.getByLabel(label, { exact: true })).toBeVisible();
     }
-    await page.getByLabel("Call note").fill("Keyboard entry.");
-    await page.getByLabel("Call disposition").selectOption("no_answer");
+    const note = page.getByLabel("Call note");
+    await note.focus();
+    await page.keyboard.type("Keyboard entry.");
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel("Call disposition")).toBeFocused();
+    await page.keyboard.press("End");
+    await page.keyboard.press("ArrowUp");
+    await expect(page.getByLabel("Call disposition")).toHaveValue("declined");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
     const save = page.getByRole("button", { name: "Save call note" });
-    await save.focus();
     await expect(save).toBeFocused();
     await expect(save).toHaveCSS("outline-style", "solid");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("status")).toHaveText("Call note saved.");
   } finally {
     await fixture.cleanup();
   }

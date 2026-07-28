@@ -176,6 +176,49 @@ describe("CallService.complete", () => {
     expect(repository.writes).toEqual([]);
   });
 
+  it("completes an unorganized booking call atomically without backfilling an organization", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.organization = null;
+    repository.context.contact = null;
+    repository.context.booking = { ...repository.context.booking!, organizationId: null, primaryContactId: null };
+    repository.context.followUp = { ...repository.context.followUp!, organizationId: null, contactId: null };
+    const unorganized = {
+      ...input({
+        contactId: null,
+        nextAction: { kind: "call", dueAt: new Date("2026-08-02T15:00:00.000Z") },
+        approvedContactUpdates: null,
+      }),
+      organizationId: null,
+    } as unknown as CompleteCallInput;
+
+    await expect(new CallService(repository).complete(unorganized)).resolves.toMatchObject({ ok: true });
+    expect(repository.writes).toEqual(expect.arrayContaining([
+      "activity",
+      "call_session",
+      "complete_follow_up",
+      "next_follow_up",
+      "link_follow_up",
+      "booking",
+    ]));
+    expect(repository.payloads.activity?.[0]).toMatchObject({ organizationId: null, bookingId: ids.booking });
+    expect(repository.payloads.call_session?.[0]).toMatchObject({ organizationId: null, bookingId: ids.booking });
+  });
+
+  it("returns a typed policy error for Last Resort without an organization", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.organization = null;
+    const unorganized = {
+      ...input({ disposition: "move_to_last_resort", nextAction: null, lastResortReason: "Repeated cancellations." }),
+      organizationId: null,
+    } as unknown as CompleteCallInput;
+
+    await expect(new CallService(repository).complete(unorganized)).resolves.toEqual({
+      ok: false,
+      error: { code: "LAST_RESORT_REQUIRES_ORGANIZATION" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
   it("allows declined and Last Resort calls without a next action", async () => {
     const service = new CallService(new InMemoryCallRepository());
 

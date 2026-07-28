@@ -41,7 +41,7 @@ export type CallWorkspaceFollowUp = {
 };
 
 export type CallWorkspaceContext = {
-  organization: CallWorkspaceOrganization;
+  organization: CallWorkspaceOrganization | null;
   contact: CallWorkspaceContact | null;
   booking: CallWorkspaceBooking | null;
   followUp: CallWorkspaceFollowUp | null;
@@ -69,7 +69,7 @@ function validId(value: string | undefined) {
 export function activityTimelineParent(context: CallWorkspaceContext): ActivityParent {
   if (context.booking) return { bookingId: context.booking.id };
   if (context.contact) return { contactId: context.contact.id };
-  return { organizationId: context.organization.id };
+  return context.organization ? { organizationId: context.organization.id } : {};
 }
 
 export async function loadCallWorkspaceContext(
@@ -118,10 +118,12 @@ export async function loadCallWorkspaceContext(
     booking?.organizationId,
     contact?.organizationId,
   ].filter((id): id is string => Boolean(id));
-  const organizationId = organizationIds[0];
-  if (!organizationId || new Set(organizationIds).size !== 1) return { ok: false };
-  const organization = await repository.findOrganization(organizationId);
-  if (!organization) return { ok: false };
+  if (new Set(organizationIds).size > 1) return { ok: false };
+  const organizationId = organizationIds[0] ?? null;
+  const organization = organizationId
+    ? await repository.findOrganization(organizationId)
+    : null;
+  if (organizationId && !organization) return { ok: false };
 
   return { ok: true, value: { organization, contact, booking, followUp } };
 }

@@ -16,7 +16,7 @@ export type CallDisposition =
 export type PersistedCallDisposition = (typeof callDispositionValues)[number];
 
 export type CompleteCallInput = {
-  organizationId: string;
+  organizationId: string | null;
   contactId: string | null;
   bookingId: string | null;
   followUpId: string | null;
@@ -80,6 +80,7 @@ export type CompletedCall = {
 export type CallError =
   | { code: "INVALID_CALL_INPUT"; message: string }
   | { code: "ORGANIZATION_NOT_FOUND" }
+  | { code: "LAST_RESORT_REQUIRES_ORGANIZATION" }
   | { code: "CONTACT_NOT_FOUND" }
   | { code: "BOOKING_NOT_FOUND" }
   | { code: "FOLLOW_UP_NOT_FOUND" }

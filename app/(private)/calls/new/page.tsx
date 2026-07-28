@@ -58,12 +58,12 @@ export default async function CallWorkspacePage({
       followUpId={context.value.followUp?.id ?? null}
       loadRevisions={listActivityRevisionsAction}
       onComplete={completeCallAction}
-      organization={{
+      organization={context.value.organization ? {
         id: context.value.organization.id,
         name: context.value.organization.name,
         lastResort: context.value.organization.lastResort,
         lastResortReason: context.value.organization.lastResortReason,
-      }}
+      } : null}
       timeline={timeline}
     />
   );

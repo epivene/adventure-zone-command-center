@@ -49,7 +49,7 @@ const approvedBookingUpdatesSchema = z.object({
 }).strict();
 
 export const completeCallInputSchema = z.object({
-  organizationId: z.uuid(),
+  organizationId: z.uuid().nullable(),
   contactId: z.uuid().nullable(),
   bookingId: z.uuid().nullable(),
   followUpId: z.uuid().nullable(),

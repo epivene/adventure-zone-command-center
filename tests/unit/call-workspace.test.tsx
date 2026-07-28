@@ -128,4 +128,16 @@ describe("CallWorkspace", () => {
     expect(screen.getByRole("link", { name: "Return to Today" })).toHaveAttribute("href", "/today");
     expect(onComplete).toHaveBeenCalledOnce();
   });
+
+  it("keeps Last Resort unavailable when no organization is linked", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn().mockResolvedValue({ ok: true });
+
+    render(<CallWorkspace {...workspace} organization={null} onComplete={onComplete} />);
+
+    expect(screen.getByText("No organization is linked to this call. Last Resort is unavailable.")).toBeVisible();
+    expect(screen.queryByRole("link", { name: "Open full organization record" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start call note" }));
+    expect(screen.queryByRole("option", { name: "Move to Last Resort" })).not.toBeInTheDocument();
+  });
 });

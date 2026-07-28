@@ -135,6 +135,8 @@ export async function arrangeReleaseBookings(): Promise<ReleaseBookingFixture> {
     cleanup: async () => {
       if (cleaned) return;
       try {
+        await sql`delete from call_sessions where organization_id = ${organizationId}`;
+        await sql`delete from activities where organization_id = ${organizationId}`;
         await sql`delete from follow_ups where booking_id in ${sql(bookingIds)}`;
         await sql`delete from bookings where id in ${sql(bookingIds)}`;
         await sql`delete from contacts where id = ${contactId}`;

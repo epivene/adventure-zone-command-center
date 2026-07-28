@@ -17,6 +17,7 @@ function readableCallError(error: CallError) {
   switch (error.code) {
     case "INVALID_CALL_INPUT": return error.message;
     case "ORGANIZATION_NOT_FOUND": return "This organization could not be found. Refresh and try again.";
+    case "LAST_RESORT_REQUIRES_ORGANIZATION": return "Last Resort is only available when this call has an organization.";
     case "CONTACT_NOT_FOUND": return "This contact could not be found. Refresh and try again.";
     case "BOOKING_NOT_FOUND": return "This booking could not be found. Refresh and try again.";
     case "FOLLOW_UP_NOT_FOUND": return "This follow-up could not be found. Refresh and try again.";
@@ -48,7 +49,9 @@ export async function completeCallAction(input: CompleteCallInput): Promise<Comp
   revalidatePath("/organizations");
   if (parsed.data.contactId) revalidatePath(`/contacts/${parsed.data.contactId}`);
   if (parsed.data.bookingId) revalidatePath(`/bookings/${parsed.data.bookingId}`);
-  revalidatePath(`/organizations/${parsed.data.organizationId}`);
+  if (parsed.data.organizationId) {
+    revalidatePath(`/organizations/${parsed.data.organizationId}`);
+  }
   return { ok: true };
 }
 

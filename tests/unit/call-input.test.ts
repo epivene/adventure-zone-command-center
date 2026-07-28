@@ -30,6 +30,12 @@ describe("completeCallInputSchema", () => {
     });
   });
 
+  it("accepts a call without an organization so local booking and contact history can be preserved", () => {
+    expect(completeCallInputSchema.parse({ ...validInput(), organizationId: null })).toMatchObject({
+      organizationId: null,
+    });
+  });
+
   it("rejects a call whose end precedes its start", () => {
     const result = completeCallInputSchema.safeParse({
       ...validInput(),

@@ -61,7 +61,12 @@ export class CallService {
 
     return this.repository.transaction(async (transaction) => {
       const context = await transaction.lockContext(value);
-      if (!context.organization) return err({ code: "ORGANIZATION_NOT_FOUND" });
+      if (value.organizationId && !context.organization) {
+        return err({ code: "ORGANIZATION_NOT_FOUND" });
+      }
+      if (value.disposition === "move_to_last_resort" && !context.organization) {
+        return err({ code: "LAST_RESORT_REQUIRES_ORGANIZATION" });
+      }
       if (value.contactId && !context.contact) return err({ code: "CONTACT_NOT_FOUND" });
       if ((value.bookingId || value.approvedBookingUpdates || value.resultingBookingStatus) && !context.booking) {
         return err({ code: "BOOKING_NOT_FOUND" });
@@ -202,7 +207,7 @@ export class CallService {
       if (value.approvedContactUpdates && context.contact) {
         const updated = await transaction.updateContact({
           contact: context.contact,
-          organizationName: context.organization.name,
+          organizationName: context.organization?.name ?? null,
           updates: value.approvedContactUpdates,
           now: completedAt,
         });
@@ -215,10 +220,10 @@ export class CallService {
         });
       }
       if (value.disposition === "move_to_last_resort") {
-        await transaction.setLastResort(value.organizationId, value.lastResortReason!, completedAt);
+        await transaction.setLastResort(context.organization!.id, value.lastResortReason!, completedAt);
         await transaction.createAuditEntry({
           entityType: "organization",
-          entityId: value.organizationId,
+          entityId: context.organization!.id,
           action: "last_resort_enabled",
           before: context.organization as unknown as Record<string, unknown>,
           after: { ...context.organization, lastResort: true, lastResortReason: value.lastResortReason },

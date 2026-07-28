@@ -38,7 +38,7 @@ export function CallWorkspace({
   onComplete,
   loadRevisions = async () => ({ ok: true, revisions: [] }),
 }: {
-  organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null };
+  organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
   contact: { id: string; name: string; phone: string | null; email: string | null } | null;
   booking: { id: string; name: string; city: string; region: string; status: BookingStatus; startsAt: Date | null } | null;
   followUpId: string | null;
@@ -76,7 +76,7 @@ export function CallWorkspace({
     setIsSubmitting(true);
     try {
       const result = await onComplete({
-        organizationId: organization.id,
+        organizationId: organization?.id ?? null,
         contactId: contact?.id ?? null,
         bookingId: booking?.id ?? null,
         followUpId,
@@ -107,7 +107,7 @@ export function CallWorkspace({
         <p className="mt-2 text-slate-600">Record this call and its next concrete action.</p>
       </header>
 
-      {organization.lastResort ? (
+      {organization?.lastResort ? (
         <aside className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950" role="alert">
           <strong>{organization.name} is marked Last Resort.</strong>{" "}
           {organization.lastResortReason || "Review this account before making any new commitments."}
@@ -141,7 +141,9 @@ export function CallWorkspace({
                 <label className="grid gap-1.5 font-medium" htmlFor="call-disposition">
                   Call disposition
                   <select id="call-disposition" onChange={(event) => setDisposition(event.target.value as CallDisposition)} value={disposition}>
-                    {dispositionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    {dispositionOptions
+                      .filter((option) => organization || option.value !== "move_to_last_resort")
+                      .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
                 <fieldset className="grid gap-3 rounded-lg border border-slate-200 p-4">
@@ -182,7 +184,11 @@ export function CallWorkspace({
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="caller-title">
             <h2 className="text-xl font-bold" id="caller-title">Caller</h2>
             {contact ? <div className="mt-3 grid gap-1 text-sm"><p className="font-semibold text-base">{contact.name}</p><p>{contact.phone || "No phone recorded"}</p><p className="break-all">{contact.email || "No email recorded"}</p><a className="link mt-2" href={`/contacts/${contact.id}`}>Open full contact record</a></div> : <p className="mt-3 text-sm text-slate-600">No contact is linked to this call.</p>}
-            <a className="link mt-3 inline-block" href={`/organizations/${organization.id}`}>Open full organization record</a>
+            {organization ? (
+              <a className="link mt-3 inline-block" href={`/organizations/${organization.id}`}>Open full organization record</a>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">No organization is linked to this call. Last Resort is unavailable.</p>
+            )}
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="booking-snapshot-title">
             <h2 className="text-xl font-bold" id="booking-snapshot-title">Booking snapshot</h2>

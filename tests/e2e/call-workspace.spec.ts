@@ -12,6 +12,7 @@ type CallFixture = {
   contactId: string;
   followUpId: string;
   organizationId: string;
+  organizationName: string;
   cleanup: () => Promise<void>;
 };
 
@@ -35,12 +36,13 @@ async function arrangeCallFixture(): Promise<CallFixture> {
   const followUpId = randomUUID();
   const runId = randomUUID();
   const bookingName = `E2E Call Workspace ${runId}`;
+  const organizationName = `E2E Organization ${runId}`;
 
   try {
     await sql.begin(async (transaction) => {
       await transaction`
         insert into organizations (id, name)
-        values (${organizationId}, ${`E2E Organization ${runId}`})
+        values (${organizationId}, ${organizationName})
       `;
       await transaction`
         insert into contacts (id, organization_id, first_name, last_name, phone)
@@ -70,6 +72,7 @@ async function arrangeCallFixture(): Promise<CallFixture> {
     contactId,
     followUpId,
     organizationId,
+    organizationName,
     cleanup: async () => {
       try {
         await sql`delete from call_sessions where organization_id = ${organizationId}`;
@@ -156,20 +159,39 @@ test("Today opens a due call with its exact contact, booking, and follow-up cont
 test("Interested creates the next action, refreshes Today, and adds the call to the timeline", async ({ page }) => {
   const fixture = await arrangeCallFixture();
   const note = "Interested in a Friday proposal.";
+  const nextActionDate = dateInputValue(2);
 
   try {
-    await page.goto(`/calls/new?contactId=${fixture.contactId}&followUpId=${fixture.followUpId}`);
+    await page.goto("/today");
+    const originalCall = page.getByRole("link", { name: fixture.bookingName, exact: true }).first();
+    const originalHref = await originalCall.getAttribute("href");
+    await expect(originalHref).toBe(
+      `/calls/new?contactId=${fixture.contactId}&bookingId=${fixture.bookingId}&followUpId=${fixture.followUpId}`,
+    );
+    await originalCall.click();
     await completeCall(page, {
       disposition: "interested",
       note,
       nextAction: "call",
-      nextActionDate: dateInputValue(2),
+      nextActionDate,
     });
     await expect(page.getByRole("status")).toHaveText("Call note saved.");
 
     await page.goto("/today");
-    await expect(page.getByRole("link", { name: fixture.bookingName, exact: true }).first()).toBeVisible();
-    await page.getByRole("link", { name: fixture.bookingName, exact: true }).first().click();
+    const hrefs = await page.getByRole("link", { name: fixture.bookingName, exact: true })
+      .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    expect(hrefs).not.toContain(originalHref);
+    const replacementHref = hrefs.find((href): href is string => Boolean(href) && href !== originalHref);
+    expect(replacementHref).toMatch(new RegExp(
+      `^/calls/new\\?contactId=${fixture.contactId}&bookingId=${fixture.bookingId}&followUpId=(?!${fixture.followUpId}$)[0-9a-f-]+$`,
+    ));
+    const replacement = page.locator(`li a[href="${replacementHref}"]`);
+    await expect(replacement).toHaveCount(1);
+    await expect(replacement.locator("xpath=ancestor::li")).toContainText("call");
+    await expect(replacement.locator("xpath=ancestor::li")).toContainText(
+      `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Chicago" }).format(new Date(`${nextActionDate}T18:00:00.000Z`))}`,
+    );
+    await replacement.click();
     await expect(page.getByText(note)).toBeVisible();
   } finally {
     await fixture.cleanup();
@@ -206,7 +228,9 @@ test("Last Resort requires a reason and displays it after completion", async ({ 
     await expect(page.getByRole("status")).toHaveText("Call note saved.");
 
     await page.reload();
-    await expect(page.getByRole("alert")).toHaveText("Repeated cancellations.");
+    await expect(page.getByRole("alert")).toHaveText(
+      `${fixture.organizationName} is marked Last Resort. Repeated cancellations.`,
+    );
   } finally {
     await fixture.cleanup();
   }

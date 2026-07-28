@@ -52,3 +52,42 @@ No new server actions, reads, mutations, analytics, notifications, or external w
 ## Concerns
 
 Browser execution requires a configured Clerk publishable key, authenticated Playwright storage state, and fixture database URL. The static/unit/build verification is complete; the E2E assertions require that environment to execute.
+
+## Round 1 — nullable organization preservation
+
+### Findings addressed
+
+- Booking-only follow-ups produced by the normal `BookingService` shape and contact-only follow-ups with no organization now resolve through Today → Call Workspace without fabricating or backfilling an organization.
+- `organizationId` is nullable across the input, locked context, call activity/session, replacement follow-up, and audit snapshot path. Non-Last-Resort completion still uses one repository transaction.
+- Relationship checks remain exact: a non-null organization on a locked contact, booking, or follow-up must still match the supplied organization. Last Resort without a locked organization returns the typed `LAST_RESORT_REQUIRES_ORGANIZATION` policy error and performs no writes.
+- The workspace omits the Last Resort disposition and organization link when none exists, and renders the explicit unavailable explanation.
+- Browser assertions now require the complete Last Resort alert string, prove original-follow-up replacement with a distinct call URL/kind/due date, and complete the keyboard flow by activating Save and asserting the saved status.
+
+### Round 1 RED evidence
+
+Before implementation:
+
+```text
+npx vitest run tests/unit/call-workspace-context.test.ts tests/integration/call-service.test.ts
+FAIL — 4 failures
+- booking-only Today context returned { ok: false }
+- unorganized contact-only Today context returned { ok: false }
+- unorganized booking completion did not succeed
+- Last Resort without an organization returned INVALID_CALL_INPUT instead of LAST_RESORT_REQUIRES_ORGANIZATION
+```
+
+### Round 1 verification
+
+| Command | Outcome |
+| --- | --- |
+| Focused BookingService/call/Today/context tests | PASS — 80 passed, 2 database-environment skips |
+| `npm test` | PASS — 372 passed, 11 skipped |
+| `npm run lint` | PASS |
+| `npm run typecheck` | PASS |
+| `npm run build` | PASS |
+| `npx playwright test tests/e2e/call-workspace.spec.ts tests/e2e/responsive.spec.ts tests/e2e/accessibility.spec.ts --list` | PASS — 12 discovered tests |
+| Exact E2E command | BLOCKED — startup again reports `@clerk/nextjs: Missing publishableKey`; no tests were weakened or skipped. |
+
+### Round 1 accessibility and responsive self-review
+
+The nullable-organization notice is visible text in the existing caller panel and removes the unavailable action from the disposition control, so keyboard users cannot reach a nonfunctional Last Resort path. The strengthened keyboard browser scenario verifies labels, focus outlines, keyboard entry, keyboard selection of Declined, keyboard navigation to Save, keyboard activation, and the saved status. The responsive workspace check remains at phone and desktop widths with the `minmax(0, ...)` grid intact.
