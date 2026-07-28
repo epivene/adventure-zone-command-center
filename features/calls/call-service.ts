@@ -1,4 +1,5 @@
 import {
+  approvedBookingWrite,
   completeCallInputSchema,
   validateApprovedBookingPatch,
 } from "@/features/calls/call-input";
@@ -98,6 +99,10 @@ export class CallService {
       const resultingBookingStatus: BookingStatus | null = context.booking
         ? requestedBookingStatus ?? context.booking.status
         : null;
+      const authoritativeStatus = mappedStatus
+        ?? value.resultingBookingStatus
+        ?? value.approvedBookingUpdates?.status
+        ?? null;
       const bookingStatus = context.booking
         ? resultingBookingStatus ?? context.booking.status
         : null;
@@ -178,7 +183,14 @@ export class CallService {
       if (context.booking && (
         mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates
       )) {
-        const updated = await transaction.updateBooking(context.booking.id, bookingPatch!.data);
+        const updated = await transaction.updateBooking(
+          context.booking.id,
+          approvedBookingWrite(
+            bookingPatch!.data,
+            value.approvedBookingUpdates ?? {},
+            authoritativeStatus,
+          ),
+        );
         await transaction.createAuditEntry({
           entityType: "booking",
           entityId: context.booking.id,

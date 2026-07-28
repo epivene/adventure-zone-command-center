@@ -212,6 +212,19 @@ describe("CallService.complete", () => {
     });
   });
 
+  it("persists only the approved booking key and authoritative status after merged validation", async () => {
+    const repository = new InMemoryCallRepository();
+
+    await expect(new CallService(repository).complete(input({
+      disposition: "proposal_contract_sent",
+      approvedBookingUpdates: { notes: "  Proposal sent during call.  " },
+    }))).resolves.toMatchObject({ ok: true });
+
+    expect(repository.payloads.booking).toEqual([
+      { notes: "Proposal sent during call.", status: "pending_contract" },
+    ]);
+  });
+
   it.each([
     ["interested", "possible"],
     ["proposal_contract_sent", "quote_sent"],
@@ -387,9 +400,18 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       organizationId: ids.organization,
       primaryContactId: ids.contact,
       name: "Marias County Fair",
-      city: "Shelby",
-      region: "MT",
+      venueName: "Do Not Rewrite Venue",
+      address1: "17 Sentinel Road",
+      city: "Sentinel City",
+      region: "mT",
+      postalCode: "59999",
+      latitude: 46.85,
+      longitude: -111.99,
+      startsAt: new Date("2026-08-15T15:00:00.000Z"),
+      endsAt: new Date("2026-08-16T15:00:00.000Z"),
       status: "possible",
+      probability: "unlikely",
+      notes: "Original notes must survive.",
     });
     await db.insert(crmSchema.followUps).values({
       id: ids.followUp,
@@ -444,8 +466,21 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     expect(await sql!.unsafe("SELECT kind, booking_id, organization_id, contact_id FROM follow_ups WHERE id <> $1", [ids.followUp])).toEqual([
       { kind: "send quote", booking_id: ids.booking, organization_id: ids.organization, contact_id: ids.contact },
     ]);
-    expect(await sql!.unsafe(`SELECT status, notes FROM bookings WHERE id = '${ids.booking}'`)).toEqual([
-      { status: "pending_contract", notes: "Proposal sent during call." },
+    expect(await sql!.unsafe(`SELECT status, notes, venue_name, address_1, city, region, postal_code, latitude, longitude, starts_at, ends_at, probability FROM bookings WHERE id = '${ids.booking}'`)).toEqual([
+      {
+        status: "pending_contract",
+        notes: "Proposal sent during call.",
+        venue_name: "Do Not Rewrite Venue",
+        address_1: "17 Sentinel Road",
+        city: "Sentinel City",
+        region: "mT",
+        postal_code: "59999",
+        latitude: 46.85,
+        longitude: -111.99,
+        starts_at: new Date("2026-08-15T15:00:00.000Z"),
+        ends_at: new Date("2026-08-16T15:00:00.000Z"),
+        probability: "unlikely",
+      },
     ]);
     expect(await sql!.unsafe(`SELECT phone, normalized_phone FROM contacts WHERE id = '${ids.contact}'`)).toEqual([
       { phone: "406-555-0101", normalized_phone: "+14065550101" },
@@ -482,6 +517,8 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     });
 
     await expect(service.complete(input({
+      disposition: "move_to_last_resort",
+      lastResortReason: "Repeated cancellations.",
       approvedContactUpdates: { phone: "406-555-0101" },
       approvedBookingUpdates: { notes: "This must roll back." },
     }))).rejects.toThrow("call audit rejected");
@@ -492,8 +529,9 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     expect(await sql!.unsafe(`SELECT completed_at, next_follow_up_id FROM follow_ups WHERE id = '${ids.followUp}'`)).toEqual([
       { completed_at: null, next_follow_up_id: null },
     ]);
+    expect(await sql!.unsafe("SELECT count(*) AS value FROM follow_ups")).toEqual([{ value: "1" }]);
     expect(await sql!.unsafe(`SELECT status, notes FROM bookings WHERE id = '${ids.booking}'`)).toEqual([
-      { status: "possible", notes: null },
+      { status: "possible", notes: "Original notes must survive." },
     ]);
     expect(await sql!.unsafe(`SELECT phone, normalized_phone FROM contacts WHERE id = '${ids.contact}'`)).toEqual([
       { phone: null, normalized_phone: null },

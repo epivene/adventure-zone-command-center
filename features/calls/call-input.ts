@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { bookingEditInputSchema } from "@/features/bookings/booking-input";
 import { bookingStatusValues, probabilityValues, type BookingStatus } from "@/features/bookings/booking-types";
+import type { BookingEditInput } from "@/features/bookings/booking-input";
 import type { CompleteCallInput } from "@/features/calls/call-types";
 
 const callDispositionSchema = z.enum([
@@ -93,4 +94,17 @@ export function validateApprovedBookingPatch(
   status: BookingStatus,
 ) {
   return bookingEditInputSchema.safeParse({ ...lockedBooking, ...updates, status });
+}
+
+export function approvedBookingWrite(
+  validated: BookingEditInput,
+  approved: Record<string, unknown>,
+  authoritativeStatus: BookingStatus | null,
+) {
+  const write: Record<string, unknown> = {};
+  for (const key of Object.keys(approved)) {
+    write[key] = validated[key as keyof BookingEditInput];
+  }
+  if (authoritativeStatus) write.status = validated.status;
+  return write;
 }
