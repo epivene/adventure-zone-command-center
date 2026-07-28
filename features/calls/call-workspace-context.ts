@@ -93,13 +93,19 @@ export async function loadCallWorkspaceContext(
   if (
     followUp &&
     ((requestedBookingId && requestedBookingId !== followUp.bookingId) ||
-      (requestedContactId && requestedContactId !== followUp.contactId))
+      (requestedContactId && followUp.contactId && requestedContactId !== followUp.contactId))
   ) return { ok: false };
 
   const bookingId = requestedBookingId ?? followUp?.bookingId ?? null;
   const booking = bookingId ? await repository.findBooking(bookingId) : null;
   if (bookingId && !booking) return { ok: false };
-  if (booking && requestedContactId && booking.primaryContactId && requestedContactId !== booking.primaryContactId) {
+  if (
+    booking &&
+    requestedContactId &&
+    booking.primaryContactId &&
+    requestedContactId !== booking.primaryContactId &&
+    !followUp?.contactId
+  ) {
     return { ok: false };
   }
 

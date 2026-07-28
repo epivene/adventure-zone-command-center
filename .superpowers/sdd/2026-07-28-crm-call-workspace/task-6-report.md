@@ -93,3 +93,29 @@ The first focused run failed exactly at the new boundaries: the context loader m
 ### Round 1 self-review
 
 The page retains owner-first authorization before importing the database. The loader rejects malformed IDs before invoking its repository, and action tests prove authorization precedes service construction and validation precedes service work. The saved-state status uses a semantic live status and removes the submit button, while the Today links remain ordinary keyboard-accessible links.
+
+## Round 2 follow-up
+
+### Finding addressed
+
+The context resolver now treats a null follow-up contact as unspecified, not conflicting. A non-null follow-up contact remains authoritative when a requested contact differs, and a same-organization non-primary follow-up contact is accepted; booking primary contact remains the fallback only when the follow-up has no contact. Booking/follow-up and common-organization checks remain enforced.
+
+### Round 2 RED evidence
+
+Added an integration-style regression that turns a `FollowUpSummary` into the actual Today Call Workspace URL, parses its IDs, and passes them to `loadCallWorkspaceContext`. Before the change, the normal booking-created shape (`followUp.contactId = null`, URL contact from booking primary) resolved to `{ ok: false }` because it was compared against null.
+
+### Round 2 verification
+
+| Command | Result |
+| --- | --- |
+| `npx vitest run tests/unit/call-workspace-page.test.ts tests/unit/call-workspace-context.test.ts tests/unit/today-components.test.tsx` | 3 files, 11 tests passed |
+| Focused context/Today/call regression set | 7 files, 26 tests passed |
+| `npm test` | 58 files passed, 2 skipped; 362 tests passed, 11 skipped |
+| `npm run typecheck` | passed |
+| `npm run lint` | passed |
+| `npm run build` | passed |
+| `git diff --check` | passed |
+
+### Round 2 self-review
+
+The resolver only skips contact mismatch rejection when the follow-up has no contact. Once booking and contact are loaded, all non-null organization IDs must still agree. The integration regression covers both the normal booking-primary fallback and an explicit same-organization non-primary contact, and the page test confirms owner authorization occurs before the context loader is invoked.
