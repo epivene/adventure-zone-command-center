@@ -45,6 +45,15 @@ export default async function ActSyncPage({
       preview = null;
     }
   }
+  const previewVersion = preview
+    ? [
+        preview.id,
+        ...preview.operations.map(
+          (operation) =>
+            `${operation.rowId}:${operation.status}:${operation.updatedAt.getTime()}`,
+        ),
+      ].join("|")
+    : "no-preview";
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -67,6 +76,7 @@ export default async function ActSyncPage({
       <ActSyncReview
         configured={configured}
         initialPreview={preview}
+        key={previewVersion}
         maskedDatabase={maskedDatabase}
       />
     </div>

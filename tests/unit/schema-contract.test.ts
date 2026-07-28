@@ -62,12 +62,13 @@ describe("database schema contract", () => {
       "localDirty", "state", "createdAt", "updatedAt",
     ]));
     expect(Object.keys(actSyncRuns)).toEqual(expect.arrayContaining([
-      "id", "status", "startedAt", "completedAt", "summary", "createdAt",
+      "id", "status", "startedAt", "completedAt", "summary",
+      "activeQueueToken", "createdAt",
     ]));
     expect(Object.keys(actSyncOperations)).toEqual(expect.arrayContaining([
       "id", "runId", "rowKey", "localContactId", "actRecordId", "category",
       "decision", "status", "baseSnapshot", "localSnapshot", "actSnapshot",
-      "error", "createdAt", "updatedAt",
+      "error", "retryable", "createdAt", "updatedAt",
     ]));
   });
 

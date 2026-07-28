@@ -189,6 +189,7 @@ export const actSyncRuns = pgTable(
       .notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     summary: jsonb("summary").$type<Record<string, unknown>>(),
+    activeQueueToken: uuid("active_queue_token"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -196,7 +197,7 @@ export const actSyncRuns = pgTable(
   (table) => [
     check(
       "act_sync_runs_status_valid",
-      sql`${table.status} in ('previewing', 'previewed', 'applying', 'completed', 'failed')`,
+      sql`${table.status} in ('previewing', 'previewed', 'applying', 'partial', 'completed', 'failed')`,
     ),
   ],
 );
@@ -218,6 +219,7 @@ export const actSyncOperations = pgTable(
     localSnapshot: jsonb("local_snapshot").$type<Record<string, string | null>>(),
     actSnapshot: jsonb("act_snapshot").$type<Record<string, string | null>>(),
     error: text("error"),
+    retryable: boolean("retryable").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

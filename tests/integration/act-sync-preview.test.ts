@@ -62,7 +62,18 @@ class InMemorySyncRepository implements SyncRepository {
       id: `sync-${this.nextRun++}`,
       status: "previewed",
       rows: structuredClone(rows),
+      operations: rows.map((row) => ({
+        rowId: row.rowId,
+        status: "pending",
+        decision: null,
+        localContactId: row.localContactId,
+        actRecordId: row.actRecordId,
+        error: null,
+        retryable: true,
+        updatedAt: new Date("2026-07-27T12:00:00Z"),
+      })),
       summary: structuredClone(summary),
+      activeQueueToken: null,
       startedAt: new Date("2026-07-27T12:00:00Z"),
       completedAt: null,
     };

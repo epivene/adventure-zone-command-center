@@ -6,6 +6,8 @@ export type ActApiErrorCode =
   | "unavailable"
   | "invalid_response";
 
+export type ActWriteOutcome = "not_applied" | "unknown";
+
 const safeMessages: Record<ActApiErrorCode, string> = {
   not_configured: "Act! connection is not configured.",
   authentication_failed:
@@ -22,8 +24,18 @@ export class ActApiError extends Error {
     readonly code: ActApiErrorCode,
     readonly retryable: boolean,
     readonly retryAfter: string | null = null,
+    readonly writeOutcome: ActWriteOutcome = "unknown",
   ) {
     super(safeMessages[code]);
     this.name = "ActApiError";
+  }
+
+  withWriteOutcome(writeOutcome: ActWriteOutcome) {
+    return new ActApiError(
+      this.code,
+      this.retryable,
+      this.retryAfter,
+      writeOutcome,
+    );
   }
 }
