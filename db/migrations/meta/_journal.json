@@ -29,6 +29,20 @@
       "when": 1785178945653,
       "tag": "0003_act_contact_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785201220836,
+      "tag": "0004_neat_colossus",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785204112187,
+      "tag": "0005_nervous_jack_power",
+      "breakpoints": true
     }
   ]
 }

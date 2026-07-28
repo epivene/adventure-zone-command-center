@@ -9,17 +9,20 @@ export type BatchApplyProgress = {
   processed: number;
   total: number;
   completed: number;
+  skipped: number;
   failed: number;
-  completedRowIds: string[];
+  settledRowIds: string[];
 };
 
 export type FailedSyncDecision = {
   decision: SyncApplyDecision;
   error: string;
+  retryable: boolean;
 };
 
 export type BatchApplyOutcome = {
   completed: number;
+  skipped: number;
   failed: FailedSyncDecision[];
   pending: SyncApplyDecision[];
   interruptedError: string | null;
@@ -30,22 +33,41 @@ type ApplyBatchResult =
       ok: true;
       result: { runId: string; rows: SyncApplyRowResult[] };
     }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      interruptedRow?: SyncApplyRowResult;
+    };
 
 type ApplyBatch = (
   runId: string,
   decisions: readonly SyncApplyDecision[],
+  context: { queueToken: string | null },
 ) => Promise<ApplyBatchResult>;
+
+type PrepareBatch = (
+  runId: string,
+  decisions: readonly SyncApplyDecision[],
+  context: {
+    replaceExisting: boolean;
+    queueToken: string | null;
+  },
+) => Promise<
+  | { ok: true; runId?: string; queueToken?: string }
+  | { ok: false; error: string }
+>;
 
 export async function applyDecisionsInBatches({
   runId,
   decisions,
+  prepareBatch,
   applyBatch,
   onProgress,
   batchSize = ACT_SYNC_BATCH_SIZE,
 }: {
   runId: string;
   decisions: readonly SyncApplyDecision[];
+  prepareBatch?: PrepareBatch;
   applyBatch: ApplyBatch;
   onProgress?: (progress: BatchApplyProgress) => void;
   batchSize?: number;
@@ -60,36 +82,101 @@ export async function applyDecisionsInBatches({
     );
   }
 
+  const queuedDecisions = decisions.map((decision) => ({ ...decision }));
   const failed: FailedSyncDecision[] = [];
-  const completedRowIds: string[] = [];
+  const settledRowIds: string[] = [];
   let completed = 0;
+  let skipped = 0;
+  let queueToken: string | null = null;
+  if (prepareBatch) {
+    for (
+      let offset = 0;
+      offset < queuedDecisions.length;
+      offset += batchSize
+    ) {
+      const batch = queuedDecisions
+        .slice(offset, offset + batchSize)
+        .map((decision) => ({ ...decision }));
+      try {
+        const prepared = await prepareBatch(runId, batch, {
+          replaceExisting: offset === 0,
+          queueToken,
+        });
+        if (!prepared.ok) {
+          return {
+            completed,
+            skipped,
+            failed,
+            pending: queuedDecisions.map((decision) => ({ ...decision })),
+            interruptedError: prepared.error,
+          };
+        }
+        if (prepared.queueToken) queueToken = prepared.queueToken;
+      } catch {
+        return {
+          completed,
+          skipped,
+          failed,
+          pending: queuedDecisions.map((decision) => ({ ...decision })),
+          interruptedError:
+            "The approved decisions could not be saved. Try again.",
+        };
+      }
+    }
+  }
   onProgress?.({
     processed: 0,
-    total: decisions.length,
+    total: queuedDecisions.length,
     completed,
+    skipped,
     failed: 0,
-    completedRowIds: [],
+    settledRowIds: [],
   });
 
-  for (let offset = 0; offset < decisions.length; offset += batchSize) {
-    const batch = decisions.slice(offset, offset + batchSize);
+  for (
+    let offset = 0;
+    offset < queuedDecisions.length;
+    offset += batchSize
+  ) {
+    const batch = queuedDecisions
+      .slice(offset, offset + batchSize)
+      .map((decision) => ({ ...decision }));
     let response: ApplyBatchResult;
     try {
-      response = await applyBatch(runId, batch);
+      response = await applyBatch(runId, batch, { queueToken });
     } catch {
       return {
         completed,
+        skipped,
         failed,
-        pending: decisions.slice(offset),
+        pending: queuedDecisions
+          .slice(offset)
+          .map((decision) => ({ ...decision })),
         interruptedError:
           "The import connection was interrupted. Retry the remaining contacts.",
       };
     }
     if (!response.ok) {
+      const interruptedBatchIndex = response.interruptedRow
+        ? batch.findIndex(
+            (decision) => decision.rowId === response.interruptedRow?.rowId,
+          )
+        : -1;
+      if (interruptedBatchIndex >= 0 && response.interruptedRow) {
+        failed.push({
+          decision: { ...batch[interruptedBatchIndex]! },
+          error: response.interruptedRow.error ?? response.error,
+          retryable: response.interruptedRow.retryable !== false,
+        });
+      }
       return {
         completed,
+        skipped,
         failed,
-        pending: decisions.slice(offset),
+        pending: queuedDecisions
+          .slice(offset)
+          .filter((_, index) => index !== interruptedBatchIndex)
+          .map((decision) => ({ ...decision })),
         interruptedError: response.error,
       };
     }
@@ -99,29 +186,35 @@ export async function applyDecisionsInBatches({
     );
     for (const decision of batch) {
       const result = results.get(decision.rowId);
-      if (result?.status === "completed" || result?.status === "skipped") {
+      if (result?.status === "completed") {
         completed += 1;
-        completedRowIds.push(decision.rowId);
+        settledRowIds.push(decision.rowId);
+      } else if (result?.status === "skipped") {
+        skipped += 1;
+        settledRowIds.push(decision.rowId);
       } else {
         failed.push({
-          decision,
+          decision: { ...decision },
           error:
             result?.error ??
             "Act! did not return a result for this contact. Try again.",
+          retryable: result?.retryable !== false,
         });
       }
     }
     onProgress?.({
-      processed: Math.min(offset + batch.length, decisions.length),
-      total: decisions.length,
+      processed: Math.min(offset + batch.length, queuedDecisions.length),
+      total: queuedDecisions.length,
       completed,
+      skipped,
       failed: failed.length,
-      completedRowIds: [...completedRowIds],
+      settledRowIds: [...settledRowIds],
     });
   }
 
   return {
     completed,
+    skipped,
     failed,
     pending: [],
     interruptedError: null,

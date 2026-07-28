@@ -68,9 +68,80 @@ describe("applyDecisionsInBatches", () => {
       processed: 1427,
       total: 1427,
       completed: 1427,
+      skipped: 0,
       failed: 0,
-      completedRowIds: decisions(1427).map((decision) => decision.rowId),
+      settledRowIds: decisions(1427).map((decision) => decision.rowId),
     });
+  });
+
+  it("durably stages every decision before applying the first batch", async () => {
+    const events: string[] = [];
+    const prepareBatch = vi.fn(async (
+      runId: string,
+      batch: readonly SyncApplyDecision[],
+      context?: { replaceExisting: boolean },
+    ) => {
+      events.push(
+        `prepare:${batch[0]?.rowId}:${context?.replaceExisting ?? "missing"}`,
+      );
+      return { ok: true as const, runId };
+    });
+    const applyBatch = vi.fn(async (
+      runId: string,
+      batch: readonly SyncApplyDecision[],
+    ) => {
+      events.push(`apply:${batch[0]?.rowId}`);
+      return completedBatch(runId, batch);
+    });
+
+    await applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: decisions(51),
+      prepareBatch,
+      applyBatch,
+    });
+
+    expect(prepareBatch).toHaveBeenCalledTimes(2);
+    expect(prepareBatch.mock.calls[0]?.[1]).toHaveLength(50);
+    expect(prepareBatch.mock.calls[1]?.[1]).toHaveLength(1);
+    expect(events).toEqual([
+      "prepare:row-1:true",
+      "prepare:row-51:false",
+      "apply:row-1",
+      "apply:row-51",
+    ]);
+  });
+
+  it("binds every staged and applied batch to one queue generation", async () => {
+    const stageContexts: Array<{
+      replaceExisting: boolean;
+      queueToken: string | null;
+    }> = [];
+    const applyTokens: Array<string | null> = [];
+
+    await applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: decisions(51),
+      prepareBatch: async (runId, batch, context) => {
+        void runId;
+        void batch;
+        stageContexts.push(context);
+        return {
+          ok: true as const,
+          queueToken: context.replaceExisting ? "queue-a" : undefined,
+        };
+      },
+      applyBatch: async (runId, batch, context) => {
+        applyTokens.push(context?.queueToken ?? null);
+        return completedBatch(runId, batch);
+      },
+    });
+
+    expect(stageContexts).toEqual([
+      { replaceExisting: true, queueToken: null },
+      { replaceExisting: false, queueToken: "queue-a" },
+    ]);
+    expect(applyTokens).toEqual(["queue-a", "queue-a"]);
   });
 
   it("continues after row failures and returns only those rows for retry", async () => {
@@ -101,6 +172,7 @@ describe("applyDecisionsInBatches", () => {
       {
         decision: { rowId: "row-2", decision: "pull" },
         error: "Try this contact again.",
+        retryable: true,
       },
     ]);
     expect(outcome.pending).toEqual([]);
@@ -123,6 +195,33 @@ describe("applyDecisionsInBatches", () => {
     expect(outcome.completed).toBe(0);
     expect(outcome.pending).toEqual(input);
     expect(outcome.interruptedError).toBe("The connection was interrupted.");
+  });
+
+  it("separates a non-retryable interrupted row from remaining work", async () => {
+    const input = decisions(3);
+    const outcome = await applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: input,
+      applyBatch: async () => ({
+        ok: false as const,
+        error: "Act! rejected the shared account credentials.",
+        interruptedRow: {
+          rowId: "row-1",
+          status: "failed" as const,
+          error: "Act! rejected the shared account credentials.",
+          retryable: false,
+        },
+      }),
+    });
+
+    expect(outcome.failed).toEqual([
+      {
+        decision: input[0],
+        error: "Act! rejected the shared account credentials.",
+        retryable: false,
+      },
+    ]);
+    expect(outcome.pending).toEqual([input[1], input[2]]);
   });
 
   it("treats a thrown request as an interruption without exposing the exception", async () => {
@@ -215,15 +314,111 @@ describe("applyDecisionsInBatches", () => {
 
     expect(outcome).toEqual({
       completed: 1,
+      skipped: 0,
       failed: [
         {
           decision: input[1],
           error: "Act! did not return a result for this contact. Try again.",
+          retryable: true,
         },
       ],
       pending: [],
       interruptedError: null,
     });
+  });
+
+  it("keeps skipped rows terminal without counting them as completed", async () => {
+    const input = decisions(2);
+
+    const outcome = await applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: input,
+      applyBatch: async (runId, batch) => ({
+        ok: true as const,
+        result: {
+          runId,
+          rows: [
+            {
+              rowId: batch[0]!.rowId,
+              status: "completed" as const,
+              error: null,
+            },
+            {
+              rowId: batch[1]!.rowId,
+              status: "skipped" as const,
+              error: null,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(outcome).toMatchObject({
+      completed: 1,
+      skipped: 1,
+      failed: [],
+      pending: [],
+    });
+  });
+
+  it("preserves whether a failed row is safe to retry", async () => {
+    const input = decisions(1);
+
+    const outcome = await applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: input,
+      applyBatch: async (runId, batch) => ({
+        ok: true as const,
+        result: {
+          runId,
+          rows: [
+            {
+              rowId: batch[0]!.rowId,
+              status: "failed" as const,
+              error: "Create a new preview.",
+              retryable: false,
+            },
+          ],
+        },
+      }),
+    });
+
+    expect(outcome.failed).toEqual([
+      {
+        decision: input[0],
+        error: "Create a new preview.",
+        retryable: false,
+      },
+    ]);
+  });
+
+  it("copies caller decisions before asynchronous batching", async () => {
+    const input = decisions(2);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const received: SyncApplyDecision[][] = [];
+    const applying = applyDecisionsInBatches({
+      runId: "run-1",
+      decisions: input,
+      batchSize: 1,
+      applyBatch: async (runId, batch) => {
+        received.push(batch.map((decision) => ({ ...decision })));
+        if (received.length === 1) await gate;
+        return completedBatch(runId, batch);
+      },
+    });
+
+    await vi.waitFor(() => expect(received).toHaveLength(1));
+    input[1]!.decision = "skip";
+    release();
+    await applying;
+
+    expect(received).toEqual([
+      [{ rowId: "row-1", decision: "pull" }],
+      [{ rowId: "row-2", decision: "pull" }],
+    ]);
   });
 
   it("collects row failures across successful batches", async () => {

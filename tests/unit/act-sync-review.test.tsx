@@ -43,6 +43,7 @@ const emptySnapshot = {
   region: "MT",
   postalCode: null,
 };
+const queueToken = "11111111-1111-4111-8111-111111111111";
 
 function row(
   category: SyncComparisonCategory,
@@ -81,6 +82,19 @@ function row(
   };
 }
 
+function pendingOperation(value: SyncComparisonRow) {
+  return {
+    rowId: value.rowId,
+    status: "pending" as const,
+    decision: null,
+    localContactId: value.localContactId,
+    actRecordId: value.actRecordId,
+    error: null,
+    retryable: true,
+    updatedAt: new Date("2026-07-27T12:00:00.000Z"),
+  };
+}
+
 const rows = [
   row("new_in_act", "new-act"),
   row("changed_in_app", "changed-app"),
@@ -91,6 +105,7 @@ const preview: StoredSyncPreview = {
   id: "run-1",
   status: "previewed",
   rows,
+  operations: rows.map(pendingOperation),
   summary: {
     new_in_act: 1,
     new_in_app: 0,
@@ -102,6 +117,7 @@ const preview: StoredSyncPreview = {
     missing_from_act: 0,
     error: 0,
   },
+  activeQueueToken: null,
   startedAt: new Date("2026-07-27T12:00:00.000Z"),
   completedAt: null,
 };
@@ -113,6 +129,7 @@ function previewWithNewActRows(count: number): StoredSyncPreview {
   return {
     ...preview,
     rows: newRows,
+    operations: newRows.map(pendingOperation),
     summary: {
       new_in_act: count,
       new_in_app: 0,
@@ -196,6 +213,35 @@ describe("ActSyncReview", () => {
     ).toBeEnabled();
   });
 
+  it("unlocks the page with sanitized copy when testing the connection rejects", async () => {
+    const user = userEvent.setup();
+    const testConnection = vi.fn(async () => {
+      throw new Error("socket secret and raw upstream body");
+    });
+    render(
+      <ActSyncReview
+        configured
+        initialPreview={preview}
+        maskedDatabase="••••3125"
+        testConnectionAction={testConnection}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+
+    expect(
+      await screen.findByText(
+        "The Act! connection test was interrupted. Try again.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Test connection" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Sync with Act!" }),
+    ).toBeEnabled();
+  });
+
   it("bulk-approves only the category being viewed and clears hidden choices", async () => {
     const user = userEvent.setup();
     const apply = vi.fn(async (
@@ -256,6 +302,38 @@ describe("ActSyncReview", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the exact number of rows eligible for category approval", async () => {
+    const user = userEvent.setup();
+    const exactRows = [
+      row("new_in_act", "eligible"),
+      {
+        ...row("new_in_act", "skip-only"),
+        allowedDecisions: ["skip" as const],
+      },
+    ];
+    const exactPreview: StoredSyncPreview = {
+      ...preview,
+      rows: exactRows,
+      operations: exactRows.map(pendingOperation),
+      summary: { ...preview.summary, new_in_act: 2 },
+    };
+    render(
+      <ActSyncReview
+        configured
+        initialPreview={exactPreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Approve only New in Act! (1)",
+      }),
+    );
+
+    expect(screen.getByText("1 row approved")).toBeVisible();
+  });
+
   it("requires an explicit conflict choice", async () => {
     const user = userEvent.setup();
     const apply = vi.fn(async () => ({
@@ -297,11 +375,50 @@ describe("ActSyncReview", () => {
     expect(apply).toHaveBeenCalledWith("run-1", [
       { rowId: "conflict", decision: "keep_app" },
     ]);
+    expect(
+      await screen.findByText("1 approved change completed."),
+    ).toBeVisible();
   });
 
-  it("applies approved contacts in 50-row batches and reports completion", async () => {
+  it("hydrates completed, skipped, failed, applying, and pending rows on reload", async () => {
     const user = userEvent.setup();
-    const largePreview = previewWithNewActRows(51);
+    const reloadRows = [
+      row("new_in_act", "completed"),
+      row("new_in_act", "skipped"),
+      row("new_in_act", "failed"),
+      row("new_in_act", "applying"),
+      row("new_in_act", "pending"),
+    ];
+    const reloadPreview: StoredSyncPreview = {
+      ...preview,
+      status: "partial",
+      rows: reloadRows,
+      operations: [
+        {
+          ...pendingOperation(reloadRows[0]!),
+          status: "completed",
+          decision: "pull",
+        },
+        {
+          ...pendingOperation(reloadRows[1]!),
+          status: "skipped",
+          decision: "skip",
+        },
+        {
+          ...pendingOperation(reloadRows[2]!),
+          status: "failed",
+          decision: "pull",
+          error: "Try this contact again.",
+        },
+        {
+          ...pendingOperation(reloadRows[3]!),
+          status: "applying",
+          decision: "pull",
+        },
+        pendingOperation(reloadRows[4]!),
+      ],
+      summary: { ...preview.summary, new_in_act: 5 },
+    };
     const apply = vi.fn(async (
       runId: string,
       decisions: readonly SyncApplyDecision[],
@@ -320,8 +437,248 @@ describe("ActSyncReview", () => {
       <ActSyncReview
         applyAction={apply}
         configured
+        initialPreview={reloadPreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Decision for completed" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("combobox", { name: "Decision for skipped" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("combobox", { name: "Decision for applying" }),
+    ).toBeDisabled();
+    expect(screen.getByText("Try this contact again.")).toBeVisible();
+    expect(
+      screen.getByText(
+        "This contact is still being reconciled. Refresh before retrying.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Approve only New in Act! (1)" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Retry failed contacts" }),
+    ).toBeVisible();
+
+    await user.click(
+      screen.getByRole("button", { name: "Retry failed contacts" }),
+    );
+
+    expect(apply).toHaveBeenCalledWith("run-1", [
+      { rowId: "failed", decision: "pull" },
+    ]);
+  });
+
+  it("hydrates an approved multi-candidate link target on reload", async () => {
+    const user = userEvent.setup();
+    const linkRow = {
+      ...row("possible_match", "link-row"),
+      localContactId: null,
+      candidateLocalContactIds: ["local-first", "local-second"],
+    };
+    const reloadPreview: StoredSyncPreview = {
+      ...preview,
+      status: "previewed",
+      rows: [linkRow],
+      operations: [
+        {
+          ...pendingOperation(linkRow),
+          status: "approved",
+          decision: "link",
+          localContactId: "local-second",
+        },
+      ],
+      summary: {
+        ...preview.summary,
+        new_in_act: 0,
+        changed_in_app: 0,
+        changed_in_both: 0,
+        possible_match: 1,
+      },
+    };
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
+      ok: true as const,
+      result: {
+        runId,
+        rows: decisions.map((decision) => ({
+          rowId: decision.rowId,
+          status: "completed" as const,
+          error: null,
+        })),
+      },
+    }));
+
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={reloadPreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+    await user.click(screen.getByRole("tab", { name: "Possible matches 1" }));
+
+    expect(
+      screen.getByRole("combobox", { name: "Local contact to link" }),
+    ).toHaveValue("local-second");
+    await user.click(
+      screen.getByRole("button", { name: "Retry remaining contacts" }),
+    );
+    expect(apply).toHaveBeenCalledWith("run-1", [
+      {
+        rowId: "link-row",
+        decision: "link",
+        localContactId: "local-second",
+      },
+    ]);
+  });
+
+  it("keeps a non-retryable stored failure locked after reload", () => {
+    const failedRow = row("new_in_act", "manual-review");
+    const reloadPreview: StoredSyncPreview = {
+      ...preview,
+      status: "failed",
+      rows: [failedRow],
+      operations: [
+        {
+          ...pendingOperation(failedRow),
+          status: "failed",
+          decision: "pull",
+          error: "Create a new preview.",
+          retryable: false,
+        },
+      ],
+      summary: {
+        ...preview.summary,
+        new_in_act: 1,
+        changed_in_app: 0,
+        changed_in_both: 0,
+      },
+    };
+
+    render(
+      <ActSyncReview
+        configured
+        initialPreview={reloadPreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    expect(
+      screen.getByRole("combobox", { name: "Decision for manual-review" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /Retry/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Create a new preview.")).toBeVisible();
+  });
+
+  it("clears a durable recovery queue before approving another category", async () => {
+    const user = userEvent.setup();
+    const queueRows = [
+      row("new_in_act", "old-approved"),
+      row("new_in_app", "new-selection"),
+    ];
+    const queuePreview: StoredSyncPreview = {
+      ...preview,
+      activeQueueToken: queueToken,
+      status: "previewed",
+      rows: queueRows,
+      operations: [
+        {
+          ...pendingOperation(queueRows[0]!),
+          status: "approved",
+          decision: "pull",
+        },
+        pendingOperation(queueRows[1]!),
+      ],
+      summary: {
+        ...preview.summary,
+        new_in_act: 1,
+        new_in_app: 1,
+        changed_in_app: 0,
+        changed_in_both: 0,
+      },
+    };
+    const clearStaged = vi.fn(async (runId: string) => ({
+      ok: true as const,
+      runId,
+    }));
+
+    render(
+      <ActSyncReview
+        applyAction={vi.fn()}
+        clearStagedAction={clearStaged}
+        configured
+        initialPreview={queuePreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+    await user.click(screen.getByRole("tab", { name: "New in app 1" }));
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in app (1)" }),
+    );
+
+    expect(clearStaged).toHaveBeenCalledWith("run-1", queueToken);
+    expect(screen.getByText("1 row approved")).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Decision for new-selection" }),
+    ).toHaveValue("push");
+  });
+
+  it("applies approved contacts in 50-row batches and reports completion", async () => {
+    const user = userEvent.setup();
+    const largePreview = previewWithNewActRows(51);
+    const stage = vi.fn(
+      async (
+        runId: string,
+        decisions: readonly SyncApplyDecision[],
+        context: {
+          replaceExisting: boolean;
+          queueToken: string | null;
+        },
+      ) => {
+        void decisions;
+        void context;
+        return {
+          ok: true as const,
+          runId,
+          queueToken,
+        };
+      },
+    );
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+      receivedQueueToken?: string,
+    ) => {
+      void receivedQueueToken;
+      return {
+        ok: true as const,
+        result: {
+          runId,
+          rows: decisions.map((decision) => ({
+            rowId: decision.rowId,
+            status: "completed" as const,
+            error: null,
+          })),
+        },
+      };
+    });
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
         initialPreview={largePreview}
         maskedDatabase="••••3125"
+        stageDecisionsAction={stage}
       />,
     );
 
@@ -330,10 +687,60 @@ describe("ActSyncReview", () => {
     );
     await user.click(screen.getByRole("button", { name: "Apply 51 approved" }));
 
+    expect(stage).toHaveBeenCalledTimes(2);
+    expect(stage.mock.calls[0]?.[1]).toHaveLength(50);
+    expect(stage.mock.calls[1]?.[1]).toHaveLength(1);
+    expect(stage.mock.calls[0]?.[2]).toEqual({
+      replaceExisting: true,
+      queueToken: null,
+    });
+    expect(stage.mock.calls[1]?.[2]).toEqual({
+      replaceExisting: false,
+      queueToken,
+    });
     expect(apply).toHaveBeenCalledTimes(2);
     expect(apply.mock.calls[0]![1]).toHaveLength(50);
     expect(apply.mock.calls[1]![1]).toHaveLength(1);
+    expect(apply.mock.calls[0]![2]).toBe(queueToken);
+    expect(apply.mock.calls[1]![2]).toBe(queueToken);
     expect(await screen.findByText("51 contacts imported.")).toBeVisible();
+    expect(routerRefresh).not.toHaveBeenCalled();
+  });
+
+  it("reports skipped contacts separately with singular completion grammar", async () => {
+    const user = userEvent.setup();
+    const twoRows = previewWithNewActRows(2);
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
+      ok: true as const,
+      result: {
+        runId,
+        rows: decisions.map((decision, index) => ({
+          rowId: decision.rowId,
+          status: index === 0 ? "completed" as const : "skipped" as const,
+          error: null,
+        })),
+      },
+    }));
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={twoRows}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (2)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 2 approved" }));
+
+    expect(
+      await screen.findByText("1 contact imported · 1 skipped."),
+    ).toBeVisible();
   });
 
   it("continues after a contact failure and retries only the failed contact", async () => {
@@ -387,6 +794,180 @@ describe("ActSyncReview", () => {
     expect(apply.mock.calls[2]![1]).toEqual([
       { rowId: "new-act-2", decision: "pull" },
     ]);
+  });
+
+  it("labels a non-retryable failure as requiring a new preview", async () => {
+    const user = userEvent.setup();
+    const oneRow = previewWithNewActRows(1);
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
+      ok: true as const,
+      result: {
+        runId,
+        rows: decisions.map((decision) => ({
+          rowId: decision.rowId,
+          status: "failed" as const,
+          error: "Create a new preview.",
+          retryable: false,
+        })),
+      },
+    }));
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={oneRow}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (1)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 1 approved" }));
+
+    expect(
+      await screen.findByText("0 imported · 1 needs a new preview."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /Retry/ }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Needs attention: New in Act! (1).")).toBeVisible();
+  });
+
+  it("continues past a non-retryable row reported with an interruption", async () => {
+    const user = userEvent.setup();
+    const twoRows = previewWithNewActRows(2);
+    let interrupted = true;
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => {
+      if (interrupted) {
+        interrupted = false;
+        return {
+          ok: false as const,
+          error: "Act! rejected the shared account credentials.",
+          interruptedRow: {
+            rowId: decisions[0]!.rowId,
+            status: "failed" as const,
+            error: "Act! rejected the shared account credentials.",
+            retryable: false,
+          },
+        };
+      }
+      return {
+        ok: true as const,
+        result: {
+          runId,
+          rows: decisions.map((decision) => ({
+            rowId: decision.rowId,
+            status: "completed" as const,
+            error: null,
+          })),
+        },
+      };
+    });
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={twoRows}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (2)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 2 approved" }));
+
+    expect(
+      await screen.findAllByText(
+        "Act! rejected the shared account credentials.",
+      ),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole("button", { name: "Retry remaining contacts" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Retry remaining contacts" }),
+    );
+    expect(apply.mock.calls[1]?.[1]).toEqual([
+      { rowId: "new-act-2", decision: "pull" },
+    ]);
+  });
+
+  it("names every category containing failed rows", async () => {
+    const user = userEvent.setup();
+    const mixedRows = [
+      row("new_in_act", "failed-act"),
+      row("changed_in_app", "failed-app"),
+      row("new_in_app", "pending-app"),
+    ];
+    const mixedPreview: StoredSyncPreview = {
+      ...preview,
+      rows: mixedRows,
+      operations: mixedRows.map(pendingOperation),
+      summary: {
+        ...preview.summary,
+        new_in_act: 1,
+        new_in_app: 1,
+        changed_in_app: 1,
+        changed_in_both: 0,
+      },
+    };
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => ({
+      ok: true as const,
+      result: {
+        runId,
+        rows: decisions.map((decision) => ({
+          rowId: decision.rowId,
+          status: "failed" as const,
+          error: "Try this contact again.",
+        })),
+      },
+    }));
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={mixedPreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Decision for failed-act" }),
+      "pull",
+    );
+    await user.click(screen.getByRole("tab", { name: "Changed in app 1" }));
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Decision for failed-app" }),
+      "push",
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 2 approved" }));
+
+    expect(
+      await screen.findByText(
+        "Needs attention: New in Act! (1), Changed in app (1).",
+      ),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "New in app 1" }));
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in app (1)" }),
+    );
+    expect(
+      screen.getByText(
+        "Needs attention: New in Act! (1), Changed in app (1).",
+      ),
+    ).toBeVisible();
   });
 
   it("retries only unfinished contacts after a staged interruption", async () => {
@@ -447,6 +1028,7 @@ describe("ActSyncReview", () => {
     expect(
       screen.getByRole("button", { name: "Approve only New in Act! (1)" }),
     ).toBeVisible();
+    expect(routerRefresh).not.toHaveBeenCalled();
 
     interrupted = false;
     await user.click(
@@ -468,15 +1050,17 @@ describe("ActSyncReview", () => {
   it("disables review controls and shows live progress while importing", async () => {
     const user = userEvent.setup();
     const largePreview = previewWithNewActRows(51);
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
+    let releaseSecond!: () => void;
+    const secondGate = new Promise<void>((resolve) => {
+      releaseSecond = resolve;
     });
+    let call = 0;
     const apply = vi.fn(async (
       runId: string,
       decisions: readonly SyncApplyDecision[],
     ) => {
-      await gate;
+      call += 1;
+      if (call === 2) await secondGate;
       return {
         ok: true as const,
         result: {
@@ -502,16 +1086,30 @@ describe("ActSyncReview", () => {
       screen.getByRole("button", { name: "Approve only New in Act! (51)" }),
     );
     await user.click(screen.getByRole("button", { name: "Apply 51 approved" }));
-    await waitFor(() => expect(apply).toHaveBeenCalledOnce());
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(2));
 
-    expect(screen.getByText("Importing 0 of 51…")).toBeVisible();
-    expect(screen.getByRole("tab", { name: "Changed in both 0" })).toBeDisabled();
+    expect(screen.getByText("Importing 50 of 51…")).toBeVisible();
+    const categoryTab = screen.getByRole("tab", { name: "Changed in both 0" });
+    expect(categoryTab).toBeDisabled();
+    expect(categoryTab).toHaveClass("disabled:opacity-60");
     expect(
       screen.getByRole("combobox", { name: "Decision for new-act-1" }),
     ).toBeDisabled();
+    const approve = screen.getByRole("button", {
+      name: "Approve only New in Act! (1)",
+    });
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveClass("disabled:opacity-60");
+    expect(
+      screen.getByRole("button", { name: "Apply 1 approved" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Test connection" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Working…" })).toBeDisabled();
 
     await act(async () => {
-      release();
+      releaseSecond();
     });
     expect(await screen.findByText("51 contacts imported.")).toBeVisible();
   });
