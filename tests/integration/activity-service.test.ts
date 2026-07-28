@@ -6,8 +6,17 @@ import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as crmSchema from "@/db/schema";
-import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
+import {
+  DrizzleActivityRepository,
+  type ActivityRepository,
+  type ActivityRevisionReader,
+} from "@/features/activities/activity-repository";
 import { ActivityService } from "@/features/activities/activity-service";
+import type {
+  ActivityRevision,
+  ActivityTimelineItem,
+  CreateActivityInput,
+} from "@/features/activities/activity-types";
 
 const databaseUrl = process.env.ACTIVITY_REPOSITORY_TEST_DATABASE_URL;
 const migrationDirectory = path.resolve(import.meta.dirname, "../../db/migrations");
@@ -16,6 +25,29 @@ const ids = {
   organization: "11111111-1111-4111-8111-111111111111",
   missing: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
+
+class RecordingActivityRepository
+  implements ActivityRepository, ActivityRevisionReader
+{
+  createCalls = 0;
+
+  async listTimeline(): Promise<ActivityTimelineItem[]> {
+    return [];
+  }
+
+  async listRevisions(): Promise<ActivityRevision[]> {
+    return [];
+  }
+
+  async create(): Promise<ActivityTimelineItem> {
+    this.createCalls += 1;
+    throw new Error("The repository must not be called for invalid input.");
+  }
+
+  async edit() {
+    return { ok: false as const, error: { code: "ACTIVITY_NOT_FOUND" as const } };
+  }
+}
 
 function testSchemaName() {
   return `activity_repository_${randomUUID().replaceAll("-", "_")}`;
@@ -29,6 +61,55 @@ async function migrationStatements(fileName: string, schemaName: string) {
     .map((statement) => statement.trim())
     .filter(Boolean);
 }
+
+async function createActivity(
+  service: ActivityService,
+  input: CreateActivityInput,
+): Promise<ActivityTimelineItem> {
+  const result = await service.create(input);
+  if (!result.ok) throw new Error("Expected a valid activity input.");
+  return result.value;
+}
+
+describe("ActivityService validation", () => {
+  it("returns a typed failure for blank activity text without calling the repository", async () => {
+    const repository = new RecordingActivityRepository();
+    const service = new ActivityService(repository);
+
+    await expect(
+      service.create({
+        organizationId: ids.organization,
+        kind: "note",
+        body: "   ",
+        occurredAt: new Date("2026-07-28T15:00:00.000Z"),
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: { code: "INVALID_ACTIVITY_INPUT", message: "Add activity text." },
+    });
+    expect(repository.createCalls).toBe(0);
+  });
+
+  it("returns a typed failure for a missing activity parent without calling the repository", async () => {
+    const repository = new RecordingActivityRepository();
+    const service = new ActivityService(repository);
+
+    await expect(
+      service.create({
+        kind: "note",
+        body: "Left a message.",
+        occurredAt: new Date("2026-07-28T15:00:00.000Z"),
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      error: {
+        code: "INVALID_ACTIVITY_INPUT",
+        message: "Link the activity to an organization, contact, or booking.",
+      },
+    });
+    expect(repository.createCalls).toBe(0);
+  });
+});
 
 describe("ActivityService", () => {
   const postgresTest = databaseUrl ? it : it.skip;
@@ -71,13 +152,13 @@ describe("ActivityService", () => {
   });
 
   postgresTest("keeps timeline rows collapsed, newest first, and loads revisions only on demand", async () => {
-    const older = await service.create({
+    const older = await createActivity(service, {
       organizationId: ids.organization,
       kind: "note",
       body: "Initial venue note.",
       occurredAt: new Date("2026-07-20T15:00:00.000Z"),
     });
-    const newer = await service.create({
+    const newer = await createActivity(service, {
       organizationId: ids.organization,
       kind: "call",
       body: "Called about the August date.",
@@ -132,7 +213,7 @@ describe("ActivityService", () => {
   });
 
   postgresTest("rolls back the revision and text update when the edit audit is rejected", async () => {
-    const activity = await service.create({
+    const activity = await createActivity(service, {
       organizationId: ids.organization,
       kind: "note",
       body: "Original text.",

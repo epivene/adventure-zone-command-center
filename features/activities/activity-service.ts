@@ -29,9 +29,17 @@ export class ActivityService {
     return this.repository.listRevisions(activityId);
   }
 
-  async create(input: CreateActivityInput): Promise<ActivityTimelineItem> {
-    const parsed = createActivityInputSchema.parse(input);
-    return this.repository.create(parsed);
+  async create(
+    input: CreateActivityInput,
+  ): Promise<Result<ActivityTimelineItem, ActivityError>> {
+    const parsed = createActivityInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return err({
+        code: "INVALID_ACTIVITY_INPUT",
+        message: parsed.error.issues[0]?.message ?? "Review the activity details.",
+      });
+    }
+    return { ok: true, value: await this.repository.create(parsed.data) };
   }
 
   async edit(
