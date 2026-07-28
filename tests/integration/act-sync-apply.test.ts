@@ -306,6 +306,45 @@ describe("ActSyncService apply", () => {
       actRecordId: "act-1",
       email: "avery@example.com",
     });
+    expect(client.getCalls).toBe(0);
+  });
+
+  it("fails a malformed new Act row without requesting Act", async () => {
+    const rows = compareContactSets([], [remote()]);
+    rows[0] = { ...rows[0]!, actSnapshot: null };
+    const repository = new InMemoryApplyRepository(rows, []);
+    const client = new FakeApplyClient([remote()]);
+    const service = new ActSyncService(client, repository);
+
+    const result = await service.apply("run-1", [
+      { rowId: rows[0]!.rowId, decision: "pull" },
+    ]);
+
+    expect(result.rows[0]).toMatchObject({
+      status: "failed",
+      error: "The reviewed Act! contact is incomplete. Create a new preview.",
+    });
+    expect(client.getCalls).toBe(0);
+    expect(repository.appliedPulls).toEqual([]);
+  });
+
+  it("still rechecks Act before overwriting an existing local contact", async () => {
+    const existing = local();
+    const rows = compareContactSets(
+      [existing],
+      [remote({ phone: "406-555-0202" })],
+    );
+    const repository = new InMemoryApplyRepository(rows, [existing]);
+    const client = new FakeApplyClient([
+      remote({ phone: "406-555-0202" }),
+    ]);
+    const service = new ActSyncService(client, repository);
+
+    await service.apply("run-1", [
+      { rowId: rows[0]!.rowId, decision: "pull" },
+    ]);
+
+    expect(client.getCalls).toBe(1);
   });
 
   it("pushes a new local contact once and reuses the completed result on retry", async () => {

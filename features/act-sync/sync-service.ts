@@ -180,7 +180,10 @@ export class ActSyncService {
     }
 
     if (input.decision === "pull" || input.decision === "keep_act") {
-      const remote = await this.currentRemote(client, row);
+      const remote =
+        input.decision === "pull" && row.category === "new_in_act"
+          ? this.reviewedNewActContact(row)
+          : await this.currentRemote(client, row);
       if (!remote.ok) return remote.result;
       await repository.pullContact(row, remote.contact);
       return { rowId: row.rowId, status: "completed", error: null };
@@ -241,6 +244,36 @@ export class ActSyncService {
       rowId: row.rowId,
       status: "failed",
       error: "Choose how to resolve this row before applying it.",
+    };
+  }
+
+  private reviewedNewActContact(
+    row: SyncComparisonRow,
+  ):
+    | { ok: true; contact: RemoteActContact }
+    | { ok: false; result: SyncApplyRowResult } {
+    if (
+      row.category !== "new_in_act" ||
+      row.localContactId !== null ||
+      !row.actRecordId ||
+      !row.actSnapshot
+    ) {
+      return {
+        ok: false,
+        result: {
+          rowId: row.rowId,
+          status: "failed",
+          error: "The reviewed Act! contact is incomplete. Create a new preview.",
+        },
+      };
+    }
+    return {
+      ok: true,
+      contact: {
+        id: row.actRecordId,
+        editedAt: row.actEditedAt,
+        ...row.actSnapshot,
+      },
     };
   }
 
