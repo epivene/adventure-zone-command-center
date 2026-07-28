@@ -111,6 +111,9 @@ function toBooking(record: typeof bookings.$inferSelect): Booking {
 }
 
 function toFollowUp(record: typeof followUps.$inferSelect): FollowUp {
+  if (!record.bookingId) {
+    throw new Error("Follow-up is not linked to a booking.");
+  }
   return {
     id: record.id,
     bookingId: record.bookingId,
@@ -259,6 +262,7 @@ export class DrizzleBookingRepository implements BookingRepository {
       { id: string; kind: string; dueAt: Date }
     >();
     for (const followUp of openFollowUps) {
+      if (!followUp.bookingId) continue;
       if (!nextActionByBooking.has(followUp.bookingId)) {
         nextActionByBooking.set(followUp.bookingId, {
           id: followUp.id,

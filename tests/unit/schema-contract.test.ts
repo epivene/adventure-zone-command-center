@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  activities,
   actContactSyncStates,
   actExternalLinks,
   actImportRuns,
   actSyncOperations,
   actSyncRuns,
+  activityRevisions,
   auditEntries,
   bookings,
+  callSessions,
   contacts,
   followUps,
   organizations,
@@ -70,6 +73,17 @@ describe("database schema contract", () => {
       "decision", "status", "baseSnapshot", "localSnapshot", "actSnapshot",
       "error", "retryable", "createdAt", "updatedAt",
     ]));
+  });
+
+  it("exports the CRM activity and call workspace fields", () => {
+    expect(organizations.lastResort).toBeDefined();
+    expect(organizations.lastResortReason).toBeDefined();
+    expect(contacts.normalizedPhone).toBeDefined();
+    expect(activities.organizationId).toBeDefined();
+    expect(activities.contactId).toBeDefined();
+    expect(activities.bookingId).toBeDefined();
+    expect(activityRevisions.activityId).toBeDefined();
+    expect(callSessions.disposition).toBeDefined();
   });
 
   it("enforces one contact owner for each Act external identifier", () => {

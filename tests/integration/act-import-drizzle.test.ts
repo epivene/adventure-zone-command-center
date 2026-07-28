@@ -16,6 +16,9 @@ const organization: OrganizationRow = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Marias Fair",
   actRecordId: null,
+  lastResort: false,
+  lastResortReason: null,
+  lastResortChangedAt: null,
   createdAt: new Date("2026-07-25T12:00:00.000Z"),
   updatedAt: new Date("2026-07-25T12:00:00.000Z"),
 };
@@ -27,6 +30,7 @@ const contactRow: ContactRow = {
   lastName: "Example",
   email: "avery@example.com",
   phone: "old phone",
+  normalizedPhone: null,
   jobTitle: null,
   address1: null,
   address2: null,
@@ -44,7 +48,7 @@ const record: ActCsvRecord = {
   company: "  MARIAS   FAIR ",
   contact: "Avery Example",
   email: "avery@example.com",
-  phone: "new phone",
+  phone: "(406) 555-0101",
   city: null,
   region: null,
   validationErrors: [],
@@ -179,12 +183,13 @@ describe("DrizzleActImportRepository", () => {
     expect(database.contactUpdates).toHaveLength(1);
     expect(database.contactUpdates[0]).toMatchObject({
       organizationId: organization.id,
-      phone: "new phone",
+      phone: "(406) 555-0101",
+      normalizedPhone: "+14065550101",
     });
     expect(updated).toMatchObject({
       organizationId: organization.id,
       organizationName: organization.name,
-      phone: "new phone",
+      phone: "(406) 555-0101",
     });
   });
 

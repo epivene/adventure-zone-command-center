@@ -259,6 +259,14 @@ const syncDecisionSchema = z.enum([
   "skip",
 ]);
 
+function normalizeUsPhone(phone: string | null) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (/^\d{10}$/.test(digits)) return `+1${digits}`;
+  if (/^1\d{10}$/.test(digits)) return `+${digits}`;
+  return null;
+}
+
 function isSnapshot(value: unknown) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -1367,6 +1375,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       jobTitle: remote.jobTitle,
       email: remote.email,
       phone: remote.phone,
+      normalizedPhone: normalizeUsPhone(remote.phone),
       address1: remote.address1,
       address2: remote.address2,
       city: remote.city,

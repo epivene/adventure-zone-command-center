@@ -43,6 +43,13 @@
       "when": 1785204112187,
       "tag": "0005_nervous_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785257675509,
+      "tag": "0006_daily_crm_foundation",
+      "breakpoints": true
     }
   ]
 }

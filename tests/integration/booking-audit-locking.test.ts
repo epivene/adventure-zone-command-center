@@ -35,6 +35,8 @@ const bookingRow: BookingRow = {
 const followUpRow: FollowUpRow = {
   id: "22222222-2222-4222-8222-222222222222",
   bookingId: bookingRow.id,
+  organizationId: null,
+  contactId: null,
   kind: "call",
   dueAt: new Date("2026-08-01T15:00:00.000Z"),
   completedAt: null,

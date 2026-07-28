@@ -70,6 +70,14 @@ function displayValue(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+function normalizeUsPhone(phone: string | null) {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (/^\d{10}$/.test(digits)) return `+1${digits}`;
+  if (/^1\d{10}$/.test(digits)) return `+${digits}`;
+  return null;
+}
+
 function comparable(value: string | null) {
   return value === null ? null : normalize(value);
 }
@@ -592,6 +600,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
+        normalizedPhone: normalizeUsPhone(record.phone),
       })
       .returning();
     if (!created) throw new Error("Could not create imported contact.");
@@ -648,6 +657,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
+        normalizedPhone: normalizeUsPhone(record.phone),
         updatedAt: new Date(),
       })
       .where(eq(contacts.id, contactId))

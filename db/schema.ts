@@ -4,6 +4,7 @@ import {
   doublePrecision,
   integer,
   jsonb,
+  index,
   pgEnum,
   pgTable,
   text,
@@ -21,14 +22,50 @@ import {
 
 export const bookingStatusEnum = pgEnum("booking_status", bookingStatusValues);
 export const probabilityEnum = pgEnum("probability", probabilityValues);
+export const activityKindValues = [
+  "call",
+  "note",
+  "follow_up",
+  "status_change",
+  "booking_update",
+  "contract_update",
+  "calendar",
+  "act_history",
+  "approved_suggestion",
+] as const;
+export const callDispositionValues = [
+  "no_answer",
+  "left_voicemail",
+  "follow_up_needed",
+  "interested",
+  "proposal_sent",
+  "booked",
+  "declined",
+  "last_resort",
+] as const;
+export const activityKindEnum = pgEnum("activity_kind", activityKindValues);
+export const callDispositionEnum = pgEnum(
+  "call_disposition",
+  callDispositionValues,
+);
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   actRecordId: text("act_record_id").unique(),
+  lastResort: boolean("last_resort").default(false).notNull(),
+  lastResortReason: text("last_resort_reason"),
+  lastResortChangedAt: timestamp("last_resort_changed_at", {
+    withTimezone: true,
+  }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  check(
+    "organizations_last_resort_reason_required",
+    sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
+  ),
+]);
 
 export const contacts = pgTable("contacts", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -37,6 +74,7 @@ export const contacts = pgTable("contacts", {
   lastName: text("last_name").notNull(),
   email: text("email"),
   phone: text("phone"),
+  normalizedPhone: text("normalized_phone"),
   jobTitle: text("job_title"),
   address1: text("address_1"),
   address2: text("address_2"),
@@ -46,7 +84,9 @@ export const contacts = pgTable("contacts", {
   actRecordId: text("act_record_id").unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("contacts_normalized_phone_idx").on(table.normalizedPhone),
+]);
 
 export const travelLegs = pgTable(
   "travel_legs",
@@ -95,7 +135,9 @@ export const bookings = pgTable("bookings", {
 
 export const followUps = pgTable("follow_ups", {
   id: uuid("id").defaultRandom().primaryKey(),
-  bookingId: uuid("booking_id").notNull().references(() => bookings.id),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  contactId: uuid("contact_id").references(() => contacts.id),
   kind: text("kind").notNull(),
   dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
@@ -105,6 +147,50 @@ export const followUps = pgTable("follow_ups", {
   ),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check(
+    "follow_ups_parent_required",
+    sql`${table.bookingId} is not null or ${table.organizationId} is not null or ${table.contactId} is not null`,
+  ),
+]);
+
+export const activities = pgTable("activities", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  kind: activityKindEnum("kind").notNull(),
+  body: text("body").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check(
+    "activities_parent_required",
+    sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null`,
+  ),
+]);
+
+export const activityRevisions = pgTable("activity_revisions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  activityId: uuid("activity_id").notNull().references(() => activities.id),
+  priorBody: text("prior_body").notNull(),
+  replacementBody: text("replacement_body").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const callSessions = pgTable("call_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  followUpId: uuid("follow_up_id").references(() => followUps.id),
+  disposition: callDispositionEnum("disposition").notNull(),
+  noteActivityId: uuid("note_activity_id").references(() => activities.id),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const auditEntries = pgTable("audit_entries", {
