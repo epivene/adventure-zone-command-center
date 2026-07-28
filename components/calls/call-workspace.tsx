@@ -54,6 +54,7 @@ export function CallWorkspace({
   const [lastResortReason, setLastResortReason] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,6 +91,7 @@ export function CallWorkspace({
         approvedBookingUpdates: null,
       });
       if (!result.ok) setError(result.error);
+      else setIsSaved(true);
     } catch {
       setError("Could not save this call note. Please try again.");
     } finally {
@@ -116,7 +118,13 @@ export function CallWorkspace({
         <div className="grid gap-5">
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="call-details-title">
             <h2 className="text-xl font-bold" id="call-details-title">Record call</h2>
-            {!startedAt ? (
+            {isSaved ? (
+              <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <p className="font-semibold text-emerald-950" role="status">Call note saved.</p>
+                <p className="mt-1 text-sm text-emerald-900">This call is complete and cannot be submitted again from this workspace.</p>
+                <a className="link mt-3 inline-block" href="/today">Return to Today</a>
+              </div>
+            ) : !startedAt ? (
               <div className="mt-4">
                 <p className="text-sm text-slate-600">Timing starts only when you are ready to record the note.</p>
                 <button className="button-primary mt-3" onClick={() => setStartedAt(new Date())} type="button">

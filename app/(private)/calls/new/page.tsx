@@ -1,11 +1,14 @@
-import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
 import { completeCallAction, listActivityRevisionsAction } from "@/app/(private)/calls/actions";
 import { CallWorkspace } from "@/components/calls/call-workspace";
-import { bookings, contacts, followUps, organizations } from "@/db/schema";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
+import {
+  activityTimelineParent,
+  DrizzleCallWorkspaceContextRepository,
+  loadCallWorkspaceContext,
+} from "@/features/calls/call-workspace-context";
 import { requireOwner } from "@/lib/auth/require-owner";
 
 export const dynamic = "force-dynamic";
@@ -24,65 +27,44 @@ export default async function CallWorkspacePage({
   const requestedContactId = firstValue(query.contactId);
   const requestedBookingId = firstValue(query.bookingId);
   const requestedFollowUpId = firstValue(query.followUpId);
-  if (!requestedContactId && !requestedBookingId && !requestedFollowUpId) notFound();
-
   const { db } = await import("@/db/client");
-  const [followUp] = requestedFollowUpId
-    ? await db.select().from(followUps).where(eq(followUps.id, requestedFollowUpId)).limit(1)
-    : [];
-  const bookingId = requestedBookingId ?? followUp?.bookingId ?? undefined;
-  const bookingRecord = bookingId
-    ? (await db.select({ booking: bookings, organization: organizations })
-      .from(bookings)
-      .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
-      .where(eq(bookings.id, bookingId)).limit(1))[0] ?? null
-    : null;
-  const contactId = requestedContactId ?? followUp?.contactId ?? bookingRecord?.booking.primaryContactId ?? undefined;
-  const contactRecord = contactId
-    ? (await db.select({ contact: contacts, organization: organizations })
-      .from(contacts)
-      .leftJoin(organizations, eq(contacts.organizationId, organizations.id))
-      .where(eq(contacts.id, contactId)).limit(1))[0] ?? null
-    : null;
-  const contact = contactRecord?.contact ?? null;
-  const booking = bookingRecord?.booking ?? null;
-  const organization = bookingRecord?.organization ?? contactRecord?.organization ?? null;
-  if (!organization || (contactId && !contact) || (bookingId && !booking) || (requestedFollowUpId && !followUp)) {
-    notFound();
-  }
+  const context = await loadCallWorkspaceContext({
+    contactId: requestedContactId,
+    bookingId: requestedBookingId,
+    followUpId: requestedFollowUpId,
+  }, new DrizzleCallWorkspaceContextRepository(db));
+  if (!context.ok) notFound();
 
-  const timeline = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline({
-    organizationId: organization.id,
-    contactId: contact?.id,
-    bookingId: booking?.id,
-  });
+  const timeline = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline(
+    activityTimelineParent(context.value),
+  );
 
   return (
     <CallWorkspace
-      booking={booking ? {
-        id: booking.id,
-        name: booking.name,
-        city: booking.city,
-        region: booking.region,
-        status: booking.status,
-        startsAt: booking.startsAt,
+      booking={context.value.booking ? {
+        id: context.value.booking.id,
+        name: context.value.booking.name,
+        city: context.value.booking.city,
+        region: context.value.booking.region,
+        status: context.value.booking.status,
+        startsAt: context.value.booking.startsAt,
       } : null}
-      contact={contact ? {
-        id: contact.id,
-        name: `${contact.firstName} ${contact.lastName}`.trim(),
-        phone: contact.phone,
-        email: contact.email,
+      contact={context.value.contact ? {
+        id: context.value.contact.id,
+        name: `${context.value.contact.firstName} ${context.value.contact.lastName}`.trim(),
+        phone: context.value.contact.phone,
+        email: context.value.contact.email,
       } : null}
-      followUpId={followUp?.id ?? null}
+      followUpId={context.value.followUp?.id ?? null}
       loadRevisions={listActivityRevisionsAction}
       onComplete={completeCallAction}
       organization={{
-        id: organization.id,
-        name: organization.name,
-        lastResort: organization.lastResort,
-        lastResortReason: organization.lastResortReason,
+        id: context.value.organization.id,
+        name: context.value.organization.name,
+        lastResort: context.value.organization.lastResort,
+        lastResortReason: context.value.organization.lastResortReason,
       }}
-      timeline={timeline.slice(0, 10)}
+      timeline={timeline}
     />
   );
 }

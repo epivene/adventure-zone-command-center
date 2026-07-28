@@ -84,7 +84,16 @@ describe("CallWorkspace", () => {
     expect(screen.queryByRole("textbox", { name: "Call note" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Start call note" }));
-    expect(within(screen.getByLabelText("Call disposition")).getAllByRole("option")).toHaveLength(8);
+    expect(within(screen.getByLabelText("Call disposition")).getAllByRole("option").map((option) => option.getAttribute("value"))).toEqual([
+      "no_answer",
+      "left_voicemail",
+      "follow_up_needed",
+      "interested",
+      "proposal_contract_sent",
+      "booked",
+      "declined",
+      "move_to_last_resort",
+    ]);
     await user.type(screen.getByLabelText("Call note"), "Asked for a proposal by Friday.");
     await user.selectOptions(screen.getByLabelText("Call disposition"), "follow_up_needed");
     await user.selectOptions(screen.getByLabelText("Next action"), "prepare_quote");
@@ -100,5 +109,23 @@ describe("CallWorkspace", () => {
     expect(screen.getByLabelText("Call note")).toHaveValue("Asked for a proposal by Friday.");
     expect(screen.getByLabelText("Next action")).toHaveValue("prepare_quote");
     expect(screen.getByLabelText("Next action date")).toHaveValue("2026-08-01");
+  });
+
+  it("confirms a saved call and removes the submit path after a successful completion", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn<
+      (input: CompleteCallInput) => Promise<{ ok: true } | { ok: false; error: string }>
+    >().mockResolvedValue({ ok: true });
+
+    render(<CallWorkspace {...workspace} onComplete={onComplete} />);
+
+    await user.click(screen.getByRole("button", { name: "Start call note" }));
+    await user.type(screen.getByLabelText("Call note"), "Confirmed the event details.");
+    await user.click(screen.getByRole("button", { name: "Save call note" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Call note saved.");
+    expect(screen.queryByRole("button", { name: "Save call note" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Return to Today" })).toHaveAttribute("href", "/today");
+    expect(onComplete).toHaveBeenCalledOnce();
   });
 });

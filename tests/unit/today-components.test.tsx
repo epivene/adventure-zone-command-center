@@ -5,15 +5,17 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FollowUpList } from "@/components/today/follow-up-list";
+import { NextCallCard } from "@/components/today/next-call-card";
 import { SummaryCards } from "@/components/today/summary-cards";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
 
 afterEach(cleanup);
 
 const now = new Date("2026-08-03T14:00:00Z");
-const followUps: FollowUpSummary[] = [
+const followUps: (FollowUpSummary & { contactId: string | null })[] = [
   {
     id: "overdue-call",
+    contactId: "contact-1",
     bookingId: "booking-1",
     bookingName: "Overdue County Fair",
     kind: "call",
@@ -29,8 +31,20 @@ describe("Today dashboard components", () => {
     render(<FollowUpList followUps={followUps} now={now} />);
 
     expect(screen.getByRole("heading", { name: "Overdue follow-ups" })).toBeVisible();
-    expect(screen.getByRole("link", { name: "Overdue County Fair" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
+      "href",
+      "/calls/new?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call",
+    );
     expect(screen.getByText("1 overdue")).toBeVisible();
+  });
+
+  it("opens the next call in the Call Workspace with its complete context", () => {
+    render(<NextCallCard followUp={followUps[0]!} />);
+
+    expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
+      "href",
+      "/calls/new?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call",
+    );
   });
 
   it("does not call a same-Chicago-day follow-up overdue after stored noon", () => {

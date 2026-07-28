@@ -15,6 +15,7 @@ function item(
 ): FollowUpSummary {
   return {
     id,
+    contactId: null,
     bookingId: `booking-${id}`,
     bookingName: `Booking ${id}`,
     kind: "call",

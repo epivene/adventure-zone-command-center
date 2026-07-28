@@ -1,4 +1,4 @@
-import { count, desc, eq, or } from "drizzle-orm";
+import { count, desc, eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { activities, activityRevisions } from "@/db/schema";
@@ -76,12 +76,9 @@ function activitySnapshot(activity: typeof activities.$inferSelect) {
 }
 
 function timelineCondition(parent: ActivityParent) {
-  const conditions = [
-    parent.organizationId ? eq(activities.organizationId, parent.organizationId) : undefined,
-    parent.contactId ? eq(activities.contactId, parent.contactId) : undefined,
-    parent.bookingId ? eq(activities.bookingId, parent.bookingId) : undefined,
-  ].filter((condition) => condition !== undefined);
-  return conditions.length ? or(...conditions) : undefined;
+  if (parent.bookingId) return eq(activities.bookingId, parent.bookingId);
+  if (parent.contactId) return eq(activities.contactId, parent.contactId);
+  return parent.organizationId ? eq(activities.organizationId, parent.organizationId) : undefined;
 }
 
 export class DrizzleActivityRepository
@@ -99,7 +96,8 @@ export class DrizzleActivityRepository
       .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
       .where(condition)
       .groupBy(activities.id)
-      .orderBy(desc(activities.occurredAt), desc(activities.createdAt), desc(activities.id));
+      .orderBy(desc(activities.occurredAt), desc(activities.createdAt), desc(activities.id))
+      .limit(10);
 
     return records.map(({ activity, revisionCount }) =>
       toTimelineItem(activity, Number(revisionCount)),

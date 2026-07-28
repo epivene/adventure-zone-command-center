@@ -13,6 +13,7 @@ export type FollowUpPriorityStatus = "due" | "deadline" | "quiet_lead" | "other"
 
 export type FollowUpSummary = {
   id: string;
+  contactId: string | null;
   bookingId: string;
   bookingName: string;
   kind: string;
@@ -149,6 +150,7 @@ export async function getTodayDashboard(now: Date): Promise<TodayDashboard> {
 
     const summary: FollowUpSummary = {
       id: followUp.id,
+      contactId: followUp.contactId ?? booking.primaryContactId,
       bookingId: booking.id,
       bookingName: booking.name,
       kind: followUp.kind,
