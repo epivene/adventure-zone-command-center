@@ -389,6 +389,82 @@ describe("ActSyncReview", () => {
     ]);
   });
 
+  it("retries only unfinished contacts after a staged interruption", async () => {
+    const user = userEvent.setup();
+    const largePreview = previewWithNewActRows(51);
+    let interrupted = true;
+    const apply = vi.fn(async (
+      runId: string,
+      decisions: readonly SyncApplyDecision[],
+    ) => {
+      if (interrupted && decisions[0]?.rowId === "new-act-51") {
+        return {
+          ok: false as const,
+          error: "The connection was interrupted.",
+        };
+      }
+      return {
+        ok: true as const,
+        result: {
+          runId,
+          rows: decisions.map((decision) => ({
+            rowId: decision.rowId,
+            status: "completed" as const,
+            error: null,
+          })),
+        },
+      };
+    });
+    render(
+      <ActSyncReview
+        applyAction={apply}
+        configured
+        initialPreview={largePreview}
+        maskedDatabase="••••3125"
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Approve only New in Act! (51)" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Apply 51 approved" }));
+
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls[0]![1]).toHaveLength(50);
+    expect(apply.mock.calls[1]![1]).toEqual([
+      { rowId: "new-act-51", decision: "pull" },
+    ]);
+    expect(await screen.findByText("The connection was interrupted.")).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Retry remaining contacts" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("combobox", { name: "Decision for new-act-1" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("combobox", { name: "Decision for new-act-51" }),
+    ).toHaveValue("pull");
+    expect(
+      screen.getByRole("button", { name: "Approve only New in Act! (1)" }),
+    ).toBeVisible();
+
+    interrupted = false;
+    await user.click(
+      screen.getByRole("button", { name: "Retry remaining contacts" }),
+    );
+
+    expect(apply).toHaveBeenCalledTimes(3);
+    expect(apply.mock.calls[2]![1]).toEqual([
+      { rowId: "new-act-51", decision: "pull" },
+    ]);
+    expect(
+      screen.getByRole("combobox", { name: "Decision for new-act-51" }),
+    ).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /Approve only New in Act!/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("disables review controls and shows live progress while importing", async () => {
     const user = userEvent.setup();
     const largePreview = previewWithNewActRows(51);

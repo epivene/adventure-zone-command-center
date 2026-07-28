@@ -247,6 +247,9 @@ export function ActSyncReview({
   const [decisions, setDecisions] = useState<Map<string, DecisionState>>(
     () => new Map(),
   );
+  const [completedRowIds, setCompletedRowIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [applyProgress, setApplyProgress] =
@@ -265,12 +268,17 @@ export function ActSyncReview({
       ) ?? [],
     [activeCategory, initialPreview],
   );
+  const approvableVisibleRows = useMemo(
+    () => visibleRows.filter((row) => !completedRowIds.has(row.rowId)),
+    [completedRowIds, visibleRows],
+  );
   const activeSafeDecision = safeDecisionForCategory(activeCategory);
 
   function setRowDecision(
     rowId: string,
     decision: DecisionState | undefined,
   ) {
+    if (completedRowIds.has(rowId)) return;
     setDecisions((current) => {
       const next = new Map(current);
       if (decision) next.set(rowId, decision);
@@ -289,7 +297,9 @@ export function ActSyncReview({
   function approveActiveCategory() {
     if (!initialPreview) return;
     const approved = decisionsForCategory(
-      initialPreview.rows,
+      initialPreview.rows.filter(
+        (row) => !completedRowIds.has(row.rowId),
+      ),
       activeCategory,
     );
     setDecisions(
@@ -331,15 +341,21 @@ export function ActSyncReview({
   }
 
   async function applyApproved() {
-    if (!initialPreview || decisions.size === 0) return;
+    if (!initialPreview) return;
+    const input = [...decisions]
+      .filter(([rowId]) => !completedRowIds.has(rowId))
+      .map(([rowId, value]) => ({
+        rowId,
+        ...value,
+      }));
+    if (input.length === 0) {
+      setDecisions(new Map());
+      return;
+    }
     setBusy(true);
     setStatus(null);
     setApplySummary(null);
     setRowErrors(new Map());
-    const input = [...decisions].map(([rowId, value]) => ({
-      rowId,
-      ...value,
-    }));
     const rowsById = new Map(
       initialPreview.rows.map((row) => [row.rowId, row]),
     );
@@ -353,6 +369,11 @@ export function ActSyncReview({
       applyBatch: applyAction,
       onProgress: (progress) => {
         setApplyProgress(progress);
+        setCompletedRowIds((current) => {
+          const next = new Set(current);
+          progress.completedRowIds.forEach((rowId) => next.add(rowId));
+          return next;
+        });
         setDecisions((current) => {
           const next = new Map(current);
           progress.completedRowIds.forEach((rowId) => next.delete(rowId));
@@ -478,7 +499,7 @@ export function ActSyncReview({
               <ul className="grid gap-3">
                 {visibleRows.map((row) => (
                   <SyncRow
-                    disabled={busy}
+                    disabled={busy || completedRowIds.has(row.rowId)}
                     error={rowErrors.get(row.rowId)}
                     key={row.rowId}
                     onDecision={setRowDecision}
@@ -509,14 +530,14 @@ export function ActSyncReview({
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
-              {activeSafeDecision && visibleRows.length > 0 ? (
+              {activeSafeDecision && approvableVisibleRows.length > 0 ? (
                 <button
                   className="button-secondary"
                   disabled={busy}
                   onClick={approveActiveCategory}
                   type="button"
                 >
-                  Approve only {categoryLabels[activeCategory]} ({visibleRows.length})
+                  {`Approve only ${categoryLabels[activeCategory]} (${approvableVisibleRows.length})`}
                 </button>
               ) : null}
               <button
