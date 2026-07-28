@@ -1,6 +1,7 @@
 import {
   and,
   asc,
+  count,
   desc,
   eq,
   ilike,
@@ -35,6 +36,24 @@ export type OrganizationListQuery = {
   search: string;
   lastResort: "all" | "only";
   travelLegId: string | null;
+  page: number;
+  pageSize: number;
+};
+
+export type OrganizationListRecord = Omit<
+  OrganizationSummary,
+  "contacts" | "bookings"
+> & {
+  contactCount: number;
+  bookingCount: number;
+};
+
+export type OrganizationListPage = {
+  records: OrganizationListRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
 };
 
 export interface OrganizationRepository {
@@ -165,63 +184,71 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     };
   }
 
-  async listOrganizations(query: OrganizationListQuery): Promise<OrganizationSummary[]> {
+  async listOrganizations(query: OrganizationListQuery): Promise<OrganizationListPage> {
+    const condition = buildOrganizationListCondition(query);
+    const [totals] = await this.database
+      .select({ value: count() })
+      .from(organizations)
+      .where(condition);
+    const total = totals?.value ?? 0;
+    const pageCount = Math.max(1, Math.ceil(total / query.pageSize));
+    const page = Math.min(query.page, pageCount);
     const organizationRecords = await this.database
       .select()
       .from(organizations)
-      .where(buildOrganizationListCondition(query))
-      .orderBy(asc(organizations.name), asc(organizations.id));
-    if (!organizationRecords.length) return [];
+      .where(condition)
+      .orderBy(asc(organizations.name), asc(organizations.id))
+      .limit(query.pageSize)
+      .offset((page - 1) * query.pageSize);
+    if (!organizationRecords.length) {
+      return { records: [], total, page, pageSize: query.pageSize, pageCount };
+    }
 
     const organizationIds = organizationRecords.map((organization) => organization.id);
-    const [organizationContacts, organizationBookings] = await Promise.all([
+    const [contactCounts, bookingCounts] = await Promise.all([
       this.database
         .select({
           organizationId: contacts.organizationId,
-          id: contacts.id,
-          firstName: contacts.firstName,
-          lastName: contacts.lastName,
+          value: count(),
         })
         .from(contacts)
         .where(inArray(contacts.organizationId, organizationIds))
-        .orderBy(asc(contacts.lastName), asc(contacts.firstName)),
+        .groupBy(contacts.organizationId),
       this.database
         .select({
-          booking: bookings,
-          travelLeg: travelLegs,
+          organizationId: bookings.organizationId,
+          value: count(),
         })
         .from(bookings)
-        .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
         .where(inArray(bookings.organizationId, organizationIds))
-        .orderBy(desc(bookings.startsAt), asc(bookings.name)),
+        .groupBy(bookings.organizationId),
     ]);
-    const contactsByOrganization = new Map<string, OrganizationContact[]>();
-    for (const contact of organizationContacts) {
-      if (!contact.organizationId) continue;
-      const records = contactsByOrganization.get(contact.organizationId) ?? [];
-      records.push({
-        id: contact.id,
-        name: `${contact.firstName} ${contact.lastName}`.trim(),
-      });
-      contactsByOrganization.set(contact.organizationId, records);
-    }
-    const bookingsByOrganization = new Map<string, OrganizationBooking[]>();
-    for (const record of organizationBookings) {
-      if (!record.booking.organizationId) continue;
-      const records = bookingsByOrganization.get(record.booking.organizationId) ?? [];
-      records.push(toOrganizationBooking(record));
-      bookingsByOrganization.set(record.booking.organizationId, records);
-    }
+    const contactCountByOrganization = new Map(
+      contactCounts
+        .filter((record) => record.organizationId !== null)
+        .map((record) => [record.organizationId!, record.value]),
+    );
+    const bookingCountByOrganization = new Map(
+      bookingCounts
+        .filter((record) => record.organizationId !== null)
+        .map((record) => [record.organizationId!, record.value]),
+    );
 
-    return organizationRecords.map((organization) => ({
-      id: organization.id,
-      name: organization.name,
-      lastResort: organization.lastResort,
-      lastResortReason: organization.lastResortReason,
-      lastResortChangedAt: organization.lastResortChangedAt,
-      contacts: contactsByOrganization.get(organization.id) ?? [],
-      bookings: bookingsByOrganization.get(organization.id) ?? [],
-    }));
+    return {
+      records: organizationRecords.map((organization) => ({
+        id: organization.id,
+        name: organization.name,
+        lastResort: organization.lastResort,
+        lastResortReason: organization.lastResortReason,
+        lastResortChangedAt: organization.lastResortChangedAt,
+        contactCount: contactCountByOrganization.get(organization.id) ?? 0,
+        bookingCount: bookingCountByOrganization.get(organization.id) ?? 0,
+      })),
+      total,
+      page,
+      pageSize: query.pageSize,
+      pageCount,
+    };
   }
 
   async listTravelLegs() {

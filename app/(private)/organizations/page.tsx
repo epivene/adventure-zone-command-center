@@ -20,6 +20,8 @@ export default async function OrganizationsPage({
     q: firstValue(raw.q),
     lastResort: firstValue(raw.lastResort),
     leg: firstValue(raw.leg),
+    page: firstValue(raw.page),
+    pageSize: firstValue(raw.pageSize),
   });
   const { db } = await import("@/db/client");
   const repository = new DrizzleOrganizationRepository(db);

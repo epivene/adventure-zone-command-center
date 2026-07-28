@@ -181,6 +181,8 @@ describe("organization list query contract", () => {
       search: "",
       lastResort: "only",
       travelLegId: null,
+      page: 1,
+      pageSize: 50,
     });
     const query = new PgDialect().sqlToQuery(condition!);
 
@@ -193,6 +195,8 @@ describe("organization list query contract", () => {
       search: "Marias",
       lastResort: "only",
       travelLegId,
+      page: 1,
+      pageSize: 50,
     });
     const query = new PgDialect().sqlToQuery(condition!);
 

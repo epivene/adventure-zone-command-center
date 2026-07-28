@@ -5,6 +5,7 @@ import { setLastResortAction } from "@/app/(private)/organizations/actions";
 import { LastResortControl } from "@/components/organizations/last-resort-control";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
+import { organizationIdSchema } from "@/features/organizations/last-resort-input";
 import { requireOwner } from "@/lib/auth/require-owner";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function OrganizationDetailPage({
 }) {
   await requireOwner();
   const { organizationId } = await params;
+  if (!organizationIdSchema.safeParse(organizationId).success) notFound();
   const { db } = await import("@/db/client");
   const organization = await new DrizzleOrganizationRepository(db).getOrganizationSummary(
     organizationId,
@@ -48,8 +50,8 @@ export default async function OrganizationDetailPage({
 
       <div className="grid gap-5 lg:grid-cols-2">
         <LastResortControl
-          initialEnabled={organization.lastResort}
-          initialReason={organization.lastResortReason}
+          isLastResort={organization.lastResort}
+          lastResortReason={organization.lastResortReason}
           onSubmit={setLastResortAction}
           organizationId={organization.id}
         />

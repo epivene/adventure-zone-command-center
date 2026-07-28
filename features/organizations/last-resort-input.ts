@@ -1,8 +1,10 @@
 import { z } from "zod";
 
+export const organizationIdSchema = z.uuid();
+
 export const setLastResortInputSchema = z
   .object({
-    organizationId: z.uuid(),
+    organizationId: organizationIdSchema,
     enabled: z.boolean(),
     reason: z.string().trim().max(2_000),
   })
@@ -23,11 +25,15 @@ export const organizationListQuerySchema = z
     q: z.string().catch("").default(""),
     lastResort: z.enum(["all", "only"]).catch("all").default("all"),
     leg: z.string().catch("").default(""),
+    page: z.coerce.number().int().min(1).max(10_000).catch(1).default(1),
+    pageSize: z.coerce.number().int().min(1).max(50).catch(50).default(50),
   })
-  .transform(({ q, lastResort, leg }) => ({
+  .transform(({ q, lastResort, leg, page, pageSize }) => ({
     search: q.trim().replace(/\s+/g, " "),
     lastResort,
     travelLegId: z.uuid().safeParse(leg).success ? leg : null,
+    page,
+    pageSize,
   }));
 
 export type OrganizationListQuery = z.output<typeof organizationListQuerySchema>;

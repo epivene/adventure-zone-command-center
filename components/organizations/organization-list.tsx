@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import type {
   OrganizationListQuery,
-  OrganizationSummary,
+  OrganizationListPage,
 } from "@/features/organizations/organization-repository";
 
 function listHref(query: OrganizationListQuery) {
@@ -10,6 +10,8 @@ function listHref(query: OrganizationListQuery) {
   if (query.search) params.set("q", query.search);
   if (query.lastResort === "only") params.set("lastResort", "only");
   if (query.travelLegId) params.set("leg", query.travelLegId);
+  if (query.page > 1) params.set("page", String(query.page));
+  if (query.pageSize !== 50) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString();
   return suffix ? `/organizations?${suffix}` : "/organizations";
 }
@@ -19,7 +21,7 @@ export function OrganizationList({
   query,
   travelLegs,
 }: {
-  organizations: OrganizationSummary[];
+  organizations: OrganizationListPage;
   query: OrganizationListQuery;
   travelLegs: { id: string; name: string; color: string }[];
 }) {
@@ -68,12 +70,12 @@ export function OrganizationList({
       </form>
 
       <p aria-live="polite" className="text-sm text-slate-600">
-        Showing {organizations.length} accounts
+        Showing {organizations.records.length} of {organizations.total} accounts
       </p>
 
-      {organizations.length ? (
+      {organizations.records.length ? (
         <ul className="grid gap-3">
-          {organizations.map((organization) => (
+          {organizations.records.map((organization) => (
             <li
               className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               key={organization.id}
@@ -94,7 +96,7 @@ export function OrganizationList({
                     ) : null}
                   </div>
                   <p className="mt-1 text-sm text-slate-600">
-                    {organization.contacts.length} contacts · {organization.bookings.length} bookings
+                    {organization.contactCount} contacts · {organization.bookingCount} bookings
                   </p>
                   {organization.lastResortReason ? (
                     <p className="mt-2 text-sm text-rose-800">
@@ -112,11 +114,28 @@ export function OrganizationList({
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <p className="font-semibold">No accounts match these filters.</p>
-          <Link className="button-secondary mt-3 inline-flex" href={listHref({ search: "", lastResort: "all", travelLegId: null })}>
+          <Link className="button-secondary mt-3 inline-flex" href={listHref({ search: "", lastResort: "all", travelLegId: null, page: 1, pageSize: 50 })}>
             Reset filters
           </Link>
         </div>
       )}
+      {organizations.pageCount > 1 ? (
+        <nav aria-label="Organization pages" className="flex items-center justify-between gap-3">
+          {organizations.page > 1 ? (
+            <Link className="button-secondary" href={listHref({ ...query, page: organizations.page - 1 })}>
+              Previous
+            </Link>
+          ) : <span />}
+          <p className="text-sm font-semibold text-slate-600">
+            Page {organizations.page} of {organizations.pageCount}
+          </p>
+          {organizations.page < organizations.pageCount ? (
+            <Link className="button-secondary" href={listHref({ ...query, page: organizations.page + 1 })}>
+              Next
+            </Link>
+          ) : <span />}
+        </nav>
+      ) : null}
     </div>
   );
 }

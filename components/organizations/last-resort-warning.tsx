@@ -7,7 +7,6 @@ export function LastResortWarning({
 }) {
   return (
     <aside
-      aria-live="polite"
       className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950"
       role="alert"
     >

@@ -7,22 +7,44 @@ import type { SetLastResortInput } from "@/features/organizations/last-resort-in
 type LastResortActionResult = { ok: true } | { ok: false; error: string };
 
 export function LastResortControl({
-  initialEnabled,
-  initialReason,
+  isLastResort,
+  lastResortReason,
   onSubmit,
   organizationId,
 }: {
-  initialEnabled: boolean;
-  initialReason: string | null;
+  isLastResort: boolean;
+  lastResortReason: string | null;
   onSubmit: (input: SetLastResortInput) => Promise<LastResortActionResult>;
   organizationId: string;
 }) {
-  const [reason, setReason] = useState(initialReason ?? "");
+  return (
+    <LastResortControlForm
+      isLastResort={isLastResort}
+      key={`${isLastResort}:${lastResortReason ?? ""}`}
+      lastResortReason={lastResortReason}
+      onSubmit={onSubmit}
+      organizationId={organizationId}
+    />
+  );
+}
+
+function LastResortControlForm({
+  isLastResort,
+  lastResortReason,
+  onSubmit,
+  organizationId,
+}: {
+  isLastResort: boolean;
+  lastResortReason: string | null;
+  onSubmit: (input: SetLastResortInput) => Promise<LastResortActionResult>;
+  organizationId: string;
+}) {
+  const [reason, setReason] = useState(lastResortReason ?? "");
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const enabled = !initialEnabled;
+  const enabled = !isLastResort;
   const confirmationLabel = enabled
     ? "I confirm this account should be marked Last Resort."
     : "I confirm the Last Resort status should be cleared.";
@@ -58,7 +80,7 @@ export function LastResortControl({
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold">Last Resort</h2>
       <p className="mt-1 text-sm text-slate-600">
-        {initialEnabled
+        {isLastResort
           ? "This account is currently marked Last Resort."
           : "Mark this account only when it should not receive routine follow-up."}
       </p>
@@ -74,7 +96,7 @@ export function LastResortControl({
         </label>
       ) : (
         <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-          Current reason: {initialReason || "Not recorded"}
+          Current reason: {lastResortReason || "Not recorded"}
         </p>
       )}
       <label className="mt-4 flex items-start gap-2 text-sm font-semibold">
@@ -91,14 +113,14 @@ export function LastResortControl({
         </p>
       ) : null}
       <button
-        className={initialEnabled ? "button-secondary mt-4" : "button-primary mt-4"}
+        className={isLastResort ? "button-secondary mt-4" : "button-primary mt-4"}
         disabled={pending}
         onClick={submit}
         type="button"
       >
         {pending
           ? "Saving…"
-          : initialEnabled
+          : isLastResort
             ? "Clear Last Resort"
             : "Mark as Last Resort"}
       </button>
