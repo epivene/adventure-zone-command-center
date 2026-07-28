@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
+import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
 
@@ -86,6 +87,13 @@ export default async function ContactDetailPage({
           This contact has local changes waiting for your next approved Act!
           sync.
         </aside>
+      ) : null}
+
+      {contact.organizationName && contact.organizationLastResort ? (
+        <LastResortWarning
+          organizationName={contact.organizationName}
+          reason={contact.organizationLastResortReason ?? null}
+        />
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">

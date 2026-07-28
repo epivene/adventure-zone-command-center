@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { completeFollowUpAction } from "@/app/(private)/bookings/actions";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
 import { StatusBadge } from "@/components/bookings/status-badge";
+import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
@@ -97,6 +98,13 @@ export default async function BookingDetailPage({
           {booking.city}, {booking.region}
         </p>
       </header>
+
+      {organization?.lastResort ? (
+        <LastResortWarning
+          organizationName={organization.name}
+          reason={organization.lastResortReason}
+        />
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <DetailSection title="Contact">

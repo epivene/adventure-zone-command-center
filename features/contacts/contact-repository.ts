@@ -92,6 +92,8 @@ function contactFields(
 function listRecord(record: {
   contact: typeof contacts.$inferSelect;
   organizationName: string | null;
+  organizationLastResort: boolean | null;
+  organizationLastResortReason: string | null;
   syncState: string | null;
   lastSyncedAt: Date | null;
 }): ContactListRecord {
@@ -101,6 +103,8 @@ function listRecord(record: {
     syncState: contactSyncState(record.syncState),
     updatedAt: record.contact.updatedAt,
     lastSyncedAt: record.lastSyncedAt,
+    organizationLastResort: record.organizationLastResort ?? false,
+    organizationLastResortReason: record.organizationLastResortReason,
   };
 }
 
@@ -123,6 +127,8 @@ export class DrizzleContactRepository {
     const baseSelection = {
       contact: contacts,
       organizationName: organizations.name,
+      organizationLastResort: organizations.lastResort,
+      organizationLastResortReason: organizations.lastResortReason,
       syncState: actContactSyncStates.state,
       lastSyncedAt: actContactSyncStates.lastSyncedAt,
     };
@@ -176,6 +182,8 @@ export class DrizzleContactRepository {
       .select({
         contact: contacts,
         organizationName: organizations.name,
+        organizationLastResort: organizations.lastResort,
+        organizationLastResortReason: organizations.lastResortReason,
         syncState: actContactSyncStates.state,
         lastSyncedAt: actContactSyncStates.lastSyncedAt,
       })

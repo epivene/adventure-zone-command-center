@@ -33,6 +33,8 @@ export type ContactListRecord = ContactFields & {
   syncState: ContactSyncState;
   updatedAt: Date;
   lastSyncedAt: Date | null;
+  organizationLastResort?: boolean;
+  organizationLastResortReason?: string | null;
 };
 
 export type ContactListPage = {

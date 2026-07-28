@@ -1,0 +1,233 @@
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  type SQL,
+  sql,
+} from "drizzle-orm";
+
+import type { db as database } from "@/db/client";
+import { bookings, contacts, organizations, travelLegs } from "@/db/schema";
+import { recordAuditEntry } from "@/features/audit/audit-service";
+import type { SetLastResortInput } from "@/features/organizations/last-resort-input";
+
+export type OrganizationContact = { id: string; name: string };
+export type OrganizationBooking = {
+  id: string;
+  name: string;
+  travelLeg: { id: string; name: string; color: string } | null;
+};
+
+export type OrganizationSummary = {
+  id: string;
+  name: string;
+  lastResort: boolean;
+  lastResortReason: string | null;
+  lastResortChangedAt: Date | null;
+  contacts: OrganizationContact[];
+  bookings: OrganizationBooking[];
+};
+
+export type OrganizationListQuery = {
+  search: string;
+  lastResort: "all" | "only";
+  travelLegId: string | null;
+};
+
+export interface OrganizationRepository {
+  setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
+  getOrganizationSummary(organizationId: string): Promise<OrganizationSummary | null>;
+}
+
+type DrizzleDatabase = typeof database;
+
+function lastResortSnapshot(record: typeof organizations.$inferSelect) {
+  return {
+    lastResort: record.lastResort,
+    lastResortReason: record.lastResortReason,
+    lastResortChangedAt: record.lastResortChangedAt?.toISOString() ?? null,
+  };
+}
+
+function toOrganizationBooking(record: {
+  booking: typeof bookings.$inferSelect;
+  travelLeg: typeof travelLegs.$inferSelect | null;
+}): OrganizationBooking {
+  return {
+    id: record.booking.id,
+    name: record.booking.name,
+    travelLeg: record.travelLeg
+      ? {
+          id: record.travelLeg.id,
+          name: record.travelLeg.name,
+          color: record.travelLeg.color,
+        }
+      : null,
+  };
+}
+
+export function buildOrganizationListCondition(
+  query: OrganizationListQuery,
+): SQL | undefined {
+  const searchCondition = query.search
+    ? ilike(organizations.name, `%${query.search}%`)
+    : undefined;
+  const lastResortCondition =
+    query.lastResort === "only" ? eq(organizations.lastResort, true) : undefined;
+  const travelLegCondition = query.travelLegId
+    ? sql`exists (select 1 from ${bookings} where ${bookings.organizationId} = ${organizations.id} and ${bookings.travelLegId} = ${query.travelLegId})`
+    : undefined;
+
+  return and(searchCondition, lastResortCondition, travelLegCondition) ?? undefined;
+}
+
+export class DrizzleOrganizationRepository implements OrganizationRepository {
+  constructor(private readonly database: DrizzleDatabase) {}
+
+  async setLastResort(
+    input: SetLastResortInput,
+    changedAt: Date,
+  ): Promise<boolean> {
+    return this.database.transaction(async (transaction) => {
+      const [before] = await transaction
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, input.organizationId))
+        .limit(1)
+        .for("update");
+      if (!before) return false;
+
+      const [updated] = await transaction
+        .update(organizations)
+        .set({
+          lastResort: input.enabled,
+          lastResortReason: input.enabled ? input.reason : null,
+          lastResortChangedAt: changedAt,
+          updatedAt: changedAt,
+        })
+        .where(eq(organizations.id, input.organizationId))
+        .returning();
+      if (!updated) throw new Error("Could not update the organization.");
+
+      await recordAuditEntry(transaction, {
+        entityType: "organization",
+        entityId: input.organizationId,
+        action: input.enabled ? "last_resort_enabled" : "last_resort_cleared",
+        before: lastResortSnapshot(before),
+        after: lastResortSnapshot(updated),
+      });
+      return true;
+    });
+  }
+
+  async getOrganizationSummary(
+    organizationId: string,
+  ): Promise<OrganizationSummary | null> {
+    const [organization] = await this.database
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1);
+    if (!organization) return null;
+
+    const [organizationContacts, organizationBookings] = await Promise.all([
+      this.database
+        .select({
+          id: contacts.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        })
+        .from(contacts)
+        .where(eq(contacts.organizationId, organizationId))
+        .orderBy(asc(contacts.lastName), asc(contacts.firstName)),
+      this.database
+        .select({ booking: bookings, travelLeg: travelLegs })
+        .from(bookings)
+        .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .where(eq(bookings.organizationId, organizationId))
+        .orderBy(desc(bookings.startsAt), asc(bookings.name)),
+    ]);
+
+    return {
+      id: organization.id,
+      name: organization.name,
+      lastResort: organization.lastResort,
+      lastResortReason: organization.lastResortReason,
+      lastResortChangedAt: organization.lastResortChangedAt,
+      contacts: organizationContacts.map((contact) => ({
+        id: contact.id,
+        name: `${contact.firstName} ${contact.lastName}`.trim(),
+      })),
+      bookings: organizationBookings.map(toOrganizationBooking),
+    };
+  }
+
+  async listOrganizations(query: OrganizationListQuery): Promise<OrganizationSummary[]> {
+    const organizationRecords = await this.database
+      .select()
+      .from(organizations)
+      .where(buildOrganizationListCondition(query))
+      .orderBy(asc(organizations.name), asc(organizations.id));
+    if (!organizationRecords.length) return [];
+
+    const organizationIds = organizationRecords.map((organization) => organization.id);
+    const [organizationContacts, organizationBookings] = await Promise.all([
+      this.database
+        .select({
+          organizationId: contacts.organizationId,
+          id: contacts.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        })
+        .from(contacts)
+        .where(inArray(contacts.organizationId, organizationIds))
+        .orderBy(asc(contacts.lastName), asc(contacts.firstName)),
+      this.database
+        .select({
+          booking: bookings,
+          travelLeg: travelLegs,
+        })
+        .from(bookings)
+        .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .where(inArray(bookings.organizationId, organizationIds))
+        .orderBy(desc(bookings.startsAt), asc(bookings.name)),
+    ]);
+    const contactsByOrganization = new Map<string, OrganizationContact[]>();
+    for (const contact of organizationContacts) {
+      if (!contact.organizationId) continue;
+      const records = contactsByOrganization.get(contact.organizationId) ?? [];
+      records.push({
+        id: contact.id,
+        name: `${contact.firstName} ${contact.lastName}`.trim(),
+      });
+      contactsByOrganization.set(contact.organizationId, records);
+    }
+    const bookingsByOrganization = new Map<string, OrganizationBooking[]>();
+    for (const record of organizationBookings) {
+      if (!record.booking.organizationId) continue;
+      const records = bookingsByOrganization.get(record.booking.organizationId) ?? [];
+      records.push(toOrganizationBooking(record));
+      bookingsByOrganization.set(record.booking.organizationId, records);
+    }
+
+    return organizationRecords.map((organization) => ({
+      id: organization.id,
+      name: organization.name,
+      lastResort: organization.lastResort,
+      lastResortReason: organization.lastResortReason,
+      lastResortChangedAt: organization.lastResortChangedAt,
+      contacts: contactsByOrganization.get(organization.id) ?? [],
+      bookings: bookingsByOrganization.get(organization.id) ?? [],
+    }));
+  }
+
+  async listTravelLegs() {
+    return this.database
+      .select({ id: travelLegs.id, name: travelLegs.name, color: travelLegs.color })
+      .from(travelLegs)
+      .orderBy(asc(travelLegs.sortOrder));
+  }
+}
