@@ -23,7 +23,7 @@ describe("Today bounded-query contract", () => {
     expect(TODAY_PLAN_PAGE_SIZE).toBe(25);
   });
 
-  it("finds active bookings with no future open action in SQL", () => {
+  it("finds active bookings with a serialized future boundary in SQL", () => {
     const boundary = new Date("2026-08-04T05:00:00.000Z");
     const query = dialect.sqlToQuery(needsFollowUpPlanCondition(boundary)!);
 
@@ -31,7 +31,7 @@ describe("Today bounded-query contract", () => {
     expect(query.sql).toContain('"follow_ups"."booking_id" = "bookings"."id"');
     expect(query.sql).toContain('"follow_ups"."completed_at" is null');
     expect(query.sql).toContain('"follow_ups"."due_at" >=');
-    expect(query.params).toContain(boundary);
+    expect(query.params).toContain("2026-08-04T05:00:00.000Z");
   });
 
   it("windows upcoming bookings from Chicago start-of-day and limits the card", () => {
@@ -43,7 +43,7 @@ describe("Today bounded-query contract", () => {
     expect(TODAY_UPCOMING_EVENT_LIMIT).toBe(5);
   });
 
-  it("applies the full priority CASE and stable tie-breakers before pagination", async () => {
+  it("serializes priority dates before applying stable pagination", async () => {
     const database = new QueryContractDatabase();
     const repository = createDrizzleTodayDashboardRepository(
       database as unknown as Parameters<
@@ -67,14 +67,14 @@ describe("Today bounded-query contract", () => {
       /case[\s\S]*"follow_ups"\."due_at" < \$1 then 0[\s\S]*"follow_ups"\."due_at" < \$2 then 1[\s\S]*"bookings"\."status"[\s\S]*then 2[\s\S]*"bookings"\."probability" = \$7 then 3[\s\S]*"bookings"\."updated_at" <= \$8[\s\S]*then 4[\s\S]*else 5[\s\S]*end asc[\s\S]*"follow_ups"\."due_at" asc[\s\S]*"follow_ups"\."created_at" asc[\s\S]*"follow_ups"\."id" asc/i,
     );
     expect(database.priorityParams).toEqual([
-      new Date("2026-08-03T05:00:00.000Z"),
-      new Date("2026-08-04T05:00:00.000Z"),
+      "2026-08-03T05:00:00.000Z",
+      "2026-08-04T05:00:00.000Z",
       "pending_decision",
       "pending_contract",
       "contract_received",
       "%deadline%",
       "likely",
-      new Date("2026-07-20T14:00:00.000Z"),
+      "2026-07-20T14:00:00.000Z",
     ]);
   });
 

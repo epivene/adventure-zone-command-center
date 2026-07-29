@@ -265,13 +265,14 @@ export function openFollowUpsCondition() {
 }
 
 export function needsFollowUpPlanCondition(futureBoundary: Date) {
+  const serializedFutureBoundary = futureBoundary.toISOString();
   return and(
     inArray(bookings.status, activeStatuses),
     notExists(sql`
       select 1 from ${followUps}
       where ${followUps.bookingId} = ${bookings.id}
         and ${followUps.completedAt} is null
-        and ${followUps.dueAt} >= ${futureBoundary}
+        and ${followUps.dueAt} >= ${serializedFutureBoundary}
     `),
   );
 }
@@ -285,9 +286,12 @@ export function todayFollowUpPriorityOrder(now: Date) {
   const quietLeadCutoff = new Date(
     now.getTime() - 14 * 24 * 60 * 60 * 1000,
   );
+  const serializedStart = start.toISOString();
+  const serializedEnd = end.toISOString();
+  const serializedQuietLeadCutoff = quietLeadCutoff.toISOString();
   const priority = sql<number>`case
-    when ${followUps.dueAt} < ${start} then 0
-    when ${followUps.dueAt} < ${end} then 1
+    when ${followUps.dueAt} < ${serializedStart} then 0
+    when ${followUps.dueAt} < ${serializedEnd} then 1
     when (
       ${inArray(bookings.status, deadlineStatusValues)}
       or ${followUps.kind} like ${"%deadline%"}
@@ -295,7 +299,7 @@ export function todayFollowUpPriorityOrder(now: Date) {
     when ${bookings.probability} = ${"likely"} then 3
     when (
       ${bookings.id} is not null
-      and ${bookings.updatedAt} <= ${quietLeadCutoff}
+      and ${bookings.updatedAt} <= ${serializedQuietLeadCutoff}
     ) then 4
     else 5
   end`;
