@@ -16,8 +16,9 @@ import type {
   CompleteCallInput,
 } from "@/features/calls/call-types";
 import * as crmSchema from "@/db/schema";
+import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
-const databaseUrl = process.env.CALL_REPOSITORY_TEST_DATABASE_URL;
+const databaseUrl = crmTestDatabaseUrl();
 const migrationDirectory = path.resolve(import.meta.dirname, "../../db/migrations");
 
 function testSchemaName() {
@@ -117,6 +118,8 @@ class InMemoryCallRepository implements CallRepository {
     id: string;
     noteActivityId: string;
     disposition: "no_answer" | "left_voicemail" | "follow_up_needed" | "interested" | "proposal_sent" | "booked" | "declined" | "last_resort";
+    nextFollowUpId: string | null;
+    resultingBookingStatus: CompleteCallInput["resultingBookingStatus"];
   }>();
 
   async transaction<T>(operation: (transaction: CallTransaction) => Promise<T>): Promise<T> {
@@ -141,6 +144,8 @@ class InMemoryCallRepository implements CallRepository {
           id: session.id,
           noteActivityId: input.noteActivityId,
           disposition: input.disposition,
+          nextFollowUpId: input.nextFollowUpId,
+          resultingBookingStatus: input.resultingBookingStatus,
         });
         return session;
       },
@@ -532,6 +537,10 @@ describe("CallService.complete", () => {
       value: {
         activityId: first.ok ? first.value.activityId : "",
         callSessionId: first.ok ? first.value.callSessionId : "",
+        nextFollowUpId: first.ok ? first.value.nextFollowUpId : "",
+        resultingBookingStatus: first.ok
+          ? first.value.resultingBookingStatus
+          : null,
       },
     });
     expect(repository.writes).toHaveLength(writeCount);
@@ -720,6 +729,49 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       { entity_type: "follow_up", action: "completed" },
       { entity_type: "follow_up", action: "create" },
     ]);
+  });
+
+  postgresTest("serializes concurrent completion replays to one call write set", async () => {
+    const secondSql = postgres(databaseUrl!, { max: 1 });
+    try {
+      await secondSql.unsafe(`SET search_path TO "${schemaName}", public`);
+      const firstService = new CallService(
+        new DrizzleCallRepository(drizzle({ client: sql!, schema: crmSchema })),
+        { now: () => new Date("2026-08-01T15:10:00.000Z") },
+      );
+      const secondService = new CallService(
+        new DrizzleCallRepository(
+          drizzle({ client: secondSql, schema: crmSchema }),
+        ),
+        { now: () => new Date("2026-08-01T15:10:00.000Z") },
+      );
+
+      const [first, replay] = await Promise.all([
+        firstService.complete(input()),
+        secondService.complete(input()),
+      ]);
+
+      expect(first).toMatchObject({ ok: true });
+      expect(replay).toMatchObject({ ok: true });
+      if (!first.ok || !replay.ok) throw new Error("Expected completed calls.");
+      expect(replay.value.callSessionId).toBe(first.value.callSessionId);
+      expect(replay.value.activityId).toBe(first.value.activityId);
+      expect(replay.value.nextFollowUpId).toBe(first.value.nextFollowUpId);
+      expect(replay.value.resultingBookingStatus).toBe(
+        first.value.resultingBookingStatus,
+      );
+      expect(await sql!.unsafe("SELECT count(*) AS value FROM call_sessions")).toEqual([
+        { value: "1" },
+      ]);
+      expect(await sql!.unsafe("SELECT count(*) AS value FROM activities")).toEqual([
+        { value: "1" },
+      ]);
+      expect(await sql!.unsafe("SELECT count(*) AS value FROM follow_ups")).toEqual([
+        { value: "2" },
+      ]);
+    } finally {
+      await secondSql.end({ timeout: 5 });
+    }
   });
 
   postgresTest("rolls call activity, session, follow-up, booking, contact, and Last Resort updates back together", async () => {

@@ -519,33 +519,43 @@ describe("BookingService.createBooking", () => {
       nextAction: { kind: "call", dueAt: new Date("2026-08-02T15:00:00Z") },
     });
     const followUp = repository.followUp!;
-    const dashboardRepository: TodayDashboardRepository = {
-      listOpenFollowUps: async () => [{
-        booking: {
-          ...booking,
-          organizationId: null,
-          primaryContactId: null,
-          startsAt: null,
-          createdAt: now,
-          updatedAt: now,
-        },
-        contact: null,
-        followUp: {
-          ...followUp,
-          organizationId: null,
-          contactId: null,
-          createdAt: now,
-        },
-        organization: null,
-      }],
-      listBookings: async () => [{
-        ...booking,
+    const bookingRecord = {
+      ...booking,
+      organizationId: null,
+      primaryContactId: null,
+      startsAt: null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const followUpRow = {
+      booking: bookingRecord,
+      contact: null,
+      followUp: {
+        ...followUp,
         organizationId: null,
-        primaryContactId: null,
-        startsAt: null,
+        contactId: null,
         createdAt: now,
-        updatedAt: now,
-      }],
+      },
+      organization: null,
+    };
+    const dashboardRepository: TodayDashboardRepository = {
+      getCounts: async () => ({
+        followUpCount: 1,
+        newLeadCount: 1,
+        contractCount: 0,
+      }),
+      listOpenFollowUps: async () => ({
+        records: [followUpRow],
+        total: 1,
+        page: 1,
+      }),
+      findNextCall: async () => followUpRow,
+      listNeedsFollowUpPlan: async () => ({
+        records: [bookingRecord],
+        total: 1,
+        page: 1,
+      }),
+      listUpcomingEvents: async () => [],
     };
 
     const dashboard = await getTodayDashboard(now, dashboardRepository);

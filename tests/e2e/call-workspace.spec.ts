@@ -111,6 +111,12 @@ async function cleanupOrganizationByName(organizationName: string) {
       where bookings.organization_id = organizations.id and organizations.name = ${organizationName}
     `;
     await sql`
+      delete from act_contact_sync_states using contacts, organizations
+      where act_contact_sync_states.contact_id = contacts.id
+        and contacts.organization_id = organizations.id
+        and organizations.name = ${organizationName}
+    `;
+    await sql`
       delete from contacts using organizations
       where contacts.organization_id = organizations.id and organizations.name = ${organizationName}
     `;
@@ -219,11 +225,15 @@ test("Last Resort requires a reason and displays it after completion", async ({ 
   try {
     await page.goto(`/calls/new?contactId=${fixture.contactId}&followUpId=${fixture.followUpId}`);
     await page.getByRole("button", { name: "Start call note" }).click();
+    await page.getByLabel("Call note").fill("Reviewing account disposition.");
     await page.getByLabel("Call disposition").selectOption("move_to_last_resort");
     await page.getByRole("button", { name: "Save call note" }).click();
     await expect(page.getByRole("alert")).toHaveText("Add a Last Resort reason");
 
     await page.getByLabel("Last Resort reason").fill("Repeated cancellations.");
+    await page.getByLabel(
+      "I confirm this organization should be moved to Last Resort",
+    ).check();
     await page.getByRole("button", { name: "Save call note" }).click();
     await expect(page.getByRole("status")).toHaveText("Call note saved.");
 

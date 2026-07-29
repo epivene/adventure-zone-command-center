@@ -141,12 +141,14 @@ export async function patchContactInTransaction(
   writer: ContactPatchWriter,
   before: typeof contacts.$inferSelect,
   organizationName: string | null,
-  updates: Partial<Omit<ContactFields, "organizationName">>,
+  updates: Record<string, unknown>,
   now: Date,
 ) {
   const contactUpdates: Record<string, unknown> = { ...updates, updatedAt: now };
   if (Object.hasOwn(updates, "phone")) {
-    contactUpdates.normalizedPhone = normalizeUsPhone(updates.phone ?? null);
+    contactUpdates.normalizedPhone = normalizeUsPhone(
+      typeof updates.phone === "string" ? updates.phone : null,
+    );
   }
   const [updated] = await writer
     .update(contacts)

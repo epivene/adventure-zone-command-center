@@ -44,9 +44,9 @@ for (const viewport of viewports) {
         await expectNoHorizontalOverflow(page);
       }
 
-      await page.getByRole("button", { name: "Quick Add" }).click();
+      await page.getByRole("link", { name: "Quick Add caller" }).click();
       await expect(
-        page.getByRole("heading", { level: 1, name: "Add a lead" }),
+        page.getByRole("heading", { level: 1, name: "Add a caller" }),
       ).toBeVisible();
       await expectNoHorizontalOverflow(page);
 

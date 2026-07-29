@@ -2,8 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+import {
+  createActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+} from "@/app/(private)/activities/actions";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
+import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
 
@@ -40,7 +48,12 @@ export default async function ContactDetailPage({
   const repository = new DrizzleContactRepository(db);
   const detail = await repository.getContactDetail(contactId);
   if (!detail) notFound();
-  const audits = await repository.listRecentAuditEntries(contactId);
+  const [audits, timeline] = await Promise.all([
+    repository.listRecentAuditEntries(contactId),
+    new ActivityService(new DrizzleActivityRepository(db)).listTimeline({
+      contactId,
+    }),
+  ]);
   const { contact, relatedBookings } = detail;
   const fullName = `${contact.firstName} ${contact.lastName}`.trim();
   const address = [
@@ -213,6 +226,18 @@ export default async function ContactDetailPage({
             <p className="text-sm text-slate-600">No contact changes recorded.</p>
           )}
         </DetailSection>
+
+        <div className="lg:col-span-2">
+          <DetailSection title="Recent activity">
+            <ActivityTimeline
+              activities={timeline}
+              createActivity={createActivityAction}
+              editActivity={editActivityAction}
+              loadRevisions={listActivityRevisionsAction}
+              parent={{ contactId }}
+            />
+          </DetailSection>
+        </div>
       </div>
     </div>
   );

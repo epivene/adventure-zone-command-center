@@ -16,6 +16,8 @@
     "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
     "test:e2e": "npm run build && playwright test",
+    "test:crm-db": "vitest run tests/integration/daily-crm-migration.test.ts tests/integration/organization-repository-postgres.test.ts tests/integration/activity-service.test.ts tests/integration/call-service.test.ts tests/integration/contact-repository.test.ts",
+    "test:release": "CRM_RELEASE_TESTS=1 npm run test:crm-db && npm run lint && npm run typecheck && npm test && npm run test:e2e -- tests/e2e/call-workspace.spec.ts tests/e2e/responsive.spec.ts tests/e2e/accessibility.spec.ts",
     "db:preflight": "bash scripts/preflight-stage-one-migration.sh",
     "db:seed": "node --import tsx db/seed.ts"
   },

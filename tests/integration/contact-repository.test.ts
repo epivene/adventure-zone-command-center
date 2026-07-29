@@ -14,8 +14,9 @@ import {
   phoneMatch,
 } from "@/features/contacts/contact-repository";
 import type { ContactListRecord, QuickCallerInput } from "@/features/contacts/contact-types";
+import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
-const databaseUrl = process.env.CONTACT_REPOSITORY_TEST_DATABASE_URL;
+const databaseUrl = crmTestDatabaseUrl();
 const migrationDirectory = path.resolve(import.meta.dirname, "../../db/migrations");
 
 function testSchemaName() {
@@ -212,6 +213,86 @@ describe("DrizzleContactRepository caller matching and intake", () => {
     expect(await sql!.unsafe(`SELECT act_record_id FROM contacts WHERE id = '${repositoryIds.existingContact}'`)).toEqual([
       { act_record_id: "ACT-CONTACT-1" },
     ]);
+  });
+
+  postgresTest("replays one concurrent intake request without duplicate local writes", async () => {
+    const secondSql = postgres(databaseUrl!, { max: 1 });
+    try {
+      await secondSql.unsafe(`SET search_path TO "${schemaName}", public`);
+      const secondRepository = new DrizzleContactRepository(
+        drizzle({ client: secondSql, schema: crmSchema }),
+      );
+
+      const [first, replay] = await Promise.all([
+        repository.createQuickCaller(quickCaller),
+        secondRepository.createQuickCaller(quickCaller),
+      ]);
+
+      expect(first).toMatchObject({ kind: "created" });
+      expect(replay).toMatchObject({ kind: "created" });
+      if (first.kind !== "created" || replay.kind !== "created") {
+        throw new Error("Expected a replayed caller creation.");
+      }
+      expect(replay.contactId).toBe(first.contactId);
+      expect(await sql!.unsafe("SELECT count(*) AS value FROM contacts")).toEqual([
+        { value: "2" },
+      ]);
+      expect(await sql!.unsafe("SELECT count(*) AS value FROM activities")).toEqual([
+        { value: "1" },
+      ]);
+      expect(await sql!.unsafe("SELECT count(*) AS value FROM audit_entries")).toEqual([
+        { value: "2" },
+      ]);
+    } finally {
+      await secondSql.end({ timeout: 5 });
+    }
+  });
+
+  postgresTest("serializes normalized organization resolution and audits one creation", async () => {
+    const secondSql = postgres(databaseUrl!, { max: 1 });
+    try {
+      await secondSql.unsafe(`SET search_path TO "${schemaName}", public`);
+      const secondRepository = new DrizzleContactRepository(
+        drizzle({ client: secondSql, schema: crmSchema }),
+      );
+      const firstInput = {
+        ...quickCaller,
+        requestKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        organizationName: "  County   Fair ",
+        phone: "406-555-0121",
+      };
+      const secondInput = {
+        ...quickCaller,
+        requestKey: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        organizationName: "county fair",
+        phone: "406-555-0122",
+      };
+
+      const [first, second] = await Promise.all([
+        repository.createQuickCaller(firstInput),
+        secondRepository.createQuickCaller(secondInput),
+      ]);
+      expect(first).toMatchObject({ kind: "created" });
+      expect(second).toMatchObject({ kind: "created" });
+
+      expect(await sql!.unsafe(`
+        SELECT count(*) AS value
+        FROM organizations
+        WHERE lower(regexp_replace(trim(name), '\\s+', ' ', 'g')) = 'county fair'
+      `)).toEqual([{ value: "1" }]);
+      expect(await sql!.unsafe(`
+        SELECT count(DISTINCT organization_id) AS organizations, count(*) AS contacts
+        FROM contacts
+        WHERE phone IN ('406-555-0121', '406-555-0122')
+      `)).toEqual([{ organizations: "1", contacts: "2" }]);
+      expect(await sql!.unsafe(`
+        SELECT count(*) AS value
+        FROM audit_entries
+        WHERE entity_type = 'organization' AND action = 'create'
+      `)).toEqual([{ value: "1" }]);
+    } finally {
+      await secondSql.end({ timeout: 5 });
+    }
   });
 
   postgresTest("rolls caller, activity, and audits back together when an activity or audit write is rejected", async () => {

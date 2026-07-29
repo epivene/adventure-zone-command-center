@@ -9,6 +9,7 @@ import {
   followUps,
   organizations,
 } from "@/db/schema";
+import type { BookingStatus } from "@/features/bookings/booking-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import {
   patchContactInTransaction,
@@ -28,6 +29,8 @@ export type ExistingCallSession = {
   id: string;
   noteActivityId: string;
   disposition: PersistedCallDisposition;
+  nextFollowUpId: string | null;
+  resultingBookingStatus: BookingStatus | null;
 };
 
 export type CallAuditEntry = {
@@ -54,7 +57,9 @@ export interface CallTransaction {
     contactId: string | null;
     bookingId: string | null;
     followUpId: string | null;
+    nextFollowUpId: string | null;
     disposition: PersistedCallDisposition;
+    resultingBookingStatus: BookingStatus | null;
     noteActivityId: string;
     startedAt: Date;
     endedAt: Date;
@@ -131,6 +136,8 @@ class DrizzleCallTransaction implements CallTransaction {
         id: callSessions.id,
         noteActivityId: callSessions.noteActivityId,
         disposition: callSessions.disposition,
+        nextFollowUpId: callSessions.nextFollowUpId,
+        resultingBookingStatus: callSessions.resultingBookingStatus,
       })
       .from(callSessions)
       .where(eq(callSessions.requestKey, requestKey))
@@ -141,6 +148,8 @@ class DrizzleCallTransaction implements CallTransaction {
       id: existing.id,
       noteActivityId: existing.noteActivityId,
       disposition: existing.disposition,
+      nextFollowUpId: existing.nextFollowUpId,
+      resultingBookingStatus: existing.resultingBookingStatus,
     };
   }
 

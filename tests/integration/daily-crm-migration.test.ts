@@ -4,7 +4,9 @@ import path from "node:path";
 import postgres from "postgres";
 import { describe, expect, it } from "vitest";
 
-const databaseUrl = process.env.DAILY_CRM_MIGRATION_TEST_DATABASE_URL;
+import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
+
+const databaseUrl = crmTestDatabaseUrl();
 const migrationDirectory = path.resolve(import.meta.dirname, "../../db/migrations");
 
 function testSchemaName() {
@@ -115,6 +117,89 @@ describe("daily CRM migration", () => {
           follow_ups: "1",
           act_links: "1",
         });
+
+        const activityId = "77777777-7777-4777-8777-777777777777";
+        await transaction.unsafe(`
+          INSERT INTO ${schema}.activities (
+            id, organization_id, kind, body, occurred_at
+          ) VALUES (
+            '${activityId}', '${ids.organization}', 'call', 'Migration guard test', now()
+          );
+          INSERT INTO ${schema}.call_sessions (
+            organization_id, note_activity_id, disposition, started_at, ended_at
+          ) VALUES (
+            '${ids.organization}', '${activityId}', 'no_answer', now(), now()
+          );
+
+          DO $$
+          BEGIN
+            BEGIN
+              INSERT INTO ${schema}.call_sessions (
+                note_activity_id, disposition, started_at, ended_at
+              ) VALUES (
+                '${activityId}', 'no_answer', now(), now()
+              );
+              RAISE EXCEPTION 'parentless call session was accepted';
+            EXCEPTION WHEN check_violation THEN
+              NULL;
+            END;
+            BEGIN
+              INSERT INTO ${schema}.call_sessions (
+                organization_id, note_activity_id, disposition, started_at, ended_at
+              ) VALUES (
+                '${ids.organization}', '${activityId}', 'no_answer',
+                now(), now() - interval '1 minute'
+              );
+              RAISE EXCEPTION 'backwards call session was accepted';
+            EXCEPTION WHEN check_violation THEN
+              NULL;
+            END;
+          END
+          $$;
+        `);
+        expect(await transaction.unsafe(
+          `SELECT request_key FROM ${schema}.call_sessions`,
+        )).toEqual([{ request_key: null }]);
+
+        const indexes = await transaction.unsafe(`
+          SELECT indexname
+          FROM pg_indexes
+          WHERE schemaname = '${schemaName}'
+            AND indexname IN (
+              'activities_organization_occurred_at_idx',
+              'activities_contact_occurred_at_idx',
+              'activities_booking_occurred_at_idx',
+              'activity_revisions_activity_created_at_idx',
+              'follow_ups_open_due_at_idx',
+              'call_sessions_request_key_unique',
+              'contacts_quick_add_request_key_unique'
+            )
+          ORDER BY indexname
+        `);
+        expect(indexes.map(({ indexname }) => indexname)).toEqual([
+          "activities_booking_occurred_at_idx",
+          "activities_contact_occurred_at_idx",
+          "activities_organization_occurred_at_idx",
+          "activity_revisions_activity_created_at_idx",
+          "call_sessions_request_key_unique",
+          "contacts_quick_add_request_key_unique",
+          "follow_ups_open_due_at_idx",
+        ]);
+
+        const constraints = await transaction.unsafe(`
+          SELECT conname
+          FROM pg_constraint
+          WHERE connamespace = '${schemaName}'::regnamespace
+            AND conname IN (
+              'call_sessions_parent_required',
+              'call_sessions_ended_at_not_before_started'
+            )
+          ORDER BY conname
+        `);
+        expect(constraints.map(({ conname }) => conname)).toEqual([
+          "call_sessions_ended_at_not_before_started",
+          "call_sessions_parent_required",
+        ]);
       });
     } finally {
       await sql.unsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);

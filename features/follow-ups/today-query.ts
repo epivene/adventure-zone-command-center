@@ -1,8 +1,23 @@
-import { asc, eq, isNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  sql,
+} from "drizzle-orm";
 
+import type { db as database } from "@/db/client";
 import { bookings, contacts, followUps, organizations } from "@/db/schema";
-import type { BookingStatus, Probability } from "@/features/bookings/booking-types";
-import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
+import {
+  bookingStatusValues,
+  type BookingStatus,
+  type Probability,
+} from "@/features/bookings/booking-types";
 import {
   businessDayBounds,
   classifyBusinessDueDate,
@@ -49,14 +64,40 @@ export type TodayDashboardFollowUpRecord = {
   createdAt: Date;
 };
 
+export type TodayDashboardFollowUpRow = {
+  booking: TodayDashboardBookingRecord | null;
+  contact: {
+    organizationId: string | null;
+    firstName: string;
+    lastName: string;
+  } | null;
+  followUp: TodayDashboardFollowUpRecord;
+  organization: { name: string } | null;
+};
+
+export type TodayQueueRequest = {
+  page: number;
+  pageSize: number;
+};
+
 export interface TodayDashboardRepository {
-  listOpenFollowUps(): Promise<{
-    booking: TodayDashboardBookingRecord | null;
-    contact: { organizationId: string | null; firstName: string; lastName: string } | null;
-    followUp: TodayDashboardFollowUpRecord;
-    organization: { name: string } | null;
-  }[]>;
-  listBookings(): Promise<TodayDashboardBookingRecord[]>;
+  getCounts(endToday: Date): Promise<{
+    followUpCount: number;
+    newLeadCount: number;
+    contractCount: number;
+  }>;
+  listOpenFollowUps(
+    request: TodayQueueRequest,
+  ): Promise<{ records: TodayDashboardFollowUpRow[]; total: number; page: number }>;
+  findNextCall(): Promise<TodayDashboardFollowUpRow | null>;
+  listNeedsFollowUpPlan(
+    futureBoundary: Date,
+    request: TodayQueueRequest,
+  ): Promise<{ records: TodayDashboardBookingRecord[]; total: number; page: number }>;
+  listUpcomingEvents(
+    startToday: Date,
+    limit: number,
+  ): Promise<TodayDashboardBookingRecord[]>;
 }
 
 export type FollowUpPlanItem = {
@@ -81,9 +122,19 @@ export type TodayDashboard = {
   routeWarningCount: number;
   nextCall: FollowUpSummary | null;
   followUps: FollowUpSummary[];
+  followUpTotal: number;
+  followUpPage: number;
+  followUpPageCount: number;
   needsFollowUpPlan: FollowUpPlanItem[];
+  needsFollowUpPlanTotal: number;
+  needsFollowUpPlanPage: number;
+  needsFollowUpPlanPageCount: number;
   upcomingEvents: UpcomingEvent[];
 };
+
+export const TODAY_FOLLOW_UP_PAGE_SIZE = 50;
+export const TODAY_PLAN_PAGE_SIZE = 25;
+export const TODAY_UPCOMING_EVENT_LIMIT = 5;
 
 const deadlineStatuses = new Set<BookingStatus>([
   "pending_decision",
@@ -91,10 +142,25 @@ const deadlineStatuses = new Set<BookingStatus>([
   "contract_received",
 ]);
 
-const contractStatuses = new Set<BookingStatus>([
+const contractStatuses = [
   "pending_contract",
   "contract_received",
-]);
+] as const satisfies readonly BookingStatus[];
+
+const activeStatuses = bookingStatusValues.filter(
+  (status) => !["declined", "cancelled", "completed"].includes(status),
+);
+
+const followUpSelection = {
+  booking: bookings,
+  contact: {
+    organizationId: contacts.organizationId,
+    firstName: contacts.firstName,
+    lastName: contacts.lastName,
+  },
+  followUp: followUps,
+  organization: { name: organizations.name },
+};
 
 function priorityBucket(item: FollowUpSummary, now: Date) {
   const due = classifyBusinessDueDate(item.dueAt, now);
@@ -104,6 +170,24 @@ function priorityBucket(item: FollowUpSummary, now: Date) {
   if (item.probability === "likely") return 3;
   if (item.status === "quiet_lead") return 4;
   return 5;
+}
+
+export function sortFollowUpsForToday(
+  items: FollowUpSummary[],
+  now: Date,
+): FollowUpSummary[] {
+  return [...items].sort((left, right) => {
+    const bucketDifference = priorityBucket(left, now) - priorityBucket(right, now);
+    if (bucketDifference !== 0) return bucketDifference;
+
+    const dueDifference = left.dueAt.getTime() - right.dueAt.getTime();
+    if (dueDifference !== 0) return dueDifference;
+
+    const createdDifference = left.createdAt.getTime() - right.createdAt.getTime();
+    if (createdDifference !== 0) return createdDifference;
+
+    return left.id.localeCompare(right.id);
+  });
 }
 
 export function selectFutureIncompleteFollowUp<
@@ -127,24 +211,6 @@ export function selectFutureIncompleteFollowUp<
   );
 }
 
-export function sortFollowUpsForToday(
-  items: FollowUpSummary[],
-  now: Date,
-): FollowUpSummary[] {
-  return [...items].sort((left, right) => {
-    const bucketDifference = priorityBucket(left, now) - priorityBucket(right, now);
-    if (bucketDifference !== 0) return bucketDifference;
-
-    const dueDifference = left.dueAt.getTime() - right.dueAt.getTime();
-    if (dueDifference !== 0) return dueDifference;
-
-    const createdDifference = left.createdAt.getTime() - right.createdAt.getTime();
-    if (createdDifference !== 0) return createdDifference;
-
-    return left.id.localeCompare(right.id);
-  });
-}
-
 function classifyFollowUp(
   booking: { status: BookingStatus; updatedAt: Date } | null,
   followUp: { kind: string },
@@ -162,122 +228,210 @@ function classifyFollowUp(
   return "due";
 }
 
-async function getDrizzleTodayDashboardRepository(): Promise<TodayDashboardRepository> {
-  const { db } = await import("@/db/client");
+function toFollowUpSummary(
+  { booking, contact, followUp, organization }: TodayDashboardFollowUpRow,
+  now: Date,
+): FollowUpSummary {
   return {
-    listOpenFollowUps: () =>
-      db
-      .select({
-        booking: bookings,
-        contact: contacts,
-        followUp: followUps,
-        organization: organizations,
-      })
+    id: followUp.id,
+    organizationId:
+      followUp.organizationId ??
+      booking?.organizationId ??
+      contact?.organizationId ??
+      null,
+    contactId: followUp.contactId ?? booking?.primaryContactId ?? null,
+    bookingId: booking?.id ?? null,
+    bookingName:
+      booking?.name ??
+      (`${contact?.firstName ?? ""} ${contact?.lastName ?? ""}`.trim() ||
+        organization?.name ||
+        "Follow-up"),
+    kind: followUp.kind,
+    dueAt: followUp.dueAt,
+    createdAt: followUp.createdAt,
+    status: classifyFollowUp(booking, followUp, now),
+    probability: booking?.probability ?? "possible",
+  };
+}
+
+export function openFollowUpsCondition() {
+  return isNull(followUps.completedAt);
+}
+
+export function needsFollowUpPlanCondition(futureBoundary: Date) {
+  return and(
+    inArray(bookings.status, activeStatuses),
+    notExists(sql`
+      select 1 from ${followUps}
+      where ${followUps.bookingId} = ${bookings.id}
+        and ${followUps.completedAt} is null
+        and ${followUps.dueAt} >= ${futureBoundary}
+    `),
+  );
+}
+
+export function upcomingEventsCondition(startToday: Date) {
+  return gte(bookings.startsAt, startToday);
+}
+
+type DrizzleDatabase = typeof database;
+
+export function createDrizzleTodayDashboardRepository(
+  db: DrizzleDatabase,
+): TodayDashboardRepository {
+  function followUpRows(condition: ReturnType<typeof and>) {
+    return db
+      .select(followUpSelection)
       .from(followUps)
       .leftJoin(bookings, eq(followUps.bookingId, bookings.id))
       .leftJoin(contacts, eq(followUps.contactId, contacts.id))
       .leftJoin(organizations, eq(followUps.organizationId, organizations.id))
-      .where(isNull(followUps.completedAt))
-      .orderBy(asc(followUps.dueAt), asc(followUps.createdAt)),
-    listBookings: () => db.select().from(bookings).orderBy(asc(bookings.createdAt)),
+      .where(condition)
+      .orderBy(asc(followUps.dueAt), asc(followUps.createdAt), asc(followUps.id));
+  }
+
+  return {
+    async getCounts(endToday) {
+      const [[followUpTotal], [newLeadTotal], [contractTotal]] = await Promise.all([
+        db
+          .select({ value: count() })
+          .from(followUps)
+          .where(and(isNull(followUps.completedAt), lt(followUps.dueAt, endToday))),
+        db
+          .select({ value: count() })
+          .from(bookings)
+          .where(eq(bookings.status, "new_lead")),
+        db
+          .select({ value: count() })
+          .from(bookings)
+          .where(inArray(bookings.status, contractStatuses)),
+      ]);
+      return {
+        followUpCount: followUpTotal?.value ?? 0,
+        newLeadCount: newLeadTotal?.value ?? 0,
+        contractCount: contractTotal?.value ?? 0,
+      };
+    },
+
+    async listOpenFollowUps({ page, pageSize }) {
+      const condition = openFollowUpsCondition();
+      const [totalRecord] = await db
+        .select({ value: count() })
+        .from(followUps)
+        .where(condition);
+      const total = totalRecord?.value ?? 0;
+      const boundedPage = Math.min(page, Math.max(1, Math.ceil(total / pageSize)));
+      const records = await followUpRows(condition)
+        .limit(pageSize)
+        .offset((boundedPage - 1) * pageSize);
+      return { records, total, page: boundedPage };
+    },
+
+    async findNextCall() {
+      const [record] = await followUpRows(
+        and(openFollowUpsCondition(), eq(followUps.kind, "call")),
+      ).limit(1);
+      return record ?? null;
+    },
+
+    async listNeedsFollowUpPlan(futureBoundary, { page, pageSize }) {
+      const condition = needsFollowUpPlanCondition(futureBoundary);
+      const [totalRecord] = await db
+        .select({ value: count() })
+        .from(bookings)
+        .where(condition);
+      const total = totalRecord?.value ?? 0;
+      const boundedPage = Math.min(page, Math.max(1, Math.ceil(total / pageSize)));
+      const records = await db
+        .select()
+        .from(bookings)
+        .where(condition)
+        .orderBy(asc(bookings.createdAt), asc(bookings.id))
+        .limit(pageSize)
+        .offset((boundedPage - 1) * pageSize);
+      return { records, total, page: boundedPage };
+    },
+
+    listUpcomingEvents(startToday, limit) {
+      return db
+        .select()
+        .from(bookings)
+        .where(upcomingEventsCondition(startToday))
+        .orderBy(asc(bookings.startsAt), asc(bookings.id))
+        .limit(limit);
+    },
   };
+}
+
+async function getDrizzleTodayDashboardRepository() {
+  const { db } = await import("@/db/client");
+  return createDrizzleTodayDashboardRepository(db);
 }
 
 export async function getTodayDashboard(
   now: Date,
   repository: TodayDashboardRepository | null = null,
+  pages: { followUps?: number; needsFollowUpPlan?: number } = {},
 ): Promise<TodayDashboard> {
   const source = repository ?? await getDrizzleTodayDashboardRepository();
-  const [records, bookingList] = await Promise.all([
-    source.listOpenFollowUps(),
-    source.listBookings(),
-  ]);
-
-  const openFollowUps: FollowUpSummary[] = [];
-  const openFollowUpsByBooking = new Map<
-    string,
-    { dueAt: Date; completedAt: Date | null }[]
-  >();
-  for (const { booking, contact, followUp, organization } of records) {
-    const summary: FollowUpSummary = {
-      id: followUp.id,
-      organizationId: followUp.organizationId ?? booking?.organizationId ?? contact?.organizationId ?? null,
-      contactId: followUp.contactId ?? booking?.primaryContactId ?? null,
-      bookingId: booking?.id ?? null,
-      bookingName:
-        booking?.name ??
-        (`${contact?.firstName ?? ""} ${contact?.lastName ?? ""}`.trim() ||
-          organization?.name ||
-          "Follow-up"),
-      kind: followUp.kind,
-      dueAt: followUp.dueAt,
-      createdAt: followUp.createdAt,
-      status: classifyFollowUp(booking, followUp, now),
-      probability: booking?.probability ?? "possible",
-    };
-    openFollowUps.push(summary);
-
-    if (booking) {
-      const bookingFollowUps = openFollowUpsByBooking.get(booking.id) ?? [];
-      bookingFollowUps.push({
-        dueAt: followUp.dueAt,
-        completedAt: followUp.completedAt,
-      });
-      openFollowUpsByBooking.set(booking.id, bookingFollowUps);
-    }
-  }
-
-  const sortedFollowUps = sortFollowUpsForToday(openFollowUps, now);
   const { start: startToday, end: endToday } = businessDayBounds(now);
-  const futureFollowUpByBooking = new Map(
-    [...openFollowUpsByBooking].flatMap(([bookingId, bookingFollowUps]) => {
-      const futureFollowUp = selectFutureIncompleteFollowUp(bookingFollowUps, now);
-      return futureFollowUp ? [[bookingId, futureFollowUp] as const] : [];
-    }),
+  const followUpPage = Math.max(1, pages.followUps ?? 1);
+  const planPage = Math.max(1, pages.needsFollowUpPlan ?? 1);
+  const [counts, followUpResult, nextCallRecord, planResult, upcoming] =
+    await Promise.all([
+      source.getCounts(endToday),
+      source.listOpenFollowUps({
+        page: followUpPage,
+        pageSize: TODAY_FOLLOW_UP_PAGE_SIZE,
+      }),
+      source.findNextCall(),
+      source.listNeedsFollowUpPlan(endToday, {
+        page: planPage,
+        pageSize: TODAY_PLAN_PAGE_SIZE,
+      }),
+      source.listUpcomingEvents(startToday, TODAY_UPCOMING_EVENT_LIMIT),
+    ]);
+
+  const followUpPageCount = Math.max(
+    1,
+    Math.ceil(followUpResult.total / TODAY_FOLLOW_UP_PAGE_SIZE),
+  );
+  const needsFollowUpPlanPageCount = Math.max(
+    1,
+    Math.ceil(planResult.total / TODAY_PLAN_PAGE_SIZE),
   );
 
   return {
-    followUpCount: sortedFollowUps.filter(
-      (followUp) => followUp.dueAt.getTime() < endToday.getTime(),
-    ).length,
-    newLeadCount: bookingList.filter((booking) => booking.status === "new_lead").length,
-    contractCount: bookingList.filter((booking) => contractStatuses.has(booking.status))
-      .length,
-    // Route optimization arrives after Stage 1. The command center keeps the
-    // count boundary visible without inferring a recommendation from bookings.
+    ...counts,
     routeWarningCount: 0,
-    nextCall:
-      sortedFollowUps.find((followUp) => followUp.kind === "call") ?? null,
-    followUps: sortedFollowUps,
-    needsFollowUpPlan: bookingList
-      .filter((booking) =>
-        needsFollowUpPlan(booking, futureFollowUpByBooking.get(booking.id) ?? null, now),
-      )
-      .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime() || left.id.localeCompare(right.id))
-      .map((booking) => ({
-        id: booking.id,
-        name: booking.name,
-        status: booking.status,
-        probability: booking.probability,
-      })),
-    upcomingEvents: bookingList
+    nextCall: nextCallRecord ? toFollowUpSummary(nextCallRecord, now) : null,
+    followUps: sortFollowUpsForToday(
+      followUpResult.records.map((record) => toFollowUpSummary(record, now)),
+      now,
+    ),
+    followUpTotal: followUpResult.total,
+    followUpPage: followUpResult.page,
+    followUpPageCount,
+    needsFollowUpPlan: planResult.records.map((booking) => ({
+      id: booking.id,
+      name: booking.name,
+      status: booking.status,
+      probability: booking.probability,
+    })),
+    needsFollowUpPlanTotal: planResult.total,
+    needsFollowUpPlanPage: planResult.page,
+    needsFollowUpPlanPageCount,
+    upcomingEvents: upcoming
       .filter(
-        (booking) =>
-          booking.startsAt &&
-          booking.startsAt.getTime() >= startToday.getTime(),
+        (booking): booking is TodayDashboardBookingRecord & { startsAt: Date } =>
+          booking.startsAt !== null,
       )
-      .sort(
-        (left, right) =>
-          left.startsAt!.getTime() - right.startsAt!.getTime() ||
-          left.id.localeCompare(right.id),
-      )
-      .slice(0, 5)
       .map((booking) => ({
         id: booking.id,
         name: booking.name,
         city: booking.city,
         region: booking.region,
-        startsAt: booking.startsAt!,
+        startsAt: booking.startsAt,
       })),
   };
 }

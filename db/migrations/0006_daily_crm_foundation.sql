@@ -29,7 +29,9 @@ CREATE TABLE "call_sessions" (
 	"contact_id" uuid,
 	"booking_id" uuid,
 	"follow_up_id" uuid,
+	"next_follow_up_id" uuid,
 	"disposition" "call_disposition" NOT NULL,
+	"resulting_booking_status" "booking_status",
 	"note_activity_id" uuid,
 	"started_at" timestamp with time zone NOT NULL,
 	"ended_at" timestamp with time zone,
@@ -69,6 +71,7 @@ ALTER TABLE "call_sessions" ADD CONSTRAINT "call_sessions_organization_id_organi
 ALTER TABLE "call_sessions" ADD CONSTRAINT "call_sessions_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "call_sessions" ADD CONSTRAINT "call_sessions_booking_id_bookings_id_fk" FOREIGN KEY ("booking_id") REFERENCES "public"."bookings"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "call_sessions" ADD CONSTRAINT "call_sessions_follow_up_id_follow_ups_id_fk" FOREIGN KEY ("follow_up_id") REFERENCES "public"."follow_ups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "call_sessions" ADD CONSTRAINT "call_sessions_next_follow_up_id_follow_ups_id_fk" FOREIGN KEY ("next_follow_up_id") REFERENCES "public"."follow_ups"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "call_sessions" ADD CONSTRAINT "call_sessions_note_activity_id_activities_id_fk" FOREIGN KEY ("note_activity_id") REFERENCES "public"."activities"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "follow_ups" ADD CONSTRAINT "follow_ups_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "follow_ups" ADD CONSTRAINT "follow_ups_contact_id_contacts_id_fk" FOREIGN KEY ("contact_id") REFERENCES "public"."contacts"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

@@ -10,8 +10,9 @@ import { DrizzleContactRepository } from "@/features/contacts/contact-repository
 import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
 import { OrganizationService } from "@/features/organizations/organization-service";
 import * as crmSchema from "@/db/schema";
+import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
-const databaseUrl = process.env.LAST_RESORT_REPOSITORY_TEST_DATABASE_URL;
+const databaseUrl = crmTestDatabaseUrl();
 const migrationDirectory = path.resolve(import.meta.dirname, "../../db/migrations");
 
 const ids = {
@@ -213,6 +214,46 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     expect(lastResortOnly.records.map((record) => record.id)).toEqual([ids.north]);
     expect(bounded).toMatchObject({ page: 2, pageCount: 2 });
     expect(bounded.records.map((record) => record.id)).toEqual([ids.north]);
+
+    await sql!.unsafe(`
+      INSERT INTO contacts (
+        id, organization_id, first_name, last_name
+      ) VALUES (
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        '${ids.marias}',
+        'Bailey',
+        'Second'
+      );
+      INSERT INTO bookings (
+        id, organization_id, name, city, region
+      ) VALUES (
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        '${ids.marias}',
+        'Second Marias Event',
+        'Shelby',
+        'MT'
+      );
+    `);
+    const associationPageOne = await repository.getOrganizationSummary(
+      ids.marias,
+      { contactPage: 1, bookingPage: 1, pageSize: 1 },
+    );
+    const associationPageTwo = await repository.getOrganizationSummary(
+      ids.marias,
+      { contactPage: 2, bookingPage: 2, pageSize: 1 },
+    );
+    expect(associationPageOne).toMatchObject({
+      contactTotal: 2,
+      contactPage: 1,
+      contactPageCount: 2,
+      bookingTotal: 2,
+      bookingPage: 1,
+      bookingPageCount: 2,
+    });
+    expect(associationPageOne?.contacts).toHaveLength(1);
+    expect(associationPageOne?.bookings).toHaveLength(1);
+    expect(associationPageTwo?.contacts).toHaveLength(1);
+    expect(associationPageTwo?.bookings).toHaveLength(1);
   });
 
   postgresTest("rolls back the Last Resort update when the audit insert is rejected", async () => {

@@ -164,9 +164,9 @@ export class CallService {
         return ok({
           activityId: replay.noteActivityId,
           callSessionId: replay.id,
-          nextFollowUpId: null,
+          nextFollowUpId: replay.nextFollowUpId,
           disposition,
-          resultingBookingStatus: dispositionBookingStatus[disposition] ?? null,
+          resultingBookingStatus: replay.resultingBookingStatus,
         });
       }
       const context = await transaction.lockContext(value);
@@ -268,18 +268,6 @@ export class CallService {
         body: value.note,
         occurredAt: value.endedAt,
       });
-      const session = await transaction.createCallSession({
-        requestKey: value.requestKey,
-        organizationId,
-        contactId,
-        bookingId,
-        followUpId: value.followUpId,
-        disposition: persistedCallDisposition[value.disposition],
-        noteActivityId: activity.id,
-        startedAt: value.startedAt,
-        endedAt: value.endedAt,
-      });
-
       let nextFollowUpId: string | null = null;
       if (context.followUp) {
         await transaction.completeFollowUp(context.followUp.id, {
@@ -309,6 +297,20 @@ export class CallService {
           },
         });
       }
+
+      const session = await transaction.createCallSession({
+        requestKey: value.requestKey,
+        organizationId,
+        contactId,
+        bookingId,
+        followUpId: value.followUpId,
+        nextFollowUpId,
+        disposition: persistedCallDisposition[value.disposition],
+        resultingBookingStatus: requestedBookingStatus ?? null,
+        noteActivityId: activity.id,
+        startedAt: value.startedAt,
+        endedAt: value.endedAt,
+      });
 
       if (context.booking && (
         mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates

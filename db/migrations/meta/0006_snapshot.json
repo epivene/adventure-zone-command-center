@@ -1048,12 +1048,25 @@
           "primaryKey": false,
           "notNull": false
         },
+        "next_follow_up_id": {
+          "name": "next_follow_up_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "disposition": {
           "name": "disposition",
           "type": "call_disposition",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
+        },
+        "resulting_booking_status": {
+          "name": "resulting_booking_status",
+          "type": "booking_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
         },
         "note_activity_id": {
           "name": "note_activity_id",
@@ -1145,6 +1158,19 @@
           "tableTo": "follow_ups",
           "columnsFrom": [
             "follow_up_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "call_sessions_next_follow_up_id_follow_ups_id_fk": {
+          "name": "call_sessions_next_follow_up_id_follow_ups_id_fk",
+          "tableFrom": "call_sessions",
+          "tableTo": "follow_ups",
+          "columnsFrom": [
+            "next_follow_up_id"
           ],
           "columnsTo": [
             "id"

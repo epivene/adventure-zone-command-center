@@ -17,8 +17,9 @@ import type {
   ActivityTimelineItem,
   CreateActivityInput,
 } from "@/features/activities/activity-types";
+import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
-const databaseUrl = process.env.ACTIVITY_REPOSITORY_TEST_DATABASE_URL;
+const databaseUrl = crmTestDatabaseUrl();
 const migrationDirectory = path.resolve(import.meta.dirname, "../../db/migrations");
 
 const ids = {
@@ -196,6 +197,47 @@ describe("ActivityService", () => {
       { action: "create" },
       { action: "create" },
       { action: "update" },
+    ]);
+  });
+
+  postgresTest("rejects nonexistent or incoherent parents without activity or audit writes", async () => {
+    await expect(service.create({
+      contactId: ids.missing,
+      kind: "note",
+      body: "This parent does not exist.",
+      occurredAt: new Date("2026-07-28T15:00:00.000Z"),
+    })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "INVALID_ACTIVITY_INPUT" },
+    });
+
+    await sql!.unsafe(`
+      INSERT INTO organizations (id, name)
+      VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Other Fair');
+      INSERT INTO contacts (
+        id, organization_id, first_name, last_name
+      ) VALUES (
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        'Other',
+        'Contact'
+      );
+    `);
+    await expect(service.create({
+      organizationId: ids.organization,
+      contactId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      kind: "note",
+      body: "These parents conflict.",
+      occurredAt: new Date("2026-07-28T15:00:00.000Z"),
+    })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "INVALID_ACTIVITY_INPUT" },
+    });
+    expect(await sql!.unsafe("SELECT count(*) AS value FROM activities")).toEqual([
+      { value: "0" },
+    ]);
+    expect(await sql!.unsafe("SELECT count(*) AS value FROM audit_entries")).toEqual([
+      { value: "0" },
     ]);
   });
 

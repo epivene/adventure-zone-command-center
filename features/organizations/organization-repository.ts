@@ -30,6 +30,18 @@ export type OrganizationSummary = {
   lastResortChangedAt: Date | null;
   contacts: OrganizationContact[];
   bookings: OrganizationBooking[];
+  contactTotal?: number;
+  contactPage?: number;
+  contactPageCount?: number;
+  bookingTotal?: number;
+  bookingPage?: number;
+  bookingPageCount?: number;
+};
+
+export type OrganizationSummaryQuery = {
+  contactPage: number;
+  bookingPage: number;
+  pageSize: number;
 };
 
 export type OrganizationListQuery = {
@@ -58,7 +70,10 @@ export type OrganizationListPage = {
 
 export interface OrganizationRepository {
   setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
-  getOrganizationSummary(organizationId: string): Promise<OrganizationSummary | null>;
+  getOrganizationSummary(
+    organizationId: string,
+    query?: OrganizationSummaryQuery,
+  ): Promise<OrganizationSummary | null>;
 }
 
 type DrizzleDatabase = typeof database;
@@ -144,6 +159,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
 
   async getOrganizationSummary(
     organizationId: string,
+    query: OrganizationSummaryQuery = {
+      contactPage: 1,
+      bookingPage: 1,
+      pageSize: 25,
+    },
   ): Promise<OrganizationSummary | null> {
     const [organization] = await this.database
       .select()
@@ -151,6 +171,29 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .where(eq(organizations.id, organizationId))
       .limit(1);
     if (!organization) return null;
+
+    const [[contactTotalRecord], [bookingTotalRecord]] = await Promise.all([
+      this.database
+        .select({ value: count() })
+        .from(contacts)
+        .where(eq(contacts.organizationId, organizationId)),
+      this.database
+        .select({ value: count() })
+        .from(bookings)
+        .where(eq(bookings.organizationId, organizationId)),
+    ]);
+    const contactTotal = contactTotalRecord?.value ?? 0;
+    const bookingTotal = bookingTotalRecord?.value ?? 0;
+    const contactPageCount = Math.max(1, Math.ceil(contactTotal / query.pageSize));
+    const bookingPageCount = Math.max(1, Math.ceil(bookingTotal / query.pageSize));
+    const contactPage = Math.min(
+      Math.max(1, query.contactPage),
+      contactPageCount,
+    );
+    const bookingPage = Math.min(
+      Math.max(1, query.bookingPage),
+      bookingPageCount,
+    );
 
     const [organizationContacts, organizationBookings] = await Promise.all([
       this.database
@@ -161,13 +204,17 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         })
         .from(contacts)
         .where(eq(contacts.organizationId, organizationId))
-        .orderBy(asc(contacts.lastName), asc(contacts.firstName)),
+        .orderBy(asc(contacts.lastName), asc(contacts.firstName), asc(contacts.id))
+        .limit(query.pageSize)
+        .offset((contactPage - 1) * query.pageSize),
       this.database
         .select({ booking: bookings, travelLeg: travelLegs })
         .from(bookings)
         .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
         .where(eq(bookings.organizationId, organizationId))
-        .orderBy(desc(bookings.startsAt), asc(bookings.name)),
+        .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id))
+        .limit(query.pageSize)
+        .offset((bookingPage - 1) * query.pageSize),
     ]);
 
     return {
@@ -181,6 +228,12 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         name: `${contact.firstName} ${contact.lastName}`.trim(),
       })),
       bookings: organizationBookings.map(toOrganizationBooking),
+      contactTotal,
+      contactPage,
+      contactPageCount,
+      bookingTotal,
+      bookingPage,
+      bookingPageCount,
     };
   }
 

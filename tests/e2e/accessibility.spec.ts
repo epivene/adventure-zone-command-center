@@ -184,6 +184,6 @@ test("mobile navigation items have distinct accessible names", async ({
   await expect(settingsControl).toHaveCount(1);
   await expect(settingsControl).toBeVisible();
   await expect(
-    navigation.getByRole("button", { name: "Quick Add", exact: true }),
+    navigation.getByRole("link", { name: "Quick Add caller", exact: true }),
   ).toHaveCount(1);
 });

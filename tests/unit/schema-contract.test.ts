@@ -86,6 +86,8 @@ describe("database schema contract", () => {
     expect(activityRevisions.activityId).toBeDefined();
     expect(callSessions.disposition).toBeDefined();
     expect(callSessions.requestKey).toBeDefined();
+    expect(callSessions.nextFollowUpId).toBeDefined();
+    expect(callSessions.resultingBookingStatus).toBeDefined();
     expect(
       getTableConfig(callSessions).checks.map((constraint) => constraint.name),
     ).toEqual(expect.arrayContaining([
