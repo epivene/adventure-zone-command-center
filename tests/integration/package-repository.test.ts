@@ -50,17 +50,21 @@ async function migrationStatements(fileName: string, schemaName: string) {
 class LockRecordingDatabase {
   readonly locks: Array<{ query: string; strength: string }> = [];
   private query = "";
+  private table: unknown;
+  private selection: Record<string, unknown> | undefined;
 
   transaction<T>(operation: (transaction: LockRecordingDatabase) => Promise<T>) {
     return operation(this);
   }
 
-  select() {
+  select(selection?: Record<string, unknown>) {
     this.query = "";
+    this.selection = selection;
     return this;
   }
 
   from(table: { [Symbol.toStringTag]?: string }) {
+    this.table = table;
     this.query = String(table);
     return this;
   }
@@ -77,8 +81,25 @@ class LockRecordingDatabase {
     return this;
   }
 
+  orderBy() {
+    return this;
+  }
+
   for(strength: string) {
     this.locks.push({ query: this.query, strength });
+    if (
+      this.table === crmSchema.bookingResourceAssignments &&
+      strength === "update"
+    ) {
+      return Promise.resolve([{
+        id: databaseIds.assignmentA1,
+        bookingId: databaseIds.bookingA,
+        resourceId: databaseIds.resourceA,
+        attributionSource: "inferred",
+        createdAt: new Date("2026-08-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      }]);
+    }
     return Promise.resolve([]);
   }
 
@@ -86,7 +107,25 @@ class LockRecordingDatabase {
     onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
-    return Promise.resolve([]).then(onfulfilled, onrejected);
+    let rows: unknown[] = [];
+    if (this.table === crmSchema.bookingPackageSelections) {
+      rows = [{ packageTemplateId: databaseIds.warriors }];
+    } else if (
+      this.table === crmSchema.bookingResourceAssignments &&
+      this.selection?.assignmentId
+    ) {
+      rows = [
+        {
+          assignmentId: databaseIds.assignmentA1,
+          packageTemplateId: databaseIds.adventure,
+        },
+        {
+          assignmentId: databaseIds.assignmentA1,
+          packageTemplateId: databaseIds.warriors,
+        },
+      ];
+    }
+    return Promise.resolve(rows).then(onfulfilled, onrejected);
   }
 }
 
@@ -120,6 +159,28 @@ describe("DrizzlePackageRepository locking", () => {
       "update",
       "update",
     ]);
+  });
+
+  it("locks assigned resources and derives inferred attribution from current tags and selections", async () => {
+    const database = new LockRecordingDatabase();
+    const repository = new DrizzlePackageRepository(
+      database as unknown as ConstructorParameters<typeof DrizzlePackageRepository>[0],
+    );
+
+    const assignments = await repository.transaction((transaction) =>
+      transaction.findBookingAssignmentsForUpdate(databaseIds.bookingA)
+    );
+
+    expect(database.locks.map(({ strength }) => strength)).toEqual([
+      "update",
+      "share",
+    ]);
+    expect(assignments).toMatchObject([{
+      id: databaseIds.assignmentA1,
+      attributionSource: "inferred",
+      resourcePackageIds: [databaseIds.adventure, databaseIds.warriors],
+      attributedPackageIds: [databaseIds.warriors],
+    }]);
   });
 });
 
@@ -284,13 +345,7 @@ describe("DrizzlePackageRepository PostgreSQL transactions", () => {
           booking_id: databaseIds.bookingA,
           assignment_id: databaseIds.assignmentA1,
           attribution_source: "inferred",
-          package_template_id: databaseIds.adventure,
-        },
-        {
-          booking_id: databaseIds.bookingA,
-          assignment_id: databaseIds.assignmentA1,
-          attribution_source: "inferred",
-          package_template_id: databaseIds.warriors,
+          package_template_id: null,
         },
         {
           booking_id: databaseIds.bookingA,

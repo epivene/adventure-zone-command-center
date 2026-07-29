@@ -253,6 +253,11 @@ export const bookingSpecialRequests = pgTable(
       .notNull(),
   },
   (table) => [
+    index("booking_special_requests_booking_status_treatment_idx").on(
+      table.bookingId,
+      table.approvalStatus,
+      table.treatment,
+    ),
     check(
       "booking_special_requests_description_nonblank",
       sql`nullif(trim(${table.description}), '') is not null`,
@@ -374,6 +379,7 @@ export const bookingResourceAssignments = pgTable(
       table.bookingId,
       table.resourceId,
     ),
+    index("booking_resource_assignments_resource_id_idx").on(table.resourceId),
     check(
       "booking_resource_assignments_attribution_source_valid",
       sql`${table.attributionSource} in (${sqlTextValues(

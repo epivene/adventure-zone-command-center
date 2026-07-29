@@ -71,6 +71,7 @@ export function PackageResourceEditor({
   const [packageError, setPackageError] = useState("");
   const [packageStatus, setPackageStatus] = useState("");
   const [resourceError, setResourceError] = useState("");
+  const [resourceStatus, setResourceStatus] = useState("");
   const [savingPackages, setSavingPackages] = useState(false);
   const [savingResources, setSavingResources] = useState(false);
   const packageErrorRef = useRef<HTMLParagraphElement>(null);
@@ -171,6 +172,7 @@ export function PackageResourceEditor({
     event.preventDefault();
     if (savingResources) return;
     setResourceError("");
+    setResourceStatus("");
     setSavingResources(true);
     try {
       const result = await configureResources({
@@ -182,7 +184,10 @@ export function PackageResourceEditor({
       if (!result.ok) {
         setResourceError(result.error);
         requestAnimationFrame(() => resourceErrorRef.current?.focus());
-      } else router.refresh();
+      } else {
+        setResourceStatus("Resource assignments saved.");
+        router.refresh();
+      }
     } catch {
       setResourceError("Could not save resource assignments. Please try again.");
       requestAnimationFrame(() => resourceErrorRef.current?.focus());
@@ -411,15 +416,28 @@ export function PackageResourceEditor({
             {resourceError}
           </p>
         ) : null}
+        {resourceStatus ? (
+          <p
+            className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"
+            role="status"
+          >
+            {resourceStatus}
+          </p>
+        ) : null}
         <fieldset className="grid gap-2">
           <legend className="font-semibold">Resources</legend>
           {model.resourceOptions.map((resource) => (
             <label className="flex items-start gap-2" key={resource.id}>
               <input
                 checked={selectedResources.has(resource.id)}
-                onChange={(event) =>
-                  toggleSet(setSelectedResources, resource.id, event.target.checked)
-                }
+                onChange={(event) => {
+                  setResourceStatus("");
+                  toggleSet(
+                    setSelectedResources,
+                    resource.id,
+                    event.target.checked,
+                  );
+                }}
                 type="checkbox"
               />
               <span className="grid">

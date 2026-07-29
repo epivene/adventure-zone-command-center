@@ -241,15 +241,14 @@ export async function detectResourceConflicts(input: {
     const orderedGroup = [...group].sort((first, second) =>
       first.assignmentId.localeCompare(second.assignmentId),
     );
-    const unavailable = orderedGroup.find(
+    for (const unavailable of orderedGroup.filter(
       ({ resourceStatus }) => resourceStatus !== "available",
-    );
-    if (unavailable) {
+    )) {
       warnings.push(
         warning({
           code: "RESOURCE_UNAVAILABLE",
           resourceId,
-          assignmentIds: orderedGroup.map(({ assignmentId }) => assignmentId),
+          assignmentIds: [unavailable.assignmentId],
           fingerprint: [
             `status=${unavailable.resourceStatus}`,
             `resource=${unavailable.resourceCode}`,
@@ -331,7 +330,11 @@ export async function detectResourceConflicts(input: {
         from.reservation,
         to.reservation,
       );
-      if (!estimate) {
+      if (
+        !estimate ||
+        !Number.isFinite(estimate.minutes) ||
+        estimate.minutes < 0
+      ) {
         warnings.push(
           warning({
             code: "TRANSFER_TRIP_MISSING",

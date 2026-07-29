@@ -46,13 +46,31 @@ case "$*" in
   *"FROM pg_index"*)
     if [[ "\${MISSING_RESOURCES_CODE_UNIQUE:-0}" == "1" ]] &&
        [[ "$*" == *"resources_code_unique"* ]]; then
-      printf '14\\n'
+      printf '16\\n'
+    elif [[ "\${PARTIAL_EXPECTED_INDEX:-0}" == "1" ]] &&
+         [[ "$*" == *"pg_index.indpred IS NULL"* ]]; then
+      printf '16\\n'
+    elif [[ "\${EXPRESSION_EXPECTED_INDEX:-0}" == "1" ]] &&
+         [[ "$*" == *"pg_index.indexprs IS NULL"* ]]; then
+      printf '16\\n'
+    elif [[ "\${NON_BTREE_EXPECTED_INDEX:-0}" == "1" ]] &&
+         [[ "$*" == *"pg_am.amname = expected_indexes.access_method"* ]]; then
+      printf '16\\n'
     else
-      printf '%s\\n' "\${EXPECTED_UNIQUE_INDEX_COUNT:-15}"
+      printf '%s\\n' "\${EXPECTED_INDEX_DEFINITION_COUNT:-17}"
     fi
     ;;
   *"FROM pg_constraint"*)
-    if [[ "$*" == *"WITH expected_constraints"* ]]; then
+    if [[ "$*" == *"WITH expected_foreign_keys"* ]]; then
+      printf '%s\\n' "\${EXPECTED_FOREIGN_KEY_DEFINITION_COUNT:-12}"
+    elif [[ "$*" == *"WITH expected_checks"* ]]; then
+      if [[ "\${WEAKENED_EXPECTED_CHECK:-0}" == "1" ]] &&
+         [[ "$*" == *"expected_checks.normalized_expression"* ]]; then
+        printf '17\\n'
+      else
+        printf '%s\\n' "\${EXPECTED_CHECK_DEFINITION_COUNT:-18}"
+      fi
+    elif [[ "$*" == *"WITH expected_constraints"* ]]; then
       if [[ "\${SIMULATE_CATALOG_TRUNCATION:-0}" == "1" ]] &&
          [[ "$*" != *"left(expected_constraints.constraint_name, 63)"* ]]; then
         printf '34\\n'
@@ -89,7 +107,17 @@ case "$*" in
     printf '%s\\n' "\${TARGET_TABLE_COUNT:-0}"
     ;;
   *"FROM information_schema.columns"*)
-    printf '%s\\n' "\${BOOKING_COLUMN_COUNT:-0}"
+    if [[ "$*" == *"WITH expected_columns"* ]]; then
+      if [[ "\${MISSING_EXPECTED_TABLE_COLUMN:-0}" == "1" ]]; then
+        printf '55\\n'
+      else
+        printf '%s\\n' "\${EXPECTED_COLUMN_DEFINITION_COUNT:-56}"
+      fi
+    elif [[ "$*" == *"data_type"* ]]; then
+      printf '%s\\n' "\${BOOKING_COLUMN_DEFINITION_COUNT:-\${BOOKING_COLUMN_COUNT:-0}}"
+    else
+      printf '%s\\n' "\${BOOKING_COLUMN_COUNT:-0}"
+    fi
     ;;
   *"to_regclass('public.package_templates')"*)
     printf '%s\\n' "\${PACKAGE_TABLE_EXISTS:-f}"
@@ -209,7 +237,7 @@ describe("daily operations migration preflight", () => {
     const result = runPreflight({
       ...context.env,
       MIGRATION_RECORD_COUNT: "1",
-      TARGET_RELATION_COUNT: "23",
+      TARGET_RELATION_COUNT: "25",
       TARGET_TYPE_COUNT: "8",
       TARGET_TABLE_COUNT: "8",
       BOOKING_COLUMN_COUNT: "2",
@@ -224,13 +252,68 @@ describe("daily operations migration preflight", () => {
     );
   });
 
-  it("rejects a recorded 0007 missing an expected unique index", async () => {
+  it("rejects a recorded 0007 with the wrong booking column type", async () => {
     const context = await fixture();
 
     const result = runPreflight({
       ...context.env,
       MIGRATION_RECORD_COUNT: "1",
-      TARGET_RELATION_COUNT: "22",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      EXPECTED_COLUMN_DEFINITION_COUNT: "55",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("56 column definitions");
+  });
+
+  it("rejects a recorded 0007 with an index on the wrong columns", async () => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      EXPECTED_INDEX_DEFINITION_COUNT: "16",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("17 index definitions");
+  });
+
+  it.each([
+    ["partial", { PARTIAL_EXPECTED_INDEX: "1" }],
+    ["expression", { EXPRESSION_EXPECTED_INDEX: "1" }],
+    ["non-btree", { NON_BTREE_EXPECTED_INDEX: "1" }],
+  ])("rejects a recorded 0007 with a %s expected index", async (_, drift) => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      ...drift,
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("17 index definitions");
+  });
+
+  it("rejects a recorded 0007 missing an expected index", async () => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "24",
       TARGET_TYPE_COUNT: "8",
       TARGET_TABLE_COUNT: "8",
       BOOKING_COLUMN_COUNT: "2",
@@ -238,7 +321,7 @@ describe("daily operations migration preflight", () => {
     });
 
     expect(result.status).toBe(65);
-    expect(result.stderr).toContain("15 unique indexes");
+    expect(result.stderr).toContain("17 index definitions");
   });
 
   it("rejects a recorded 0007 missing an expected foreign key", async () => {
@@ -247,7 +330,7 @@ describe("daily operations migration preflight", () => {
     const result = runPreflight({
       ...context.env,
       MIGRATION_RECORD_COUNT: "1",
-      TARGET_RELATION_COUNT: "23",
+      TARGET_RELATION_COUNT: "25",
       TARGET_TYPE_COUNT: "8",
       TARGET_TABLE_COUNT: "8",
       BOOKING_COLUMN_COUNT: "2",
@@ -258,13 +341,30 @@ describe("daily operations migration preflight", () => {
     expect(result.stderr).toContain("38 constraints");
   });
 
+  it("rejects a recorded 0007 with a foreign key targeting the wrong relation or action", async () => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      EXPECTED_FOREIGN_KEY_DEFINITION_COUNT: "11",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("12 foreign-key definitions");
+  });
+
   it("rejects a recorded 0007 missing an expected check", async () => {
     const context = await fixture();
 
     const result = runPreflight({
       ...context.env,
       MIGRATION_RECORD_COUNT: "1",
-      TARGET_RELATION_COUNT: "23",
+      TARGET_RELATION_COUNT: "25",
       TARGET_TYPE_COUNT: "8",
       TARGET_TABLE_COUNT: "8",
       BOOKING_COLUMN_COUNT: "2",
@@ -273,6 +373,57 @@ describe("daily operations migration preflight", () => {
 
     expect(result.status).toBe(65);
     expect(result.stderr).toContain("38 constraints");
+  });
+
+  it("rejects a recorded 0007 with a changed check definition", async () => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      EXPECTED_CHECK_DEFINITION_COUNT: "17",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("18 check definitions");
+  });
+
+  it("rejects a recorded 0007 with a weakened check definition", async () => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      WEAKENED_EXPECTED_CHECK: "1",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("18 check definitions");
+  });
+
+  it("rejects a recorded 0007 missing an operational table column", async () => {
+    const context = await fixture();
+
+    const result = runPreflight({
+      ...context.env,
+      MIGRATION_RECORD_COUNT: "1",
+      TARGET_RELATION_COUNT: "25",
+      TARGET_TYPE_COUNT: "8",
+      TARGET_TABLE_COUNT: "8",
+      BOOKING_COLUMN_COUNT: "2",
+      MISSING_EXPECTED_TABLE_COLUMN: "1",
+    });
+
+    expect(result.status).toBe(65);
+    expect(result.stderr).toContain("56 column definitions");
   });
 
   it("rejects duplicate 0007 migration metadata", async () => {
@@ -293,7 +444,7 @@ describe("daily operations migration preflight", () => {
     const result = runPreflight({
       ...context.env,
       MIGRATION_RECORD_COUNT: "1",
-      TARGET_RELATION_COUNT: "23",
+      TARGET_RELATION_COUNT: "25",
       TARGET_TYPE_COUNT: "8",
       TARGET_TABLE_COUNT: "8",
       BOOKING_COLUMN_COUNT: "2",

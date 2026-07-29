@@ -109,7 +109,9 @@ ALTER TABLE "resource_package_tags" ADD CONSTRAINT "resource_package_tags_packag
 ALTER TABLE "resources" ADD CONSTRAINT "resources_normal_travel_leg_id_travel_legs_id_fk" FOREIGN KEY ("normal_travel_leg_id") REFERENCES "public"."travel_legs"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "booking_package_selections_booking_package_unique" ON "booking_package_selections" USING btree ("booking_id","package_template_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "booking_resource_assignments_booking_resource_unique" ON "booking_resource_assignments" USING btree ("booking_id","resource_id");--> statement-breakpoint
+CREATE INDEX "booking_resource_assignments_resource_id_idx" ON "booking_resource_assignments" USING btree ("resource_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "booking_resource_package_attributions_assignment_package_unique" ON "booking_resource_package_attributions" USING btree ("booking_resource_assignment_id","package_template_id");--> statement-breakpoint
+CREATE INDEX "booking_special_requests_booking_status_treatment_idx" ON "booking_special_requests" USING btree ("booking_id","approval_status","treatment");--> statement-breakpoint
 CREATE UNIQUE INDEX "package_templates_code_unique" ON "package_templates" USING btree ("code");--> statement-breakpoint
 CREATE UNIQUE INDEX "resource_conflict_overrides_booking_conflict_unique" ON "resource_conflict_overrides" USING btree ("booking_id","conflict_key");--> statement-breakpoint
 CREATE UNIQUE INDEX "resource_package_tags_resource_package_unique" ON "resource_package_tags" USING btree ("resource_id","package_template_id");--> statement-breakpoint

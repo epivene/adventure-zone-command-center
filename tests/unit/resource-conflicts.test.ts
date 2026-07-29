@@ -358,6 +358,38 @@ describe("detectResourceConflicts", () => {
   });
 
   it.each([
+    ["NaN", Number.NaN],
+    ["an infinite", Number.POSITIVE_INFINITY],
+    ["a negative", -1],
+  ])(
+    "treats %s transfer estimate as missing trip data",
+    async (_label, minutes) => {
+      const warnings = await detectResourceConflicts({
+        reservations: [
+          reservation(),
+          reservation({
+            assignmentId: ids.assignmentB,
+            bookingId: ids.bookingB,
+            bookingName: "Booking B",
+            startsAt: new Date("2026-08-11T17:00:00.000Z"),
+            endsAt: new Date("2026-08-11T17:00:00.000Z"),
+            location: { latitude: 46.87, longitude: -113.99 },
+          }),
+        ],
+        physicalAttractionTotal: null,
+        assignedAttractionCount: 1,
+        transferTimeLookup: {
+          estimateMinutes: async () => ({ minutes, source: "cached" }),
+        },
+      });
+
+      expect(warnings.map(({ code }) => code)).toEqual([
+        "TRANSFER_TRIP_MISSING",
+      ]);
+    },
+  );
+
+  it.each([
     { latitude: 91, longitude: -108.5 },
     { latitude: -91, longitude: -108.5 },
     { latitude: 45.75, longitude: 181 },

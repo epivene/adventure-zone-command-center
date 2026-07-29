@@ -973,6 +973,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "booking_resource_assignments_resource_id_idx": {
+          "name": "booking_resource_assignments_resource_id_idx",
+          "columns": [
+            {
+              "expression": "resource_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -1165,7 +1180,35 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "booking_special_requests_booking_status_treatment_idx": {
+          "name": "booking_special_requests_booking_status_treatment_idx",
+          "columns": [
+            {
+              "expression": "booking_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "approval_status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "treatment",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "booking_special_requests_booking_id_bookings_id_fk": {
           "name": "booking_special_requests_booking_id_bookings_id_fk",

@@ -84,7 +84,7 @@ export default async function TodayPage({
         contractCount={dashboard.contractCount}
         followUpCount={dashboard.followUpCount}
         newLeadCount={dashboard.newLeadCount}
-        routeWarningCount={dashboard.routeWarningCount}
+        visibleRouteWarningCount={dashboard.visibleRouteWarningCount}
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(19rem,1fr)] lg:items-start">
@@ -147,6 +147,7 @@ export default async function TodayPage({
                   <span className="ml-2 text-sm capitalize text-slate-600">
                     {booking.status.replaceAll("_", " ")}
                   </span>
+                  <BookingOperations operations={booking.operations} />
                 </li>
               ))}
             </ul>

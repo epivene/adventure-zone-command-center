@@ -16,14 +16,33 @@ import {
 const dialect = new PgDialect();
 
 describe("Today bounded-query contract", () => {
-  it("batches unique booking operations once instead of issuing N+1 reads", async () => {
+  it("batches the visible dashboard slice and counts each distinct visible route warning once", async () => {
     const getForBookings = vi.fn(async () => new Map([
       ["booking-1", {
         packageNames: ["Adventure Zone"],
         sharedAttractionTotal: 10,
         pendingRequestCount: 0,
         leg: null,
-        warnings: [],
+        warnings: [{
+          id: "shared-route-warning",
+          kind: "route" as const,
+          severity: "warning" as const,
+          message: "Transfer trip is missing.",
+          href: "/bookings/booking-1/edit#resource-warnings",
+        }],
+      }],
+      ["booking-2", {
+        packageNames: ["Weekend Warriors"],
+        sharedAttractionTotal: 5,
+        pendingRequestCount: 1,
+        leg: null,
+        warnings: [{
+          id: "shared-route-warning",
+          kind: "route" as const,
+          severity: "warning" as const,
+          message: "Transfer trip is missing.",
+          href: "/bookings/booking-2/edit#resource-warnings",
+        }],
       }],
     ]));
     const getForBooking = vi.fn(() => {
@@ -33,7 +52,7 @@ describe("Today bounded-query contract", () => {
       followUpCount: 0,
       newLeadCount: 0,
       contractCount: 0,
-      routeWarningCount: 0,
+      visibleRouteWarningCount: 0,
       nextCall: null,
       followUps: [{
         id: "follow-up-1",
@@ -47,13 +66,18 @@ describe("Today bounded-query contract", () => {
         status: "due",
         probability: "likely",
       }],
-      followUpTotal: 1,
+      followUpTotal: TODAY_FOLLOW_UP_PAGE_SIZE + 1,
       followUpPage: 1,
-      followUpPageCount: 1,
-      needsFollowUpPlan: [],
-      needsFollowUpPlanTotal: 0,
+      followUpPageCount: 2,
+      needsFollowUpPlan: [{
+        id: "booking-2",
+        name: "Needs Plan Fair",
+        status: "new_lead",
+        probability: "possible",
+      }],
+      needsFollowUpPlanTotal: TODAY_PLAN_PAGE_SIZE + 1,
       needsFollowUpPlanPage: 1,
-      needsFollowUpPlanPageCount: 1,
+      needsFollowUpPlanPageCount: 2,
       upcomingEvents: [{
         id: "booking-1",
         name: "County Fair",
@@ -63,12 +87,16 @@ describe("Today bounded-query contract", () => {
       }],
     }, { getForBooking, getForBookings });
 
-    expect(getForBookings).toHaveBeenCalledWith(["booking-1"]);
+    expect(getForBookings).toHaveBeenCalledWith(["booking-1", "booking-2"]);
     expect(getForBooking).not.toHaveBeenCalled();
     expect(dashboard.followUps[0]?.operations?.sharedAttractionTotal).toBe(10);
+    expect(
+      dashboard.needsFollowUpPlan[0]?.operations?.pendingRequestCount,
+    ).toBe(1);
     expect(dashboard.upcomingEvents[0]?.operations?.packageNames).toEqual([
       "Adventure Zone",
     ]);
+    expect(dashboard.visibleRouteWarningCount).toBe(1);
   });
   it("keeps the work queue on open follow-ups and bounded page sizes", () => {
     const query = dialect.sqlToQuery(openFollowUpsCondition());

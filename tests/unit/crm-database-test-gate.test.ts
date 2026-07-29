@@ -16,9 +16,17 @@ describe("CRM PostgreSQL test gate", () => {
     );
   });
 
-  it("runs booking operations PostgreSQL coverage in the release database command", () => {
-    expect(packageJson.scripts["test:crm-db"].split(/\s+/)).toContain(
-      "tests/integration/booking-operations-summary.test.ts",
+  it("runs every package/resource PostgreSQL suite in the release database command", () => {
+    expect(packageJson.scripts["test:crm-db"].split(/\s+/)).toEqual(
+      expect.arrayContaining([
+        "tests/integration/package-resource-migration.test.ts",
+        "tests/integration/package-repository.test.ts",
+        "tests/integration/package-resource-settings-repository.test.ts",
+        "tests/integration/package-service.test.ts",
+        "tests/integration/resource-repository.test.ts",
+        "tests/integration/resource-service.test.ts",
+        "tests/integration/booking-operations-summary.test.ts",
+      ]),
     );
   });
 });

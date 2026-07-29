@@ -240,6 +240,31 @@ describe("package and resource schema contract", () => {
     ]));
   });
 
+  it("indexes resource assignment lookups and special-request operations filters", () => {
+    const indexColumns = [
+      databaseSchema.bookingResourceAssignments,
+      databaseSchema.bookingSpecialRequests,
+    ].flatMap((table) =>
+      getTableConfig(table).indexes.map((index) => ({
+        name: index.config.name,
+        columns: index.config.columns.map((column) =>
+          "name" in column ? column.name : undefined
+        ),
+      })),
+    );
+
+    expect(indexColumns).toEqual(expect.arrayContaining([
+      {
+        name: "booking_resource_assignments_resource_id_idx",
+        columns: ["resource_id"],
+      },
+      {
+        name: "booking_special_requests_booking_status_treatment_idx",
+        columns: ["booking_id", "approval_status", "treatment"],
+      },
+    ]));
+  });
+
   it("keeps package/resource child rows connected through foreign keys", () => {
     expect(
       getTableConfig(databaseSchema.bookingPackageSelections).foreignKeys,

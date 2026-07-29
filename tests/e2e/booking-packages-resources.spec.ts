@@ -15,6 +15,14 @@ test("edits package totals, requests, attribution, warnings, and overrides acces
       "Inferred: Adventure Zone, Weekend Warriors",
     )).toBeVisible();
     await expect(page.getByLabel(/Paintball.*unavailable/i)).toBeChecked();
+    const saveResources = page.getByRole("button", {
+      name: "Save resource assignments",
+    });
+    const resourceForm = page.locator("form").filter({ has: saveResources });
+    await saveResources.click();
+    await expect(resourceForm.getByRole("status")).toHaveText(
+      "Resource assignments saved.",
+    );
 
     const paintballAttribution = page.getByRole("group", {
       name: "Paintball attribution",
@@ -30,8 +38,12 @@ test("edits package totals, requests, attribution, warnings, and overrides acces
     await page.getByLabel("Physical attraction total").fill("13");
     await page.getByLabel("Out-of-range approval reason")
       .fill("Owner approved customer expansion");
-    await page.getByRole("button", { name: "Save package setup" }).click();
-    await expect(page.getByRole("status")).toHaveText(
+    const savePackages = page.getByRole("button", {
+      name: "Save package setup",
+    });
+    const packageForm = page.locator("form").filter({ has: savePackages });
+    await savePackages.click();
+    await expect(packageForm.getByRole("status")).toHaveText(
       "Package setup saved.",
     );
     await expect(page.getByRole("heading", {
@@ -87,9 +99,25 @@ test("edits package totals, requests, attribution, warnings, and overrides acces
     await expect(page.getByText(/Overridden.*Backup equipment confirmed/i))
       .toBeVisible();
 
-    await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.getByRole("heading", { name: "Special requests" }))
+    await page.goto(`/calls/new?bookingId=${fixture.bookingId}`);
+    await expect(page.getByRole("heading", {
+      name: "Call Workspace",
+    })).toBeVisible();
+    await expect(page.getByText("Adventure Zone + Weekend Warriors"))
       .toBeVisible();
+    await expect(page.getByText("2 packages · 13 attractions"))
+      .toBeVisible();
+
+    await page.goto("/today");
+    const todayBooking = page
+      .getByRole("region", { name: "Follow-up queue" })
+      .getByRole("listitem")
+      .filter({ hasText: fixture.bookingName });
+    await expect(todayBooking.getByText("2 packages · 13 attractions"))
+      .toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/bookings/${fixture.bookingId}/edit`);
     await expect(page.getByRole("heading", { name: "Resource warnings" }))
       .toBeVisible();
   } finally {

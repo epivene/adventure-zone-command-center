@@ -20,6 +20,7 @@ export async function arrangeBookingPackagesResources() {
   const warriorsId = randomUUID();
   const resourceId = randomUUID();
   const assignmentId = randomUUID();
+  const followUpId = randomUUID();
   const suffix = runId.replaceAll("-", "");
   const bookingName = `E2E Package Fair ${runId}`;
 
@@ -67,6 +68,10 @@ export async function arrangeBookingPackagesResources() {
           id, booking_id, resource_id, attribution_source
         ) values (${assignmentId}, ${bookingId}, ${resourceId}, 'inferred')
       `;
+      await transaction`
+        insert into follow_ups (id, booking_id, kind, due_at)
+        values (${followUpId}, ${bookingId}, 'call', ${new Date()})
+      `;
     });
   } catch (error) {
     await sql.end({ timeout: 5 });
@@ -77,6 +82,7 @@ export async function arrangeBookingPackagesResources() {
   return {
     bookingId,
     bookingName,
+    followUpId,
     cleanup: async () => {
       if (cleaned) return;
       try {
@@ -85,6 +91,7 @@ export async function arrangeBookingPackagesResources() {
         `;
         const auditIds = [bookingId, assignmentId, ...requestIds.map(({ id }) => id)];
         await sql`delete from audit_entries where entity_id in ${sql(auditIds)}`;
+        await sql`delete from follow_ups where id = ${followUpId}`;
         await sql`delete from bookings where id = ${bookingId}`;
         await sql`delete from resources where id = ${resourceId}`;
         await sql`

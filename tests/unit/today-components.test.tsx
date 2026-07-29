@@ -159,13 +159,13 @@ describe("Today dashboard components", () => {
         contractCount={2}
         followUpCount={3}
         newLeadCount={4}
-        routeWarningCount={0}
+        visibleRouteWarningCount={0}
       />,
     );
 
     expect(screen.getByText("Follow-ups due")).toBeVisible();
     expect(screen.getByText("New leads")).toBeVisible();
     expect(screen.getByText("Contracts")).toBeVisible();
-    expect(screen.getByText("Route warnings")).toBeVisible();
+    expect(screen.getByText("Visible route warnings")).toBeVisible();
   });
 });

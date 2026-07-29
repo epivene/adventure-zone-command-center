@@ -35,10 +35,15 @@ export function SpecialRequestEditor({
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
   const errorRef = useRef<HTMLParagraphElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+  useEffect(() => {
+    if (status) statusRef.current?.focus();
+  }, [status]);
 
   function showError(message: string) {
     setError(message);
@@ -49,6 +54,7 @@ export function SpecialRequestEditor({
     if (pendingKey) return;
     setPendingKey("new");
     setError("");
+    setStatus("");
     try {
       const result = await addRequest({ bookingId, description, treatment });
       if (!result.ok) showError(result.error);
@@ -70,6 +76,7 @@ export function SpecialRequestEditor({
     if (pendingKey) return;
     setPendingKey(request.id);
     setError("");
+    setStatus("");
     try {
       const result = await decideRequest({
         specialRequestId: request.id,
@@ -77,7 +84,10 @@ export function SpecialRequestEditor({
         reason: reasons[request.id] ?? "",
       });
       if (!result.ok) showError(result.error);
-      else router.refresh();
+      else {
+        setStatus(`${request.description} ${decision}.`);
+        router.refresh();
+      }
     } catch {
       showError("Could not save the request decision. Please try again.");
     } finally {
@@ -97,6 +107,16 @@ export function SpecialRequestEditor({
       {error ? (
         <p className="mt-3" ref={errorRef} role="alert" tabIndex={-1}>
           {error}
+        </p>
+      ) : null}
+      {status ? (
+        <p
+          className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800"
+          ref={statusRef}
+          role="status"
+          tabIndex={-1}
+        >
+          {status}
         </p>
       ) : null}
       <form className="mt-4 grid gap-3 sm:grid-cols-2" onSubmit={submitNew}>

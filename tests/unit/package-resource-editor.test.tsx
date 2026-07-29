@@ -345,6 +345,36 @@ describe("PackageResourceEditor", () => {
     );
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
+
+  it("announces when resource assignments are durably saved", async () => {
+    let finish!: (result: { ok: true }) => void;
+    const configureResources = vi.fn(() =>
+      new Promise<{ ok: true }>((resolve) => {
+        finish = resolve;
+      })
+    );
+    const user = userEvent.setup();
+    render(
+      <PackageResourceEditor
+        configurePackages={vi.fn()}
+        configureResources={configureResources}
+        model={model}
+      />,
+    );
+    const save = screen.getByRole("button", {
+      name: "Save resource assignments",
+    });
+
+    await user.click(save);
+    expect(save).toBeDisabled();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    finish({ ok: true });
+
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Resource assignments saved.",
+    );
+    expect(save).toBeEnabled();
+  });
 });
 
 describe("SpecialRequestEditor", () => {
@@ -390,6 +420,32 @@ describe("SpecialRequestEditor", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("This request was already decided.");
     expect(alert).toHaveFocus();
+  });
+
+  it("moves keyboard focus to live success feedback after a request decision", async () => {
+    const user = userEvent.setup();
+    render(
+      <SpecialRequestEditor
+        addRequest={vi.fn()}
+        bookingId={ids.booking}
+        decideRequest={vi.fn(async () => ({ ok: true as const }))}
+        requests={model.specialRequests}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText("Decision reason for Ferris wheel"),
+      "Owner approved",
+    );
+    const approve = screen.getByRole("button", {
+      name: "Approve Ferris wheel",
+    });
+    approve.focus();
+    await user.keyboard("{Enter}");
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Ferris wheel approved.");
+    expect(status).toHaveFocus();
   });
 });
 
@@ -456,5 +512,30 @@ describe("ResourceWarningList", () => {
     }));
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveFocus();
+  });
+
+  it("moves keyboard focus to live success feedback after an override", async () => {
+    const user = userEvent.setup();
+    render(
+      <ResourceWarningList
+        acknowledge={vi.fn(async () => ({ ok: true as const }))}
+        bookingId={ids.booking}
+        warnings={model.warnings}
+      />,
+    );
+
+    await user.type(
+      screen.getByLabelText(/Override reason for Paintball is already assigned/i),
+      "Owner approved",
+    );
+    const override = screen.getByRole("button", {
+      name: /Override Paintball is already assigned/i,
+    });
+    override.focus();
+    await user.keyboard("{Enter}");
+
+    const status = await screen.findByRole("status");
+    expect(status).toHaveTextContent("Resource conflict override saved.");
+    expect(status).toHaveFocus();
   });
 });

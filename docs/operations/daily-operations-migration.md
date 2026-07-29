@@ -47,11 +47,11 @@ The preflight correlates the target schema with Drizzle's default
 timestamp. A clean `0006` database has neither the `0007` record nor any
 `0007` target relation/booking column and passes. If `0007` is not recorded,
 any of the eight table names, eight implicit primary-key index names, seven
-explicit unique-index names, eight PostgreSQL table-type names, or either new
-booking column is treated as a partial migration or schema collision and
-blocks migration. Restore the reviewed pre-migration database backup or obtain
-a separately reviewed remediation plan; do not drop/rename objects or insert
-migration metadata by hand.
+explicit unique-index names, two lookup-index names, eight PostgreSQL
+table-type names, or either new booking column is treated as a partial
+migration or schema collision and blocks migration. Restore the reviewed
+pre-migration database backup or obtain a separately reviewed remediation
+plan; do not drop/rename objects or insert migration metadata by hand.
 
 The same unapplied-schema gate independently rejects an existing
 `bookings_physical_attraction_total_nonnegative` constraint on `bookings`,
@@ -60,10 +60,16 @@ pre-existing table and therefore is not represented by the new-table relation
 inventory.
 
 When `0007` is already recorded, the preflight permits a deliberate rerun only
-if all eight target tables/table types and both booking columns exist, all 15
-primary-key/explicit unique indexes are valid, unique, and attached to their
-expected tables, and all 38 primary-key, foreign-key, and check constraints
-match their exact expected table/name/type. It then rejects an existing
+if all eight target tables/table types exist and all 56 expected columns (54
+across those tables plus the two new booking columns) have their expected type,
+nullability, and default presence. All 17 indexes must be valid, ready, plain
+non-partial/non-expression btree indexes with their expected table, uniqueness,
+and ordered columns. All 38 primary-key, foreign-key, and check constraints
+must match their expected table/name/type.
+Foreign keys are also checked for source columns, target relation/columns,
+update/delete actions, and validation; check constraints are checked for their
+complete normalized validated expression, rather than matching selected
+expression fragments. It then rejects an existing
 `adventure_zone`, `weekend_warriors`, `pirates_rebellion`, or
 `paintball_trailer` stable code whose defining values are incompatible with
 the approved defaults. Do not automatically rewrite or delete an incompatible

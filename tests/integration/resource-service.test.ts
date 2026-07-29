@@ -506,6 +506,54 @@ describe("ResourceService", () => {
     expect(refreshed.value.warnings[0]!.conflictKey).not.toBe(oldKey);
   });
 
+  it("keeps an unavailable-resource override stable when another booking adds the resource", async () => {
+    const repository = new InMemoryResourceRepository();
+    repository.state.bookings.get(ids.booking)!.physicalAttractionTotal = 0;
+    const service = new ResourceService(repository, {
+      estimateMinutes: async () => ({ minutes: 60, source: "cached" }),
+    });
+    const configured = await service.configureBookingAssignments({
+      bookingId: ids.booking,
+      resourceIds: [ids.unavailable],
+      actorId: "owner_1",
+    });
+    if (!configured.ok) throw new Error("configuration setup failed");
+    const unavailableWarning = configured.value.warnings.find(
+      ({ code }) => code === "RESOURCE_UNAVAILABLE",
+    );
+    if (!unavailableWarning) throw new Error("unavailable warning missing");
+
+    const acknowledged = await service.acknowledgeConflict({
+      bookingId: ids.booking,
+      conflictKey: unavailableWarning.conflictKey,
+      reason: "Maintenance assignment approved",
+      actorId: "owner_1",
+    });
+    if (!acknowledged.ok) throw new Error("override setup failed");
+
+    repository.state.assignments.get(ids.foreignAssignment)!.resourceId =
+      ids.unavailable;
+    const refreshed = await service.configureBookingAssignments({
+      bookingId: ids.booking,
+      resourceIds: [ids.unavailable],
+      actorId: "owner_1",
+    });
+
+    expect(refreshed).toMatchObject({
+      ok: true,
+      value: {
+        warnings: [{
+          code: "RESOURCE_UNAVAILABLE",
+          conflictKey: unavailableWarning.conflictKey,
+          overridden: true,
+          override: {
+            reason: "Maintenance assignment approved",
+          },
+        }],
+      },
+    });
+  });
+
   it("keeps the target count fingerprint independent of another booking's assignment", async () => {
     const repository = new InMemoryResourceRepository();
     repository.state.bookings.get(ids.booking)!.physicalAttractionTotal = 2;

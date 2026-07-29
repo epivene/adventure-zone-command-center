@@ -8,8 +8,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as crmSchema from "@/db/schema";
 import {
+  DrizzlePackageRepository,
   DrizzlePackageSettingsRepository,
 } from "@/features/packages/package-repository";
+import { PackageService } from "@/features/packages/package-service";
 import {
   DrizzleResourceSettingsRepository,
   ResourceSettingsError,
@@ -51,6 +53,7 @@ describe("package/resource settings PostgreSQL persistence", () => {
   let schemaName = "";
   let packageRepository: DrizzlePackageSettingsRepository;
   let resourceRepository: DrizzleResourceSettingsRepository;
+  let db: ReturnType<typeof drizzle<typeof crmSchema>>;
 
   beforeEach(async () => {
     if (!databaseUrl) return;
@@ -70,7 +73,7 @@ describe("package/resource settings PostgreSQL persistence", () => {
       }
     }
 
-    const db = drizzle({ client: sql, schema: crmSchema });
+    db = drizzle({ client: sql, schema: crmSchema });
     packageRepository = new DrizzlePackageSettingsRepository(db);
     resourceRepository = new DrizzleResourceSettingsRepository(db);
 
@@ -291,6 +294,70 @@ describe("package/resource settings PostgreSQL persistence", () => {
       action: "update",
       before_has_actor_id: false,
       after_actor_id: "owner_1",
+    }]);
+  });
+
+  postgresTest("derives inferred attribution from later resource-tag changes in the next audit", async () => {
+    await sql!.unsafe(`
+      DELETE FROM booking_resource_package_attributions
+      WHERE booking_resource_assignment_id = '${ids.assignment}';
+      UPDATE booking_resource_assignments
+      SET attribution_source = 'inferred'
+      WHERE id = '${ids.assignment}';
+    `);
+    const service = new PackageService(new DrizzlePackageRepository(db));
+    await expect(service.configureBooking({
+      bookingId: ids.booking,
+      packageTemplateIds: [ids.packageA],
+      physicalAttractionTotal: 10,
+      attractionTotalApprovalReason: null,
+      manualAttributions: [{
+        bookingResourceAssignmentId: ids.assignment,
+        packageTemplateIds: null,
+      }],
+    })).resolves.toMatchObject({ ok: true });
+    expect(await sql!.unsafe(`
+      SELECT count(*) AS value
+      FROM booking_resource_package_attributions
+      WHERE booking_resource_assignment_id = '${ids.assignment}'
+    `)).toEqual([{ value: "0" }]);
+
+    await resourceRepository.upsertResource({
+      id: ids.resource,
+      code: "paintball_trailer",
+      name: "Paintball trailer",
+      category: "trailer",
+      countsAsAttraction: true,
+      packageTemplateIds: [ids.packageNew],
+      normalTravelLegId: ids.leg,
+      movable: true,
+      setupMinutes: 0,
+      teardownMinutes: 0,
+      minimumTransferMinutes: 60,
+      status: "available",
+    }, "owner_1");
+    await expect(service.configureBooking({
+      bookingId: ids.booking,
+      packageTemplateIds: [ids.packageA],
+      physicalAttractionTotal: 11,
+      attractionTotalApprovalReason: "Approved historical variance",
+      manualAttributions: [{
+        bookingResourceAssignmentId: ids.assignment,
+        packageTemplateIds: null,
+      }],
+    })).resolves.toMatchObject({ ok: true });
+
+    expect(await sql!.unsafe(`
+      SELECT before->'attributions' AS before_attributions
+      FROM audit_entries
+      WHERE action = 'configure_packages'
+        AND after->>'physicalAttractionTotal' = '11'
+    `)).toEqual([{
+      before_attributions: [{
+        bookingResourceAssignmentId: ids.assignment,
+        source: "inferred",
+        packageTemplateIds: [],
+      }],
     }]);
   });
 

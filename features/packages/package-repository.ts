@@ -9,6 +9,7 @@ import {
   bookings,
   packageTemplates,
   resourcePackageTags,
+  resources,
 } from "@/db/schema";
 import {
   recordAuditEntry,
@@ -192,47 +193,69 @@ class DrizzlePackageTransaction implements PackageTransaction {
     if (assignments.length === 0) return [];
 
     const assignmentIds = assignments.map(({ id }) => id);
-    const [tags, attributions] = await Promise.all([
-      this.database
-        .select({
-          assignmentId: bookingResourceAssignments.id,
-          packageTemplateId: resourcePackageTags.packageTemplateId,
-        })
-        .from(bookingResourceAssignments)
-        .leftJoin(
-          resourcePackageTags,
-          eq(
-            resourcePackageTags.resourceId,
-            bookingResourceAssignments.resourceId,
-          ),
-        )
-        .where(inArray(bookingResourceAssignments.id, assignmentIds)),
-      this.database
-        .select()
-        .from(bookingResourcePackageAttributions)
-        .where(
-          inArray(
-            bookingResourcePackageAttributions.bookingResourceAssignmentId,
-            assignmentIds,
-          ),
-        ),
-    ]);
+    const resourceIds = [...new Set(assignments.map(({ resourceId }) => resourceId))]
+      .sort((first, second) => first.localeCompare(second));
+    await this.database
+      .select({ id: resources.id })
+      .from(resources)
+      .where(inArray(resources.id, resourceIds))
+      .orderBy(resources.id)
+      .for("share");
 
-    return assignments.map((assignment) => ({
-      id: assignment.id,
-      bookingId: assignment.bookingId,
-      attributionSource: assignment.attributionSource,
-      resourcePackageIds: tags.flatMap((tag) =>
+    const selections = await this.database
+      .select({ packageTemplateId: bookingPackageSelections.packageTemplateId })
+      .from(bookingPackageSelections)
+      .where(eq(bookingPackageSelections.bookingId, bookingId));
+    const tags = await this.database
+      .select({
+        assignmentId: bookingResourceAssignments.id,
+        packageTemplateId: resourcePackageTags.packageTemplateId,
+      })
+      .from(bookingResourceAssignments)
+      .leftJoin(
+        resourcePackageTags,
+        eq(
+          resourcePackageTags.resourceId,
+          bookingResourceAssignments.resourceId,
+        ),
+      )
+      .where(inArray(bookingResourceAssignments.id, assignmentIds));
+    const attributions = await this.database
+      .select()
+      .from(bookingResourcePackageAttributions)
+      .where(
+        inArray(
+          bookingResourcePackageAttributions.bookingResourceAssignmentId,
+          assignmentIds,
+        ),
+      );
+    const selectedPackageIds = new Set(
+      selections.map(({ packageTemplateId }) => packageTemplateId),
+    );
+
+    return assignments.map((assignment) => {
+      const resourcePackageIds = tags.flatMap((tag) =>
         tag.assignmentId === assignment.id && tag.packageTemplateId
           ? [tag.packageTemplateId]
           : [],
-      ),
-      attributedPackageIds: attributions.flatMap((attribution) =>
+      );
+      const persistedPackageIds = attributions.flatMap((attribution) =>
         attribution.bookingResourceAssignmentId === assignment.id
           ? [attribution.packageTemplateId]
           : [],
-      ),
-    }));
+      );
+      return {
+        id: assignment.id,
+        bookingId: assignment.bookingId,
+        attributionSource: assignment.attributionSource,
+        resourcePackageIds,
+        attributedPackageIds: assignment.attributionSource === "manual"
+          ? persistedPackageIds
+          : resourcePackageIds.filter((packageTemplateId) =>
+              selectedPackageIds.has(packageTemplateId)
+            ),
+      };
+    });
   }
 
   async replacePackageSelections(
@@ -317,12 +340,14 @@ class DrizzlePackageTransaction implements PackageTransaction {
         );
     }
 
-    const attributionRows = attributions.flatMap((attribution) =>
-      attribution.packageTemplateIds.map((packageTemplateId) => ({
-        bookingResourceAssignmentId: attribution.assignmentId,
-        packageTemplateId,
-      })),
-    );
+    const attributionRows = attributions
+      .filter(({ source }) => source === "manual")
+      .flatMap((attribution) =>
+        attribution.packageTemplateIds.map((packageTemplateId) => ({
+          bookingResourceAssignmentId: attribution.assignmentId,
+          packageTemplateId,
+        }))
+      );
     if (attributionRows.length > 0) {
       await this.database
         .insert(bookingResourcePackageAttributions)

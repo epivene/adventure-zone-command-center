@@ -2,14 +2,18 @@ type SummaryCardsProps = {
   followUpCount: number;
   newLeadCount: number;
   contractCount: number;
-  routeWarningCount: number;
+  visibleRouteWarningCount: number;
 };
 
 const cards = [
   { key: "followUpCount", label: "Follow-ups due", tone: "text-rose-700" },
   { key: "newLeadCount", label: "New leads", tone: "text-orange-700" },
   { key: "contractCount", label: "Contracts", tone: "text-indigo-700" },
-  { key: "routeWarningCount", label: "Route warnings", tone: "text-amber-700" },
+  {
+    key: "visibleRouteWarningCount",
+    label: "Visible route warnings",
+    tone: "text-amber-700",
+  },
 ] as const;
 
 export function SummaryCards(props: SummaryCardsProps) {

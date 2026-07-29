@@ -32,7 +32,10 @@ export function FollowUpList({
   ).length;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section
+      aria-label="Follow-up queue"
+      className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">Overdue follow-ups</h2>

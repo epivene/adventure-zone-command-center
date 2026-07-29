@@ -115,6 +115,7 @@ export type FollowUpPlanItem = {
   name: string;
   status: BookingStatus;
   probability: Probability;
+  operations?: BookingOperationsSummary | null;
 };
 
 export type UpcomingEvent = {
@@ -130,7 +131,8 @@ export type TodayDashboard = {
   followUpCount: number;
   newLeadCount: number;
   contractCount: number;
-  routeWarningCount: number;
+  /** Distinct route warnings among bookings loaded in the visible dashboard slice. */
+  visibleRouteWarningCount: number;
   nextCall: FollowUpSummary | null;
   followUps: FollowUpSummary[];
   followUpTotal: number;
@@ -154,6 +156,7 @@ export async function enrichTodayDashboardOperations(
         bookingId ? [bookingId] : []
       ),
       ...(dashboard.nextCall?.bookingId ? [dashboard.nextCall.bookingId] : []),
+      ...dashboard.needsFollowUpPlan.map(({ id }) => id),
       ...dashboard.upcomingEvents.map(({ id }) => id),
     ]),
   ].sort();
@@ -169,8 +172,16 @@ export async function enrichTodayDashboardOperations(
         ] as const)));
   const withOperations = (bookingId: string | null) =>
     bookingId ? summaries.get(bookingId) ?? null : null;
+  const visibleRouteWarningCount = new Set(
+    [...summaries.values()].flatMap(({ warnings }) =>
+      warnings
+        .filter(({ kind }) => kind === "route")
+        .map(({ id }) => id)
+    ),
+  ).size;
   return {
     ...dashboard,
+    visibleRouteWarningCount,
     nextCall: dashboard.nextCall
       ? {
           ...dashboard.nextCall,
@@ -180,6 +191,10 @@ export async function enrichTodayDashboardOperations(
     followUps: dashboard.followUps.map((followUp) => ({
       ...followUp,
       operations: withOperations(followUp.bookingId),
+    })),
+    needsFollowUpPlan: dashboard.needsFollowUpPlan.map((booking) => ({
+      ...booking,
+      operations: withOperations(booking.id),
     })),
     upcomingEvents: dashboard.upcomingEvents.map((event) => ({
       ...event,
@@ -496,7 +511,7 @@ export async function getTodayDashboard(
 
   const dashboard: TodayDashboard = {
     ...counts,
-    routeWarningCount: 0,
+    visibleRouteWarningCount: 0,
     nextCall: nextCallRecord ? toFollowUpSummary(nextCallRecord, now) : null,
     followUps: followUpResult.records.map((record) =>
       toFollowUpSummary(record, now),
