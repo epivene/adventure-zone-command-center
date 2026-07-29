@@ -1,15 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createDrizzleTodayDashboardRepository,
   selectFutureIncompleteFollowUp,
   sortFollowUpsForToday,
   type FollowUpSummary,
-  type TodayDashboardFollowUpRow,
 } from "@/features/follow-ups/today-query";
 import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
-import { PgDialect } from "drizzle-orm/pg-core";
-import type { SQL } from "drizzle-orm";
 
 function item(
   id: string,
@@ -122,38 +118,6 @@ describe("sortFollowUpsForToday", () => {
     ]);
   });
 
-  it("puts a later deadline on page one ahead of more than one page of earlier low-priority work", async () => {
-    const now = new Date("2026-08-03T14:00:00.000Z");
-    const lowPriorityRows = Array.from({ length: 50 }, (_, index) =>
-      followUpRow(
-        `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-        new Date(`2026-08-04T${String(index % 24).padStart(2, "0")}:00:00.000Z`),
-        "email",
-      ),
-    );
-    const deadline = followUpRow(
-      "ffffffff-ffff-4fff-8fff-ffffffffffff",
-      new Date("2026-08-10T18:00:00.000Z"),
-      "contract_deadline",
-    );
-    const database = new PriorityRecordingDatabase([...lowPriorityRows, deadline]);
-    const repository = createDrizzleTodayDashboardRepository(
-      database as unknown as Parameters<
-        typeof createDrizzleTodayDashboardRepository
-      >[0],
-    );
-
-    const result = await repository.listOpenFollowUps({
-      page: 1,
-      pageSize: 50,
-      now,
-    });
-
-    expect(result.records).toHaveLength(50);
-    expect(result.records.map((row) => row.followUp.id)).toContain(
-      deadline.followUp.id,
-    );
-  });
 });
 
 describe("selectFutureIncompleteFollowUp", () => {
@@ -184,102 +148,3 @@ describe("selectFutureIncompleteFollowUp", () => {
     ).toBe(false);
   });
 });
-
-function followUpRow(
-  id: string,
-  dueAt: Date,
-  kind: string,
-): TodayDashboardFollowUpRow {
-  return {
-    booking: {
-      id: `booking-${id}`,
-      organizationId: null,
-      primaryContactId: null,
-      name: `Booking ${id}`,
-      city: "Fargo",
-      region: "ND",
-      startsAt: null,
-      status: "possible",
-      probability: "possible",
-      createdAt: new Date("2026-08-01T12:00:00.000Z"),
-      updatedAt: new Date("2026-08-03T12:00:00.000Z"),
-    },
-    contact: null,
-    followUp: {
-      id,
-      organizationId: null,
-      contactId: null,
-      bookingId: `booking-${id}`,
-      kind,
-      dueAt,
-      completedAt: null,
-      createdAt: new Date("2026-08-01T12:00:00.000Z"),
-    },
-    organization: null,
-  };
-}
-
-class PriorityRecordingDatabase {
-  private readonly dialect = new PgDialect();
-
-  constructor(private readonly rows: TodayDashboardFollowUpRow[]) {}
-
-  select(selection?: Record<string, unknown>) {
-    const isCount = Boolean(selection && "value" in selection);
-    let limit = Number.POSITIVE_INFINITY;
-    let offset = 0;
-    let orderSql = "";
-    const rows = this.rows;
-    const renderOrder = (expressions: SQL[]) =>
-      expressions
-        .map((expression) => this.dialect.sqlToQuery(expression).sql)
-        .join(" ");
-    const builder = {
-      from() {
-        return builder;
-      },
-      leftJoin() {
-        return builder;
-      },
-      where() {
-        return builder;
-      },
-      orderBy(...expressions: SQL[]) {
-        orderSql = renderOrder(expressions);
-        return builder;
-      },
-      limit(value: number) {
-        limit = value;
-        return builder;
-      },
-      offset(value: number) {
-        offset = value;
-        return builder;
-      },
-      then<TResult1 = unknown, TResult2 = never>(
-        onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
-        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-      ) {
-        const records = isCount
-          ? [{ value: rows.length }]
-          : [...rows]
-              .sort((left, right) => {
-                if (orderSql.toLowerCase().includes("case")) {
-                  const leftDeadline = left.followUp.kind.includes("deadline");
-                  const rightDeadline = right.followUp.kind.includes("deadline");
-                  if (leftDeadline !== rightDeadline) return leftDeadline ? -1 : 1;
-                }
-                return (
-                  left.followUp.dueAt.getTime() - right.followUp.dueAt.getTime() ||
-                  left.followUp.createdAt.getTime() -
-                    right.followUp.createdAt.getTime() ||
-                  left.followUp.id.localeCompare(right.followUp.id)
-                );
-              })
-              .slice(offset, offset + limit);
-        return Promise.resolve(records).then(onfulfilled, onrejected);
-      },
-    };
-    return builder;
-  }
-}

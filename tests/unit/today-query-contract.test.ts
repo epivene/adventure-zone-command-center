@@ -64,7 +64,7 @@ describe("Today bounded-query contract", () => {
     expect(database.orderSql).toContain('"bookings"."probability"');
     expect(database.orderSql).toContain('"bookings"."updated_at"');
     expect(database.orderSql).toMatch(
-      /case[\s\S]*"follow_ups"\."due_at"[\s\S]*"follow_ups"\."created_at"[\s\S]*"follow_ups"\."id"/i,
+      /case[\s\S]*"follow_ups"\."due_at" < \$1 then 0[\s\S]*"follow_ups"\."due_at" < \$2 then 1[\s\S]*"bookings"\."status"[\s\S]*then 2[\s\S]*"bookings"\."probability" = \$7 then 3[\s\S]*"bookings"\."updated_at" <= \$8[\s\S]*then 4[\s\S]*else 5[\s\S]*end asc[\s\S]*"follow_ups"\."due_at" asc[\s\S]*"follow_ups"\."created_at" asc[\s\S]*"follow_ups"\."id" asc/i,
     );
     expect(database.priorityParams).toEqual([
       new Date("2026-08-03T05:00:00.000Z"),
