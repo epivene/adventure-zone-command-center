@@ -1,4 +1,5 @@
 import { and, desc, eq, sql } from "drizzle-orm";
+import { z } from "zod";
 
 import type { db as database } from "@/db/client";
 import {
@@ -10,9 +11,13 @@ import {
   contacts,
   organizations,
 } from "@/db/schema";
-import { canonicalContactSnapshot } from "@/features/act-sync/contact-snapshot";
+import {
+  canonicalContactSnapshot,
+  contactSnapshotsEqual,
+} from "@/features/act-sync/contact-snapshot";
 import type { RemoteActContact } from "@/features/act-sync/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import {
   syncComparisonCategories,
   type LocalSyncContact,
@@ -27,11 +32,31 @@ type SyncWriter = Pick<DrizzleDatabase, "select" | "insert" | "update">;
 
 export type SyncSummary = Record<SyncComparisonCategory, number>;
 
+export type SyncRunStatus =
+  | "previewed"
+  | "applying"
+  | "partial"
+  | "completed"
+  | "failed";
+
+export type StoredSyncOperation = {
+  rowId: string;
+  status: ApplyOperationStatus;
+  decision: SyncDecision | null;
+  localContactId: string | null;
+  actRecordId: string | null;
+  error: string | null;
+  retryable: boolean;
+  updatedAt: Date;
+};
+
 export type StoredSyncPreview = {
   id: string;
-  status: "previewed" | "applying" | "completed" | "failed";
+  status: SyncRunStatus;
   rows: SyncComparisonRow[];
+  operations: StoredSyncOperation[];
   summary: SyncSummary;
+  activeQueueToken: string | null;
   startedAt: Date;
   completedAt: Date | null;
 };
@@ -48,6 +73,7 @@ export interface SyncRepository {
 
 export type ApplyOperationStatus =
   | "pending"
+  | "approved"
   | "applying"
   | "completed"
   | "failed"
@@ -58,27 +84,64 @@ export type ApplyOperation = {
   rowId: string;
   status: ApplyOperationStatus;
   decision: SyncDecision | null;
+  localContactId: string | null;
   actRecordId: string | null;
   error: string | null;
+  retryable: boolean;
+  updatedAt: Date;
 };
 
 export type ApplyOperationResult = {
   status: Extract<ApplyOperationStatus, "completed" | "failed" | "skipped">;
   error: string | null;
+  retryable?: boolean;
 };
 
+export type StagedSyncDecision = {
+  rowId: string;
+  decision: SyncDecision;
+  localContactId?: string;
+};
+
+export type StageOperationsOptions = {
+  replaceExisting: boolean;
+  queueToken: string;
+};
+
+export class LocalContactChangedAfterPreviewError extends Error {
+  constructor() {
+    super("Command Center changed after this preview. Create a new preview.");
+    this.name = "LocalContactChangedAfterPreviewError";
+  }
+}
+
 export interface SyncApplyRepository extends SyncRepository {
+  stageOperations(
+    runId: string,
+    decisions: readonly StagedSyncDecision[],
+    options: StageOperationsOptions,
+  ): Promise<void>;
+  clearStagedOperations(runId: string, queueToken?: string): Promise<void>;
   claimOperation(
     runId: string,
     rowId: string,
     decision: SyncDecision,
-  ): Promise<"claimed" | "finished" | "in_progress" | "missing">;
+    localContactId?: string,
+    queueToken?: string,
+  ): Promise<
+    "claimed" | "finished" | "in_progress" | "missing" | "superseded"
+  >;
   getOperation(runId: string, rowId: string): Promise<ApplyOperation | null>;
   rememberCreatedActId(
     runId: string,
     rowId: string,
     actRecordId: string,
   ): Promise<void>;
+  assertLocalContactUnchanged(row: SyncComparisonRow): Promise<boolean>;
+  withLockedLocalContact<T>(
+    row: SyncComparisonRow,
+    action: () => Promise<T>,
+  ): Promise<T>;
   pullContact(
     row: SyncComparisonRow,
     remote: RemoteActContact,
@@ -99,46 +162,285 @@ export interface SyncApplyRepository extends SyncRepository {
   finishRun(runId: string): Promise<void>;
 }
 
+const contactSnapshotSchema = z
+  .object({
+    firstName: z.string(),
+    lastName: z.string(),
+    organizationName: z.string().nullable(),
+    jobTitle: z.string().nullable(),
+    email: z.string().nullable(),
+    phone: z.string().nullable(),
+    address1: z.string().nullable(),
+    address2: z.string().nullable(),
+    city: z.string().nullable(),
+    region: z.string().nullable(),
+    postalCode: z.string().nullable(),
+  })
+  .strict();
+
+const nullableSnapshotSchema = contactSnapshotSchema.nullable();
+const syncComparisonRowSchema = z
+  .object({
+    rowId: z.string().min(1),
+    category: z.enum(syncComparisonCategories),
+    matchReason: z.enum([
+      "act_record_id",
+      "email",
+      "organization_contact",
+      "none",
+    ]),
+    localContactId: z.string().nullable(),
+    actRecordId: z.string().nullable(),
+    candidateLocalContactIds: z.array(z.string()),
+    candidateActRecordIds: z.array(z.string()),
+    baseSnapshot: nullableSnapshotSchema,
+    localSnapshot: nullableSnapshotSchema,
+    actSnapshot: nullableSnapshotSchema,
+    actEditedAt: z.string().nullable(),
+    allowedDecisions: z.array(
+      z.enum([
+        "pull",
+        "push",
+        "keep_act",
+        "keep_app",
+        "link",
+        "keep_separate",
+        "skip",
+      ]),
+    ),
+    messages: z.array(z.string()),
+  })
+  .strict();
+
+const syncSummarySchema = z
+  .object({
+    new_in_act: z.number().int().nonnegative(),
+    new_in_app: z.number().int().nonnegative(),
+    changed_in_act: z.number().int().nonnegative(),
+    changed_in_app: z.number().int().nonnegative(),
+    changed_in_both: z.number().int().nonnegative(),
+    possible_match: z.number().int().nonnegative(),
+    already_matched: z.number().int().nonnegative(),
+    missing_from_act: z.number().int().nonnegative(),
+    error: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const storedSummarySchema = z
+  .object({
+    counts: syncSummarySchema,
+    rows: z.array(z.unknown()),
+  })
+  .strict();
+
+const applyOperationStatuses = [
+  "pending",
+  "approved",
+  "applying",
+  "completed",
+  "failed",
+  "skipped",
+] as const;
+
+const syncRunStatuses = [
+  "previewed",
+  "applying",
+  "partial",
+  "completed",
+  "failed",
+] as const;
+
+const syncDecisionSchema = z.enum([
+  "pull",
+  "push",
+  "keep_act",
+  "keep_app",
+  "link",
+  "keep_separate",
+  "skip",
+]);
+
 function isSnapshot(value: unknown) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isSyncSummary(value: unknown): value is SyncSummary {
-  if (!isSnapshot(value)) return false;
-  return syncComparisonCategories.every(
-    (category) =>
-      typeof (value as Record<string, unknown>)[category] === "number",
+export const ACT_SYNC_OPERATION_LEASE_MS = 5 * 60 * 1_000;
+
+export function parseStoredSyncRows(value: unknown): SyncComparisonRow[] {
+  const parsed = z.array(syncComparisonRowSchema).safeParse(value);
+  if (!parsed.success) {
+    throw new Error("Stored Act! sync preview is malformed.");
+  }
+  return parsed.data;
+}
+
+export function deriveSyncRunStatus(
+  operations: readonly Pick<ApplyOperation, "status">[],
+): SyncRunStatus {
+  if (operations.length === 0) return "previewed";
+  if (operations.some(({ status }) => status === "applying")) {
+    return "applying";
+  }
+  const pending = operations.some(
+    ({ status }) => status === "pending" || status === "approved",
   );
+  const settled = operations.some(
+    ({ status }) => status !== "pending" && status !== "approved",
+  );
+  if (pending) return settled ? "partial" : "previewed";
+  return operations.some(({ status }) => status === "failed")
+    ? "failed"
+    : "completed";
 }
 
-function storedSummary(value: unknown) {
-  if (!isSnapshot(value)) return null;
-  const record = value as Record<string, unknown>;
-  if (!isSyncSummary(record.counts) || !Array.isArray(record.rows)) return null;
-  return {
-    counts: record.counts,
-    rows: record.rows as SyncComparisonRow[],
-  };
-}
-
-function storedPreview(
-  run: typeof actSyncRuns.$inferSelect,
-): StoredSyncPreview {
-  const summary = storedSummary(run.summary);
-  if (!summary) throw new Error("Stored Act! sync preview is malformed.");
+export function operationClaimDisposition(
+  operation: Pick<
+    ApplyOperation,
+    "status" | "decision" | "actRecordId" | "retryable" | "updatedAt"
+  >,
+  now = new Date(),
+): "finished" | "in_progress" | "reclaim" | "manual_review" {
   if (
-    run.status !== "previewed" &&
-    run.status !== "applying" &&
-    run.status !== "completed" &&
-    run.status !== "failed"
+    operation.status === "completed" ||
+    operation.status === "skipped" ||
+    (operation.status === "failed" && !operation.retryable)
   ) {
+    return "finished";
+  }
+  if (operation.status !== "applying") return "reclaim";
+  if (
+    now.getTime() - operation.updatedAt.getTime() <
+    ACT_SYNC_OPERATION_LEASE_MS
+  ) {
+    return "in_progress";
+  }
+  if (
+    (operation.decision === "push" || operation.decision === "keep_app") &&
+    operation.actRecordId === null
+  ) {
+    return "manual_review";
+  }
+  return "reclaim";
+}
+
+export function staleOperationRecovery(
+  operation: Pick<
+    ApplyOperation,
+    "status" | "decision" | "actRecordId" | "retryable" | "updatedAt"
+  >,
+  now = new Date(),
+): Pick<ApplyOperationResult, "status" | "error" | "retryable"> | null {
+  const disposition = operationClaimDisposition(operation, now);
+  if (disposition === "manual_review") {
+    return {
+      status: "failed",
+      error:
+        "A previous Act! create may have completed. Create a new preview before trying again.",
+      retryable: false,
+    };
+  }
+  if (
+    operation.status === "applying" &&
+    disposition === "reclaim"
+  ) {
+    return {
+      status: "failed",
+      error: "A previous sync attempt was interrupted. Retry this contact.",
+      retryable: true,
+    };
+  }
+  return null;
+}
+
+type StoredRunRecord = Pick<
+  typeof actSyncRuns.$inferSelect,
+  | "id"
+  | "status"
+  | "summary"
+  | "activeQueueToken"
+  | "startedAt"
+  | "completedAt"
+>;
+
+type StoredOperationRecord = Pick<
+  typeof actSyncOperations.$inferSelect,
+  | "rowKey"
+  | "status"
+  | "decision"
+  | "localContactId"
+  | "actRecordId"
+  | "error"
+  | "retryable"
+  | "updatedAt"
+>;
+
+export function buildStoredSyncPreview(
+  run: StoredRunRecord,
+  operationRecords: readonly StoredOperationRecord[],
+): StoredSyncPreview {
+  const summary = storedSummarySchema.safeParse(run.summary);
+  if (!summary.success) {
+    throw new Error("Stored Act! sync preview is malformed.");
+  }
+  const status = z.enum(syncRunStatuses).safeParse(run.status);
+  const activeQueueToken =
+    run.activeQueueToken === null
+      ? { success: true as const, data: null }
+      : z.uuid().safeParse(run.activeQueueToken);
+  if (!status.success || !activeQueueToken.success) {
     throw new Error("Stored Act! sync run has an unsupported status.");
+  }
+  const rows = parseStoredSyncRows(summary.data.rows);
+  const operations = new Map<string, StoredSyncOperation>();
+  for (const record of operationRecords) {
+    const operationStatus = z.enum(applyOperationStatuses).safeParse(
+      record.status,
+    );
+    const decision =
+      record.decision === null
+        ? { success: true as const, data: null }
+        : syncDecisionSchema.safeParse(record.decision);
+    if (
+      !operationStatus.success ||
+      !decision.success ||
+      typeof record.rowKey !== "string" ||
+      record.rowKey.length === 0 ||
+      (record.localContactId !== null &&
+        typeof record.localContactId !== "string") ||
+      (record.actRecordId !== null &&
+        typeof record.actRecordId !== "string") ||
+      (record.error !== null && typeof record.error !== "string") ||
+      typeof record.retryable !== "boolean" ||
+      !(record.updatedAt instanceof Date) ||
+      Number.isNaN(record.updatedAt.getTime()) ||
+      operations.has(record.rowKey)
+    ) {
+      throw new Error("Stored Act! sync operations are malformed.");
+    }
+    operations.set(record.rowKey, {
+      rowId: record.rowKey,
+      status: operationStatus.data,
+      decision: decision.data,
+      localContactId: record.localContactId,
+      actRecordId: record.actRecordId,
+      error: record.error,
+      retryable: record.retryable,
+      updatedAt: record.updatedAt,
+    });
+  }
+  if (
+    operations.size !== rows.length ||
+    rows.some((row) => !operations.has(row.rowId))
+  ) {
+    throw new Error("Stored Act! sync operations are malformed.");
   }
   return {
     id: run.id,
-    status: run.status,
-    rows: structuredClone(summary.rows),
-    summary: structuredClone(summary.counts),
+    status: status.data,
+    rows,
+    operations: rows.map((row) => structuredClone(operations.get(row.rowId)!)),
+    summary: summary.data.counts,
+    activeQueueToken: activeQueueToken.data,
     startedAt: run.startedAt,
     completedAt: run.completedAt,
   };
@@ -244,7 +546,18 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         id: run.id,
         status: "previewed",
         rows: structuredClone([...rows]),
+        operations: rows.map((row) => ({
+          rowId: row.rowId,
+          status: "pending",
+          decision: null,
+          localContactId: row.localContactId,
+          actRecordId: row.actRecordId,
+          error: null,
+          retryable: true,
+          updatedAt: run.startedAt,
+        })),
         summary: structuredClone(summary),
+        activeQueueToken: null,
         startedAt: run.startedAt,
         completedAt: run.completedAt,
       };
@@ -252,30 +565,313 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
   }
 
   async getPreview(runId: string): Promise<StoredSyncPreview | null> {
-    const [run] = await this.database
-      .select()
-      .from(actSyncRuns)
-      .where(eq(actSyncRuns.id, runId))
-      .limit(1);
-    if (!run) return null;
-    return storedPreview(run);
+    return this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select()
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) return null;
+      const operations = await transaction
+        .select()
+        .from(actSyncOperations)
+        .where(eq(actSyncOperations.runId, runId))
+        .for("update");
+      const now = new Date();
+      const reconciledOperations: (typeof actSyncOperations.$inferSelect)[] =
+        [];
+      for (const operation of operations) {
+        const recovery = staleOperationRecovery(
+          {
+            status: operation.status as ApplyOperationStatus,
+            decision: operation.decision as SyncDecision | null,
+            actRecordId: operation.actRecordId,
+            retryable: operation.retryable,
+            updatedAt: operation.updatedAt,
+          },
+          now,
+        );
+        if (!recovery) {
+          reconciledOperations.push(operation);
+          continue;
+        }
+        const reconciled = {
+          ...operation,
+          ...recovery,
+          updatedAt: now,
+        };
+        await transaction
+          .update(actSyncOperations)
+          .set({
+            status: recovery.status,
+            error: recovery.error,
+            retryable: recovery.retryable,
+            updatedAt: now,
+          })
+          .where(eq(actSyncOperations.id, operation.id));
+        reconciledOperations.push(reconciled);
+      }
+      const status = deriveSyncRunStatus(
+        reconciledOperations.map((operation) => ({
+          status: operation.status as ApplyOperationStatus,
+        })),
+      );
+      const finished = status === "completed" || status === "failed";
+      const completedAt = finished ? (run.completedAt ?? now) : null;
+      await transaction
+        .update(actSyncRuns)
+        .set({ status, completedAt })
+        .where(eq(actSyncRuns.id, runId));
+      return buildStoredSyncPreview(
+        { ...run, status, completedAt },
+        reconciledOperations,
+      );
+    });
   }
 
   async getLatestPreview(): Promise<StoredSyncPreview | null> {
     const [run] = await this.database
-      .select()
+      .select({ id: actSyncRuns.id })
       .from(actSyncRuns)
       .orderBy(desc(actSyncRuns.startedAt))
       .limit(1);
-    return run ? storedPreview(run) : null;
+    return run ? this.getPreview(run.id) : null;
+  }
+
+  async stageOperations(
+    runId: string,
+    decisions: readonly StagedSyncDecision[],
+    options: StageOperationsOptions,
+  ) {
+    await this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({
+          id: actSyncRuns.id,
+          activeQueueToken: actSyncRuns.activeQueueToken,
+        })
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) throw new Error("Act! sync preview was not found.");
+      if (
+        !options.replaceExisting &&
+        run.activeQueueToken !== options.queueToken
+      ) {
+        throw new Error(
+          "The saved sync queue changed in another page. Review the current selections and try again.",
+        );
+      }
+
+      const operations = await transaction
+        .select()
+        .from(actSyncOperations)
+        .where(eq(actSyncOperations.runId, runId))
+        .for("update");
+      const operationsByRowId = new Map(
+        operations.map((operation) => [operation.rowKey, operation]),
+      );
+      const now = new Date();
+
+      if (options.replaceExisting) {
+        await transaction
+          .update(actSyncOperations)
+          .set({
+            status: "pending",
+            decision: null,
+            error: null,
+            retryable: true,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(actSyncOperations.runId, runId),
+              eq(actSyncOperations.status, "approved"),
+            ),
+          );
+        await transaction
+          .update(actSyncOperations)
+          .set({
+            decision: null,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(actSyncOperations.runId, runId),
+              eq(actSyncOperations.status, "failed"),
+              eq(actSyncOperations.retryable, true),
+            ),
+          );
+        for (const operation of operations) {
+          if (operation.status === "approved") {
+            operation.status = "pending";
+            operation.decision = null;
+            operation.error = null;
+            operation.retryable = true;
+            operation.updatedAt = now;
+          } else if (operation.status === "failed" && operation.retryable) {
+            operation.decision = null;
+            operation.updatedAt = now;
+          }
+        }
+      }
+
+      for (const decision of decisions) {
+        const operation = operationsByRowId.get(decision.rowId);
+        if (
+          !operation ||
+          operation.status === "applying" ||
+          operation.status === "completed" ||
+          operation.status === "skipped" ||
+          (operation.status === "failed" && !operation.retryable)
+        ) {
+          throw new Error("A selected Act! sync row cannot be staged.");
+        }
+        await transaction
+          .update(actSyncOperations)
+          .set({
+            decision: decision.decision,
+            localContactId:
+              decision.localContactId ?? operation.localContactId,
+            status: "approved",
+            error: null,
+            retryable: true,
+            updatedAt: now,
+          })
+          .where(eq(actSyncOperations.id, operation.id));
+        operation.decision = decision.decision;
+        operation.localContactId =
+          decision.localContactId ?? operation.localContactId;
+        operation.status = "approved";
+        operation.error = null;
+        operation.retryable = true;
+        operation.updatedAt = now;
+      }
+
+      const status = deriveSyncRunStatus(
+        operations.map((operation) => ({
+          status: operation.status as ApplyOperationStatus,
+        })),
+      );
+      await transaction
+        .update(actSyncRuns)
+        .set({
+          status,
+          completedAt: null,
+          activeQueueToken: options.queueToken,
+        })
+        .where(eq(actSyncRuns.id, runId));
+    });
+  }
+
+  async clearStagedOperations(runId: string, queueToken?: string) {
+    await this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({
+          id: actSyncRuns.id,
+          completedAt: actSyncRuns.completedAt,
+          activeQueueToken: actSyncRuns.activeQueueToken,
+        })
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) throw new Error("Act! sync preview was not found.");
+      if (
+        run.activeQueueToken !== null &&
+        run.activeQueueToken !== queueToken
+      ) {
+        throw new Error(
+          "The saved sync queue changed in another page. Review the current selections and try again.",
+        );
+      }
+
+      const operations = await transaction
+        .select()
+        .from(actSyncOperations)
+        .where(eq(actSyncOperations.runId, runId))
+        .for("update");
+      const now = new Date();
+      await transaction
+        .update(actSyncOperations)
+        .set({
+          status: "pending",
+          decision: null,
+          error: null,
+          retryable: true,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(actSyncOperations.runId, runId),
+            eq(actSyncOperations.status, "approved"),
+          ),
+        );
+      await transaction
+        .update(actSyncOperations)
+        .set({
+          decision: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(actSyncOperations.runId, runId),
+            eq(actSyncOperations.status, "failed"),
+            eq(actSyncOperations.retryable, true),
+          ),
+        );
+      for (const operation of operations) {
+        if (operation.status === "approved") {
+          operation.status = "pending";
+          operation.decision = null;
+          operation.error = null;
+          operation.retryable = true;
+          operation.updatedAt = now;
+        } else if (operation.status === "failed" && operation.retryable) {
+          operation.decision = null;
+          operation.updatedAt = now;
+        }
+      }
+
+      const status = deriveSyncRunStatus(
+        operations.map((operation) => ({
+          status: operation.status as ApplyOperationStatus,
+        })),
+      );
+      const finished = status === "completed" || status === "failed";
+      await transaction
+        .update(actSyncRuns)
+        .set({
+          status,
+          completedAt: finished ? (run.completedAt ?? now) : null,
+          activeQueueToken: null,
+        })
+        .where(eq(actSyncRuns.id, runId));
+    });
   }
 
   async claimOperation(
     runId: string,
     rowId: string,
     decision: SyncDecision,
+    localContactId?: string,
+    queueToken?: string,
   ) {
     return this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({
+          id: actSyncRuns.id,
+          activeQueueToken: actSyncRuns.activeQueueToken,
+        })
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) return "missing" as const;
+      if (run.activeQueueToken !== (queueToken ?? null)) {
+        return "superseded" as const;
+      }
       const [operation] = await transaction
         .select()
         .from(actSyncOperations)
@@ -288,22 +884,44 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         .limit(1)
         .for("update");
       if (!operation) return "missing" as const;
-      if (operation.status === "completed" || operation.status === "skipped") {
+      const claim = operationClaimDisposition({
+        status: operation.status as ApplyOperationStatus,
+        decision: operation.decision as SyncDecision | null,
+        actRecordId: operation.actRecordId,
+        retryable: operation.retryable,
+        updatedAt: operation.updatedAt,
+      });
+      if (claim === "finished") {
         return "finished" as const;
       }
-      if (operation.status === "applying") return "in_progress" as const;
+      if (claim === "in_progress") return "in_progress" as const;
+      if (claim === "manual_review") {
+        await transaction
+          .update(actSyncOperations)
+          .set({
+            status: "failed",
+            error:
+              "A previous Act! create may have completed. Create a new preview before trying again.",
+            retryable: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(actSyncOperations.id, operation.id));
+        return "finished" as const;
+      }
       await transaction
         .update(actSyncOperations)
         .set({
           decision,
+          localContactId: localContactId ?? operation.localContactId,
           status: "applying",
           error: null,
+          retryable: true,
           updatedAt: new Date(),
         })
         .where(eq(actSyncOperations.id, operation.id));
       await transaction
         .update(actSyncRuns)
-        .set({ status: "applying" })
+        .set({ status: "applying", completedAt: null })
         .where(eq(actSyncRuns.id, runId));
       return "claimed" as const;
     });
@@ -329,8 +947,11 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       rowId: operation.rowKey,
       status: operation.status as ApplyOperationStatus,
       decision: operation.decision as SyncDecision | null,
+      localContactId: operation.localContactId,
       actRecordId: operation.actRecordId,
       error: operation.error,
+      retryable: operation.retryable,
+      updatedAt: operation.updatedAt,
     };
   }
 
@@ -339,20 +960,137 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
     rowId: string,
     actRecordId: string,
   ) {
-    await this.database
-      .update(actSyncOperations)
-      .set({ actRecordId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(actSyncOperations.runId, runId),
-          eq(actSyncOperations.rowKey, rowId),
-          eq(actSyncOperations.status, "applying"),
-        ),
+    await this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({ id: actSyncRuns.id })
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) throw new Error("Act! sync run is missing.");
+      const [operation] = await transaction
+        .select({ id: actSyncOperations.id, status: actSyncOperations.status })
+        .from(actSyncOperations)
+        .where(
+          and(
+            eq(actSyncOperations.runId, runId),
+            eq(actSyncOperations.rowKey, rowId),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!operation || operation.status !== "applying") {
+        throw new Error("Act! sync operation is not active.");
+      }
+      const [remembered] = await transaction
+        .update(actSyncOperations)
+        .set({ actRecordId, updatedAt: new Date() })
+        .where(eq(actSyncOperations.id, operation.id))
+        .returning({ id: actSyncOperations.id });
+      if (!remembered) throw new Error("Could not remember the created Act id.");
+    });
+  }
+
+  async assertLocalContactUnchanged(row: SyncComparisonRow) {
+    if (!row.localContactId || !row.localSnapshot) return false;
+    return this.database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(contacts)
+        .where(eq(contacts.id, row.localContactId!))
+        .limit(1)
+        .for("update");
+      if (!current) return false;
+      const [organization] = current.organizationId
+        ? await transaction
+            .select({ name: organizations.name })
+            .from(organizations)
+            .where(eq(organizations.id, current.organizationId))
+            .limit(1)
+            .for("update")
+        : [];
+      return contactSnapshotsEqual(
+        canonicalContactSnapshot({
+          firstName: current.firstName,
+          lastName: current.lastName,
+          organizationName: organization?.name ?? null,
+          jobTitle: current.jobTitle,
+          email: current.email,
+          phone: current.phone,
+          address1: current.address1,
+          address2: current.address2,
+          city: current.city,
+          region: current.region,
+          postalCode: current.postalCode,
+        }),
+        row.localSnapshot,
       );
+    });
+  }
+
+  async withLockedLocalContact<T>(
+    row: SyncComparisonRow,
+    action: () => Promise<T>,
+  ) {
+    if (!row.localContactId || !row.localSnapshot) {
+      throw new LocalContactChangedAfterPreviewError();
+    }
+    return this.database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select()
+        .from(contacts)
+        .where(eq(contacts.id, row.localContactId!))
+        .limit(1)
+        .for("update");
+      const [organization] = current?.organizationId
+        ? await transaction
+            .select({ name: organizations.name })
+            .from(organizations)
+            .where(eq(organizations.id, current.organizationId))
+            .limit(1)
+            .for("update")
+        : [];
+      if (
+        !current ||
+        !contactSnapshotsEqual(
+          canonicalContactSnapshot({
+            firstName: current.firstName,
+            lastName: current.lastName,
+            organizationName: organization?.name ?? null,
+            jobTitle: current.jobTitle,
+            email: current.email,
+            phone: current.phone,
+            address1: current.address1,
+            address2: current.address2,
+            city: current.city,
+            region: current.region,
+            postalCode: current.postalCode,
+          }),
+          row.localSnapshot,
+        )
+      ) {
+        throw new LocalContactChangedAfterPreviewError();
+      }
+      return action();
+    });
   }
 
   async pullContact(row: SyncComparisonRow, remote: RemoteActContact) {
     return this.database.transaction(async (transaction) => {
+      if (!row.localContactId) {
+        const [recovered] = await transaction
+          .select({ entityId: actExternalLinks.entityId })
+          .from(actExternalLinks)
+          .where(
+            and(
+              eq(actExternalLinks.entityType, "contact"),
+              eq(actExternalLinks.actRecordId, remote.id),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (recovered) return recovered.entityId;
+      }
       const now = new Date();
       const organizationId = await this.resolveOrganizationId(
         transaction,
@@ -360,32 +1098,39 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         now,
       );
       let localContactId = row.localContactId;
-      let before: Record<string, unknown> | null = null;
+      let before: ReturnType<typeof canonicalContactSnapshot> | null = null;
       if (localContactId) {
         const [current] = await transaction
-          .select({ contact: contacts, organizationName: organizations.name })
+          .select()
           .from(contacts)
-          .leftJoin(
-            organizations,
-            eq(contacts.organizationId, organizations.id),
-          )
           .where(eq(contacts.id, localContactId))
           .limit(1)
-          .for("update", { of: contacts });
+          .for("update");
         if (!current) throw new Error("Local contact is missing.");
+        const [organization] = current.organizationId
+          ? await transaction
+              .select({ name: organizations.name })
+              .from(organizations)
+              .where(eq(organizations.id, current.organizationId))
+              .limit(1)
+              .for("update")
+          : [];
         before = canonicalContactSnapshot({
-          firstName: current.contact.firstName,
-          lastName: current.contact.lastName,
-          organizationName: current.organizationName,
-          jobTitle: current.contact.jobTitle,
-          email: current.contact.email,
-          phone: current.contact.phone,
-          address1: current.contact.address1,
-          address2: current.contact.address2,
-          city: current.contact.city,
-          region: current.contact.region,
-          postalCode: current.contact.postalCode,
+          firstName: current.firstName,
+          lastName: current.lastName,
+          organizationName: organization?.name ?? null,
+          jobTitle: current.jobTitle,
+          email: current.email,
+          phone: current.phone,
+          address1: current.address1,
+          address2: current.address2,
+          city: current.city,
+          region: current.region,
+          postalCode: current.postalCode,
         });
+        if (!contactSnapshotsEqual(before, row.localSnapshot)) {
+          throw new LocalContactChangedAfterPreviewError();
+        }
         await transaction
           .update(contacts)
           .set({
@@ -442,6 +1187,30 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         .limit(1)
         .for("update");
       if (!current) throw new Error("Local contact is missing.");
+      const [organization] = current.organizationId
+        ? await transaction
+            .select({ name: organizations.name })
+            .from(organizations)
+            .where(eq(organizations.id, current.organizationId))
+            .limit(1)
+            .for("update")
+        : [];
+      const currentSnapshot = canonicalContactSnapshot({
+        firstName: current.firstName,
+        lastName: current.lastName,
+        organizationName: organization?.name ?? null,
+        jobTitle: current.jobTitle,
+        email: current.email,
+        phone: current.phone,
+        address1: current.address1,
+        address2: current.address2,
+        city: current.city,
+        region: current.region,
+        postalCode: current.postalCode,
+      });
+      if (!contactSnapshotsEqual(currentSnapshot, row.localSnapshot)) {
+        throw new LocalContactChangedAfterPreviewError();
+      }
       const now = new Date();
       await this.ensureExternalLink(
         transaction,
@@ -527,41 +1296,69 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
     rowId: string,
     result: ApplyOperationResult,
   ) {
-    await this.database
-      .update(actSyncOperations)
-      .set({
-        status: result.status,
-        error: result.error,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(actSyncOperations.runId, runId),
-          eq(actSyncOperations.rowKey, rowId),
-        ),
-      );
+    await this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({ id: actSyncRuns.id })
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) throw new Error("Act! sync run is missing.");
+      const [operation] = await transaction
+        .select({ id: actSyncOperations.id })
+        .from(actSyncOperations)
+        .where(
+          and(
+            eq(actSyncOperations.runId, runId),
+            eq(actSyncOperations.rowKey, rowId),
+          ),
+        )
+        .limit(1)
+        .for("update");
+      if (!operation) throw new Error("Act! sync operation is missing.");
+      await transaction
+        .update(actSyncOperations)
+        .set({
+          status: result.status,
+          error: result.error,
+          retryable: result.retryable ?? true,
+          updatedAt: new Date(),
+        })
+        .where(eq(actSyncOperations.id, operation.id));
+    });
   }
 
   async finishRun(runId: string) {
-    const operations = await this.database
-      .select({ status: actSyncOperations.status })
-      .from(actSyncOperations)
-      .where(eq(actSyncOperations.runId, runId));
-    if (
-      operations.some(
-        ({ status }) => status === "pending" || status === "applying",
-      )
-    ) {
-      return;
-    }
-    const failed = operations.some(({ status }) => status === "failed");
-    await this.database
-      .update(actSyncRuns)
-      .set({
-        status: failed ? "failed" : "completed",
-        completedAt: new Date(),
-      })
-      .where(eq(actSyncRuns.id, runId));
+    await this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({
+          id: actSyncRuns.id,
+          completedAt: actSyncRuns.completedAt,
+        })
+        .from(actSyncRuns)
+        .where(eq(actSyncRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) return;
+      const operations = await transaction
+        .select({ status: actSyncOperations.status })
+        .from(actSyncOperations)
+        .where(eq(actSyncOperations.runId, runId))
+        .for("update");
+      const status = deriveSyncRunStatus(
+        operations.map(({ status: operationStatus }) => ({
+          status: operationStatus as ApplyOperationStatus,
+        })),
+      );
+      const finished = status === "completed" || status === "failed";
+      await transaction
+        .update(actSyncRuns)
+        .set({
+          status,
+          completedAt: finished ? (run.completedAt ?? new Date()) : null,
+        })
+        .where(eq(actSyncRuns.id, runId));
+    });
   }
 
   private contactValues(remote: RemoteActContact) {
@@ -571,6 +1368,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       jobTitle: remote.jobTitle,
       email: remote.email,
       phone: remote.phone,
+      normalizedPhone: remote.phone
+        ? normalizeNorthAmericanPhone(remote.phone)
+        : null,
       address1: remote.address1,
       address2: remote.address2,
       city: remote.city,

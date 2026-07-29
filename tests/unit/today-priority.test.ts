@@ -15,6 +15,8 @@ function item(
 ): FollowUpSummary {
   return {
     id,
+    organizationId: null,
+    contactId: null,
     bookingId: `booking-${id}`,
     bookingName: `Booking ${id}`,
     kind: "call",
@@ -115,6 +117,7 @@ describe("sortFollowUpsForToday", () => {
       "later-today",
     ]);
   });
+
 });
 
 describe("selectFutureIncompleteFollowUp", () => {

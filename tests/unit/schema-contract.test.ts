@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
 import {
+  activities,
   actContactSyncStates,
   actExternalLinks,
   actImportRuns,
   actSyncOperations,
   actSyncRuns,
+  activityRevisions,
   auditEntries,
   bookings,
+  callSessions,
   contacts,
   followUps,
   organizations,
@@ -62,13 +65,55 @@ describe("database schema contract", () => {
       "localDirty", "state", "createdAt", "updatedAt",
     ]));
     expect(Object.keys(actSyncRuns)).toEqual(expect.arrayContaining([
-      "id", "status", "startedAt", "completedAt", "summary", "createdAt",
+      "id", "status", "startedAt", "completedAt", "summary",
+      "activeQueueToken", "createdAt",
     ]));
     expect(Object.keys(actSyncOperations)).toEqual(expect.arrayContaining([
       "id", "runId", "rowKey", "localContactId", "actRecordId", "category",
       "decision", "status", "baseSnapshot", "localSnapshot", "actSnapshot",
-      "error", "createdAt", "updatedAt",
+      "error", "retryable", "createdAt", "updatedAt",
     ]));
+  });
+
+  it("exports the CRM activity and call workspace fields", () => {
+    expect(organizations.lastResort).toBeDefined();
+    expect(organizations.lastResortReason).toBeDefined();
+    expect(contacts.normalizedPhone).toBeDefined();
+    expect(contacts.quickAddRequestKey).toBeDefined();
+    expect(activities.organizationId).toBeDefined();
+    expect(activities.contactId).toBeDefined();
+    expect(activities.bookingId).toBeDefined();
+    expect(activityRevisions.activityId).toBeDefined();
+    expect(callSessions.disposition).toBeDefined();
+    expect(callSessions.requestKey).toBeDefined();
+    expect(callSessions.nextFollowUpId).toBeDefined();
+    expect(callSessions.resultingBookingStatus).toBeDefined();
+    expect(
+      getTableConfig(callSessions).checks.map((constraint) => constraint.name),
+    ).toEqual(expect.arrayContaining([
+      "call_sessions_parent_required",
+      "call_sessions_ended_at_not_before_started",
+    ]));
+    expect(
+      getTableConfig(callSessions).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("call_sessions_request_key_unique");
+    expect(
+      getTableConfig(contacts).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("contacts_quick_add_request_key_unique");
+    expect(getTableConfig(activities).indexes.map((index) => index.config.name))
+      .toEqual(expect.arrayContaining([
+        "activities_organization_occurred_at_idx",
+        "activities_contact_occurred_at_idx",
+        "activities_booking_occurred_at_idx",
+      ]));
+    expect(getTableConfig(activityRevisions).indexes.map((index) => index.config.name))
+      .toContain("activity_revisions_activity_created_at_idx");
+    expect(getTableConfig(followUps).indexes.map((index) => index.config.name))
+      .toContain("follow_ups_open_due_at_idx");
   });
 
   it("enforces one contact owner for each Act external identifier", () => {

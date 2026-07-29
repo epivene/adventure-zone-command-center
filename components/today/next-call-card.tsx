@@ -10,6 +10,21 @@ function formatDate(value: Date) {
   }).format(value);
 }
 
+export function callWorkspaceHref(followUp: FollowUpSummary) {
+  const parameters = new URLSearchParams();
+  if (followUp.contactId) parameters.set("contactId", followUp.contactId);
+  if (followUp.bookingId) parameters.set("bookingId", followUp.bookingId);
+  parameters.set("followUpId", followUp.id);
+  return `/calls/new?${parameters.toString()}`;
+}
+
+export function followUpHref(followUp: FollowUpSummary) {
+  if (followUp.kind === "call") return callWorkspaceHref(followUp);
+  if (followUp.bookingId) return `/bookings/${followUp.bookingId}`;
+  if (followUp.contactId) return `/contacts/${followUp.contactId}`;
+  return `/organizations/${followUp.organizationId}`;
+}
+
 export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null }) {
   return (
     <section className="rounded-xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
@@ -20,7 +35,7 @@ export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null })
         <div className="mt-3">
           <Link
             className="text-xl font-bold text-slate-950 hover:text-orange-800"
-            href={`/bookings/${followUp.bookingId}`}
+            href={callWorkspaceHref(followUp)}
           >
             {followUp.bookingName}
           </Link>

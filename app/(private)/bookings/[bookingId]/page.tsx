@@ -2,9 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+import {
+  createActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+} from "@/app/(private)/activities/actions";
 import { completeFollowUpAction } from "@/app/(private)/bookings/actions";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
 import { StatusBadge } from "@/components/bookings/status-badge";
+import { LastResortWarning } from "@/components/organizations/last-resort-warning";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
+import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
@@ -51,19 +60,20 @@ function DetailList({
   );
 }
 
-async function loadBooking(bookingId: string) {
-  await requireOwner();
-  const { db } = await import("@/db/client");
-  return new DrizzleBookingRepository(db).getBookingDetail(bookingId);
-}
-
 export default async function BookingDetailPage({
   params,
 }: {
   params: Promise<{ bookingId: string }>;
 }) {
+  await requireOwner();
   const { bookingId } = await params;
-  const detail = await loadBooking(bookingId);
+  const { db } = await import("@/db/client");
+  const [detail, timeline] = await Promise.all([
+    new DrizzleBookingRepository(db).getBookingDetail(bookingId),
+    new ActivityService(new DrizzleActivityRepository(db)).listTimeline({
+      bookingId,
+    }),
+  ]);
   if (!detail) notFound();
 
   const { booking, organization, contact, travelLeg, followUps, auditEntries } =
@@ -86,17 +96,32 @@ export default async function BookingDetailPage({
             <h1 className="text-3xl font-bold tracking-tight">{booking.name}</h1>
             <StatusBadge status={booking.status} />
           </div>
-          <Link
-            className="button-secondary text-center"
-            href={`/bookings/${booking.id}/edit`}
-          >
-            Edit booking
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              className="button-secondary text-center"
+              href={`/calls/new?bookingId=${booking.id}${contact ? `&contactId=${contact.id}` : ""}`}
+            >
+              Call Workspace
+            </Link>
+            <Link
+              className="button-secondary text-center"
+              href={`/bookings/${booking.id}/edit`}
+            >
+              Edit booking
+            </Link>
+          </div>
         </div>
         <p className="mt-2 text-slate-600">
           {booking.city}, {booking.region}
         </p>
       </header>
+
+      {organization?.lastResort ? (
+        <LastResortWarning
+          organizationName={organization.name}
+          reason={organization.lastResortReason}
+        />
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <DetailSection title="Contact">
@@ -230,6 +255,18 @@ export default async function BookingDetailPage({
             <p className="text-sm text-slate-600">No follow-ups recorded.</p>
           )}
         </DetailSection>
+
+        <div className="lg:col-span-2">
+          <DetailSection title="Recent activity">
+            <ActivityTimeline
+              activities={timeline}
+              createActivity={createActivityAction}
+              editActivity={editActivityAction}
+              loadRevisions={listActivityRevisionsAction}
+              parent={{ bookingId }}
+            />
+          </DetailSection>
+        </div>
 
         <div className="lg:col-span-2">
           <DetailSection title="Audit History">

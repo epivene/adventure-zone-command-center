@@ -2,7 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
+import {
+  createActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+} from "@/app/(private)/activities/actions";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
+import { LastResortWarning } from "@/components/organizations/last-resort-warning";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
+import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
 
@@ -39,7 +48,12 @@ export default async function ContactDetailPage({
   const repository = new DrizzleContactRepository(db);
   const detail = await repository.getContactDetail(contactId);
   if (!detail) notFound();
-  const audits = await repository.listRecentAuditEntries(contactId);
+  const [audits, timeline] = await Promise.all([
+    repository.listRecentAuditEntries(contactId),
+    new ActivityService(new DrizzleActivityRepository(db)).listTimeline({
+      contactId,
+    }),
+  ]);
   const { contact, relatedBookings } = detail;
   const fullName = `${contact.firstName} ${contact.lastName}`.trim();
   const address = [
@@ -72,12 +86,20 @@ export default async function ContactDetailPage({
               {contact.jobTitle ? ` · ${contact.jobTitle}` : ""}
             </p>
           </div>
-          <Link
-            className="button-secondary text-center"
-            href={`/contacts/${contact.id}/edit`}
-          >
-            Edit contact
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link
+              className="button-secondary text-center"
+              href={`/calls/new?contactId=${contact.id}`}
+            >
+              Call Workspace
+            </Link>
+            <Link
+              className="button-secondary text-center"
+              href={`/contacts/${contact.id}/edit`}
+            >
+              Edit contact
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -86,6 +108,13 @@ export default async function ContactDetailPage({
           This contact has local changes waiting for your next approved Act!
           sync.
         </aside>
+      ) : null}
+
+      {contact.organizationName && contact.organizationLastResort ? (
+        <LastResortWarning
+          organizationName={contact.organizationName}
+          reason={contact.organizationLastResortReason ?? null}
+        />
       ) : null}
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -197,6 +226,18 @@ export default async function ContactDetailPage({
             <p className="text-sm text-slate-600">No contact changes recorded.</p>
           )}
         </DetailSection>
+
+        <div className="lg:col-span-2">
+          <DetailSection title="Recent activity">
+            <ActivityTimeline
+              activities={timeline}
+              createActivity={createActivityAction}
+              editActivity={editActivityAction}
+              loadRevisions={listActivityRevisionsAction}
+              parent={{ contactId }}
+            />
+          </DetailSection>
+        </div>
       </div>
     </div>
   );

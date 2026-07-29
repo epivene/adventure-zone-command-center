@@ -2,8 +2,8 @@
 
 The Command Center synchronizes contacts with Act! Premium Cloud only when the
 owner presses a button. It never schedules a background sync. **Sync with
-Act!** reads both systems and stores a preview; only the separate **Apply
-approved** action writes selected changes.
+Act!** reads both systems and stores a preview; only the separate **Apply approved**
+action writes selected changes.
 
 ## Render configuration
 
@@ -31,12 +31,20 @@ Basic header, or bearer token.
    success or error. It does not read or change contacts.
 2. Press **Sync with Act!**. Wait for the preview and review every category,
    including zero-count categories.
-3. Use **Approve safe defaults** only after inspecting New in Act!, New in
-   app, Changed in Act!, and Changed in app.
-4. Resolve Changed in both and Possible matches one row at a time. If the
-   evidence is unclear, choose Skip or Keep separate.
-5. Press **Apply approved** once. Verify a small Act!-to-app sample and a small
-   app-to-Act! sample in both systems before approving a larger batch.
+3. Open one category and press **Approve only [category] ([count])**. This
+   clears hidden selections and approves only the category being viewed.
+4. Press **Apply [count] approved**. The app imports in batches of 50 and shows
+   progress in the sticky action bar.
+5. If individual contacts fail, let the remaining batches finish, review the
+   failed rows, and press **Retry failed contacts**. If the connection is
+   interrupted, press **Retry remaining contacts** after connectivity returns.
+6. Resolve Changed in both and Possible matches one row at a time. These
+   categories never have a bulk-approval action.
+7. Verify a small sample in Contacts before moving to another category.
+
+Importing **New in Act!** creates Command Center contacts only and never writes
+to the shared Act! account. Do not approve **New in app** unless those contacts
+are intentionally meant to be created in Act!.
 
 The sync does not delete missing contacts. A linked contact that is absent
 from Act! is reported for review.

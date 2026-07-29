@@ -20,6 +20,7 @@ import type {
   LocalContact,
 } from "@/features/import/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 
 export interface ActImportTransaction {
   createContact(record: ActCsvRecord): Promise<LocalContact>;
@@ -592,6 +593,9 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
+        normalizedPhone: record.phone
+          ? normalizeNorthAmericanPhone(record.phone)
+          : null,
       })
       .returning();
     if (!created) throw new Error("Could not create imported contact.");
@@ -648,6 +652,9 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
+        normalizedPhone: record.phone
+          ? normalizeNorthAmericanPhone(record.phone)
+          : null,
         updatedAt: new Date(),
       })
       .where(eq(contacts.id, contactId))

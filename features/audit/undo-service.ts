@@ -16,6 +16,10 @@ import {
   type ReversibleEntityType,
   type StoredAuditEntry,
 } from "@/features/audit/audit-service";
+import {
+  patchContactInTransaction,
+  type ContactPatchWriter,
+} from "@/features/contacts/contact-repository";
 import { err, ok, type Result } from "@/lib/result";
 
 export type UndoError =
@@ -242,6 +246,11 @@ function databaseFields(
 }
 
 class DrizzleUndoTransaction implements UndoTransaction {
+  private readonly lockedEntities = new Map<
+    string,
+    Record<string, unknown>
+  >();
+
   constructor(private readonly database: DrizzleUndoWriter) {}
 
   async findAuditEntryForUpdate(entryId: string) {
@@ -275,6 +284,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           .where(eq(bookings.id, entityId))
           .limit(1)
           .for("update");
+        if (record) this.lockedEntities.set(`${entityType}:${entityId}`, record);
         return record ?? null;
       }
       case "contact": {
@@ -284,6 +294,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           .where(eq(contacts.id, entityId))
           .limit(1)
           .for("update");
+        if (record) this.lockedEntities.set(`${entityType}:${entityId}`, record);
         return record ?? null;
       }
       case "organization": {
@@ -293,6 +304,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           .where(eq(organizations.id, entityId))
           .limit(1)
           .for("update");
+        if (record) this.lockedEntities.set(`${entityType}:${entityId}`, record);
         return record ?? null;
       }
       case "follow_up": {
@@ -302,6 +314,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           .where(eq(followUps.id, entityId))
           .limit(1)
           .for("update");
+        if (record) this.lockedEntities.set(`${entityType}:${entityId}`, record);
         return record ?? null;
       }
       case "travel_leg": {
@@ -311,6 +324,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           .where(eq(travelLegs.id, entityId))
           .limit(1)
           .for("update");
+        if (record) this.lockedEntities.set(`${entityType}:${entityId}`, record);
         return record ?? null;
       }
     }
@@ -332,12 +346,18 @@ class DrizzleUndoTransaction implements UndoTransaction {
         return Boolean(record);
       }
       case "contact": {
-        const [record] = await this.database
-          .update(contacts)
-          .set(values)
-          .where(eq(contacts.id, entityId))
-          .returning({ id: contacts.id });
-        return Boolean(record);
+        const before = this.lockedEntities.get(
+          `${entityType}:${entityId}`,
+        ) as typeof contacts.$inferSelect | undefined;
+        if (!before) return false;
+        await patchContactInTransaction(
+          this.database as ContactPatchWriter,
+          before,
+          null,
+          databaseFields(entityType, fields),
+          values.updatedAt as Date,
+        );
+        return true;
       }
       case "organization": {
         const [record] = await this.database

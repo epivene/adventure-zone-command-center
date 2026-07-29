@@ -5,20 +5,20 @@ const navigation = [
   { href: "/today", label: "Today" },
   { href: "/bookings", label: "Bookings" },
   { href: "/contacts", label: "Contacts" },
+  { href: "/organizations", label: "Organizations" },
   { href: "/calendar", label: "Calendar" },
   { href: "/routes", label: "Routes" },
 ];
 
 function QuickAddButton({ className }: { className: string }) {
   return (
-    <form action="/bookings/new" className={className} method="get">
-      <button
-        className="w-full rounded-lg bg-orange-600 px-4 py-3 font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-        type="submit"
-      >
-        Quick Add
-      </button>
-    </form>
+    <Link
+      aria-label="Quick Add caller"
+      className={`${className} w-full rounded-lg bg-orange-600 px-4 py-3 text-center font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600`}
+      href="/quick-add"
+    >
+      Quick Add
+    </Link>
   );
 }
 
@@ -69,7 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <nav
         aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-7 border-t border-slate-200 bg-white p-2 shadow-[0_-4px_12px_rgba(15,23,42,0.08)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-8 border-t border-slate-200 bg-white p-2 shadow-[0_-4px_12px_rgba(15,23,42,0.08)] md:hidden"
       >
         {navigation.map((item) => (
           <Link

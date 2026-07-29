@@ -27,6 +27,7 @@ Never commit values to `.env.example`, logs, screenshots, or support tickets.
 | Name | Purpose | Exposure |
 | --- | --- | --- |
 | `DATABASE_URL` | TLS PostgreSQL connection used by the app and migrations | Secret |
+| `CRM_TEST_DATABASE_URL` | Explicitly disposable PostgreSQL target for all CRM database suites | Secret; test/release only |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk browser initialization | Public by design |
 | `CLERK_SECRET_KEY` | Clerk server authentication | Secret |
 | `OWNER_CLERK_USER_ID` | Exact Clerk user ID allowed into private routes | Secret configuration |
@@ -47,6 +48,30 @@ tiles and glyphs permit the deployed origin. Because this name begins with
 `NEXT_PUBLIC_`, never place a private provider token in it unless that token is
 specifically designed for browser exposure and restricted by origin and quota.
 If the value is empty, the app uses its plain local fallback style.
+
+## CRM database and authenticated release gate
+
+All five high-risk PostgreSQL suites use one variable:
+`CRM_TEST_DATABASE_URL`. It must name a disposable database where the tests
+may create and drop isolated schemas. Never point it at production or at a
+database containing data that must survive. Local `npm test` runs remain
+developer-friendly and skip these suites when the variable is absent.
+Release mode fails closed instead:
+
+```bash
+CRM_TEST_DATABASE_URL=postgresql://... npm run test:release
+```
+
+`test:release` first sets `CRM_RELEASE_TESTS=1` and runs the migration,
+organization, activity, call, and contact PostgreSQL suites. Missing
+`CRM_TEST_DATABASE_URL` is an immediate error, not a skip. The later
+authenticated Playwright phase also requires installed Chromium,
+`DATABASE_URL` pointing at the migrated disposable application database,
+valid Clerk public/secret keys, the configured owner ID, and
+`PLAYWRIGHT_AUTH_STATE` pointing to that owner's saved browser state.
+
+Do not create the `stage-1-ready` tag if either the PostgreSQL suites or the
+authenticated Playwright tests are skipped, gated, or blocked.
 
 Set the four Act! values directly in Render's Environment page. The base URL
 must be exactly `https://apius.act.com/act.web.api`; do not substitute the Act!
@@ -111,6 +136,19 @@ migrations, seed, and then run all post-migration verification. If there is any
 uncertainty about whether a database is empty, treat it as an existing database
 and stop for operator review.
 
+Migration `0006_daily_crm_foundation` is amended only while it remains
+unapplied to every persistent environment. Its new request-key columns are
+nullable so existing contacts and call sessions remain compatible. If any
+persistent database has already recorded the earlier form of `0006`, stop and
+create a new additive migration instead of rewriting migration history.
+
+After `0006`, follow-ups may be linked only to an organization or contact with
+no booking. Older application code assumes every follow-up has a booking and
+is not rollback-compatible once such rows exist. After creating any
+organization-only or contact-only follow-up, restore application traffic only
+to compatible code. Use a forward fix or a reviewed data restore; never run an
+automatic SQL downgrade.
+
 The seed inserts missing defaults for sort orders 1–4 and does nothing when a
 slot already exists. Reseeding therefore preserves operator-configured names
 and colors. The migration enforces unique sort orders and rejects values
@@ -153,11 +191,7 @@ comparisons.
 Run the complete release gate against the exact commit being deployed:
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
-npm run test:e2e
+CRM_TEST_DATABASE_URL=postgresql://... npm run test:release
 shellcheck scripts/backup-database.sh scripts/restore-database.sh
 ```
 

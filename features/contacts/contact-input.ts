@@ -2,12 +2,12 @@ import { z } from "zod";
 
 import { contactSyncStateValues } from "@/features/contacts/contact-types";
 
-const requiredText = z.string().trim().min(1);
-const nullableText = z
+export const requiredContactTextSchema = z.string().trim().min(1);
+export const nullableContactTextSchema = z
   .string()
   .trim()
   .transform((value) => value || null);
-const nullableEmail = z
+export const nullableContactEmailSchema = z
   .string()
   .trim()
   .toLowerCase()
@@ -18,17 +18,17 @@ const nullableEmail = z
   .transform((value) => value || null);
 
 export const contactFormInputSchema = z.object({
-  firstName: requiredText,
+  firstName: requiredContactTextSchema,
   lastName: z.string().trim(),
-  organizationName: nullableText,
-  jobTitle: nullableText,
-  email: nullableEmail,
-  phone: nullableText,
-  address1: nullableText,
-  address2: nullableText,
-  city: nullableText,
-  region: nullableText,
-  postalCode: nullableText,
+  organizationName: nullableContactTextSchema,
+  jobTitle: nullableContactTextSchema,
+  email: nullableContactEmailSchema,
+  phone: nullableContactTextSchema,
+  address1: nullableContactTextSchema,
+  address2: nullableContactTextSchema,
+  city: nullableContactTextSchema,
+  region: nullableContactTextSchema,
+  postalCode: nullableContactTextSchema,
 });
 
 export type ContactFormInput = z.input<typeof contactFormInputSchema>;

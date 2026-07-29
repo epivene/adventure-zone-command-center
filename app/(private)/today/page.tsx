@@ -16,14 +16,44 @@ function formatDate(value: Date) {
   }).format(value);
 }
 
-async function loadDashboard(now: Date) {
+async function loadDashboard(
+  now: Date,
+  pages: { followUps: number; needsFollowUpPlan: number },
+) {
   await requireOwner();
-  return getTodayDashboard(now);
+  return getTodayDashboard(now, null, pages);
 }
 
-export default async function TodayPage() {
+function positivePage(value: string | string[] | undefined) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  const page = Number(candidate);
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+function todayHref(followUpsPage: number, planPage: number) {
+  const query = new URLSearchParams();
+  if (followUpsPage > 1) query.set("followUpsPage", String(followUpsPage));
+  if (planPage > 1) query.set("planPage", String(planPage));
+  const serialized = query.toString();
+  return serialized ? `/today?${serialized}` : "/today";
+}
+
+export default async function TodayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    followUpsPage?: string | string[];
+    planPage?: string | string[];
+  }>;
+}) {
   const now = new Date();
-  const dashboard = await loadDashboard(now);
+  const query = await searchParams;
+  const requestedFollowUpPage = positivePage(query.followUpsPage);
+  const requestedPlanPage = positivePage(query.planPage);
+  const dashboard = await loadDashboard(now, {
+    followUps: requestedFollowUpPage,
+    needsFollowUpPlan: requestedPlanPage,
+  });
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -38,7 +68,7 @@ export default async function TodayPage() {
           </p>
         </div>
         <Link className="button-primary text-center" href="/bookings/new">
-          Quick Add
+          New booking
         </Link>
       </header>
 
@@ -50,7 +80,43 @@ export default async function TodayPage() {
       />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(19rem,1fr)] lg:items-start">
-        <FollowUpList followUps={dashboard.followUps} now={now} />
+        <div className="grid gap-3">
+          <FollowUpList followUps={dashboard.followUps} now={now} />
+          {dashboard.followUpPageCount > 1 ? (
+            <nav
+              aria-label="Follow-up pages"
+              className="flex items-center justify-between text-sm"
+            >
+              <span>
+                Page {dashboard.followUpPage} of {dashboard.followUpPageCount}
+              </span>
+              <div className="flex gap-3">
+                {dashboard.followUpPage > 1 ? (
+                  <Link
+                    className="link"
+                    href={todayHref(
+                      dashboard.followUpPage - 1,
+                      dashboard.needsFollowUpPlanPage,
+                    )}
+                  >
+                    Previous follow-ups
+                  </Link>
+                ) : null}
+                {dashboard.followUpPage < dashboard.followUpPageCount ? (
+                  <Link
+                    className="link"
+                    href={todayHref(
+                      dashboard.followUpPage + 1,
+                      dashboard.needsFollowUpPlanPage,
+                    )}
+                  >
+                    Next follow-ups
+                  </Link>
+                ) : null}
+              </div>
+            </nav>
+          ) : null}
+        </div>
         <NextCallCard followUp={dashboard.nextCall} />
       </div>
 
@@ -79,6 +145,42 @@ export default async function TodayPage() {
           ) : (
             <p className="mt-4 text-sm text-slate-600">Every active lead has a future action.</p>
           )}
+          {dashboard.needsFollowUpPlanPageCount > 1 ? (
+            <nav
+              aria-label="Follow-up plan pages"
+              className="mt-4 flex items-center justify-between gap-3 text-sm"
+            >
+              <span>
+                Page {dashboard.needsFollowUpPlanPage} of{" "}
+                {dashboard.needsFollowUpPlanPageCount}
+              </span>
+              <div className="flex gap-3">
+                {dashboard.needsFollowUpPlanPage > 1 ? (
+                  <Link
+                    className="link"
+                    href={todayHref(
+                      dashboard.followUpPage,
+                      dashboard.needsFollowUpPlanPage - 1,
+                    )}
+                  >
+                    Previous plans
+                  </Link>
+                ) : null}
+                {dashboard.needsFollowUpPlanPage <
+                dashboard.needsFollowUpPlanPageCount ? (
+                  <Link
+                    className="link"
+                    href={todayHref(
+                      dashboard.followUpPage,
+                      dashboard.needsFollowUpPlanPage + 1,
+                    )}
+                  >
+                    Next plans
+                  </Link>
+                ) : null}
+              </div>
+            </nav>
+          ) : null}
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
