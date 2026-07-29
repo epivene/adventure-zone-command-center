@@ -112,7 +112,9 @@ export class PackageService {
       }
       if (
         parsed.data.packageTemplateIds.some(
-          (packageTemplateId) => !templateById.get(packageTemplateId)?.active,
+          (packageTemplateId) =>
+            !templateById.get(packageTemplateId)?.active &&
+            !booking.packageTemplateIds.includes(packageTemplateId),
         )
       ) {
         return err({ code: "PACKAGE_TEMPLATE_INACTIVE" });

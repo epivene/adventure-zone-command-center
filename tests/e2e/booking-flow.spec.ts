@@ -34,6 +34,9 @@ test("new lead remains visible after its first call", async ({ page }, testInfo)
   await expect(page.getByRole("link", { name: eventName })).toBeVisible();
 
   await page.getByRole("link", { name: eventName }).click();
+  await expect(page.getByRole("heading", {
+    name: "Packages and resources",
+  })).toBeVisible();
   await page.getByRole("button", { name: "Complete call" }).click();
   await page.getByLabel("Call outcome").selectOption("call_again");
   await page.getByLabel("Next action type").selectOption("call");

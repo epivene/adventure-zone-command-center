@@ -1,6 +1,6 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createDrizzleTodayDashboardRepository,
@@ -10,11 +10,66 @@ import {
   TODAY_PLAN_PAGE_SIZE,
   TODAY_UPCOMING_EVENT_LIMIT,
   upcomingEventsCondition,
+  enrichTodayDashboardOperations,
 } from "@/features/follow-ups/today-query";
 
 const dialect = new PgDialect();
 
 describe("Today bounded-query contract", () => {
+  it("batches unique booking operations once instead of issuing N+1 reads", async () => {
+    const getForBookings = vi.fn(async () => new Map([
+      ["booking-1", {
+        packageNames: ["Adventure Zone"],
+        sharedAttractionTotal: 10,
+        pendingRequestCount: 0,
+        leg: null,
+        warnings: [],
+      }],
+    ]));
+    const getForBooking = vi.fn(() => {
+      throw new Error("N+1");
+    });
+    const dashboard = await enrichTodayDashboardOperations({
+      followUpCount: 0,
+      newLeadCount: 0,
+      contractCount: 0,
+      routeWarningCount: 0,
+      nextCall: null,
+      followUps: [{
+        id: "follow-up-1",
+        organizationId: null,
+        contactId: null,
+        bookingId: "booking-1",
+        bookingName: "County Fair",
+        kind: "call",
+        dueAt: new Date("2026-08-01T12:00:00.000Z"),
+        createdAt: new Date("2026-07-29T12:00:00.000Z"),
+        status: "due",
+        probability: "likely",
+      }],
+      followUpTotal: 1,
+      followUpPage: 1,
+      followUpPageCount: 1,
+      needsFollowUpPlan: [],
+      needsFollowUpPlanTotal: 0,
+      needsFollowUpPlanPage: 1,
+      needsFollowUpPlanPageCount: 1,
+      upcomingEvents: [{
+        id: "booking-1",
+        name: "County Fair",
+        city: "Shelby",
+        region: "MT",
+        startsAt: new Date("2026-08-10T12:00:00.000Z"),
+      }],
+    }, { getForBooking, getForBookings });
+
+    expect(getForBookings).toHaveBeenCalledWith(["booking-1"]);
+    expect(getForBooking).not.toHaveBeenCalled();
+    expect(dashboard.followUps[0]?.operations?.sharedAttractionTotal).toBe(10);
+    expect(dashboard.upcomingEvents[0]?.operations?.packageNames).toEqual([
+      "Adventure Zone",
+    ]);
+  });
   it("keeps the work queue on open follow-ups and bounded page sizes", () => {
     const query = dialect.sqlToQuery(openFollowUpsCondition());
 

@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { updateBookingAction } from "@/app/(private)/bookings/actions";
+import {
+  acknowledgeResourceConflictAction,
+  addBookingSpecialRequestAction,
+  configureBookingPackagesAction,
+  configureBookingResourcesAction,
+  decideBookingSpecialRequestAction,
+  updateBookingAction,
+} from "@/app/(private)/bookings/actions";
 import { BookingForm } from "@/components/bookings/booking-form";
+import { PackageResourceEditor } from "@/components/bookings/package-resource-editor";
+import { ResourceWarningList } from "@/components/bookings/resource-warning-list";
+import { SpecialRequestEditor } from "@/components/bookings/special-request-editor";
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
+import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { businessDateKey } from "@/lib/business-date";
@@ -13,11 +24,20 @@ export const dynamic = "force-dynamic";
 async function loadBooking(bookingId: string) {
   await requireOwner();
   const { db } = await import("@/db/client");
-  const [detail, travelLegs] = await Promise.all([
-    new DrizzleBookingRepository(db).getBookingDetail(bookingId),
+  const repository = new DrizzleBookingRepository(db);
+  const operationsProvider = createBookingOperationsSummaryProvider(db);
+  const [detail, travelLegs, resourceSummary] = await Promise.all([
+    repository.getBookingDetail(bookingId),
     new DrizzleTravelLegRepository(db).listTravelLegs(),
+    operationsProvider.getResourceSummaryForBooking(bookingId),
   ]);
-  return { detail, travelLegs };
+  const editorModel = detail
+    ? await repository.getPackageResourceEditorModel(
+        bookingId,
+        resourceSummary?.warnings ?? [],
+      )
+    : null;
+  return { detail, travelLegs, editorModel };
 }
 
 export default async function EditBookingPage({
@@ -26,13 +46,13 @@ export default async function EditBookingPage({
   params: Promise<{ bookingId: string }>;
 }) {
   const { bookingId } = await params;
-  const { detail, travelLegs } = await loadBooking(bookingId);
-  if (!detail) notFound();
+  const { detail, travelLegs, editorModel } = await loadBooking(bookingId);
+  if (!detail || !editorModel) notFound();
 
   const updateAction = updateBookingAction.bind(null, bookingId);
 
   return (
-    <div className="mx-auto grid max-w-2xl gap-6">
+    <div className="mx-auto grid max-w-6xl gap-6">
       <header>
         <Link
           className="text-sm font-semibold text-slate-600 hover:text-orange-700"
@@ -52,7 +72,7 @@ export default async function EditBookingPage({
         </p>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+      <section className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
         <BookingForm
           draftKey={`booking:edit:${bookingId}`}
           initialValues={{
@@ -81,6 +101,22 @@ export default async function EditBookingPage({
           variant="edit"
         />
       </section>
+      <PackageResourceEditor
+        configurePackages={configureBookingPackagesAction}
+        configureResources={configureBookingResourcesAction}
+        model={editorModel}
+      />
+      <SpecialRequestEditor
+        addRequest={addBookingSpecialRequestAction}
+        bookingId={bookingId}
+        decideRequest={decideBookingSpecialRequestAction}
+        requests={editorModel.specialRequests}
+      />
+      <ResourceWarningList
+        acknowledge={acknowledgeResourceConflictAction}
+        bookingId={bookingId}
+        warnings={editorModel.warnings}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { followUpHref } from "@/components/today/next-call-card";
+import { BookingOperations } from "@/components/today/booking-operations";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
 import {
   BUSINESS_TIME_ZONE,
@@ -66,6 +67,7 @@ export function FollowUpList({
                   <p className="mt-0.5 text-sm capitalize text-slate-600">
                     {formatKind(followUp.kind)}
                   </p>
+                  <BookingOperations operations={followUp.operations} />
                 </div>
                 <p
                   className={`text-sm font-semibold ${

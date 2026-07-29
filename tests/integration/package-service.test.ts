@@ -374,6 +374,33 @@ describe("PackageService", () => {
     expect(repository.state.audits).toEqual([]);
   });
 
+  it("preserves an already selected inactive package but rejects adding a new inactive package", async () => {
+    const repository = new InMemoryPackageRepository();
+    repository.state.bookings.get(ids.booking)!.packageTemplateIds = [
+      ids.inactive,
+    ];
+    const service = new PackageService(repository);
+
+    await expect(service.configureBooking(configuration({
+      packageTemplateIds: [ids.inactive],
+      physicalAttractionTotal: 4,
+      manualAttributions: [],
+    }))).resolves.toMatchObject({
+      ok: true,
+      value: { packages: [{ id: ids.inactive }] },
+    });
+
+    repository.state.bookings.get(ids.booking)!.packageTemplateIds = [];
+    await expect(service.configureBooking(configuration({
+      packageTemplateIds: [ids.inactive],
+      physicalAttractionTotal: 4,
+      manualAttributions: [],
+    }))).resolves.toEqual({
+      ok: false,
+      error: { code: "PACKAGE_TEMPLATE_INACTIVE" },
+    });
+  });
+
   it("rolls back package, attribution, and total writes when audit insertion fails", async () => {
     const repository = new InMemoryPackageRepository();
     repository.failAudit = true;
@@ -482,6 +509,54 @@ describe("PackageService", () => {
     });
     expect(repository.state.bookings.get(ids.booking)?.physicalAttractionTotal).toBe(11);
   });
+
+  it.each([
+    {
+      name: "single-package",
+      packageTemplateIds: [ids.adventure],
+      physicalAttractionTotal: 11,
+    },
+    {
+      name: "multi-package",
+      packageTemplateIds: [ids.adventure, ids.warriors],
+      physicalAttractionTotal: 13,
+    },
+  ])(
+    "validates an approved add-to-count suggestion against the base $name range",
+    async ({ packageTemplateIds, physicalAttractionTotal }) => {
+      const repository = new InMemoryPackageRepository();
+      const service = new PackageService(repository);
+      const added = await service.addSpecialRequest({
+        bookingId: ids.booking,
+        description: "Approved extra attraction",
+        treatment: "add_to_count",
+      });
+      if (!added.ok) throw new Error("request setup failed");
+      await service.decideSpecialRequest({
+        specialRequestId: added.value.id,
+        decision: "approved",
+        reason: "Owner approved",
+      });
+
+      await expectError(service.configureBooking(configuration({
+        packageTemplateIds,
+        physicalAttractionTotal,
+        attractionTotalApprovalReason: null,
+      })), "APPROVAL_REASON_REQUIRED");
+
+      await expect(service.configureBooking(configuration({
+        packageTemplateIds,
+        physicalAttractionTotal,
+        attractionTotalApprovalReason: "Outside the base package range",
+      }))).resolves.toMatchObject({
+        ok: true,
+        value: {
+          physicalAttractionTotal,
+          suggestedPhysicalAttractionTotal: 11,
+        },
+      });
+    },
+  );
 
   it("rolls back special-request creation and decisions on audit failure", async () => {
     const repository = new InMemoryPackageRepository();

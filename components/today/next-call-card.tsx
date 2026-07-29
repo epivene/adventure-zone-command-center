@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
+import { BookingOperations } from "@/components/today/booking-operations";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 function formatDate(value: Date) {
@@ -42,6 +43,7 @@ export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null })
           <p className="mt-1 text-sm text-slate-700">
             Call due {formatDate(followUp.dueAt)}
           </p>
+          <BookingOperations operations={followUp.operations} />
         </div>
       ) : (
         <p className="mt-3 text-sm text-slate-700">

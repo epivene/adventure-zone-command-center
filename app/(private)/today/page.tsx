@@ -3,7 +3,9 @@ import Link from "next/link";
 import { FollowUpList } from "@/components/today/follow-up-list";
 import { NextCallCard } from "@/components/today/next-call-card";
 import { SummaryCards } from "@/components/today/summary-cards";
+import { BookingOperations } from "@/components/today/booking-operations";
 import { getTodayDashboard } from "@/features/follow-ups/today-query";
+import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
@@ -21,7 +23,13 @@ async function loadDashboard(
   pages: { followUps: number; needsFollowUpPlan: number },
 ) {
   await requireOwner();
-  return getTodayDashboard(now, null, pages);
+  const { db } = await import("@/db/client");
+  return getTodayDashboard(
+    now,
+    null,
+    pages,
+    createBookingOperationsSummaryProvider(db),
+  );
 }
 
 function positivePage(value: string | string[] | undefined) {
@@ -189,13 +197,16 @@ export default async function TodayPage({
           {dashboard.upcomingEvents.length ? (
             <ul className="mt-4 grid gap-3">
               {dashboard.upcomingEvents.map((event) => (
-                <li className="flex items-center justify-between gap-3" key={event.id}>
-                  <Link
-                    className="font-semibold text-slate-950 hover:text-orange-700"
-                    href={`/bookings/${event.id}`}
-                  >
-                    {event.name}
-                  </Link>
+                <li className="flex items-start justify-between gap-3" key={event.id}>
+                  <div>
+                    <Link
+                      className="font-semibold text-slate-950 hover:text-orange-700"
+                      href={`/bookings/${event.id}`}
+                    >
+                      {event.name}
+                    </Link>
+                    <BookingOperations operations={event.operations} />
+                  </div>
                   <span className="whitespace-nowrap text-sm text-slate-600">
                     {formatDate(event.startsAt)}
                   </span>

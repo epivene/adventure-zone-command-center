@@ -55,7 +55,7 @@ function assignmentSnapshot(
     }));
 }
 
-function withOverrides(
+export function withResourceConflictOverrides(
   warnings: readonly ResourceWarning[],
   overrides: readonly ResourceConflictOverride[],
 ): ResourceWarning[] {
@@ -78,6 +78,79 @@ function withOverrides(
   });
 }
 
+export async function summarizeBookingResources(input: {
+  booking: BookingResourceState;
+  assignments: readonly ResourceAssignmentRecord[];
+  resources: readonly ResourceRecord[];
+  reservations: readonly import("@/features/resources/resource-types").ResourceReservation[];
+  overrides: readonly ResourceConflictOverride[];
+  transferTimeLookup: TransferTimeLookup;
+}): Promise<BookingResourceSummary> {
+  const assignmentIds = new Set(input.assignments.map(({ id }) => id));
+  const resourceIds = [
+    ...new Set(input.assignments.map(({ resourceId }) => resourceId)),
+  ];
+  const resourceById = new Map(
+    input.resources.map((resource) => [resource.id, resource]),
+  );
+  const assignedAttractionCount = resourceIds.filter(
+    (resourceId) => resourceById.get(resourceId)?.countsAsAttraction,
+  ).length;
+  const globalWarnings = await detectResourceConflicts({
+    reservations: input.reservations,
+    physicalAttractionTotal: null,
+    assignedAttractionCount,
+    transferTimeLookup: input.transferTimeLookup,
+  });
+  const countWarnings = await detectResourceConflicts({
+    reservations: input.reservations.filter(({ assignmentId }) =>
+      assignmentIds.has(assignmentId),
+    ),
+    physicalAttractionTotal: input.booking.physicalAttractionTotal,
+    assignedAttractionCount,
+    transferTimeLookup: input.transferTimeLookup,
+  });
+  const detected = [
+    ...countWarnings.filter(
+      ({ code }) => code === "ATTRACTION_TOTAL_MISMATCH",
+    ),
+    ...globalWarnings,
+  ];
+  const relevantWarnings = detected.filter(
+    (warning) =>
+      warning.code === "ATTRACTION_TOTAL_MISMATCH" ||
+      warning.assignmentIds.some((assignmentId) =>
+        assignmentIds.has(assignmentId),
+      ),
+  );
+
+  return {
+    bookingId: input.booking.id,
+    assignments: [...input.assignments]
+      .sort((first, second) => first.id.localeCompare(second.id))
+      .map((assignment) => {
+        const resource = resourceById.get(assignment.resourceId);
+        if (!resource) {
+          throw new Error("An assigned resource disappeared while locked.");
+        }
+        return {
+          id: assignment.id,
+          resourceId: resource.id,
+          resourceCode: resource.code,
+          resourceName: resource.name,
+          resourceStatus: resource.status,
+          countsAsAttraction: resource.countsAsAttraction,
+          attributionSource: assignment.attributionSource,
+        };
+      }),
+    assignedAttractionCount,
+    warnings: withResourceConflictOverrides(
+      relevantWarnings,
+      input.overrides,
+    ),
+  };
+}
+
 export class ResourceService {
   private readonly now: () => Date;
 
@@ -95,71 +168,29 @@ export class ResourceService {
     assignments: readonly ResourceAssignmentRecord[],
     resources: readonly ResourceRecord[],
   ): Promise<BookingResourceSummary> {
-    const assignmentIds = new Set(
-      assignments.map(({ id }) => id),
-    );
     const resourceIds = [...new Set(assignments.map(({ resourceId }) => resourceId))];
-    const resourceById = new Map(
-      resources.map((resource) => [resource.id, resource]),
-    );
-    const assignedAttractionCount = resourceIds.filter(
-      (resourceId) => resourceById.get(resourceId)?.countsAsAttraction,
-    ).length;
     const reservations =
       await transaction.listReservationsForResources(resourceIds);
-    const globalWarnings = await detectResourceConflicts({
+    const preliminary = await summarizeBookingResources({
+      booking,
+      assignments,
+      resources,
       reservations,
-      physicalAttractionTotal: null,
-      assignedAttractionCount,
+      overrides: [],
       transferTimeLookup: this.transferTimeLookup,
     });
-    const countWarnings = await detectResourceConflicts({
-      reservations: reservations.filter(({ assignmentId }) =>
-        assignmentIds.has(assignmentId),
-      ),
-      physicalAttractionTotal: booking.physicalAttractionTotal,
-      assignedAttractionCount,
-      transferTimeLookup: this.transferTimeLookup,
-    });
-    const detected = [
-      ...countWarnings.filter(
-        ({ code }) => code === "ATTRACTION_TOTAL_MISMATCH",
-      ),
-      ...globalWarnings,
-    ];
-    const relevantWarnings = detected.filter(
-      (warning) =>
-        warning.code === "ATTRACTION_TOTAL_MISMATCH" ||
-        warning.assignmentIds.some((assignmentId) =>
-          assignmentIds.has(assignmentId),
-        ),
-    );
-    const overrides = await transaction.listOverrides(
-      booking.id,
-      relevantWarnings.map(({ conflictKey }) => conflictKey),
-    );
-
+    const exactOverrides = preliminary.warnings.length === 0
+      ? []
+      : await transaction.listOverrides(
+          booking.id,
+          preliminary.warnings.map(({ conflictKey }) => conflictKey),
+        );
     return {
-      bookingId: booking.id,
-      assignments: [...assignments]
-        .sort((first, second) => first.id.localeCompare(second.id))
-        .map((assignment) => {
-          const resource = resourceById.get(assignment.resourceId);
-          if (!resource) {
-            throw new Error("An assigned resource disappeared while locked.");
-          }
-          return {
-            id: assignment.id,
-            resourceId: resource.id,
-            resourceCode: resource.code,
-            resourceName: resource.name,
-            resourceStatus: resource.status,
-            countsAsAttraction: resource.countsAsAttraction,
-            attributionSource: assignment.attributionSource,
-          };
-        }),
-      assignedAttractionCount,
-      warnings: withOverrides(relevantWarnings, overrides),
+      ...preliminary,
+      warnings: withResourceConflictOverrides(
+        preliminary.warnings,
+        exactOverrides,
+      ),
     };
   }
 

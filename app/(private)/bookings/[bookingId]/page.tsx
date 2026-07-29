@@ -15,6 +15,7 @@ import { LastResortWarning } from "@/components/organizations/last-resort-warnin
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
+import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
@@ -53,7 +54,13 @@ function DetailList({
       {items.map((item) => (
         <div key={item.label}>
           <dt className="text-sm font-semibold text-slate-500">{item.label}</dt>
-          <dd className="mt-0.5 text-slate-900">{item.value || "Not set"}</dd>
+          <dd className="mt-0.5 text-slate-900">
+            {item.value === null ||
+            item.value === undefined ||
+            item.value === ""
+              ? "Not set"
+              : item.value}
+          </dd>
         </div>
       ))}
     </dl>
@@ -68,11 +75,12 @@ export default async function BookingDetailPage({
   await requireOwner();
   const { bookingId } = await params;
   const { db } = await import("@/db/client");
-  const [detail, timeline] = await Promise.all([
+  const [detail, timeline, operations] = await Promise.all([
     new DrizzleBookingRepository(db).getBookingDetail(bookingId),
     new ActivityService(new DrizzleActivityRepository(db)).listTimeline({
       bookingId,
     }),
+    createBookingOperationsSummaryProvider(db).getForBooking(bookingId),
   ]);
   if (!detail) notFound();
 
@@ -187,6 +195,44 @@ export default async function BookingDetailPage({
               { label: "Last updated", value: formatDate(booking.updatedAt) },
             ]}
           />
+        </DetailSection>
+
+        <DetailSection title="Packages and resources">
+          <DetailList
+            items={[
+              {
+                label: "Packages",
+                value: operations.packageNames.join(", ") || "Not configured",
+              },
+              {
+                label: "Shared physical attractions",
+                value: operations.sharedAttractionTotal,
+              },
+              {
+                label: "Pending special requests",
+                value: operations.pendingRequestCount,
+              },
+              { label: "Travel leg", value: operations.leg?.name },
+            ]}
+          />
+          {operations.warnings.length ? (
+            <ul className="mt-4 grid gap-2">
+              {operations.warnings.map((warning) => (
+                <li key={warning.id}>
+                  <Link
+                    className={
+                      warning.severity === "blocking"
+                        ? "font-semibold text-rose-700"
+                        : "font-semibold text-amber-800"
+                    }
+                    href={warning.href}
+                  >
+                    {warning.message}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </DetailSection>
 
         <DetailSection title="Logistics">

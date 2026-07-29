@@ -12,8 +12,9 @@ import { DrizzleActivityRepository } from "@/features/activities/activity-reposi
 import {
   activityTimelineParent,
   DrizzleCallWorkspaceContextRepository,
-  loadCallWorkspaceContext,
 } from "@/features/calls/call-workspace-context";
+import { loadCallWorkspace } from "@/features/calls/call-workspace-query";
+import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import { requireOwner } from "@/lib/auth/require-owner";
 
 export const dynamic = "force-dynamic";
@@ -39,51 +40,54 @@ export default async function CallWorkspacePage({
   const requestedBookingId = firstValue(query.bookingId);
   const requestedFollowUpId = firstValue(query.followUpId);
   const { db } = await import("@/db/client");
-  const context = await loadCallWorkspaceContext({
+  const workspace = await loadCallWorkspace({
     organizationId: requestedOrganizationId,
     contactId: requestedContactId,
     bookingId: requestedBookingId,
     followUpId: requestedFollowUpId,
-  }, new DrizzleCallWorkspaceContextRepository(db));
-  if (!context.ok) notFound();
+  }, new DrizzleCallWorkspaceContextRepository(db),
+  createBookingOperationsSummaryProvider(db));
+  if (!workspace.ok) notFound();
+  const context = workspace.value.context;
 
   const timeline = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline(
-    activityTimelineParent(context.value),
+    activityTimelineParent(context),
   );
 
   return (
     <CallWorkspace
-      activityParent={activityTimelineParent(context.value)}
-      booking={context.value.booking ? {
-        id: context.value.booking.id,
-        name: context.value.booking.name,
-        city: context.value.booking.city,
-        region: context.value.booking.region,
-        status: context.value.booking.status,
-        startsAt: context.value.booking.startsAt,
+      activityParent={activityTimelineParent(context)}
+      booking={context.booking ? {
+        id: context.booking.id,
+        name: context.booking.name,
+        city: context.booking.city,
+        region: context.booking.region,
+        status: context.booking.status,
+        startsAt: context.booking.startsAt,
       } : null}
-      contact={context.value.contact ? {
-        id: context.value.contact.id,
-        name: `${context.value.contact.firstName} ${context.value.contact.lastName}`.trim(),
-        phone: context.value.contact.phone,
-        email: context.value.contact.email,
-        city: context.value.contact.city,
-        region: context.value.contact.region,
+      contact={context.contact ? {
+        id: context.contact.id,
+        name: `${context.contact.firstName} ${context.contact.lastName}`.trim(),
+        phone: context.contact.phone,
+        email: context.contact.email,
+        city: context.contact.city,
+        region: context.contact.region,
       } : null}
-      followUp={context.value.followUp ? {
-        id: context.value.followUp.id,
-        kind: context.value.followUp.kind,
-        dueAt: context.value.followUp.dueAt,
+      followUp={context.followUp ? {
+        id: context.followUp.id,
+        kind: context.followUp.kind,
+        dueAt: context.followUp.dueAt,
       } : null}
       createActivity={createActivityAction}
       editActivity={editActivityAction}
       loadRevisions={listActivityRevisionsAction}
       onComplete={completeCallAction}
-      organization={context.value.organization ? {
-        id: context.value.organization.id,
-        name: context.value.organization.name,
-        lastResort: context.value.organization.lastResort,
-        lastResortReason: context.value.organization.lastResortReason,
+      operations={workspace.value.operations}
+      organization={context.organization ? {
+        id: context.organization.id,
+        name: context.organization.name,
+        lastResort: context.organization.lastResort,
+        lastResortReason: context.organization.lastResortReason,
       } : null}
       timeline={timeline}
     />

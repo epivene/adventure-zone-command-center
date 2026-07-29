@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import packageJson from "@/package.json";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
 describe("CRM PostgreSQL test gate", () => {
@@ -12,6 +13,12 @@ describe("CRM PostgreSQL test gate", () => {
   it("fails closed for release tests without the disposable database URL", () => {
     expect(() => crmTestDatabaseUrl({ CRM_RELEASE_TESTS: "1" })).toThrow(
       "CRM_TEST_DATABASE_URL must be set when CRM_RELEASE_TESTS=1.",
+    );
+  });
+
+  it("runs booking operations PostgreSQL coverage in the release database command", () => {
+    expect(packageJson.scripts["test:crm-db"].split(/\s+/)).toContain(
+      "tests/integration/booking-operations-summary.test.ts",
     );
   });
 });

@@ -18,6 +18,11 @@ import {
   type BookingStatus,
   type Probability,
 } from "@/features/bookings/booking-types";
+import type {
+  BatchBookingOperationsSummaryProvider,
+  BookingOperationsSummary,
+  BookingOperationsSummaryProvider,
+} from "@/features/bookings/booking-operations-summary";
 import {
   businessDayBounds,
   classifyBusinessDueDate,
@@ -37,6 +42,7 @@ export type FollowUpSummary = {
   createdAt: Date;
   status: FollowUpPriorityStatus;
   probability: Probability;
+  operations?: BookingOperationsSummary | null;
 };
 
 export type TodayDashboardBookingRecord = {
@@ -117,6 +123,7 @@ export type UpcomingEvent = {
   city: string;
   region: string;
   startsAt: Date;
+  operations?: BookingOperationsSummary | null;
 };
 
 export type TodayDashboard = {
@@ -135,6 +142,51 @@ export type TodayDashboard = {
   needsFollowUpPlanPageCount: number;
   upcomingEvents: UpcomingEvent[];
 };
+
+export async function enrichTodayDashboardOperations(
+  dashboard: TodayDashboard,
+  provider: BookingOperationsSummaryProvider &
+    Partial<BatchBookingOperationsSummaryProvider>,
+): Promise<TodayDashboard> {
+  const bookingIds = [
+    ...new Set([
+      ...dashboard.followUps.flatMap(({ bookingId }) =>
+        bookingId ? [bookingId] : []
+      ),
+      ...(dashboard.nextCall?.bookingId ? [dashboard.nextCall.bookingId] : []),
+      ...dashboard.upcomingEvents.map(({ id }) => id),
+    ]),
+  ].sort();
+  const summaries =
+    "getForBookings" in provider &&
+    typeof (provider as Partial<BatchBookingOperationsSummaryProvider>)
+      .getForBookings === "function"
+      ? await (provider as BatchBookingOperationsSummaryProvider)
+          .getForBookings(bookingIds)
+      : new Map(await Promise.all(bookingIds.map(async (bookingId) => [
+          bookingId,
+          await provider.getForBooking(bookingId),
+        ] as const)));
+  const withOperations = (bookingId: string | null) =>
+    bookingId ? summaries.get(bookingId) ?? null : null;
+  return {
+    ...dashboard,
+    nextCall: dashboard.nextCall
+      ? {
+          ...dashboard.nextCall,
+          operations: withOperations(dashboard.nextCall.bookingId),
+        }
+      : null,
+    followUps: dashboard.followUps.map((followUp) => ({
+      ...followUp,
+      operations: withOperations(followUp.bookingId),
+    })),
+    upcomingEvents: dashboard.upcomingEvents.map((event) => ({
+      ...event,
+      operations: withOperations(event.id),
+    })),
+  };
+}
 
 export const TODAY_FOLLOW_UP_PAGE_SIZE = 50;
 export const TODAY_PLAN_PAGE_SIZE = 25;
@@ -411,6 +463,7 @@ export async function getTodayDashboard(
   now: Date,
   repository: TodayDashboardRepository | null = null,
   pages: { followUps?: number; needsFollowUpPlan?: number } = {},
+  operationsProvider: BookingOperationsSummaryProvider | null = null,
 ): Promise<TodayDashboard> {
   const source = repository ?? await getDrizzleTodayDashboardRepository();
   const { start: startToday, end: endToday } = businessDayBounds(now);
@@ -441,7 +494,7 @@ export async function getTodayDashboard(
     Math.ceil(planResult.total / TODAY_PLAN_PAGE_SIZE),
   );
 
-  return {
+  const dashboard: TodayDashboard = {
     ...counts,
     routeWarningCount: 0,
     nextCall: nextCallRecord ? toFollowUpSummary(nextCallRecord, now) : null,
@@ -473,4 +526,7 @@ export async function getTodayDashboard(
         startsAt: booking.startsAt,
       })),
   };
+  return operationsProvider
+    ? enrichTodayDashboardOperations(dashboard, operationsProvider)
+    : dashboard;
 }
