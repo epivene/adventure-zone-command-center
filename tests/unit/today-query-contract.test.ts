@@ -1,7 +1,9 @@
 import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
 import {
+  createDrizzleTodayDashboardRepository,
   needsFollowUpPlanCondition,
   openFollowUpsCondition,
   TODAY_FOLLOW_UP_PAGE_SIZE,
@@ -40,4 +42,105 @@ describe("Today bounded-query contract", () => {
     expect(query.params).toEqual([start.toISOString()]);
     expect(TODAY_UPCOMING_EVENT_LIMIT).toBe(5);
   });
+
+  it("applies the full priority CASE and stable tie-breakers before pagination", async () => {
+    const database = new QueryContractDatabase();
+    const repository = createDrizzleTodayDashboardRepository(
+      database as unknown as Parameters<
+        typeof createDrizzleTodayDashboardRepository
+      >[0],
+    );
+
+    await repository.listOpenFollowUps({
+      page: 2,
+      pageSize: TODAY_FOLLOW_UP_PAGE_SIZE,
+      now: new Date("2026-08-03T14:00:00.000Z"),
+    });
+
+    expect(database.steps).toEqual(["orderBy", "limit", "offset"]);
+    expect(database.orderSql.toLowerCase()).toContain("case");
+    expect(database.orderSql).toContain('"follow_ups"."due_at"');
+    expect(database.orderSql).toContain('"bookings"."status"');
+    expect(database.orderSql).toContain('"bookings"."probability"');
+    expect(database.orderSql).toContain('"bookings"."updated_at"');
+    expect(database.orderSql).toMatch(
+      /case[\s\S]*"follow_ups"\."due_at"[\s\S]*"follow_ups"\."created_at"[\s\S]*"follow_ups"\."id"/i,
+    );
+    expect(database.priorityParams).toEqual([
+      new Date("2026-08-03T05:00:00.000Z"),
+      new Date("2026-08-04T05:00:00.000Z"),
+      "pending_decision",
+      "pending_contract",
+      "contract_received",
+      "%deadline%",
+      "likely",
+      new Date("2026-07-20T14:00:00.000Z"),
+    ]);
+  });
+
+  it("uses the same priority CASE for the next call query", async () => {
+    const database = new QueryContractDatabase();
+    const repository = createDrizzleTodayDashboardRepository(
+      database as unknown as Parameters<
+        typeof createDrizzleTodayDashboardRepository
+      >[0],
+    );
+
+    await repository.findNextCall(new Date("2026-08-03T14:00:00.000Z"));
+
+    expect(database.steps).toEqual(["orderBy", "limit"]);
+    expect(database.orderSql.toLowerCase()).toContain("case");
+  });
 });
+
+class QueryContractDatabase {
+  readonly steps: string[] = [];
+  orderSql = "";
+  priorityParams: unknown[] = [];
+
+  select(selection?: Record<string, unknown>) {
+    const isCount = Boolean(selection && "value" in selection);
+    const recordOrder = (expressions: SQL[]) => {
+      this.steps.push("orderBy");
+      const queries = expressions.map((expression) =>
+        dialect.sqlToQuery(expression),
+      );
+      this.orderSql = queries.map((query) => query.sql).join(" ");
+      this.priorityParams = queries[0]?.params ?? [];
+    };
+    const recordStep = (step: string) => this.steps.push(step);
+    const builder = {
+      from() {
+        return builder;
+      },
+      leftJoin() {
+        return builder;
+      },
+      where() {
+        return builder;
+      },
+      orderBy(...expressions: SQL[]) {
+        recordOrder(expressions);
+        return builder;
+      },
+      limit() {
+        recordStep("limit");
+        return builder;
+      },
+      offset() {
+        recordStep("offset");
+        return builder;
+      },
+      then<TResult1 = unknown, TResult2 = never>(
+        onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ) {
+        return Promise.resolve(isCount ? [{ value: 100 }] : []).then(
+          onfulfilled,
+          onrejected,
+        );
+      },
+    };
+    return builder;
+  }
+}

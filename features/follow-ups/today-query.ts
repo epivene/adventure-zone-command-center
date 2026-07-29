@@ -80,6 +80,10 @@ export type TodayQueueRequest = {
   pageSize: number;
 };
 
+export type TodayPriorityQueueRequest = TodayQueueRequest & {
+  now: Date;
+};
+
 export interface TodayDashboardRepository {
   getCounts(endToday: Date): Promise<{
     followUpCount: number;
@@ -87,9 +91,9 @@ export interface TodayDashboardRepository {
     contractCount: number;
   }>;
   listOpenFollowUps(
-    request: TodayQueueRequest,
+    request: TodayPriorityQueueRequest,
   ): Promise<{ records: TodayDashboardFollowUpRow[]; total: number; page: number }>;
-  findNextCall(): Promise<TodayDashboardFollowUpRow | null>;
+  findNextCall(now: Date): Promise<TodayDashboardFollowUpRow | null>;
   listNeedsFollowUpPlan(
     futureBoundary: Date,
     request: TodayQueueRequest,
@@ -136,11 +140,13 @@ export const TODAY_FOLLOW_UP_PAGE_SIZE = 50;
 export const TODAY_PLAN_PAGE_SIZE = 25;
 export const TODAY_UPCOMING_EVENT_LIMIT = 5;
 
-const deadlineStatuses = new Set<BookingStatus>([
+const deadlineStatusValues = [
   "pending_decision",
   "pending_contract",
   "contract_received",
-]);
+] as const satisfies readonly BookingStatus[];
+
+const deadlineStatuses = new Set<BookingStatus>(deadlineStatusValues);
 
 const contractStatuses = [
   "pending_contract",
@@ -274,12 +280,40 @@ export function upcomingEventsCondition(startToday: Date) {
   return gte(bookings.startsAt, startToday);
 }
 
+export function todayFollowUpPriorityOrder(now: Date) {
+  const { start, end } = businessDayBounds(now);
+  const quietLeadCutoff = new Date(
+    now.getTime() - 14 * 24 * 60 * 60 * 1000,
+  );
+  const priority = sql<number>`case
+    when ${followUps.dueAt} < ${start} then 0
+    when ${followUps.dueAt} < ${end} then 1
+    when (
+      ${inArray(bookings.status, deadlineStatusValues)}
+      or ${followUps.kind} like ${"%deadline%"}
+    ) then 2
+    when ${bookings.probability} = ${"likely"} then 3
+    when (
+      ${bookings.id} is not null
+      and ${bookings.updatedAt} <= ${quietLeadCutoff}
+    ) then 4
+    else 5
+  end`;
+
+  return [
+    asc(priority),
+    asc(followUps.dueAt),
+    asc(followUps.createdAt),
+    asc(followUps.id),
+  ] as const;
+}
+
 type DrizzleDatabase = typeof database;
 
 export function createDrizzleTodayDashboardRepository(
   db: DrizzleDatabase,
 ): TodayDashboardRepository {
-  function followUpRows(condition: ReturnType<typeof and>) {
+  function followUpRows(condition: ReturnType<typeof and>, now: Date) {
     return db
       .select(followUpSelection)
       .from(followUps)
@@ -287,7 +321,7 @@ export function createDrizzleTodayDashboardRepository(
       .leftJoin(contacts, eq(followUps.contactId, contacts.id))
       .leftJoin(organizations, eq(followUps.organizationId, organizations.id))
       .where(condition)
-      .orderBy(asc(followUps.dueAt), asc(followUps.createdAt), asc(followUps.id));
+      .orderBy(...todayFollowUpPriorityOrder(now));
   }
 
   return {
@@ -313,7 +347,7 @@ export function createDrizzleTodayDashboardRepository(
       };
     },
 
-    async listOpenFollowUps({ page, pageSize }) {
+    async listOpenFollowUps({ page, pageSize, now }) {
       const condition = openFollowUpsCondition();
       const [totalRecord] = await db
         .select({ value: count() })
@@ -321,15 +355,16 @@ export function createDrizzleTodayDashboardRepository(
         .where(condition);
       const total = totalRecord?.value ?? 0;
       const boundedPage = Math.min(page, Math.max(1, Math.ceil(total / pageSize)));
-      const records = await followUpRows(condition)
+      const records = await followUpRows(condition, now)
         .limit(pageSize)
         .offset((boundedPage - 1) * pageSize);
       return { records, total, page: boundedPage };
     },
 
-    async findNextCall() {
+    async findNextCall(now) {
       const [record] = await followUpRows(
         and(openFollowUpsCondition(), eq(followUps.kind, "call")),
+        now,
       ).limit(1);
       return record ?? null;
     },
@@ -383,8 +418,9 @@ export async function getTodayDashboard(
       source.listOpenFollowUps({
         page: followUpPage,
         pageSize: TODAY_FOLLOW_UP_PAGE_SIZE,
+        now,
       }),
-      source.findNextCall(),
+      source.findNextCall(now),
       source.listNeedsFollowUpPlan(endToday, {
         page: planPage,
         pageSize: TODAY_PLAN_PAGE_SIZE,
@@ -405,9 +441,8 @@ export async function getTodayDashboard(
     ...counts,
     routeWarningCount: 0,
     nextCall: nextCallRecord ? toFollowUpSummary(nextCallRecord, now) : null,
-    followUps: sortFollowUpsForToday(
-      followUpResult.records.map((record) => toFollowUpSummary(record, now)),
-      now,
+    followUps: followUpResult.records.map((record) =>
+      toFollowUpSummary(record, now),
     ),
     followUpTotal: followUpResult.total,
     followUpPage: followUpResult.page,

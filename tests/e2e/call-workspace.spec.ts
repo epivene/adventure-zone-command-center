@@ -249,6 +249,7 @@ test("Last Resort requires a reason and displays it after completion", async ({ 
 test("an unknown caller can be Quick Added and complete a call", async ({ page }) => {
   const runId = randomUUID();
   const organizationName = `E2E Quick Add ${runId}`;
+  const nextActionDate = dateInputValue(2);
 
   try {
     await page.goto("/quick-add");
@@ -258,9 +259,32 @@ test("an unknown caller can be Quick Added and complete a call", async ({ page }
     await page.getByLabel("Reason for calling").fill("Asked about next season.");
     await page.getByRole("button", { name: "Create caller" }).click();
     await expect(page.getByRole("heading", { name: "Call Workspace" })).toBeVisible();
+    const contactId = new URL(page.url()).searchParams.get("contactId");
+    expect(contactId).toMatch(/^[0-9a-f-]+$/);
 
-    await completeCall(page, { disposition: "no_answer", note: "Left a callback request." });
+    await completeCall(page, {
+      disposition: "no_answer",
+      note: "Left a callback request.",
+      nextAction: "call",
+      nextActionDate,
+    });
     await expect(page.getByRole("status")).toHaveText("Call note saved.");
+
+    await page.goto("/today");
+    const replacement = page.getByRole("link", {
+      name: "Taylor New Caller",
+      exact: true,
+    });
+    await expect(replacement).toHaveAttribute(
+      "href",
+      new RegExp(
+        `^/calls/new\\?contactId=${contactId}&followUpId=[0-9a-f-]+$`,
+      ),
+    );
+    await expect(replacement.locator("xpath=ancestor::li")).toContainText("call");
+    await expect(replacement.locator("xpath=ancestor::li")).toContainText(
+      `Due ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Chicago" }).format(new Date(`${nextActionDate}T18:00:00.000Z`))}`,
+    );
   } finally {
     await cleanupOrganizationByName(organizationName);
   }
