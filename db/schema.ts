@@ -19,6 +19,38 @@ import {
   bookingStatusValues,
   probabilityValues,
 } from "@/features/bookings/booking-types";
+import {
+  requestApprovalStatusValues,
+  specialRequestTreatmentValues,
+  type RequestApprovalStatus,
+  type SpecialRequestTreatment,
+} from "@/features/packages/package-types";
+
+export {
+  requestApprovalStatusValues,
+  specialRequestTreatmentValues,
+} from "@/features/packages/package-types";
+
+export const resourceStatusValues = [
+  "available",
+  "unavailable",
+  "maintenance",
+  "archived",
+] as const;
+export type ResourceStatus = (typeof resourceStatusValues)[number];
+
+export const packageAttributionSourceValues = [
+  "inferred",
+  "manual",
+] as const;
+export type PackageAttributionSource =
+  (typeof packageAttributionSourceValues)[number];
+
+function sqlTextValues(values: readonly string[]) {
+  return sql.raw(
+    values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", "),
+  );
+}
 
 export const bookingStatusEnum = pgEnum("booking_status", bookingStatusValues);
 export const probabilityEnum = pgEnum("probability", probabilityValues);
@@ -133,9 +165,282 @@ export const bookings = pgTable("bookings", {
   travelLegId: uuid("travel_leg_id").references(() => travelLegs.id),
   actRecordId: text("act_record_id").unique(),
   notes: text("notes"),
+  physicalAttractionTotal: integer("physical_attraction_total"),
+  attractionTotalApprovalReason: text("attraction_total_approval_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  check(
+    "bookings_physical_attraction_total_nonnegative",
+    sql`${table.physicalAttractionTotal} is null or ${table.physicalAttractionTotal} >= 0`,
+  ),
+]);
+
+export const packageTemplates = pgTable(
+  "package_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    baseAttractionCount: integer("base_attraction_count").notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("package_templates_code_unique").on(table.code),
+    check(
+      "package_templates_code_nonblank",
+      sql`nullif(trim(${table.code}), '') is not null`,
+    ),
+    check(
+      "package_templates_name_nonblank",
+      sql`nullif(trim(${table.name}), '') is not null`,
+    ),
+    check(
+      "package_templates_base_attraction_count_positive",
+      sql`${table.baseAttractionCount} > 0`,
+    ),
+  ],
+);
+
+export const bookingPackageSelections = pgTable(
+  "booking_package_selections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    packageTemplateId: uuid("package_template_id")
+      .notNull()
+      .references(() => packageTemplates.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("booking_package_selections_booking_package_unique").on(
+      table.bookingId,
+      table.packageTemplateId,
+    ),
+  ],
+);
+
+export const bookingSpecialRequests = pgTable(
+  "booking_special_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    description: text("description").notNull(),
+    treatment: text("treatment").$type<SpecialRequestTreatment>().notNull(),
+    approvalStatus: text("approval_status")
+      .$type<RequestApprovalStatus>()
+      .default("needs_approval")
+      .notNull(),
+    decisionReason: text("decision_reason"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "booking_special_requests_description_nonblank",
+      sql`nullif(trim(${table.description}), '') is not null`,
+    ),
+    check(
+      "booking_special_requests_treatment_valid",
+      sql`${table.treatment} in (${sqlTextValues(specialRequestTreatmentValues)})`,
+    ),
+    check(
+      "booking_special_requests_approval_status_valid",
+      sql`${table.approvalStatus} in (${sqlTextValues(requestApprovalStatusValues)})`,
+    ),
+  ],
+);
+
+export const resources = pgTable(
+  "resources",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    code: text("code").notNull(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    countsAsAttraction: boolean("counts_as_attraction").default(false).notNull(),
+    movable: boolean("movable").default(false).notNull(),
+    normalTravelLegId: uuid("normal_travel_leg_id").references(
+      () => travelLegs.id,
+    ),
+    setupMinutes: integer("setup_minutes").default(0).notNull(),
+    teardownMinutes: integer("teardown_minutes").default(0).notNull(),
+    minimumTransferMinutes: integer("minimum_transfer_minutes")
+      .default(0)
+      .notNull(),
+    status: text("status").$type<ResourceStatus>().default("available").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("resources_code_unique").on(table.code),
+    check(
+      "resources_code_nonblank",
+      sql`nullif(trim(${table.code}), '') is not null`,
+    ),
+    check(
+      "resources_name_nonblank",
+      sql`nullif(trim(${table.name}), '') is not null`,
+    ),
+    check(
+      "resources_category_nonblank",
+      sql`nullif(trim(${table.category}), '') is not null`,
+    ),
+    check(
+      "resources_status_valid",
+      sql`${table.status} in (${sqlTextValues(resourceStatusValues)})`,
+    ),
+    check(
+      "resources_setup_minutes_nonnegative",
+      sql`${table.setupMinutes} >= 0`,
+    ),
+    check(
+      "resources_teardown_minutes_nonnegative",
+      sql`${table.teardownMinutes} >= 0`,
+    ),
+    check(
+      "resources_minimum_transfer_minutes_nonnegative",
+      sql`${table.minimumTransferMinutes} >= 0`,
+    ),
+  ],
+);
+
+export const resourcePackageTags = pgTable(
+  "resource_package_tags",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => resources.id, { onDelete: "cascade" }),
+    packageTemplateId: uuid("package_template_id")
+      .notNull()
+      .references(() => packageTemplates.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("resource_package_tags_resource_package_unique").on(
+      table.resourceId,
+      table.packageTemplateId,
+    ),
+  ],
+);
+
+export const bookingResourceAssignments = pgTable(
+  "booking_resource_assignments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => resources.id),
+    attributionSource: text("attribution_source")
+      .$type<PackageAttributionSource>()
+      .default("inferred")
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("booking_resource_assignments_booking_resource_unique").on(
+      table.bookingId,
+      table.resourceId,
+    ),
+    check(
+      "booking_resource_assignments_attribution_source_valid",
+      sql`${table.attributionSource} in (${sqlTextValues(
+        packageAttributionSourceValues,
+      )})`,
+    ),
+  ],
+);
+
+export const bookingResourcePackageAttributions = pgTable(
+  "booking_resource_package_attributions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingResourceAssignmentId: uuid("booking_resource_assignment_id")
+      .notNull()
+      .references(() => bookingResourceAssignments.id, { onDelete: "cascade" }),
+    packageTemplateId: uuid("package_template_id")
+      .notNull()
+      .references(() => packageTemplates.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex(
+      "booking_resource_package_attributions_assignment_package_unique",
+    ).on(
+      table.bookingResourceAssignmentId,
+      table.packageTemplateId,
+    ),
+  ],
+);
+
+export const resourceConflictOverrides = pgTable(
+  "resource_conflict_overrides",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    resourceId: uuid("resource_id").references(() => resources.id),
+    conflictKey: text("conflict_key").notNull(),
+    reason: text("reason").notNull(),
+    acknowledgedBy: text("acknowledged_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("resource_conflict_overrides_booking_conflict_unique").on(
+      table.bookingId,
+      table.conflictKey,
+    ),
+    check(
+      "resource_conflict_overrides_conflict_key_nonblank",
+      sql`nullif(trim(${table.conflictKey}), '') is not null`,
+    ),
+    check(
+      "resource_conflict_overrides_reason_nonblank",
+      sql`nullif(trim(${table.reason}), '') is not null`,
+    ),
+    check(
+      "resource_conflict_overrides_acknowledged_by_nonblank",
+      sql`nullif(trim(${table.acknowledgedBy}), '') is not null`,
+    ),
+  ],
+);
 
 export const followUps = pgTable("follow_ups", {
   id: uuid("id").defaultRandom().primaryKey(),

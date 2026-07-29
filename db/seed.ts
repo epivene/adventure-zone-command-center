@@ -1,7 +1,14 @@
 import { pathToFileURL } from "node:url";
 
+import { inArray } from "drizzle-orm";
+
 import type { db as database } from "@/db/client";
-import { travelLegs } from "@/db/schema";
+import {
+  packageTemplates,
+  resourcePackageTags,
+  resources,
+  travelLegs,
+} from "@/db/schema";
 
 export const initialTravelLegs = [
   { name: "Leg 1", color: "#DC3B3B", sortOrder: 1 },
@@ -10,7 +17,42 @@ export const initialTravelLegs = [
   { name: "Leg 4", color: "#15956B", sortOrder: 4 },
 ] as const;
 
-type SeedDatabase = Pick<typeof database, "insert">;
+export const initialPackageTemplates = [
+  {
+    code: "adventure_zone",
+    name: "Adventure Zone",
+    baseAttractionCount: 10,
+  },
+  {
+    code: "weekend_warriors",
+    name: "Weekend Warriors",
+    baseAttractionCount: 5,
+  },
+  {
+    code: "pirates_rebellion",
+    name: "Pirates Rebellion",
+    baseAttractionCount: 3,
+  },
+] as const;
+
+export const initialResources = [
+  {
+    code: "paintball_trailer",
+    name: "Paintball trailer",
+    category: "trailer",
+    countsAsAttraction: true,
+    movable: true,
+  },
+] as const;
+
+export const initialResourcePackageTags = [
+  {
+    resourceCode: "paintball_trailer",
+    packageTemplateCode: "weekend_warriors",
+  },
+] as const;
+
+type SeedDatabase = Pick<typeof database, "insert" | "select">;
 
 export async function seedTravelLegDefaults(database: SeedDatabase) {
   await database
@@ -21,15 +63,80 @@ export async function seedTravelLegDefaults(database: SeedDatabase) {
     });
 }
 
-export async function seedTravelLegs() {
+export async function seedPackageResourceDefaults(database: SeedDatabase) {
+  await database
+    .insert(packageTemplates)
+    .values([...initialPackageTemplates])
+    .onConflictDoNothing({
+      target: packageTemplates.code,
+    });
+
+  await database
+    .insert(resources)
+    .values([...initialResources])
+    .onConflictDoNothing({
+      target: resources.code,
+    });
+
+  const packageRows = await database
+    .select({
+      id: packageTemplates.id,
+      code: packageTemplates.code,
+    })
+    .from(packageTemplates)
+    .where(inArray(
+      packageTemplates.code,
+      initialPackageTemplates.map(({ code }) => code),
+    ));
+  const resourceRows = await database
+    .select({
+      id: resources.id,
+      code: resources.code,
+    })
+    .from(resources)
+    .where(inArray(
+      resources.code,
+      initialResources.map(({ code }) => code),
+    ));
+
+  const packageIdsByCode = new Map(
+    packageRows.map(({ code, id }) => [code, id]),
+  );
+  const resourceIdsByCode = new Map(
+    resourceRows.map(({ code, id }) => [code, id]),
+  );
+  const tagRows = initialResourcePackageTags.map((tag) => {
+    const resourceId = resourceIdsByCode.get(tag.resourceCode);
+    const packageTemplateId = packageIdsByCode.get(tag.packageTemplateCode);
+    if (!resourceId || !packageTemplateId) {
+      throw new Error(
+        `Seed prerequisite is missing for ${tag.resourceCode}:${tag.packageTemplateCode}.`,
+      );
+    }
+    return { resourceId, packageTemplateId };
+  });
+
+  await database
+    .insert(resourcePackageTags)
+    .values(tagRows)
+    .onConflictDoNothing({
+      target: [
+        resourcePackageTags.resourceId,
+        resourcePackageTags.packageTemplateId,
+      ],
+    });
+}
+
+export async function seedDatabaseDefaults() {
   const { db } = await import("@/db/client");
   await seedTravelLegDefaults(db);
+  await seedPackageResourceDefaults(db);
 }
 
 const invokedFile = process.argv[1];
 
 if (invokedFile && import.meta.url === pathToFileURL(invokedFile).href) {
-  seedTravelLegs().catch((error: unknown) => {
+  seedDatabaseDefaults().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
   });
