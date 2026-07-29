@@ -22,6 +22,21 @@ const migrationPreflightScript = path.join(
 );
 const temporaryRoots: string[] = [];
 
+function environmentWithFixturePath(binaryDirectory: string): NodeJS.ProcessEnv {
+  const existingPath = Object.entries(process.env).find(
+    ([key]) => key.toLowerCase() === "path",
+  )?.[1];
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "path"),
+  );
+
+  return {
+    ...environment,
+    NODE_ENV: process.env.NODE_ENV,
+    PATH: `${binaryDirectory}${path.delimiter}${existingPath ?? ""}`,
+  };
+}
+
 async function executable(filePath: string, source: string) {
   await writeFile(filePath, source, { mode: 0o700 });
   await chmod(filePath, 0o700);
@@ -137,8 +152,7 @@ fi
     temporaryDirectory,
     commandLog,
     env: {
-      ...process.env,
-      PATH: `${binaryDirectory}:${process.env.PATH ?? ""}`,
+      ...environmentWithFixturePath(binaryDirectory),
       TMPDIR: temporaryDirectory,
       COMMAND_LOG: commandLog,
       DATABASE_URL: "postgresql://backup-user@example.test/adventure_zone",
