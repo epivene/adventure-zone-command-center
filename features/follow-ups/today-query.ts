@@ -268,12 +268,12 @@ export function needsFollowUpPlanCondition(futureBoundary: Date) {
   const serializedFutureBoundary = futureBoundary.toISOString();
   return and(
     inArray(bookings.status, activeStatuses),
-    notExists(sql`
+    notExists(sql`(
       select 1 from ${followUps}
       where ${followUps.bookingId} = ${bookings.id}
         and ${followUps.completedAt} is null
         and ${followUps.dueAt} >= ${serializedFutureBoundary}
-    `),
+    )`),
   );
 }
 

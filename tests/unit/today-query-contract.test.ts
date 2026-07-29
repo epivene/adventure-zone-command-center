@@ -27,7 +27,7 @@ describe("Today bounded-query contract", () => {
     const boundary = new Date("2026-08-04T05:00:00.000Z");
     const query = dialect.sqlToQuery(needsFollowUpPlanCondition(boundary)!);
 
-    expect(query.sql.toLowerCase()).toContain("not exists");
+    expect(query.sql.toLowerCase()).toMatch(/not exists\s*\(\s*select 1/);
     expect(query.sql).toContain('"follow_ups"."booking_id" = "bookings"."id"');
     expect(query.sql).toContain('"follow_ups"."completed_at" is null');
     expect(query.sql).toContain('"follow_ups"."due_at" >=');
