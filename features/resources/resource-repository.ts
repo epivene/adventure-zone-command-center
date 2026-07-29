@@ -1,16 +1,20 @@
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   bookingResourceAssignments,
   bookings,
+  packageTemplates,
   resourceConflictOverrides,
+  resourcePackageTags,
   resources,
+  travelLegs,
 } from "@/db/schema";
 import {
   recordAuditEntry,
   type AuditChange,
 } from "@/features/audit/audit-service";
+import type { ResourceInput } from "@/features/resources/resource-input";
 
 import type {
   ResourceAvailabilityStatus,
@@ -330,5 +334,274 @@ export class DrizzleResourceRepository implements ResourceRepository {
     return this.database.transaction((transaction) =>
       operation(new DrizzleResourceTransaction(transaction)),
     );
+  }
+}
+
+export type ResourceInventoryRecord = ResourceRecord & {
+  normalTravelLegId: string | null;
+  packageTemplateIds: string[];
+};
+
+export type ResourceSettingsErrorCode =
+  | "RESOURCE_NOT_FOUND"
+  | "DUPLICATE_RESOURCE_CODE"
+  | "UNKNOWN_PACKAGE_TAG"
+  | "INACTIVE_PACKAGE_TAG"
+  | "UNKNOWN_TRAVEL_LEG"
+  | "RESOURCE_CODE_IMMUTABLE";
+
+export class ResourceSettingsError extends Error {
+  constructor(readonly code: ResourceSettingsErrorCode) {
+    super(code);
+    this.name = "ResourceSettingsError";
+  }
+}
+
+export interface ResourceSettingsRepository {
+  listResources(): Promise<ResourceInventoryRecord[]>;
+  upsertResource(
+    input: ResourceInput,
+    actorId: string,
+  ): Promise<ResourceInventoryRecord>;
+}
+
+function isDuplicateResourceCode(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const record = error as Record<string, unknown>;
+  return (
+    record.constraint_name === "resources_code_unique" ||
+    record.constraint === "resources_code_unique" ||
+    (typeof record.message === "string" &&
+      record.message.includes("resources_code_unique"))
+  );
+}
+
+function resourceSettingsSnapshot(
+  resource: ResourceInventoryRecord,
+) {
+  return {
+    code: resource.code,
+    name: resource.name,
+    category: resource.category,
+    countsAsAttraction: resource.countsAsAttraction,
+    packageTemplateIds: [...resource.packageTemplateIds].sort(),
+    normalTravelLegId: resource.normalTravelLegId,
+    movable: resource.movable,
+    setupMinutes: resource.setupMinutes,
+    teardownMinutes: resource.teardownMinutes,
+    minimumTransferMinutes: resource.minimumTransferMinutes,
+    status: resource.status,
+  };
+}
+
+function toInventoryRecord(
+  record: typeof resources.$inferSelect,
+  packageTemplateIds: string[],
+): ResourceInventoryRecord {
+  return {
+    id: record.id,
+    code: record.code,
+    name: record.name,
+    category: record.category,
+    countsAsAttraction: record.countsAsAttraction,
+    normalTravelLegId: record.normalTravelLegId,
+    movable: record.movable,
+    setupMinutes: record.setupMinutes,
+    teardownMinutes: record.teardownMinutes,
+    minimumTransferMinutes: record.minimumTransferMinutes,
+    status: record.status,
+    packageTemplateIds,
+  };
+}
+
+export class DrizzleResourceSettingsRepository
+implements ResourceSettingsRepository {
+  constructor(private readonly database: DrizzleDatabase) {}
+
+  async listResources(): Promise<ResourceInventoryRecord[]> {
+    const rows = await this.database
+      .select({
+        resource: resources,
+        packageTemplateId: resourcePackageTags.packageTemplateId,
+      })
+      .from(resources)
+      .leftJoin(
+        resourcePackageTags,
+        eq(resourcePackageTags.resourceId, resources.id),
+      )
+      .orderBy(
+        asc(resources.name),
+        asc(resources.id),
+        asc(resourcePackageTags.packageTemplateId),
+      );
+    const records = new Map<string, ResourceInventoryRecord>();
+    for (const row of rows) {
+      const record =
+        records.get(row.resource.id) ?? toInventoryRecord(row.resource, []);
+      if (row.packageTemplateId !== null) {
+        record.packageTemplateIds.push(row.packageTemplateId);
+      }
+      records.set(record.id, record);
+    }
+    return [...records.values()].map((record) => ({
+      ...record,
+      packageTemplateIds: record.packageTemplateIds.sort(),
+    }));
+  }
+
+  async upsertResource(
+    input: ResourceInput,
+    actorId: string,
+  ): Promise<ResourceInventoryRecord> {
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [currentRow] = input.id
+          ? await transaction
+              .select()
+              .from(resources)
+              .where(eq(resources.id, input.id))
+              .limit(1)
+              .for("update")
+          : [];
+        if (input.id && !currentRow) {
+          throw new ResourceSettingsError("RESOURCE_NOT_FOUND");
+        }
+        if (currentRow && currentRow.code !== input.code) {
+          throw new ResourceSettingsError("RESOURCE_CODE_IMMUTABLE");
+        }
+
+        const currentTags = currentRow
+          ? await transaction
+              .select({
+                id: resourcePackageTags.id,
+                packageTemplateId: resourcePackageTags.packageTemplateId,
+              })
+              .from(resourcePackageTags)
+              .where(eq(resourcePackageTags.resourceId, currentRow.id))
+          : [];
+        const currentTagIds = new Set(
+          currentTags.map(({ packageTemplateId }) => packageTemplateId),
+        );
+
+        const selectedTemplates =
+          input.packageTemplateIds.length === 0
+            ? []
+            : await transaction
+                .select({
+                  id: packageTemplates.id,
+                  active: packageTemplates.active,
+                })
+                .from(packageTemplates)
+                .where(
+                  inArray(packageTemplates.id, [...input.packageTemplateIds]),
+                )
+                .for("share");
+        if (selectedTemplates.length !== input.packageTemplateIds.length) {
+          throw new ResourceSettingsError("UNKNOWN_PACKAGE_TAG");
+        }
+        if (
+          selectedTemplates.some(
+            (template) =>
+              !template.active && !currentTagIds.has(template.id),
+          )
+        ) {
+          throw new ResourceSettingsError("INACTIVE_PACKAGE_TAG");
+        }
+
+        if (input.normalTravelLegId) {
+          const [leg] = await transaction
+            .select({ id: travelLegs.id })
+            .from(travelLegs)
+            .where(eq(travelLegs.id, input.normalTravelLegId))
+            .limit(1);
+          if (!leg) {
+            throw new ResourceSettingsError("UNKNOWN_TRAVEL_LEG");
+          }
+        }
+
+        const values = {
+          code: input.code,
+          name: input.name,
+          category: input.category,
+          countsAsAttraction: input.countsAsAttraction,
+          normalTravelLegId: input.normalTravelLegId,
+          movable: input.movable,
+          setupMinutes: input.setupMinutes,
+          teardownMinutes: input.teardownMinutes,
+          minimumTransferMinutes: input.minimumTransferMinutes,
+          status: input.status,
+          updatedAt: new Date(),
+        };
+        const [savedRow] = currentRow
+          ? await transaction
+              .update(resources)
+              .set(values)
+              .where(eq(resources.id, currentRow.id))
+              .returning()
+          : await transaction
+              .insert(resources)
+              .values(values)
+              .returning();
+        if (!savedRow) {
+          throw new ResourceSettingsError("RESOURCE_NOT_FOUND");
+        }
+
+        const desiredTagIds = new Set(input.packageTemplateIds);
+        const removedTagIds = currentTags
+          .filter(({ packageTemplateId }) =>
+            !desiredTagIds.has(packageTemplateId)
+          )
+          .map(({ packageTemplateId }) => packageTemplateId);
+        if (removedTagIds.length > 0) {
+          await transaction
+            .delete(resourcePackageTags)
+            .where(
+              and(
+                eq(resourcePackageTags.resourceId, savedRow.id),
+                inArray(resourcePackageTags.packageTemplateId, removedTagIds),
+              ),
+            );
+        }
+        const addedTagIds = input.packageTemplateIds.filter(
+          (packageTemplateId) => !currentTagIds.has(packageTemplateId),
+        );
+        if (addedTagIds.length > 0) {
+          await transaction.insert(resourcePackageTags).values(
+            addedTagIds.map((packageTemplateId) => ({
+              resourceId: savedRow.id,
+              packageTemplateId,
+            })),
+          );
+        }
+
+        const saved = toInventoryRecord(savedRow, [
+          ...input.packageTemplateIds,
+        ]);
+        await recordAuditEntry(transaction, {
+          entityType: "resource",
+          entityId: saved.id,
+          action: currentRow ? "update" : "create",
+          before: currentRow
+            ? resourceSettingsSnapshot(
+                toInventoryRecord(
+                  currentRow,
+                  currentTags.map(({ packageTemplateId }) => packageTemplateId),
+                ),
+              )
+            : null,
+          after: {
+            ...resourceSettingsSnapshot(saved),
+            actorId,
+          },
+        });
+        return saved;
+      });
+    } catch (error) {
+      if (error instanceof ResourceSettingsError) throw error;
+      if (isDuplicateResourceCode(error)) {
+        throw new ResourceSettingsError("DUPLICATE_RESOURCE_CODE");
+      }
+      throw error;
+    }
   }
 }

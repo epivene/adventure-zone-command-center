@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -19,6 +19,7 @@ import type {
   RequestApprovalStatus,
   SpecialRequestTreatment,
 } from "@/features/packages/package-types";
+import type { PackageTemplateInput } from "@/features/packages/package-input";
 
 export type AuditEntry = AuditChange;
 
@@ -434,5 +435,109 @@ export class DrizzlePackageRepository implements PackageRepository {
     return this.database.transaction((transaction) =>
       operation(new DrizzlePackageTransaction(transaction)),
     );
+  }
+}
+
+export type PackageTemplateSettingsRecord = PackageTemplateRecord;
+
+export type PackageSettingsErrorCode = "PACKAGE_TEMPLATE_NOT_FOUND";
+
+export class PackageSettingsError extends Error {
+  constructor(readonly code: PackageSettingsErrorCode) {
+    super(code);
+    this.name = "PackageSettingsError";
+  }
+}
+
+export interface PackageSettingsRepository {
+  listPackageTemplates(): Promise<PackageTemplateSettingsRecord[]>;
+  updatePackageTemplate(
+    input: PackageTemplateInput,
+    actorId: string,
+  ): Promise<PackageTemplateSettingsRecord>;
+}
+
+function packageSettingsSnapshot(
+  template: PackageTemplateSettingsRecord,
+) {
+  return {
+    code: template.code,
+    name: template.name,
+    baseAttractionCount: template.baseAttractionCount,
+    active: template.active,
+  };
+}
+
+export class DrizzlePackageSettingsRepository
+implements PackageSettingsRepository {
+  constructor(private readonly database: DrizzleDatabase) {}
+
+  async listPackageTemplates(): Promise<PackageTemplateSettingsRecord[]> {
+    const records = await this.database
+      .select({
+        id: packageTemplates.id,
+        code: packageTemplates.code,
+        name: packageTemplates.name,
+        baseAttractionCount: packageTemplates.baseAttractionCount,
+        active: packageTemplates.active,
+      })
+      .from(packageTemplates)
+      .orderBy(asc(packageTemplates.name), asc(packageTemplates.id));
+    return records;
+  }
+
+  updatePackageTemplate(
+    input: PackageTemplateInput,
+    actorId: string,
+  ): Promise<PackageTemplateSettingsRecord> {
+    return this.database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select({
+          id: packageTemplates.id,
+          code: packageTemplates.code,
+          name: packageTemplates.name,
+          baseAttractionCount: packageTemplates.baseAttractionCount,
+          active: packageTemplates.active,
+        })
+        .from(packageTemplates)
+        .where(eq(packageTemplates.id, input.id))
+        .limit(1)
+        .for("update");
+      if (!current) {
+        throw new PackageSettingsError("PACKAGE_TEMPLATE_NOT_FOUND");
+      }
+
+      const [updated] = await transaction
+        .update(packageTemplates)
+        .set({
+          name: input.name,
+          baseAttractionCount: input.baseAttractionCount,
+          active: input.active,
+          updatedAt: new Date(),
+        })
+        .where(eq(packageTemplates.id, input.id))
+        .returning({
+          id: packageTemplates.id,
+          code: packageTemplates.code,
+          name: packageTemplates.name,
+          baseAttractionCount: packageTemplates.baseAttractionCount,
+          active: packageTemplates.active,
+        });
+      if (!updated) {
+        throw new PackageSettingsError("PACKAGE_TEMPLATE_NOT_FOUND");
+      }
+
+      await recordAuditEntry(transaction, {
+        entityType: "package_template",
+        entityId: updated.id,
+        action: "update",
+        before: packageSettingsSnapshot(current),
+        after: {
+          ...packageSettingsSnapshot(updated),
+          actorId,
+        },
+      });
+      return updated;
+    });
   }
 }

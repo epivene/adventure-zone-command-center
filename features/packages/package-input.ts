@@ -76,6 +76,22 @@ export const decideSpecialRequestInputSchema = z
   })
   .strict();
 
+export const packageTemplateInputSchema = z
+  .object({
+    id: canonicalUuid,
+    name: z
+      .string()
+      .trim()
+      .min(1, "Package name is required.")
+      .max(100, "Package name is too long."),
+    baseAttractionCount: z
+      .number()
+      .int("Base attraction count must be a whole number.")
+      .positive("Base attraction count must be at least one."),
+    active: z.boolean(),
+  })
+  .strict();
+
 export type ConfigureBookingPackagesInput = z.output<
   typeof configureBookingPackagesInputSchema
 >;
@@ -84,4 +100,7 @@ export type AddSpecialRequestInput = z.output<
 >;
 export type DecideSpecialRequestInput = z.output<
   typeof decideSpecialRequestInputSchema
+>;
+export type PackageTemplateInput = z.output<
+  typeof packageTemplateInputSchema
 >;
