@@ -1,0 +1,334 @@
+import { and, eq, inArray, notInArray } from "drizzle-orm";
+
+import type { db as database } from "@/db/client";
+import {
+  bookingResourceAssignments,
+  bookings,
+  resourceConflictOverrides,
+  resources,
+} from "@/db/schema";
+import {
+  recordAuditEntry,
+  type AuditChange,
+} from "@/features/audit/audit-service";
+
+import type {
+  ResourceAvailabilityStatus,
+  ResourceReservation,
+} from "./resource-types";
+
+const terminalBookingStatusValues = [
+  "declined",
+  "cancelled",
+  "completed",
+] as const;
+const terminalBookingStatuses: ReadonlySet<string> = new Set(
+  terminalBookingStatusValues,
+);
+
+export type AuditEntry = AuditChange;
+
+export type BookingResourceState = {
+  id: string;
+  name: string;
+  startsAt: Date | null;
+  endsAt: Date | null;
+  latitude: number | null;
+  longitude: number | null;
+  physicalAttractionTotal: number | null;
+};
+
+export type ResourceRecord = {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  countsAsAttraction: boolean;
+  movable: boolean;
+  setupMinutes: number;
+  teardownMinutes: number;
+  minimumTransferMinutes: number;
+  status: ResourceAvailabilityStatus;
+};
+
+export type ResourceAssignmentRecord = {
+  id: string;
+  bookingId: string;
+  resourceId: string;
+  attributionSource: "inferred" | "manual";
+};
+
+export type ResourceConflictOverride = {
+  id: string;
+  bookingId: string;
+  resourceId: string | null;
+  conflictKey: string;
+  reason: string;
+  acknowledgedBy: string;
+  createdAt: Date;
+};
+
+export type CreateResourceOverrideInput = Omit<
+  ResourceConflictOverride,
+  "id" | "createdAt"
+>;
+
+export interface ResourceTransaction {
+  findBookingForUpdate(
+    bookingId: string,
+  ): Promise<BookingResourceState | null>;
+  findCurrentAssignmentsForUpdate(
+    bookingId: string,
+  ): Promise<ResourceAssignmentRecord[]>;
+  findResourcesForUpdate(
+    resourceIds: readonly string[],
+  ): Promise<ResourceRecord[]>;
+  replaceBookingAssignments(
+    bookingId: string,
+    resourceIds: readonly string[],
+    now: Date,
+  ): Promise<ResourceAssignmentRecord[]>;
+  listReservationsForResources(
+    resourceIds: readonly string[],
+  ): Promise<ResourceReservation[]>;
+  listOverrides(
+    bookingId: string,
+    conflictKeys: readonly string[],
+  ): Promise<ResourceConflictOverride[]>;
+  createOverride(
+    input: CreateResourceOverrideInput,
+    now: Date,
+  ): Promise<ResourceConflictOverride>;
+  createAuditEntry(entry: AuditEntry): Promise<void>;
+}
+
+export interface ResourceRepository {
+  transaction<T>(
+    operation: (transaction: ResourceTransaction) => Promise<T>,
+  ): Promise<T>;
+}
+
+type DrizzleDatabase = typeof database;
+type DrizzleResourceWriter = Pick<
+  DrizzleDatabase,
+  "select" | "insert" | "delete"
+>;
+
+function assignmentRecord(
+  assignment: typeof bookingResourceAssignments.$inferSelect,
+): ResourceAssignmentRecord {
+  return {
+    id: assignment.id,
+    bookingId: assignment.bookingId,
+    resourceId: assignment.resourceId,
+    attributionSource: assignment.attributionSource,
+  };
+}
+
+class DrizzleResourceTransaction implements ResourceTransaction {
+  constructor(private readonly database: DrizzleResourceWriter) {}
+
+  async findBookingForUpdate(
+    bookingId: string,
+  ): Promise<BookingResourceState | null> {
+    const [booking] = await this.database
+      .select({
+        id: bookings.id,
+        name: bookings.name,
+        startsAt: bookings.startsAt,
+        endsAt: bookings.endsAt,
+        latitude: bookings.latitude,
+        longitude: bookings.longitude,
+        physicalAttractionTotal: bookings.physicalAttractionTotal,
+      })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1)
+      .for("update");
+    return booking ?? null;
+  }
+
+  async findCurrentAssignmentsForUpdate(
+    bookingId: string,
+  ): Promise<ResourceAssignmentRecord[]> {
+    const assignments = await this.database
+      .select()
+      .from(bookingResourceAssignments)
+      .where(eq(bookingResourceAssignments.bookingId, bookingId))
+      .for("update");
+    return assignments.map(assignmentRecord);
+  }
+
+  async findResourcesForUpdate(
+    resourceIds: readonly string[],
+  ): Promise<ResourceRecord[]> {
+    if (resourceIds.length === 0) return [];
+    const records = await this.database
+      .select()
+      .from(resources)
+      .where(inArray(resources.id, [...resourceIds]))
+      .orderBy(resources.id)
+      .for("update");
+    return records.map((record) => ({
+      id: record.id,
+      code: record.code,
+      name: record.name,
+      category: record.category,
+      countsAsAttraction: record.countsAsAttraction,
+      movable: record.movable,
+      setupMinutes: record.setupMinutes,
+      teardownMinutes: record.teardownMinutes,
+      minimumTransferMinutes: record.minimumTransferMinutes,
+      status: record.status,
+    }));
+  }
+
+  async replaceBookingAssignments(
+    bookingId: string,
+    resourceIds: readonly string[],
+    now: Date,
+  ): Promise<ResourceAssignmentRecord[]> {
+    const current = await this.database
+      .select()
+      .from(bookingResourceAssignments)
+      .where(eq(bookingResourceAssignments.bookingId, bookingId));
+    const desired = new Set(resourceIds);
+    const retainedResourceIds = new Set(
+      current
+        .filter(({ resourceId }) => desired.has(resourceId))
+        .map(({ resourceId }) => resourceId),
+    );
+
+    if (resourceIds.length === 0) {
+      await this.database
+        .delete(bookingResourceAssignments)
+        .where(eq(bookingResourceAssignments.bookingId, bookingId));
+    } else {
+      await this.database
+        .delete(bookingResourceAssignments)
+        .where(
+          and(
+            eq(bookingResourceAssignments.bookingId, bookingId),
+            notInArray(bookingResourceAssignments.resourceId, [...resourceIds]),
+          ),
+        );
+    }
+
+    const additions = resourceIds.filter(
+      (resourceId) => !retainedResourceIds.has(resourceId),
+    );
+    if (additions.length > 0) {
+      await this.database.insert(bookingResourceAssignments).values(
+        additions.map((resourceId) => ({
+          bookingId,
+          resourceId,
+          attributionSource: "inferred" as const,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      );
+    }
+
+    const finalAssignments = await this.database
+      .select()
+      .from(bookingResourceAssignments)
+      .where(eq(bookingResourceAssignments.bookingId, bookingId));
+    return finalAssignments.map(assignmentRecord);
+  }
+
+  async listReservationsForResources(
+    resourceIds: readonly string[],
+  ): Promise<ResourceReservation[]> {
+    if (resourceIds.length === 0) return [];
+    const rows = await this.database
+      .select({
+        assignment: bookingResourceAssignments,
+        booking: bookings,
+        resource: resources,
+      })
+      .from(bookingResourceAssignments)
+      .innerJoin(
+        bookings,
+        eq(bookings.id, bookingResourceAssignments.bookingId),
+      )
+      .innerJoin(
+        resources,
+        eq(resources.id, bookingResourceAssignments.resourceId),
+      )
+      .where(
+        and(
+          inArray(bookingResourceAssignments.resourceId, [...resourceIds]),
+          notInArray(bookings.status, [...terminalBookingStatusValues]),
+        ),
+      );
+    return rows
+      .filter(({ booking }) => !terminalBookingStatuses.has(booking.status))
+      .map(({ assignment, booking, resource }) => ({
+        assignmentId: assignment.id,
+        bookingId: booking.id,
+        bookingName: booking.name,
+        resourceId: resource.id,
+        resourceCode: resource.code,
+        resourceName: resource.name,
+        resourceStatus: resource.status,
+        countsAsAttraction: resource.countsAsAttraction,
+        movable: resource.movable,
+        setupMinutes: resource.setupMinutes,
+        teardownMinutes: resource.teardownMinutes,
+        minimumTransferMinutes: resource.minimumTransferMinutes,
+        startsAt: booking.startsAt,
+        endsAt: booking.endsAt,
+        location:
+          booking.latitude === null || booking.longitude === null
+            ? null
+            : {
+                latitude: booking.latitude,
+                longitude: booking.longitude,
+              },
+      }));
+  }
+
+  async listOverrides(
+    bookingId: string,
+    conflictKeys: readonly string[],
+  ): Promise<ResourceConflictOverride[]> {
+    if (conflictKeys.length === 0) return [];
+    return this.database
+      .select()
+      .from(resourceConflictOverrides)
+      .where(
+        and(
+          eq(resourceConflictOverrides.bookingId, bookingId),
+          inArray(resourceConflictOverrides.conflictKey, [...conflictKeys]),
+        ),
+      );
+  }
+
+  async createOverride(
+    input: CreateResourceOverrideInput,
+    now: Date,
+  ): Promise<ResourceConflictOverride> {
+    const [created] = await this.database
+      .insert(resourceConflictOverrides)
+      .values({ ...input, createdAt: now })
+      .returning();
+    if (!created) throw new Error("Could not store the conflict override.");
+    return created;
+  }
+
+  createAuditEntry(entry: AuditEntry): Promise<void> {
+    return recordAuditEntry(this.database, entry);
+  }
+}
+
+export class DrizzleResourceRepository implements ResourceRepository {
+  constructor(private readonly database: DrizzleDatabase) {}
+
+  transaction<T>(
+    operation: (transaction: ResourceTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.database.transaction((transaction) =>
+      operation(new DrizzleResourceTransaction(transaction)),
+    );
+  }
+}
