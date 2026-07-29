@@ -29,7 +29,12 @@ describe("CallWorkspacePage", () => {
 
     expect(events).toEqual(["owner", "context"]);
     expect(loadContext).toHaveBeenCalledWith(
-      { contactId: "not-a-uuid", bookingId: undefined, followUpId: undefined },
+      {
+        organizationId: undefined,
+        contactId: "not-a-uuid",
+        bookingId: undefined,
+        followUpId: undefined,
+      },
       expect.anything(),
     );
   });

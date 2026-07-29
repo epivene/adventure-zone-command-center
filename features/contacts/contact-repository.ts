@@ -36,7 +36,10 @@ import {
 import { requireOwner } from "@/lib/auth/require-owner";
 
 type DrizzleDatabase = typeof database;
-type OrganizationWriter = Pick<DrizzleDatabase, "select" | "insert">;
+type OrganizationWriter = Pick<
+  DrizzleDatabase,
+  "execute" | "select" | "insert"
+>;
 export type ContactPatchWriter = Pick<DrizzleDatabase, "insert" | "update">;
 
 export function contactSyncState(value: string | null): ContactSyncState {
@@ -349,6 +352,56 @@ export class DrizzleContactRepository {
 
   async createQuickCaller(input: QuickCallerInput, now = new Date()) {
     return this.database.transaction(async (transaction) => {
+      await transaction.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`quick-caller:${input.requestKey}`}, 0))`,
+      );
+      const [replay] = await transaction
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(eq(contacts.quickAddRequestKey, input.requestKey))
+        .limit(1)
+        .for("update");
+      if (replay) {
+        return { kind: "created" as const, contactId: replay.id };
+      }
+
+      const normalizedPhone = normalizeUsPhone(input.phone);
+      if (normalizedPhone) {
+        await transaction.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`quick-caller-phone:${normalizedPhone}`}, 0))`,
+        );
+        const matches = await transaction
+          .select({
+            contact: contacts,
+            organizationName: organizations.name,
+            organizationLastResort: organizations.lastResort,
+            organizationLastResortReason: organizations.lastResortReason,
+            syncState: actContactSyncStates.state,
+            lastSyncedAt: actContactSyncStates.lastSyncedAt,
+          })
+          .from(contacts)
+          .leftJoin(
+            organizations,
+            eq(contacts.organizationId, organizations.id),
+          )
+          .leftJoin(
+            actContactSyncStates,
+            eq(contacts.id, actContactSyncStates.contactId),
+          )
+          .where(eq(contacts.normalizedPhone, normalizedPhone))
+          .orderBy(
+            asc(contacts.lastName),
+            asc(contacts.firstName),
+            asc(contacts.id),
+          );
+        if (matches.length) {
+          return {
+            kind: "match" as const,
+            match: phoneMatch(normalizedPhone, matches.map(listRecord)),
+          };
+        }
+      }
+
       const organizationId = await this.resolveOrganizationId(
         transaction,
         input.organizationName,
@@ -362,7 +415,8 @@ export class DrizzleContactRepository {
           lastName: input.lastName,
           email: input.email,
           phone: input.phone,
-          normalizedPhone: normalizeUsPhone(input.phone),
+          normalizedPhone,
+          quickAddRequestKey: input.requestKey,
           createdAt: now,
           updatedAt: now,
         })
@@ -417,7 +471,7 @@ export class DrizzleContactRepository {
         },
       });
 
-      return contact.id;
+      return { kind: "created" as const, contactId: contact.id };
     });
   }
 
@@ -497,6 +551,9 @@ export class DrizzleContactRepository {
       .trim()
       .toLocaleLowerCase("en-US")
       .replace(/\s+/g, " ");
+    await writer.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`organization:${normalizedName}`}, 0))`,
+    );
     const [existing] = await writer
       .select({ id: organizations.id })
       .from(organizations)
@@ -515,6 +572,16 @@ export class DrizzleContactRepository {
       })
       .returning({ id: organizations.id });
     if (!created) throw new Error("Could not create contact organization.");
+    await recordAuditEntry(writer, {
+      entityType: "organization",
+      entityId: created.id,
+      action: "create",
+      before: null,
+      after: {
+        name: organizationName,
+        actRecordId: null,
+      },
+    });
     return created.id;
   }
 }

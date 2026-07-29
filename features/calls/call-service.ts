@@ -1,6 +1,8 @@
 import {
+  approvedContactWrite,
   approvedBookingWrite,
   completeCallInputSchema,
+  validateApprovedContactPatch,
   validateApprovedBookingPatch,
 } from "@/features/calls/call-input";
 import type { BookingStatus } from "@/features/bookings/booking-types";
@@ -8,11 +10,14 @@ import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
 import {
   dispositionBookingStatus,
   persistedCallDisposition,
+  publicCallDisposition,
+  type CallContext,
   type CallError,
   type CompletedCall,
   type CompleteCallInput,
 } from "@/features/calls/call-types";
 import type { CallRepository } from "@/features/calls/call-repository";
+import { isFutureBusinessDate } from "@/lib/business-date";
 import { err, ok, type Result } from "@/lib/result";
 
 export type { CallRepository, CallTransaction } from "@/features/calls/call-repository";
@@ -22,6 +27,7 @@ type CallServiceOptions = { now?: () => Date };
 function activityAudit(
   input: CompleteCallInput,
   activityId: string,
+  organizationId: string | null,
   contactId: string | null,
   bookingId: string | null,
 ) {
@@ -31,7 +37,7 @@ function activityAudit(
     action: "create",
     before: null,
     after: {
-      organizationId: input.organizationId,
+      organizationId,
       contactId,
       bookingId,
       kind: "call",
@@ -39,6 +45,98 @@ function activityAudit(
       occurredAt: input.endedAt.toISOString(),
     },
   };
+}
+
+function canonicalOrganizationId(context: CallContext) {
+  return (
+    context.followUp?.organizationId ??
+    context.booking?.organizationId ??
+    context.contact?.organizationId ??
+    context.organization?.id ??
+    null
+  );
+}
+
+function validateCanonicalContext(
+  value: CompleteCallInput,
+  context: CallContext,
+): Result<{
+  organizationId: string | null;
+  contactId: string | null;
+  bookingId: string | null;
+}, CallError> {
+  const followUp = context.followUp;
+  const booking = context.booking;
+  const contact = context.contact;
+
+  if (
+    followUp &&
+    value.bookingId !== null &&
+    value.bookingId !== followUp.bookingId
+  ) {
+    return err({ code: "FOLLOW_UP_BOOKING_MISMATCH" });
+  }
+  if (followUp && value.contactId !== null) {
+    if (
+      followUp.contactId !== null &&
+      value.contactId !== followUp.contactId
+    ) {
+      return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
+    }
+    if (followUp.contactId === null) {
+      if (followUp.bookingId === null) {
+        return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
+      }
+      if (
+        booking?.primaryContactId &&
+        value.contactId !== booking.primaryContactId
+      ) {
+        return err({ code: "CONTACT_BOOKING_MISMATCH" });
+      }
+    }
+  }
+  if (
+    booking?.primaryContactId &&
+    contact &&
+    contact.id !== booking.primaryContactId &&
+    followUp?.contactId !== contact.id
+  ) {
+    return err({ code: "CONTACT_BOOKING_MISMATCH" });
+  }
+
+  const organizationId =
+    value.organizationId ?? canonicalOrganizationId(context);
+  if (
+    contact?.organizationId &&
+    contact.organizationId !== organizationId
+  ) {
+    return err({ code: "CONTACT_ORGANIZATION_MISMATCH" });
+  }
+  if (
+    booking?.organizationId &&
+    booking.organizationId !== organizationId
+  ) {
+    return err({ code: "BOOKING_ORGANIZATION_MISMATCH" });
+  }
+  if (
+    followUp?.organizationId &&
+    followUp.organizationId !== organizationId
+  ) {
+    return err({ code: "FOLLOW_UP_ORGANIZATION_MISMATCH" });
+  }
+  if (
+    context.organization &&
+    organizationId &&
+    context.organization.id !== organizationId
+  ) {
+    return err({ code: "ORGANIZATION_NOT_FOUND" });
+  }
+
+  return ok({
+    organizationId,
+    contactId: contact?.id ?? null,
+    bookingId: booking?.id ?? null,
+  });
 }
 
 export class CallService {
@@ -60,6 +158,17 @@ export class CallService {
     const completedAt = this.now();
 
     return this.repository.transaction(async (transaction) => {
+      const replay = await transaction.lockRequest(value.requestKey);
+      if (replay) {
+        const disposition = publicCallDisposition[replay.disposition];
+        return ok({
+          activityId: replay.noteActivityId,
+          callSessionId: replay.id,
+          nextFollowUpId: null,
+          disposition,
+          resultingBookingStatus: dispositionBookingStatus[disposition] ?? null,
+        });
+      }
       const context = await transaction.lockContext(value);
       if (value.organizationId && !context.organization) {
         return err({ code: "ORGANIZATION_NOT_FOUND" });
@@ -72,20 +181,11 @@ export class CallService {
         return err({ code: "BOOKING_NOT_FOUND" });
       }
       if (value.followUpId && !context.followUp) return err({ code: "FOLLOW_UP_NOT_FOUND" });
-      if (context.followUp?.bookingId && value.bookingId && context.followUp.bookingId !== value.bookingId) {
-        return err({ code: "FOLLOW_UP_BOOKING_MISMATCH" });
-      }
-      if (context.contact && context.contact.organizationId !== value.organizationId) {
-        return err({ code: "CONTACT_ORGANIZATION_MISMATCH" });
-      }
-      if (context.booking && context.booking.organizationId !== value.organizationId) {
-        return err({ code: "BOOKING_ORGANIZATION_MISMATCH" });
-      }
-      if (context.followUp?.organizationId && context.followUp.organizationId !== value.organizationId) {
-        return err({ code: "FOLLOW_UP_ORGANIZATION_MISMATCH" });
-      }
-      if (context.followUp?.contactId && value.contactId && context.followUp.contactId !== value.contactId) {
-        return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
+      const canonical = validateCanonicalContext(value, context);
+      if (!canonical.ok) return canonical;
+      const { organizationId, contactId, bookingId } = canonical.value;
+      if (organizationId && !context.organization) {
+        return err({ code: "ORGANIZATION_NOT_FOUND" });
       }
       if (context.followUp && (context.followUp.completedAt || context.followUp.nextFollowUpId)) {
         return err({ code: "ALREADY_COMPLETED" });
@@ -111,16 +211,27 @@ export class CallService {
       const bookingStatus = context.booking
         ? resultingBookingStatus ?? context.booking.status
         : null;
-      if (context.booking && needsFollowUpPlan(
-        { status: bookingStatus! },
-        value.nextAction ? { ...value.nextAction, completedAt: null } : null,
-        completedAt,
-      )) {
+      const hasFutureNextAction = Boolean(
+        value.nextAction &&
+        isFutureBusinessDate(value.nextAction.dueAt, completedAt),
+      );
+      const terminalDisposition =
+        value.disposition === "declined" ||
+        value.disposition === "move_to_last_resort";
+      if (
+        (value.nextAction && !hasFutureNextAction) ||
+        (context.booking && needsFollowUpPlan(
+          { status: bookingStatus! },
+          hasFutureNextAction
+            ? { ...value.nextAction!, completedAt: null }
+            : null,
+          completedAt,
+        )) ||
+        (!context.booking && !terminalDisposition && !hasFutureNextAction)
+      ) {
         return err({ code: "NEXT_ACTION_REQUIRED" });
       }
       if (value.approvedContactUpdates && !context.contact) return err({ code: "CONTACT_NOT_FOUND" });
-      const contactId = context.contact?.id ?? value.contactId;
-      const bookingId = context.booking?.id ?? value.bookingId;
       const bookingPatch = context.booking && (
         mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates
       )
@@ -136,16 +247,30 @@ export class CallService {
           message: bookingPatch.error.issues[0]?.message ?? "Review the booking updates.",
         });
       }
+      const contactPatch = context.contact && value.approvedContactUpdates
+        ? validateApprovedContactPatch(
+          context.contact as Record<string, unknown>,
+          context.organization?.name ?? null,
+          value.approvedContactUpdates,
+        )
+        : null;
+      if (contactPatch && !contactPatch.success) {
+        return err({
+          code: "INVALID_CALL_INPUT",
+          message: contactPatch.error.issues[0]?.message ?? "Review the contact updates.",
+        });
+      }
 
       const activity = await transaction.createActivity({
-        organizationId: value.organizationId,
+        organizationId,
         contactId,
         bookingId,
         body: value.note,
         occurredAt: value.endedAt,
       });
       const session = await transaction.createCallSession({
-        organizationId: value.organizationId,
+        requestKey: value.requestKey,
+        organizationId,
         contactId,
         bookingId,
         followUpId: value.followUpId,
@@ -164,7 +289,7 @@ export class CallService {
       }
       if (value.nextAction) {
         const next = await transaction.createFollowUp({
-          organizationId: value.organizationId,
+          organizationId,
           contactId,
           bookingId: context.booking?.id ?? null,
           ...value.nextAction,
@@ -177,7 +302,7 @@ export class CallService {
           action: "create",
           before: null,
           after: {
-            organizationId: value.organizationId,
+            organizationId,
             contactId,
             bookingId: context.booking?.id ?? null,
             ...value.nextAction,
@@ -208,7 +333,10 @@ export class CallService {
         const updated = await transaction.updateContact({
           contact: context.contact,
           organizationName: context.organization?.name ?? null,
-          updates: value.approvedContactUpdates,
+          updates: approvedContactWrite(
+            contactPatch!.data,
+            value.approvedContactUpdates,
+          ),
           now: completedAt,
         });
         await transaction.createAuditEntry({
@@ -243,7 +371,13 @@ export class CallService {
         });
       }
       await transaction.createAuditEntry(
-        activityAudit(value, activity.id, contactId, bookingId),
+        activityAudit(
+          value,
+          activity.id,
+          organizationId,
+          contactId,
+          bookingId,
+        ),
       );
       await transaction.createAuditEntry({
         entityType: "call_session",

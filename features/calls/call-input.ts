@@ -4,6 +4,11 @@ import { bookingEditInputSchema } from "@/features/bookings/booking-input";
 import { bookingStatusValues, probabilityValues, type BookingStatus } from "@/features/bookings/booking-types";
 import type { BookingEditInput } from "@/features/bookings/booking-input";
 import type { CompleteCallInput } from "@/features/calls/call-types";
+import {
+  contactFormInputSchema,
+  nullableContactEmailSchema,
+} from "@/features/contacts/contact-input";
+import type { ContactFields } from "@/features/contacts/contact-types";
 
 const callDispositionSchema = z.enum([
   "no_answer",
@@ -17,12 +22,16 @@ const callDispositionSchema = z.enum([
 ]);
 
 const nullableText = z.union([z.string(), z.null()]).transform((value) => value?.trim() || null);
+const nullableEmail = z
+  .union([z.string(), z.null()])
+  .transform((value) => value ?? "")
+  .pipe(nullableContactEmailSchema);
 
 const approvedContactUpdatesSchema = z.object({
   firstName: z.string().trim().min(1).optional(),
   lastName: z.string().trim().min(1).optional(),
   jobTitle: nullableText.optional(),
-  email: nullableText.optional(),
+  email: nullableEmail.optional(),
   phone: nullableText.optional(),
   address1: nullableText.optional(),
   address2: nullableText.optional(),
@@ -49,6 +58,7 @@ const approvedBookingUpdatesSchema = z.object({
 }).strict();
 
 export const completeCallInputSchema = z.object({
+  requestKey: z.uuid(),
   organizationId: z.uuid().nullable(),
   contactId: z.uuid().nullable(),
   bookingId: z.uuid().nullable(),
@@ -62,7 +72,10 @@ export const completeCallInputSchema = z.object({
     kind: z.string().trim().min(1, "Choose the next action"),
     dueAt: z.date(),
   }).nullable(),
-  lastResortReason: nullableText,
+  lastResortReason: z
+    .union([z.string().trim().max(2_000), z.null()])
+    .transform((value) => value || null),
+  lastResortConfirmed: z.boolean(),
   approvedContactUpdates: approvedContactUpdatesSchema.nullable(),
   approvedBookingUpdates: approvedBookingUpdatesSchema.nullable(),
 }).superRefine((value, context) => {
@@ -78,6 +91,16 @@ export const completeCallInputSchema = z.object({
       code: "custom",
       path: ["lastResortReason"],
       message: "Add a Last Resort reason",
+    });
+  }
+  if (
+    value.disposition === "move_to_last_resort" &&
+    !value.lastResortConfirmed
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["lastResortConfirmed"],
+      message: "Confirm moving this organization to Last Resort",
     });
   }
   if (!value.organizationId && !value.contactId && !value.bookingId && !value.followUpId) {
@@ -113,5 +136,41 @@ export function approvedBookingWrite(
     write[key] = validated[key as keyof BookingEditInput];
   }
   if (authoritativeStatus) write.status = validated.status;
+  return write;
+}
+
+export function validateApprovedContactPatch(
+  lockedContact: Record<string, unknown>,
+  organizationName: string | null,
+  updates: Record<string, unknown>,
+) {
+  const formUpdates = Object.fromEntries(
+    Object.entries(updates).map(([key, value]) => [key, value ?? ""]),
+  );
+  return contactFormInputSchema.safeParse({
+    firstName: lockedContact.firstName,
+    lastName: lockedContact.lastName ?? "",
+    organizationName: organizationName ?? "",
+    jobTitle: lockedContact.jobTitle ?? "",
+    email: lockedContact.email ?? "",
+    phone: lockedContact.phone ?? "",
+    address1: lockedContact.address1 ?? "",
+    address2: lockedContact.address2 ?? "",
+    city: lockedContact.city ?? "",
+    region: lockedContact.region ?? "",
+    postalCode: lockedContact.postalCode ?? "",
+    ...formUpdates,
+  });
+}
+
+export function approvedContactWrite(
+  validated: ContactFields,
+  approved: Record<string, unknown>,
+) {
+  const write: Record<string, unknown> = {};
+  for (const key of Object.keys(approved)) {
+    if (key === "organizationName") continue;
+    write[key] = validated[key as keyof ContactFields];
+  }
   return write;
 }

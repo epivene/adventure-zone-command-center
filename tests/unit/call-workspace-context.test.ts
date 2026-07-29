@@ -19,6 +19,8 @@ type FollowUpRecord = {
   organizationId: string | null;
   contactId: string | null;
   bookingId: string | null;
+  kind: string;
+  dueAt: Date;
 };
 
 class RecordingContextRepository implements CallWorkspaceContextRepository {
@@ -29,6 +31,8 @@ class RecordingContextRepository implements CallWorkspaceContextRepository {
     organizationId,
     contactId: null,
     bookingId: null,
+    kind: "call",
+    dueAt: new Date("2026-08-01T17:00:00Z"),
   }, private readonly relatedOrganizationId: string | null = organizationId) {}
 
   async findOrganization(id: string) {
@@ -40,8 +44,8 @@ class RecordingContextRepository implements CallWorkspaceContextRepository {
 
   async findContact(id: string) {
     this.calls.push(`contact:${id}`);
-    if (id === contactId) return { id, organizationId: this.relatedOrganizationId, firstName: "Avery", lastName: "Example", email: null, phone: null };
-    if (id === secondaryContactId) return { id, organizationId: this.relatedOrganizationId, firstName: "Bailey", lastName: "Example", email: null, phone: null };
+    if (id === contactId) return { id, organizationId: this.relatedOrganizationId, firstName: "Avery", lastName: "Example", email: null, phone: null, city: "Shelby", region: "MT" };
+    if (id === secondaryContactId) return { id, organizationId: this.relatedOrganizationId, firstName: "Bailey", lastName: "Example", email: null, phone: null, city: null, region: null };
     return null;
   }
 
@@ -89,6 +93,29 @@ describe("loadCallWorkspaceContext", () => {
     });
   });
 
+  it("opens a directly requested organization without inventing a contact, booking, or follow-up", async () => {
+    const repository = new RecordingContextRepository();
+
+    await expect(loadCallWorkspaceContext({ organizationId }, repository)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        organization: { id: organizationId, name: "Marias Fair" },
+        contact: null,
+        booking: null,
+        followUp: null,
+      },
+    });
+  });
+
+  it("rejects an organization query that conflicts with the follow-up account", async () => {
+    const repository = new RecordingContextRepository();
+
+    await expect(loadCallWorkspaceContext({
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      followUpId,
+    }, repository)).resolves.toEqual({ ok: false });
+  });
+
   it("rejects an added booking ID for an organization-only follow-up", async () => {
     const repository = new RecordingContextRepository();
 
@@ -120,6 +147,8 @@ describe("loadCallWorkspaceContext", () => {
       organizationId,
       contactId: null,
       bookingId,
+      kind: "call",
+      dueAt: new Date("2026-08-01T17:00:00Z"),
     });
     await expect(loadCallWorkspaceContext(
       queryFromToday(primarySummary),
@@ -132,6 +161,8 @@ describe("loadCallWorkspaceContext", () => {
       organizationId,
       contactId: secondaryContactId,
       bookingId,
+      kind: "call",
+      dueAt: new Date("2026-08-01T17:00:00Z"),
     });
     await expect(loadCallWorkspaceContext(
       queryFromToday(explicitSummary),
@@ -145,6 +176,8 @@ describe("loadCallWorkspaceContext", () => {
       organizationId: null,
       contactId: null,
       bookingId,
+      kind: "call",
+      dueAt: new Date("2026-08-01T17:00:00Z"),
     }, null);
     const summary: FollowUpSummary = {
       id: followUpId,
@@ -174,6 +207,8 @@ describe("loadCallWorkspaceContext", () => {
       organizationId: null,
       contactId,
       bookingId: null,
+      kind: "call",
+      dueAt: new Date("2026-08-01T17:00:00Z"),
     }, null);
     const summary: FollowUpSummary = {
       id: followUpId,
@@ -200,7 +235,7 @@ describe("loadCallWorkspaceContext", () => {
   it("uses booking scope before contact scope before organization scope for recent history", () => {
     expect(activityTimelineParent({
       organization: { id: organizationId, name: "Marias Fair", lastResort: false, lastResortReason: null },
-      contact: { id: contactId, organizationId, firstName: "Avery", lastName: "Example", email: null, phone: null },
+      contact: { id: contactId, organizationId, firstName: "Avery", lastName: "Example", email: null, phone: null, city: "Shelby", region: "MT" },
       booking: { id: bookingId, organizationId, primaryContactId: contactId, name: "Marias Fair 2026", city: "Shelby", region: "MT", status: "interested", startsAt: null },
       followUp: null,
     })).toEqual({ bookingId });

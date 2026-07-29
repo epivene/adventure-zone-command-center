@@ -20,6 +20,8 @@ export type CallWorkspaceContact = {
   lastName: string;
   email: string | null;
   phone: string | null;
+  city: string | null;
+  region: string | null;
 };
 
 export type CallWorkspaceBooking = {
@@ -38,6 +40,8 @@ export type CallWorkspaceFollowUp = {
   organizationId: string | null;
   contactId: string | null;
   bookingId: string | null;
+  kind: string;
+  dueAt: Date;
 };
 
 export type CallWorkspaceContext = {
@@ -55,6 +59,7 @@ export interface CallWorkspaceContextRepository {
 }
 
 export type CallWorkspaceQuery = {
+  organizationId?: string;
   contactId?: string;
   bookingId?: string;
   followUpId?: string;
@@ -76,14 +81,19 @@ export async function loadCallWorkspaceContext(
   query: CallWorkspaceQuery,
   repository: CallWorkspaceContextRepository,
 ): Promise<{ ok: true; value: CallWorkspaceContext } | { ok: false }> {
+  const requestedOrganizationId = validId(query.organizationId);
   const requestedContactId = validId(query.contactId);
   const requestedBookingId = validId(query.bookingId);
   const requestedFollowUpId = validId(query.followUpId);
   if (
+    requestedOrganizationId === undefined ||
     requestedContactId === undefined ||
     requestedBookingId === undefined ||
     requestedFollowUpId === undefined ||
-    (!requestedContactId && !requestedBookingId && !requestedFollowUpId)
+    (!requestedOrganizationId &&
+      !requestedContactId &&
+      !requestedBookingId &&
+      !requestedFollowUpId)
   ) return { ok: false };
 
   const followUp = requestedFollowUpId
@@ -93,7 +103,12 @@ export async function loadCallWorkspaceContext(
   if (
     followUp &&
     ((requestedBookingId && requestedBookingId !== followUp.bookingId) ||
-      (requestedContactId && followUp.contactId && requestedContactId !== followUp.contactId))
+      (requestedContactId &&
+        followUp.contactId &&
+        requestedContactId !== followUp.contactId) ||
+      (requestedContactId &&
+        !followUp.contactId &&
+        !followUp.bookingId))
   ) return { ok: false };
 
   const bookingId = requestedBookingId ?? followUp?.bookingId ?? null;
@@ -114,12 +129,13 @@ export async function loadCallWorkspaceContext(
   if (contactId && !contact) return { ok: false };
 
   const organizationIds = [
+    requestedOrganizationId,
     followUp?.organizationId,
     booking?.organizationId,
     contact?.organizationId,
   ].filter((id): id is string => Boolean(id));
   if (new Set(organizationIds).size > 1) return { ok: false };
-  const organizationId = organizationIds[0] ?? null;
+  const organizationId = requestedOrganizationId ?? organizationIds[0] ?? null;
   const organization = organizationId
     ? await repository.findOrganization(organizationId)
     : null;
@@ -152,6 +168,8 @@ export class DrizzleCallWorkspaceContextRepository
         lastName: record.lastName,
         email: record.email,
         phone: record.phone,
+        city: record.city,
+        region: record.region,
       }
       : null;
   }
@@ -175,7 +193,14 @@ export class DrizzleCallWorkspaceContextRepository
   async findFollowUp(id: string): Promise<CallWorkspaceFollowUp | null> {
     const [record] = await this.database.select().from(followUps).where(eq(followUps.id, id)).limit(1);
     return record
-      ? { id: record.id, organizationId: record.organizationId, contactId: record.contactId, bookingId: record.bookingId }
+      ? {
+        id: record.id,
+        organizationId: record.organizationId,
+        contactId: record.contactId,
+        bookingId: record.bookingId,
+        kind: record.kind,
+        dueAt: record.dueAt,
+      }
       : null;
   }
 }

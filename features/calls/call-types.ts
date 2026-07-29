@@ -16,6 +16,7 @@ export type CallDisposition =
 export type PersistedCallDisposition = (typeof callDispositionValues)[number];
 
 export type CompleteCallInput = {
+  requestKey: string;
   organizationId: string | null;
   contactId: string | null;
   bookingId: string | null;
@@ -27,6 +28,7 @@ export type CompleteCallInput = {
   endedAt: Date;
   nextAction: { kind: string; dueAt: Date } | null;
   lastResortReason: string | null;
+  lastResortConfirmed: boolean;
   approvedContactUpdates: Partial<ContactFields> | null;
   approvedBookingUpdates: Partial<BookingEditInput> | null;
 };
@@ -41,6 +43,16 @@ export type CallOrganization = {
 export type CallContact = {
   id: string;
   organizationId: string | null;
+  firstName: string;
+  lastName: string;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
   [key: string]: unknown;
 };
 
@@ -89,6 +101,7 @@ export type CallError =
   | { code: "BOOKING_ORGANIZATION_MISMATCH" }
   | { code: "FOLLOW_UP_ORGANIZATION_MISMATCH" }
   | { code: "FOLLOW_UP_CONTACT_MISMATCH" }
+  | { code: "CONTACT_BOOKING_MISMATCH" }
   | { code: "ALREADY_COMPLETED" }
   | { code: "NEXT_ACTION_REQUIRED" }
   | { code: "RESULTING_STATUS_MISMATCH" };
@@ -106,6 +119,20 @@ export const persistedCallDisposition: Record<
   booked: "booked",
   declined: "declined",
   move_to_last_resort: "last_resort",
+};
+
+export const publicCallDisposition: Record<
+  PersistedCallDisposition,
+  CallDisposition
+> = {
+  no_answer: "no_answer",
+  left_voicemail: "left_voicemail",
+  follow_up_needed: "follow_up_needed",
+  interested: "interested",
+  proposal_sent: "proposal_contract_sent",
+  booked: "booked",
+  declined: "declined",
+  last_resort: "move_to_last_resort",
 };
 
 export const dispositionBookingStatus: Partial<

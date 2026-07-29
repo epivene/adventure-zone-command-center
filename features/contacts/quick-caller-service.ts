@@ -6,6 +6,7 @@ import type { PhoneMatch, QuickCallerInput } from "@/features/contacts/contact-t
 const optionalText = z.string().trim().transform((value) => value || null);
 
 const quickCallerSchema = z.object({
+  requestKey: z.uuid(),
   name: z.string().trim().min(1, "Enter the caller's name."),
   organizationName: z.string().trim().min(1, "Enter an organization or event."),
   phone: optionalText,
@@ -29,7 +30,7 @@ export type QuickCallerActionResult =
 
 export type QuickCallerRepository = Pick<
   DrizzleContactRepository,
-  "findContactsByPhone" | "createQuickCaller"
+  "createQuickCaller"
 >;
 
 function splitName(name: string) {
@@ -54,10 +55,8 @@ export async function submitQuickCaller(
 
   const { name, ...fields } = parsed.data;
   const caller: QuickCallerInput = { ...splitName(name), ...fields };
-  if (caller.phone) {
-    const match = await repository.findContactsByPhone(caller.phone);
-    if (match.kind !== "none") return { ok: false, match };
-  }
-  const contactId = await repository.createQuickCaller(caller);
-  return { ok: true, contactId };
+  const result = await repository.createQuickCaller(caller);
+  return result.kind === "created"
+    ? { ok: true, contactId: result.contactId }
+    : { ok: false, match: result.match };
 }

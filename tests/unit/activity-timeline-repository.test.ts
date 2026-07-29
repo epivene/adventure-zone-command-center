@@ -42,4 +42,39 @@ describe("DrizzleActivityRepository.listTimeline", () => {
     })).resolves.toMatchObject([{ id: "activity-1", revisionCount: 2 }]);
     expect(limit).toHaveBeenCalledWith(10);
   });
+
+  it("pages revision bodies in bounded batches", async () => {
+    const revisions = Array.from({ length: 26 }, (_, index) => ({
+      id: `revision-${index}`,
+      activityId: "11111111-1111-4111-8111-111111111111",
+      priorBody: `Before ${index}`,
+      replacementBody: `After ${index}`,
+      reason: "Correction",
+      createdAt: new Date(`2026-07-${String(28 - index).padStart(2, "0")}T15:00:00Z`),
+    }));
+    const offset = vi.fn(async () => revisions);
+    const limitResult = { offset };
+    const limit = vi.fn(() => limitResult);
+    const chain = {
+      from: vi.fn(),
+      where: vi.fn(),
+      orderBy: vi.fn(),
+    };
+    chain.from.mockReturnValue(chain);
+    chain.where.mockReturnValue(chain);
+    chain.orderBy.mockReturnValue({ limit });
+    const database = { select: vi.fn(() => chain) };
+
+    await expect(
+      new DrizzleActivityRepository(database as never).listRevisions(
+        "11111111-1111-4111-8111-111111111111",
+        2,
+      ),
+    ).resolves.toMatchObject({
+      revisions: expect.any(Array),
+      nextPage: 3,
+    });
+    expect(limit).toHaveBeenCalledWith(26);
+    expect(offset).toHaveBeenCalledWith(25);
+  });
 });

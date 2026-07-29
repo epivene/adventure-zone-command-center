@@ -1,12 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
-import type { ActivityRevisionResult } from "@/components/activities/activity-timeline";
 import type { CompleteCallResult } from "@/components/calls/call-workspace";
-import { ActivityService } from "@/features/activities/activity-service";
-import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { completeCallInputSchema } from "@/features/calls/call-input";
 import { DrizzleCallRepository } from "@/features/calls/call-repository";
 import { CallService } from "@/features/calls/call-service";
@@ -26,6 +22,7 @@ function readableCallError(error: CallError) {
     case "BOOKING_ORGANIZATION_MISMATCH": return "This booking does not belong to the selected organization.";
     case "FOLLOW_UP_ORGANIZATION_MISMATCH": return "This follow-up does not belong to the selected organization.";
     case "FOLLOW_UP_CONTACT_MISMATCH": return "This follow-up does not belong to the selected contact.";
+    case "CONTACT_BOOKING_MISMATCH": return "This contact is not the booking contact for this call.";
     case "ALREADY_COMPLETED": return "This follow-up was already completed. Refresh to see its saved outcome.";
     case "NEXT_ACTION_REQUIRED": return "Choose a next action and date before completing this call.";
     case "RESULTING_STATUS_MISMATCH": return "The selected disposition determines a different booking status.";
@@ -53,16 +50,4 @@ export async function completeCallAction(input: CompleteCallInput): Promise<Comp
     revalidatePath(`/organizations/${parsed.data.organizationId}`);
   }
   return { ok: true };
-}
-
-export async function listActivityRevisionsAction(activityId: string): Promise<ActivityRevisionResult> {
-  await requireOwner();
-  if (!z.uuid().safeParse(activityId).success) {
-    return { ok: false, error: "This activity could not be found. Refresh and try again." };
-  }
-  const { db } = await import("@/db/client");
-  const revisions = await new ActivityService(
-    new DrizzleActivityRepository(db),
-  ).listRevisions(activityId);
-  return { ok: true, revisions };
 }

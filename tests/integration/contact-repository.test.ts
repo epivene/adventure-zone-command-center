@@ -37,6 +37,7 @@ const repositoryIds = {
 };
 
 const quickCaller: QuickCallerInput = {
+  requestKey: "99999999-9999-4999-8999-999999999999",
   firstName: "Bailey",
   lastName: "Caller",
   organizationName: "  marias   fair ",
@@ -176,7 +177,10 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       normalizedPhone: "+14065550199",
     });
 
-    const contactId = await repository.createQuickCaller(quickCaller);
+    const created = await repository.createQuickCaller(quickCaller);
+    expect(created).toMatchObject({ kind: "created" });
+    if (created.kind !== "created") throw new Error("Expected a new caller.");
+    const contactId = created.contactId;
 
     expect(await sql!.unsafe("SELECT id, act_record_id FROM organizations ORDER BY id")).toEqual([
       { id: repositoryIds.organization, act_record_id: "ACT-ORG-1" },

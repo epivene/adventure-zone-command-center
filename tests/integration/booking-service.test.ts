@@ -580,6 +580,8 @@ describe("BookingService.createBooking", () => {
         organizationId: null,
         contactId: null,
         bookingId: todayBookingId,
+        kind: "call",
+        dueAt: new Date("2026-07-28T15:00:00.000Z"),
       } : null,
     };
 

@@ -24,6 +24,7 @@ import { CallService } from "@/features/calls/call-service";
 import { requireOwner } from "@/lib/auth/require-owner";
 
 const input = {
+  requestKey: "99999999-9999-4999-8999-999999999999",
   organizationId: "11111111-1111-4111-8111-111111111111",
   contactId: "22222222-2222-4222-8222-222222222222",
   bookingId: "33333333-3333-4333-8333-333333333333",
@@ -35,6 +36,7 @@ const input = {
   endedAt: new Date("2026-07-28T15:01:00Z"),
   nextAction: { kind: "call", dueAt: new Date("2026-08-01T17:00:00Z") },
   lastResortReason: null,
+  lastResortConfirmed: false,
   approvedContactUpdates: null,
   approvedBookingUpdates: null,
 };

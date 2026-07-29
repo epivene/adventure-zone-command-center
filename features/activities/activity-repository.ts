@@ -1,7 +1,13 @@
 import { count, desc, eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { activities, activityRevisions } from "@/db/schema";
+import {
+  activities,
+  activityRevisions,
+  bookings,
+  contacts,
+  organizations,
+} from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { err, ok, type Result } from "@/lib/result";
 
@@ -9,6 +15,7 @@ import type {
   ActivityError,
   ActivityParent,
   ActivityRevision,
+  ActivityRevisionPage,
   ActivityTimelineItem,
   CreateActivityInput,
   EditActivityInput,
@@ -18,6 +25,7 @@ export type {
   ActivityError,
   ActivityParent,
   ActivityRevision,
+  ActivityRevisionPage,
   ActivityTimelineItem,
   CreateActivityInput,
   EditActivityInput,
@@ -30,10 +38,21 @@ export interface ActivityRepository {
 }
 
 export interface ActivityRevisionReader {
-  listRevisions(activityId: string): Promise<ActivityRevision[]>;
+  listRevisions(
+    activityId: string,
+    page?: number,
+  ): Promise<ActivityRevisionPage>;
 }
 
 type DrizzleDatabase = typeof database;
+const REVISION_PAGE_SIZE = 25;
+
+export class ActivityParentValidationError extends Error {
+  constructor() {
+    super("The linked CRM record could not be found or does not match.");
+    this.name = "ActivityParentValidationError";
+  }
+}
 
 function toTimelineItem(
   activity: typeof activities.$inferSelect,
@@ -104,17 +123,65 @@ export class DrizzleActivityRepository
     );
   }
 
-  async listRevisions(activityId: string): Promise<ActivityRevision[]> {
-    const revisions = await this.database
+  async listRevisions(
+    activityId: string,
+    page = 1,
+  ): Promise<ActivityRevisionPage> {
+    const records = await this.database
       .select()
       .from(activityRevisions)
       .where(eq(activityRevisions.activityId, activityId))
-      .orderBy(desc(activityRevisions.createdAt), desc(activityRevisions.id));
-    return revisions.map(toRevision);
+      .orderBy(desc(activityRevisions.createdAt), desc(activityRevisions.id))
+      .limit(REVISION_PAGE_SIZE + 1)
+      .offset((page - 1) * REVISION_PAGE_SIZE);
+    return {
+      revisions: records.slice(0, REVISION_PAGE_SIZE).map(toRevision),
+      nextPage: records.length > REVISION_PAGE_SIZE ? page + 1 : null,
+    };
   }
 
   async create(input: CreateActivityInput): Promise<ActivityTimelineItem> {
     return this.database.transaction(async (transaction) => {
+      const [organization] = input.organizationId
+        ? await transaction
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(eq(organizations.id, input.organizationId))
+          .limit(1)
+          .for("update")
+        : [];
+      const [contact] = input.contactId
+        ? await transaction
+          .select({ id: contacts.id, organizationId: contacts.organizationId })
+          .from(contacts)
+          .where(eq(contacts.id, input.contactId))
+          .limit(1)
+          .for("update")
+        : [];
+      const [booking] = input.bookingId
+        ? await transaction
+          .select({ id: bookings.id, organizationId: bookings.organizationId })
+          .from(bookings)
+          .where(eq(bookings.id, input.bookingId))
+          .limit(1)
+          .for("update")
+        : [];
+      if (
+        (input.organizationId && !organization) ||
+        (input.contactId && !contact) ||
+        (input.bookingId && !booking)
+      ) {
+        throw new ActivityParentValidationError();
+      }
+      const organizationIds = [
+        input.organizationId,
+        contact?.organizationId,
+        booking?.organizationId,
+      ].filter((id): id is string => Boolean(id));
+      if (new Set(organizationIds).size > 1) {
+        throw new ActivityParentValidationError();
+      }
+
       const now = new Date();
       const [activity] = await transaction
         .insert(activities)

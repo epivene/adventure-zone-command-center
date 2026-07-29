@@ -2,14 +2,15 @@ import {
   createActivityInputSchema,
   editActivityInputSchema,
 } from "@/features/activities/activity-input";
-import type {
-  ActivityRepository,
-  ActivityRevisionReader,
+import {
+  ActivityParentValidationError,
+  type ActivityRepository,
+  type ActivityRevisionReader,
 } from "@/features/activities/activity-repository";
 import type {
   ActivityError,
   ActivityParent,
-  ActivityRevision,
+  ActivityRevisionPage,
   ActivityTimelineItem,
   CreateActivityInput,
   EditActivityInput,
@@ -25,8 +26,11 @@ export class ActivityService {
     return this.repository.listTimeline(parent);
   }
 
-  listRevisions(activityId: string): Promise<ActivityRevision[]> {
-    return this.repository.listRevisions(activityId);
+  listRevisions(
+    activityId: string,
+    page = 1,
+  ): Promise<ActivityRevisionPage> {
+    return this.repository.listRevisions(activityId, page);
   }
 
   async create(
@@ -39,7 +43,17 @@ export class ActivityService {
         message: parsed.error.issues[0]?.message ?? "Review the activity details.",
       });
     }
-    return { ok: true, value: await this.repository.create(parsed.data) };
+    try {
+      return { ok: true, value: await this.repository.create(parsed.data) };
+    } catch (error) {
+      if (error instanceof ActivityParentValidationError) {
+        return err({
+          code: "INVALID_ACTIVITY_INPUT",
+          message: error.message,
+        });
+      }
+      throw error;
+    }
   }
 
   async edit(

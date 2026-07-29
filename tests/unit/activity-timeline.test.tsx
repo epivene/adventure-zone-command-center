@@ -54,4 +54,65 @@ describe("ActivityTimeline", () => {
     expect(screen.getByText(/Added the requested date/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Hide edit history" })).toBeVisible();
   });
+
+  it("creates and edits activities with labeled compact forms while retaining failed values", async () => {
+    const user = userEvent.setup();
+    const createActivity = vi.fn().mockResolvedValue({
+      ok: false,
+      error: "The activity could not be saved.",
+    });
+    const editActivity = vi.fn().mockResolvedValue({
+      ok: true,
+      activity: {
+        ...activity,
+        body: "Corrected call summary.",
+        revisionCount: 2,
+      },
+    });
+
+    render(
+      <ActivityTimeline
+        activities={[activity]}
+        createActivity={createActivity}
+        editActivity={editActivity}
+        loadRevisions={vi.fn()}
+        parent={{ organizationId: activity.organizationId! }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Add activity" }));
+    await user.type(screen.getByLabelText("Activity text"), "New account note.");
+    await user.click(screen.getByRole("button", { name: "Save activity" }));
+    expect(createActivity).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: activity.organizationId,
+      kind: "note",
+      body: "New account note.",
+      occurredAt: expect.any(Date),
+    }));
+    expect(screen.getByText("The activity could not be saved.")).toHaveAttribute(
+      "role",
+      "alert",
+    );
+    expect(screen.getByLabelText("Activity text")).toHaveValue(
+      "New account note.",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit activity" }));
+    await user.clear(screen.getByLabelText("Edited activity text"));
+    await user.type(
+      screen.getByLabelText("Edited activity text"),
+      "Corrected call summary.",
+    );
+    await user.type(screen.getByLabelText("Reason for edit"), "Fixed the summary.");
+    await user.click(screen.getByRole("button", { name: "Save activity edit" }));
+
+    expect(editActivity).toHaveBeenCalledWith({
+      activityId: activity.id,
+      body: "Corrected call summary.",
+      reason: "Fixed the summary.",
+    });
+    expect(screen.getByText("Corrected call summary.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "View edit history (2)" }))
+      .toHaveAttribute("aria-expanded", "false");
+  });
 });

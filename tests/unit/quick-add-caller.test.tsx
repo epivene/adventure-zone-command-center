@@ -64,6 +64,7 @@ describe("QuickAddCaller", () => {
     await user.click(screen.getByRole("button", { name: "Create caller" }));
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       name: "Avery Example",
       organizationName: "Marias Fair",
       phone: "(406) 555-0101",

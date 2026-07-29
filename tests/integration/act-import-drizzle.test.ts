@@ -31,6 +31,7 @@ const contactRow: ContactRow = {
   email: "avery@example.com",
   phone: "old phone",
   normalizedPhone: null,
+  quickAddRequestKey: null,
   jobTitle: null,
   address1: null,
   address2: null,

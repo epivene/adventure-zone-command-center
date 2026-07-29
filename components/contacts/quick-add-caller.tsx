@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import type {
   PhoneMatch,
@@ -22,6 +22,7 @@ type QuickAddCallerForm = {
   eventDate: string;
   eventLocation: string;
 };
+type QuickAddCallerSubmission = QuickAddCallerForm & { requestKey: string };
 
 function callerName(firstName: string, lastName: string) {
   return `${firstName} ${lastName}`.trim() || "Unnamed caller";
@@ -38,10 +39,11 @@ export function QuickAddCaller({
 }: {
   match: PhoneMatch;
   initialPhone?: string;
-  onSubmit?: (input: QuickAddCallerForm) => Promise<QuickAddSubmission> | QuickAddSubmission;
+  onSubmit?: (input: QuickAddCallerSubmission) => Promise<QuickAddSubmission> | QuickAddSubmission;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
+  const requestKey = useRef<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resolvedMatch, setResolvedMatch] = useState(match);
   const [values, setValues] = useState<QuickAddCallerForm>({
@@ -72,6 +74,7 @@ export function QuickAddCaller({
     setIsSubmitting(true);
     try {
       const result = await onSubmit({
+        requestKey: requestKey.current ??= crypto.randomUUID(),
         name: values.name,
         organizationName: values.organizationName,
         phone: values.phone.trim(),

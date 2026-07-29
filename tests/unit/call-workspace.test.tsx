@@ -38,6 +38,8 @@ const workspace = {
     name: "Avery Example",
     phone: "406-555-0101",
     email: "avery@example.com",
+    city: "Shelby",
+    region: "MT",
   },
   booking: {
     id: "33333333-3333-4333-8333-333333333333",
@@ -47,7 +49,11 @@ const workspace = {
     status: "interested" as const,
     startsAt: new Date("2026-08-08T17:00:00Z"),
   },
-  followUpId: "44444444-4444-4444-8444-444444444444",
+  followUp: {
+    id: "44444444-4444-4444-8444-444444444444",
+    kind: "call",
+    dueAt: new Date("2026-08-01T17:00:00Z"),
+  },
   timeline,
 };
 
@@ -65,7 +71,11 @@ describe("CallWorkspace", () => {
 
     expect(screen.getByRole("heading", { name: "Call Workspace" })).toBeVisible();
     expect(screen.getByText("Avery Example")).toBeVisible();
+    expect(screen.getAllByText("Shelby, MT")).toHaveLength(2);
+    expect(screen.getByText("Marias Fair")).toBeVisible();
     expect(screen.getByText("Marias Fair 2026")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Current task" })).toBeVisible();
+    expect(screen.getByText(/call · Due Aug 1, 2026/i)).toBeVisible();
     expect(screen.getByRole("alert")).toHaveTextContent("Marias Fair is marked Last Resort");
     expect(screen.getByText("Sent availability information.")).toBeVisible();
     expect(screen.getByRole("link", { name: "Open full contact record" })).toHaveAttribute(
@@ -103,6 +113,7 @@ describe("CallWorkspace", () => {
     expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
       note: "Asked for a proposal by Friday.",
       disposition: "follow_up_needed",
+      requestKey: expect.stringMatching(/^[0-9a-f-]{36}$/),
       nextAction: expect.objectContaining({ kind: "prepare_quote" }),
     }));
     expect(screen.getByText("Choose a next action and date before completing this call.")).toHaveAttribute("role", "alert");
@@ -139,5 +150,35 @@ describe("CallWorkspace", () => {
     expect(screen.queryByRole("link", { name: "Open full organization record" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Start call note" }));
     expect(screen.queryByRole("option", { name: "Move to Last Resort" })).not.toBeInTheDocument();
+  });
+
+  it("requires a deliberate Last Resort confirmation and preserves it after a server error", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn().mockResolvedValue({
+      ok: false,
+      error: "The organization could not be moved to Last Resort.",
+    });
+
+    render(<CallWorkspace {...workspace} onComplete={onComplete} />);
+
+    await user.click(screen.getByRole("button", { name: "Start call note" }));
+    await user.type(screen.getByLabelText("Call note"), "Reviewed the account history.");
+    await user.selectOptions(screen.getByLabelText("Call disposition"), "move_to_last_resort");
+    await user.type(screen.getByLabelText("Last Resort reason"), "Repeated cancellations.");
+    const confirmation = screen.getByRole("checkbox", {
+      name: "I confirm this organization should be moved to Last Resort",
+    });
+    await user.click(confirmation);
+    await user.click(screen.getByRole("button", { name: "Save call note" }));
+
+    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
+      lastResortReason: "Repeated cancellations.",
+      lastResortConfirmed: true,
+    }));
+    expect(confirmation).toBeChecked();
+    expect(screen.getByLabelText("Last Resort reason")).toHaveValue("Repeated cancellations.");
+    expect(screen.getByText(
+      "The organization could not be moved to Last Resort.",
+    )).toHaveAttribute("role", "alert");
   });
 });

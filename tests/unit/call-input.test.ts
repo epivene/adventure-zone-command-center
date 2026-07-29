@@ -6,6 +6,7 @@ const organizationId = "11111111-1111-4111-8111-111111111111";
 
 function validInput() {
   return {
+    requestKey: "99999999-9999-4999-8999-999999999999",
     organizationId,
     contactId: null,
     bookingId: null,
@@ -17,6 +18,7 @@ function validInput() {
     endedAt: new Date("2026-08-01T15:10:00.000Z"),
     nextAction: { kind: "  send quote  ", dueAt: new Date("2026-08-02T15:00:00.000Z") },
     lastResortReason: null,
+    lastResortConfirmed: false,
     approvedContactUpdates: null,
     approvedBookingUpdates: null,
   };
@@ -75,7 +77,7 @@ describe("completeCallInputSchema", () => {
     );
   });
 
-  it("requires a Last Resort reason only for the Last Resort disposition", () => {
+  it("requires a Last Resort reason and explicit confirmation only for the Last Resort disposition", () => {
     const missingReason = completeCallInputSchema.safeParse({
       ...validInput(),
       disposition: "move_to_last_resort",
@@ -92,5 +94,58 @@ describe("completeCallInputSchema", () => {
         }),
       ]),
     );
+
+    const missingConfirmation = completeCallInputSchema.safeParse({
+      ...validInput(),
+      disposition: "move_to_last_resort",
+      nextAction: null,
+      lastResortReason: "Repeated cancellations.",
+    });
+    expect(missingConfirmation.success).toBe(false);
+    if (missingConfirmation.success) return;
+    expect(missingConfirmation.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ["lastResortConfirmed"],
+          message: "Confirm moving this organization to Last Resort",
+        }),
+      ]),
+    );
+  });
+
+  it("enforces the canonical 2,000-character Last Resort reason bound", () => {
+    expect(completeCallInputSchema.safeParse({
+      ...validInput(),
+      disposition: "move_to_last_resort",
+      nextAction: null,
+      lastResortReason: "x".repeat(2_000),
+      lastResortConfirmed: true,
+    }).success).toBe(true);
+
+    const tooLong = completeCallInputSchema.safeParse({
+      ...validInput(),
+      disposition: "move_to_last_resort",
+      nextAction: null,
+      lastResortReason: "x".repeat(2_001),
+      lastResortConfirmed: true,
+    });
+    expect(tooLong.success).toBe(false);
+    if (tooLong.success) return;
+    expect(tooLong.error.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ["lastResortReason"] }),
+    ]));
+  });
+
+  it("requires a UUID request key for database-boundary replay protection", () => {
+    const result = completeCallInputSchema.safeParse({
+      ...validInput(),
+      requestKey: "not-a-uuid",
+    });
+
+    expect(result.success).toBe(false);
+    if (result.success) return;
+    expect(result.error.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: ["requestKey"] }),
+    ]));
   });
 });

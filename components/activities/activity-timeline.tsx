@@ -3,14 +3,40 @@
 import { useState } from "react";
 
 import type {
+  ActivityKind,
+  ActivityParent,
   ActivityRevision,
   ActivityTimelineItem,
+  CreateActivityInput,
+  EditActivityInput,
 } from "@/features/activities/activity-types";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 export type ActivityRevisionResult =
-  | { ok: true; revisions: ActivityRevision[] }
+  | {
+      ok: true;
+      revisions: ActivityRevision[];
+      nextPage?: number | null;
+    }
   | { ok: false; error: string };
+
+export type ActivityMutationResult =
+  | { ok: true; activity: ActivityTimelineItem }
+  | { ok: false; error: string };
+
+type EditFormState = {
+  open: boolean;
+  body: string;
+  reason: string;
+  error: string;
+  saving: boolean;
+};
+
+const manualActivityKinds = [
+  ["note", "Note"],
+  ["call", "Call"],
+  ["follow_up", "Follow-up"],
+] as const satisfies readonly (readonly [ActivityKind, string])[];
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -22,15 +48,92 @@ function formatDate(value: Date) {
 
 export function ActivityTimeline({
   activities,
+  parent,
+  createActivity,
+  editActivity,
   loadRevisions,
 }: {
   activities: ActivityTimelineItem[];
-  loadRevisions: (activityId: string) => Promise<ActivityRevisionResult>;
+  parent?: ActivityParent;
+  createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
+  editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
+  loadRevisions: (
+    activityId: string,
+    page?: number,
+  ) => Promise<ActivityRevisionResult>;
 }) {
+  const [items, setItems] = useState(activities);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [revisions, setRevisions] = useState<Record<string, ActivityRevision[]>>({});
+  const [nextPages, setNextPages] = useState<Record<string, number | null>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
+  const [addOpen, setAddOpen] = useState(false);
+  const [newKind, setNewKind] = useState<ActivityKind>("note");
+  const [newBody, setNewBody] = useState("");
+  const [createError, setCreateError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [editForms, setEditForms] = useState<Record<string, EditFormState>>({});
+
+  function editForm(activity: ActivityTimelineItem): EditFormState {
+    return editForms[activity.id] ?? {
+      open: false,
+      body: activity.body,
+      reason: "",
+      error: "",
+      saving: false,
+    };
+  }
+
+  function updateEditForm(
+    activity: ActivityTimelineItem,
+    patch: Partial<EditFormState>,
+  ) {
+    setEditForms((current) => ({
+      ...current,
+      [activity.id]: {
+        open: false,
+        body: activity.body,
+        reason: "",
+        error: "",
+        saving: false,
+        ...current[activity.id],
+        ...patch,
+      },
+    }));
+  }
+
+  async function loadHistory(activityId: string, page?: number) {
+    if (loading[activityId]) return;
+    setLoading((current) => ({ ...current, [activityId]: true }));
+    setErrors((current) => ({ ...current, [activityId]: "" }));
+    try {
+      const result = page
+        ? await loadRevisions(activityId, page)
+        : await loadRevisions(activityId);
+      if (result.ok) {
+        setRevisions((current) => ({
+          ...current,
+          [activityId]: page
+            ? [...(current[activityId] ?? []), ...result.revisions]
+            : result.revisions,
+        }));
+        setNextPages((current) => ({
+          ...current,
+          [activityId]: result.nextPage ?? null,
+        }));
+      } else {
+        setErrors((current) => ({ ...current, [activityId]: result.error }));
+      }
+    } catch {
+      setErrors((current) => ({
+        ...current,
+        [activityId]: "Could not load edit history. Please try again.",
+      }));
+    } finally {
+      setLoading((current) => ({ ...current, [activityId]: false }));
+    }
+  }
 
   async function toggleHistory(activity: ActivityTimelineItem) {
     if (expanded[activity.id]) {
@@ -39,84 +142,286 @@ export function ActivityTimeline({
     }
     setExpanded((current) => ({ ...current, [activity.id]: true }));
     if (revisions[activity.id] || loading[activity.id]) return;
+    await loadHistory(activity.id);
+  }
 
-    setLoading((current) => ({ ...current, [activity.id]: true }));
-    setErrors((current) => ({ ...current, [activity.id]: "" }));
+  async function submitCreate() {
+    if (!createActivity || !parent || creating) return;
+    setCreating(true);
+    setCreateError("");
     try {
-      const result = await loadRevisions(activity.id);
-      if (result.ok) {
-        setRevisions((current) => ({ ...current, [activity.id]: result.revisions }));
-      } else {
-        setErrors((current) => ({ ...current, [activity.id]: result.error }));
+      const result = await createActivity({
+        ...parent,
+        kind: newKind,
+        body: newBody,
+        occurredAt: new Date(),
+      });
+      if (!result.ok) {
+        setCreateError(result.error);
+        return;
       }
+      setItems((current) => [result.activity, ...current]);
+      setNewBody("");
+      setNewKind("note");
+      setAddOpen(false);
     } catch {
-      setErrors((current) => ({
-        ...current,
-        [activity.id]: "Could not load edit history. Please try again.",
-      }));
+      setCreateError("The activity could not be saved. Please try again.");
     } finally {
-      setLoading((current) => ({ ...current, [activity.id]: false }));
+      setCreating(false);
     }
   }
 
-  if (!activities.length) {
-    return <p className="text-sm text-slate-600">No recent activity recorded.</p>;
+  async function submitEdit(activity: ActivityTimelineItem) {
+    if (!editActivity) return;
+    const form = editForm(activity);
+    if (form.saving) return;
+    updateEditForm(activity, { saving: true, error: "" });
+    try {
+      const result = await editActivity({
+        activityId: activity.id,
+        body: form.body,
+        reason: form.reason,
+      });
+      if (!result.ok) {
+        updateEditForm(activity, { saving: false, error: result.error });
+        return;
+      }
+      setItems((current) =>
+        current.map((item) => (
+          item.id === result.activity.id ? result.activity : item
+        )),
+      );
+      updateEditForm(result.activity, {
+        open: false,
+        body: result.activity.body,
+        reason: "",
+        error: "",
+        saving: false,
+      });
+      setExpanded((current) => ({ ...current, [activity.id]: false }));
+      setRevisions((current) => {
+        const updated = { ...current };
+        delete updated[activity.id];
+        return updated;
+      });
+      setNextPages((current) => {
+        const updated = { ...current };
+        delete updated[activity.id];
+        return updated;
+      });
+    } catch {
+      updateEditForm(activity, {
+        saving: false,
+        error: "The activity edit could not be saved. Please try again.",
+      });
+    }
   }
 
+  const canCreate = Boolean(parent && createActivity);
+
   return (
-    <ol className="grid gap-3" aria-label="Recent activity">
-      {activities.map((activity) => {
-        const historyId = `activity-history-${activity.id}`;
-        const isExpanded = Boolean(expanded[activity.id]);
-        const activityRevisions = revisions[activity.id] ?? [];
-        return (
-          <li className="rounded-lg border border-slate-200 bg-slate-50 p-3" key={activity.id}>
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className="text-sm font-semibold capitalize">
-                {activity.kind.replaceAll("_", " ")}
-              </p>
-              <time className="text-xs text-slate-500" dateTime={activity.occurredAt.toISOString()}>
-                {formatDate(activity.occurredAt)}
-              </time>
-            </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
-              {activity.body}
-            </p>
-            {activity.revisionCount ? (
-              <div className="mt-3">
-                <button
-                  aria-controls={historyId}
-                  aria-expanded={isExpanded}
-                  className="text-sm font-semibold text-orange-800 underline-offset-2 hover:underline"
-                  onClick={() => void toggleHistory(activity)}
-                  type="button"
+    <div>
+      {canCreate ? (
+        <div className="mb-4">
+          <button
+            aria-expanded={addOpen}
+            className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-900 hover:bg-orange-100"
+            onClick={() => setAddOpen((current) => !current)}
+            type="button"
+          >
+            {addOpen ? "Cancel activity" : "Add activity"}
+          </button>
+          {addOpen ? (
+            <div className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                Activity type
+                <select
+                  className="rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"
+                  onChange={(event) => setNewKind(event.target.value as ActivityKind)}
+                  value={newKind}
                 >
-                  {isExpanded ? "Hide edit history" : `View edit history (${activity.revisionCount})`}
-                </button>
-                {isExpanded ? (
-                  <div className="mt-3 border-l-2 border-slate-200 pl-3" id={historyId}>
-                    {loading[activity.id] ? <p className="text-sm text-slate-600">Loading edit history…</p> : null}
-                    {errors[activity.id] ? <p className="text-sm text-rose-800" role="alert">{errors[activity.id]}</p> : null}
-                    {activityRevisions.length ? (
-                      <ol className="grid gap-3" aria-label="Edit history">
-                        {activityRevisions.map((revision) => (
-                          <li className="text-sm" key={revision.id}>
-                            <p className="font-semibold text-slate-700">Previous note</p>
-                            <p className="mt-1 whitespace-pre-wrap text-slate-600">{revision.priorBody}</p>
-                            {revision.reason ? (
-                              <p className="mt-1 text-slate-600">Reason: {revision.reason}</p>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ol>
+                  {manualActivityKinds.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                Activity text
+                <textarea
+                  className="min-h-24 rounded-md border border-slate-300 px-3 py-2 font-normal"
+                  maxLength={4000}
+                  onChange={(event) => setNewBody(event.target.value)}
+                  value={newBody}
+                />
+              </label>
+              {createError ? (
+                <p className="text-sm text-rose-800" role="alert">{createError}</p>
+              ) : null}
+              <button
+                className="w-fit rounded-md bg-orange-700 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
+                disabled={creating}
+                onClick={() => void submitCreate()}
+                type="button"
+              >
+                {creating ? "Saving…" : "Save activity"}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!items.length ? (
+        <p className="text-sm text-slate-600">No recent activity recorded.</p>
+      ) : (
+        <ol className="grid gap-3" aria-label="Recent activity">
+          {items.map((activity) => {
+            const historyId = `activity-history-${activity.id}`;
+            const editId = `activity-edit-${activity.id}`;
+            const isExpanded = Boolean(expanded[activity.id]);
+            const activityRevisions = revisions[activity.id] ?? [];
+            const nextPage = nextPages[activity.id];
+            const form = editForm(activity);
+            return (
+              <li
+                className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                key={activity.id}
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <p className="text-sm font-semibold capitalize">
+                    {activity.kind.replaceAll("_", " ")}
+                  </p>
+                  <time
+                    className="text-xs text-slate-500"
+                    dateTime={activity.occurredAt.toISOString()}
+                  >
+                    {formatDate(activity.occurredAt)}
+                  </time>
+                </div>
+                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                  {activity.body}
+                </p>
+
+                {editActivity ? (
+                  <div className="mt-3">
+                    <button
+                      aria-controls={editId}
+                      aria-expanded={form.open}
+                      className="text-sm font-semibold text-slate-700 underline-offset-2 hover:underline"
+                      onClick={() => updateEditForm(activity, {
+                        open: !form.open,
+                        body: activity.body,
+                        reason: "",
+                        error: "",
+                      })}
+                      type="button"
+                    >
+                      {form.open ? "Cancel edit" : "Edit activity"}
+                    </button>
+                    {form.open ? (
+                      <div
+                        className="mt-3 grid gap-3 rounded-md border border-slate-200 bg-white p-3"
+                        id={editId}
+                      >
+                        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                          Edited activity text
+                          <textarea
+                            className="min-h-24 rounded-md border border-slate-300 px-3 py-2 font-normal"
+                            maxLength={4000}
+                            onChange={(event) => updateEditForm(activity, {
+                              body: event.target.value,
+                            })}
+                            value={form.body}
+                          />
+                        </label>
+                        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                          Reason for edit
+                          <input
+                            className="rounded-md border border-slate-300 px-3 py-2 font-normal"
+                            maxLength={500}
+                            onChange={(event) => updateEditForm(activity, {
+                              reason: event.target.value,
+                            })}
+                            value={form.reason}
+                          />
+                        </label>
+                        {form.error ? (
+                          <p className="text-sm text-rose-800" role="alert">{form.error}</p>
+                        ) : null}
+                        <button
+                          className="w-fit rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60"
+                          disabled={form.saving}
+                          onClick={() => void submitEdit(activity)}
+                          type="button"
+                        >
+                          {form.saving ? "Saving…" : "Save activity edit"}
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}
-              </div>
-            ) : null}
-          </li>
-        );
-      })}
-    </ol>
+
+                {activity.revisionCount ? (
+                  <div className="mt-3">
+                    <button
+                      aria-controls={historyId}
+                      aria-expanded={isExpanded}
+                      className="text-sm font-semibold text-orange-800 underline-offset-2 hover:underline"
+                      onClick={() => void toggleHistory(activity)}
+                      type="button"
+                    >
+                      {isExpanded
+                        ? "Hide edit history"
+                        : `View edit history (${activity.revisionCount})`}
+                    </button>
+                    {isExpanded ? (
+                      <div
+                        className="mt-3 border-l-2 border-slate-200 pl-3"
+                        id={historyId}
+                      >
+                        {loading[activity.id] ? (
+                          <p className="text-sm text-slate-600">Loading edit history…</p>
+                        ) : null}
+                        {errors[activity.id] ? (
+                          <p className="text-sm text-rose-800" role="alert">
+                            {errors[activity.id]}
+                          </p>
+                        ) : null}
+                        {activityRevisions.length ? (
+                          <ol className="grid gap-3" aria-label="Edit history">
+                            {activityRevisions.map((revision) => (
+                              <li className="text-sm" key={revision.id}>
+                                <p className="font-semibold text-slate-700">Previous note</p>
+                                <p className="mt-1 whitespace-pre-wrap text-slate-600">
+                                  {revision.priorBody}
+                                </p>
+                                {revision.reason ? (
+                                  <p className="mt-1 text-slate-600">
+                                    Reason: {revision.reason}
+                                  </p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : null}
+                        {nextPage ? (
+                          <button
+                            className="mt-3 text-sm font-semibold text-orange-800 underline-offset-2 hover:underline disabled:opacity-60"
+                            disabled={loading[activity.id]}
+                            onClick={() => void loadHistory(activity.id, nextPage)}
+                            type="button"
+                          >
+                            Load older edits
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </div>
   );
 }

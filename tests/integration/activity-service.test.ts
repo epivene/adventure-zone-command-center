@@ -13,7 +13,7 @@ import {
 } from "@/features/activities/activity-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import type {
-  ActivityRevision,
+  ActivityRevisionPage,
   ActivityTimelineItem,
   CreateActivityInput,
 } from "@/features/activities/activity-types";
@@ -35,8 +35,8 @@ class RecordingActivityRepository
     return [];
   }
 
-  async listRevisions(): Promise<ActivityRevision[]> {
-    return [];
+  async listRevisions(): Promise<ActivityRevisionPage> {
+    return { revisions: [], nextPage: null };
   }
 
   async create(): Promise<ActivityTimelineItem> {
@@ -181,14 +181,17 @@ describe("ActivityService", () => {
       expect.objectContaining({ id: older.id, revisionCount: 0 }),
     ]);
     expect(timeline[0]).not.toHaveProperty("revisions");
-    expect(await service.listRevisions(newer.id)).toEqual([
-      expect.objectContaining({
-        activityId: newer.id,
-        priorBody: "Called about the August date.",
-        replacementBody: "Confirmed the August date.",
-        reason: "Corrected the call summary.",
-      }),
-    ]);
+    expect(await service.listRevisions(newer.id)).toEqual({
+      revisions: [
+        expect.objectContaining({
+          activityId: newer.id,
+          priorBody: "Called about the August date.",
+          replacementBody: "Confirmed the August date.",
+          reason: "Corrected the call summary.",
+        }),
+      ],
+      nextPage: null,
+    });
     expect(await sql!.unsafe("SELECT action FROM audit_entries ORDER BY created_at, id")).toEqual([
       { action: "create" },
       { action: "create" },

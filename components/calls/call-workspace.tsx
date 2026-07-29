@@ -4,12 +4,21 @@ import { useState, type FormEvent } from "react";
 
 import {
   ActivityTimeline,
+  type ActivityMutationResult,
   type ActivityRevisionResult,
 } from "@/components/activities/activity-timeline";
-import type { ActivityTimelineItem } from "@/features/activities/activity-types";
+import type {
+  ActivityParent,
+  ActivityTimelineItem,
+  CreateActivityInput,
+  EditActivityInput,
+} from "@/features/activities/activity-types";
 import type { BookingStatus } from "@/features/bookings/booking-types";
 import type { CallDisposition, CompleteCallInput } from "@/features/calls/call-types";
-import { parseBusinessDate } from "@/lib/business-date";
+import {
+  BUSINESS_TIME_ZONE,
+  parseBusinessDate,
+} from "@/lib/business-date";
 
 export type CompleteCallResult = { ok: true } | { ok: false; error: string };
 
@@ -26,39 +35,60 @@ const dispositionOptions: { value: CallDisposition; label: string }[] = [
 
 function formatDate(value: Date | null) {
   if (!value) return "Not set";
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(value);
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeZone: BUSINESS_TIME_ZONE,
+  }).format(value);
 }
 
 export function CallWorkspace({
   organization,
   contact,
   booking,
-  followUpId,
+  followUp,
   timeline,
   onComplete,
+  activityParent,
+  createActivity,
+  editActivity,
   loadRevisions = async () => ({ ok: true, revisions: [] }),
 }: {
   organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
-  contact: { id: string; name: string; phone: string | null; email: string | null } | null;
+  contact: {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    city: string | null;
+    region: string | null;
+  } | null;
   booking: { id: string; name: string; city: string; region: string; status: BookingStatus; startsAt: Date | null } | null;
-  followUpId: string | null;
+  followUp: { id: string; kind: string; dueAt: Date } | null;
   timeline: ActivityTimelineItem[];
   onComplete: (input: CompleteCallInput) => Promise<CompleteCallResult>;
-  loadRevisions?: (activityId: string) => Promise<ActivityRevisionResult>;
+  activityParent?: ActivityParent;
+  createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
+  editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
+  loadRevisions?: (
+    activityId: string,
+    page?: number,
+  ) => Promise<ActivityRevisionResult>;
 }) {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
+  const [requestKey, setRequestKey] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [disposition, setDisposition] = useState<CallDisposition>("no_answer");
   const [nextActionKind, setNextActionKind] = useState("");
   const [nextActionDueAt, setNextActionDueAt] = useState("");
   const [lastResortReason, setLastResortReason] = useState("");
+  const [lastResortConfirmed, setLastResortConfirmed] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!startedAt) {
+    if (!startedAt || !requestKey) {
       setError("Start the call note before saving.");
       return;
     }
@@ -76,10 +106,11 @@ export function CallWorkspace({
     setIsSubmitting(true);
     try {
       const result = await onComplete({
+        requestKey,
         organizationId: organization?.id ?? null,
         contactId: contact?.id ?? null,
         bookingId: booking?.id ?? null,
-        followUpId,
+        followUpId: followUp?.id ?? null,
         note,
         disposition,
         resultingBookingStatus: null,
@@ -87,6 +118,7 @@ export function CallWorkspace({
         endedAt: new Date(),
         nextAction: nextActionKind && dueAt ? { kind: nextActionKind, dueAt } : null,
         lastResortReason: lastResortReason || null,
+        lastResortConfirmed,
         approvedContactUpdates: null,
         approvedBookingUpdates: null,
       });
@@ -127,7 +159,14 @@ export function CallWorkspace({
             ) : !startedAt ? (
               <div className="mt-4">
                 <p className="text-sm text-slate-600">Timing starts only when you are ready to record the note.</p>
-                <button className="button-primary mt-3" onClick={() => setStartedAt(new Date())} type="button">
+                <button
+                  className="button-primary mt-3"
+                  onClick={() => {
+                    setStartedAt(new Date());
+                    setRequestKey(crypto.randomUUID());
+                  }}
+                  type="button"
+                >
                   Start call note
                 </button>
               </div>
@@ -140,7 +179,17 @@ export function CallWorkspace({
                 </label>
                 <label className="grid gap-1.5 font-medium" htmlFor="call-disposition">
                   Call disposition
-                  <select id="call-disposition" onChange={(event) => setDisposition(event.target.value as CallDisposition)} value={disposition}>
+                  <select
+                    id="call-disposition"
+                    onChange={(event) => {
+                      const nextDisposition = event.target.value as CallDisposition;
+                      setDisposition(nextDisposition);
+                      if (nextDisposition !== "move_to_last_resort") {
+                        setLastResortConfirmed(false);
+                      }
+                    }}
+                    value={disposition}
+                  >
                     {dispositionOptions
                       .filter((option) => organization || option.value !== "move_to_last_resort")
                       .map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -164,10 +213,30 @@ export function CallWorkspace({
                   </label>
                 </fieldset>
                 {disposition === "move_to_last_resort" ? (
-                  <label className="grid gap-1.5 font-medium" htmlFor="last-resort-reason">
-                    Last Resort reason
-                    <textarea id="last-resort-reason" onChange={(event) => setLastResortReason(event.target.value)} value={lastResortReason} />
-                  </label>
+                  <fieldset className="grid gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4">
+                    <legend className="px-1 font-semibold text-rose-950">
+                      Move organization to Last Resort
+                    </legend>
+                    <label className="grid gap-1.5 font-medium" htmlFor="last-resort-reason">
+                      Last Resort reason
+                      <textarea
+                        id="last-resort-reason"
+                        maxLength={2_000}
+                        onChange={(event) => setLastResortReason(event.target.value)}
+                        value={lastResortReason}
+                      />
+                    </label>
+                    <label className="flex items-start gap-2 font-medium" htmlFor="last-resort-confirmed">
+                      <input
+                        checked={lastResortConfirmed}
+                        className="mt-1"
+                        id="last-resort-confirmed"
+                        onChange={(event) => setLastResortConfirmed(event.target.checked)}
+                        type="checkbox"
+                      />
+                      <span>I confirm this organization should be moved to Last Resort</span>
+                    </label>
+                  </fieldset>
                 ) : null}
                 <div><button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving…" : "Save call note"}</button></div>
               </form>
@@ -176,18 +245,39 @@ export function CallWorkspace({
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="recent-history-title">
             <h2 className="text-xl font-bold" id="recent-history-title">Recent history</h2>
-            <div className="mt-4"><ActivityTimeline activities={timeline} loadRevisions={loadRevisions} /></div>
+            <div className="mt-4">
+              <ActivityTimeline
+                activities={timeline}
+                createActivity={createActivity}
+                editActivity={editActivity}
+                loadRevisions={loadRevisions}
+                parent={activityParent}
+              />
+            </div>
           </section>
         </div>
 
         <aside className="grid gap-5">
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="caller-title">
             <h2 className="text-xl font-bold" id="caller-title">Caller</h2>
-            {contact ? <div className="mt-3 grid gap-1 text-sm"><p className="font-semibold text-base">{contact.name}</p><p>{contact.phone || "No phone recorded"}</p><p className="break-all">{contact.email || "No email recorded"}</p><a className="link mt-2" href={`/contacts/${contact.id}`}>Open full contact record</a></div> : <p className="mt-3 text-sm text-slate-600">No contact is linked to this call.</p>}
+            {contact ? <div className="mt-3 grid gap-1 text-sm"><p className="font-semibold text-base">{contact.name}</p><p>{contact.phone || "No phone recorded"}</p><p className="break-all">{contact.email || "No email recorded"}</p>{contact.city || contact.region ? <p>{[contact.city, contact.region].filter(Boolean).join(", ")}</p> : null}<a className="link mt-2" href={`/contacts/${contact.id}`}>Open full contact record</a></div> : <p className="mt-3 text-sm text-slate-600">No contact is linked to this call.</p>}
             {organization ? (
-              <a className="link mt-3 inline-block" href={`/organizations/${organization.id}`}>Open full organization record</a>
+              <div className="mt-3 grid gap-1 text-sm">
+                <p className="font-semibold">{organization.name}</p>
+                <a className="link" href={`/organizations/${organization.id}`}>Open full organization record</a>
+              </div>
             ) : (
               <p className="mt-3 text-sm text-slate-600">No organization is linked to this call. Last Resort is unavailable.</p>
+            )}
+          </section>
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="current-task-title">
+            <h2 className="text-xl font-bold" id="current-task-title">Current task</h2>
+            {followUp ? (
+              <p className="mt-3 text-sm capitalize">
+                {followUp.kind.replaceAll("_", " ")} · Due {formatDate(followUp.dueAt)}
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">This is an ad-hoc call with no linked follow-up.</p>
             )}
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="booking-snapshot-title">

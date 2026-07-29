@@ -42,6 +42,7 @@ const ids = {
 
 function input(overrides: Partial<CompleteCallInput> = {}): CompleteCallInput {
   return {
+    requestKey: "99999999-9999-4999-8999-999999999999",
     organizationId: ids.organization,
     contactId: ids.contact,
     bookingId: ids.booking,
@@ -53,6 +54,7 @@ function input(overrides: Partial<CompleteCallInput> = {}): CompleteCallInput {
     endedAt: new Date("2026-08-01T15:10:00.000Z"),
     nextAction: { kind: "send quote", dueAt: new Date("2026-08-02T15:00:00.000Z") },
     lastResortReason: null,
+    lastResortConfirmed: false,
     approvedContactUpdates: { phone: "555-0123" },
     approvedBookingUpdates: { notes: "Confirmed on call" },
     ...overrides,
@@ -62,7 +64,20 @@ function input(overrides: Partial<CompleteCallInput> = {}): CompleteCallInput {
 class InMemoryCallRepository implements CallRepository {
   public context: CallContext = {
     organization: { id: ids.organization, name: "Marias Fair", lastResort: false, lastResortReason: null },
-    contact: { id: ids.contact, organizationId: ids.organization, phone: null },
+    contact: {
+      id: ids.contact,
+      organizationId: ids.organization,
+      firstName: "Avery",
+      lastName: "Example",
+      jobTitle: null,
+      email: null,
+      phone: null,
+      address1: null,
+      address2: null,
+      city: null,
+      region: null,
+      postalCode: null,
+    },
     booking: {
       id: ids.booking,
       organizationId: ids.organization,
@@ -98,18 +113,37 @@ class InMemoryCallRepository implements CallRepository {
   public transactions = 0;
   public lockContextCalls = 0;
   private next = 1;
+  private readonly completedRequests = new Map<string, {
+    id: string;
+    noteActivityId: string;
+    disposition: "no_answer" | "left_voicemail" | "follow_up_needed" | "interested" | "proposal_sent" | "booked" | "declined" | "last_resort";
+  }>();
 
   async transaction<T>(operation: (transaction: CallTransaction) => Promise<T>): Promise<T> {
     this.transactions += 1;
     const writes = [...this.writes];
     const context = structuredClone(this.context);
     const transaction: CallTransaction = {
+      lockRequest: async (requestKey) => this.completedRequests.get(requestKey) ?? null,
       lockContext: async () => {
         this.lockContextCalls += 1;
         return context;
       },
       createActivity: async (input) => this.write(writes, "activity", { id: `activity-${this.next++}` }, input),
-      createCallSession: async (input) => this.write(writes, "call_session", { id: `call-${this.next++}` }, input),
+      createCallSession: async (input) => {
+        const session = await this.write(
+          writes,
+          "call_session",
+          { id: `call-${this.next++}` },
+          input,
+        );
+        this.completedRequests.set(input.requestKey, {
+          id: session.id,
+          noteActivityId: input.noteActivityId,
+          disposition: input.disposition,
+        });
+        return session;
+      },
       completeFollowUp: async (id, input) => this.write(writes, "complete_follow_up", undefined, { id, input }),
       createFollowUp: async (input) => this.write(writes, "next_follow_up", { id: `follow-up-${this.next++}` }, input),
       linkNextFollowUp: async (id, nextId) => this.write(writes, "link_follow_up", undefined, { id, nextId }),
@@ -152,6 +186,7 @@ describe("CallService.complete", () => {
         ? null
         : input().nextAction,
       lastResortReason: disposition === "move_to_last_resort" ? "Repeated cancellations." : null,
+      lastResortConfirmed: disposition === "move_to_last_resort",
     }));
 
     expect(result).toMatchObject({ ok: true, value: { disposition, resultingBookingStatus: status } });
@@ -236,7 +271,12 @@ describe("CallService.complete", () => {
     const repository = new InMemoryCallRepository();
     repository.context.organization = null;
     const unorganized = {
-      ...input({ disposition: "move_to_last_resort", nextAction: null, lastResortReason: "Repeated cancellations." }),
+      ...input({
+        disposition: "move_to_last_resort",
+        nextAction: null,
+        lastResortReason: "Repeated cancellations.",
+        lastResortConfirmed: true,
+      }),
       organizationId: null,
     } as unknown as CompleteCallInput;
 
@@ -255,6 +295,7 @@ describe("CallService.complete", () => {
       disposition: "move_to_last_resort",
       nextAction: null,
       lastResortReason: "Repeated cancellations.",
+      lastResortConfirmed: true,
     }))).resolves.toMatchObject({ ok: true });
   });
 
@@ -310,6 +351,7 @@ describe("CallService.complete", () => {
       resultingBookingStatus: status,
       nextAction: disposition === "declined" || disposition === "move_to_last_resort" ? null : input().nextAction,
       lastResortReason: disposition === "move_to_last_resort" ? "Repeated cancellations." : null,
+      lastResortConfirmed: disposition === "move_to_last_resort",
     }))).resolves.toEqual({ ok: false, error: { code: "RESULTING_STATUS_MISMATCH" } });
     expect(repository.writes).toEqual([]);
   });
@@ -328,13 +370,17 @@ describe("CallService.complete", () => {
       approvedBookingUpdates: { status },
       nextAction: disposition === "declined" || disposition === "move_to_last_resort" ? null : input().nextAction,
       lastResortReason: disposition === "move_to_last_resort" ? "Repeated cancellations." : null,
+      lastResortConfirmed: disposition === "move_to_last_resort",
     }))).resolves.toEqual({ ok: false, error: { code: "RESULTING_STATUS_MISMATCH" } });
     expect(repository.writes).toEqual([]);
   });
 
   it("rejects a supplied contact from a different organization before writing", async () => {
     const repository = new InMemoryCallRepository();
-    repository.context.contact = { id: ids.contact, organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" };
+    repository.context.contact = {
+      ...repository.context.contact!,
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
 
     await expect(new CallService(repository).complete(input())).resolves.toEqual({
       ok: false,
@@ -385,6 +431,112 @@ describe("CallService.complete", () => {
     expect(repository.writes).toEqual([]);
   });
 
+  it("rejects an unrelated unorganized contact attached to an ad-hoc booking", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.organization = null;
+    repository.context.booking = {
+      ...repository.context.booking!,
+      organizationId: null,
+      primaryContactId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contact = {
+      ...repository.context.contact!,
+      organizationId: null,
+    };
+    repository.context.followUp = null;
+
+    await expect(new CallService(repository).complete(input({
+      organizationId: null,
+      followUpId: null,
+    }))).resolves.toEqual({
+      ok: false,
+      error: { code: "CONTACT_BOOKING_MISMATCH" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("rejects added booking and contact parents for an organization-only follow-up", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.followUp = {
+      ...repository.context.followUp!,
+      bookingId: null,
+      contactId: null,
+    };
+
+    await expect(new CallService(repository).complete(input())).resolves.toEqual({
+      ok: false,
+      error: { code: "FOLLOW_UP_BOOKING_MISMATCH" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("requires a future next action for an active contact-only call", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.organization = null;
+    repository.context.booking = null;
+    repository.context.followUp = null;
+    repository.context.contact = {
+      ...repository.context.contact!,
+      organizationId: null,
+    };
+
+    await expect(new CallService(repository, {
+      now: () => new Date("2026-08-01T15:10:00.000Z"),
+    }).complete(input({
+      organizationId: null,
+      bookingId: null,
+      followUpId: null,
+      approvedBookingUpdates: null,
+      nextAction: null,
+    }))).resolves.toEqual({
+      ok: false,
+      error: { code: "NEXT_ACTION_REQUIRED" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("rejects malformed approved contact email before local writes", async () => {
+    const repository = new InMemoryCallRepository();
+
+    await expect(new CallService(repository).complete(input({
+      approvedContactUpdates: { email: "not-an-email" },
+    }))).resolves.toMatchObject({
+      ok: false,
+      error: { code: "INVALID_CALL_INPUT" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("normalizes approved contact email and persists only the approved key", async () => {
+    const repository = new InMemoryCallRepository();
+
+    await expect(new CallService(repository).complete(input({
+      approvedContactUpdates: { email: "  AVERY@EXAMPLE.COM  " },
+    }))).resolves.toMatchObject({ ok: true });
+    expect(repository.payloads.contact?.[0]).toMatchObject({
+      updates: { email: "avery@example.com" },
+    });
+  });
+
+  it("returns the first completed call for a sequential request replay without new writes", async () => {
+    const repository = new InMemoryCallRepository();
+    const service = new CallService(repository);
+
+    const first = await service.complete(input());
+    const writeCount = repository.writes.length;
+    const replay = await service.complete(input());
+
+    expect(first).toMatchObject({ ok: true });
+    expect(replay).toMatchObject({
+      ok: true,
+      value: {
+        activityId: first.ok ? first.value.activityId : "",
+        callSessionId: first.ok ? first.value.callSessionId : "",
+      },
+    });
+    expect(repository.writes).toHaveLength(writeCount);
+  });
+
   it("rejects a booking patch that leaves only one coordinate", async () => {
     const repository = new InMemoryCallRepository();
 
@@ -433,6 +585,7 @@ describe("CallService.complete", () => {
       disposition: "move_to_last_resort",
       nextAction: null,
       lastResortReason: "Repeated cancellations.",
+      lastResortConfirmed: true,
     }))).rejects.toThrow("last_resort failed");
     expect(repository.writes).toEqual([]);
   });
@@ -590,6 +743,7 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     await expect(service.complete(input({
       disposition: "move_to_last_resort",
       lastResortReason: "Repeated cancellations.",
+      lastResortConfirmed: true,
       approvedContactUpdates: { phone: "406-555-0101" },
       approvedBookingUpdates: { notes: "This must roll back." },
     }))).rejects.toThrow("call audit rejected");

@@ -530,7 +530,71 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "activities_organization_occurred_at_idx": {
+          "name": "activities_organization_occurred_at_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "activities_contact_occurred_at_idx": {
+          "name": "activities_contact_occurred_at_idx",
+          "columns": [
+            {
+              "expression": "contact_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "activities_booking_occurred_at_idx": {
+          "name": "activities_booking_occurred_at_idx",
+          "columns": [
+            {
+              "expression": "booking_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "activities_organization_id_organizations_id_fk": {
           "name": "activities_organization_id_organizations_id_fk",
@@ -626,7 +690,29 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "activity_revisions_activity_created_at_idx": {
+          "name": "activity_revisions_activity_created_at_idx",
+          "columns": [
+            {
+              "expression": "activity_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "activity_revisions_activity_id_activities_id_fk": {
           "name": "activity_revisions_activity_id_activities_id_fk",
@@ -932,6 +1018,12 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "request_key": {
+          "name": "request_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "organization_id": {
           "name": "organization_id",
           "type": "uuid",
@@ -989,7 +1081,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "call_sessions_request_key_unique": {
+          "name": "call_sessions_request_key_unique",
+          "columns": [
+            {
+              "expression": "request_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"call_sessions\".\"request_key\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "call_sessions_organization_id_organizations_id_fk": {
           "name": "call_sessions_organization_id_organizations_id_fk",
@@ -1060,7 +1169,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "call_sessions_parent_required": {
+          "name": "call_sessions_parent_required",
+          "value": "\"call_sessions\".\"organization_id\" is not null or \"call_sessions\".\"contact_id\" is not null or \"call_sessions\".\"booking_id\" is not null or \"call_sessions\".\"follow_up_id\" is not null"
+        },
+        "call_sessions_ended_at_not_before_started": {
+          "name": "call_sessions_ended_at_not_before_started",
+          "value": "\"call_sessions\".\"ended_at\" is null or \"call_sessions\".\"ended_at\" >= \"call_sessions\".\"started_at\""
+        }
+      },
       "isRLSEnabled": false
     },
     "public.contacts": {
@@ -1107,6 +1225,12 @@
         "normalized_phone": {
           "name": "normalized_phone",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quick_add_request_key": {
+          "name": "quick_add_request_key",
+          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -1179,6 +1303,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "contacts_quick_add_request_key_unique": {
+          "name": "contacts_quick_add_request_key_unique",
+          "columns": [
+            {
+              "expression": "quick_add_request_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"contacts\".\"quick_add_request_key\" is not null",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -1287,7 +1427,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "follow_ups_open_due_at_idx": {
+          "name": "follow_ups_open_due_at_idx",
+          "columns": [
+            {
+              "expression": "due_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"follow_ups\".\"completed_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "follow_ups_booking_id_bookings_id_fk": {
           "name": "follow_ups_booking_id_bookings_id_fk",

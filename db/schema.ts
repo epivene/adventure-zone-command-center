@@ -75,6 +75,7 @@ export const contacts = pgTable("contacts", {
   email: text("email"),
   phone: text("phone"),
   normalizedPhone: text("normalized_phone"),
+  quickAddRequestKey: uuid("quick_add_request_key"),
   jobTitle: text("job_title"),
   address1: text("address_1"),
   address2: text("address_2"),
@@ -86,6 +87,9 @@ export const contacts = pgTable("contacts", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("contacts_normalized_phone_idx").on(table.normalizedPhone),
+  uniqueIndex("contacts_quick_add_request_key_unique")
+    .on(table.quickAddRequestKey)
+    .where(sql`${table.quickAddRequestKey} is not null`),
 ]);
 
 export const travelLegs = pgTable(
@@ -152,6 +156,9 @@ export const followUps = pgTable("follow_ups", {
     "follow_ups_parent_required",
     sql`${table.bookingId} is not null or ${table.organizationId} is not null or ${table.contactId} is not null`,
   ),
+  index("follow_ups_open_due_at_idx")
+    .on(table.dueAt)
+    .where(sql`${table.completedAt} is null`),
 ]);
 
 export const activities = pgTable("activities", {
@@ -169,29 +176,67 @@ export const activities = pgTable("activities", {
     "activities_parent_required",
     sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null`,
   ),
+  index("activities_organization_occurred_at_idx").on(
+    table.organizationId,
+    table.occurredAt.desc(),
+  ),
+  index("activities_contact_occurred_at_idx").on(
+    table.contactId,
+    table.occurredAt.desc(),
+  ),
+  index("activities_booking_occurred_at_idx").on(
+    table.bookingId,
+    table.occurredAt.desc(),
+  ),
 ]);
 
-export const activityRevisions = pgTable("activity_revisions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  activityId: uuid("activity_id").notNull().references(() => activities.id),
-  priorBody: text("prior_body").notNull(),
-  replacementBody: text("replacement_body").notNull(),
-  reason: text("reason"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const activityRevisions = pgTable(
+  "activity_revisions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    activityId: uuid("activity_id").notNull().references(() => activities.id),
+    priorBody: text("prior_body").notNull(),
+    replacementBody: text("replacement_body").notNull(),
+    reason: text("reason"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("activity_revisions_activity_created_at_idx").on(
+      table.activityId,
+      table.createdAt.desc(),
+    ),
+  ],
+);
 
-export const callSessions = pgTable("call_sessions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  organizationId: uuid("organization_id").references(() => organizations.id),
-  contactId: uuid("contact_id").references(() => contacts.id),
-  bookingId: uuid("booking_id").references(() => bookings.id),
-  followUpId: uuid("follow_up_id").references(() => followUps.id),
-  disposition: callDispositionEnum("disposition").notNull(),
-  noteActivityId: uuid("note_activity_id").references(() => activities.id),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
-  endedAt: timestamp("ended_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const callSessions = pgTable(
+  "call_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestKey: uuid("request_key"),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    contactId: uuid("contact_id").references(() => contacts.id),
+    bookingId: uuid("booking_id").references(() => bookings.id),
+    followUpId: uuid("follow_up_id").references(() => followUps.id),
+    disposition: callDispositionEnum("disposition").notNull(),
+    noteActivityId: uuid("note_activity_id").references(() => activities.id),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("call_sessions_request_key_unique")
+      .on(table.requestKey)
+      .where(sql`${table.requestKey} is not null`),
+    check(
+      "call_sessions_parent_required",
+      sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null or ${table.followUpId} is not null`,
+    ),
+    check(
+      "call_sessions_ended_at_not_before_started",
+      sql`${table.endedAt} is null or ${table.endedAt} >= ${table.startedAt}`,
+    ),
+  ],
+);
 
 export const auditEntries = pgTable("audit_entries", {
   id: uuid("id").defaultRandom().primaryKey(),

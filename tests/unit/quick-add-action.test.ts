@@ -4,6 +4,7 @@ import { submitQuickCaller } from "@/features/contacts/quick-caller-service";
 import type { PhoneMatch, QuickCallerInput } from "@/features/contacts/contact-types";
 
 const input = {
+  requestKey: "99999999-9999-4999-8999-999999999999",
   name: "Avery Example",
   organizationName: "Marias Fair",
   phone: "406-555-0101",
@@ -16,24 +17,23 @@ const input = {
 class RecordingQuickCallerRepository {
   readonly submitted: QuickCallerInput[] = [];
 
-  constructor(private readonly match: PhoneMatch) {}
-
-  async findContactsByPhone(phone: string) {
-    expect(phone).toBe("406-555-0101");
-    return this.match;
-  }
+  constructor(private readonly result:
+    | { kind: "created"; contactId: string }
+    | { kind: "match"; match: PhoneMatch }) {}
 
   async createQuickCaller(caller: QuickCallerInput) {
     this.submitted.push(caller);
-    return "new-contact";
+    return this.result;
   }
 }
 
 describe("submitQuickCaller", () => {
   it("does a fresh exact lookup and blocks a stale typed duplicate before creating", async () => {
     const repository = new RecordingQuickCallerRepository({
-      kind: "one",
-      contact: {
+      kind: "match",
+      match: {
+        kind: "one",
+        contact: {
         id: "existing-contact",
         firstName: "Avery",
         lastName: "Example",
@@ -49,6 +49,7 @@ describe("submitQuickCaller", () => {
         syncState: "synced",
         updatedAt: new Date("2026-07-28T12:00:00Z"),
         lastSyncedAt: null,
+        },
       },
     });
 
@@ -56,13 +57,15 @@ describe("submitQuickCaller", () => {
       ok: false,
       match: { kind: "one", contact: { id: "existing-contact" } },
     });
-    expect(repository.submitted).toEqual([]);
+    expect(repository.submitted).toEqual([
+      expect.objectContaining({ requestKey: input.requestKey }),
+    ]);
   });
 
   it("creates only after a fresh no-match response and retains the raw phone", async () => {
     const repository = new RecordingQuickCallerRepository({
-      kind: "none",
-      normalizedPhone: "+14065550101",
+      kind: "created",
+      contactId: "new-contact",
     });
 
     await expect(submitQuickCaller(input, repository)).resolves.toEqual({
@@ -74,6 +77,7 @@ describe("submitQuickCaller", () => {
         firstName: "Avery",
         lastName: "Example",
         phone: "406-555-0101",
+        requestKey: input.requestKey,
       }),
     ]);
   });

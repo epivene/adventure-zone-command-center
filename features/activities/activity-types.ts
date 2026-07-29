@@ -42,6 +42,11 @@ export type ActivityRevision = {
   createdAt: Date;
 };
 
+export type ActivityRevisionPage = {
+  revisions: ActivityRevision[];
+  nextPage: number | null;
+};
+
 export type ActivityError =
   | { code: "ACTIVITY_NOT_FOUND" }
   | { code: "INVALID_ACTIVITY_INPUT"; message: string };

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -24,6 +24,12 @@ import type {
   PersistedCallDisposition,
 } from "@/features/calls/call-types";
 
+export type ExistingCallSession = {
+  id: string;
+  noteActivityId: string;
+  disposition: PersistedCallDisposition;
+};
+
 export type CallAuditEntry = {
   entityType: string;
   entityId: string;
@@ -33,6 +39,7 @@ export type CallAuditEntry = {
 };
 
 export interface CallTransaction {
+  lockRequest(requestKey: string): Promise<ExistingCallSession | null>;
   lockContext(input: CompleteCallInput): Promise<CallContext>;
   createActivity(input: {
     organizationId: string | null;
@@ -42,6 +49,7 @@ export interface CallTransaction {
     occurredAt: Date;
   }): Promise<{ id: string }>;
   createCallSession(input: {
+    requestKey: string;
     organizationId: string | null;
     contactId: string | null;
     bookingId: string | null;
@@ -76,7 +84,10 @@ export interface CallRepository {
 }
 
 type DrizzleDatabase = typeof database;
-type DrizzleWriter = Pick<DrizzleDatabase, "select" | "insert" | "update">;
+type DrizzleWriter = Pick<
+  DrizzleDatabase,
+  "execute" | "select" | "insert" | "update"
+>;
 
 function organizationSnapshot(record: typeof organizations.$inferSelect): CallOrganization {
   return {
@@ -111,28 +122,56 @@ function followUpSnapshot(record: typeof followUps.$inferSelect): CallFollowUp {
 class DrizzleCallTransaction implements CallTransaction {
   constructor(private readonly database: DrizzleWriter) {}
 
+  async lockRequest(requestKey: string): Promise<ExistingCallSession | null> {
+    await this.database.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${requestKey}, 0))`,
+    );
+    const [existing] = await this.database
+      .select({
+        id: callSessions.id,
+        noteActivityId: callSessions.noteActivityId,
+        disposition: callSessions.disposition,
+      })
+      .from(callSessions)
+      .where(eq(callSessions.requestKey, requestKey))
+      .limit(1)
+      .for("update");
+    if (!existing?.noteActivityId) return null;
+    return {
+      id: existing.id,
+      noteActivityId: existing.noteActivityId,
+      disposition: existing.disposition,
+    };
+  }
+
   async lockContext(input: CompleteCallInput): Promise<CallContext> {
-    const [organization] = input.organizationId
-      ? await this.database.select().from(organizations)
-        .where(eq(organizations.id, input.organizationId)).limit(1).for("update")
-      : [];
-    let [contact] = input.contactId
-      ? await this.database.select().from(contacts).where(eq(contacts.id, input.contactId)).limit(1).for("update")
-      : [];
-    let [booking] = input.bookingId
-      ? await this.database.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1).for("update")
-      : [];
     const [followUp] = input.followUpId
       ? await this.database.select().from(followUps).where(eq(followUps.id, input.followUpId)).limit(1).for("update")
       : [];
-    if (!booking && followUp?.bookingId) {
-      [booking] = await this.database.select().from(bookings)
-        .where(eq(bookings.id, followUp.bookingId)).limit(1).for("update");
-    }
-    if (!contact && followUp?.contactId) {
-      [contact] = await this.database.select().from(contacts)
-        .where(eq(contacts.id, followUp.contactId)).limit(1).for("update");
-    }
+    const bookingId = input.bookingId ?? followUp?.bookingId ?? null;
+    const [booking] = bookingId
+      ? await this.database.select().from(bookings)
+        .where(eq(bookings.id, bookingId)).limit(1).for("update")
+      : [];
+    const contactId =
+      input.contactId ??
+      followUp?.contactId ??
+      booking?.primaryContactId ??
+      null;
+    const [contact] = contactId
+      ? await this.database.select().from(contacts)
+        .where(eq(contacts.id, contactId)).limit(1).for("update")
+      : [];
+    const organizationId =
+      input.organizationId ??
+      followUp?.organizationId ??
+      booking?.organizationId ??
+      contact?.organizationId ??
+      null;
+    const [organization] = organizationId
+      ? await this.database.select().from(organizations)
+        .where(eq(organizations.id, organizationId)).limit(1).for("update")
+      : [];
     return {
       organization: organization ? organizationSnapshot(organization) : null,
       contact: contact ? { ...contact, organizationId: contact.organizationId } : null,
