@@ -133,13 +133,24 @@ describe("DrizzleContactRepository caller matching and intake", () => {
     });
     await db.insert(crmSchema.contacts).values({
       id: repositoryIds.existingContact,
-      organizationId: repositoryIds.organization,
+      organizationId: null,
       firstName: "Avery",
       lastName: "Example",
       phone: "(406) 555-0101",
       normalizedPhone: "+14065550101",
       actRecordId: "ACT-CONTACT-1",
     });
+    await db.insert(crmSchema.organizationContacts).values({
+      organizationId: repositoryIds.organization,
+      contactId: repositoryIds.existingContact,
+      active: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE contacts
+      SET organization_id = '${repositoryIds.organization}'
+      WHERE id = '${repositoryIds.existingContact}'
+    `);
     await db.insert(crmSchema.actContactSyncStates).values({
       contactId: repositoryIds.existingContact,
       state: "synced",
@@ -164,7 +175,12 @@ describe("DrizzleContactRepository caller matching and intake", () => {
     });
     await sql!.unsafe(`
       INSERT INTO contacts (id, organization_id, first_name, last_name, phone, normalized_phone)
-      VALUES ('33333333-3333-4333-8333-333333333333', '${repositoryIds.organization}', 'Avery', 'Duplicate', '406-555-0101', '+14065550101')
+      VALUES ('33333333-3333-4333-8333-333333333333', NULL, 'Avery', 'Duplicate', '406-555-0101', '+14065550101');
+      INSERT INTO organization_contacts (organization_id, contact_id, source)
+      VALUES ('${repositoryIds.organization}', '33333333-3333-4333-8333-333333333333', 'legacy_backfill');
+      UPDATE contacts
+      SET organization_id = '${repositoryIds.organization}'
+      WHERE id = '33333333-3333-4333-8333-333333333333';
     `);
     await expect(repository.findContactsByPhone("1 406 555 0101")).resolves.toMatchObject({
       kind: "many",

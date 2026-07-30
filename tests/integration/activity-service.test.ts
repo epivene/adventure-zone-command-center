@@ -214,14 +214,17 @@ describe("ActivityService", () => {
     await sql!.unsafe(`
       INSERT INTO organizations (id, name)
       VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'Other Fair');
-      INSERT INTO contacts (
-        id, organization_id, first_name, last_name
-      ) VALUES (
-        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      INSERT INTO contacts (id, organization_id, first_name, last_name)
+      VALUES ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', NULL, 'Other', 'Contact');
+      INSERT INTO organization_contacts (organization_id, contact_id, source)
+      VALUES (
         'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        'Other',
-        'Contact'
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        'legacy_backfill'
       );
+      UPDATE contacts
+      SET organization_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+      WHERE id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
     `);
     await expect(service.create({
       organizationId: ids.organization,

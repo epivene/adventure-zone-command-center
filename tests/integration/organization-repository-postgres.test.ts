@@ -90,15 +90,24 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     ]);
     await db.insert(crmSchema.contacts).values({
       id: ids.contact,
-      organizationId: ids.marias,
+      organizationId: null,
       firstName: "Avery",
       lastName: "Example",
     });
+    await db.insert(crmSchema.organizationContacts).values({
+      organizationId: ids.marias,
+      contactId: ids.contact,
+      active: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE contacts SET organization_id = '${ids.marias}' WHERE id = '${ids.contact}'
+    `);
     await db.insert(crmSchema.bookings).values([
       {
         id: ids.mariasBooking,
         organizationId: ids.marias,
-        primaryContactId: ids.contact,
+        primaryContactId: null,
         name: "Marias County Fair",
         city: "Shelby",
         region: "MT",
@@ -121,6 +130,15 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
         travelLegId: ids.southLeg,
       },
     ]);
+    await db.insert(crmSchema.bookingContacts).values({
+      bookingId: ids.mariasBooking,
+      contactId: ids.contact,
+      isPrimary: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE bookings SET primary_contact_id = '${ids.contact}' WHERE id = '${ids.mariasBooking}'
+    `);
   });
 
   afterEach(async () => {
@@ -216,14 +234,13 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     expect(bounded.records.map((record) => record.id)).toEqual([ids.north]);
 
     await sql!.unsafe(`
-      INSERT INTO contacts (
-        id, organization_id, first_name, last_name
-      ) VALUES (
-        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        '${ids.marias}',
-        'Bailey',
-        'Second'
-      );
+      INSERT INTO contacts (id, organization_id, first_name, last_name)
+      VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', NULL, 'Bailey', 'Second');
+      INSERT INTO organization_contacts (organization_id, contact_id, source)
+      VALUES ('${ids.marias}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'legacy_backfill');
+      UPDATE contacts
+      SET organization_id = '${ids.marias}'
+      WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
       INSERT INTO bookings (
         id, organization_id, name, city, region
       ) VALUES (

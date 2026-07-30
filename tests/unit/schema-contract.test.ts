@@ -11,10 +11,12 @@ import {
   activityRevisions,
   auditEntries,
   bookings,
+  bookingContacts,
   callSessions,
   contacts,
   followUps,
   organizations,
+  organizationContacts,
   travelLegs,
 } from "@/db/schema";
 import { initialTravelLegs } from "@/db/seed";
@@ -36,6 +38,58 @@ describe("booking status contract", () => {
 });
 
 describe("database schema contract", () => {
+  it("exports normalized Place-Person and Booking-Person relationships", () => {
+    expect(Object.keys(organizationContacts)).toEqual(expect.arrayContaining([
+      "id",
+      "organizationId",
+      "contactId",
+      "role",
+      "isPrimary",
+      "active",
+      "source",
+      "createdAt",
+      "updatedAt",
+    ]));
+    expect(Object.keys(bookingContacts)).toEqual(expect.arrayContaining([
+      "id",
+      "bookingId",
+      "contactId",
+      "role",
+      "isPrimary",
+      "source",
+      "createdAt",
+      "updatedAt",
+    ]));
+
+    expect(
+      getTableConfig(organizationContacts).uniqueConstraints
+        .map((constraint) => constraint.name),
+    ).toContain("organization_contacts_organization_contact_unique");
+    expect(
+      getTableConfig(organizationContacts).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("organization_contacts_one_active_primary");
+    expect(
+      getTableConfig(organizationContacts).checks.map((check) => check.name),
+    ).toContain("organization_contacts_primary_is_active");
+    expect(
+      getTableConfig(bookingContacts).uniqueConstraints
+        .map((constraint) => constraint.name),
+    ).toContain("booking_contacts_booking_contact_unique");
+    expect(
+      getTableConfig(bookingContacts).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("booking_contacts_one_primary");
+    expect(
+      getTableConfig(contacts).foreignKeys.map((key) => key.getName()),
+    ).toContain("contacts_primary_organization_contact_fk");
+    expect(
+      getTableConfig(bookings).foreignKeys.map((key) => key.getName()),
+    ).toContain("bookings_primary_booking_contact_fk");
+  });
+
   it("exports the Stage 1 normalized tables", () => {
     expect(Object.keys(contacts)).toEqual(expect.arrayContaining([
       "id", "organizationId", "firstName", "lastName", "email", "phone",

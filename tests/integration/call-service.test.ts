@@ -624,14 +624,23 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     await db.insert(crmSchema.organizations).values({ id: ids.organization, name: "Marias Fair" });
     await db.insert(crmSchema.contacts).values({
       id: ids.contact,
-      organizationId: ids.organization,
+      organizationId: null,
       firstName: "Avery",
       lastName: "Example",
     });
+    await db.insert(crmSchema.organizationContacts).values({
+      organizationId: ids.organization,
+      contactId: ids.contact,
+      active: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE contacts SET organization_id = '${ids.organization}' WHERE id = '${ids.contact}'
+    `);
     await db.insert(crmSchema.bookings).values({
       id: ids.booking,
       organizationId: ids.organization,
-      primaryContactId: ids.contact,
+      primaryContactId: null,
       name: "Marias County Fair",
       venueName: "Do Not Rewrite Venue",
       address1: "17 Sentinel Road",
@@ -646,6 +655,15 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       probability: "unlikely",
       notes: "Original notes must survive.",
     });
+    await db.insert(crmSchema.bookingContacts).values({
+      bookingId: ids.booking,
+      contactId: ids.contact,
+      isPrimary: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE bookings SET primary_contact_id = '${ids.contact}' WHERE id = '${ids.booking}'
+    `);
     await db.insert(crmSchema.followUps).values({
       id: ids.followUp,
       organizationId: ids.organization,

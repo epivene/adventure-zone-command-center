@@ -2,6 +2,7 @@ import {
   boolean,
   check,
   doublePrecision,
+  foreignKey,
   integer,
   jsonb,
   index,
@@ -9,6 +10,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   type AnyPgColumn,
@@ -118,6 +120,14 @@ export const contacts = pgTable("contacts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
+  foreignKey({
+    columns: [table.organizationId, table.id],
+    foreignColumns: [
+      organizationContacts.organizationId,
+      organizationContacts.contactId,
+    ],
+    name: "contacts_primary_organization_contact_fk",
+  }),
   index("contacts_normalized_phone_idx").on(table.normalizedPhone),
   uniqueIndex("contacts_quick_add_request_key_unique")
     .on(table.quickAddRequestKey)
@@ -170,11 +180,88 @@ export const bookings = pgTable("bookings", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
+  foreignKey({
+    columns: [table.id, table.primaryContactId],
+    foreignColumns: [
+      bookingContacts.bookingId,
+      bookingContacts.contactId,
+    ],
+    name: "bookings_primary_booking_contact_fk",
+  }),
   check(
     "bookings_physical_attraction_total_nonnegative",
     sql`${table.physicalAttractionTotal} is null or ${table.physicalAttractionTotal} >= 0`,
   ),
 ]);
+
+export const organizationContacts = pgTable(
+  "organization_contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references((): AnyPgColumn => contacts.id),
+    role: text("role"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    active: boolean("active").default(true).notNull(),
+    source: text("source").default("local").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("organization_contacts_organization_contact_unique").on(
+      table.organizationId,
+      table.contactId,
+    ),
+    uniqueIndex("organization_contacts_one_active_primary")
+      .on(table.organizationId)
+      .where(sql`${table.active} and ${table.isPrimary}`),
+    index("organization_contacts_contact_id_idx").on(table.contactId),
+    check(
+      "organization_contacts_primary_is_active",
+      sql`not ${table.isPrimary} or ${table.active}`,
+    ),
+  ],
+);
+
+export const bookingContacts = pgTable(
+  "booking_contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references((): AnyPgColumn => bookings.id),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references((): AnyPgColumn => contacts.id),
+    role: text("role"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    source: text("source").default("local").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("booking_contacts_booking_contact_unique").on(
+      table.bookingId,
+      table.contactId,
+    ),
+    uniqueIndex("booking_contacts_one_primary")
+      .on(table.bookingId)
+      .where(sql`${table.isPrimary}`),
+    index("booking_contacts_contact_id_idx").on(table.contactId),
+  ],
+);
 
 export const packageTemplates = pgTable(
   "package_templates",
