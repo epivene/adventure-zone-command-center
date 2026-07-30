@@ -805,7 +805,14 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
         checkpointId: checkpoint!.id,
         leaseOwner: "worker-b",
         expectedSkip: 1,
-        records: [staged("company", "company-1", { id: "company-1", name: "Replay" })],
+        records: [{
+          ...staged(
+            "company",
+            "company-1",
+            { id: "company-1", name: "Changed" },
+          ),
+          fingerprint: "changed-fingerprint",
+        }],
         nextSkip: 2,
         queryMode: "plain",
         now: new Date("2026-07-30T15:01:00.000Z"),
@@ -838,7 +845,7 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
         next_skip: 2,
         query_mode: "plain",
         status: "pending",
-        records_staged: 1,
+        records_staged: 2,
         lease_owner: null,
       }]);
     },
@@ -941,7 +948,7 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
           source_key: expect.stringMatching(
             /^error:company:duplicate:[a-f0-9]{64}$/,
           ),
-          raw_snapshot: {},
+          raw_snapshot: { id: "company-1", name: "Changed" },
           error_code: "duplicate_source_id_conflict",
         },
       ]);
