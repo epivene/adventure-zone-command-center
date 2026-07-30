@@ -26,6 +26,10 @@ describe("CRM PostgreSQL test gate", () => {
         "tests/integration/resource-repository.test.ts",
         "tests/integration/resource-service.test.ts",
         "tests/integration/booking-operations-summary.test.ts",
+        "tests/integration/place-person-relationship-migration.test.ts",
+        "tests/integration/relationship-repository.test.ts",
+        "tests/integration/booking-relationship-repository.test.ts",
+        "tests/integration/relationship-reconciliation.test.ts",
       ]),
     );
   });
