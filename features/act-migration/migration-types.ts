@@ -267,7 +267,8 @@ export function allowedDecisionsForProposal(input: {
       decision !== "keep_separate" ||
       (input.targetEntityType === "contact" &&
         (input.state === "possible_duplicate" ||
-          input.issueCode === "ambiguous_person_match")),
+          input.issueCode === "ambiguous_person_match" ||
+          input.issueCode === "shared_mailbox_match_blocked")),
   );
 }
 

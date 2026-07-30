@@ -95,6 +95,14 @@ describe("Act migration contracts", () => {
       allowedDecisionsForProposal({
         state: "needs_review",
         targetEntityType: "contact",
+        issueCode: "shared_mailbox_match_blocked",
+        candidateLocalIds: ["person-1"],
+      }),
+    ).toEqual(["link_existing", "keep_separate", "ignore"]);
+    expect(
+      allowedDecisionsForProposal({
+        state: "needs_review",
+        targetEntityType: "contact",
         issueCode: "orphaned_external_link",
         candidateLocalIds: [],
       }),
