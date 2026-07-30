@@ -879,10 +879,17 @@ export const actMigrationProposals = pgTable(
       .references(() => actMigrationRuns.id, { onDelete: "cascade" }),
     proposalKey: text("proposal_key").notNull(),
     state: text("state").notNull(),
+    reviewState: text("review_state").default("not_required").notNull(),
     targetEntityType: text("target_entity_type").notNull(),
     sourceRecordKeys: jsonb("source_record_keys").$type<string[]>().notNull(),
     candidateLocalIds: jsonb("candidate_local_ids").$type<string[]>().notNull(),
     proposedLocalId: uuid("proposed_local_id"),
+    issueCode: text("issue_code"),
+    proposedPrimarySourceId: text("proposed_primary_source_id"),
+    dependencyProposalKeys: jsonb("dependency_proposal_keys")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     matchReason: text("match_reason"),
     displaySnapshot: jsonb("display_snapshot")
       .$type<Record<string, unknown>>()
@@ -910,12 +917,28 @@ export const actMigrationProposals = pgTable(
       sql`${table.state} in (${sqlTextValues(migrationPreviewStateValues)})`,
     ),
     check(
+      "act_migration_proposals_review_state_valid",
+      sql`${table.reviewState} in (${sqlTextValues(migrationReviewStateValues)})`,
+    ),
+    check(
       "act_migration_proposals_target_entity_type_valid",
       sql`${table.targetEntityType} in (${sqlTextValues(migrationTargetEntityTypeValues)})`,
     ),
     check(
       "act_migration_proposals_decision_valid",
       sql`${table.decision} is null or ${table.decision} in (${sqlTextValues(migrationDecisionValues)})`,
+    ),
+    check(
+      "act_migration_proposals_issue_code_nonblank",
+      sql`${table.issueCode} is null or btrim(${table.issueCode}) <> ''`,
+    ),
+    check(
+      "act_migration_proposals_proposed_primary_source_id_nonblank",
+      sql`${table.proposedPrimarySourceId} is null or btrim(${table.proposedPrimarySourceId}) <> ''`,
+    ),
+    check(
+      "act_migration_proposals_dependency_proposal_keys_array",
+      sql`jsonb_typeof(${table.dependencyProposalKeys}) = 'array'`,
     ),
   ],
 );

@@ -7,6 +7,14 @@ import {
   relationshipSourceKey,
   sourceRecordKey,
 } from "@/features/act-migration/migration-types";
+import {
+  isGenericContactName,
+  isSharedMailboxEmail,
+  normalizeMatchingEmail,
+  normalizeMatchingText,
+  normalizeWebsiteHost,
+} from "@/features/act-migration/matching-normalization";
+import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 
 export type ParsedSourceItem<T> =
   | {
@@ -53,6 +61,7 @@ export type NormalizedCompany = NormalizedAddress & {
   phone: string | null;
   normalizedPhone: string | null;
   website: string | null;
+  normalizedWebsiteHost: string | null;
   industry: string | null;
   editedAt: string | null;
 };
@@ -66,6 +75,7 @@ export type NormalizedContact = NormalizedAddress & {
   normalizedCompanyName: string | null;
   jobTitle: string | null;
   email: string | null;
+  normalizedEmail: string | null;
   phone: string | null;
   normalizedPhone: string | null;
   sharedEmail: boolean;
@@ -92,6 +102,7 @@ export type NormalizedGroup = {
   displayName: string | null;
   normalizedName: string | null;
   description: string | null;
+  membershipSemantics: "unknown";
   editedAt: string | null;
 };
 
@@ -100,31 +111,22 @@ export type NormalizedRelationship = {
   targetSourceId: string;
 };
 
+export type NormalizedGroupRelationship = NormalizedRelationship & {
+  membershipSemantics: "unknown";
+};
+
 type NormalizedSourceItem =
   | NormalizedCompany
   | NormalizedContact
   | NormalizedOpportunity
   | NormalizedGroup
-  | NormalizedRelationship;
-
-const sharedMailboxLocalParts = new Set(["info", "office", "sales"]);
+  | NormalizedRelationship
+  | NormalizedGroupRelationship;
 
 function displayValue(value: unknown) {
   return typeof value === "string" && value.trim()
     ? value.trim()
     : null;
-}
-
-function comparisonValue(value: string | null) {
-  return (
-    value?.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US") ?? null
-  );
-}
-
-function normalizedPhone(value: string | null) {
-  if (!value) return null;
-  const digits = value.replace(/\D/g, "");
-  return digits || null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -145,8 +147,8 @@ function addressValue(value: unknown): NormalizedAddress {
     city,
     region,
     postalCode: displayValue(address.postalCode),
-    normalizedCity: comparisonValue(city),
-    normalizedRegion: comparisonValue(region),
+    normalizedCity: normalizeMatchingText(city),
+    normalizedRegion: normalizeMatchingText(region),
   };
 }
 
@@ -219,12 +221,14 @@ function successful<T>(
 function company(rawSnapshot: Record<string, unknown>): NormalizedCompany {
   const displayName = displayValue(rawSnapshot.name);
   const phone = displayValue(rawSnapshot.phone);
+  const website = displayValue(rawSnapshot.website);
   return {
     displayName,
-    normalizedName: comparisonValue(displayName),
+    normalizedName: normalizeMatchingText(displayName),
     phone,
-    normalizedPhone: normalizedPhone(phone),
-    website: displayValue(rawSnapshot.website),
+    normalizedPhone: phone ? normalizeNorthAmericanPhone(phone) : null,
+    website,
+    normalizedWebsiteHost: normalizeWebsiteHost(website),
     industry: displayValue(rawSnapshot.industry),
     ...addressValue(rawSnapshot.address),
     editedAt: displayValue(rawSnapshot.edited),
@@ -238,23 +242,24 @@ function contact(rawSnapshot: Record<string, unknown>): NormalizedContact {
   const displayName =
     fullName ?? displayValue([firstName, lastName].filter(Boolean).join(" "));
   const companyName = displayValue(rawSnapshot.company);
-  const email =
-    displayValue(rawSnapshot.emailAddress)?.toLocaleLowerCase("en-US") ?? null;
+  const email = displayValue(rawSnapshot.emailAddress);
+  const normalizedEmail = normalizeMatchingEmail(email);
   const phone = displayValue(rawSnapshot.businessPhone);
   return {
     firstName,
     lastName,
     displayName,
-    normalizedName: comparisonValue(displayName),
+    normalizedName: normalizeMatchingText(displayName),
     companyName,
-    normalizedCompanyName: comparisonValue(companyName),
+    normalizedCompanyName: normalizeMatchingText(companyName),
     jobTitle: displayValue(rawSnapshot.jobTitle),
     email,
+    normalizedEmail,
     phone,
-    normalizedPhone: normalizedPhone(phone),
+    normalizedPhone: phone ? normalizeNorthAmericanPhone(phone) : null,
     ...addressValue(rawSnapshot.businessAddress),
-    sharedEmail: sharedEmailValue(email),
-    personCandidate: displayName !== null,
+    sharedEmail: isSharedMailboxEmail(normalizedEmail),
+    personCandidate: !isGenericContactName(displayName, companyName),
     editedAt: displayValue(rawSnapshot.edited),
   };
 }
@@ -272,7 +277,7 @@ function opportunity(
   const process = recordValue(stage.process);
   return {
     displayName,
-    normalizedName: comparisonValue(displayName),
+    normalizedName: normalizeMatchingText(displayName),
     status: displayValue(rawSnapshot.status),
     estimatedCloseDate: displayValue(rawSnapshot.estimatedCloseDate),
     actualCloseDate: displayValue(rawSnapshot.actualCloseDate),
@@ -290,8 +295,9 @@ function group(rawSnapshot: Record<string, unknown>): NormalizedGroup {
   const displayName = displayValue(rawSnapshot.name);
   return {
     displayName,
-    normalizedName: comparisonValue(displayName),
+    normalizedName: normalizeMatchingText(displayName),
     description: displayValue(rawSnapshot.description),
+    membershipSemantics: "unknown",
     editedAt: displayValue(rawSnapshot.edited),
   };
 }
@@ -334,14 +340,10 @@ function parseRelationship(
     sourceId,
     relationshipSourceKey(streamType, sourceId, targetSourceId),
     rawSnapshot,
-    { sourceId, targetSourceId },
+    streamType === "group_contact"
+      ? { sourceId, targetSourceId, membershipSemantics: "unknown" }
+      : { sourceId, targetSourceId },
   );
-}
-
-function sharedEmailValue(email: string | null) {
-  if (!email || !/^[^@\s]+@[^@\s]+$/.test(email)) return false;
-  const [localPart] = email.split("@");
-  return sharedMailboxLocalParts.has(localPart ?? "");
 }
 
 function malformedStructuredField(

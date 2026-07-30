@@ -234,10 +234,14 @@ describe("database schema contract", () => {
         "runId",
         "proposalKey",
         "state",
+        "reviewState",
         "targetEntityType",
         "sourceRecordKeys",
         "candidateLocalIds",
         "proposedLocalId",
+        "issueCode",
+        "proposedPrimarySourceId",
+        "dependencyProposalKeys",
         "matchReason",
         "displaySnapshot",
         "decision",
@@ -273,6 +277,18 @@ describe("database schema contract", () => {
     ).toContain("act_migration_records_source_key_nonblank");
     expect(indexNames(databaseSchema.actMigrationProposals)).toContain(
       "act_migration_proposals_run_key_unique",
+    );
+    expect(
+      getTableConfig(databaseSchema.actMigrationProposals).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "act_migration_proposals_review_state_valid",
+        "act_migration_proposals_issue_code_nonblank",
+        "act_migration_proposals_proposed_primary_source_id_nonblank",
+        "act_migration_proposals_dependency_proposal_keys_array",
+      ]),
     );
     expect(indexNames(actExternalLinks)).toEqual(
       expect.arrayContaining([

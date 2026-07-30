@@ -37,8 +37,9 @@ describe("parseSourceItem", () => {
         displayName: "Example   Events",
         normalizedName: "example events",
         phone: "(303) 555-0100",
-        normalizedPhone: "3035550100",
+        normalizedPhone: "+13035550100",
         website: "HTTPS://Example.COM",
+        normalizedWebsiteHost: "example.com",
         industry: "Fair  /   Festival",
         address1: "100  Main St",
         address2: "Suite 4",
@@ -88,9 +89,10 @@ describe("parseSourceItem", () => {
           companyName: "Example   Events",
           normalizedCompanyName: "example events",
           jobTitle: "Director",
-          email: `${mailbox.toLowerCase()}@example.com`,
+          email: `${mailbox}@EXAMPLE.COM`,
+          normalizedEmail: `${mailbox.toLowerCase()}@example.com`,
           phone: "(303) 555-0123",
-          normalizedPhone: "3035550123",
+          normalizedPhone: "+13035550123",
           address1: "200 Market St",
           address2: "Floor 2",
           city: "Denver",
@@ -124,6 +126,51 @@ describe("parseSourceItem", () => {
         normalizedName: null,
         companyName: "Example Fair Association",
         personCandidate: false,
+      },
+    });
+  });
+
+  it.each([
+    ["Info", "Example Fair Association"],
+    ["Office", "Example Fair Association"],
+    ["Sales", "Example Fair Association"],
+    ["Support", "Example Fair Association"],
+    ["Box Office", "Example Fair Association"],
+    ["Reservations", "Example Fair Association"],
+    ["General Contact", "Example Fair Association"],
+    ["Example Fair Association", "Example Fair Association"],
+  ])(
+    "keeps generic Contact name %j company-only",
+    (fullName, company) => {
+      const parsed = parseSourceItem("contact", {
+        id: `CONTACT-${fullName}`,
+        fullName,
+        company,
+      });
+
+      expect(parsed).toMatchObject({
+        ok: true,
+        normalized: { personCandidate: false },
+      });
+    },
+  );
+
+  it("rejects phone extensions and malformed email only from comparison fields", () => {
+    const parsed = parseSourceItem("contact", {
+      id: "CONTACT-INVALID-COMPARISONS",
+      fullName: "Avery Example",
+      emailAddress: " Avery@ ",
+      businessPhone: "(303) 555-0123 ext 9",
+    });
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      normalized: {
+        email: "Avery@",
+        normalizedEmail: null,
+        phone: "(303) 555-0123 ext 9",
+        normalizedPhone: null,
+        sharedEmail: false,
       },
     });
   });
@@ -188,6 +235,7 @@ describe("parseSourceItem", () => {
         displayName: "12345",
         normalizedName: "12345",
         description: "Legacy   Segment",
+        membershipSemantics: "unknown",
         editedAt: "2026-07-29T13:00:00Z",
       },
     });
@@ -207,6 +255,7 @@ describe("parseSourceItem", () => {
         ok: true,
         normalized: {
           email: emailAddress,
+          normalizedEmail: null,
           sharedEmail: false,
         },
       });
@@ -230,7 +279,10 @@ describe("parseSourceItem", () => {
         ok: true,
         sourceId,
         sourceKey: `${streamType}:${sourceId}:${targetSourceId}`,
-        normalized: { sourceId, targetSourceId },
+        normalized:
+          streamType === "group_contact"
+            ? { sourceId, targetSourceId, membershipSemantics: "unknown" }
+            : { sourceId, targetSourceId },
       });
     },
   );

@@ -33,10 +33,14 @@ CREATE TABLE "act_migration_proposals" (
 	"run_id" uuid NOT NULL,
 	"proposal_key" text NOT NULL,
 	"state" text NOT NULL,
+	"review_state" text DEFAULT 'not_required' NOT NULL,
 	"target_entity_type" text NOT NULL,
 	"source_record_keys" jsonb NOT NULL,
 	"candidate_local_ids" jsonb NOT NULL,
 	"proposed_local_id" uuid,
+	"issue_code" text,
+	"proposed_primary_source_id" text,
+	"dependency_proposal_keys" jsonb DEFAULT '[]'::jsonb NOT NULL,
 	"match_reason" text,
 	"display_snapshot" jsonb NOT NULL,
 	"decision" text,
@@ -48,8 +52,12 @@ CREATE TABLE "act_migration_proposals" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "act_migration_proposals_state_valid" CHECK ("act_migration_proposals"."state" in ('new', 'matched_unchanged', 'change', 'new_relationship', 'possible_duplicate', 'needs_review', 'ignored', 'error')),
-	CONSTRAINT "act_migration_proposals_target_entity_type_valid" CHECK ("act_migration_proposals"."target_entity_type" in ('organization', 'contact', 'booking', 'organization_contact', 'booking_contact', 'calling_list', 'calling_list_member')),
-	CONSTRAINT "act_migration_proposals_decision_valid" CHECK ("act_migration_proposals"."decision" is null or "act_migration_proposals"."decision" in ('approve_proposed', 'link_existing', 'keep_separate', 'ignore'))
+	CONSTRAINT "act_migration_proposals_review_state_valid" CHECK ("act_migration_proposals"."review_state" in ('not_required', 'pending', 'decided', 'ignored')),
+	CONSTRAINT "act_migration_proposals_target_entity_type_valid" CHECK ("act_migration_proposals"."target_entity_type" in ('organization', 'contact', 'organization_contact', 'booking', 'booking_contact', 'calling_list', 'calling_list_member')),
+	CONSTRAINT "act_migration_proposals_decision_valid" CHECK ("act_migration_proposals"."decision" is null or "act_migration_proposals"."decision" in ('approve_proposed', 'link_existing', 'keep_separate', 'ignore')),
+	CONSTRAINT "act_migration_proposals_issue_code_nonblank" CHECK ("act_migration_proposals"."issue_code" is null or btrim("act_migration_proposals"."issue_code") <> ''),
+	CONSTRAINT "act_migration_proposals_proposed_primary_source_id_nonblank" CHECK ("act_migration_proposals"."proposed_primary_source_id" is null or btrim("act_migration_proposals"."proposed_primary_source_id") <> ''),
+	CONSTRAINT "act_migration_proposals_dependency_proposal_keys_array" CHECK (jsonb_typeof("act_migration_proposals"."dependency_proposal_keys") = 'array')
 );
 --> statement-breakpoint
 CREATE TABLE "act_migration_records" (

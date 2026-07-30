@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  allowedDecisionsForProposal,
   allowedDecisionsForPreviewState,
   isMigrationDecision,
   isMigrationTargetEntityType,
+  migrationIssueCodeValues,
   migrationStreamRank,
+  migrationTargetRank,
   relationshipSourceKey,
   sourceRecordKey,
   type ActMigrationStreamType,
+  type MigrationTargetEntityType,
 } from "@/features/act-migration/migration-types";
 
 describe("Act migration contracts", () => {
@@ -41,6 +45,88 @@ describe("Act migration contracts", () => {
       "link_existing",
       "keep_separate",
       "ignore",
+    ]);
+  });
+
+  it("orders proposal targets by parent dependency", () => {
+    const targets: MigrationTargetEntityType[] = [
+      "calling_list_member",
+      "booking",
+      "organization_contact",
+      "organization",
+      "booking_contact",
+      "calling_list",
+      "contact",
+    ];
+
+    expect(
+      targets.toSorted(
+        (left, right) => migrationTargetRank(left) - migrationTargetRank(right),
+      ),
+    ).toEqual([
+      "organization",
+      "contact",
+      "organization_contact",
+      "booking",
+      "booking_contact",
+      "calling_list",
+      "calling_list_member",
+    ]);
+  });
+
+  it("keeps review decisions legal for the specific proposal", () => {
+    expect(
+      allowedDecisionsForProposal({
+        state: "possible_duplicate",
+        targetEntityType: "contact",
+        issueCode: "ambiguous_person_match",
+        candidateLocalIds: [],
+      }),
+    ).toEqual(["keep_separate", "ignore"]);
+    expect(
+      allowedDecisionsForProposal({
+        state: "possible_duplicate",
+        targetEntityType: "organization",
+        issueCode: "ambiguous_place_match",
+        candidateLocalIds: ["place-1"],
+      }),
+    ).toEqual(["link_existing", "ignore"]);
+    expect(
+      allowedDecisionsForProposal({
+        state: "needs_review",
+        targetEntityType: "booking",
+        issueCode: "opportunity_place_missing",
+        candidateLocalIds: ["booking-1"],
+      }),
+    ).toEqual(["ignore"]);
+    expect(
+      allowedDecisionsForProposal({
+        state: "error",
+        targetEntityType: "contact",
+        issueCode: "source_record_error",
+        candidateLocalIds: ["person-1"],
+      }),
+    ).toEqual([]);
+  });
+
+  it("exports the complete stable migration issue vocabulary", () => {
+    expect(migrationIssueCodeValues).toEqual([
+      "ambiguous_person_match",
+      "ambiguous_place_match",
+      "company_only_contact_unresolved",
+      "duplicate_source_id_conflict",
+      "group_dynamic_unsupported",
+      "group_membership_semantics_unknown",
+      "group_target_unavailable",
+      "needs_person",
+      "opportunity_place_ambiguous",
+      "opportunity_place_errored",
+      "opportunity_place_location_incomplete",
+      "opportunity_place_missing",
+      "orphaned_external_link",
+      "parent_proposal_unresolved",
+      "shared_mailbox_match_blocked",
+      "source_record_error",
     ]);
   });
 

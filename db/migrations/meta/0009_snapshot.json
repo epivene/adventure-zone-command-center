@@ -560,6 +560,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "review_state": {
+          "name": "review_state",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'not_required'"
+        },
         "target_entity_type": {
           "name": "target_entity_type",
           "type": "text",
@@ -583,6 +590,25 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "issue_code": {
+          "name": "issue_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "proposed_primary_source_id": {
+          "name": "proposed_primary_source_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dependency_proposal_keys": {
+          "name": "dependency_proposal_keys",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
         },
         "match_reason": {
           "name": "match_reason",
@@ -693,13 +719,29 @@
           "name": "act_migration_proposals_state_valid",
           "value": "\"act_migration_proposals\".\"state\" in ('new', 'matched_unchanged', 'change', 'new_relationship', 'possible_duplicate', 'needs_review', 'ignored', 'error')"
         },
+        "act_migration_proposals_review_state_valid": {
+          "name": "act_migration_proposals_review_state_valid",
+          "value": "\"act_migration_proposals\".\"review_state\" in ('not_required', 'pending', 'decided', 'ignored')"
+        },
         "act_migration_proposals_target_entity_type_valid": {
           "name": "act_migration_proposals_target_entity_type_valid",
-          "value": "\"act_migration_proposals\".\"target_entity_type\" in ('organization', 'contact', 'booking', 'organization_contact', 'booking_contact', 'calling_list', 'calling_list_member')"
+          "value": "\"act_migration_proposals\".\"target_entity_type\" in ('organization', 'contact', 'organization_contact', 'booking', 'booking_contact', 'calling_list', 'calling_list_member')"
         },
         "act_migration_proposals_decision_valid": {
           "name": "act_migration_proposals_decision_valid",
           "value": "\"act_migration_proposals\".\"decision\" is null or \"act_migration_proposals\".\"decision\" in ('approve_proposed', 'link_existing', 'keep_separate', 'ignore')"
+        },
+        "act_migration_proposals_issue_code_nonblank": {
+          "name": "act_migration_proposals_issue_code_nonblank",
+          "value": "\"act_migration_proposals\".\"issue_code\" is null or btrim(\"act_migration_proposals\".\"issue_code\") <> ''"
+        },
+        "act_migration_proposals_proposed_primary_source_id_nonblank": {
+          "name": "act_migration_proposals_proposed_primary_source_id_nonblank",
+          "value": "\"act_migration_proposals\".\"proposed_primary_source_id\" is null or btrim(\"act_migration_proposals\".\"proposed_primary_source_id\") <> ''"
+        },
+        "act_migration_proposals_dependency_proposal_keys_array": {
+          "name": "act_migration_proposals_dependency_proposal_keys_array",
+          "value": "jsonb_typeof(\"act_migration_proposals\".\"dependency_proposal_keys\") = 'array'"
         }
       },
       "isRLSEnabled": false

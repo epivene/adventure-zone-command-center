@@ -75,17 +75,137 @@ export const migrationReviewStateValues = [
 export type MigrationReviewState =
   (typeof migrationReviewStateValues)[number];
 
+export const migrationIssueCodeValues = [
+  "ambiguous_person_match",
+  "ambiguous_place_match",
+  "company_only_contact_unresolved",
+  "duplicate_source_id_conflict",
+  "group_dynamic_unsupported",
+  "group_membership_semantics_unknown",
+  "group_target_unavailable",
+  "needs_person",
+  "opportunity_place_ambiguous",
+  "opportunity_place_errored",
+  "opportunity_place_location_incomplete",
+  "opportunity_place_missing",
+  "orphaned_external_link",
+  "parent_proposal_unresolved",
+  "shared_mailbox_match_blocked",
+  "source_record_error",
+] as const;
+export type MigrationIssueCode =
+  (typeof migrationIssueCodeValues)[number];
+
 export const migrationTargetEntityTypeValues = [
   "organization",
   "contact",
-  "booking",
   "organization_contact",
+  "booking",
   "booking_contact",
   "calling_list",
   "calling_list_member",
 ] as const;
 export type MigrationTargetEntityType =
   (typeof migrationTargetEntityTypeValues)[number];
+
+export type LocalPlaceCandidate = {
+  id: string;
+  name: string;
+  normalizedName: string;
+  placeType: string;
+  actIndustry: string | null;
+  phone: string | null;
+  normalizedPhone: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  normalizedCity: string | null;
+  normalizedRegion: string | null;
+  postalCode: string | null;
+  website: string | null;
+  normalizedWebsiteHost: string | null;
+};
+
+export type LocalPersonCandidate = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
+  normalizedName: string;
+  email: string | null;
+  normalizedEmail: string | null;
+  sharedEmail: boolean;
+  phone: string | null;
+  normalizedPhone: string | null;
+  jobTitle: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+};
+
+export type LocalBookingCandidate = {
+  id: string;
+  organizationId: string | null;
+  primaryContactId: string | null;
+  name: string;
+  venueName: string | null;
+  address1: string | null;
+  city: string;
+  region: string;
+  postalCode: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  status: string;
+  probability: string;
+  notes: string | null;
+};
+
+export type LocalMigrationCandidateSnapshot = {
+  places: readonly LocalPlaceCandidate[];
+  people: readonly LocalPersonCandidate[];
+  bookings: readonly LocalBookingCandidate[];
+  placePeople: readonly {
+    organizationId: string;
+    contactId: string;
+    active: boolean;
+    isPrimary: boolean;
+    role: string | null;
+    source: string;
+  }[];
+  bookingPeople: readonly {
+    bookingId: string;
+    contactId: string;
+    isPrimary: boolean;
+    role: string | null;
+    source: string;
+  }[];
+  externalLinks: readonly {
+    entityType: "organization" | "contact" | "booking" | "calling_list";
+    entityId: string;
+    sourceEntityType: ActSourceEntityType;
+    actRecordId: string;
+    isPrimary: boolean;
+    syncMode: "two_way" | "pull_only";
+  }[];
+};
+
+export type ActMigrationProposal = {
+  proposalKey: string;
+  state: MigrationPreviewState;
+  reviewState: MigrationReviewState;
+  targetEntityType: MigrationTargetEntityType;
+  sourceRecordKeys: readonly string[];
+  candidateLocalIds: readonly string[];
+  proposedLocalId: string | null;
+  proposedPrimarySourceId: string | null;
+  matchReason: string;
+  issueCode: MigrationIssueCode | null;
+  dependencyProposalKeys: readonly string[];
+  displaySnapshot: Record<string, string | number | boolean | null>;
+};
 
 const decisionsByPreviewState: Record<
   MigrationPreviewState,
@@ -105,10 +225,50 @@ export function migrationStreamRank(stream: ActMigrationStreamType) {
   return actMigrationStreamTypeValues.indexOf(stream);
 }
 
+export function migrationTargetRank(target: MigrationTargetEntityType) {
+  return migrationTargetEntityTypeValues.indexOf(target);
+}
+
 export function allowedDecisionsForPreviewState(
   state: MigrationPreviewState,
 ) {
   return [...decisionsByPreviewState[state]];
+}
+
+const unresolvedProposalIssues = new Set<MigrationIssueCode>([
+  "opportunity_place_ambiguous",
+  "opportunity_place_errored",
+  "opportunity_place_location_incomplete",
+  "opportunity_place_missing",
+  "parent_proposal_unresolved",
+  "group_target_unavailable",
+]);
+
+export function allowedDecisionsForProposal(input: {
+  state: MigrationPreviewState;
+  targetEntityType: MigrationTargetEntityType;
+  issueCode: MigrationIssueCode | null;
+  candidateLocalIds: readonly string[];
+}): readonly MigrationDecision[] {
+  if (input.state === "error" || input.state === "ignored") return [];
+  if (
+    input.issueCode !== null &&
+    unresolvedProposalIssues.has(input.issueCode)
+  ) {
+    return ["ignore"];
+  }
+
+  const decisions = allowedDecisionsForPreviewState(input.state).filter(
+    (decision) =>
+      decision !== "link_existing" || input.candidateLocalIds.length > 0,
+  );
+  return decisions.filter(
+    (decision) =>
+      decision !== "keep_separate" ||
+      (input.targetEntityType === "contact" &&
+        (input.state === "possible_duplicate" ||
+          input.state === "needs_review")),
+  );
 }
 
 export function isMigrationDecision(
