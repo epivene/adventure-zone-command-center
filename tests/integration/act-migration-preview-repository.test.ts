@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -189,15 +190,14 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   }
 
   async function crmSentinels() {
-    return sql!.unsafe(`
-      SELECT
-        (SELECT count(*) FROM organizations) AS organizations,
-        (SELECT count(*) FROM contacts) AS contacts,
-        (SELECT count(*) FROM bookings) AS bookings,
-        (SELECT count(*) FROM organization_contacts) AS organization_contacts,
-        (SELECT count(*) FROM booking_contacts) AS booking_contacts,
-        (SELECT count(*) FROM act_external_links) AS external_links
-    `);
+    return Promise.all([
+      sql!.unsafe(`SELECT * FROM organizations ORDER BY id`),
+      sql!.unsafe(`SELECT * FROM contacts ORDER BY id`),
+      sql!.unsafe(`SELECT * FROM bookings ORDER BY id`),
+      sql!.unsafe(`SELECT * FROM organization_contacts ORDER BY id`),
+      sql!.unsafe(`SELECT * FROM booking_contacts ORDER BY id`),
+      sql!.unsafe(`SELECT * FROM act_external_links ORDER BY id`),
+    ]);
   }
 
   beforeEach(async () => {
@@ -323,11 +323,19 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       },
       {
         name: "report digest mismatch",
-        input: () => storeDirect(valid, { report: report(valid, { proposalDigest: "wrong-proposal" }) }),
+        input: () => storeDirect(valid, {
+          sourceDigest: "source-digest",
+          proposalDigest: proposalSnapshotDigest(valid),
+          report: report(valid, { proposalDigest: "wrong-proposal" }),
+        }),
       },
       {
         name: "report source digest mismatch",
-        input: () => storeDirect(valid, { report: report(valid, { sourceDigest: "wrong-source" }) }),
+        input: () => storeDirect(valid, {
+          sourceDigest: "source-digest",
+          proposalDigest: proposalSnapshotDigest(valid),
+          report: report(valid, { sourceDigest: "wrong-source" }),
+        }),
       },
       {
         name: "incomplete report",
@@ -335,7 +343,10 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       },
       {
         name: "unknown staged source key",
-        input: () => storeDirect([proposal({ proposalKey: "unknown", sourceRecordKeys: ["company:missing"] })]),
+        input: () => storeDirect([
+          baseProposal(),
+          proposal({ proposalKey: "unknown", sourceRecordKeys: ["company:missing"] }),
+        ]),
       },
       {
         name: "duplicate source ownership",
@@ -346,18 +357,29 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       },
       {
         name: "missing or cross-run dependency",
-        input: () => storeDirect([
-          baseProposal(),
-          proposal({
-            proposalKey: "dependent",
-            sourceRecordKeys: ["company:dependent"],
-            dependencyProposalKeys: ["organization:other-run"],
-          }),
-        ]),
+        input: async () => {
+          await insertRecord("company:dependent");
+          return storeDirect([
+            baseProposal(),
+            proposal({
+              proposalKey: "dependent",
+              sourceRecordKeys: ["company:dependent"],
+              dependencyProposalKeys: ["organization:other-run"],
+            }),
+          ]);
+        },
+        error: "dependency",
+        cleanup: () => database.delete(crmSchema.actMigrationRecords)
+          .where(eq(crmSchema.actMigrationRecords.sourceKey, "company:dependent")),
       },
     ];
     for (const scenario of scenarios) {
-      await expect(scenario.input()).rejects.toThrow();
+      if ("error" in scenario) {
+        await expect(scenario.input()).rejects.toThrow(scenario.error);
+      } else {
+        await expect(scenario.input()).rejects.toThrow();
+      }
+      if ("cleanup" in scenario && scenario.cleanup) await scenario.cleanup();
       expect(await proposalRows()).toEqual([]);
       expect(await sql!.unsafe(`
         SELECT status, proposal_digest, preview_completed_at FROM act_migration_runs WHERE id = '${runId}'
@@ -423,7 +445,14 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       candidateLocalIds: [localA],
       issueCode: "orphaned_external_link",
     });
-    await store([approvable, noCandidate, duplicate, orphan]);
+    const nonPersonDuplicate = proposal({
+      proposalKey: "organization:not-a-person",
+      state: "possible_duplicate",
+      targetEntityType: "organization",
+      sourceRecordKeys: ["company:not-a-person"],
+      candidateLocalIds: [localA],
+    });
+    await store([approvable, noCandidate, duplicate, orphan, nonPersonDuplicate]);
 
     await repository.saveDecision({ runId, proposalKey: approvable.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user" });
     await expect(repository.saveDecision({
@@ -440,6 +469,9 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     });
     await expect(repository.saveDecision({
       runId, proposalKey: orphan.proposalKey, decision: "keep_separate", decidedBy: "clerk-user",
+    })).rejects.toThrow("not allowed");
+    await expect(repository.saveDecision({
+      runId, proposalKey: nonPersonDuplicate.proposalKey, decision: "keep_separate", decidedBy: "clerk-user",
     })).rejects.toThrow("not allowed");
     await expect(repository.saveDecision({
       runId, proposalKey: orphan.proposalKey, decision: "ignore", ignoreReason: "   ", decidedBy: "clerk-user",
@@ -473,7 +505,13 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceRecordKeys: ["contact:explicit-a", "contact:explicit-b"],
       candidateLocalIds: [localA],
     });
-    await store([baseProposal(), primary, explicit]);
+    const approveWithPrimary = proposal({
+      proposalKey: "contact:approve-primary",
+      state: "new",
+      targetEntityType: "contact",
+      sourceRecordKeys: ["contact:approve-a", "contact:approve-b"],
+    });
+    await store([baseProposal(), primary, explicit, approveWithPrimary]);
 
     await expect(repository.saveDecision({
       runId, proposalKey: baseProposal().proposalKey, decision: "approve_proposed", primarySourceId: "company-1", decidedBy: "clerk-user",
@@ -485,11 +523,20 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       runId, proposalKey: explicit.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "not-staged", decidedBy: "clerk-user",
     })).rejects.toThrow("not part");
     await expect(repository.saveDecision({
+      runId, proposalKey: approveWithPrimary.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user",
+    })).rejects.toThrow("requires a primary");
+    await repository.saveDecision({
+      runId, proposalKey: approveWithPrimary.proposalKey, decision: "approve_proposed", primarySourceId: "approve-b", decidedBy: "clerk-user",
+    });
+    await expect(repository.saveDecision({
       runId, proposalKey: primary.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "primary-b", decidedBy: "clerk-user",
     })).rejects.toThrow("cannot be overridden");
     await repository.saveDecision({
       runId, proposalKey: primary.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, decidedBy: "clerk-user",
     });
+    const [primaryBeforeRetry] = await sql!.unsafe(`
+      SELECT decided_at, decided_by FROM act_migration_proposals WHERE proposal_key = '${primary.proposalKey}'
+    `);
     const auditsBeforeEqualPrimaryRetry = await auditRows();
     await repository.saveDecision({
       runId, proposalKey: primary.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "primary-a", decidedBy: "other-clerk-user",
@@ -506,6 +553,9 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       { proposal_key: "contact:proposed-primary", primary_source_id: null },
     ]);
     expect(await auditRows()).toHaveLength(auditsBeforeEqualPrimaryRetry.length + 1);
+    expect(await sql!.unsafe(`
+      SELECT decided_at, decided_by FROM act_migration_proposals WHERE proposal_key = '${primary.proposalKey}'
+    `)).toEqual([primaryBeforeRetry]);
   });
 
   postgresTest("persists decisions across repository recreation and suppresses semantic-retry audits", async () => {
@@ -568,20 +618,29 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     });
     await store([baseProposal(), changeable, parent, child, notRequired]);
     await repository.saveDecision({ runId, proposalKey: changeable.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, decidedBy: "clerk-user" });
-    await repository.saveDecision({ runId, proposalKey: changeable.proposalKey, decision: "ignore", ignoreReason: "changed mind", decidedBy: "clerk-user" });
-    await repository.saveDecision({ runId, proposalKey: child.proposalKey, decision: "ignore", ignoreReason: "wait for parent", decidedBy: "clerk-user" });
-    await repository.saveDecision({ runId, proposalKey: notRequired.proposalKey, decision: "ignore", ignoreReason: "not required", decidedBy: "clerk-user" });
-
     expect(await sql!.unsafe(`
-      SELECT proposal_key, decision, chosen_local_entity_id, primary_source_id, decision_reason
+      SELECT review_state FROM act_migration_records WHERE source_key = 'contact:changeable'
+    `)).toEqual([{ review_state: "decided" }]);
+    await repository.saveDecision({ runId, proposalKey: changeable.proposalKey, decision: "ignore", ignoreReason: "changed mind", decidedBy: "clerk-user" });
+    expect(await sql!.unsafe(`
+      SELECT review_state FROM act_migration_records WHERE source_key = 'contact:changeable'
+    `)).toEqual([{ review_state: "ignored" }]);
+    expect(await sql!.unsafe(`
+      SELECT decision, chosen_local_entity_id, primary_source_id, decision_reason
       FROM act_migration_proposals WHERE proposal_key = '${changeable.proposalKey}'
     `)).toEqual([{
-      proposal_key: changeable.proposalKey,
       decision: "ignore",
       chosen_local_entity_id: null,
       primary_source_id: null,
       decision_reason: "changed mind",
     }]);
+    await repository.saveDecision({ runId, proposalKey: changeable.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, decidedBy: "clerk-user" });
+    expect(await sql!.unsafe(`
+      SELECT review_state FROM act_migration_records WHERE source_key = 'contact:changeable'
+    `)).toEqual([{ review_state: "decided" }]);
+    await repository.saveDecision({ runId, proposalKey: child.proposalKey, decision: "ignore", ignoreReason: "wait for parent", decidedBy: "clerk-user" });
+    await repository.saveDecision({ runId, proposalKey: notRequired.proposalKey, decision: "ignore", ignoreReason: "not required", decidedBy: "clerk-user" });
+
     expect(await sql!.unsafe(`
       SELECT source_key, review_state FROM act_migration_records
       WHERE source_key IN ('company:parent', 'opportunity:child', 'company:not-required') ORDER BY source_key
@@ -601,8 +660,32 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     await store([baseProposal(), reviewable]);
     await repository.saveDecision({ runId, proposalKey: reviewable.proposalKey, decision: "ignore", ignoreReason: "audit me", decidedBy: "clerk-user" });
     const [audit] = await auditRows();
+    expect(audit).toMatchObject({
+      entity_type: "act_migration_proposal",
+      action: "review_decision_changed",
+      before: {
+        decision: null,
+        decisionReason: null,
+        chosenLocalEntityId: null,
+        primarySourceId: null,
+      },
+      after: {
+        decision: "ignore",
+        decisionReason: "audit me",
+        chosenLocalEntityId: null,
+        primarySourceId: null,
+      },
+    });
+    expect(Object.keys(audit!.before).toSorted()).toEqual([
+      "chosenLocalEntityId", "decision", "decisionReason", "primarySourceId",
+    ]);
+    expect(Object.keys(audit!.after).toSorted()).toEqual([
+      "chosenLocalEntityId", "decision", "decisionReason", "primarySourceId",
+    ]);
     expect(JSON.stringify(audit)).not.toContain("rawSourceMustNeverAppear");
     expect(JSON.stringify(audit)).not.toContain("display_snapshot");
+    expect(JSON.stringify(audit)).not.toContain("confidential");
+    expect(JSON.stringify(audit)).not.toContain("not-audit");
 
     await sql!.unsafe(`
       CREATE FUNCTION reject_preview_audit() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -638,6 +721,47 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   postgresTest("does not mutate CRM or relationship sentinel tables while saving decisions", async () => {
     const reviewable = proposal({ proposalKey: "organization:sentinel", sourceRecordKeys: ["company:sentinel"] });
     await store([baseProposal(), reviewable]);
+    await database.insert(crmSchema.organizations).values({
+      id: "77777777-7777-4777-8777-777777777777",
+      name: "Sentinel Organization",
+      city: "Denver",
+      region: "CO",
+    });
+    await database.insert(crmSchema.contacts).values({
+      id: "88888888-8888-4888-8888-888888888888",
+      firstName: "Sentinel",
+      lastName: "Person",
+      email: "sentinel@example.test",
+    });
+    await database.insert(crmSchema.bookings).values({
+      id: "99999999-9999-4999-8999-999999999999",
+      name: "Sentinel Booking",
+      city: "Denver",
+      region: "CO",
+    });
+    await database.insert(crmSchema.organizationContacts).values({
+      organizationId: "77777777-7777-4777-8777-777777777777",
+      contactId: "88888888-8888-4888-888888888888",
+      role: "Sentinel role",
+      isPrimary: true,
+      active: true,
+      source: "local",
+    });
+    await database.insert(crmSchema.bookingContacts).values({
+      bookingId: "99999999-9999-4999-8999-999999999999",
+      contactId: "88888888-8888-4888-888888888888",
+      role: "Sentinel booking role",
+      isPrimary: true,
+      source: "local",
+    });
+    await database.insert(crmSchema.actExternalLinks).values({
+      entityType: "calling_list",
+      sourceEntityType: "group",
+      entityId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      actRecordId: "GROUP-SENTINEL",
+      isPrimary: false,
+      syncMode: "pull_only",
+    });
     const before = await crmSentinels();
     await repository.saveDecision({ runId, proposalKey: reviewable.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user" });
     expect(await crmSentinels()).toEqual(before);
