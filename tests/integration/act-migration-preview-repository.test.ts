@@ -528,6 +528,13 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     await repository.saveDecision({
       runId, proposalKey: approveWithPrimary.proposalKey, decision: "approve_proposed", primarySourceId: "approve-b", decidedBy: "clerk-user",
     });
+    expect(await sql!.unsafe(`
+      SELECT decision, primary_source_id FROM act_migration_proposals
+      WHERE proposal_key = '${approveWithPrimary.proposalKey}'
+    `)).toEqual([{
+      decision: "approve_proposed",
+      primary_source_id: "approve-b",
+    }]);
     await expect(repository.saveDecision({
       runId, proposalKey: primary.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "primary-b", decidedBy: "clerk-user",
     })).rejects.toThrow("cannot be overridden");
@@ -541,6 +548,10 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     await repository.saveDecision({
       runId, proposalKey: primary.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "primary-a", decidedBy: "other-clerk-user",
     });
+    expect(await auditRows()).toEqual(auditsBeforeEqualPrimaryRetry);
+    expect(await sql!.unsafe(`
+      SELECT decided_at, decided_by FROM act_migration_proposals WHERE proposal_key = '${primary.proposalKey}'
+    `)).toEqual([primaryBeforeRetry]);
     await repository.saveDecision({
       runId, proposalKey: explicit.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "explicit-b", decidedBy: "clerk-user",
     });
@@ -553,9 +564,6 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       { proposal_key: "contact:proposed-primary", primary_source_id: null },
     ]);
     expect(await auditRows()).toHaveLength(auditsBeforeEqualPrimaryRetry.length + 1);
-    expect(await sql!.unsafe(`
-      SELECT decided_at, decided_by FROM act_migration_proposals WHERE proposal_key = '${primary.proposalKey}'
-    `)).toEqual([primaryBeforeRetry]);
   });
 
   postgresTest("persists decisions across repository recreation and suppresses semantic-retry audits", async () => {
@@ -617,6 +625,9 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       reviewState: "not_required",
     });
     await store([baseProposal(), changeable, parent, child, notRequired]);
+    expect(await sql!.unsafe(`
+      SELECT review_state FROM act_migration_records WHERE source_key = 'contact:changeable'
+    `)).toEqual([{ review_state: "pending" }]);
     await repository.saveDecision({ runId, proposalKey: changeable.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, decidedBy: "clerk-user" });
     expect(await sql!.unsafe(`
       SELECT review_state FROM act_migration_records WHERE source_key = 'contact:changeable'
