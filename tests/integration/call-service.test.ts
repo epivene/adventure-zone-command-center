@@ -107,6 +107,8 @@ class InMemoryCallRepository implements CallRepository {
       outcome: null,
       nextFollowUpId: null,
     },
+    contactHasActiveOrganizationRelationship: true,
+    contactHasBookingRelationship: true,
   };
   public readonly writes: string[] = [];
   public readonly payloads: Record<string, unknown[]> = {};
@@ -386,8 +388,62 @@ describe("CallService.complete", () => {
       ...repository.context.contact!,
       organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     };
+    repository.context.contactHasActiveOrganizationRelationship = false;
 
     await expect(new CallService(repository).complete(input())).resolves.toEqual({
+      ok: false,
+      error: { code: "CONTACT_ORGANIZATION_MISMATCH" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("opens a call for a Person at a secondary active Place", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.booking = null;
+    repository.context.followUp = null;
+    repository.context.contact = {
+      ...repository.context.contact!,
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contactHasActiveOrganizationRelationship = true;
+    repository.context.contactHasBookingRelationship = null;
+
+    await expect(new CallService(repository).complete(input({
+      bookingId: null,
+      followUpId: null,
+      approvedBookingUpdates: null,
+      resultingBookingStatus: null,
+    }))).resolves.toMatchObject({ ok: true });
+  });
+
+  it("opens a Booking call for an additional involved Person", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.followUp = null;
+    repository.context.booking = {
+      ...repository.context.booking!,
+      primaryContactId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contactHasActiveOrganizationRelationship = true;
+    repository.context.contactHasBookingRelationship = true;
+
+    await expect(new CallService(repository).complete(input({
+      followUpId: null,
+    }))).resolves.toMatchObject({ ok: true });
+  });
+
+  it("rejects a call when the Place-Person relationship is inactive", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.booking = null;
+    repository.context.followUp = null;
+    repository.context.contactHasActiveOrganizationRelationship = false;
+    repository.context.contactHasBookingRelationship = null;
+
+    await expect(new CallService(repository).complete(input({
+      bookingId: null,
+      followUpId: null,
+      approvedBookingUpdates: null,
+      resultingBookingStatus: null,
+    }))).resolves.toEqual({
       ok: false,
       error: { code: "CONTACT_ORGANIZATION_MISMATCH" },
     });
@@ -448,6 +504,7 @@ describe("CallService.complete", () => {
       ...repository.context.contact!,
       organizationId: null,
     };
+    repository.context.contactHasBookingRelationship = false;
     repository.context.followUp = null;
 
     await expect(new CallService(repository).complete(input({

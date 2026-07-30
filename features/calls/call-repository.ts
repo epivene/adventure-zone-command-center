@@ -1,12 +1,14 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   activities,
+  bookingContacts,
   bookings,
   callSessions,
   contacts,
   followUps,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import type { BookingStatus } from "@/features/bookings/booking-types";
@@ -181,11 +183,40 @@ class DrizzleCallTransaction implements CallTransaction {
       ? await this.database.select().from(organizations)
         .where(eq(organizations.id, organizationId)).limit(1).for("update")
       : [];
+    const [organizationContact] =
+      organizationId && contactId
+        ? await this.database
+          .select({ id: organizationContacts.id })
+          .from(organizationContacts)
+          .where(and(
+            eq(organizationContacts.organizationId, organizationId),
+            eq(organizationContacts.contactId, contactId),
+            eq(organizationContacts.active, true),
+          ))
+          .limit(1)
+          .for("share")
+        : [];
+    const [bookingContact] =
+      bookingId && contactId
+        ? await this.database
+          .select({ id: bookingContacts.id })
+          .from(bookingContacts)
+          .where(and(
+            eq(bookingContacts.bookingId, bookingId),
+            eq(bookingContacts.contactId, contactId),
+          ))
+          .limit(1)
+          .for("share")
+        : [];
     return {
       organization: organization ? organizationSnapshot(organization) : null,
       contact: contact ? { ...contact, organizationId: contact.organizationId } : null,
       booking: booking ? bookingSnapshot(booking) : null,
       followUp: followUp ? followUpSnapshot(followUp) : null,
+      contactHasActiveOrganizationRelationship:
+        organizationId && contactId ? Boolean(organizationContact) : null,
+      contactHasBookingRelationship:
+        bookingId && contactId ? Boolean(bookingContact) : null,
     };
   }
 

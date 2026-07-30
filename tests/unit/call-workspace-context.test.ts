@@ -25,6 +25,8 @@ type FollowUpRecord = {
 
 class RecordingContextRepository implements CallWorkspaceContextRepository {
   calls: string[] = [];
+  activeOrganizationContacts = new Set<string>();
+  bookingContacts = new Set<string>();
 
   constructor(private readonly followUpRecord: FollowUpRecord = {
     id: followUpId,
@@ -59,6 +61,22 @@ class RecordingContextRepository implements CallWorkspaceContextRepository {
   async findFollowUp(id: string) {
     this.calls.push(`follow-up:${id}`);
     return id === this.followUpRecord.id ? this.followUpRecord : null;
+  }
+
+  async hasActiveOrganizationContact(organizationIdToFind: string, contactIdToFind: string) {
+    this.calls.push(`organization-contact:${organizationIdToFind}:${contactIdToFind}`);
+    return (
+      this.activeOrganizationContacts.has(`${organizationIdToFind}:${contactIdToFind}`) ||
+      (
+        organizationIdToFind === this.relatedOrganizationId &&
+        (contactIdToFind === contactId || contactIdToFind === secondaryContactId)
+      )
+    );
+  }
+
+  async hasBookingContact(bookingIdToFind: string, contactIdToFind: string) {
+    this.calls.push(`booking-contact:${bookingIdToFind}:${contactIdToFind}`);
+    return this.bookingContacts.has(`${bookingIdToFind}:${contactIdToFind}`);
   }
 }
 
@@ -129,6 +147,42 @@ describe("loadCallWorkspaceContext", () => {
     await expect(loadCallWorkspaceContext({ contactId: anotherContactId, bookingId }, repository)).resolves.toEqual({ ok: false });
   });
 
+  it("uses an explicit Place before the Person primary pointer when the association is active", async () => {
+    const repository = new RecordingContextRepository(
+      undefined,
+      "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    );
+    repository.activeOrganizationContacts.add(`${organizationId}:${contactId}`);
+
+    await expect(loadCallWorkspaceContext({
+      organizationId,
+      contactId,
+    }, repository)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        organization: { id: organizationId },
+        contact: { id: contactId },
+      },
+    });
+  });
+
+  it("opens an additional Booking Person when the Booking relationship exists", async () => {
+    const repository = new RecordingContextRepository();
+    repository.bookingContacts.add(`${bookingId}:${secondaryContactId}`);
+    repository.activeOrganizationContacts.add(`${organizationId}:${secondaryContactId}`);
+
+    await expect(loadCallWorkspaceContext({
+      bookingId,
+      contactId: secondaryContactId,
+    }, repository)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        booking: { id: bookingId },
+        contact: { id: secondaryContactId },
+      },
+    });
+  });
+
   it("accepts Today-generated booking follow-up queries for both primary fallback and explicit same-org contacts", async () => {
     const primarySummary: FollowUpSummary = {
       id: followUpId,
@@ -164,6 +218,7 @@ describe("loadCallWorkspaceContext", () => {
       kind: "call",
       dueAt: new Date("2026-08-01T17:00:00Z"),
     });
+    explicitRepository.bookingContacts.add(`${bookingId}:${secondaryContactId}`);
     await expect(loadCallWorkspaceContext(
       queryFromToday(explicitSummary),
       explicitRepository,

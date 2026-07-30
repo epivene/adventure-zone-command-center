@@ -15,8 +15,10 @@ import {
   actContactSyncStates,
   activities,
   auditEntries,
+  bookingContacts,
   bookings,
   contacts,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
@@ -278,7 +280,25 @@ export class DrizzleContactRepository {
       .limit(1);
     if (!record) return null;
 
-    const relatedBookings = await this.database
+    const [placeRows, relatedBookings] = await Promise.all([
+      this.database
+        .select({
+          relationship: organizationContacts,
+          organization: organizations,
+        })
+        .from(organizationContacts)
+        .innerJoin(
+          organizations,
+          eq(organizationContacts.organizationId, organizations.id),
+        )
+        .where(eq(organizationContacts.contactId, contactId))
+        .orderBy(
+          desc(sql`${organizationContacts.organizationId} = ${record.contact.organizationId}`),
+          asc(organizationContacts.role),
+          asc(organizations.name),
+          asc(organizations.id),
+        ),
+      this.database
       .select({
         id: bookings.id,
         name: bookings.name,
@@ -287,9 +307,11 @@ export class DrizzleContactRepository {
         startsAt: bookings.startsAt,
         status: bookings.status,
       })
-      .from(bookings)
-      .where(eq(bookings.primaryContactId, contactId))
-      .orderBy(desc(bookings.startsAt), asc(bookings.name));
+      .from(bookingContacts)
+      .innerJoin(bookings, eq(bookingContacts.bookingId, bookings.id))
+      .where(eq(bookingContacts.contactId, contactId))
+      .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
+    ]);
 
     return {
       contact: {
@@ -297,6 +319,15 @@ export class DrizzleContactRepository {
         actRecordId: record.contact.actRecordId,
         createdAt: record.contact.createdAt,
       },
+      places: placeRows.map(({ relationship, organization }) => ({
+        id: organization.id,
+        name: organization.name,
+        role: relationship.role,
+        isPrimaryPerson: relationship.isPrimary,
+        isPrimaryPlace:
+          relationship.organizationId === record.contact.organizationId,
+        active: relationship.active,
+      })),
       relatedBookings,
     };
   }

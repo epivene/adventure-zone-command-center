@@ -20,6 +20,8 @@ const repository: CallWorkspaceContextRepository = {
     status: "interested",
     startsAt: null,
   }),
+  hasActiveOrganizationContact: async () => false,
+  hasBookingContact: async () => false,
 };
 
 describe("loadCallWorkspace operations adapter", () => {

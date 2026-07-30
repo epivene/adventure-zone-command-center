@@ -300,4 +300,100 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
       { value: "0" },
     ]);
   });
+
+  postgresTest("reads the complete active Place-Person and Booking-Person graph", async () => {
+    const db = drizzle({ client: sql!, schema: crmSchema });
+    const additionalPerson = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    await db.insert(crmSchema.contacts).values({
+      id: additionalPerson,
+      organizationId: null,
+      firstName: "Bailey",
+      lastName: "Additional",
+    });
+    await db.insert(crmSchema.organizationContacts).values([
+      {
+        organizationId: ids.marias,
+        contactId: additionalPerson,
+        role: "Director",
+        isPrimary: true,
+      },
+      {
+        organizationId: ids.north,
+        contactId: ids.contact,
+        role: "Shared",
+        active: true,
+      },
+      {
+        organizationId: ids.south,
+        contactId: ids.contact,
+        role: "Former",
+        active: false,
+      },
+    ]);
+    await sql!.unsafe(`
+      UPDATE contacts SET organization_id = '${ids.marias}'
+      WHERE id = '${additionalPerson}'
+    `);
+    await db.insert(crmSchema.bookingContacts).values({
+      bookingId: ids.mariasBooking,
+      contactId: additionalPerson,
+      role: "Coordinator",
+      isPrimary: false,
+    });
+
+    expect((await repository.getOrganizationSummary(ids.marias))?.contacts).toEqual([
+      {
+        id: additionalPerson,
+        name: "Bailey Additional",
+        role: "Director",
+        isPrimary: true,
+        phone: null,
+        email: null,
+      },
+      {
+        id: ids.contact,
+        name: "Avery Example",
+        role: null,
+        isPrimary: false,
+        phone: null,
+        email: null,
+      },
+    ]);
+    expect((await repository.getOrganizationSummary(ids.north))?.contacts).toEqual([
+      expect.objectContaining({ id: ids.contact, role: "Shared" }),
+    ]);
+    expect((await repository.getOrganizationSummary(ids.south))?.contacts).toEqual([]);
+    expect((await repository.getOrganizationSummary(ids.south))?.id).toBe(ids.south);
+
+    expect((await contactRepository.getContactDetail(ids.contact))?.places).toEqual([
+      expect.objectContaining({
+        id: ids.marias,
+        isPrimaryPlace: true,
+        active: true,
+      }),
+      expect.objectContaining({
+        id: ids.south,
+        isPrimaryPlace: false,
+        active: false,
+      }),
+      expect.objectContaining({
+        id: ids.north,
+        isPrimaryPlace: false,
+        active: true,
+      }),
+    ]);
+    expect((await contactRepository.getContactDetail(additionalPerson))?.relatedBookings)
+      .toEqual([expect.objectContaining({ id: ids.mariasBooking })]);
+    expect((await bookingRepository.getBookingDetail(ids.mariasBooking))?.people).toEqual([
+      expect.objectContaining({ id: ids.contact, isPrimary: true }),
+      expect.objectContaining({
+        id: additionalPerson,
+        role: "Coordinator",
+        isPrimary: false,
+      }),
+    ]);
+    expect(await sql!.unsafe("SELECT count(*) AS value FROM contacts")).toEqual([
+      { value: "2" },
+    ]);
+  });
 });

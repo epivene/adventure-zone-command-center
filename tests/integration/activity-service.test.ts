@@ -244,6 +244,60 @@ describe("ActivityService", () => {
     ]);
   });
 
+  postgresTest("creates an activity for a Person at a secondary active Place", async () => {
+    const personId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const primaryPlaceId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    await sql!.unsafe(`
+      INSERT INTO organizations (id, name)
+      VALUES ('${primaryPlaceId}', 'Primary Fair');
+      INSERT INTO contacts (id, organization_id, first_name, last_name)
+      VALUES ('${personId}', NULL, 'Shared', 'Person');
+      INSERT INTO organization_contacts (
+        organization_id, contact_id, active, source
+      ) VALUES
+        ('${primaryPlaceId}', '${personId}', true, 'local'),
+        ('${ids.organization}', '${personId}', true, 'local');
+      UPDATE contacts SET organization_id = '${primaryPlaceId}'
+      WHERE id = '${personId}';
+    `);
+
+    await expect(service.create({
+      organizationId: ids.organization,
+      contactId: personId,
+      kind: "note",
+      body: "Secondary Place note.",
+      occurredAt: new Date("2026-07-28T15:00:00.000Z"),
+    })).resolves.toMatchObject({
+      ok: true,
+      value: {
+        organizationId: ids.organization,
+        contactId: personId,
+      },
+    });
+  });
+
+  postgresTest("rejects an activity for a Person with no active Place relationship", async () => {
+    const personId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    await sql!.unsafe(`
+      INSERT INTO contacts (id, organization_id, first_name, last_name)
+      VALUES ('${personId}', NULL, 'Inactive', 'Person');
+      INSERT INTO organization_contacts (
+        organization_id, contact_id, active, source
+      ) VALUES ('${ids.organization}', '${personId}', false, 'local');
+    `);
+
+    await expect(service.create({
+      organizationId: ids.organization,
+      contactId: personId,
+      kind: "note",
+      body: "Must not be stored.",
+      occurredAt: new Date("2026-07-28T15:00:00.000Z"),
+    })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "INVALID_ACTIVITY_INPUT" },
+    });
+  });
+
   postgresTest("returns missing without writing a revision or audit entry", async () => {
     await expect(
       service.edit({

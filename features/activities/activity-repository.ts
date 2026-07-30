@@ -1,11 +1,13 @@
-import { count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   activities,
   activityRevisions,
+  bookingContacts,
   bookings,
   contacts,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
@@ -166,16 +168,42 @@ export class DrizzleActivityRepository
           .limit(1)
           .for("update")
         : [];
+      const [placePerson] =
+        input.organizationId && input.contactId
+          ? await transaction
+            .select({ id: organizationContacts.id })
+            .from(organizationContacts)
+            .where(and(
+              eq(organizationContacts.organizationId, input.organizationId),
+              eq(organizationContacts.contactId, input.contactId),
+              eq(organizationContacts.active, true),
+            ))
+            .limit(1)
+            .for("share")
+          : [];
+      const [bookingPerson] =
+        input.bookingId && input.contactId
+          ? await transaction
+            .select({ id: bookingContacts.id })
+            .from(bookingContacts)
+            .where(and(
+              eq(bookingContacts.bookingId, input.bookingId),
+              eq(bookingContacts.contactId, input.contactId),
+            ))
+            .limit(1)
+            .for("share")
+          : [];
       if (
         (input.organizationId && !organization) ||
         (input.contactId && !contact) ||
-        (input.bookingId && !booking)
+        (input.bookingId && !booking) ||
+        (input.organizationId && input.contactId && !placePerson) ||
+        (input.bookingId && input.contactId && !bookingPerson)
       ) {
         throw new ActivityParentValidationError();
       }
       const organizationIds = [
         input.organizationId,
-        contact?.organizationId,
         booking?.organizationId,
       ].filter((id): id is string => Boolean(id));
       if (new Set(organizationIds).size > 1) {

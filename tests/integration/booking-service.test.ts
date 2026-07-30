@@ -593,6 +593,8 @@ describe("BookingService.createBooking", () => {
         kind: "call",
         dueAt: new Date("2026-07-28T15:00:00.000Z"),
       } : null,
+      hasActiveOrganizationContact: async () => false,
+      hasBookingContact: async () => false,
     };
 
     await expect(loadCallWorkspaceContext({

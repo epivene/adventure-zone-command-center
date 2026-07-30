@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   auditEntries,
+  bookingContacts,
   bookingPackageSelections,
   bookingResourceAssignments,
   bookingResourcePackageAttributions,
@@ -80,9 +81,17 @@ export type BookingDetail = {
   booking: typeof bookings.$inferSelect;
   organization: typeof organizations.$inferSelect | null;
   contact: typeof contacts.$inferSelect | null;
+  people: BookingPerson[];
   travelLeg: typeof travelLegs.$inferSelect | null;
   followUps: (typeof followUps.$inferSelect)[];
   auditEntries: (typeof auditEntries.$inferSelect)[];
+};
+
+export type BookingPerson = {
+  id: string;
+  name: string;
+  role: string | null;
+  isPrimary: boolean;
 };
 
 export type BookingPackageOption = {
@@ -347,11 +356,31 @@ export class DrizzleBookingRepository implements BookingRepository {
 
     if (!record) return null;
 
-    const bookingFollowUps = await this.database
-      .select()
-      .from(followUps)
-      .where(eq(followUps.bookingId, bookingId))
-      .orderBy(desc(followUps.dueAt));
+    const [bookingFollowUps, people] = await Promise.all([
+      this.database
+        .select()
+        .from(followUps)
+        .where(eq(followUps.bookingId, bookingId))
+        .orderBy(desc(followUps.dueAt)),
+      this.database
+        .select({
+          id: contacts.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          role: bookingContacts.role,
+          isPrimary: bookingContacts.isPrimary,
+        })
+        .from(bookingContacts)
+        .innerJoin(contacts, eq(bookingContacts.contactId, contacts.id))
+        .where(eq(bookingContacts.bookingId, bookingId))
+        .orderBy(
+          desc(bookingContacts.isPrimary),
+          asc(bookingContacts.role),
+          asc(contacts.lastName),
+          asc(contacts.firstName),
+          asc(contacts.id),
+        ),
+    ]);
     const followUpIds = bookingFollowUps.map((followUp) => followUp.id);
     const auditFilter =
       followUpIds.length > 0
@@ -377,6 +406,12 @@ export class DrizzleBookingRepository implements BookingRepository {
 
     return {
       ...record,
+      people: people.map((person) => ({
+        id: person.id,
+        name: `${person.firstName} ${person.lastName}`.trim(),
+        role: person.role,
+        isPrimary: person.isPrimary,
+      })),
       followUps: bookingFollowUps,
       auditEntries: history,
     };
