@@ -267,6 +267,16 @@ function compatibleName(
   return sourceName !== null && sourceName === localName;
 }
 
+function isResolvedParent(value: ActMigrationProposal | undefined) {
+  return Boolean(
+    value &&
+      (value.state === "new" ||
+        value.state === "matched_unchanged" ||
+        value.state === "change") &&
+      (value.issueCode === null || value.issueCode === "needs_person"),
+  );
+}
+
 export function buildMigrationProposals(input: {
   source: FinalizedSourceSnapshot;
   local: LocalMigrationCandidateSnapshot;
@@ -338,7 +348,7 @@ export function buildMigrationProposals(input: {
     personEligible.set(
       sourceId,
       record.normalizedSnapshot.personCandidate ||
-        Boolean(link && localPeople.has(link.entityId)),
+        Boolean(link),
     );
   }
 
@@ -391,6 +401,20 @@ export function buildMigrationProposals(input: {
       ...placeDisplay(merged),
       ...(ignoredContactEmail ? { ignoredContactEmail } : {}),
     };
+    if (merged.displayName === null) {
+      add(
+        proposal({
+          proposalKey: `organization:${company.sourceKey}`,
+          state: "needs_review",
+          targetEntityType: "organization",
+          sourceRecordKeys: sourceKeys,
+          matchReason: "company_name_missing",
+          issueCode: "source_record_error",
+          displaySnapshot: display,
+        }),
+      );
+      continue;
+    }
     const link = stableLink(input.local, "company", company.sourceId);
     if (link) {
       const localPlace = localPlaces.get(link.entityId);
@@ -477,7 +501,7 @@ export function buildMigrationProposals(input: {
       );
       continue;
     }
-    if (named.length > 1 || locationMatches.length > 1 || verifiedMatches.length > 1) {
+    if (named.length > 0 || locationMatches.length > 1 || verifiedMatches.length > 1) {
       add(
         proposal({
           proposalKey: `organization:${company.sourceKey}`,
@@ -485,7 +509,10 @@ export function buildMigrationProposals(input: {
           targetEntityType: "organization",
           sourceRecordKeys: sourceKeys,
           candidateLocalIds: named.map(({ id }) => id),
-          matchReason: "ambiguous_normalized_company_name",
+          matchReason:
+            named.length === 1
+              ? "same_name_without_corroboration"
+              : "ambiguous_normalized_company_name",
           issueCode: "ambiguous_place_match",
           displaySnapshot: display,
         }),
@@ -520,6 +547,14 @@ export function buildMigrationProposals(input: {
           contact.sourceKey,
           ...edges.map(({ sourceKey }) => sourceKey),
         ],
+        candidateLocalIds: input.local.places
+          .filter(
+            ({ normalizedName }) =>
+              contact.normalizedSnapshot.normalizedCompanyName !== null &&
+              normalizedName ===
+                contact.normalizedSnapshot.normalizedCompanyName,
+          )
+          .map(({ id }) => id),
         matchReason:
           edges.length === 0
             ? "company_only_contact_has_no_company"
@@ -562,6 +597,17 @@ export function buildMigrationProposals(input: {
         candidates: [link.entityId],
         issueCode: null,
         stable: true,
+      });
+      continue;
+    }
+    if (link) {
+      personMatches.push({
+        record: contact,
+        groupKey: `source:${contact.sourceId}`,
+        reason: "dangling_contact_link",
+        candidates: [],
+        issueCode: "orphaned_external_link",
+        stable: false,
       });
       continue;
     }
@@ -655,14 +701,24 @@ export function buildMigrationProposals(input: {
       continue;
     }
 
+    const phoneCollisions =
+      normalized.normalizedPhone === null
+        ? []
+        : input.local.people.filter(
+            ({ normalizedPhone }) =>
+              normalizedPhone === normalized.normalizedPhone,
+          );
     const ambiguous = [
       ...new Set(
-        [...compatibleEmailMatches, ...phoneMatches, ...placeMatches].map(
-          ({ id }) => id,
-        ),
+        [
+          ...compatible,
+          ...emailMatches,
+          ...phoneCollisions,
+          ...placeMatches,
+        ].map(({ id }) => id),
       ),
     ].toSorted();
-    if (ambiguous.length > 1) {
+    if (ambiguous.length > 0) {
       personMatches.push({
         record: contact,
         groupKey: `source:${contact.sourceId}`,
@@ -748,6 +804,7 @@ export function buildMigrationProposals(input: {
       const localPerson = localPeople.get(localId)!;
       const hasStable = stableMatches.length > 0;
       const hasTwoWay = twoWayMatches.length > 0;
+      const hasFirstTimeMember = sortedMatches.some(({ stable }) => !stable);
       const unchanged =
         !hasTwoWay ||
         sameValues(
@@ -759,9 +816,11 @@ export function buildMigrationProposals(input: {
         proposal({
           proposalKey: `contact:${sortedMatches[0]!.record.sourceKey}`,
           state: hasStable
-            ? unchanged
-              ? "matched_unchanged"
-              : "change"
+            ? hasFirstTimeMember
+              ? "possible_duplicate"
+              : unchanged
+                ? "matched_unchanged"
+                : "change"
             : "possible_duplicate",
           targetEntityType: "contact",
           sourceRecordKeys: sortedMatches.map(({ record }) => record.sourceKey),
@@ -773,11 +832,14 @@ export function buildMigrationProposals(input: {
               : consolidation
                 ? null
                 : sourceIds[0]!,
-          matchReason: hasTwoWay
-            ? "stable_contact_link"
+          matchReason:
+            hasStable && hasFirstTimeMember
+              ? "stable_contact_consolidation"
+              : hasTwoWay
+                ? "stable_contact_link"
             : hasStable
               ? "stable_contact_alias"
-            : authoritative.reason,
+              : authoritative.reason,
           displaySnapshot: display,
         }),
       );
@@ -841,7 +903,8 @@ export function buildMigrationProposals(input: {
               contactId === personParent.proposedLocalId,
           )
         : undefined;
-    const unresolved = !placeParent || !personParent;
+    const unresolved =
+      !isResolvedParent(placeParent) || !isResolvedParent(personParent);
     add(
       proposal({
         proposalKey: `organization_contact:${first.sourceKey}`,
@@ -901,10 +964,7 @@ export function buildMigrationProposals(input: {
       issueCode = "opportunity_place_ambiguous";
     } else if (!parentCompany || !parentProposal) {
       issueCode = "opportunity_place_errored";
-    } else if (
-      parentProposal.state === "needs_review" ||
-      parentProposal.state === "possible_duplicate"
-    ) {
+    } else if (!isResolvedParent(parentProposal)) {
       issueCode = "opportunity_place_ambiguous";
     } else if (
       !parentProposal.displaySnapshot.city ||
@@ -914,6 +974,8 @@ export function buildMigrationProposals(input: {
     }
 
     const normalized = opportunity.normalizedSnapshot;
+    const missingOpportunityName = normalized.displayName === null;
+    if (missingOpportunityName) issueCode = "source_record_error";
     const display: DisplaySnapshot = {
       name: normalized.displayName,
       organizationId: parentProposal?.proposedLocalId ?? null,
@@ -968,7 +1030,9 @@ export function buildMigrationProposals(input: {
           state: "needs_review",
           targetEntityType: "booking",
           sourceRecordKeys: sourceKeys,
-          matchReason: issueCode,
+          matchReason: missingOpportunityName
+            ? "opportunity_name_missing"
+            : issueCode,
           issueCode,
           dependencyProposalKeys: dependencyKeys,
           displaySnapshot: display,
@@ -982,10 +1046,10 @@ export function buildMigrationProposals(input: {
     );
     const hasResolvedPerson = personEdges.some((edge) => {
       const contact = contacts.get(edge.targetSourceId ?? "");
-      return Boolean(
-        contact && proposalBySourceKey.get(contact.sourceKey)?.targetEntityType ===
-          "contact",
-      );
+      const parent = contact
+        ? proposalBySourceKey.get(contact.sourceKey)
+        : undefined;
+      return parent?.targetEntityType === "contact" && isResolvedParent(parent);
     });
     const link = stableLink(input.local, "opportunity", opportunity.sourceId);
     if (link) {
@@ -1007,6 +1071,8 @@ export function buildMigrationProposals(input: {
       }
       const unchanged =
         normalizeMatchingText(booking.name) === normalized.normalizedName &&
+        parentProposal?.proposedLocalId !== null &&
+        booking.organizationId === parentProposal?.proposedLocalId &&
         normalizeMatchingText(booking.address1) ===
           normalizeMatchingText(display.address1 as string | null) &&
         normalizeMatchingText(booking.city) ===
@@ -1088,12 +1154,7 @@ export function buildMigrationProposals(input: {
           )
         : undefined;
     const unresolved =
-      !bookingParent ||
-      !personParent ||
-      bookingParent.issueCode === "opportunity_place_missing" ||
-      bookingParent.issueCode === "opportunity_place_ambiguous" ||
-      bookingParent.issueCode === "opportunity_place_errored" ||
-      bookingParent.issueCode === "opportunity_place_location_incomplete";
+      !isResolvedParent(bookingParent) || !isResolvedParent(personParent);
     add(
       proposal({
         proposalKey: `booking_contact:${first.sourceKey}`,
@@ -1146,6 +1207,14 @@ export function buildMigrationProposals(input: {
     );
   }
   for (const edge of groupContactEdges) {
+    const groupParent = groups.get(edge.sourceId)
+      ? proposalBySourceKey.get(groups.get(edge.sourceId)!.sourceKey)
+      : undefined;
+    const contactParent = contacts.get(edge.targetSourceId ?? "")
+      ? proposalBySourceKey.get(
+          contacts.get(edge.targetSourceId ?? "")!.sourceKey,
+        )
+      : undefined;
     add(
       proposal({
         proposalKey: `calling_list_member:${edge.sourceKey}`,
@@ -1154,14 +1223,9 @@ export function buildMigrationProposals(input: {
         sourceRecordKeys: [edge.sourceKey],
         matchReason: "group_membership_semantics_unknown",
         issueCode: "group_membership_semantics_unknown",
-        dependencyProposalKeys: [
-          ...(groups.get(edge.sourceId)
-            ? [
-                proposalBySourceKey.get(groups.get(edge.sourceId)!.sourceKey)
-                  ?.proposalKey,
-              ]
-            : []),
-        ].filter((value): value is string => Boolean(value)),
+        dependencyProposalKeys: [groupParent, contactParent].flatMap((value) =>
+          value ? [value.proposalKey] : [],
+        ),
         displaySnapshot: {
           groupSourceId: edge.sourceId,
           contactSourceId: edge.targetSourceId,

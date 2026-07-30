@@ -20,6 +20,7 @@ import {
 } from "@/db/schema";
 import {
   actSourceEntityTypeValues,
+  migrationStreamRank,
   type ActMigrationCheckpointStatus,
   type ActMigrationRunStatus,
   type ActMigrationStreamType,
@@ -179,17 +180,27 @@ function recordStreamOrder(column: typeof actMigrationRecords.streamType) {
     else 8 end`;
 }
 
-function sourceDigest(records: readonly StagedSourceItem[]) {
+export function sourceSnapshotDigest(records: readonly StagedSourceItem[]) {
   return createHash("sha256")
-    .update(JSON.stringify(records.map((record) => ({
-      streamType: record.streamType,
-      sourceKey: record.sourceKey,
-      sourceId: record.sourceId,
-      targetSourceId: record.targetSourceId,
-      fingerprint: record.fingerprint,
-      errorCode: record.errorCode,
-      errorFields: record.errorFields,
-    }))))
+    .update(JSON.stringify(
+      records
+        .toSorted(
+          (left, right) =>
+            migrationStreamRank(left.streamType) -
+              migrationStreamRank(right.streamType) ||
+            left.sourceKey.localeCompare(right.sourceKey) ||
+            left.fingerprint.localeCompare(right.fingerprint),
+        )
+        .map((record) => ({
+          streamType: record.streamType,
+          sourceKey: record.sourceKey,
+          sourceId: record.sourceId,
+          targetSourceId: record.targetSourceId,
+          fingerprint: record.fingerprint,
+          errorCode: record.errorCode,
+          errorFields: record.errorFields,
+        })),
+    ))
     .digest("hex");
 }
 
@@ -803,7 +814,7 @@ export class DrizzleActMigrationSnapshotRepository
 
       const records = storedRecords.map(stagedRecordValue);
       const checkpoints = storedCheckpoints.map(checkpointValue);
-      const digest = sourceDigest(records);
+      const digest = sourceSnapshotDigest(records);
       if (run.status === "snapshotting") {
         const completedAt = run.snapshotCompletedAt ?? new Date();
         await transaction

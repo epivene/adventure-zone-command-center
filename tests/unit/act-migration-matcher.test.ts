@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
 
+import {
+  allowedDecisionsForProposal,
+  type LocalBookingCandidate,
+  type LocalPersonCandidate,
+  type LocalPlaceCandidate,
+} from "@/features/act-migration/migration-types";
 import type {
   ActMigrationProposal,
   LocalMigrationCandidateSnapshot,
@@ -19,6 +25,75 @@ const emptyLocal: LocalMigrationCandidateSnapshot = {
   bookingPeople: [],
   externalLinks: [],
 };
+
+function localPlace(
+  input: Pick<LocalPlaceCandidate, "id" | "name" | "normalizedName"> &
+    Partial<LocalPlaceCandidate>,
+): LocalPlaceCandidate {
+  return {
+    placeType: "other",
+    actIndustry: null,
+    phone: null,
+    normalizedPhone: null,
+    address1: null,
+    address2: null,
+    city: null,
+    region: null,
+    normalizedCity: null,
+    normalizedRegion: null,
+    postalCode: null,
+    website: null,
+    normalizedWebsiteHost: null,
+    ...input,
+  };
+}
+
+function localPerson(
+  input: Pick<
+    LocalPersonCandidate,
+    "id" | "displayName" | "normalizedName"
+  > &
+    Partial<LocalPersonCandidate>,
+): LocalPersonCandidate {
+  const [firstName = "", ...lastNameParts] = input.displayName.split(" ");
+  return {
+    firstName,
+    lastName: lastNameParts.join(" "),
+    email: null,
+    normalizedEmail: null,
+    sharedEmail: false,
+    phone: null,
+    normalizedPhone: null,
+    jobTitle: null,
+    address1: null,
+    address2: null,
+    city: null,
+    region: null,
+    postalCode: null,
+    ...input,
+  };
+}
+
+function localBooking(
+  input: Pick<LocalBookingCandidate, "id" | "name"> &
+    Partial<LocalBookingCandidate>,
+): LocalBookingCandidate {
+  return {
+    organizationId: null,
+    primaryContactId: null,
+    venueName: null,
+    address1: null,
+    city: "Denver",
+    region: "CO",
+    postalCode: null,
+    startsAt: null,
+    endsAt: null,
+    status: "new_lead",
+    probability: "possible",
+    notes: null,
+    ...input,
+  };
+}
 
 function staged(
   streamType: Parameters<typeof parseSourceItem>[0],
@@ -740,6 +815,436 @@ describe("buildMigrationProposals", () => {
         isPrimary: false,
         role: null,
       },
+    });
+  });
+
+  it("surfaces unsupported same-name and incompatible-name identity collisions", () => {
+    const records = [
+      staged("company", { id: "COMPANY-SAME-NAME", name: "Same Place" }),
+      staged("contact", {
+        id: "CONTACT-SAME-NAME",
+        fullName: "Avery Person",
+      }),
+      staged("contact", {
+        id: "CONTACT-EMAIL-COLLISION",
+        fullName: "Different Person",
+        emailAddress: "avery@example.com",
+      }),
+    ];
+    const local: LocalMigrationCandidateSnapshot = {
+      ...emptyLocal,
+      places: [
+        localPlace({
+          id: "place-1",
+          name: "Same Place",
+          normalizedName: "same place",
+        }),
+      ],
+      people: [
+        localPerson({
+          id: "person-1",
+          displayName: "Avery Person",
+          normalizedName: "avery person",
+          email: "avery@example.com",
+          normalizedEmail: "avery@example.com",
+        }),
+      ],
+    };
+
+    const proposals = buildMigrationProposals({ source: source(records), local });
+
+    expect(proposal(proposals, "company:COMPANY-SAME-NAME")).toMatchObject({
+      state: "needs_review",
+      issueCode: "ambiguous_place_match",
+      candidateLocalIds: ["place-1"],
+      proposedLocalId: null,
+    });
+    expect(proposal(proposals, "contact:CONTACT-SAME-NAME")).toMatchObject({
+      state: "needs_review",
+      issueCode: "ambiguous_person_match",
+      candidateLocalIds: ["person-1"],
+      proposedLocalId: null,
+    });
+    expect(
+      proposal(proposals, "contact:CONTACT-EMAIL-COLLISION"),
+    ).toMatchObject({
+      state: "needs_review",
+      issueCode: "ambiguous_person_match",
+      candidateLocalIds: ["person-1"],
+      proposedLocalId: null,
+    });
+  });
+
+  it("requires review when a stable Person absorbs a first-time Contact", () => {
+    const records = [
+      staged("contact", {
+        id: "CONTACT-PRIMARY",
+        fullName: "Avery Person",
+        emailAddress: "avery@example.com",
+      }),
+      staged("contact", {
+        id: "CONTACT-FIRST-TIME",
+        fullName: "Avery Person",
+        emailAddress: "avery@example.com",
+      }),
+    ];
+    const local: LocalMigrationCandidateSnapshot = {
+      ...emptyLocal,
+      people: [
+        localPerson({
+          id: "person-1",
+          displayName: "Avery Person",
+          normalizedName: "avery person",
+          email: "avery@example.com",
+          normalizedEmail: "avery@example.com",
+        }),
+      ],
+      externalLinks: [
+        {
+          entityType: "contact",
+          entityId: "person-1",
+          sourceEntityType: "contact",
+          actRecordId: "CONTACT-PRIMARY",
+          isPrimary: true,
+          syncMode: "two_way",
+        },
+      ],
+    };
+
+    expect(
+      proposal(
+        buildMigrationProposals({ source: source(records), local }),
+        "contact:CONTACT-PRIMARY",
+      ),
+    ).toMatchObject({
+      state: "possible_duplicate",
+      reviewState: "pending",
+      proposedLocalId: "person-1",
+      proposedPrimarySourceId: "CONTACT-PRIMARY",
+      matchReason: "stable_contact_consolidation",
+    });
+  });
+
+  it("blocks a dangling Contact link instead of falling back to heuristics", () => {
+    const record = staged("contact", {
+      id: "CONTACT-DANGLING",
+      fullName: "Avery Person",
+    });
+    const local: LocalMigrationCandidateSnapshot = {
+      ...emptyLocal,
+      externalLinks: [
+        {
+          entityType: "contact",
+          entityId: "missing-person",
+          sourceEntityType: "contact",
+          actRecordId: "CONTACT-DANGLING",
+          isPrimary: true,
+          syncMode: "two_way",
+        },
+      ],
+    };
+
+    expect(
+      proposal(
+        buildMigrationProposals({ source: source([record]), local }),
+        record.sourceKey,
+      ),
+    ).toMatchObject({
+      state: "needs_review",
+      targetEntityType: "contact",
+      issueCode: "orphaned_external_link",
+      candidateLocalIds: [],
+      proposedLocalId: null,
+    });
+  });
+
+  it("waits for pending parents and records both Group-member dependencies", () => {
+    const records = [
+      staged("company", {
+        id: "COMPANY-PENDING",
+        name: "Pending Place",
+        address: { city: "Denver", state: "CO" },
+      }),
+      staged("company", {
+        id: "COMPANY-STABLE",
+        name: "Stable Place",
+        address: { city: "Denver", state: "CO" },
+      }),
+      staged("contact", {
+        id: "CONTACT-STABLE",
+        fullName: "Stable Person",
+      }),
+      staged("contact", {
+        id: "CONTACT-PENDING",
+        fullName: "Pending Person",
+        emailAddress: "pending@example.com",
+      }),
+      staged("company_contact", {
+        sourceId: "COMPANY-PENDING",
+        targetSourceId: "CONTACT-STABLE",
+      }),
+      staged("opportunity", {
+        id: "OPPORTUNITY-1",
+        name: "Event",
+      }),
+      staged("opportunity_company", {
+        sourceId: "OPPORTUNITY-1",
+        targetSourceId: "COMPANY-STABLE",
+      }),
+      staged("opportunity_contact", {
+        sourceId: "OPPORTUNITY-1",
+        targetSourceId: "CONTACT-PENDING",
+      }),
+      staged("group", { id: "GROUP-1", name: "Legacy" }),
+      staged("group_contact", {
+        sourceId: "GROUP-1",
+        targetSourceId: "CONTACT-PENDING",
+      }),
+    ];
+    const local: LocalMigrationCandidateSnapshot = {
+      ...emptyLocal,
+      places: [
+        localPlace({
+          id: "place-pending",
+          name: "Pending Place",
+          normalizedName: "pending place",
+          city: "Denver",
+          region: "CO",
+          normalizedCity: "denver",
+          normalizedRegion: "co",
+        }),
+        localPlace({
+          id: "place-stable",
+          name: "Stable Place",
+          normalizedName: "stable place",
+          city: "Denver",
+          region: "CO",
+          normalizedCity: "denver",
+          normalizedRegion: "co",
+        }),
+      ],
+      people: [
+        localPerson({
+          id: "person-stable",
+          displayName: "Stable Person",
+          normalizedName: "stable person",
+        }),
+        localPerson({
+          id: "person-pending",
+          displayName: "Pending Person",
+          normalizedName: "pending person",
+          email: "pending@example.com",
+          normalizedEmail: "pending@example.com",
+        }),
+      ],
+      placePeople: [
+        {
+          organizationId: "place-pending",
+          contactId: "person-stable",
+          active: true,
+          isPrimary: false,
+          role: null,
+          source: "local",
+        },
+      ],
+      externalLinks: [
+        {
+          entityType: "organization",
+          entityId: "place-stable",
+          sourceEntityType: "company",
+          actRecordId: "COMPANY-STABLE",
+          isPrimary: false,
+          syncMode: "pull_only",
+        },
+        {
+          entityType: "contact",
+          entityId: "person-stable",
+          sourceEntityType: "contact",
+          actRecordId: "CONTACT-STABLE",
+          isPrimary: true,
+          syncMode: "two_way",
+        },
+      ],
+    };
+
+    const proposals = buildMigrationProposals({ source: source(records), local });
+    expect(
+      proposal(proposals, "company_contact:COMPANY-PENDING:CONTACT-STABLE"),
+    ).toMatchObject({
+      state: "needs_review",
+      issueCode: "parent_proposal_unresolved",
+    });
+    expect(
+      proposal(proposals, "opportunity_contact:OPPORTUNITY-1:CONTACT-PENDING"),
+    ).toMatchObject({
+      state: "needs_review",
+      issueCode: "parent_proposal_unresolved",
+    });
+    const groupMember = proposal(
+      proposals,
+      "group_contact:GROUP-1:CONTACT-PENDING",
+    );
+    expect(groupMember.dependencyProposalKeys).toHaveLength(2);
+    expect(groupMember.dependencyProposalKeys).toEqual(
+      expect.arrayContaining([
+        proposal(proposals, "group:GROUP-1").proposalKey,
+        proposal(proposals, "contact:CONTACT-PENDING").proposalKey,
+      ]),
+    );
+  });
+
+  it("blocks Company and Opportunity proposals with missing required names", () => {
+    const records = [
+      staged("company", { id: "COMPANY-NAMELESS" }),
+      staged("company", {
+        id: "COMPANY-PARENT",
+        name: "Parent Place",
+        address: { city: "Denver", state: "CO" },
+      }),
+      staged("opportunity", { id: "OPPORTUNITY-NAMELESS" }),
+      staged("opportunity_company", {
+        sourceId: "OPPORTUNITY-NAMELESS",
+        targetSourceId: "COMPANY-PARENT",
+      }),
+    ];
+
+    const proposals = buildMigrationProposals({
+      source: source(records),
+      local: emptyLocal,
+    });
+    expect(proposal(proposals, "company:COMPANY-NAMELESS")).toMatchObject({
+      state: "needs_review",
+      issueCode: "source_record_error",
+      matchReason: "company_name_missing",
+    });
+    expect(
+      proposal(proposals, "opportunity:OPPORTUNITY-NAMELESS"),
+    ).toMatchObject({
+      state: "needs_review",
+      issueCode: "source_record_error",
+      matchReason: "opportunity_name_missing",
+    });
+  });
+
+  it("offers exact Company-name Place candidates for unresolved company-only Contacts", () => {
+    const records = [
+      staged("contact", {
+        id: "CONTACT-CANDIDATE",
+        fullName: "Info",
+        company: "Exact Place",
+      }),
+      staged("contact", {
+        id: "CONTACT-NO-CANDIDATE",
+        fullName: "Info",
+        company: "Missing Place",
+      }),
+    ];
+    const local: LocalMigrationCandidateSnapshot = {
+      ...emptyLocal,
+      places: [
+        localPlace({
+          id: "place-1",
+          name: "Exact Place",
+          normalizedName: "exact place",
+        }),
+      ],
+    };
+
+    const proposals = buildMigrationProposals({ source: source(records), local });
+    const candidate = proposal(proposals, "contact:CONTACT-CANDIDATE");
+    expect(candidate).toMatchObject({
+      state: "needs_review",
+      targetEntityType: "organization",
+      issueCode: "company_only_contact_unresolved",
+      candidateLocalIds: ["place-1"],
+    });
+    expect(allowedDecisionsForProposal(candidate)).toEqual([
+      "link_existing",
+      "ignore",
+    ]);
+
+    const noCandidate = proposal(
+      proposals,
+      "contact:CONTACT-NO-CANDIDATE",
+    );
+    expect(noCandidate.candidateLocalIds).toEqual([]);
+    expect(allowedDecisionsForProposal(noCandidate)).toEqual(["ignore"]);
+  });
+
+  it("changes a stable Booking when its resolved Place identity differs", () => {
+    const records = [
+      staged("company", {
+        id: "COMPANY-1",
+        name: "Source Place",
+        address: { city: "Denver", state: "CO" },
+      }),
+      staged("opportunity", {
+        id: "OPPORTUNITY-1",
+        name: "Annual Event",
+      }),
+      staged("opportunity_company", {
+        sourceId: "OPPORTUNITY-1",
+        targetSourceId: "COMPANY-1",
+      }),
+    ];
+    const local: LocalMigrationCandidateSnapshot = {
+      ...emptyLocal,
+      places: [
+        localPlace({
+          id: "place-source",
+          name: "Source Place",
+          normalizedName: "source place",
+          city: "Denver",
+          region: "CO",
+          normalizedCity: "denver",
+          normalizedRegion: "co",
+        }),
+        localPlace({
+          id: "place-wrong",
+          name: "Wrong Place",
+          normalizedName: "wrong place",
+          city: "Denver",
+          region: "CO",
+          normalizedCity: "denver",
+          normalizedRegion: "co",
+        }),
+      ],
+      bookings: [
+        localBooking({
+          id: "booking-1",
+          organizationId: "place-wrong",
+          name: "Annual Event",
+        }),
+      ],
+      externalLinks: [
+        {
+          entityType: "organization",
+          entityId: "place-source",
+          sourceEntityType: "company",
+          actRecordId: "COMPANY-1",
+          isPrimary: false,
+          syncMode: "pull_only",
+        },
+        {
+          entityType: "booking",
+          entityId: "booking-1",
+          sourceEntityType: "opportunity",
+          actRecordId: "OPPORTUNITY-1",
+          isPrimary: false,
+          syncMode: "pull_only",
+        },
+      ],
+    };
+
+    expect(
+      proposal(
+        buildMigrationProposals({ source: source(records), local }),
+        "opportunity:OPPORTUNITY-1",
+      ),
+    ).toMatchObject({
+      state: "change",
+      proposedLocalId: "booking-1",
+      matchReason: "stable_opportunity_link",
     });
   });
 

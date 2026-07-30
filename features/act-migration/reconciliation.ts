@@ -9,7 +9,10 @@ import {
   type ActSourceEntityType,
   type MigrationPreviewState,
 } from "@/features/act-migration/migration-types";
-import type { FinalizedSourceSnapshot } from "@/features/act-migration/snapshot-repository";
+import {
+  sourceSnapshotDigest,
+  type FinalizedSourceSnapshot,
+} from "@/features/act-migration/snapshot-repository";
 
 export type MigrationReconciliationReport = {
   sourceCounts: Record<ActSourceEntityType, number>;
@@ -55,26 +58,6 @@ function countValues<T extends string>(
   ) as Record<T, number>;
 }
 
-function canonicalSource(source: FinalizedSourceSnapshot) {
-  return source.records
-    .map((record) => ({
-      streamType: record.streamType,
-      sourceKey: record.sourceKey,
-      sourceId: record.sourceId,
-      targetSourceId: record.targetSourceId,
-      rawSnapshot: canonicalValue(record.rawSnapshot),
-      normalizedSnapshot: canonicalValue(record.normalizedSnapshot),
-      fingerprint: record.fingerprint,
-      errorCode: record.errorCode,
-      errorFields: [...record.errorFields].toSorted(),
-    }))
-    .toSorted((left, right) => {
-      const leftIdentity = `${left.streamType}\0${left.sourceKey}\0${left.fingerprint}`;
-      const rightIdentity = `${right.streamType}\0${right.sourceKey}\0${right.fingerprint}`;
-      return leftIdentity.localeCompare(rightIdentity);
-    });
-}
-
 function canonicalProposals(proposals: readonly ActMigrationProposal[]) {
   return proposals
     .map((value) => ({
@@ -101,6 +84,13 @@ export function reconcileMigrationPreview(input: {
   source: FinalizedSourceSnapshot;
   proposals: readonly ActMigrationProposal[];
 }): MigrationReconciliationReport {
+  if (
+    sourceSnapshotDigest(input.source.records) !== input.source.sourceDigest
+  ) {
+    throw new Error(
+      "Act migration source digest does not match the finalized snapshot.",
+    );
+  }
   const validRecords = input.source.records.filter(
     ({ errorCode }) => errorCode === null,
   );
@@ -115,78 +105,101 @@ export function reconcileMigrationPreview(input: {
     )
     .map(({ streamType }) => streamType);
 
-  const companyIds = new Set(
-    validRecords
-      .filter(({ streamType, sourceId }) => streamType === "company" && sourceId)
-      .map(({ sourceId }) => sourceId!),
+  const readyProposal = (value: ActMigrationProposal | undefined) =>
+    Boolean(
+      value &&
+        (value.state === "new" ||
+          value.state === "matched_unchanged" ||
+          value.state === "change") &&
+        (value.issueCode === null || value.issueCode === "needs_person"),
+    );
+  const resolvedPlaces = input.proposals.filter(
+    (value) =>
+      value.targetEntityType === "organization" && readyProposal(value),
   );
-  const contactIds = new Set(
-    validRecords
-      .filter(({ streamType, sourceId }) => streamType === "contact" && sourceId)
-      .map(({ sourceId }) => sourceId!),
+  const resolvedPeople = input.proposals.filter(
+    (value) => value.targetEntityType === "contact" && readyProposal(value),
   );
-  const opportunityIds = new Set(
-    validRecords
-      .filter(
-        ({ streamType, sourceId }) =>
-          streamType === "opportunity" && sourceId,
+  const resolvedPlaceKeys = new Set(
+    resolvedPlaces.map(({ proposalKey }) => proposalKey),
+  );
+  const resolvedPersonKeys = new Set(
+    resolvedPeople.map(({ proposalKey }) => proposalKey),
+  );
+  const resolvedPlacePersonRelationships = input.proposals.flatMap((value) => {
+    if (
+      value.targetEntityType !== "organization_contact" ||
+      value.issueCode !== null ||
+      !(
+        value.state === "new_relationship" ||
+        value.state === "matched_unchanged" ||
+        value.state === "change"
       )
-      .map(({ sourceId }) => sourceId!),
-  );
-  const companyContactEdges = validRecords.filter(
-    ({ streamType, sourceId, targetSourceId }) =>
-      streamType === "company_contact" &&
-      sourceId !== null &&
-      targetSourceId !== null,
-  );
-  const opportunityCompanyEdges = validRecords.filter(
-    ({ streamType, sourceId, targetSourceId }) =>
-      streamType === "opportunity_company" &&
-      sourceId !== null &&
-      targetSourceId !== null,
-  );
-  const opportunityContactEdges = validRecords.filter(
-    ({ streamType, sourceId, targetSourceId }) =>
-      streamType === "opportunity_contact" &&
-      sourceId !== null &&
-      targetSourceId !== null,
-  );
-
-  const companiesWithPeople = new Set(
-    companyContactEdges
-      .filter(
-        ({ sourceId, targetSourceId }) =>
-          companyIds.has(sourceId!) && contactIds.has(targetSourceId!),
-      )
-      .map(({ sourceId }) => sourceId!),
+    ) {
+      return [];
+    }
+    const placeKey = value.dependencyProposalKeys.find((key) =>
+      resolvedPlaceKeys.has(key),
+    );
+    const personKey = value.dependencyProposalKeys.find((key) =>
+      resolvedPersonKeys.has(key),
+    );
+    return placeKey && personKey ? [{ placeKey, personKey }] : [];
+  });
+  const placesWithPeople = new Set(
+    resolvedPlacePersonRelationships.map(({ placeKey }) => placeKey),
   );
   const placesByPerson = new Map<string, Set<string>>();
-  for (const edge of companyContactEdges) {
-    if (
-      !companyIds.has(edge.sourceId!) ||
-      !contactIds.has(edge.targetSourceId!)
-    ) {
-      continue;
-    }
-    const places = placesByPerson.get(edge.targetSourceId!) ?? new Set<string>();
-    places.add(edge.sourceId!);
-    placesByPerson.set(edge.targetSourceId!, places);
+  for (const { placeKey, personKey } of resolvedPlacePersonRelationships) {
+    const places = placesByPerson.get(personKey) ?? new Set<string>();
+    places.add(placeKey);
+    placesByPerson.set(personKey, places);
   }
-  const opportunitiesWithPlace = new Set(
-    opportunityCompanyEdges
-      .filter(
-        ({ sourceId, targetSourceId }) =>
-          opportunityIds.has(sourceId!) && companyIds.has(targetSourceId!),
-      )
-      .map(({ sourceId }) => sourceId!),
+
+  const opportunityRecords = validRecords.filter(
+    ({ streamType, sourceId }) =>
+      streamType === "opportunity" && sourceId !== null,
   );
-  const opportunitiesWithPerson = new Set(
-    opportunityContactEdges
-      .filter(
-        ({ sourceId, targetSourceId }) =>
-          opportunityIds.has(sourceId!) && contactIds.has(targetSourceId!),
-      )
-      .map(({ sourceId }) => sourceId!),
+  const proposalBySourceKey = new Map<string, ActMigrationProposal>();
+  for (const value of input.proposals) {
+    for (const sourceKey of value.sourceRecordKeys) {
+      proposalBySourceKey.set(sourceKey, value);
+    }
+  }
+  const opportunityBookings = opportunityRecords.map((record) => ({
+    record,
+    proposal: proposalBySourceKey.get(record.sourceKey),
+  }));
+  const reliableOpportunityBookings = new Set(
+    opportunityBookings.flatMap(({ proposal: value }) =>
+      value &&
+      value.targetEntityType === "booking" &&
+      readyProposal(value) &&
+      value.dependencyProposalKeys.some((key) => resolvedPlaceKeys.has(key))
+        ? [value.proposalKey]
+        : [],
+    ),
+  );
+  const reliableBookingPeople = new Set(
+    input.proposals.flatMap((value) => {
+      if (
+        value.targetEntityType !== "booking_contact" ||
+        value.issueCode !== null ||
+        !(
+          value.state === "new_relationship" ||
+          value.state === "matched_unchanged" ||
+          value.state === "change"
+        ) ||
+        !value.dependencyProposalKeys.some((key) =>
+          resolvedPersonKeys.has(key),
+        )
+      ) {
+        return [];
+      }
+      return value.dependencyProposalKeys.filter((key) =>
+        reliableOpportunityBookings.has(key),
+      );
+    }),
   );
 
   const ownershipCounts = new Map<string, number>();
@@ -239,24 +252,26 @@ export function reconcileMigrationPreview(input: {
       migrationPreviewStateValues,
       input.proposals.map(({ state }) => state),
     ),
-    placesWithoutPeople: [...companyIds].filter(
-      (sourceId) => !companiesWithPeople.has(sourceId),
+    placesWithoutPeople: resolvedPlaces.filter(
+      ({ proposalKey }) => !placesWithPeople.has(proposalKey),
     ).length,
     multiPlacePeople: [...placesByPerson.values()].filter(
       (places) => places.size > 1,
     ).length,
-    opportunitiesWithoutPlace: [...opportunityIds].filter(
-      (sourceId) => !opportunitiesWithPlace.has(sourceId),
+    opportunitiesWithoutPlace: opportunityBookings.filter(
+      ({ proposal: value }) =>
+        !value || !reliableOpportunityBookings.has(value.proposalKey),
     ).length,
-    opportunitiesWithoutPerson: [...opportunityIds].filter(
-      (sourceId) => !opportunitiesWithPerson.has(sourceId),
+    opportunitiesWithoutPerson: opportunityBookings.filter(
+      ({ proposal: value }) =>
+        !value || !reliableBookingPeople.has(value.proposalKey),
     ).length,
     duplicateSourceIdConflicts: input.source.records.filter(
       ({ errorCode }) => errorCode === "duplicate_source_id_conflict",
     ).length,
     incompleteCheckpoints,
     failedCheckpoints,
-    sourceDigest: digest(canonicalSource(input.source)),
+    sourceDigest: input.source.sourceDigest,
     proposalDigest: digest(canonicalProposals(input.proposals)),
     complete:
       input.source.checkpoints.length > 0 &&
