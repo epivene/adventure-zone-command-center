@@ -99,72 +99,54 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  actMigrationRunStatusValues,
-  actMigrationStreamTypeValues,
-  migrationDecisionValues,
-  migrationPreviewStateValues,
-  migrationReviewStateValues,
-  migrationTargetEntityTypeValues,
+  allowedDecisionsForPreviewState,
+  isMigrationDecision,
+  isMigrationTargetEntityType,
+  migrationStreamRank,
   relationshipSourceKey,
   sourceRecordKey,
+  type ActMigrationStreamType,
 } from "@/features/act-migration/migration-types";
 
 describe("Act migration contracts", () => {
-  it("keeps the approved root and relationship streams in dependency order", () => {
-    expect(actMigrationStreamTypeValues).toEqual([
-      "company",
-      "contact",
+  it("orders root entities before relationship streams", () => {
+    const streams: ActMigrationStreamType[] = [
+      "group_contact",
       "opportunity",
-      "group",
       "company_contact",
-      "opportunity_company",
-      "opportunity_contact",
+      "company",
+    ];
+    expect(
+      streams.toSorted(
+        (left, right) =>
+          migrationStreamRank(left) - migrationStreamRank(right),
+      ),
+    ).toEqual([
+      "company",
+      "opportunity",
+      "company_contact",
       "group_contact",
     ]);
   });
 
-  it("uses the approved visible preview states and review decisions", () => {
-    expect(migrationPreviewStateValues).toEqual([
-      "new",
-      "matched_unchanged",
-      "change",
-      "new_relationship",
-      "possible_duplicate",
-      "needs_review",
-      "ignored",
-      "error",
-    ]);
-    expect(migrationDecisionValues).toEqual([
+  it("allows only decisions that can resolve the visible preview state", () => {
+    expect(allowedDecisionsForPreviewState("new")).toEqual([
       "approve_proposed",
+      "ignore",
+    ]);
+    expect(allowedDecisionsForPreviewState("matched_unchanged")).toEqual([]);
+    expect(allowedDecisionsForPreviewState("possible_duplicate")).toEqual([
       "link_existing",
       "keep_separate",
       "ignore",
     ]);
-    expect(migrationReviewStateValues).toEqual([
-      "not_required",
-      "pending",
-      "decided",
-      "ignored",
-    ]);
-    expect(migrationTargetEntityTypeValues).toEqual([
-      "organization",
-      "contact",
-      "booking",
-      "organization_contact",
-      "booking_contact",
-      "calling_list",
-      "calling_list_member",
-    ]);
   });
 
-  it("allows only snapshot and preview states in this read-only slice", () => {
-    expect(actMigrationRunStatusValues).toEqual([
-      "snapshotting",
-      "snapshot_complete",
-      "matching",
-      "previewed",
-      "failed",
-    ]);
+  it("validates decisions and local proposal targets at runtime", () => {
+    expect(isMigrationDecision("link_existing")).toBe(true);
+    expect(isMigrationDecision("apply_now")).toBe(false);
+    expect(isMigrationTargetEntityType("booking_contact")).toBe(true);
+    expect(isMigrationTargetEntityType("company")).toBe(false);
   });
 
   it("builds deterministic entity and relationship keys", () => {
@@ -285,6 +267,48 @@ export const migrationTargetEntityTypeValues = [
 ] as const;
 export type MigrationTargetEntityType =
   (typeof migrationTargetEntityTypeValues)[number];
+
+const decisionsByPreviewState: Record<
+  MigrationPreviewState,
+  readonly MigrationDecision[]
+> = {
+  new: ["approve_proposed", "ignore"],
+  matched_unchanged: [],
+  change: ["approve_proposed", "ignore"],
+  new_relationship: ["approve_proposed", "ignore"],
+  possible_duplicate: ["link_existing", "keep_separate", "ignore"],
+  needs_review: ["link_existing", "keep_separate", "ignore"],
+  ignored: [],
+  error: [],
+};
+
+export function migrationStreamRank(stream: ActMigrationStreamType) {
+  return actMigrationStreamTypeValues.indexOf(stream);
+}
+
+export function allowedDecisionsForPreviewState(
+  state: MigrationPreviewState,
+) {
+  return [...decisionsByPreviewState[state]];
+}
+
+export function isMigrationDecision(
+  value: unknown,
+): value is MigrationDecision {
+  return (
+    typeof value === "string" &&
+    (migrationDecisionValues as readonly string[]).includes(value)
+  );
+}
+
+export function isMigrationTargetEntityType(
+  value: unknown,
+): value is MigrationTargetEntityType {
+  return (
+    typeof value === "string" &&
+    (migrationTargetEntityTypeValues as readonly string[]).includes(value)
+  );
+}
 
 export type ActPageRequest = {
   skip: number;
