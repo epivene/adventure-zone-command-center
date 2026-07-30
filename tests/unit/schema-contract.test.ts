@@ -196,6 +196,7 @@ describe("database schema contract", () => {
         "leaseOwner",
         "leaseExpiresAt",
         "retryAfter",
+        "retryable",
         "attemptCount",
         "recordsStaged",
         "errorCode",

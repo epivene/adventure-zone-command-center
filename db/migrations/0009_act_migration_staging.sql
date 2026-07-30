@@ -11,6 +11,7 @@ CREATE TABLE "act_migration_checkpoints" (
 	"lease_owner" text,
 	"lease_expires_at" timestamp with time zone,
 	"retry_after" timestamp with time zone,
+	"retryable" boolean DEFAULT true NOT NULL,
 	"attempt_count" integer DEFAULT 0 NOT NULL,
 	"records_staged" integer DEFAULT 0 NOT NULL,
 	"error_code" text,

@@ -400,6 +400,13 @@
           "primaryKey": false,
           "notNull": false
         },
+        "retryable": {
+          "name": "retryable",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
         "attempt_count": {
           "name": "attempt_count",
           "type": "integer",

@@ -755,6 +755,7 @@ export const actMigrationCheckpoints = pgTable(
     leaseOwner: text("lease_owner"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     retryAfter: timestamp("retry_after", { withTimezone: true }),
+    retryable: boolean("retryable").default(true).notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     recordsStaged: integer("records_staged").default(0).notNull(),
     errorCode: text("error_code"),
