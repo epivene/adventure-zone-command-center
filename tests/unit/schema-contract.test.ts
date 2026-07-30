@@ -26,6 +26,10 @@ import {
   specialRequestTreatmentValues,
 } from "@/features/packages/package-types";
 
+function indexNames(table: Parameters<typeof getTableConfig>[0]) {
+  return getTableConfig(table).indexes.map((index) => index.config.name);
+}
+
 describe("booking status contract", () => {
   it("contains the approved workflow in order", () => {
     expect(bookingStatusValues).toEqual([
@@ -134,6 +138,149 @@ describe("database schema contract", () => {
     ]));
   });
 
+  it("exports durable Act migration staging and canonical link metadata", () => {
+    expect(databaseSchema.placeTypeValues).toEqual([
+      "fair",
+      "city_government",
+      "festival_event",
+      "venue",
+      "school",
+      "tribe",
+      "association",
+      "company",
+      "other",
+    ]);
+    expect(Object.keys(databaseSchema.organizations)).toEqual(
+      expect.arrayContaining([
+        "placeType",
+        "actIndustry",
+        "phone",
+        "normalizedPhone",
+        "address1",
+        "address2",
+        "city",
+        "region",
+        "postalCode",
+        "website",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.actMigrationRuns)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "requestKey",
+        "sourceDatabaseKey",
+        "requestedBy",
+        "status",
+        "sourceDigest",
+        "proposalDigest",
+        "summary",
+        "lastErrorCode",
+        "snapshotCompletedAt",
+        "previewCompletedAt",
+        "startedAt",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.actMigrationCheckpoints)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "runId",
+        "streamType",
+        "partitionKey",
+        "parentSourceId",
+        "nextSkip",
+        "pageSize",
+        "queryMode",
+        "status",
+        "leaseOwner",
+        "leaseExpiresAt",
+        "retryAfter",
+        "attemptCount",
+        "recordsStaged",
+        "errorCode",
+        "completedAt",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.actMigrationRecords)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "runId",
+        "streamType",
+        "sourceKey",
+        "sourceId",
+        "targetSourceId",
+        "rawSnapshot",
+        "normalizedSnapshot",
+        "fingerprint",
+        "proposedAction",
+        "reviewState",
+        "proposalKey",
+        "matchedEntityType",
+        "matchedEntityId",
+        "appliedEntityId",
+        "errorCode",
+        "errorFields",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.actMigrationProposals)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "runId",
+        "proposalKey",
+        "state",
+        "targetEntityType",
+        "sourceRecordKeys",
+        "candidateLocalIds",
+        "proposedLocalId",
+        "matchReason",
+        "displaySnapshot",
+        "decision",
+        "decisionReason",
+        "chosenLocalEntityId",
+        "primarySourceId",
+        "decidedBy",
+        "decidedAt",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(actExternalLinks)).toEqual(
+      expect.arrayContaining([
+        "sourceEntityType",
+        "isPrimary",
+        "syncMode",
+        "migrationRunId",
+      ]),
+    );
+
+    expect(indexNames(databaseSchema.actMigrationCheckpoints)).toContain(
+      "act_migration_checkpoints_run_stream_partition_unique",
+    );
+    expect(indexNames(databaseSchema.actMigrationRecords)).toContain(
+      "act_migration_records_run_stream_source_unique",
+    );
+    expect(databaseSchema.actMigrationRecords.sourceId.notNull).toBe(false);
+    expect(
+      getTableConfig(databaseSchema.actMigrationRecords).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toContain("act_migration_records_source_key_nonblank");
+    expect(indexNames(databaseSchema.actMigrationProposals)).toContain(
+      "act_migration_proposals_run_key_unique",
+    );
+    expect(indexNames(actExternalLinks)).toEqual(
+      expect.arrayContaining([
+        "act_external_links_source_external_id_unique",
+        "act_external_links_one_primary_per_local_source",
+      ]),
+    );
+  });
+
   it("exports the CRM activity and call workspace fields", () => {
     expect(organizations.lastResort).toBeDefined();
     expect(organizations.lastResortReason).toBeDefined();
@@ -173,14 +320,6 @@ describe("database schema contract", () => {
       .toContain("activity_revisions_activity_created_at_idx");
     expect(getTableConfig(followUps).indexes.map((index) => index.config.name))
       .toContain("follow_ups_open_due_at_idx");
-  });
-
-  it("enforces one contact owner for each Act external identifier", () => {
-    expect(
-      getTableConfig(actExternalLinks).indexes
-        .filter((index) => index.config.unique)
-        .map((index) => index.config.name),
-    ).toContain("act_external_links_entity_external_id_unique");
   });
 
   it("constrains contact sync state and operation identity", () => {

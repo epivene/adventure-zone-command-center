@@ -468,6 +468,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         actExternalLinks,
         and(
           eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.isPrimary, true),
+          eq(actExternalLinks.syncMode, "two_way"),
           eq(actExternalLinks.entityId, contacts.id),
         ),
       )
@@ -1023,6 +1026,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
           .where(
             and(
               eq(actExternalLinks.entityType, "contact"),
+              eq(actExternalLinks.sourceEntityType, "contact"),
+              eq(actExternalLinks.isPrimary, true),
+              eq(actExternalLinks.syncMode, "two_way"),
               eq(actExternalLinks.actRecordId, remote.id),
             ),
           )
@@ -1497,11 +1503,17 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .insert(actExternalLinks)
       .values({
         entityType: "contact",
+        sourceEntityType: "contact",
+        isPrimary: true,
+        syncMode: "two_way",
         entityId: contactId,
         actRecordId,
       })
       .onConflictDoNothing({
-        target: [actExternalLinks.entityType, actExternalLinks.actRecordId],
+        target: [
+          actExternalLinks.sourceEntityType,
+          actExternalLinks.actRecordId,
+        ],
       })
       .returning({ entityId: actExternalLinks.entityId });
     if (created) return;
@@ -1511,6 +1523,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .where(
         and(
           eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.isPrimary, true),
+          eq(actExternalLinks.syncMode, "two_way"),
           eq(actExternalLinks.actRecordId, actRecordId),
         ),
       )

@@ -714,12 +714,18 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       .insert(actExternalLinks)
       .values({
         entityType: "contact",
+        sourceEntityType: "contact",
+        isPrimary: true,
+        syncMode: "two_way",
         entityId: contactId,
         actRecordId: externalId,
         importRunId,
       })
       .onConflictDoNothing({
-        target: [actExternalLinks.entityType, actExternalLinks.actRecordId],
+        target: [
+          actExternalLinks.sourceEntityType,
+          actExternalLinks.actRecordId,
+        ],
       })
       .returning({ entityId: actExternalLinks.entityId });
     if (created) return "linked" as const;
@@ -733,6 +739,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       .where(
         and(
           eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
           eq(actExternalLinks.actRecordId, externalId),
         ),
       )

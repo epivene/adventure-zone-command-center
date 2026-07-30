@@ -22,6 +22,20 @@ import {
   probabilityValues,
 } from "@/features/bookings/booking-types";
 import {
+  actMigrationCheckpointStatusValues,
+  actMigrationRunStatusValues,
+  actMigrationStreamTypeValues,
+  actQueryModeValues,
+  migrationDecisionValues,
+  migrationPreviewStateValues,
+  migrationReviewStateValues,
+  migrationTargetEntityTypeValues,
+} from "@/features/act-migration/migration-types";
+import {
+  placeTypeValues,
+  type PlaceType,
+} from "@/features/organizations/place-types";
+import {
   requestApprovalStatusValues,
   specialRequestTreatmentValues,
   type RequestApprovalStatus,
@@ -29,9 +43,10 @@ import {
 } from "@/features/packages/package-types";
 
 export {
+  placeTypeValues,
   requestApprovalStatusValues,
   specialRequestTreatmentValues,
-} from "@/features/packages/package-types";
+};
 
 export const resourceStatusValues = [
   "available",
@@ -87,6 +102,16 @@ export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
   actRecordId: text("act_record_id").unique(),
+  placeType: text("place_type").$type<PlaceType>().default("other").notNull(),
+  actIndustry: text("act_industry"),
+  phone: text("phone"),
+  normalizedPhone: text("normalized_phone"),
+  address1: text("address_1"),
+  address2: text("address_2"),
+  city: text("city"),
+  region: text("region"),
+  postalCode: text("postal_code"),
+  website: text("website"),
   lastResort: boolean("last_resort").default(false).notNull(),
   lastResortReason: text("last_resort_reason"),
   lastResortChangedAt: timestamp("last_resort_changed_at", {
@@ -96,9 +121,14 @@ export const organizations = pgTable("organizations", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   check(
+    "organizations_place_type_valid",
+    sql`${table.placeType} in (${sqlTextValues(placeTypeValues)})`,
+  ),
+  check(
     "organizations_last_resort_reason_required",
     sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
   ),
+  index("organizations_normalized_phone_idx").on(table.normalizedPhone),
 ]);
 
 export const contacts = pgTable("contacts", {
@@ -661,14 +691,27 @@ export const actImportRuns = pgTable("act_import_runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
-export const actExternalLinks = pgTable(
-  "act_external_links",
+export const actMigrationRuns = pgTable(
+  "act_migration_runs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    entityType: text("entity_type").notNull(),
-    entityId: uuid("entity_id").notNull(),
-    actRecordId: text("act_record_id").notNull(),
-    importRunId: uuid("import_run_id").references(() => actImportRuns.id),
+    requestKey: uuid("request_key").notNull(),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    requestedBy: text("requested_by").notNull(),
+    status: text("status").default("snapshotting").notNull(),
+    sourceDigest: text("source_digest"),
+    proposalDigest: text("proposal_digest"),
+    summary: jsonb("summary").$type<Record<string, unknown>>(),
+    lastErrorCode: text("last_error_code"),
+    snapshotCompletedAt: timestamp("snapshot_completed_at", {
+      withTimezone: true,
+    }),
+    previewCompletedAt: timestamp("preview_completed_at", {
+      withTimezone: true,
+    }),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -677,9 +720,245 @@ export const actExternalLinks = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("act_external_links_entity_external_id_unique").on(
-      table.entityType,
+    uniqueIndex("act_migration_runs_request_key_unique").on(
+      table.requestKey,
+    ),
+    check(
+      "act_migration_runs_status_valid",
+      sql`${table.status} in (${sqlTextValues(actMigrationRunStatusValues)})`,
+    ),
+    check(
+      "act_migration_runs_source_database_key_nonblank",
+      sql`btrim(${table.sourceDatabaseKey}) <> ''`,
+    ),
+    check(
+      "act_migration_runs_requested_by_nonblank",
+      sql`btrim(${table.requestedBy}) <> ''`,
+    ),
+  ],
+);
+
+export const actMigrationCheckpoints = pgTable(
+  "act_migration_checkpoints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actMigrationRuns.id, { onDelete: "cascade" }),
+    streamType: text("stream_type").notNull(),
+    partitionKey: text("partition_key").notNull(),
+    parentSourceId: text("parent_source_id"),
+    nextSkip: integer("next_skip").default(0).notNull(),
+    pageSize: integer("page_size").notNull(),
+    queryMode: text("query_mode").default("projected").notNull(),
+    status: text("status").default("pending").notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    retryAfter: timestamp("retry_after", { withTimezone: true }),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    recordsStaged: integer("records_staged").default(0).notNull(),
+    errorCode: text("error_code"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_migration_checkpoints_run_stream_partition_unique").on(
+      table.runId,
+      table.streamType,
+      table.partitionKey,
+    ),
+    check(
+      "act_migration_checkpoints_stream_type_valid",
+      sql`${table.streamType} in (${sqlTextValues(actMigrationStreamTypeValues)})`,
+    ),
+    check(
+      "act_migration_checkpoints_query_mode_valid",
+      sql`${table.queryMode} in (${sqlTextValues(actQueryModeValues)})`,
+    ),
+    check(
+      "act_migration_checkpoints_status_valid",
+      sql`${table.status} in (${sqlTextValues(actMigrationCheckpointStatusValues)})`,
+    ),
+    check(
+      "act_migration_checkpoints_partition_key_nonblank",
+      sql`btrim(${table.partitionKey}) <> ''`,
+    ),
+    check(
+      "act_migration_checkpoints_next_skip_nonnegative",
+      sql`${table.nextSkip} >= 0`,
+    ),
+    check(
+      "act_migration_checkpoints_page_size_positive",
+      sql`${table.pageSize} > 0`,
+    ),
+    check(
+      "act_migration_checkpoints_attempt_count_nonnegative",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "act_migration_checkpoints_records_staged_nonnegative",
+      sql`${table.recordsStaged} >= 0`,
+    ),
+  ],
+);
+
+export const actMigrationRecords = pgTable(
+  "act_migration_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actMigrationRuns.id, { onDelete: "cascade" }),
+    streamType: text("stream_type").notNull(),
+    sourceKey: text("source_key").notNull(),
+    sourceId: text("source_id"),
+    targetSourceId: text("target_source_id"),
+    rawSnapshot: jsonb("raw_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    normalizedSnapshot: jsonb("normalized_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    proposedAction: text("proposed_action"),
+    reviewState: text("review_state").default("not_required").notNull(),
+    proposalKey: text("proposal_key"),
+    matchedEntityType: text("matched_entity_type"),
+    matchedEntityId: uuid("matched_entity_id"),
+    appliedEntityId: uuid("applied_entity_id"),
+    errorCode: text("error_code"),
+    errorFields: jsonb("error_fields").$type<string[]>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_migration_records_run_stream_source_unique").on(
+      table.runId,
+      table.streamType,
+      table.sourceKey,
+    ),
+    check(
+      "act_migration_records_stream_type_valid",
+      sql`${table.streamType} in (${sqlTextValues(actMigrationStreamTypeValues)})`,
+    ),
+    check(
+      "act_migration_records_source_key_nonblank",
+      sql`btrim(${table.sourceKey}) <> ''`,
+    ),
+    check(
+      "act_migration_records_proposed_action_valid",
+      sql`${table.proposedAction} is null or ${table.proposedAction} in (${sqlTextValues(migrationPreviewStateValues)})`,
+    ),
+    check(
+      "act_migration_records_review_state_valid",
+      sql`${table.reviewState} in (${sqlTextValues(migrationReviewStateValues)})`,
+    ),
+    check(
+      "act_migration_records_matched_entity_type_valid",
+      sql`${table.matchedEntityType} is null or ${table.matchedEntityType} in (${sqlTextValues(migrationTargetEntityTypeValues)})`,
+    ),
+  ],
+);
+
+export const actMigrationProposals = pgTable(
+  "act_migration_proposals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actMigrationRuns.id, { onDelete: "cascade" }),
+    proposalKey: text("proposal_key").notNull(),
+    state: text("state").notNull(),
+    targetEntityType: text("target_entity_type").notNull(),
+    sourceRecordKeys: jsonb("source_record_keys").$type<string[]>().notNull(),
+    candidateLocalIds: jsonb("candidate_local_ids").$type<string[]>().notNull(),
+    proposedLocalId: uuid("proposed_local_id"),
+    matchReason: text("match_reason"),
+    displaySnapshot: jsonb("display_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    decision: text("decision"),
+    decisionReason: text("decision_reason"),
+    chosenLocalEntityId: uuid("chosen_local_entity_id"),
+    primarySourceId: text("primary_source_id"),
+    decidedBy: text("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_migration_proposals_run_key_unique").on(
+      table.runId,
+      table.proposalKey,
+    ),
+    check(
+      "act_migration_proposals_state_valid",
+      sql`${table.state} in (${sqlTextValues(migrationPreviewStateValues)})`,
+    ),
+    check(
+      "act_migration_proposals_target_entity_type_valid",
+      sql`${table.targetEntityType} in (${sqlTextValues(migrationTargetEntityTypeValues)})`,
+    ),
+    check(
+      "act_migration_proposals_decision_valid",
+      sql`${table.decision} is null or ${table.decision} in (${sqlTextValues(migrationDecisionValues)})`,
+    ),
+  ],
+);
+
+export const actExternalLinks = pgTable(
+  "act_external_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    entityType: text("entity_type").notNull(),
+    sourceEntityType: text("source_entity_type").notNull(),
+    entityId: uuid("entity_id").notNull(),
+    actRecordId: text("act_record_id").notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    syncMode: text("sync_mode").default("pull_only").notNull(),
+    importRunId: uuid("import_run_id").references(() => actImportRuns.id),
+    migrationRunId: uuid("migration_run_id").references(
+      () => actMigrationRuns.id,
+    ),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_external_links_source_external_id_unique").on(
+      table.sourceEntityType,
       table.actRecordId,
+    ),
+    uniqueIndex("act_external_links_one_primary_per_local_source")
+      .on(table.entityType, table.entityId, table.sourceEntityType)
+      .where(sql`${table.isPrimary} = true`),
+    check(
+      "act_external_links_sync_mode_valid",
+      sql`${table.syncMode} in ('two_way', 'pull_only')`,
+    ),
+    check(
+      "act_external_links_type_pair_valid",
+      sql`(${table.entityType}, ${table.sourceEntityType}) in (('organization', 'company'), ('contact', 'contact'), ('booking', 'opportunity'), ('calling_list', 'group'))`,
+    ),
+    check(
+      "act_external_links_contact_primary_sync_valid",
+      sql`(${table.entityType} = 'contact' and ${table.sourceEntityType} = 'contact' and ((${table.isPrimary} = true and ${table.syncMode} = 'two_way') or (${table.isPrimary} = false and ${table.syncMode} = 'pull_only'))) or (${table.entityType} <> 'contact' and ${table.syncMode} = 'pull_only')`,
     ),
   ],
 );

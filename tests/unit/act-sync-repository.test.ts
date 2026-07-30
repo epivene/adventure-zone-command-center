@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 import {
   actExternalLinks,
@@ -298,6 +300,83 @@ class RecordingSnapshotDatabase {
   }
 }
 
+class CanonicalLinkListDatabase {
+  readonly contact = {
+    id: "22222222-2222-4222-8222-222222222222",
+    organizationId: null,
+    firstName: snapshot.firstName,
+    lastName: snapshot.lastName,
+    jobTitle: snapshot.jobTitle,
+    email: snapshot.email,
+    phone: snapshot.phone,
+    address1: snapshot.address1,
+    address2: snapshot.address2,
+    city: snapshot.city,
+    region: snapshot.region,
+    postalCode: snapshot.postalCode,
+    actRecordId: "direct-act-id",
+  };
+  readonly links = [
+    {
+      actRecordId: "pull-only-alias",
+      sourceEntityType: "contact",
+      isPrimary: false,
+      syncMode: "pull_only",
+    },
+    {
+      actRecordId: "primary-two-way",
+      sourceEntityType: "contact",
+      isPrimary: true,
+      syncMode: "two_way",
+    },
+  ];
+  private canonicalLinkPredicate = false;
+
+  select() {
+    const database = this;
+    const builder = {
+      from() {
+        return builder;
+      },
+      leftJoin(table: unknown, condition: SQL) {
+        if (table === actExternalLinks) {
+          const query = new PgDialect().sqlToQuery(condition);
+          database.canonicalLinkPredicate = [
+            "contact",
+            "contact",
+            true,
+            "two_way",
+          ].every((value) => query.params.includes(value));
+        }
+        return builder;
+      },
+      then(
+        resolve: (value: unknown[]) => unknown,
+        reject?: (reason: unknown) => unknown,
+      ) {
+        const selectedLinks = database.canonicalLinkPredicate
+          ? database.links.filter(
+              (link) =>
+                link.sourceEntityType === "contact" &&
+                link.isPrimary &&
+                link.syncMode === "two_way",
+            )
+          : database.links;
+        return Promise.resolve(
+          selectedLinks.map((link) => ({
+            contact: database.contact,
+            organizationName: null,
+            externalActRecordId: link.actRecordId,
+            baseSnapshot: null,
+            actEditedAt: null,
+          })),
+        ).then(resolve, reject);
+      },
+    };
+    return builder;
+  }
+}
+
 const remote = {
   ...snapshot,
   id: "act-1",
@@ -390,6 +469,19 @@ describe("stored Act sync previews", () => {
         [],
       ),
     ).toThrow("Stored Act! sync operations are malformed.");
+  });
+});
+
+describe("DrizzleSyncRepository local Contact discovery", () => {
+  it("selects only the primary two-way Contact link and ignores pull-only aliases", async () => {
+    const database = new CanonicalLinkListDatabase();
+
+    const contacts = await new DrizzleSyncRepository(
+      database as never,
+    ).listLocalContacts();
+
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]?.actRecordId).toBe("primary-two-way");
   });
 });
 

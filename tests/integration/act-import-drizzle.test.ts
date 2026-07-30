@@ -2,7 +2,12 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { contacts, organizationContacts, organizations } from "@/db/schema";
+import {
+  actExternalLinks,
+  contacts,
+  organizationContacts,
+  organizations,
+} from "@/db/schema";
 import { DrizzleActImportRepository } from "@/features/import/act-matcher";
 import type {
   ActCsvRecord,
@@ -16,6 +21,16 @@ const organization: OrganizationRow = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Marias Fair",
   actRecordId: null,
+  placeType: "other",
+  actIndustry: null,
+  phone: null,
+  normalizedPhone: null,
+  address1: null,
+  address2: null,
+  city: null,
+  region: null,
+  postalCode: null,
+  website: null,
   lastResort: false,
   lastResortReason: null,
   lastResortChangedAt: null,
@@ -175,6 +190,61 @@ class RecordingDrizzleDatabase {
   }
 }
 
+class ExternalLinkRecordingDatabase {
+  readonly links: Record<string, unknown>[] = [];
+
+  insert(table: unknown) {
+    if (table !== actExternalLinks) throw new Error("Unexpected table.");
+    return {
+      values: (values: Record<string, unknown>) => ({
+        onConflictDoNothing: () => ({
+          returning: async () => {
+            const sourceOwner = this.links.find(
+              (link) =>
+                link.sourceEntityType === values.sourceEntityType &&
+                link.actRecordId === values.actRecordId,
+            );
+            const existingPrimary = this.links.find(
+              (link) =>
+                link.entityType === values.entityType &&
+                link.entityId === values.entityId &&
+                link.sourceEntityType === values.sourceEntityType &&
+                link.isPrimary === true,
+            );
+            if (sourceOwner || existingPrimary) return [];
+            this.links.push({ ...values });
+            return [{ entityId: values.entityId }];
+          },
+        }),
+      }),
+    };
+  }
+
+  select() {
+    return {
+      from: (table: unknown) => {
+        if (table !== actExternalLinks) throw new Error("Unexpected table.");
+        return {
+          where: (condition: SQL) => {
+            const query = new PgDialect().sqlToQuery(condition);
+            const externalId = query.params.at(-1);
+            const rows = this.links.filter(
+              (link) => link.actRecordId === externalId,
+            );
+            return { limit: async () => rows };
+          },
+        };
+      },
+    };
+  }
+
+  transaction<T>(
+    operation: (transaction: ExternalLinkRecordingDatabase) => Promise<T>,
+  ) {
+    return operation(this);
+  }
+}
+
 function repository(database: RecordingDrizzleDatabase) {
   return new DrizzleActImportRepository(
     database as unknown as ConstructorParameters<
@@ -184,6 +254,36 @@ function repository(database: RecordingDrizzleDatabase) {
 }
 
 describe("DrizzleActImportRepository", () => {
+  it("creates one primary two-way Contact link and preserves it when a different Act id is imported", async () => {
+    const database = new ExternalLinkRecordingDatabase();
+    const importRepository = new DrizzleActImportRepository(database as never);
+
+    const claims = await importRepository.transaction(async (transaction) => [
+      await transaction.ensureExternalLink(
+        "ACT-CONTACT-PRIMARY",
+        contactRow.id,
+        "77777777-7777-4777-8777-777777777777",
+      ),
+      await transaction.ensureExternalLink(
+        "ACT-CONTACT-DIFFERENT",
+        contactRow.id,
+        "77777777-7777-4777-8777-777777777777",
+      ),
+    ]);
+
+    expect(claims).toEqual(["linked", "conflict"]);
+    expect(database.links).toEqual([
+      expect.objectContaining({
+        entityType: "contact",
+        sourceEntityType: "contact",
+        entityId: contactRow.id,
+        actRecordId: "ACT-CONTACT-PRIMARY",
+        isPrimary: true,
+        syncMode: "two_way",
+      }),
+    ]);
+  });
+
   it("locks the target Place before the Contact during legacy import update", async () => {
     const database = new RecordingDrizzleDatabase();
 
