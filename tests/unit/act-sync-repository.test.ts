@@ -69,6 +69,8 @@ class RecordingPullDatabase {
   readonly events: string[] = [];
   readonly primaryOrganizationAssignments: Array<string | null> = [];
   syncBaseSnapshot: unknown = null;
+  organizationName = "Marias Fair";
+  organizationNameAfterLock: string | null = null;
   contact = {
     id: this.contactId,
     organizationId: null as string | null,
@@ -86,25 +88,42 @@ class RecordingPullDatabase {
 
   select() {
     return {
-      from: (table: unknown) => ({
-        where: () => {
-          const records =
-            table === organizations ? [{ id: this.organizationId, name: "Marias Fair" }] :
-            table === contacts ? [this.contact] :
-            [];
-          const terminal = {
-            limit: () => terminal,
-            for: async () => {
-              this.events.push(
-                `lock:${table === organizations ? "organization" : table === contacts ? "contact" : "external"}`,
-              );
-              return records;
-            },
-            then: Promise.resolve(records).then.bind(Promise.resolve(records)),
-          };
-          return terminal;
-        },
-      }),
+      from: (table: unknown) => {
+        const records = () =>
+          table === organizations
+            ? [{ id: this.organizationId, name: this.organizationName }]
+            : table === contacts
+              ? [{ ...this.contact }]
+              : [];
+        const terminal = {
+          where: () => terminal,
+          orderBy: () => terminal,
+          limit: () => terminal,
+          for: async () => {
+            this.events.push(
+              `lock:${table === organizations ? "organization" : table === contacts ? "contact" : "external"}`,
+            );
+            if (
+              table === organizations &&
+              this.organizationNameAfterLock
+            ) {
+              this.organizationName = this.organizationNameAfterLock;
+            }
+            return records();
+          },
+          then: (
+            resolve: (value: unknown[]) => unknown,
+            reject?: (reason: unknown) => unknown,
+          ) => {
+            if (table === contacts) this.events.push("discover:contact");
+            return Promise.resolve(records()).then(resolve, reject);
+          },
+        };
+        return {
+          where: () => terminal,
+          orderBy: () => terminal,
+        };
+      },
     };
   }
 
@@ -454,6 +473,44 @@ describe("DrizzleSyncRepository pull", () => {
     expect(database.syncBaseSnapshot).toEqual(
       expect.objectContaining({ organizationName: null }),
     );
+  });
+
+  it("locks and revalidates the current Place before Person during an existing-Contact pull", async () => {
+    const database = new RecordingPullDatabase();
+    database.contact.organizationId = database.organizationId;
+    database.organizationNameAfterLock = "Renamed after preview";
+    const existingRow = {
+      ...row,
+      category: "changed_in_act",
+      matchReason: "act_record_id",
+      localContactId: database.contactId,
+      baseSnapshot: snapshot,
+      localSnapshot: snapshot,
+      actSnapshot: {
+        ...snapshot,
+        organizationName: null,
+      },
+    } satisfies SyncComparisonRow;
+
+    await expect(
+      new DrizzleSyncRepository(database as never).pullContact(
+        existingRow,
+        { ...remote, organizationName: null },
+      ),
+    ).rejects.toBeInstanceOf(LocalContactChangedAfterPreviewError);
+    expect(
+      database.events.filter(
+        (event) =>
+          event === "discover:contact" ||
+          event === "lock:organization" ||
+          event === "lock:contact",
+      ),
+    ).toEqual([
+      "discover:contact",
+      "lock:organization",
+      "lock:contact",
+    ]);
+    expect(database.primaryOrganizationAssignments).toEqual([]);
   });
 });
 

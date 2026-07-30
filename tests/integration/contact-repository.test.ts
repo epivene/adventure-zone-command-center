@@ -7,7 +7,10 @@ import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as crmSchema from "@/db/schema";
-import { DrizzleSyncRepository } from "@/features/act-sync/sync-repository";
+import {
+  DrizzleSyncRepository,
+  LocalContactChangedAfterPreviewError,
+} from "@/features/act-sync/sync-repository";
 import type { SyncComparisonRow } from "@/features/act-sync/sync-comparison";
 import {
   buildContactSearchCondition,
@@ -669,6 +672,110 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       await personLockClient.end({ timeout: 5 });
       await actClient.end({ timeout: 5 });
       await updateClient.end({ timeout: 5 });
+      await observerClient.end({ timeout: 5 });
+    }
+  });
+
+  postgresTest("rejects an Act pull after a concurrent current Place rename", async () => {
+    const renameClient = postgres(databaseUrl!, { max: 1 });
+    const pullClient = postgres(databaseUrl!, { max: 1 });
+    const observerClient = postgres(databaseUrl!, { max: 1 });
+    const renameHeld = deferred();
+    const releaseRename = deferred();
+    let rename: Promise<unknown> | undefined;
+    let pull: Promise<string> | undefined;
+    try {
+      await Promise.all([
+        renameClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        pullClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        observerClient.unsafe(`SET search_path TO "${schemaName}", public`),
+      ]);
+      await pullClient.unsafe("SET lock_timeout = '5s'");
+      const [{ pid: pullPid } = { pid: 0 }] =
+        await pullClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      if (!pullPid) throw new Error("Could not identify the Act pull session.");
+
+      rename = renameClient.begin(async (transaction) => {
+        await transaction.unsafe(`
+          UPDATE organizations
+          SET name = 'Renamed after preview'
+          WHERE id = '${repositoryIds.organization}'
+        `);
+        renameHeld.resolve();
+        await releaseRename.promise;
+      });
+      await renameHeld.promise;
+
+      const previewSnapshot = {
+        firstName: "Avery",
+        lastName: "Example",
+        organizationName: "Marias Fair",
+        jobTitle: null,
+        email: null,
+        phone: "(406) 555-0101",
+        address1: null,
+        address2: null,
+        city: null,
+        region: null,
+        postalCode: null,
+      };
+      const previewRow = {
+        rowId: `act:ACT-CONTACT-1`,
+        category: "changed_in_act",
+        matchReason: "act_record_id",
+        localContactId: repositoryIds.existingContact,
+        actRecordId: "ACT-CONTACT-1",
+        candidateLocalContactIds: [repositoryIds.existingContact],
+        candidateActRecordIds: ["ACT-CONTACT-1"],
+        baseSnapshot: previewSnapshot,
+        localSnapshot: previewSnapshot,
+        actSnapshot: {
+          ...previewSnapshot,
+          organizationName: null,
+        },
+        actEditedAt: "2026-08-01T15:10:00.000Z",
+        allowedDecisions: ["pull", "skip"],
+        messages: [],
+      } satisfies SyncComparisonRow;
+      const actRepository = new DrizzleSyncRepository(
+        drizzle({ client: pullClient, schema: crmSchema }),
+      );
+      pull = actRepository.pullContact(previewRow, {
+        id: "ACT-CONTACT-1",
+        ...previewSnapshot,
+        organizationName: null,
+        editedAt: "2026-08-01T15:10:00.000Z",
+      });
+      await waitForDatabaseLock(observerClient, pullPid);
+
+      releaseRename.resolve();
+      await rename;
+      await expect(pull).rejects.toBeInstanceOf(
+        LocalContactChangedAfterPreviewError,
+      );
+      expect(
+        await sql!.unsafe(`
+          SELECT organization_id
+          FROM contacts
+          WHERE id = '${repositoryIds.existingContact}'
+        `),
+      ).toEqual([{ organization_id: repositoryIds.organization }]);
+      expect(
+        await sql!.unsafe(`
+          SELECT id FROM audit_entries
+          WHERE entity_type = 'contact'
+            AND entity_id = '${repositoryIds.existingContact}'
+            AND action = 'act_sync_pulled_update'
+        `),
+      ).toEqual([]);
+    } finally {
+      releaseRename.resolve();
+      if (rename) await rename;
+      if (pull) await Promise.allSettled([pull]);
+      await renameClient.end({ timeout: 5 });
+      await pullClient.end({ timeout: 5 });
       await observerClient.end({ timeout: 5 });
     }
   });

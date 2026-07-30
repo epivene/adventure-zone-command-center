@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { db as database } from "@/db/client";
@@ -1031,44 +1031,18 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         if (recovered) return recovered.entityId;
       }
       const now = new Date();
-      const organizationId = await this.resolveOrganizationId(
-        transaction,
-        remote.organizationName,
-        now,
-      );
       let localContactId = row.localContactId;
       let before: ReturnType<typeof canonicalContactSnapshot> | null = null;
+      let organizationId: string | null;
       if (localContactId) {
-        const [current] = await transaction
-          .select()
-          .from(contacts)
-          .where(eq(contacts.id, localContactId))
-          .limit(1)
-          .for("update");
-        if (!current) throw new Error("Local contact is missing.");
-        const [organization] = current.organizationId
-          ? await transaction
-              .select({ name: organizations.name })
-              .from(organizations)
-              .where(eq(organizations.id, current.organizationId))
-              .limit(1)
-          : [];
-        before = canonicalContactSnapshot({
-          firstName: current.firstName,
-          lastName: current.lastName,
-          organizationName: organization?.name ?? null,
-          jobTitle: current.jobTitle,
-          email: current.email,
-          phone: current.phone,
-          address1: current.address1,
-          address2: current.address2,
-          city: current.city,
-          region: current.region,
-          postalCode: current.postalCode,
-        });
-        if (!contactSnapshotsEqual(before, row.localSnapshot)) {
-          throw new LocalContactChangedAfterPreviewError();
-        }
+        const locked = await this.lockPullContact(
+          transaction,
+          row,
+          remote.organizationName,
+          now,
+        );
+        organizationId = locked.organizationId;
+        before = locked.currentSnapshot;
         await transaction
           .update(contacts)
           .set({
@@ -1078,6 +1052,11 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
           })
           .where(eq(contacts.id, localContactId));
       } else {
+        organizationId = await this.resolveOrganizationId(
+          transaction,
+          remote.organizationName,
+          now,
+        );
         const [created] = await transaction
           .insert(contacts)
           .values({
@@ -1153,6 +1132,103 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         after: canonicalContactSnapshot(remote),
       });
     });
+  }
+
+  private async lockPullContact(
+    writer: SyncWriter,
+    row: SyncComparisonRow,
+    targetOrganizationName: string | null,
+    now: Date,
+  ) {
+    if (!row.localContactId || !row.localSnapshot) {
+      throw new LocalContactChangedAfterPreviewError();
+    }
+    const [discoveredContact] = await writer
+      .select({ organizationId: contacts.organizationId })
+      .from(contacts)
+      .where(eq(contacts.id, row.localContactId))
+      .limit(1);
+    if (!discoveredContact) throw new Error("Local contact is missing.");
+
+    const discoveredTarget = targetOrganizationName
+      ? await this.findOrganizationByName(writer, targetOrganizationName)
+      : null;
+    const organizationIds = [
+      discoveredContact.organizationId,
+      discoveredTarget?.id,
+    ]
+      .filter((id): id is string => Boolean(id))
+      .filter((id, index, ids) => ids.indexOf(id) === index)
+      .sort((left, right) => left.localeCompare(right));
+    const lockedOrganizations = organizationIds.length > 0
+      ? await writer
+          .select({ id: organizations.id, name: organizations.name })
+          .from(organizations)
+          .where(inArray(organizations.id, organizationIds))
+          .orderBy(asc(organizations.id))
+          .for("update")
+      : [];
+    const currentOrganization = discoveredContact.organizationId
+      ? lockedOrganizations.find(
+          ({ id }) => id === discoveredContact.organizationId,
+        )
+      : null;
+    if (discoveredContact.organizationId && !currentOrganization) {
+      throw new LocalContactChangedAfterPreviewError();
+    }
+
+    let organizationId: string | null = null;
+    if (targetOrganizationName) {
+      if (discoveredTarget) {
+        const lockedTarget = lockedOrganizations.find(
+          ({ id }) => id === discoveredTarget.id,
+        );
+        if (
+          !lockedTarget ||
+          this.normalizedOrganizationName(lockedTarget.name) !==
+            this.normalizedOrganizationName(targetOrganizationName)
+        ) {
+          throw new LocalContactChangedAfterPreviewError();
+        }
+        organizationId = lockedTarget.id;
+      } else {
+        organizationId = await this.createOrganization(
+          writer,
+          targetOrganizationName,
+          now,
+        );
+      }
+    }
+
+    const [current] = await writer
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, row.localContactId))
+      .limit(1)
+      .for("update");
+    if (
+      !current ||
+      current.organizationId !== discoveredContact.organizationId
+    ) {
+      throw new LocalContactChangedAfterPreviewError();
+    }
+    const currentSnapshot = canonicalContactSnapshot({
+      firstName: current.firstName,
+      lastName: current.lastName,
+      organizationName: currentOrganization?.name ?? null,
+      jobTitle: current.jobTitle,
+      email: current.email,
+      phone: current.phone,
+      address1: current.address1,
+      address2: current.address2,
+      city: current.city,
+      region: current.region,
+      postalCode: current.postalCode,
+    });
+    if (!contactSnapshotsEqual(currentSnapshot, row.localSnapshot)) {
+      throw new LocalContactChangedAfterPreviewError();
+    }
+    return { organizationId, currentSnapshot };
   }
 
   private async lockPreviewedLocalContact(
@@ -1360,10 +1436,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
     now: Date,
   ) {
     if (!organizationName) return null;
-    const normalized = organizationName
-      .trim()
-      .toLocaleLowerCase("en-US")
-      .replace(/\s+/g, " ");
+    const normalized = this.normalizedOrganizationName(organizationName);
     const [existing] = await writer
       .select({ id: organizations.id })
       .from(organizations)
@@ -1373,6 +1446,36 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .limit(1)
       .for("update");
     if (existing) return existing.id;
+    return this.createOrganization(writer, organizationName, now);
+  }
+
+  private async findOrganizationByName(
+    writer: OrganizationWriter,
+    organizationName: string,
+  ) {
+    const normalized = this.normalizedOrganizationName(organizationName);
+    const [organization] = await writer
+      .select({ id: organizations.id, name: organizations.name })
+      .from(organizations)
+      .where(
+        sql`lower(regexp_replace(trim(${organizations.name}), '\\s+', ' ', 'g')) = ${normalized}`,
+      )
+      .limit(1);
+    return organization ?? null;
+  }
+
+  private normalizedOrganizationName(organizationName: string) {
+    return organizationName
+      .trim()
+      .toLocaleLowerCase("en-US")
+      .replace(/\s+/g, " ");
+  }
+
+  private async createOrganization(
+    writer: OrganizationWriter,
+    organizationName: string,
+    now: Date,
+  ) {
     const [created] = await writer
       .insert(organizations)
       .values({
