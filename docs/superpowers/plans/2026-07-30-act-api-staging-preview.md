@@ -450,6 +450,7 @@ expect(Object.keys(databaseSchema.actMigrationCheckpoints)).toEqual(
     "leaseOwner",
     "leaseExpiresAt",
     "retryAfter",
+    "retryable",
     "attemptCount",
     "recordsStaged",
     "errorCode",
@@ -632,7 +633,13 @@ export const actMigrationRuns = pgTable(
 );
 ```
 
-Add checkpoints with non-negative checks and a unique `(run_id, stream_type, partition_key)` index. Add records with a unique `(run_id, stream_type, source_key)` index. Add proposals with a unique `(run_id, proposal_key)` index and the exact fields asserted in Step 1, including nullable `decision_reason`. Check every stored status, query mode, preview state, review state, decision, and target entity type against the exact Task 1 values.
+Add checkpoints with `retryable: boolean("retryable").default(true).notNull()`,
+non-negative checks, and a unique `(run_id, stream_type, partition_key)`
+index. Add records with a unique `(run_id, stream_type, source_key)` index.
+Add proposals with a unique `(run_id, proposal_key)` index and the exact
+fields asserted in Step 1, including nullable `decision_reason`. Check every
+stored status, query mode, preview state, review state, decision, and target
+entity type against the exact Task 1 values.
 
 Extend `actExternalLinks` with:
 
@@ -1004,6 +1011,10 @@ git commit -m "feat: normalize Act migration sources"
 ### Task 5: Capture a durable, resumable source snapshot
 
 **Files:**
+- Modify: `db/schema.ts`
+- Modify: `db/migrations/0009_act_migration_staging.sql`
+- Modify: `db/migrations/meta/0009_snapshot.json`
+- Modify: `tests/unit/schema-contract.test.ts`
 - Create: `features/act-migration/snapshot-repository.ts`
 - Create: `features/act-migration/snapshot-service.ts`
 - Create: `tests/integration/act-migration-snapshot-repository.test.ts`
@@ -1040,6 +1051,7 @@ export type ActMigrationCheckpoint = {
   queryMode: ActQueryMode;
   status: ActMigrationCheckpointStatus;
   retryAfter: Date | null;
+  retryable: boolean;
 };
 
 export type SnapshotProgress = {
@@ -1105,6 +1117,13 @@ Expected: FAIL because the snapshot repository does not exist.
 - [ ] **Step 3: Implement atomic checkpoint persistence**
 
 Claim with `FOR UPDATE SKIP LOCKED` in a short transaction, set a UUID lease owner and a five-minute expiry, and release the transaction before the network call. `storePage()` must verify the same lease owner and `expectedSkip` before writing records and advancing the checkpoint.
+
+Because migration `0009` has not been released yet, add the missing
+`retryable boolean default true not null` checkpoint column consistently to
+the Drizzle schema, `0009` SQL, generated snapshot, and schema contract in
+this task. `failCheckpoint()` must persist the supplied boolean independently
+from `retryAfter`; do not infer retryability from whether a retry timestamp is
+present.
 
 On completion of all four root streams, enqueue:
 
@@ -1181,7 +1200,7 @@ Translate `ActApiError` into its safe `code`, `retryable`, and `retryAfter`. Do 
 ```powershell
 node node_modules/vitest/vitest.mjs run tests/integration/act-migration-snapshot-repository.test.ts tests/integration/act-migration-snapshot-service.test.ts
 npm run typecheck
-git add features/act-migration/snapshot-repository.ts features/act-migration/snapshot-service.ts tests/integration/act-migration-snapshot-repository.test.ts tests/integration/act-migration-snapshot-service.test.ts
+git add db/schema.ts db/migrations/0009_act_migration_staging.sql db/migrations/meta/0009_snapshot.json tests/unit/schema-contract.test.ts features/act-migration/snapshot-repository.ts features/act-migration/snapshot-service.ts tests/integration/act-migration-snapshot-repository.test.ts tests/integration/act-migration-snapshot-service.test.ts
 git commit -m "feat: capture resumable Act snapshots"
 ```
 
