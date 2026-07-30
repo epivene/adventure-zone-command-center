@@ -37,6 +37,7 @@
 - `features/act-migration/source-client.ts` — paged read-only Companies, Contacts, Opportunities, Groups, and relationship client.
 - `features/act-migration/snapshot-repository.ts` — Drizzle run, checkpoint, page, lease, and snapshot persistence.
 - `features/act-migration/snapshot-service.ts` — bounded start, capture, resume, and finalize orchestration.
+- `features/act-migration/matching-normalization.ts` — shared conservative text, email, and website matching normalization.
 - `features/act-migration/local-candidate-repository.ts` — deterministic local Place, Person, Booking, relationship, and external-link snapshot.
 - `features/act-migration/matcher.ts` — pure match precedence and proposal synthesis.
 - `features/act-migration/reconciliation.ts` — source/proposal digests and completion report.
@@ -52,6 +53,7 @@
 
 - `tests/unit/act-migration-types.test.ts`
 - `tests/unit/act-migration-source-parser.test.ts`
+- `tests/unit/act-migration-matching-normalization.test.ts`
 - `tests/unit/act-migration-matcher.test.ts`
 - `tests/unit/act-migration-reconciliation.test.ts`
 - `tests/unit/act-migration-actions.test.ts`
@@ -60,6 +62,7 @@
 - `tests/integration/act-migration-staging-migration.test.ts`
 - `tests/integration/act-migration-snapshot-repository.test.ts`
 - `tests/integration/act-migration-snapshot-service.test.ts`
+- `tests/integration/act-migration-local-candidate-repository.test.ts`
 - `tests/integration/act-migration-preview-repository.test.ts`
 - `tests/integration/act-migration-docs.test.ts`
 
@@ -1209,60 +1212,139 @@ git commit -m "feat: capture resumable Act snapshots"
 ### Task 6: Build deterministic local candidates, matching, and reconciliation
 
 **Files:**
+- Modify: `features/act-migration/migration-types.ts`
+- Modify: `features/act-migration/source-parser.ts`
+- Create: `features/act-migration/matching-normalization.ts`
 - Create: `features/act-migration/local-candidate-repository.ts`
 - Create: `features/act-migration/matcher.ts`
 - Create: `features/act-migration/reconciliation.ts`
+- Modify: `db/schema.ts`
+- Modify: `db/migrations/0009_act_migration_staging.sql`
+- Modify: `db/migrations/meta/0009_snapshot.json`
+- Modify: `tests/unit/act-migration-types.test.ts`
+- Modify: `tests/unit/act-migration-source-parser.test.ts`
+- Create: `tests/unit/act-migration-matching-normalization.test.ts`
+- Modify: `tests/unit/schema-contract.test.ts`
+- Create: `tests/integration/act-migration-local-candidate-repository.test.ts`
 - Create: `tests/unit/act-migration-matcher.test.ts`
 - Create: `tests/unit/act-migration-reconciliation.test.ts`
 
 **Interfaces:**
 - Consumes: one finalized source snapshot and canonical external links.
-- Produces: `LocalMigrationCandidateSnapshot`, `ActMigrationProposal`, `buildMigrationProposals()`, `MigrationReconciliationReport`, and `reconcileMigrationPreview()`.
+- Produces: conservative shared matching normalization,
+  `LocalMigrationCandidateSnapshot`, `ActMigrationProposal`,
+  `buildMigrationProposals()`, `MigrationReconciliationReport`, and
+  `reconcileMigrationPreview()`.
 
-- [ ] **Step 1: Write match-precedence tests**
+- [ ] **Step 1: Write failing contract and normalization tests**
 
-Add explicit tests for:
+Prove:
 
-- Place stable Company link;
-- Place unique normalized name plus city/state;
-- Place unique normalized name plus verified phone or website;
-- ambiguous Place name producing `needs_review`;
-- Person stable Contact link;
-- Person unique non-shared email with compatible name;
-- Person phone plus compatible name;
-- Person Place plus compatible name;
-- shared mailboxes never merging People by email alone;
-- one source Person connected to several Places without duplication;
-- several source Contact IDs proposing one reviewed Person consolidation;
-- existing primary Contact link winning the proposed primary identity;
-- company-only source Contact updating an unambiguous Place’s general details and never creating a Person;
-- Opportunity stable link matching a Booking;
-- an unlinked Opportunity always proposing a new Booking rather than a fuzzy merge;
-- Opportunity without a reliable Place producing `needs_review`;
-- Opportunity with a Place and no Person remaining eligible with `Needs person`;
-- relationship proposals waiting for both parent proposals;
-- explicit Group memberships producing a calling-list proposal;
-- unsupported dynamic Group producing `ignored` with a reason.
+- target dependency order is `organization`, `contact`,
+  `organization_contact`, `booking`, `booking_contact`, `calling_list`,
+  `calling_list_member`;
+- proposal-aware decisions never offer `link_existing` without a candidate,
+  never offer `keep_separate` outside a Person duplicate/consolidation, and
+  do not offer create/link choices for unresolved Opportunity parents;
+- source Company and Contact phones reuse
+  `normalizeNorthAmericanPhone()` and therefore use the same E.164,
+  extension-rejection, and invalid-value behavior as local CRM data;
+- source and local names/city/region values use one
+  `normalizeMatchingText()` whitespace-and-case contract;
+- matching email normalization trims and lowercases only syntactically valid
+  addresses;
+- shared-mailbox detection covers `admin`, `billing`, `bookings`,
+  `boxoffice`, `contact`, `customerservice`, `events`, `hello`, `info`,
+  `inquiries`, `office`, `reservations`, `sales`, `support`, and `tickets`,
+  including plus tags;
+- website normalization accepts only HTTP(S) or bare-host input, rejects
+  credentials and malformed/hostless values, lowercases the hostname,
+  removes one leading `www.` and a terminal dot, and otherwise preserves
+  subdomains;
+- every parsed Group has `membershipSemantics: "unknown"` until a precise,
+  trustworthy Act! API field is separately verified and projected;
+- returned `group_contact` rows never imply that a Group is explicit/static.
 
 Use:
 
 ```ts
+export const migrationIssueCodeValues = [
+  "ambiguous_person_match",
+  "ambiguous_place_match",
+  "company_only_contact_unresolved",
+  "duplicate_source_id_conflict",
+  "group_dynamic_unsupported",
+  "group_membership_semantics_unknown",
+  "group_target_unavailable",
+  "needs_person",
+  "opportunity_place_ambiguous",
+  "opportunity_place_errored",
+  "opportunity_place_location_incomplete",
+  "opportunity_place_missing",
+  "orphaned_external_link",
+  "parent_proposal_unresolved",
+  "shared_mailbox_match_blocked",
+  "source_record_error",
+] as const;
+export type MigrationIssueCode =
+  (typeof migrationIssueCodeValues)[number];
+
+export function migrationTargetRank(
+  target: MigrationTargetEntityType,
+): number;
+
+export function allowedDecisionsForProposal(input: {
+  state: MigrationPreviewState;
+  targetEntityType: MigrationTargetEntityType;
+  issueCode: MigrationIssueCode | null;
+  candidateLocalIds: readonly string[];
+}): readonly MigrationDecision[];
+
+export function normalizeMatchingText(value: string | null): string | null;
+export function normalizeMatchingEmail(value: string | null): string | null;
+export function isSharedMailboxEmail(value: string | null): boolean;
+export function isGenericContactName(
+  displayName: string | null,
+  companyName: string | null,
+): boolean;
+export function normalizeWebsiteHost(value: string | null): string | null;
+
 export type LocalPlaceCandidate = {
   id: string;
   name: string;
   normalizedName: string;
+  placeType: string;
+  actIndustry: string | null;
+  phone: string | null;
+  normalizedPhone: string | null;
+  address1: string | null;
+  address2: string | null;
   city: string | null;
   region: string | null;
-  normalizedPhone: string | null;
+  normalizedCity: string | null;
+  normalizedRegion: string | null;
+  postalCode: string | null;
   website: string | null;
+  normalizedWebsiteHost: string | null;
 };
 
 export type LocalPersonCandidate = {
   id: string;
+  firstName: string;
+  lastName: string;
   displayName: string;
   normalizedName: string;
   email: string | null;
+  normalizedEmail: string | null;
+  sharedEmail: boolean;
+  phone: string | null;
   normalizedPhone: string | null;
+  jobTitle: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
 };
 
 export type LocalBookingCandidate = {
@@ -1270,7 +1352,16 @@ export type LocalBookingCandidate = {
   organizationId: string | null;
   primaryContactId: string | null;
   name: string;
+  venueName: string | null;
+  address1: string | null;
+  city: string;
+  region: string;
+  postalCode: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
   status: string;
+  probability: string;
+  notes: string | null;
 };
 
 export type LocalMigrationCandidateSnapshot = {
@@ -1282,11 +1373,15 @@ export type LocalMigrationCandidateSnapshot = {
     contactId: string;
     active: boolean;
     isPrimary: boolean;
+    role: string | null;
+    source: string;
   }[];
   bookingPeople: readonly {
     bookingId: string;
     contactId: string;
     isPrimary: boolean;
+    role: string | null;
+    source: string;
   }[];
   externalLinks: readonly {
     entityType: "organization" | "contact" | "booking" | "calling_list";
@@ -1306,7 +1401,10 @@ export type ActMigrationProposal = {
   sourceRecordKeys: readonly string[];
   candidateLocalIds: readonly string[];
   proposedLocalId: string | null;
+  proposedPrimarySourceId: string | null;
   matchReason: string;
+  issueCode: MigrationIssueCode | null;
+  dependencyProposalKeys: readonly string[];
   displaySnapshot: Record<string, string | number | boolean | null>;
 };
 
@@ -1316,29 +1414,167 @@ export function buildMigrationProposals(input: {
 }): readonly ActMigrationProposal[];
 ```
 
-- [ ] **Step 2: Run matcher tests and verify failure**
+- [ ] **Step 2: Run the contract tests and verify failure**
 
 ```powershell
-node node_modules/vitest/vitest.mjs run tests/unit/act-migration-matcher.test.ts
+node node_modules/vitest/vitest.mjs run tests/unit/act-migration-types.test.ts tests/unit/act-migration-source-parser.test.ts tests/unit/act-migration-matching-normalization.test.ts tests/unit/schema-contract.test.ts
 ```
 
-Expected: FAIL because the matcher and local candidate contracts do not exist.
+Expected: FAIL because the target ordering, shared normalization, Group
+semantics, and proposal persistence contracts do not exist.
 
-- [ ] **Step 3: Implement deterministic local reads and pure matching**
+- [ ] **Step 3: Implement normalization and proposal persistence contracts**
 
-The local repository must read in stable ID order:
+Keep display values unchanged and comparison values separate. Do not expand
+the Group API projection using a guessed field.
+
+Extend the normalized source contracts so `NormalizedCompany` carries
+`normalizedWebsiteHost`, `NormalizedContact` carries both display `email`
+and `normalizedEmail`, and `NormalizedGroup` carries
+`membershipSemantics: "unknown"`. Compute `sharedEmail` from the normalized
+address, not from an unvalidated display value. An unlinked Contact is a
+Person candidate only when it has a non-generic human name: blank names,
+names equal to the Company name, and role labels such as Info, Office,
+Sales, Support, Box Office, Reservations, or General Contact are
+company-only. A valid existing stable Contact link overrides that heuristic
+so an already-linked Person is never silently reclassified.
+
+While migration `0009` remains unreleased, add these proposal columns to the
+Drizzle schema, SQL migration, and snapshot:
+
+```ts
+reviewState: text("review_state").default("not_required").notNull(),
+issueCode: text("issue_code"),
+proposedPrimarySourceId: text("proposed_primary_source_id"),
+dependencyProposalKeys: jsonb("dependency_proposal_keys")
+  .$type<string[]>()
+  .default(sql`'[]'::jsonb`)
+  .notNull(),
+```
+
+Add checks for a valid review state, null-or-nonblank issue and proposed
+primary source IDs, and an array-valued dependency list. Matching must keep
+the proposed primary ID null or within that proposal's Contact source IDs.
+
+- [ ] **Step 4: Write and implement deterministic local reads**
+
+Create a PostgreSQL-gated integration test that inserts rows out of ID order.
+The local repository must return, in stable ID order:
 
 - all Places and their normalized name, address, phone, website, and type fields;
-- all People and all active Place-Person relationships;
+- all People and all Place-Person relationships, including inactive rows;
 - all Bookings and Booking-Person relationships;
 - canonical `company`, `contact`, `opportunity`, and `group` external links;
 - existing primary two-way Contact links separately from pull-only aliases.
 
-The matcher must not query the database, call Act!, read the clock, or generate random IDs. Sort proposals by stream dependency order and then `proposalKey`.
+Run every read inside one read-only `REPEATABLE READ` transaction. An
+inactive existing Place-Person pair is available as a reviewed
+reactivation/change candidate; source absence never proposes deactivation.
 
-Every first-time fallback match uses a visible review state even when the candidate is unique. Only an existing stable external link may produce an automatic `matched_unchanged` or `change` proposal.
+- [ ] **Step 5: Write failing match-precedence and source-ownership tests**
 
-- [ ] **Step 4: Write reconciliation tests**
+Prove:
+
+- Place matching follows stable Company link, unique normalized name plus
+  city/state, then unique normalized name plus verified E.164 phone or
+  normalized website host; ambiguous names require review;
+- Person matching follows stable Contact link, unique non-shared email with
+  compatible name, phone plus compatible name, then Place plus compatible
+  name; shared mailboxes never merge People by email alone;
+- one source Person can connect to several Places without duplication;
+- several source Contact IDs may form one reviewed Person consolidation, and
+  an existing primary two-way Contact link wins the proposed primary identity;
+- pull-only alias Contact fields cannot overwrite or drive a `change` for a
+  Person; aliases may preserve source identity and relationships only;
+- generic role names, names equal to the Company, and shared-mailbox/generic
+  combinations remain company-only unless a valid stable Contact link
+  already owns the source ID;
+- a company-only Contact never creates a Person or an invalid
+  Contact-to-Place external link;
+- a company-only Contact and its `company_contact` key fold into one Place
+  proposal only when exactly one source Company relationship resolves it;
+  Company values win and Contact phone/address only fill missing Place
+  values, while Contact email is visibly ignored because Places have no
+  email field;
+- missing or multiple company relationships for a company-only Contact
+  require review;
+- an Opportunity stable link matches its Booking, while an unlinked
+  Opportunity always proposes a new Booking and never fuzzy-merges;
+- a reliable Opportunity Place is exactly one resolved
+  `opportunity_company` parent; missing, ambiguous, errored, and
+  location-incomplete parents have distinct issue codes;
+- a Booking is ineligible until its Place supplies required city and region;
+- a Booking with a reliable Place and no Person stays eligible with
+  `needs_person` and `primaryContactId: null`;
+- relationship proposals depend on both parents; new relationship metadata
+  is `role: null` and `isPrimary: false`, while an existing pair preserves
+  its current metadata;
+- Group and `group_contact` records are explicitly owned by ignored
+  proposals with `group_membership_semantics_unknown`;
+- an existing `calling_list/group` link is reported as unavailable/orphaned
+  because this slice has no local calling-list table;
+- malformed and duplicate-conflict rows become error proposals;
+- every staged `sourceKey` appears in exactly one proposal and never two.
+
+Task 5 already converts a later same-ID/different-fingerprint occurrence into
+a deterministic `duplicate_source_id_conflict` record with its own error
+`sourceKey`. The matcher consumes that staged error row; it must not attempt
+to rediscover duplicate IDs or collapse the canonical row and conflict row.
+
+For company-only Contacts, ownership is explicit:
+
+- exactly one Company edge whose valid parent proposal exists folds the
+  Contact key and that edge key into the resolved Company/Place proposal;
+- zero Company edges create one organization-target `needs_review` proposal
+  owning the Contact key, with no dependency;
+- multiple Company edges, or any edge with a missing/error parent, create
+  one organization-target `needs_review` proposal owning the Contact key and
+  every one of those edge keys, with each valid Company proposal key as a
+  dependency;
+- none of these paths creates a Person or a Contact-to-Place external link.
+
+The source Company is the first endpoint of `company_contact`; Opportunity
+is the first endpoint of `opportunity_company` and `opportunity_contact`;
+Group is the first endpoint of `group_contact`. Do not reverse them.
+
+- [ ] **Step 6: Implement pure deterministic matching**
+
+The matcher must not query the database, call Act!, read the clock, or
+generate random IDs. Sort by `migrationTargetRank()` and then `proposalKey`.
+Put parent keys in `dependencyProposalKeys`; keep `issueCode` separate from
+the user-facing reason; use one canonical comparable field set for both
+unchanged/change classification and display data.
+
+`proposedPrimarySourceId` is part of the proposal and proposal digest.
+Existing primary two-way Contact identity wins; otherwise a consolidation
+requires an explicit later review choice. Do not use alias field values to
+construct the proposed Person update.
+
+Decision legality is proposal-aware. `allowedDecisionsForProposal()` may
+offer `link_existing` only when the proposal has a valid local candidate,
+and `keep_separate` only for a Person duplicate/consolidation. Missing,
+errored, or location-incomplete Opportunity parents, unresolved parent
+dependencies, unavailable Groups, and source error rows cannot accept a
+semantically invalid link/create choice; they expose only `ignore` or no
+decision as appropriate. Task 7 must validate with this function rather
+than the state-only helper.
+
+Act! Opportunity status, stage, process, probability, total, and close dates
+remain visible source metadata; this slice does not guess a mapping from
+those values to local Booking workflow status, probability, or event dates.
+New Booking proposals use the existing local defaults `new_lead` and
+`possible`, leave event dates null, and derive required location only from
+the resolved Place. Stable Booking comparisons must not report changes for
+unmapped Act! fields.
+
+Only an existing valid stable link may yield an automatic
+`matched_unchanged` or `change` match. Every first-time name, address, phone,
+website, email, consolidation, or relationship fallback remains visibly
+review-required even when unique. Dangling external links are review-only.
+This task must not mutate CRM entities, relationships, external links,
+calling lists, or decisions.
+
+- [ ] **Step 7: Write reconciliation tests**
 
 Use:
 
@@ -1360,14 +1596,22 @@ export type MigrationReconciliationReport = {
 };
 ```
 
-Prove `complete` is true only when all checkpoints are complete and every staged record key appears exactly once among proposal source keys, ignored reasons, or errors. Prove the same inputs generate the same source and proposal digests regardless of input array order.
+Prove `complete` is true only when all checkpoints are complete, every staged
+record key is owned exactly once (including ignored/error proposals), and
+every dependency key exists. Missing/duplicate ownership and
+pending/failed checkpoints make it false. Prove array input order does not
+change either digest. The proposal digest covers state, review state, target,
+source keys, candidates, proposed local ID, proposed primary source ID,
+issue, dependencies, reason, and display snapshot in canonical order.
 
-- [ ] **Step 5: Run focused tests and commit**
+- [ ] **Step 8: Run focused tests and commit**
 
 ```powershell
-node node_modules/vitest/vitest.mjs run tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts
+node node_modules/vitest/vitest.mjs run tests/unit/act-migration-types.test.ts tests/unit/act-migration-source-parser.test.ts tests/unit/act-migration-matching-normalization.test.ts tests/unit/schema-contract.test.ts tests/integration/act-migration-local-candidate-repository.test.ts tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts
 npm run typecheck
-git add features/act-migration/local-candidate-repository.ts features/act-migration/matcher.ts features/act-migration/reconciliation.ts tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts
+node node_modules/drizzle-kit/bin.cjs check
+git diff --check
+git add features/act-migration/migration-types.ts features/act-migration/source-parser.ts features/act-migration/matching-normalization.ts features/act-migration/local-candidate-repository.ts features/act-migration/matcher.ts features/act-migration/reconciliation.ts db/schema.ts db/migrations/0009_act_migration_staging.sql db/migrations/meta/0009_snapshot.json tests/unit/act-migration-types.test.ts tests/unit/act-migration-source-parser.test.ts tests/unit/act-migration-matching-normalization.test.ts tests/unit/schema-contract.test.ts tests/integration/act-migration-local-candidate-repository.test.ts tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts
 git commit -m "feat: build Act migration proposals"
 ```
 
@@ -1399,6 +1643,13 @@ Prove:
 9. Choosing a primary source Contact requires one of that proposal’s source IDs.
 10. A saved decision survives repository recreation and preview reload.
 11. No decision method writes to organizations, contacts, bookings, relationship tables, or calling-list tables.
+
+Persist and reload `reviewState`, `issueCode`,
+`proposedPrimarySourceId`, and `dependencyProposalKeys` without deriving
+them again. Reject a stored
+dependency key that does not belong to the same run. An unresolved
+dependency remains review-only; saving a child decision must not silently
+resolve or apply its parent.
 
 The interface must be:
 
