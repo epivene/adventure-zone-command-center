@@ -33,10 +33,128 @@ async function migrationStatements(fileName: string, schemaName: string) {
     .filter(Boolean);
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+async function waitForDatabaseLock(sql: postgres.Sql, backendPid: number) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [activity] = await sql.unsafe(`
+      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${backendPid}
+    `);
+    if (activity?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Expected the Contact update to wait on the Place lock.");
+}
+
+function queryTerminal<T>(records: T[]) {
+  const promise = Promise.resolve(records);
+  const terminal = {
+    limit: () => terminal,
+    for: () => promise,
+    then: promise.then.bind(promise),
+  };
+  return terminal;
+}
+
+class DisappearingContactDatabase {
+  readonly createdOrganizationId =
+    "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  readonly organizations = new Map<string, Record<string, unknown>>();
+  readonly audits: Array<Record<string, unknown>> = [];
+  readonly events: string[] = [];
+  candidateExists = true;
+  executeError: Error | null = null;
+
+  async execute() {
+    if (this.executeError) throw this.executeError;
+    this.events.push("lock:organization-name");
+    return [];
+  }
+
+  select() {
+    return {
+      from: (table: unknown) => {
+        let joined = false;
+        const builder = {
+          leftJoin: () => {
+            joined = true;
+            return builder;
+          },
+          where: () => {
+            if (table === crmSchema.organizations) {
+              return queryTerminal([]);
+            }
+            if (table === crmSchema.contacts) {
+              const records =
+                this.candidateExists && !joined
+                  ? [{ id: repositoryIds.existingContact }]
+                  : [];
+              if (joined) this.events.push("recheck:contact-missing");
+              return queryTerminal(records);
+            }
+            return queryTerminal([]);
+          },
+        };
+        return builder;
+      },
+    };
+  }
+
+  insert(table: unknown) {
+    return {
+      values: (values: Record<string, unknown>) => {
+        if (table === crmSchema.organizations) {
+          this.organizations.set(this.createdOrganizationId, {
+            ...values,
+            id: this.createdOrganizationId,
+          });
+          this.events.push("insert:organization");
+          return {
+            returning: async () => [{ id: this.createdOrganizationId }],
+          };
+        }
+        if (table === crmSchema.auditEntries) {
+          this.audits.push({ ...values });
+          this.events.push("insert:audit");
+          return {};
+        }
+        throw new Error("Unexpected insert in disappearance test.");
+      },
+    };
+  }
+
+  async transaction<T>(
+    operation: (transaction: DisappearingContactDatabase) => Promise<T>,
+  ) {
+    const organizationsBefore = new Map(this.organizations);
+    const auditsBefore = this.audits.map((entry) => ({ ...entry }));
+    try {
+      const result = await operation(this);
+      this.events.push("commit");
+      return result;
+    } catch (error) {
+      this.organizations.clear();
+      for (const [id, organization] of organizationsBefore) {
+        this.organizations.set(id, organization);
+      }
+      this.audits.splice(0, this.audits.length, ...auditsBefore);
+      this.events.push("rollback");
+      throw error;
+    }
+  }
+}
+
 const repositoryIds = {
   organization: "11111111-1111-4111-8111-111111111111",
   secondOrganization: "33333333-3333-4333-8333-333333333333",
   existingContact: "22222222-2222-4222-8222-222222222222",
+  disappearingContact: "44444444-4444-4444-8444-444444444444",
 };
 
 const quickCaller: QuickCallerInput = {
@@ -117,6 +235,65 @@ describe("contact repository query contract", () => {
       kind: "none",
       normalizedPhone: "+14065550101",
     });
+  });
+});
+
+describe("DrizzleContactRepository update rollback semantics", () => {
+  it("returns false and rolls back a newly created Place when the Contact disappears", async () => {
+    const database = new DisappearingContactDatabase();
+    const repository = new DrizzleContactRepository(database as never);
+
+    await expect(
+      repository.updateContact(repositoryIds.existingContact, {
+        ...localContact,
+        organizationName: "Race Fair",
+      }),
+    ).resolves.toBe(false);
+
+    expect(database.organizations.size).toBe(0);
+    expect(database.audits).toEqual([]);
+    expect(database.events).toEqual([
+      "lock:organization-name",
+      "insert:organization",
+      "insert:audit",
+      "recheck:contact-missing",
+      "rollback",
+    ]);
+  });
+
+  it("returns false without resolving a Place when the initial probe misses", async () => {
+    const database = new DisappearingContactDatabase();
+    database.candidateExists = false;
+
+    await expect(
+      new DrizzleContactRepository(database as never).updateContact(
+        repositoryIds.existingContact,
+        {
+          ...localContact,
+          organizationName: "Race Fair",
+        },
+      ),
+    ).resolves.toBe(false);
+
+    expect(database.organizations.size).toBe(0);
+    expect(database.audits).toEqual([]);
+    expect(database.events).toEqual(["commit"]);
+  });
+
+  it("rethrows unrelated transaction errors", async () => {
+    const database = new DisappearingContactDatabase();
+    const unrelated = new Error("database unavailable");
+    database.executeError = unrelated;
+
+    await expect(
+      new DrizzleContactRepository(database as never).updateContact(
+        repositoryIds.existingContact,
+        {
+          ...localContact,
+          organizationName: "Race Fair",
+        },
+      ),
+    ).rejects.toBe(unrelated);
   });
 });
 
@@ -307,6 +484,85 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       from contacts
       where id = ${contactId}
     `).toEqual([{ organization_id: repositoryIds.secondOrganization }]);
+  });
+
+  postgresTest("rolls back a newly resolved Place when the Contact disappears before the locked recheck", async () => {
+    const lockClient = postgres(databaseUrl!, { max: 1 });
+    const updateClient = postgres(databaseUrl!, { max: 1 });
+    const observerClient = postgres(databaseUrl!, { max: 1 });
+    const placeLockHeld = deferred();
+    const releasePlaceLock = deferred();
+    let placeLock: Promise<unknown> | undefined;
+    let update: Promise<boolean> | undefined;
+    try {
+      await Promise.all([
+        lockClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        updateClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        observerClient.unsafe(`SET search_path TO "${schemaName}", public`),
+      ]);
+      await updateClient.unsafe("SET lock_timeout = '5s'");
+      const [{ pid: updatePid } = { pid: 0 }] =
+        await updateClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      if (!updatePid) throw new Error("Could not identify the update session.");
+      await sql!.unsafe(`
+        INSERT INTO contacts (id, first_name, last_name)
+        VALUES ('${repositoryIds.disappearingContact}', 'Race', 'Condition')
+      `);
+
+      placeLock = lockClient.begin(async (transaction) => {
+        await transaction.unsafe(`
+          SELECT pg_advisory_xact_lock(
+            hashtextextended('organization:race fair', 0)
+          )
+        `);
+        placeLockHeld.resolve();
+        await releasePlaceLock.promise;
+      });
+      await placeLockHeld.promise;
+
+      const updateRepository = new DrizzleContactRepository(
+        drizzle({ client: updateClient, schema: crmSchema }),
+      );
+      update = updateRepository.updateContact(
+        repositoryIds.disappearingContact,
+        {
+          ...localContact,
+          organizationName: "Race Fair",
+        },
+      );
+      await waitForDatabaseLock(observerClient, updatePid);
+      await sql!.unsafe(`
+        DELETE FROM contacts
+        WHERE id = '${repositoryIds.disappearingContact}'
+      `);
+
+      releasePlaceLock.resolve();
+      await placeLock;
+      await expect(update).resolves.toBe(false);
+      expect(
+        await sql!.unsafe(`
+          SELECT id FROM organizations
+          WHERE lower(name) = 'race fair'
+        `),
+      ).toEqual([]);
+      expect(
+        await sql!.unsafe(`
+          SELECT id FROM audit_entries
+          WHERE entity_type = 'organization'
+            AND action = 'create'
+            AND after->>'name' = 'Race Fair'
+        `),
+      ).toEqual([]);
+    } finally {
+      releasePlaceLock.resolve();
+      if (placeLock) await placeLock;
+      if (update) await Promise.allSettled([update]);
+      await lockClient.end({ timeout: 5 });
+      await updateClient.end({ timeout: 5 });
+      await observerClient.end({ timeout: 5 });
+    }
   });
 
   postgresTest("replays one concurrent intake request without duplicate local writes", async () => {

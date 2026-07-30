@@ -51,6 +51,13 @@ export type ContactPatchWriter = Pick<
   "delete" | "insert" | "select" | "update"
 >;
 
+class ContactDisappearedDuringUpdateError extends Error {
+  constructor() {
+    super("Contact disappeared during update.");
+    this.name = "ContactDisappearedDuringUpdateError";
+  }
+}
+
 export function contactSyncState(value: string | null): ContactSyncState {
   return contactSyncStateValues.includes(value as ContactSyncState)
     ? (value as ContactSyncState)
@@ -549,58 +556,63 @@ export class DrizzleContactRepository {
     input: ContactInput,
     now = new Date(),
   ) {
-    return this.database.transaction(async (transaction) => {
-      const [candidate] = await transaction
-        .select({ id: contacts.id })
-        .from(contacts)
-        .where(eq(contacts.id, contactId))
-        .limit(1);
-      if (!candidate) return false;
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [candidate] = await transaction
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(eq(contacts.id, contactId))
+          .limit(1);
+        if (!candidate) return false;
 
-      const organizationId = await this.resolveOrganizationId(
-        transaction,
-        input.organizationName,
-        now,
-      );
-      const [before] = await transaction
-        .select({ contact: contacts, organizationName: organizations.name })
-        .from(contacts)
-        .leftJoin(
-          organizations,
-          eq(contacts.organizationId, organizations.id),
-        )
-        .where(eq(contacts.id, contactId))
-        .limit(1)
-        .for("update", { of: contacts });
-      if (!before) return false;
-      const { snapshot } = await patchContactInTransaction(
-        transaction,
-        before.contact,
-        input.organizationName,
-        {
-          organizationId,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          jobTitle: input.jobTitle,
-          email: input.email,
-          phone: input.phone,
-          address1: input.address1,
-          address2: input.address2,
-          city: input.city,
-          region: input.region,
-          postalCode: input.postalCode,
-        } as Partial<Omit<ContactFields, "organizationName">>,
-        now,
-      );
-      await recordAuditEntry(transaction, {
-        entityType: "contact",
-        entityId: contactId,
-        action: "update",
-        before: contactAuditSnapshot(before.contact, before.organizationName),
-        after: snapshot,
+        const organizationId = await this.resolveOrganizationId(
+          transaction,
+          input.organizationName,
+          now,
+        );
+        const [before] = await transaction
+          .select({ contact: contacts, organizationName: organizations.name })
+          .from(contacts)
+          .leftJoin(
+            organizations,
+            eq(contacts.organizationId, organizations.id),
+          )
+          .where(eq(contacts.id, contactId))
+          .limit(1)
+          .for("update", { of: contacts });
+        if (!before) throw new ContactDisappearedDuringUpdateError();
+        const { snapshot } = await patchContactInTransaction(
+          transaction,
+          before.contact,
+          input.organizationName,
+          {
+            organizationId,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            jobTitle: input.jobTitle,
+            email: input.email,
+            phone: input.phone,
+            address1: input.address1,
+            address2: input.address2,
+            city: input.city,
+            region: input.region,
+            postalCode: input.postalCode,
+          } as Partial<Omit<ContactFields, "organizationName">>,
+          now,
+        );
+        await recordAuditEntry(transaction, {
+          entityType: "contact",
+          entityId: contactId,
+          action: "update",
+          before: contactAuditSnapshot(before.contact, before.organizationName),
+          after: snapshot,
+        });
+        return true;
       });
-      return true;
-    });
+    } catch (error) {
+      if (error instanceof ContactDisappearedDuringUpdateError) return false;
+      throw error;
+    }
   }
 
   async listRecentAuditEntries(contactId: string) {
