@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { ActMigrationProposal } from "@/features/act-migration/migration-types";
-import { reconcileMigrationPreview } from "@/features/act-migration/reconciliation";
+import {
+  proposalSnapshotDigest,
+  reconcileMigrationPreview,
+} from "@/features/act-migration/reconciliation";
 import type {
   ActMigrationCheckpoint,
   FinalizedSourceSnapshot,
@@ -129,6 +132,27 @@ const proposals = [
 ];
 
 describe("reconcileMigrationPreview", () => {
+  it("hashes immutable proposal evidence independently of input ordering", () => {
+    const forward = proposalSnapshotDigest(proposals);
+    const reordered = proposalSnapshotDigest(
+      proposals.toReversed().map((value) => ({
+        ...value,
+        sourceRecordKeys: value.sourceRecordKeys.toReversed(),
+        candidateLocalIds: value.candidateLocalIds.toReversed(),
+        dependencyProposalKeys: value.dependencyProposalKeys.toReversed(),
+        displaySnapshot: Object.fromEntries(
+          Object.entries(value.displaySnapshot).toReversed(),
+        ),
+      })),
+    );
+
+    expect(reordered).toBe(forward);
+    expect(proposalSnapshotDigest([
+      { ...proposals[0]!, reviewState: "decided" },
+      ...proposals.slice(1),
+    ])).not.toBe(forward);
+  });
+
   it("counts source coverage, gaps, checkpoints, and preview states", () => {
     const report = reconcileMigrationPreview({
       source: source(records),

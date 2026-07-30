@@ -80,6 +80,12 @@ function canonicalProposals(proposals: readonly ActMigrationProposal[]) {
     });
 }
 
+export function proposalSnapshotDigest(
+  proposals: readonly ActMigrationProposal[],
+) {
+  return digest(canonicalProposals(proposals));
+}
+
 export function reconcileMigrationPreview(input: {
   source: FinalizedSourceSnapshot;
   proposals: readonly ActMigrationProposal[];
@@ -272,7 +278,7 @@ export function reconcileMigrationPreview(input: {
     incompleteCheckpoints,
     failedCheckpoints,
     sourceDigest: input.source.sourceDigest,
-    proposalDigest: digest(canonicalProposals(input.proposals)),
+    proposalDigest: proposalSnapshotDigest(input.proposals),
     complete:
       input.source.checkpoints.length > 0 &&
       incompleteCheckpoints === 0 &&
