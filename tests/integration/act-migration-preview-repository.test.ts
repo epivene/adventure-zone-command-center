@@ -13,6 +13,7 @@ import {
 } from "@/features/act-migration/preview-repository";
 import { ActMigrationPreviewService } from "@/features/act-migration/preview-service";
 import { proposalSnapshotDigest } from "@/features/act-migration/reconciliation";
+import { ActMigrationRunNotFoundError } from "@/features/act-migration/snapshot-repository";
 import type { ActMigrationProposal } from "@/features/act-migration/migration-types";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
@@ -113,6 +114,52 @@ async function waitForDatabaseLock(
   }
   throw new Error("Expected the database session to wait on a lock.");
 }
+
+describe("preview decision run lookup", () => {
+  it("distinguishes a missing run from a stored run in the wrong status", async () => {
+    const repositoryWithRunRows = (runRows: unknown[]) => {
+      const query = {
+        from() {
+          return this;
+        },
+        where() {
+          return this;
+        },
+        limit() {
+          return this;
+        },
+        for() {
+          return Promise.resolve(runRows);
+        },
+      };
+      const database = {
+        transaction<T>(operation: (transaction: {
+          select(): typeof query;
+        }) => Promise<T>) {
+          return operation({ select: () => query });
+        },
+      };
+      return new DrizzleActMigrationPreviewRepository(database as never);
+    };
+    const input = {
+      runId,
+      proposalKey: "contact:missing-run",
+      decision: "ignore" as const,
+      ignoreReason: "reviewed",
+      decidedBy: "owner",
+    };
+
+    await expect(
+      repositoryWithRunRows([]).saveDecision(input),
+    ).rejects.toBeInstanceOf(ActMigrationRunNotFoundError);
+    await expect(
+      repositoryWithRunRows([{
+        id: runId,
+        status: "snapshot_complete",
+      }]).saveDecision(input),
+    ).rejects.toThrow("not ready");
+  });
+});
 
 describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   const postgresTest = databaseUrl ? it : it.skip;
@@ -217,17 +264,30 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   beforeEach(async () => {
     if (!databaseUrl) return;
     schemaName = testSchemaName();
-    sql = postgres(databaseUrl, { max: 4 });
-    await sql.unsafe(`CREATE SCHEMA "${schemaName}"`);
-    await sql.unsafe(`SET search_path TO "${schemaName}", public`);
-    const journal = JSON.parse(await readFile(
-      path.join(migrationDirectory, "meta", "_journal.json"), "utf8",
-    )) as { entries: { tag: string }[] };
-    for (const entry of journal.entries) {
-      for (const statement of await migrationStatements(`${entry.tag}.sql`, schemaName)) {
-        await sql.unsafe(statement);
+    const setupSql = postgres(databaseUrl, { max: 1 });
+    try {
+      await setupSql.unsafe(`CREATE SCHEMA "${schemaName}"`);
+      await setupSql.unsafe(`SET search_path TO "${schemaName}", public`);
+      const journal = JSON.parse(await readFile(
+        path.join(migrationDirectory, "meta", "_journal.json"), "utf8",
+      )) as { entries: { tag: string }[] };
+      for (const entry of journal.entries) {
+        for (
+          const statement of await migrationStatements(
+            `${entry.tag}.sql`,
+            schemaName,
+          )
+        ) {
+          await setupSql.unsafe(statement);
+        }
       }
+    } finally {
+      await setupSql.end({ timeout: 5 });
     }
+    sql = postgres(databaseUrl, {
+      max: 4,
+      connection: { search_path: `${schemaName},public` },
+    });
     database = drizzle({ client: sql, schema: crmSchema });
     repository = new DrizzleActMigrationPreviewRepository(database);
     await database.insert(crmSchema.actMigrationRuns).values({
@@ -298,6 +358,111 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     expect(preview.rows.find(({ proposalKey }) => proposalKey === detailed.proposalKey)).toMatchObject(detailed);
     expect(proposalSnapshotDigest(preview.rows)).toBe(proposalSnapshotDigest(proposals));
   });
+
+  postgresTest(
+    "reloads only safe available staged Contact IDs as primary-source choices",
+    async () => {
+      await database.insert(crmSchema.actMigrationRecords).values([
+        {
+          runId,
+          streamType: "contact",
+          sourceKey: "contact:valid-primary",
+          sourceId: "ACT-CONTACT-VALID",
+          rawSnapshot: {
+            id: "ACT-CONTACT-VALID",
+            emailAddress: "private@example.test",
+          },
+          normalizedSnapshot: { displayName: "Private Contact Name" },
+          fingerprint: "valid-primary",
+        },
+        {
+          runId,
+          streamType: "contact",
+          sourceKey: "contact:invalid-primary",
+          sourceId: "ACT-CONTACT-INVALID",
+          rawSnapshot: { id: "ACT-CONTACT-INVALID", secret: "do-not-return" },
+          normalizedSnapshot: {},
+          fingerprint: "invalid-primary",
+          errorCode: "invalid_source_record",
+        },
+        {
+          runId,
+          streamType: "contact",
+          sourceKey: "contact:blank-primary",
+          sourceId: "   ",
+          rawSnapshot: { id: "   " },
+          normalizedSnapshot: {},
+          fingerprint: "blank-primary",
+        },
+        {
+          runId,
+          streamType: "contact",
+          sourceKey: "contact:missing-primary",
+          sourceId: null,
+          rawSnapshot: {},
+          normalizedSnapshot: {},
+          fingerprint: "missing-primary",
+        },
+      ]);
+      const contactProposal = proposal({
+        proposalKey: "contact:safe-primary-choices",
+        state: "change",
+        targetEntityType: "contact",
+        sourceRecordKeys: [
+          "contact:valid-primary",
+          "contact:invalid-primary",
+          "contact:blank-primary",
+          "contact:missing-primary",
+        ],
+        proposedPrimarySourceId: "ACT-CONTACT-VALID",
+      });
+      await store([baseProposal(), contactProposal]);
+
+      const first = await repository.getPreview(runId, {
+        page: 1,
+        pageSize: 100,
+      });
+      const row = first.rows.find(
+        ({ proposalKey }) => proposalKey === contactProposal.proposalKey,
+      );
+      expect(row?.primarySourceChoices).toEqual([{
+        id: "ACT-CONTACT-VALID",
+        label: "ACT-CONTACT-VALID",
+        available: true,
+      }]);
+      expect(JSON.stringify(row?.primarySourceChoices)).not.toContain(
+        "private@example.test",
+      );
+      expect(JSON.stringify(row?.primarySourceChoices)).not.toContain(
+        "Private Contact Name",
+      );
+      expect(JSON.stringify(row?.primarySourceChoices)).not.toContain(
+        "do-not-return",
+      );
+
+      await repository.saveDecision({
+        runId,
+        proposalKey: contactProposal.proposalKey,
+        decision: "approve_proposed",
+        decidedBy: "owner",
+      });
+      const reloaded = await repository.getPreview(runId, {
+        page: 1,
+        pageSize: 100,
+      });
+      expect(reloaded.rows.find(
+        ({ proposalKey }) => proposalKey === contactProposal.proposalKey,
+      )).toMatchObject({
+        proposedPrimarySourceId: "ACT-CONTACT-VALID",
+        primarySourceId: null,
+        primarySourceChoices: [{
+          id: "ACT-CONTACT-VALID",
+          label: "ACT-CONTACT-VALID",
+          available: true,
+        }],
+      });
+    },
+  );
 
   postgresTest("makes identical direct retries write-free and rejects a changed stored digest", async () => {
     const proposals = [baseProposal()];

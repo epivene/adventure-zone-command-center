@@ -166,7 +166,7 @@ export async function startActMigrationAction(
       requestedBy: actor.userId,
     });
     changedPath(result.created);
-    return {
+    return interruptionError(result.progress) ?? {
       ok: true,
       changed: result.created,
       runId: result.id,

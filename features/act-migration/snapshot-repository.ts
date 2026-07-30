@@ -771,6 +771,14 @@ export class DrizzleActMigrationSnapshotRepository
     const failures = checkpoints
       .filter(({ status }) => status === "failed")
       .toSorted(failureOrder);
+    const retryableFailures = failures.filter(({ retryable }) => retryable);
+    const aggregateRetryAfter = retryableFailures.some(
+      ({ retryAfter }) => retryAfter === null,
+    )
+      ? null
+      : retryableFailures
+        .flatMap(({ retryAfter }) => retryAfter ? [retryAfter] : [])
+        .toSorted((left, right) => left.getTime() - right.getTime())[0] ?? null;
     const streams = actMigrationStreamTypeValues.map((streamType) => {
       const streamCheckpoints = checkpoints.filter(
         (checkpoint) => checkpoint.streamType === streamType,
@@ -804,8 +812,8 @@ export class DrizzleActMigrationSnapshotRepository
       totalCheckpoints: checkpoints.length,
       stagedRecords: records.length,
       failedCheckpoints: failures.length,
-      retryable: interruption?.retryable ?? false,
-      retryAfter: interruption?.retryAfter ?? null,
+      retryable: retryableFailures.length > 0,
+      retryAfter: aggregateRetryAfter,
       streams,
       interruption: interruption
         ? {

@@ -113,14 +113,41 @@ beforeEach(() => {
 });
 
 describe("Act migration owner actions", () => {
-  it("authorizes before environment or runtime construction", async () => {
+  it.each([
+    ["start", () => startActMigrationAction("invalid-request-key")],
+    ["continue", () => continueActMigrationAction("invalid-run-id")],
+    ["resume", () => resumeActMigrationAction("invalid-run-id")],
+    [
+      "finalize",
+      () => finalizeActMigrationPreviewAction({
+        runId: "invalid-run-id",
+        query: { page: 0, pageSize: 101 },
+      }),
+    ],
+    [
+      "decision",
+      () => saveActMigrationDecisionAction({
+        runId: "invalid-run-id",
+        proposalKey: " ",
+        decision: "invalid" as never,
+      }),
+    ],
+  ])("authorizes before parsing or constructing the %s runtime", async (
+    _name,
+    invoke,
+  ) => {
     mocks.requireOwner.mockRejectedValueOnce(new Error("Not authorized"));
 
-    await expect(startActMigrationAction(requestKey)).rejects.toThrow(
-      "Not authorized",
-    );
+    await expect(invoke()).rejects.toThrow("Not authorized");
+    expect(mocks.requireOwner).toHaveBeenCalledOnce();
     expect(mocks.getActEnvironment).not.toHaveBeenCalled();
     expect(mocks.createCapture).not.toHaveBeenCalled();
+    expect(mocks.createPreview).not.toHaveBeenCalled();
+    expect(mocks.capture.start).not.toHaveBeenCalled();
+    expect(mocks.capture.captureNext).not.toHaveBeenCalled();
+    expect(mocks.preview.finalizePreview).not.toHaveBeenCalled();
+    expect(mocks.preview.saveDecision).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it("starts with only the database digest and owner identity", async () => {
@@ -146,6 +173,39 @@ describe("Act migration owner actions", () => {
       "/settings/act-migration",
     );
   });
+
+  it.each([
+    [true, true],
+    [false, false],
+  ])(
+    "returns an interrupted start retry with created=%s and revalidate=%s",
+    async (created, revalidate) => {
+      mocks.capture.start.mockResolvedValue({
+        id: runId,
+        created,
+        progress: {
+          ...progress,
+          failedCheckpoints: 2,
+          retryable: true,
+          retryAfter: new Date("2030-01-02T03:04:05.000Z"),
+          interruption: {
+            code: "authentication_failed",
+            retryable: false,
+            retryAfter: null,
+          },
+        },
+      });
+
+      await expect(startActMigrationAction(requestKey)).resolves.toEqual({
+        ok: false,
+        error:
+          "Act! rejected the shared account credentials. Check the Render settings.",
+        retryable: false,
+        retryAfter: null,
+      });
+      expect(mocks.revalidatePath).toHaveBeenCalledTimes(revalidate ? 1 : 0);
+    },
+  );
 
   it("validates strict identifiers before factory construction", async () => {
     await expect(continueActMigrationAction("run-1")).resolves.toMatchObject({
@@ -311,6 +371,25 @@ describe("Act migration owner actions", () => {
       retryable: false,
       retryAfter: null,
     });
+  });
+
+  it("maps a missing decision run to the selected-run message", async () => {
+    mocks.preview.saveDecision.mockRejectedValue(
+      new ActMigrationRunNotFoundError(),
+    );
+
+    await expect(saveActMigrationDecisionAction({
+      runId,
+      proposalKey: "contact:missing-run",
+      decision: "ignore",
+      ignoreReason: "reviewed",
+    })).resolves.toEqual({
+      ok: false,
+      error: "The selected Act! migration run was not found.",
+      retryable: false,
+      retryAfter: null,
+    });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
   it.each([

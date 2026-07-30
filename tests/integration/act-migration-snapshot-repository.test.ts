@@ -629,18 +629,30 @@ describe("snapshot finalization state monotonicity", () => {
 });
 
 describe("snapshot progress retry scheduling", () => {
-  it("reports retry now when any retryable failure has no retry-after time", async () => {
-    const futureRetry = new Date("2026-07-30T16:00:00.000Z");
+  it("keeps aggregate retry scheduling independent from the selected interruption", async () => {
+    const laterRetry = new Date("2026-07-30T17:00:00.000Z");
+    const earlierRetry = new Date("2026-07-30T16:00:00.000Z");
     const database = new FinalizationDatabase([
       {
         ...storedCheckpoint("company", "root", null),
         status: "failed",
+        retryable: false,
         retryAfter: null,
+        errorCode: "authentication_failed",
       },
       {
         ...storedCheckpoint("contact", "root", null),
         status: "failed",
-        retryAfter: futureRetry,
+        retryable: true,
+        retryAfter: laterRetry,
+        errorCode: "rate_limited",
+      },
+      {
+        ...storedCheckpoint("opportunity", "root", null),
+        status: "failed",
+        retryable: true,
+        retryAfter: earlierRetry,
+        errorCode: "unavailable",
       },
     ]);
     const repository = new DrizzleActMigrationSnapshotRepository(
@@ -648,9 +660,55 @@ describe("snapshot progress retry scheduling", () => {
     );
 
     await expect(repository.getProgress(finalizationRunId)).resolves.toMatchObject({
-      failedCheckpoints: 2,
+      failedCheckpoints: 3,
+      retryable: true,
+      retryAfter: earlierRetry,
+      interruption: {
+        code: "authentication_failed",
+        retryable: false,
+        retryAfter: null,
+      },
+    });
+  });
+
+  it("reports retry now when any retryable failure has no retry-after time", async () => {
+    const futureRetry = new Date("2026-07-30T16:00:00.000Z");
+    const database = new FinalizationDatabase([
+      {
+        ...storedCheckpoint("company", "root", null),
+        status: "failed",
+        retryable: false,
+        retryAfter: null,
+        errorCode: "permission_denied",
+      },
+      {
+        ...storedCheckpoint("contact", "root", null),
+        status: "failed",
+        retryable: true,
+        retryAfter: null,
+        errorCode: "rate_limited",
+      },
+      {
+        ...storedCheckpoint("opportunity", "root", null),
+        status: "failed",
+        retryable: true,
+        retryAfter: futureRetry,
+        errorCode: "unavailable",
+      },
+    ]);
+    const repository = new DrizzleActMigrationSnapshotRepository(
+      database as never,
+    );
+
+    await expect(repository.getProgress(finalizationRunId)).resolves.toMatchObject({
+      failedCheckpoints: 3,
       retryable: true,
       retryAfter: null,
+      interruption: {
+        code: "permission_denied",
+        retryable: false,
+        retryAfter: null,
+      },
     });
   });
 });
@@ -707,6 +765,34 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
       requestedBy: "snapshot-test",
     });
   }
+
+  postgresTest("returns null when no stored migration run exists", async () => {
+    await expect(repository.getLatestProgress()).resolves.toBeNull();
+  });
+
+  postgresTest(
+    "breaks newest-run created-at ties by descending run ID",
+    async () => {
+      const createdAt = "2030-01-02T03:04:05.000Z";
+      const lowerId = "11111111-1111-4111-8111-111111111111";
+      const higherId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+      await sql!.unsafe(`
+        INSERT INTO act_migration_runs (
+          id, request_key, source_database_key, requested_by, created_at
+        ) VALUES
+          (
+            '${lowerId}', '22222222-2222-4222-8222-222222222222',
+            'source', 'owner', '${createdAt}'
+          ),
+          (
+            '${higherId}', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            'source', 'owner', '${createdAt}'
+          )
+      `);
+
+      expect((await repository.getLatestProgress())?.runId).toBe(higherId);
+    },
+  );
 
   postgresTest(
     "reuses a request key and creates the four root checkpoints in dependency order",
@@ -790,6 +876,12 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
         WHERE run_id = '${newer.id}' AND stream_type = 'opportunity'
       `);
       await sql!.unsafe(`
+        UPDATE act_migration_checkpoints
+        SET status = 'failed', retryable = false,
+          retry_after = NULL, error_code = 'future_private_code'
+        WHERE run_id = '${newer.id}' AND stream_type = 'group'
+      `);
+      await sql!.unsafe(`
         INSERT INTO act_migration_records (
           run_id, stream_type, source_key, source_id, raw_snapshot,
           normalized_snapshot, fingerprint
@@ -799,25 +891,77 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
       `);
 
       const explicit = await repository.getProgress(newer.id);
-      expect(explicit.streams.map(({ streamType }) => streamType)).toEqual([
-        "company",
-        "contact",
-        "opportunity",
-        "group",
-        "company_contact",
-        "opportunity_company",
-        "opportunity_contact",
-        "group_contact",
-      ]);
-      expect(explicit.streams[0]).toMatchObject({
+      expect(explicit).toEqual({
+        runId: newer.id,
+        status: "snapshotting",
         completedCheckpoints: 1,
-        totalCheckpoints: 1,
+        totalCheckpoints: 4,
         stagedRecords: 2,
-      });
-      expect(explicit.interruption).toEqual({
-        code: "permission_denied",
-        retryable: false,
-        retryAfter: null,
+        failedCheckpoints: 3,
+        retryable: true,
+        retryAfter: new Date("2030-01-02T03:04:05.000Z"),
+        streams: [
+          {
+            streamType: "company",
+            completedCheckpoints: 1,
+            totalCheckpoints: 1,
+            stagedRecords: 2,
+            failedCheckpoints: 0,
+            retryable: false,
+            retryAfter: null,
+            errorCode: null,
+          },
+          {
+            streamType: "contact",
+            completedCheckpoints: 0,
+            totalCheckpoints: 1,
+            stagedRecords: 0,
+            failedCheckpoints: 1,
+            retryable: true,
+            retryAfter: new Date("2030-01-02T03:04:05.000Z"),
+            errorCode: "rate_limited",
+          },
+          {
+            streamType: "opportunity",
+            completedCheckpoints: 0,
+            totalCheckpoints: 1,
+            stagedRecords: 0,
+            failedCheckpoints: 1,
+            retryable: false,
+            retryAfter: null,
+            errorCode: "permission_denied",
+          },
+          {
+            streamType: "group",
+            completedCheckpoints: 0,
+            totalCheckpoints: 1,
+            stagedRecords: 0,
+            failedCheckpoints: 1,
+            retryable: false,
+            retryAfter: null,
+            errorCode: "unknown",
+          },
+          ...[
+            "company_contact",
+            "opportunity_company",
+            "opportunity_contact",
+            "group_contact",
+          ].map((streamType) => ({
+            streamType,
+            completedCheckpoints: 0,
+            totalCheckpoints: 0,
+            stagedRecords: 0,
+            failedCheckpoints: 0,
+            retryable: false,
+            retryAfter: null,
+            errorCode: null,
+          })),
+        ],
+        interruption: {
+          code: "permission_denied",
+          retryable: false,
+          retryAfter: null,
+        },
       });
       expect((await repository.getLatestProgress())?.runId).toBe(newer.id);
       expect((await repository.getProgress(older.id)).runId).toBe(older.id);

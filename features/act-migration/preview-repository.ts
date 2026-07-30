@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -25,6 +25,7 @@ import {
   proposalSnapshotDigest,
   type MigrationReconciliationReport,
 } from "@/features/act-migration/reconciliation";
+import { ActMigrationRunNotFoundError } from "@/features/act-migration/snapshot-repository";
 
 type DrizzleDatabase = typeof database;
 type StoredProposalRow = typeof actMigrationProposals.$inferSelect;
@@ -480,11 +481,13 @@ export class DrizzleActMigrationPreviewRepository
         .from(actMigrationRecords)
         .where(and(
           eq(actMigrationRecords.runId, runId),
+          eq(actMigrationRecords.streamType, "contact"),
+          isNull(actMigrationRecords.errorCode),
           inArray(actMigrationRecords.sourceKey, sourceKeys),
         ));
     const contactSourceByKey = new Map(
       contactSources.flatMap((record) =>
-        record.streamType === "contact" && record.sourceId
+        record.streamType === "contact" && record.sourceId?.trim()
           ? [[record.sourceKey, record.sourceId] as const]
           : []
       ),
@@ -568,7 +571,8 @@ export class DrizzleActMigrationPreviewRepository
         .where(eq(actMigrationRuns.id, input.runId))
         .limit(1)
         .for("update");
-      if (!run || run.status !== "previewed") {
+      if (!run) throw new ActMigrationRunNotFoundError();
+      if (run.status !== "previewed") {
         throw new Error("Act migration preview is not ready for review decisions.");
       }
       const [proposal] = await transaction
