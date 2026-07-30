@@ -126,6 +126,61 @@ function followUpSnapshot(record: typeof followUps.$inferSelect): CallFollowUp {
   };
 }
 
+class CallContextChangedWhileLockingError extends Error {
+  constructor() {
+    super("Call context changed while locks were acquired.");
+    this.name = "CallContextChangedWhileLockingError";
+  }
+}
+
+function contextDerivation(
+  input: CompleteCallInput,
+  records: {
+    followUp: typeof followUps.$inferSelect | undefined;
+    booking: typeof bookings.$inferSelect | undefined;
+    contact: typeof contacts.$inferSelect | undefined;
+  },
+) {
+  const bookingId = input.bookingId ?? records.followUp?.bookingId ?? null;
+  const contactId =
+    input.contactId ??
+    records.followUp?.contactId ??
+    records.booking?.primaryContactId ??
+    null;
+  const organizationId =
+    input.organizationId ??
+    records.followUp?.organizationId ??
+    records.booking?.organizationId ??
+    records.contact?.organizationId ??
+    null;
+  return {
+    bookingId,
+    contactId,
+    organizationId,
+    followUp: records.followUp
+      ? {
+          id: records.followUp.id,
+          bookingId: records.followUp.bookingId,
+          contactId: records.followUp.contactId,
+          organizationId: records.followUp.organizationId,
+        }
+      : null,
+    booking: records.booking
+      ? {
+          id: records.booking.id,
+          organizationId: records.booking.organizationId,
+          primaryContactId: records.booking.primaryContactId,
+        }
+      : null,
+    contact: records.contact
+      ? {
+          id: records.contact.id,
+          organizationId: records.contact.organizationId,
+        }
+      : null,
+  };
+}
+
 class DrizzleCallTransaction implements CallTransaction {
   constructor(private readonly database: DrizzleWriter) {}
 
@@ -156,33 +211,78 @@ class DrizzleCallTransaction implements CallTransaction {
   }
 
   async lockContext(input: CompleteCallInput): Promise<CallContext> {
-    const [followUp] = input.followUpId
-      ? await this.database.select().from(followUps).where(eq(followUps.id, input.followUpId)).limit(1).for("update")
+    const [discoveredFollowUp] = input.followUpId
+      ? await this.database
+        .select()
+        .from(followUps)
+        .where(eq(followUps.id, input.followUpId))
+        .limit(1)
       : [];
-    const bookingId = input.bookingId ?? followUp?.bookingId ?? null;
-    const [booking] = bookingId
-      ? await this.database.select().from(bookings)
-        .where(eq(bookings.id, bookingId)).limit(1).for("update")
+    const discoveredBookingId =
+      input.bookingId ?? discoveredFollowUp?.bookingId ?? null;
+    const [discoveredBooking] = discoveredBookingId
+      ? await this.database
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, discoveredBookingId))
+        .limit(1)
       : [];
-    const contactId =
+    const discoveredContactId =
       input.contactId ??
-      followUp?.contactId ??
-      booking?.primaryContactId ??
+      discoveredFollowUp?.contactId ??
+      discoveredBooking?.primaryContactId ??
       null;
-    const [contact] = contactId
-      ? await this.database.select().from(contacts)
-        .where(eq(contacts.id, contactId)).limit(1).for("update")
+    const [discoveredContact] = discoveredContactId
+      ? await this.database
+        .select()
+        .from(contacts)
+        .where(eq(contacts.id, discoveredContactId))
+        .limit(1)
       : [];
-    const organizationId =
-      input.organizationId ??
-      followUp?.organizationId ??
-      booking?.organizationId ??
-      contact?.organizationId ??
-      null;
-    const [organization] = organizationId
-      ? await this.database.select().from(organizations)
-        .where(eq(organizations.id, organizationId)).limit(1).for("update")
+    const discovered = contextDerivation(input, {
+      followUp: discoveredFollowUp,
+      booking: discoveredBooking,
+      contact: discoveredContact,
+    });
+
+    const [organization] = discovered.organizationId
+      ? await this.database
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, discovered.organizationId))
+        .limit(1)
+        .for("update")
       : [];
+    const [contact] = discovered.contactId
+      ? await this.database
+        .select()
+        .from(contacts)
+        .where(eq(contacts.id, discovered.contactId))
+        .limit(1)
+        .for("update")
+      : [];
+    const [booking] = discovered.bookingId
+      ? await this.database
+        .select()
+        .from(bookings)
+        .where(eq(bookings.id, discovered.bookingId))
+        .limit(1)
+        .for("update")
+      : [];
+    const [followUp] = input.followUpId
+      ? await this.database
+        .select()
+        .from(followUps)
+        .where(eq(followUps.id, input.followUpId))
+        .limit(1)
+        .for("update")
+      : [];
+    const locked = contextDerivation(input, { followUp, booking, contact });
+    if (JSON.stringify(locked) !== JSON.stringify(discovered)) {
+      throw new CallContextChangedWhileLockingError();
+    }
+
+    const { bookingId, contactId, organizationId } = locked;
     const [organizationContact] =
       organizationId && contactId
         ? await this.database

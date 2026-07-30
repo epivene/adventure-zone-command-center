@@ -15,6 +15,7 @@ import type {
   CallContext,
   CompleteCallInput,
 } from "@/features/calls/call-types";
+import { DrizzleRelationshipRepository } from "@/features/relationships/relationship-repository";
 import * as crmSchema from "@/db/schema";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
@@ -32,6 +33,25 @@ async function migrationStatements(fileName: string, schemaName: string) {
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter(Boolean);
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+async function waitForDatabaseLock(sql: postgres.Sql, backendPid: number) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [activity] = await sql.unsafe(`
+      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${backendPid}
+    `);
+    if (activity?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Expected the database session to wait on a lock.");
 }
 
 const ids = {
@@ -897,6 +917,92 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       contactHasActiveOrganizationRelationship: true,
       contactHasBookingRelationship: false,
     });
+  });
+
+  postgresTest("avoids a call context versus Place-first relationship deadlock", async () => {
+    const personLockClient = postgres(databaseUrl!, { max: 1 });
+    const callClient = postgres(databaseUrl!, { max: 1 });
+    const relationshipClient = postgres(databaseUrl!, { max: 1 });
+    const observerClient = postgres(databaseUrl!, { max: 1 });
+    const personLockHeld = deferred();
+    const releasePersonLock = deferred();
+    const writes: Promise<unknown>[] = [];
+    let personLock: Promise<unknown> | undefined;
+    try {
+      await Promise.all([
+        personLockClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        callClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        relationshipClient.unsafe(
+          `SET search_path TO "${schemaName}", public`,
+        ),
+        observerClient.unsafe(`SET search_path TO "${schemaName}", public`),
+      ]);
+      await callClient.unsafe("SET lock_timeout = '5s'");
+      await relationshipClient.unsafe("SET lock_timeout = '5s'");
+      const [{ pid: callPid } = { pid: 0 }] =
+        await callClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      const [{ pid: relationshipPid } = { pid: 0 }] =
+        await relationshipClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      if (!callPid || !relationshipPid) {
+        throw new Error("Could not identify the concurrent database sessions.");
+      }
+
+      personLock = personLockClient.begin(async (transaction) => {
+        await transaction.unsafe(`
+          SELECT id FROM contacts WHERE id = '${ids.contact}' FOR UPDATE
+        `);
+        personLockHeld.resolve();
+        await releasePersonLock.promise;
+      });
+      await personLockHeld.promise;
+
+      const callRepository = new DrizzleCallRepository(
+        drizzle({ client: callClient, schema: crmSchema }),
+      );
+      const callContext = callRepository.transaction((transaction) =>
+        transaction.lockContext(input()));
+      writes.push(callContext);
+      await waitForDatabaseLock(observerClient, callPid);
+
+      const relationshipRepository = new DrizzleRelationshipRepository(
+        drizzle({ client: relationshipClient, schema: crmSchema }),
+      );
+      const relationshipWrite =
+        relationshipRepository.associatePersonWithPlace(
+          {
+            organizationId: ids.organization,
+            contactId: ids.contact,
+            role: "Event Director",
+          },
+          new Date("2026-08-01T15:10:00.000Z"),
+        );
+      writes.push(relationshipWrite);
+      await waitForDatabaseLock(observerClient, relationshipPid);
+
+      releasePersonLock.resolve();
+      await personLock;
+      await expect(
+        Promise.all([callContext, relationshipWrite]),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          organization: expect.objectContaining({ id: ids.organization }),
+          contact: expect.objectContaining({ id: ids.contact }),
+        }),
+        expect.objectContaining({ kind: "ok" }),
+      ]);
+    } finally {
+      releasePersonLock.resolve();
+      if (personLock) await personLock;
+      await Promise.allSettled(writes);
+      await personLockClient.end({ timeout: 5 });
+      await callClient.end({ timeout: 5 });
+      await relationshipClient.end({ timeout: 5 });
+      await observerClient.end({ timeout: 5 });
+    }
   });
 
   postgresTest("serializes concurrent completion replays to one call write set", async () => {
