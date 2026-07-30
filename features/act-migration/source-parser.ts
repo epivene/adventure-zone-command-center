@@ -111,12 +111,14 @@ const sharedMailboxLocalParts = new Set(["info", "office", "sales"]);
 
 function displayValue(value: unknown) {
   return typeof value === "string" && value.trim()
-    ? value.trim().replace(/\s+/g, " ")
+    ? value.trim()
     : null;
 }
 
-function normalizedValue(value: string | null) {
-  return value?.toLocaleLowerCase("en-US") ?? null;
+function comparisonValue(value: string | null) {
+  return (
+    value?.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US") ?? null
+  );
 }
 
 function normalizedPhone(value: string | null) {
@@ -125,10 +127,12 @@ function normalizedPhone(value: string | null) {
   return digits || null;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function recordValue(value: unknown) {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+  return isRecord(value) ? value : {};
 }
 
 function addressValue(value: unknown): NormalizedAddress {
@@ -141,8 +145,8 @@ function addressValue(value: unknown): NormalizedAddress {
     city,
     region,
     postalCode: displayValue(address.postalCode),
-    normalizedCity: normalizedValue(city),
-    normalizedRegion: normalizedValue(region),
+    normalizedCity: comparisonValue(city),
+    normalizedRegion: comparisonValue(region),
   };
 }
 
@@ -163,14 +167,15 @@ function sha256(value: unknown) {
 }
 
 function errorResult(
-  streamType: ActMigrationStreamType,
+  streamType: string,
   rawSnapshot: Record<string, unknown>,
   errorCode: "missing_source_id" | "invalid_source_record",
   errorFields: string[],
+  fingerprintInput: unknown = rawSnapshot,
 ): ParsedSourceItem<never> {
   return {
     ok: false,
-    deterministicErrorKey: `error:${streamType}:${sha256(rawSnapshot)}`,
+    deterministicErrorKey: `error:${streamType}:${sha256(fingerprintInput)}`,
     rawSnapshot,
     errorCode,
     errorFields,
@@ -178,7 +183,7 @@ function errorResult(
 }
 
 function sourceIdResult(
-  streamType: ActMigrationStreamType,
+  streamType: string,
   rawSnapshot: Record<string, unknown>,
   field: "id" | "sourceId" | "targetSourceId",
 ) {
@@ -216,7 +221,7 @@ function company(rawSnapshot: Record<string, unknown>): NormalizedCompany {
   const phone = displayValue(rawSnapshot.phone);
   return {
     displayName,
-    normalizedName: normalizedValue(displayName),
+    normalizedName: comparisonValue(displayName),
     phone,
     normalizedPhone: normalizedPhone(phone),
     website: displayValue(rawSnapshot.website),
@@ -233,23 +238,22 @@ function contact(rawSnapshot: Record<string, unknown>): NormalizedContact {
   const displayName =
     fullName ?? displayValue([firstName, lastName].filter(Boolean).join(" "));
   const companyName = displayValue(rawSnapshot.company);
-  const email = normalizedValue(displayValue(rawSnapshot.emailAddress));
+  const email =
+    displayValue(rawSnapshot.emailAddress)?.toLocaleLowerCase("en-US") ?? null;
   const phone = displayValue(rawSnapshot.businessPhone);
   return {
     firstName,
     lastName,
     displayName,
-    normalizedName: normalizedValue(displayName),
+    normalizedName: comparisonValue(displayName),
     companyName,
-    normalizedCompanyName: normalizedValue(companyName),
+    normalizedCompanyName: comparisonValue(companyName),
     jobTitle: displayValue(rawSnapshot.jobTitle),
     email,
     phone,
     normalizedPhone: normalizedPhone(phone),
     ...addressValue(rawSnapshot.businessAddress),
-    sharedEmail:
-      email !== null &&
-      sharedMailboxLocalParts.has(email.split("@", 1)[0] ?? ""),
+    sharedEmail: sharedEmailValue(email),
     personCandidate: displayName !== null,
     editedAt: displayValue(rawSnapshot.edited),
   };
@@ -268,7 +272,7 @@ function opportunity(
   const process = recordValue(stage.process);
   return {
     displayName,
-    normalizedName: normalizedValue(displayName),
+    normalizedName: comparisonValue(displayName),
     status: displayValue(rawSnapshot.status),
     estimatedCloseDate: displayValue(rawSnapshot.estimatedCloseDate),
     actualCloseDate: displayValue(rawSnapshot.actualCloseDate),
@@ -286,7 +290,7 @@ function group(rawSnapshot: Record<string, unknown>): NormalizedGroup {
   const displayName = displayValue(rawSnapshot.name);
   return {
     displayName,
-    normalizedName: normalizedValue(displayName),
+    normalizedName: comparisonValue(displayName),
     description: displayValue(rawSnapshot.description),
     editedAt: displayValue(rawSnapshot.edited),
   };
@@ -334,17 +338,164 @@ function parseRelationship(
   );
 }
 
+function sharedEmailValue(email: string | null) {
+  if (!email || !/^[^@\s]+@[^@\s]+$/.test(email)) return false;
+  const [localPart] = email.split("@");
+  return sharedMailboxLocalParts.has(localPart ?? "");
+}
+
+function malformedStructuredField(
+  streamType: ActSourceEntityType,
+  rawSnapshot: Record<string, unknown>,
+) {
+  if (
+    streamType === "company" &&
+    Object.hasOwn(rawSnapshot, "address") &&
+    rawSnapshot.address !== null &&
+    !isRecord(rawSnapshot.address)
+  ) {
+    return "address";
+  }
+  if (
+    streamType === "contact" &&
+    Object.hasOwn(rawSnapshot, "businessAddress") &&
+    rawSnapshot.businessAddress !== null &&
+    !isRecord(rawSnapshot.businessAddress)
+  ) {
+    return "businessAddress";
+  }
+  if (
+    streamType === "opportunity" &&
+    Object.hasOwn(rawSnapshot, "stage") &&
+    rawSnapshot.stage !== null &&
+    !isRecord(rawSnapshot.stage)
+  ) {
+    return "stage";
+  }
+  if (
+    streamType === "opportunity" &&
+    isRecord(rawSnapshot.stage) &&
+    Object.hasOwn(rawSnapshot.stage, "process") &&
+    rawSnapshot.stage.process !== null &&
+    !isRecord(rawSnapshot.stage.process)
+  ) {
+    return "stage.process";
+  }
+  return null;
+}
+
+function invalidRootSnapshot(value: unknown): Record<string, unknown> {
+  return { invalidRoot: jsonCompatibleValue(value) };
+}
+
+function jsonCompatibleValue(value: unknown): unknown {
+  if (
+    value === null ||
+    typeof value === "string" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value)
+      ? value
+      : { type: "number", value: String(value) };
+  }
+  if (typeof value === "bigint") {
+    return { type: "bigint", value: String(value) };
+  }
+  if (typeof value === "undefined") return { type: "undefined" };
+  if (Array.isArray(value)) return value.map(jsonCompatibleValue);
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [
+        key,
+        jsonCompatibleValue(child),
+      ]),
+    );
+  }
+  return { type: typeof value, value: String(value) };
+}
+
+function isKnownStreamType(
+  streamType: string,
+): streamType is ActMigrationStreamType {
+  switch (streamType) {
+    case "company":
+    case "contact":
+    case "opportunity":
+    case "group":
+    case "company_contact":
+    case "opportunity_company":
+    case "opportunity_contact":
+    case "group_contact":
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function parseSourceItem(
   streamType: ActMigrationStreamType,
   rawSnapshot: Record<string, unknown>,
 ): ParsedSourceItem<NormalizedSourceItem> {
-  if (
-    streamType === "company" ||
-    streamType === "contact" ||
-    streamType === "opportunity" ||
-    streamType === "group"
-  ) {
-    return parseEntity(streamType, rawSnapshot);
+  const runtimeStreamType = streamType as string;
+  if (!isKnownStreamType(runtimeStreamType)) {
+    const safeRawSnapshot = isRecord(rawSnapshot)
+      ? rawSnapshot
+      : invalidRootSnapshot(rawSnapshot);
+    return errorResult(
+      "invalid_stream",
+      safeRawSnapshot,
+      "invalid_source_record",
+      ["streamType"],
+      { rawSnapshot: safeRawSnapshot, streamType: runtimeStreamType },
+    );
   }
-  return parseRelationship(streamType, rawSnapshot);
+  if (!isRecord(rawSnapshot)) {
+    return errorResult(
+      runtimeStreamType,
+      invalidRootSnapshot(rawSnapshot),
+      "invalid_source_record",
+      ["record"],
+    );
+  }
+
+  switch (runtimeStreamType) {
+    case "company":
+    case "contact":
+    case "opportunity":
+    case "group": {
+      const entityType = runtimeStreamType as ActSourceEntityType;
+      const malformedField = malformedStructuredField(
+        entityType,
+        rawSnapshot,
+      );
+      if (malformedField) {
+        return errorResult(
+          runtimeStreamType,
+          rawSnapshot,
+          "invalid_source_record",
+          [malformedField],
+        );
+      }
+      return parseEntity(entityType, rawSnapshot);
+    }
+    case "company_contact":
+    case "opportunity_company":
+    case "opportunity_contact":
+    case "group_contact":
+      return parseRelationship(
+        runtimeStreamType as ActRelationshipType,
+        rawSnapshot,
+      );
+    default:
+      return errorResult(
+        "invalid_stream",
+        rawSnapshot,
+        "invalid_source_record",
+        ["streamType"],
+        { rawSnapshot, streamType: runtimeStreamType },
+      );
+  }
 }
