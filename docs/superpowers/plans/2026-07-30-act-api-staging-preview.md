@@ -43,6 +43,7 @@
 - `features/act-migration/reconciliation.ts` — source/proposal digests and completion report.
 - `features/act-migration/preview-repository.ts` — immutable proposal storage, paginated reads, and durable review decisions.
 - `features/act-migration/preview-service.ts` — finalize a snapshot into one stored preview and expose progress/review operations.
+- `features/act-migration/runtime.ts` — post-authorization capture, DB-only workspace, and preview/decision factories.
 - `features/organizations/place-types.ts` — stable Place type values and user-facing labels.
 - `app/(private)/settings/act-migration/page.tsx` — owner-only Act! migration page.
 - `app/(private)/settings/act-migration/actions.ts` — bounded owner-only start, continue, resume, and decision actions.
@@ -57,6 +58,7 @@
 - `tests/unit/act-migration-matcher.test.ts`
 - `tests/unit/act-migration-reconciliation.test.ts`
 - `tests/unit/act-migration-actions.test.ts`
+- `tests/unit/act-migration-page.test.tsx`
 - `tests/unit/act-migration-review.test.tsx`
 - `tests/integration/act-migration-client.test.ts`
 - `tests/integration/act-migration-staging-migration.test.ts`
@@ -1840,108 +1842,460 @@ git commit -m "feat: store reviewed Act migration previews"
 
 The repository test must use `crmTestDatabaseUrl()` and report itself as
 PostgreSQL-gated when no disposable URL is configured. A skipped database test
-does not satisfy the Slice 2 release gate: Task 9 must run it against a
+does not satisfy the Slice 2 release gate: Task 10 must run it against a
 disposable database with `CRM_RELEASE_TESTS=1`.
 
 ---
 
-### Task 8: Add the owner-only migration progress and review interface
+### Task 8: Add the owner-safe migration read model and server actions
 
 **Files:**
-- Create: `app/(private)/settings/act-migration/page.tsx`
+- Modify: `features/act-migration/snapshot-repository.ts`
+- Modify: `features/act-migration/snapshot-service.ts`
+- Modify: `features/act-migration/preview-repository.ts`
+- Modify: `features/act-migration/preview-service.ts`
+- Create: `features/act-migration/runtime.ts`
 - Create: `app/(private)/settings/act-migration/actions.ts`
-- Create: `components/act-migration/act-migration-review.tsx`
-- Modify: `components/navigation/app-shell.tsx`
+- Modify: `tests/integration/act-migration-snapshot-repository.test.ts`
+- Modify: `tests/integration/act-migration-snapshot-service.test.ts`
+- Modify: `tests/integration/act-migration-preview-repository.test.ts`
 - Create: `tests/unit/act-migration-actions.test.ts`
-- Create: `tests/unit/act-migration-review.test.tsx`
 
 **Interfaces:**
-- Consumes: `ActMigrationSnapshotService` and `ActMigrationPreviewService`.
-- Produces: owner-only start/continue/resume/finalize/decision actions and the review UI.
+- Consumes: Task 5 snapshot capture and Task 7 immutable previews.
+- Produces: typed per-stream progress, DB-only stored-workspace reads,
+  preview facets and safe decision choices, post-authorization runtime
+  factories, and distinct owner-only action results.
 
-- [ ] **Step 1: Write action-boundary tests**
-
-Mock `requireOwner()` and prove it runs before service construction for:
+The DB-only reader contract is:
 
 ```ts
-startActMigrationAction(requestKey)
-continueActMigrationAction(runId)
-resumeActMigrationAction(runId)
-finalizeActMigrationPreviewAction(runId)
-saveActMigrationDecisionAction(input)
+export type StoredMigrationWorkspace = {
+  progress: SnapshotProgress;
+  preview: StoredMigrationPreviewPage | null;
+};
+
+export interface ActMigrationWorkspaceReader {
+  getWorkspace(input: {
+    runId?: string;
+    query: MigrationPreviewQuery;
+  }): Promise<StoredMigrationWorkspace | null>;
+}
 ```
 
-Validate request and run IDs as UUIDs, page sizes between 1 and 100, and decisions through the Task 1 value arrays. Hash the configured Act! database name with SHA-256 into `sourceDatabaseKey`; never store credential values or the raw database name. Return sanitized user messages for `ActApiError`, lease conflicts, invalid source records, and unknown failures.
+An omitted `runId` selects the newest run by `createdAt`, then `id`; no runs
+returns `null`.
 
-- [ ] **Step 2: Write component tests**
+- [ ] **Step 1: Write failing read-model and idempotency tests**
 
-Prove the component:
+Extend `SnapshotProgress` without removing its existing aggregate fields:
 
-- says `Preview only — no Command Center or Act! records are changed`;
-- shows Companies, Contacts, Opportunities, Groups, and relationship progress separately;
-- continues snapshot capture in bounded action calls;
-- stops and offers `Resume` after a retryable error;
-- does not auto-retry a non-retryable error;
-- shows entity and preview-state tabs with counts;
-- pages rows without loading the complete 1,814-company snapshot into the browser;
-- shows Places without People, multi-Place People, Opportunities without Place/Person, duplicate IDs, and incomplete/failed checkpoints;
-- offers only decisions allowed by each proposal;
-- has no Apply or Import button;
-- preserves saved decisions after remount;
-- keeps raw snapshots and credential fields out of rendered markup.
+```ts
+export type SnapshotStreamProgress = {
+  streamType: ActMigrationStreamType;
+  completedCheckpoints: number;
+  totalCheckpoints: number;
+  stagedRecords: number;
+  failedCheckpoints: number;
+  retryable: boolean;
+  retryAfter: Date | null;
+  errorCode: ActApiErrorCode | "unknown" | null;
+};
 
-- [ ] **Step 3: Implement authenticated server actions**
+export type SnapshotInterruption = {
+  code: ActApiErrorCode | "unknown";
+  retryable: boolean;
+  retryAfter: Date | null;
+};
 
-Each action begins:
+export type SnapshotProgress = {
+  // existing aggregate fields remain
+  streams: readonly SnapshotStreamProgress[];
+  interruption: SnapshotInterruption | null;
+};
+```
+
+The snapshot contracts are exact:
+
+```ts
+createRun(input: {
+  requestKey: string;
+  sourceDatabaseKey: string;
+  requestedBy: string;
+}): Promise<{ id: string; created: boolean }>;
+
+getProgress(runId: string): Promise<SnapshotProgress>;
+getLatestProgress(): Promise<SnapshotProgress | null>;
+
+start(input: {
+  requestKey: string;
+  sourceDatabaseKey: string;
+  requestedBy: string;
+}): Promise<{
+  id: string;
+  created: boolean;
+  progress: SnapshotProgress;
+}>;
+
+captureNext(
+  runId: string,
+  options?: { maxRequests?: number },
+): Promise<{ progress: SnapshotProgress; changed: boolean }>;
+```
+
+A valid but missing explicit run throws typed
+`ActMigrationRunNotFoundError`; the DB-only workspace reader converts it to
+`null`, while actions return the sanitized
+`The selected Act! migration run was not found.` error.
+
+Prove:
+
+1. all four root streams and four relationship streams appear in stable
+   `migrationStreamRank()` order, including zero-count streams;
+2. staged-record, complete, failed, retryability, and retry-time values are
+   correct per stream and in aggregate;
+3. `getLatestProgress()` returns the newest stored run, while
+   `getProgress(runId)` loads an explicit stored run using only PostgreSQL;
+4. invalid source rows remain staged preview evidence and never become an
+   action exception;
+5. a request-key retry returns `{ id, created: false }` only when its stored
+   `sourceDatabaseKey` and `requestedBy` exactly match; otherwise a typed
+   `ActMigrationRunConflictError` is thrown;
+6. lease/skip failures use a typed `ActMigrationLeaseConflictError`;
+7. `captureNext(runId, { maxRequests: 10 })` returns
+   `{ progress, changed }`, never performs more than 10 Act! requests, and
+   reports a persisted Act! failure through `progress.interruption`;
+8. no eligible checkpoint returns `changed: false`.
+
+Invalid source records are not action failures. They remain deterministic
+`source_record_error` preview rows for review.
+
+For each stream, select one interruption deterministically: non-retryable
+failed checkpoints first, then retryable failures, then `partitionKey`, then
+checkpoint `id`. The aggregate interruption uses the same failure priority,
+then `migrationStreamRank()`, `partitionKey`, and checkpoint `id`. Its
+`errorCode`, `retryable`, and `retryAfter` come from that selected checkpoint;
+unknown stored codes map to `"unknown"`.
+
+Persist `failCheckpoint.retryable = error.retryable` exactly. Do not promote
+authentication, permission, or not-configured errors to retryable. Tests must
+cover non-retryable 401/403/not-configured interruptions as well as a
+retryable rate-limit failure.
+
+- [ ] **Step 2: Write failing preview-facet and safe-choice tests**
+
+Extend stored preview reads:
+
+```ts
+export type StoredMigrationChoice = {
+  id: string;
+  label: string;
+  available: boolean;
+};
+
+export type StoredMigrationProposal = ActMigrationProposal & {
+  // existing decision fields remain
+  candidateChoices: readonly StoredMigrationChoice[];
+  primarySourceChoices: readonly StoredMigrationChoice[];
+};
+
+export type StoredMigrationPreviewPage = {
+  // existing fields remain
+  entityCounts: Record<MigrationTargetEntityType, number>;
+  stateCounts: Record<MigrationPreviewState, number>;
+};
+```
+
+`entityCounts` applies the active state filter but not the active entity
+filter. `stateCounts` applies the active entity filter but not the active
+state filter. Missing facets are zero. Candidate labels come from current
+local Place/Person rows; primary-source choices contain only staged Contact
+IDs and safe ID labels, never raw snapshots.
+
+`saveDecision(link_existing)` must recheck, inside the decision transaction,
+that the chosen immutable candidate ID still exists in the local table for
+the proposal target (`organizations`, `contacts`, or `bookings`) and reject
+unsupported target types. Lock that target row `FOR KEY SHARE` through the
+decision write so a concurrent delete cannot pass between validation and
+persistence. Link controls use only choices with
+`available: true`, never raw `candidateLocalIds`. If an already-saved chosen
+row was later removed, reload adds one non-selectable
+`{ label: "Unavailable local record", available: false }` choice so the
+historical decision remains visible without becoming submit-able.
+
+Prove filtered SQL counts and the selected page remain bounded to
+`pageSize <= 100`. Persisted decisions, actor, timestamp, reason, chosen
+candidate, effective primary authority, and safe choices survive reload.
+Also prove a candidate removed after preview finalization is absent from
+selectable choices, receives the safe historical fallback when previously
+chosen, and cannot be newly saved. A two-connection PostgreSQL test must prove
+a concurrent delete waits behind the decision transaction’s `FOR KEY SHARE`
+lock; deletion after commit remains allowed and produces the historical
+fallback on reload.
+`storeProposalsIfAbsent()` and `saveDecision()` return `{ changed: boolean }`;
+preview retries and semantic decision retries return `false`.
+
+Change the orchestration methods to preserve that signal:
+
+```ts
+finalizePreview(
+  runId: string,
+  query?: MigrationPreviewQuery,
+): Promise<{
+  preview: StoredMigrationPreviewPage;
+  changed: boolean;
+}>;
+
+saveDecision(input: {
+  runId: string;
+  proposalKey: string;
+  decision: MigrationDecision;
+  chosenLocalEntityId?: string;
+  primarySourceId?: string;
+  ignoreReason?: string;
+  decidedBy: string;
+}): Promise<{ changed: boolean }>;
+```
+
+A stored-preview fast path returns `{ preview, changed: false }`. A newly
+stored preview returns `true`; a concurrent repository no-op returns `false`.
+Tests must prove each path and that no snapshot/local-candidate read occurs on
+the fast path.
+
+- [ ] **Step 3: Write action-boundary tests**
+
+The exact action contracts are:
+
+```ts
+export type ActMigrationActionError = {
+  ok: false;
+  error: string;
+  retryable: boolean;
+  retryAfter: string | null;
+};
+
+export type ActMigrationProgressActionResult =
+  | {
+      ok: true;
+      changed: boolean;
+      runId: string;
+      progress: SnapshotProgress;
+    }
+  | ActMigrationActionError;
+
+export type ActMigrationPreviewActionResult =
+  | {
+      ok: true;
+      changed: boolean;
+      runId: string;
+      preview: StoredMigrationPreviewPage;
+    }
+  | ActMigrationActionError;
+
+export type ActMigrationDecisionActionResult =
+  | {
+      ok: true;
+      changed: boolean;
+      runId: string;
+      proposalKey: string;
+    }
+  | ActMigrationActionError;
+```
+
+Use these strict inputs:
+
+```ts
+startActMigrationAction(requestKey: string)
+continueActMigrationAction(runId: string)
+resumeActMigrationAction(runId: string)
+finalizeActMigrationPreviewAction(input: {
+  runId: string;
+  query: MigrationPreviewQuery;
+})
+saveActMigrationDecisionAction(input: {
+  runId: string;
+  proposalKey: string;
+  decision: MigrationDecision;
+  chosenLocalEntityId?: string;
+  primarySourceId?: string;
+  ignoreReason?: string;
+})
+```
+
+Every action starts with:
 
 ```ts
 const actor = await requireOwner();
 ```
 
-`continueActMigrationAction()` invokes at most 10 source requests. Return:
+Use shared named bounds:
 
 ```ts
-type ActMigrationActionResult =
-  | {
-      ok: true;
-      runId: string;
-      progress: SnapshotProgress;
-    }
-  | {
-      ok: false;
-      error: string;
-      retryable: boolean;
-      retryAfter: string | null;
-    };
+export const ACT_MIGRATION_PREVIEW_MAX_PAGE = 1_000_000;
+export const ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH = 500;
+export const ACT_MIGRATION_SOURCE_ID_MAX_LENGTH = 500;
+export const ACT_MIGRATION_IGNORE_REASON_MAX_LENGTH = 2_000;
 ```
 
-Revalidate `/settings/act-migration` only after a successful state change.
+Prove authorization completes before environment access, dynamic database
+import, or factory construction. Validate UUID request/run IDs, one-based
+safe-integer pages through `ACT_MIGRATION_PREVIEW_MAX_PAGE`, page sizes from
+1 through 100, enum filters/decisions, a
+bounded nonblank proposal key, optional UUID `chosenLocalEntityId`, and
+bounded trimmed `primarySourceId`/`ignoreReason`. Use 1–500 characters for
+`proposalKey` and `primarySourceId`, and 1–2,000 characters for
+`ignoreReason`. The client cannot supply `decidedBy`.
 
-- [ ] **Step 4: Implement the page and component**
+Hash `ACT_DATABASE_NAME.trim()` as lowercase hexadecimal SHA-256. Pass only
+that digest and `actor.userId` to `start()`; never log, return, or place the
+database name, username, password, or credentials in service input/props.
 
-The page must remain `force-dynamic`, mask the database name with only the last four characters visible, and load a stored run without contacting Act!. Render:
+Map `ActApiError`, `ActMigrationLeaseConflictError`,
+`ActMigrationRunConflictError`, `ActMigrationRunNotFoundError`, and unknown
+errors to static sanitized copy.
+Use the existing static `ActApiError.message` mapping and these exact other
+messages:
 
-1. Connection and preview-only warning.
-2. Snapshot progress and resume controls.
-3. Reconciliation summary.
-4. Entity/state tabs.
-5. Paginated proposal rows.
-6. Durable review choices.
+```text
+Another migration worker is finishing this page. Try again.
+That request key belongs to a different migration request.
+The selected Act! migration run was not found.
+The Act! migration could not be updated.
+```
 
-Add `Act! migration` beside the existing `Act! sync` Settings link. Do not rename or remove Contact sync.
+An Act! interruption stored in progress returns `ok: false` with its safe
+retryability and ISO `retryAfter`. `continueActMigrationAction()` and
+`resumeActMigrationAction()` each call exactly one
+`captureNext(runId, { maxRequests: 10 })`.
+
+Revalidate `/settings/act-migration` only when `changed === true`, including a
+successfully persisted checkpoint failure. Invalid inputs, lease conflicts,
+unknown exceptions, stored-preview reads, and semantic no-op retries do not
+revalidate.
+
+- [ ] **Step 4: Implement post-authorization runtime construction**
+
+`features/act-migration/runtime.ts` exposes three factories with these names:
+
+1. `createActMigrationCaptureService()` — a network capture service built
+   from configured `ActClient`,
+   `HttpActMigrationSourceClient`, and
+   `DrizzleActMigrationSnapshotRepository`;
+2. `createActMigrationWorkspaceReader()` — a DB-only reader that can load
+   explicit/latest progress and a stored preview without constructing an Act!
+   client or local matcher;
+3. `createActMigrationPreviewService()` — a preview/decision service built
+   from the snapshot, local-candidate, and preview repositories.
+
+Factories dynamically import `db` only when called. Actions and pages call
+them only after their own `requireOwner()` succeeds. Page reads use the
+DB-only reader and `getPreview()`/`getPreviewIfStored()`; they never call
+`finalizePreview()` and still work when Act! credentials are unavailable.
 
 - [ ] **Step 5: Run focused tests and commit**
 
 ```powershell
-node node_modules/vitest/vitest.mjs run tests/unit/act-migration-actions.test.ts tests/unit/act-migration-review.test.tsx
+node node_modules/vitest/vitest.mjs run tests/unit/act-migration-actions.test.ts tests/integration/act-migration-snapshot-service.test.ts tests/integration/act-migration-snapshot-repository.test.ts tests/integration/act-migration-preview-repository.test.ts
 npm run typecheck
-git add app/(private)/settings/act-migration/page.tsx app/(private)/settings/act-migration/actions.ts components/act-migration/act-migration-review.tsx components/navigation/app-shell.tsx tests/unit/act-migration-actions.test.ts tests/unit/act-migration-review.test.tsx
+git add features/act-migration/snapshot-repository.ts features/act-migration/snapshot-service.ts features/act-migration/preview-repository.ts features/act-migration/preview-service.ts features/act-migration/runtime.ts "app/(private)/settings/act-migration/actions.ts" tests/unit/act-migration-actions.test.ts tests/integration/act-migration-snapshot-service.test.ts tests/integration/act-migration-snapshot-repository.test.ts tests/integration/act-migration-preview-repository.test.ts
+git commit -m "feat: add owner-safe Act migration actions"
+```
+
+---
+
+### Task 9: Add the owner-only migration progress and review interface
+
+**Files:**
+- Create: `app/(private)/settings/act-migration/page.tsx`
+- Create: `components/act-migration/act-migration-review.tsx`
+- Modify: `components/navigation/app-shell.tsx`
+- Create: `tests/unit/act-migration-page.test.tsx`
+- Create: `tests/unit/act-migration-review.test.tsx`
+
+**Interfaces:**
+- Consumes: Task 8 owner-safe actions and DB-only workspace reader.
+- Produces: one owner-only, paginated progress and durable-review workspace.
+
+- [ ] **Step 1: Write page-boundary tests**
+
+Prove the page independently awaits `requireOwner()` before reading the
+environment or constructing the DB-only workspace reader. It must be
+`force-dynamic`, accept an optional UUID `runId`, and use the newest stored run
+when none is supplied. Validate URL-driven `page`, `pageSize`,
+`targetEntityType`, and `state`; invalid values fall back to safe defaults
+without widening `pageSize` beyond 100. The exact defaults are `page = 1`,
+`pageSize = 50`, and no entity/state filter. An invalid `runId` is treated as
+omitted and therefore selects the newest stored run. A page must be a safe
+integer from 1 through `ACT_MIGRATION_PREVIEW_MAX_PAGE`; larger values fall
+back to 1.
+
+The page loads stored progress/preview without constructing an Act! client,
+fetching Act!, finalizing, or rematching. It does so even when Act!
+credentials are missing. Only a database-name mask with the last four
+characters visible may enter rendered props; raw database name, username, and
+password must not.
+
+- [ ] **Step 2: Write component and navigation tests**
+
+Prove the component:
+
+- says `Preview only — no Command Center or Act! records are changed`;
+- shows Companies, Contacts, Opportunities, Groups, and all four relationship
+  streams separately;
+- starts with a UUID request key and auto-continues only after a changed,
+  interruption-free result, through one non-overlapping action call at a time;
+- each continuation delegates to the Task 8 server action, whose request cap
+  is 10;
+- stops on any interruption, offers `Resume` only when retryable, respects
+  `retryAfter`, and never auto-retries a non-retryable failure;
+- offers preview finalization only after every checkpoint is complete;
+- shows entity and preview-state URL tabs with the server-computed counts;
+- changes page/filter through URL navigation and receives only the selected
+  page, never the complete 1,814-company snapshot;
+- shows Places without People, multi-Place People, Opportunities without
+  Place/Person, duplicate IDs, and incomplete/failed checkpoints;
+- derives controls from `allowedDecisionsForProposal()` and uses only
+  `candidateChoices`/`primarySourceChoices`;
+- has no Apply or Import button;
+- reloads persisted decisions, reason, candidate, primary, actor, and timestamp
+  after remount;
+- keeps source-record raw snapshots, credential fields, and unmasked database
+  values out of rendered markup.
+
+Assert `Act! migration` appears beside the unchanged `Act! Sync` link in both
+desktop and mobile Settings navigation.
+
+- [ ] **Step 3: Implement the page and component**
+
+The page calls `requireOwner()` itself, then the DB-only reader. Render:
+
+1. connection status and preview-only warning;
+2. per-stream snapshot progress and bounded resume controls;
+3. reconciliation summary;
+4. entity/state facet tabs;
+5. paginated proposal rows;
+6. durable proposal-aware review choices.
+
+The client may continue automatically only after an `ok: true`,
+`changed: true`, incomplete progress result with no interruption. It issues no
+concurrent continuation and stops immediately on any error or on
+`changed: false`; the latter offers a manual `Check again` control instead of
+forming a tight loop around an active lease. Successful changed actions
+refresh the server view; saved decisions are never treated as applied CRM
+changes.
+
+- [ ] **Step 4: Run focused tests and commit**
+
+```powershell
+node node_modules/vitest/vitest.mjs run tests/unit/act-migration-page.test.tsx tests/unit/act-migration-review.test.tsx
+npm run typecheck
+git add "app/(private)/settings/act-migration/page.tsx" components/act-migration/act-migration-review.tsx components/navigation/app-shell.tsx tests/unit/act-migration-page.test.tsx tests/unit/act-migration-review.test.tsx
 git commit -m "feat: add Act migration preview workspace"
 ```
 
 ---
 
-### Task 9: Add operations guidance and the Slice 2 release gate
+### Task 10: Add operations guidance and the Slice 2 release gate
 
 **Files:**
 - Create: `docs/operations/act-migration.md`
@@ -2005,7 +2359,7 @@ Keep `--maxWorkers=1 --testTimeout=120000 --hookTimeout=120000`.
 
 ```powershell
 # Run these in a shell without CRM_TEST_DATABASE_URL or CRM_RELEASE_TESTS.
-node node_modules/vitest/vitest.mjs run tests/unit/act-migration-types.test.ts tests/unit/act-migration-source-parser.test.ts tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts tests/unit/act-migration-actions.test.ts tests/unit/act-migration-review.test.tsx tests/integration/act-client.test.ts tests/integration/act-migration-client.test.ts tests/integration/act-migration-snapshot-service.test.ts tests/integration/act-migration-docs.test.ts
+node node_modules/vitest/vitest.mjs run tests/unit/act-migration-types.test.ts tests/unit/act-migration-source-parser.test.ts tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts tests/unit/act-migration-actions.test.ts tests/unit/act-migration-page.test.tsx tests/unit/act-migration-review.test.tsx tests/integration/act-client.test.ts tests/integration/act-migration-client.test.ts tests/integration/act-migration-snapshot-service.test.ts tests/integration/act-migration-docs.test.ts
 npm run typecheck
 npm run lint
 npm test
