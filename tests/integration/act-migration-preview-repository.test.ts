@@ -427,6 +427,9 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
 
     await repository.saveDecision({ runId, proposalKey: approvable.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user" });
     await expect(repository.saveDecision({
+      runId, proposalKey: noCandidate.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user",
+    })).rejects.toThrow("not allowed");
+    await expect(repository.saveDecision({
       runId, proposalKey: noCandidate.proposalKey, decision: "link_existing", decidedBy: "clerk-user",
     })).rejects.toThrow("not allowed");
     await expect(repository.saveDecision({
@@ -446,10 +449,11 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     });
 
     expect(await sql!.unsafe(`
-      SELECT proposal_key, decision, decision_reason FROM act_migration_proposals
+      SELECT proposal_key, review_state, decision, decision_reason FROM act_migration_proposals
       WHERE run_id = '${runId}' ORDER BY proposal_key
     `)).toEqual(expect.arrayContaining([
-      { proposal_key: "contact:orphan", decision: "ignore", decision_reason: "no source owner" },
+      expect.objectContaining({ proposal_key: "contact:orphan", decision: "ignore", decision_reason: "no source owner" }),
+      expect.objectContaining({ proposal_key: "organization:company-1", review_state: "pending", decision: "approve_proposed", decision_reason: null }),
     ]));
   });
 
@@ -477,6 +481,9 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     await expect(repository.saveDecision({
       runId, proposalKey: explicit.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, decidedBy: "clerk-user",
     })).rejects.toThrow("requires a primary");
+    await expect(repository.saveDecision({
+      runId, proposalKey: explicit.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "not-staged", decidedBy: "clerk-user",
+    })).rejects.toThrow("not part");
     await expect(repository.saveDecision({
       runId, proposalKey: primary.proposalKey, decision: "link_existing", chosenLocalEntityId: localA, primarySourceId: "primary-b", decidedBy: "clerk-user",
     })).rejects.toThrow("cannot be overridden");
