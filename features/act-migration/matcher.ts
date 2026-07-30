@@ -1154,7 +1154,10 @@ export function buildMigrationProposals(input: {
           )
         : undefined;
     const unresolved =
-      !isResolvedParent(bookingParent) || !isResolvedParent(personParent);
+      bookingParent?.targetEntityType !== "booking" ||
+      personParent?.targetEntityType !== "contact" ||
+      !isResolvedParent(bookingParent) ||
+      !isResolvedParent(personParent);
     add(
       proposal({
         proposalKey: `booking_contact:${first.sourceKey}`,

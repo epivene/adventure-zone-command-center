@@ -94,6 +94,14 @@ describe("Act migration contracts", () => {
     expect(
       allowedDecisionsForProposal({
         state: "needs_review",
+        targetEntityType: "contact",
+        issueCode: "orphaned_external_link",
+        candidateLocalIds: [],
+      }),
+    ).toEqual(["ignore"]);
+    expect(
+      allowedDecisionsForProposal({
+        state: "needs_review",
         targetEntityType: "booking",
         issueCode: "opportunity_place_missing",
         candidateLocalIds: ["booking-1"],

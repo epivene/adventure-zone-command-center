@@ -536,6 +536,53 @@ describe("buildMigrationProposals", () => {
     ).toBe(false);
   });
 
+  it("does not resolve Booking-Person through a company-only Contact", () => {
+    const records = [
+      staged("company", {
+        id: "COMPANY-1",
+        name: "Example Place",
+        address: { city: "Denver", state: "CO" },
+      }),
+      staged("contact", {
+        id: "CONTACT-GENERIC",
+        fullName: "Info",
+        company: "Example Place",
+      }),
+      staged("company_contact", {
+        sourceId: "COMPANY-1",
+        targetSourceId: "CONTACT-GENERIC",
+      }),
+      staged("opportunity", {
+        id: "OPPORTUNITY-1",
+        name: "Event",
+      }),
+      staged("opportunity_company", {
+        sourceId: "OPPORTUNITY-1",
+        targetSourceId: "COMPANY-1",
+      }),
+      staged("opportunity_contact", {
+        sourceId: "OPPORTUNITY-1",
+        targetSourceId: "CONTACT-GENERIC",
+      }),
+    ];
+
+    const proposals = buildMigrationProposals({
+      source: source(records),
+      local: emptyLocal,
+    });
+
+    expect(
+      proposal(
+        proposals,
+        "opportunity_contact:OPPORTUNITY-1:CONTACT-GENERIC",
+      ),
+    ).toMatchObject({
+      state: "needs_review",
+      targetEntityType: "booking_contact",
+      issueCode: "parent_proposal_unresolved",
+    });
+  });
+
   it("keeps unresolved company-only ownership visible without creating a Person", () => {
     const records = [
       staged("company", {
