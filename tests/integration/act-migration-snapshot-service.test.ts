@@ -131,7 +131,7 @@ class InMemorySnapshotRepository
         this.addCheckpoint(streamType, "root", null);
       }
     }
-    return { id: this.runId };
+    return { id: this.runId, created: true };
   }
 
   async claimNextCheckpoint(
@@ -289,7 +289,21 @@ class InMemorySnapshotRepository
         .map(({ retryAfter }) => retryAfter)
         .filter((value): value is Date => value !== null)
         .sort((left, right) => left.getTime() - right.getTime())[0] ?? null,
+      streams: [],
+      interruption: failed[0]
+        ? {
+            code: this.failures.at(-1)?.errorCode === "rate_limited"
+              ? "rate_limited"
+              : "unknown",
+            retryable: failed[0].retryable,
+            retryAfter: failed[0].retryAfter,
+          }
+        : null,
     };
+  }
+
+  getLatestProgress() {
+    return this.getProgress(this.runId);
   }
 
   async finalizeSourceSnapshot(): Promise<FinalizedSourceSnapshot> {
@@ -374,6 +388,40 @@ describe("ActMigrationSnapshotService", () => {
 
     expect(client.requests).toEqual([]);
     expect(run.id).toBe(repository.checkpoints[0]?.runId);
+    expect(run).toMatchObject({
+      created: true,
+      progress: { runId: run.id, totalCheckpoints: 4 },
+    });
+  });
+
+  it("returns changed false when no checkpoint is eligible", async () => {
+    const { service, run } = await setup();
+    await service.captureNext(run.id, { maxRequests: 10 });
+
+    await expect(
+      service.captureNext(run.id, { maxRequests: 10 }),
+    ).resolves.toMatchObject({ changed: false });
+  });
+
+  it("returns a persisted API interruption with changed true", async () => {
+    const { client, service, run } = await setup();
+    client.queue(
+      "listCompanies",
+      new ActApiError("rate_limited", true, "2030-01-02T03:04:05.000Z"),
+    );
+
+    await expect(
+      service.captureNext(run.id, { maxRequests: 10 }),
+    ).resolves.toMatchObject({
+      changed: true,
+      progress: {
+        interruption: {
+          code: "rate_limited",
+          retryable: true,
+          retryAfter: new Date("2030-01-02T03:04:05.000Z"),
+        },
+      },
+    });
   });
 
   it("bounds captureNext to between one and ten requests", async () => {
@@ -494,32 +542,32 @@ describe("ActMigrationSnapshotService", () => {
     ]);
   });
 
-  it("allows an operator-fixed authentication failure to resume the same run and skip", async () => {
+  it.each([
+    "authentication_failed",
+    "permission_denied",
+    "not_configured",
+  ] as const)("keeps %s interruptions nonretryable", async (code) => {
     const { client, repository, service, run, now } = await setup();
     client.queue(
       "listCompanies",
-      new ActApiError("authentication_failed", false),
+      new ActApiError(code, false),
     );
 
     await service.captureNext(run.id, { maxRequests: 10 });
 
     expect(client.requests).toHaveLength(1);
     expect(repository.failures).toEqual([{
-      errorCode: "authentication_failed",
-      retryable: true,
+      errorCode: code,
+      retryable: false,
       retryAfter: null,
     }]);
     expect(repository.checkpoints[0]).toMatchObject({
       status: "failed",
       nextSkip: 0,
-      retryable: true,
+      retryable: false,
     });
 
     const fixedClient = new FakeSourceClient();
-    fixedClient.queue(
-      "listCompanies",
-      page([{ id: "company-after-auth-fix" }], 1),
-    );
     const resumedService = new ActMigrationSnapshotService(
       fixedClient,
       repository,
@@ -528,16 +576,9 @@ describe("ActMigrationSnapshotService", () => {
     await resumedService.captureNext(run.id, { maxRequests: 1 });
 
     expect(fixedClient.requests).toEqual([
-      expect.objectContaining({
-        method: "listCompanies",
-        request: expect.objectContaining({ skip: 0 }),
-      }),
+      expect.objectContaining({ method: "listContacts" }),
     ]);
-    expect(repository.records).toEqual([
-      expect.objectContaining({
-        sourceKey: "company:company-after-auth-fix",
-      }),
-    ]);
+    expect(repository.records).toEqual([]);
   });
 
   it("keeps malformed Act responses nonretryable", async () => {

@@ -6,9 +6,14 @@ import {
   actMigrationRecords,
   actMigrationRuns,
   auditEntries,
+  bookings,
+  contacts,
+  organizations,
 } from "@/db/schema";
 import {
   allowedDecisionsForProposal,
+  migrationPreviewStateValues,
+  migrationTargetEntityTypeValues,
   migrationTargetRank,
   type ActMigrationProposal,
   type MigrationDecision,
@@ -41,6 +46,14 @@ export type StoredMigrationProposal = ActMigrationProposal & {
   primarySourceId: string | null;
   decidedBy: string | null;
   decidedAt: Date | null;
+  candidateChoices: readonly StoredMigrationChoice[];
+  primarySourceChoices: readonly StoredMigrationChoice[];
+};
+
+export type StoredMigrationChoice = {
+  id: string;
+  label: string;
+  available: boolean;
 };
 
 export type StoredMigrationPreviewPage = {
@@ -50,6 +63,8 @@ export type StoredMigrationPreviewPage = {
   page: number;
   pageSize: number;
   total: number;
+  entityCounts: Record<MigrationTargetEntityType, number>;
+  stateCounts: Record<MigrationPreviewState, number>;
 };
 
 export interface ActMigrationPreviewRepository {
@@ -59,7 +74,7 @@ export interface ActMigrationPreviewRepository {
     proposalDigest: string;
     proposals: readonly ActMigrationProposal[];
     report: MigrationReconciliationReport;
-  }): Promise<void>;
+  }): Promise<{ changed: boolean }>;
   getPreviewIfStored(
     runId: string,
     query: MigrationPreviewQuery,
@@ -76,7 +91,7 @@ export interface ActMigrationPreviewRepository {
     primarySourceId?: string;
     ignoreReason?: string;
     decidedBy: string;
-  }): Promise<void>;
+  }): Promise<{ changed: boolean }>;
 }
 
 function targetOrder(column: typeof actMigrationProposals.targetEntityType) {
@@ -100,7 +115,11 @@ function validateQuery(query: MigrationPreviewQuery) {
   }
 }
 
-function proposalValue(row: StoredProposalRow): StoredMigrationProposal {
+function proposalValue(
+  row: StoredProposalRow,
+  candidateChoices: readonly StoredMigrationChoice[] = [],
+  primarySourceChoices: readonly StoredMigrationChoice[] = [],
+): StoredMigrationProposal {
   return {
     id: row.id,
     proposalKey: row.proposalKey,
@@ -121,6 +140,8 @@ function proposalValue(row: StoredProposalRow): StoredMigrationProposal {
     primarySourceId: row.primarySourceId,
     decidedBy: row.decidedBy,
     decidedAt: row.decidedAt,
+    candidateChoices,
+    primarySourceChoices,
   };
 }
 
@@ -197,7 +218,7 @@ export class DrizzleActMigrationPreviewRepository
     proposalDigest: string;
     proposals: readonly ActMigrationProposal[];
     report: MigrationReconciliationReport;
-  }): Promise<void> {
+  }): Promise<{ changed: boolean }> {
     return this.database.transaction(async (transaction) => {
       const [run] = await transaction
         .select()
@@ -223,7 +244,7 @@ export class DrizzleActMigrationPreviewRepository
         if (run.proposalDigest !== input.proposalDigest) {
           throw new Error("Act migration preview digest does not match the stored preview.");
         }
-        return;
+        return { changed: false };
       }
       if (run.status !== "snapshot_complete") {
         throw new Error(`Act migration run cannot preview from status ${run.status}.`);
@@ -340,6 +361,7 @@ export class DrizzleActMigrationPreviewRepository
           updatedAt: completedAt,
         })
         .where(eq(actMigrationRuns.id, input.runId));
+      return { changed: true };
     });
   }
 
@@ -379,13 +401,145 @@ export class DrizzleActMigrationPreviewRepository
       .orderBy(targetOrder(actMigrationProposals.targetEntityType), asc(actMigrationProposals.proposalKey))
       .limit(query.pageSize)
       .offset((query.page - 1) * query.pageSize);
+    const organizationCandidateIds = [...new Set(rows.flatMap((row) =>
+      row.targetEntityType === "organization" ? row.candidateLocalIds : []
+    ))];
+    const contactCandidateIds = [...new Set(rows.flatMap((row) =>
+      row.targetEntityType === "contact" ? row.candidateLocalIds : []
+    ))];
+    const bookingCandidateIds = [...new Set(rows.flatMap((row) =>
+      row.targetEntityType === "booking" ? row.candidateLocalIds : []
+    ))];
+    const entityFilters = [eq(actMigrationProposals.runId, runId)];
+    if (query.state) {
+      entityFilters.push(eq(actMigrationProposals.state, query.state));
+    }
+    const stateFilters = [eq(actMigrationProposals.runId, runId)];
+    if (query.targetEntityType) {
+      stateFilters.push(
+        eq(actMigrationProposals.targetEntityType, query.targetEntityType),
+      );
+    }
+    const [entityRows, stateRows, organizationRows, contactRows, bookingRows] =
+      await Promise.all([
+        this.database
+          .select({
+            value: actMigrationProposals.targetEntityType,
+            total: count(),
+          })
+          .from(actMigrationProposals)
+          .where(and(...entityFilters))
+          .groupBy(actMigrationProposals.targetEntityType),
+        this.database
+          .select({ value: actMigrationProposals.state, total: count() })
+          .from(actMigrationProposals)
+          .where(and(...stateFilters))
+          .groupBy(actMigrationProposals.state),
+        organizationCandidateIds.length === 0
+          ? Promise.resolve([])
+          : this.database
+          .select({ id: organizations.id, label: organizations.name })
+          .from(organizations)
+          .where(inArray(organizations.id, organizationCandidateIds)),
+        contactCandidateIds.length === 0
+          ? Promise.resolve([])
+          : this.database
+          .select({
+            id: contacts.id,
+            firstName: contacts.firstName,
+            lastName: contacts.lastName,
+          })
+          .from(contacts)
+          .where(inArray(contacts.id, contactCandidateIds)),
+        bookingCandidateIds.length === 0
+          ? Promise.resolve([])
+          : this.database
+          .select({ id: bookings.id, label: bookings.name })
+          .from(bookings)
+          .where(inArray(bookings.id, bookingCandidateIds)),
+      ]);
+    const organizationLabels = new Map(
+      organizationRows.map((row) => [row.id, row.label] as const),
+    );
+    const contactLabels = new Map(contactRows.map((row) => [
+        row.id,
+        `${row.firstName} ${row.lastName}`.trim() || row.id,
+      ] as const));
+    const bookingLabels = new Map(
+      bookingRows.map((row) => [row.id, row.label] as const),
+    );
+    const sourceKeys = [...new Set(rows.flatMap((row) => row.sourceRecordKeys))];
+    const contactSources = sourceKeys.length === 0
+      ? []
+      : await this.database
+        .select({
+          sourceKey: actMigrationRecords.sourceKey,
+          sourceId: actMigrationRecords.sourceId,
+          streamType: actMigrationRecords.streamType,
+        })
+        .from(actMigrationRecords)
+        .where(and(
+          eq(actMigrationRecords.runId, runId),
+          inArray(actMigrationRecords.sourceKey, sourceKeys),
+        ));
+    const contactSourceByKey = new Map(
+      contactSources.flatMap((record) =>
+        record.streamType === "contact" && record.sourceId
+          ? [[record.sourceKey, record.sourceId] as const]
+          : []
+      ),
+    );
+    const storedRows = rows.map((row) => {
+      const candidateLabels = row.targetEntityType === "organization"
+        ? organizationLabels
+        : row.targetEntityType === "contact"
+          ? contactLabels
+          : row.targetEntityType === "booking"
+            ? bookingLabels
+            : new Map<string, string>();
+      const choices = row.candidateLocalIds.flatMap((id) => {
+        const label = candidateLabels.get(id);
+        return label ? [{ id, label, available: true }] : [];
+      });
+      if (
+        row.chosenLocalEntityId &&
+        !choices.some(({ id }) => id === row.chosenLocalEntityId)
+      ) {
+        choices.push({
+          id: row.chosenLocalEntityId,
+          label: "Unavailable local record",
+          available: false,
+        });
+      }
+      const primarySourceChoices = row.targetEntityType === "contact"
+        ? [...new Set(row.sourceRecordKeys.flatMap((key) => {
+            const id = contactSourceByKey.get(key);
+            return id ? [id] : [];
+          }))].map((id) => ({ id, label: id, available: true }))
+        : [];
+      return proposalValue(row, choices, primarySourceChoices);
+    });
+    const entityCounts = Object.fromEntries(
+      migrationTargetEntityTypeValues.map((value) => [
+        value,
+        Number(entityRows.find((row) => row.value === value)?.total ?? 0),
+      ]),
+    ) as Record<MigrationTargetEntityType, number>;
+    const stateCounts = Object.fromEntries(
+      migrationPreviewStateValues.map((value) => [
+        value,
+        Number(stateRows.find((row) => row.value === value)?.total ?? 0),
+      ]),
+    ) as Record<MigrationPreviewState, number>;
     return {
       runId,
-      rows: rows.map(proposalValue),
+      rows: storedRows,
       report: reportValue(run.summary),
       page: query.page,
       pageSize: query.pageSize,
       total,
+      entityCounts,
+      stateCounts,
     };
   }
 
@@ -406,7 +560,7 @@ export class DrizzleActMigrationPreviewRepository
     primarySourceId?: string;
     ignoreReason?: string;
     decidedBy: string;
-  }): Promise<void> {
+  }): Promise<{ changed: boolean }> {
     return this.database.transaction(async (transaction) => {
       const [run] = await transaction
         .select({ id: actMigrationRuns.id, status: actMigrationRuns.status })
@@ -508,7 +662,33 @@ export class DrizzleActMigrationPreviewRepository
         primarySourceId,
       };
       const previousDecision = decisionMetadata(proposal);
-      if (sameDecision(previousDecision, nextDecision)) return;
+      if (sameDecision(previousDecision, nextDecision)) {
+        return { changed: false };
+      }
+
+      if (input.decision === "link_existing" && chosenLocalEntityId) {
+        const table = proposal.targetEntityType === "organization"
+          ? organizations
+          : proposal.targetEntityType === "contact"
+            ? contacts
+            : proposal.targetEntityType === "booking"
+              ? bookings
+              : null;
+        if (!table) {
+          throw new Error(
+            "Act migration target does not support linking to a local record.",
+          );
+        }
+        const [candidate] = await transaction
+          .select({ id: table.id })
+          .from(table)
+          .where(eq(table.id, chosenLocalEntityId))
+          .limit(1)
+          .for("key share");
+        if (!candidate) {
+          throw new Error("Act migration local candidate is unavailable.");
+        }
+      }
 
       const nextReviewState = input.decision === "ignore" ? "ignored" : "decided";
       const now = new Date();
@@ -533,6 +713,7 @@ export class DrizzleActMigrationPreviewRepository
         before: previousDecision,
         after: nextDecision,
       });
+      return { changed: true };
     });
   }
 }

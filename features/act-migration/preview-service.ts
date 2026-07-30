@@ -23,22 +23,25 @@ export class ActMigrationPreviewService {
   async finalizePreview(
     runId: string,
     query: MigrationPreviewQuery = DEFAULT_QUERY,
-  ): Promise<StoredMigrationPreviewPage> {
+  ): Promise<{ preview: StoredMigrationPreviewPage; changed: boolean }> {
     const stored = await this.previews.getPreviewIfStored(runId, query);
-    if (stored) return stored;
+    if (stored) return { preview: stored, changed: false };
 
     const source = await this.snapshots.finalizeSourceSnapshot(runId);
     const local = await this.localCandidates.loadCandidateSnapshot();
     const proposals = buildMigrationProposals({ source, local });
     const report = reconcileMigrationPreview({ source, proposals });
-    await this.previews.storeProposalsIfAbsent({
+    const storedResult = await this.previews.storeProposalsIfAbsent({
       runId,
       sourceDigest: source.sourceDigest,
       proposalDigest: report.proposalDigest,
       proposals,
       report,
     });
-    return this.previews.getPreview(runId, query);
+    return {
+      preview: await this.previews.getPreview(runId, query),
+      changed: storedResult.changed,
+    };
   }
 
   getPreview(runId: string, query: MigrationPreviewQuery) {

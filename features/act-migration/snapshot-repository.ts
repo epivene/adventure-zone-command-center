@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import {
   and,
   asc,
-  count,
+  desc,
   eq,
   inArray,
   isNull,
@@ -20,12 +20,14 @@ import {
 } from "@/db/schema";
 import {
   actSourceEntityTypeValues,
+  actMigrationStreamTypeValues,
   migrationStreamRank,
   type ActMigrationCheckpointStatus,
   type ActMigrationRunStatus,
   type ActMigrationStreamType,
   type ActQueryMode,
 } from "@/features/act-migration/migration-types";
+import type { ActApiErrorCode } from "@/features/act-sync/act-errors";
 import type { StagedSourceItem } from "@/features/act-migration/source-parser";
 
 type DrizzleDatabase = typeof database;
@@ -57,7 +59,47 @@ export type SnapshotProgress = {
   failedCheckpoints: number;
   retryable: boolean;
   retryAfter: Date | null;
+  streams: readonly SnapshotStreamProgress[];
+  interruption: SnapshotInterruption | null;
 };
+
+export type SnapshotStreamProgress = {
+  streamType: ActMigrationStreamType;
+  completedCheckpoints: number;
+  totalCheckpoints: number;
+  stagedRecords: number;
+  failedCheckpoints: number;
+  retryable: boolean;
+  retryAfter: Date | null;
+  errorCode: ActApiErrorCode | "unknown" | null;
+};
+
+export type SnapshotInterruption = {
+  code: ActApiErrorCode | "unknown";
+  retryable: boolean;
+  retryAfter: Date | null;
+};
+
+export class ActMigrationRunNotFoundError extends Error {
+  constructor() {
+    super("Act migration run is missing.");
+    this.name = "ActMigrationRunNotFoundError";
+  }
+}
+
+export class ActMigrationRunConflictError extends Error {
+  constructor() {
+    super("Act migration request key conflicts with an existing run.");
+    this.name = "ActMigrationRunConflictError";
+  }
+}
+
+export class ActMigrationLeaseConflictError extends Error {
+  constructor() {
+    super("Act migration checkpoint lease or skip no longer matches.");
+    this.name = "ActMigrationLeaseConflictError";
+  }
+}
 
 export type FinalizedSourceSnapshot = {
   runId: string;
@@ -71,7 +113,7 @@ export interface ActMigrationSnapshotRepository {
     requestKey: string;
     sourceDatabaseKey: string;
     requestedBy: string;
-  }): Promise<{ id: string }>;
+  }): Promise<{ id: string; created: boolean }>;
   claimNextCheckpoint(
     runId: string,
     leaseOwner: string,
@@ -96,6 +138,7 @@ export interface ActMigrationSnapshotRepository {
   }): Promise<void>;
   enqueueRelationshipCheckpoints(runId: string): Promise<void>;
   getProgress(runId: string): Promise<SnapshotProgress>;
+  getLatestProgress(): Promise<SnapshotProgress | null>;
   finalizeSourceSnapshot(runId: string): Promise<FinalizedSourceSnapshot>;
 }
 
@@ -299,21 +342,33 @@ export class DrizzleActMigrationSnapshotRepository
     requestKey: string;
     sourceDatabaseKey: string;
     requestedBy: string;
-  }): Promise<{ id: string }> {
+  }): Promise<{ id: string; created: boolean }> {
     return this.database.transaction(async (transaction) => {
       const [created] = await transaction
         .insert(actMigrationRuns)
         .values(input)
         .onConflictDoNothing({ target: actMigrationRuns.requestKey })
         .returning({ id: actMigrationRuns.id });
-      const [run] = created
-        ? [created]
+      const [existing] = created
+        ? []
         : await transaction
-          .select({ id: actMigrationRuns.id })
+          .select({
+            id: actMigrationRuns.id,
+            sourceDatabaseKey: actMigrationRuns.sourceDatabaseKey,
+            requestedBy: actMigrationRuns.requestedBy,
+          })
           .from(actMigrationRuns)
           .where(eq(actMigrationRuns.requestKey, input.requestKey))
           .limit(1);
+      const run = created ?? existing;
       if (!run) throw new Error("Could not create the Act migration run.");
+      if (
+        !created &&
+        (existing?.sourceDatabaseKey !== input.sourceDatabaseKey ||
+          existing.requestedBy !== input.requestedBy)
+      ) {
+        throw new ActMigrationRunConflictError();
+      }
 
       await transaction
         .insert(actMigrationCheckpoints)
@@ -330,7 +385,7 @@ export class DrizzleActMigrationSnapshotRepository
             actMigrationCheckpoints.partitionKey,
           ],
         });
-      return run;
+      return { id: run.id, created: Boolean(created) };
     });
   }
 
@@ -415,7 +470,7 @@ export class DrizzleActMigrationSnapshotRepository
         .limit(1)
         .for("key share", { of: actMigrationRuns });
       if (!lockedRun) {
-        throw new Error("Act migration checkpoint lease or skip no longer matches.");
+        throw new ActMigrationLeaseConflictError();
       }
       const [checkpoint] = await transaction
         .select({
@@ -428,7 +483,7 @@ export class DrizzleActMigrationSnapshotRepository
         .limit(1)
         .for("update");
       if (!checkpoint || checkpoint.runId !== lockedRun.id) {
-        throw new Error("Act migration checkpoint lease or skip no longer matches.");
+        throw new ActMigrationLeaseConflictError();
       }
       if (input.records.some(
         (record) => record.streamType !== checkpoint.streamType,
@@ -531,7 +586,7 @@ export class DrizzleActMigrationSnapshotRepository
         .where(guard)
         .returning({ id: actMigrationCheckpoints.id });
       if (!advanced) {
-        throw new Error("Act migration checkpoint lease or skip no longer matches.");
+        throw new ActMigrationLeaseConflictError();
       }
     });
   }
@@ -562,7 +617,7 @@ export class DrizzleActMigrationSnapshotRepository
       ))
       .returning({ id: actMigrationCheckpoints.id });
     if (!failed) {
-      throw new Error("Act migration checkpoint lease no longer matches.");
+      throw new ActMigrationLeaseConflictError();
     }
   }
 
@@ -674,31 +729,72 @@ export class DrizzleActMigrationSnapshotRepository
       .from(actMigrationRuns)
       .where(eq(actMigrationRuns.id, runId))
       .limit(1);
-    if (!run) throw new Error("Act migration run is missing.");
+    if (!run) throw new ActMigrationRunNotFoundError();
     const checkpoints = await this.database
       .select({
+        id: actMigrationCheckpoints.id,
+        streamType: actMigrationCheckpoints.streamType,
+        partitionKey: actMigrationCheckpoints.partitionKey,
         status: actMigrationCheckpoints.status,
         retryable: actMigrationCheckpoints.retryable,
         retryAfter: actMigrationCheckpoints.retryAfter,
+        errorCode: actMigrationCheckpoints.errorCode,
       })
       .from(actMigrationCheckpoints)
       .where(eq(actMigrationCheckpoints.runId, runId));
-    const [{ stagedRecords = 0 } = {}] = await this.database
-      .select({ stagedRecords: count() })
+    const records = await this.database
+      .select({ streamType: actMigrationRecords.streamType })
       .from(actMigrationRecords)
       .where(eq(actMigrationRecords.runId, runId));
-    const retryableFailures = checkpoints.filter(
-      (checkpoint) =>
-        checkpoint.status === "failed" && checkpoint.retryable,
-    );
-    const retryAfter = retryableFailures.some(
-      (checkpoint) => checkpoint.retryAfter === null,
-    )
-      ? null
-      : retryableFailures
-        .map((checkpoint) => checkpoint.retryAfter)
-        .filter((value): value is Date => value !== null)
-        .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
+    const errorCode = (
+      value: string | null,
+    ): ActApiErrorCode | "unknown" | null =>
+      value === "not_configured" ||
+        value === "authentication_failed" ||
+        value === "permission_denied" ||
+        value === "rate_limited" ||
+        value === "unavailable" ||
+        value === "invalid_response"
+        ? value
+        : value === null
+          ? null
+          : "unknown";
+    const failureOrder = (
+      left: (typeof checkpoints)[number],
+      right: (typeof checkpoints)[number],
+    ) =>
+      Number(left.retryable) - Number(right.retryable) ||
+      migrationStreamRank(left.streamType as ActMigrationStreamType) -
+        migrationStreamRank(right.streamType as ActMigrationStreamType) ||
+      left.partitionKey.localeCompare(right.partitionKey) ||
+      left.id.localeCompare(right.id);
+    const failures = checkpoints
+      .filter(({ status }) => status === "failed")
+      .toSorted(failureOrder);
+    const streams = actMigrationStreamTypeValues.map((streamType) => {
+      const streamCheckpoints = checkpoints.filter(
+        (checkpoint) => checkpoint.streamType === streamType,
+      );
+      const streamFailures = streamCheckpoints
+        .filter(({ status }) => status === "failed")
+        .toSorted(failureOrder);
+      const interruption = streamFailures[0] ?? null;
+      return {
+        streamType,
+        completedCheckpoints: streamCheckpoints.filter(
+          ({ status }) => status === "complete",
+        ).length,
+        totalCheckpoints: streamCheckpoints.length,
+        stagedRecords: records.filter(
+          (record) => record.streamType === streamType,
+        ).length,
+        failedCheckpoints: streamFailures.length,
+        retryable: interruption?.retryable ?? false,
+        retryAfter: interruption?.retryAfter ?? null,
+        errorCode: errorCode(interruption?.errorCode ?? null),
+      };
+    });
+    const interruption = failures[0] ?? null;
     return {
       runId,
       status: run.status as ActMigrationRunStatus,
@@ -706,13 +802,28 @@ export class DrizzleActMigrationSnapshotRepository
         ({ status }) => status === "complete",
       ).length,
       totalCheckpoints: checkpoints.length,
-      stagedRecords,
-      failedCheckpoints: checkpoints.filter(
-        ({ status }) => status === "failed",
-      ).length,
-      retryable: retryableFailures.length > 0,
-      retryAfter,
+      stagedRecords: records.length,
+      failedCheckpoints: failures.length,
+      retryable: interruption?.retryable ?? false,
+      retryAfter: interruption?.retryAfter ?? null,
+      streams,
+      interruption: interruption
+        ? {
+            code: errorCode(interruption.errorCode) ?? "unknown",
+            retryable: interruption.retryable,
+            retryAfter: interruption.retryAfter,
+          }
+        : null,
     };
+  }
+
+  async getLatestProgress(): Promise<SnapshotProgress | null> {
+    const [run] = await this.database
+      .select({ id: actMigrationRuns.id })
+      .from(actMigrationRuns)
+      .orderBy(desc(actMigrationRuns.createdAt), desc(actMigrationRuns.id))
+      .limit(1);
+    return run ? this.getProgress(run.id) : null;
   }
 
   finalizeSourceSnapshot(runId: string): Promise<FinalizedSourceSnapshot> {
@@ -723,7 +834,7 @@ export class DrizzleActMigrationSnapshotRepository
         .where(eq(actMigrationRuns.id, runId))
         .limit(1)
         .for("update");
-      if (!run) throw new Error("Act migration run is missing.");
+      if (!run) throw new ActMigrationRunNotFoundError();
       if (
         run.status !== "snapshotting" &&
         run.status !== "snapshot_complete" &&

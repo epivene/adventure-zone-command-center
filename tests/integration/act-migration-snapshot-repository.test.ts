@@ -8,6 +8,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as crmSchema from "@/db/schema";
 import {
+  ActMigrationLeaseConflictError,
+  ActMigrationRunConflictError,
+  ActMigrationRunNotFoundError,
   DrizzleActMigrationSnapshotRepository,
   planStagedPageRecords,
 } from "@/features/act-migration/snapshot-repository";
@@ -717,7 +720,8 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
       const first = await repository.createRun(input);
       const second = await repository.createRun(input);
 
-      expect(second).toEqual(first);
+      expect(first.created).toBe(true);
+      expect(second).toEqual({ id: first.id, created: false });
       expect(await sql!.unsafe(`
         SELECT stream_type, partition_key
         FROM act_migration_checkpoints
@@ -735,6 +739,112 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
         { stream_type: "opportunity", partition_key: "root" },
         { stream_type: "group", partition_key: "root" },
       ]);
+    },
+  );
+
+  postgresTest(
+    "rejects a request-key retry owned by a different source or actor",
+    async () => {
+      const requestKey = randomUUID();
+      await repository.createRun({
+        requestKey,
+        sourceDatabaseKey: "source-a",
+        requestedBy: "owner-a",
+      });
+
+      await expect(repository.createRun({
+        requestKey,
+        sourceDatabaseKey: "source-b",
+        requestedBy: "owner-a",
+      })).rejects.toBeInstanceOf(ActMigrationRunConflictError);
+      await expect(repository.createRun({
+        requestKey,
+        sourceDatabaseKey: "source-a",
+        requestedBy: "owner-b",
+      })).rejects.toBeInstanceOf(ActMigrationRunConflictError);
+    },
+  );
+
+  postgresTest(
+    "loads explicit/latest progress with stable zero-count streams and deterministic interruptions",
+    async () => {
+      const older = await createRun();
+      await new Promise((resolve) => setTimeout(resolve, 2));
+      const newer = await createRun();
+      await sql!.unsafe(`
+        UPDATE act_migration_checkpoints
+        SET status = 'complete', records_staged = 2
+        WHERE run_id = '${newer.id}' AND stream_type = 'company'
+      `);
+      await sql!.unsafe(`
+        UPDATE act_migration_checkpoints
+        SET status = 'failed', retryable = true,
+          retry_after = '2030-01-02T03:04:05.000Z',
+          error_code = 'rate_limited'
+        WHERE run_id = '${newer.id}' AND stream_type = 'contact'
+      `);
+      await sql!.unsafe(`
+        UPDATE act_migration_checkpoints
+        SET status = 'failed', retryable = false,
+          retry_after = NULL, error_code = 'permission_denied'
+        WHERE run_id = '${newer.id}' AND stream_type = 'opportunity'
+      `);
+      await sql!.unsafe(`
+        INSERT INTO act_migration_records (
+          run_id, stream_type, source_key, source_id, raw_snapshot,
+          normalized_snapshot, fingerprint
+        ) VALUES
+          ('${newer.id}', 'company', 'company:a', 'a', '{}', '{}', 'a'),
+          ('${newer.id}', 'company', 'error:company:b', NULL, '{"bad":true}', '{}', 'b')
+      `);
+
+      const explicit = await repository.getProgress(newer.id);
+      expect(explicit.streams.map(({ streamType }) => streamType)).toEqual([
+        "company",
+        "contact",
+        "opportunity",
+        "group",
+        "company_contact",
+        "opportunity_company",
+        "opportunity_contact",
+        "group_contact",
+      ]);
+      expect(explicit.streams[0]).toMatchObject({
+        completedCheckpoints: 1,
+        totalCheckpoints: 1,
+        stagedRecords: 2,
+      });
+      expect(explicit.interruption).toEqual({
+        code: "permission_denied",
+        retryable: false,
+        retryAfter: null,
+      });
+      expect((await repository.getLatestProgress())?.runId).toBe(newer.id);
+      expect((await repository.getProgress(older.id)).runId).toBe(older.id);
+      await expect(
+        repository.getProgress(randomUUID()),
+      ).rejects.toBeInstanceOf(ActMigrationRunNotFoundError);
+    },
+  );
+
+  postgresTest(
+    "reports guarded lease and skip mismatches with the typed conflict",
+    async () => {
+      const run = await createRun();
+      const checkpoint = await repository.claimNextCheckpoint(
+        run.id,
+        "worker-a",
+        new Date("2026-07-30T15:00:00.000Z"),
+      );
+      await expect(repository.storePage({
+        checkpointId: checkpoint!.id,
+        leaseOwner: "worker-b",
+        expectedSkip: 0,
+        records: [],
+        nextSkip: null,
+        queryMode: "projected",
+        now: new Date("2026-07-30T15:00:01.000Z"),
+      })).rejects.toBeInstanceOf(ActMigrationLeaseConflictError);
     },
   );
 

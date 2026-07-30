@@ -126,23 +126,29 @@ export class ActMigrationSnapshotService {
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  start(input: {
+  async start(input: {
     requestKey: string;
     sourceDatabaseKey: string;
     requestedBy: string;
   }) {
-    return this.repository.createRun(input);
+    const run = await this.repository.createRun(input);
+    return {
+      ...run,
+      progress: await this.repository.getProgress(run.id),
+    };
   }
 
   async captureNext(
     runId: string,
     options: { maxRequests?: number } = {},
-  ): Promise<SnapshotProgress> {
+  ): Promise<{ progress: SnapshotProgress; changed: boolean }> {
     const maxRequests = Math.min(
       10,
       Math.max(1, options.maxRequests ?? 10),
     );
+    await this.repository.getProgress(runId);
     await this.repository.enqueueRelationshipCheckpoints(runId);
+    let changed = false;
     for (let request = 0; request < maxRequests; request += 1) {
       const leaseOwner = randomUUID();
       const checkpoint = await this.repository.claimNextCheckpoint(
@@ -151,10 +157,14 @@ export class ActMigrationSnapshotService {
         this.now(),
       );
       if (!checkpoint) break;
+      changed = true;
       const result = await this.captureCheckpointPage(checkpoint, leaseOwner);
       if (result === "api_failed") break;
     }
-    return this.repository.getProgress(runId);
+    return {
+      progress: await this.repository.getProgress(runId),
+      changed,
+    };
   }
 
   private async captureCheckpointPage(
@@ -194,11 +204,7 @@ export class ActMigrationSnapshotService {
         checkpointId: checkpoint.id,
         leaseOwner,
         errorCode: error.code,
-        retryable:
-          error.retryable ||
-          error.code === "authentication_failed" ||
-          error.code === "permission_denied" ||
-          error.code === "not_configured",
+        retryable: error.retryable,
         retryAfter: retryAfterDate(error.retryAfter),
         now: this.now(),
       });

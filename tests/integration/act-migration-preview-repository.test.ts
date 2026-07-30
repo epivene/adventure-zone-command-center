@@ -100,6 +100,20 @@ function streamType(sourceKey: string) {
   return sourceKey.split(":")[0] ?? "company";
 }
 
+async function waitForDatabaseLock(
+  observer: postgres.Sql,
+  backendPid: number,
+) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [activity] = await observer.unsafe(`
+      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${backendPid}
+    `);
+    if (activity?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Expected the database session to wait on a lock.");
+}
+
 describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   const postgresTest = databaseUrl ? it : it.skip;
   let sql: postgres.Sql | undefined;
@@ -203,7 +217,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   beforeEach(async () => {
     if (!databaseUrl) return;
     schemaName = testSchemaName();
-    sql = postgres(databaseUrl, { max: 1 });
+    sql = postgres(databaseUrl, { max: 4 });
     await sql.unsafe(`CREATE SCHEMA "${schemaName}"`);
     await sql.unsafe(`SET search_path TO "${schemaName}", public`);
     const journal = JSON.parse(await readFile(
@@ -225,6 +239,18 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceDigest: "source-digest",
     });
     await insertRecord("company:company-1");
+    await database.insert(crmSchema.organizations).values([
+      { id: localA, name: "Local Place A" },
+      { id: localB, name: "Local Place B" },
+    ]);
+    await database.insert(crmSchema.contacts).values([
+      { id: localA, firstName: "Local", lastName: "Person A" },
+      { id: localB, firstName: "Local", lastName: "Person B" },
+    ]);
+    await database.insert(crmSchema.bookings).values([
+      { id: localA, name: "Local Booking A", city: "Denver", region: "CO" },
+      { id: localB, name: "Local Booking B", city: "Denver", region: "CO" },
+    ]);
   });
 
   afterEach(async () => {
@@ -275,14 +301,14 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
 
   postgresTest("makes identical direct retries write-free and rejects a changed stored digest", async () => {
     const proposals = [baseProposal()];
-    await store(proposals);
+    await expect(store(proposals)).resolves.toEqual({ changed: true });
     const before = await Promise.all([
       sql!.unsafe(`SELECT preview_completed_at, updated_at FROM act_migration_runs WHERE id = '${runId}'`),
       sql!.unsafe(`SELECT created_at, updated_at FROM act_migration_proposals WHERE run_id = '${runId}'`),
       sql!.unsafe(`SELECT count(*) AS count FROM audit_entries`),
     ]);
 
-    await store(proposals);
+    await expect(store(proposals)).resolves.toEqual({ changed: false });
     expect(await Promise.all([
       sql!.unsafe(`SELECT preview_completed_at, updated_at FROM act_migration_runs WHERE id = '${runId}'`),
       sql!.unsafe(`SELECT created_at, updated_at FROM act_migration_proposals WHERE run_id = '${runId}'`),
@@ -419,7 +445,153 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     expect(first.total).toBe(4);
     expect(filtered.rows.map(({ proposalKey }) => proposalKey)).toEqual(["contact:a"]);
     expect(filtered.total).toBe(1);
+    expect(filtered.entityCounts).toEqual({
+      organization: 0,
+      contact: 1,
+      organization_contact: 0,
+      booking: 0,
+      booking_contact: 0,
+      calling_list: 0,
+      calling_list_member: 0,
+    });
+    expect(filtered.stateCounts).toMatchObject({ new: 1, change: 1 });
   });
+
+  postgresTest(
+    "exposes safe current choices, preserves unavailable history, and rejects a removed candidate",
+    async () => {
+      const historical = proposal({
+        proposalKey: "contact:historical-choice",
+        state: "possible_duplicate",
+        targetEntityType: "contact",
+        sourceRecordKeys: ["contact:historical-choice"],
+        candidateLocalIds: [localA, localB],
+      });
+      await store([baseProposal(), historical]);
+      const initial = await repository.getPreview(runId, {
+        page: 1,
+        pageSize: 100,
+      });
+      expect(initial.rows.find(
+        ({ proposalKey }) => proposalKey === historical.proposalKey,
+      )?.candidateChoices).toEqual([
+        { id: localA, label: "Local Person A", available: true },
+        { id: localB, label: "Local Person B", available: true },
+      ]);
+
+      await expect(repository.saveDecision({
+        runId,
+        proposalKey: historical.proposalKey,
+        decision: "link_existing",
+        chosenLocalEntityId: localA,
+        decidedBy: "owner",
+      })).resolves.toEqual({ changed: true });
+      await expect(repository.saveDecision({
+        runId,
+        proposalKey: historical.proposalKey,
+        decision: "link_existing",
+        chosenLocalEntityId: localA,
+        decidedBy: "owner",
+      })).resolves.toEqual({ changed: false });
+
+      await database.delete(crmSchema.contacts).where(eq(crmSchema.contacts.id, localA));
+      const reloaded = await repository.getPreview(runId, {
+        page: 1,
+        pageSize: 100,
+      });
+      expect(reloaded.rows.find(
+        ({ proposalKey }) => proposalKey === historical.proposalKey,
+      )?.candidateChoices).toContainEqual({
+        id: localA,
+        label: "Unavailable local record",
+        available: false,
+      });
+      await database.delete(crmSchema.contacts).where(eq(crmSchema.contacts.id, localB));
+      await expect(repository.saveDecision({
+        runId,
+        proposalKey: historical.proposalKey,
+        decision: "link_existing",
+        chosenLocalEntityId: localB,
+        decidedBy: "owner",
+      })).rejects.toThrow("unavailable");
+    },
+  );
+
+  postgresTest(
+    "holds a candidate key-share lock through the decision transaction while allowing deletion after commit",
+    async () => {
+      const lockable = proposal({
+        proposalKey: "contact:lockable-choice",
+        state: "possible_duplicate",
+        targetEntityType: "contact",
+        sourceRecordKeys: ["contact:lockable-choice"],
+        candidateLocalIds: [localA],
+      });
+      await store([baseProposal(), lockable]);
+      await sql!.unsafe(`
+        CREATE FUNCTION delay_act_proposal_update() RETURNS trigger
+        LANGUAGE plpgsql AS $$
+        BEGIN
+          PERFORM pg_sleep(0.5);
+          RETURN NEW;
+        END
+        $$
+      `);
+      await sql!.unsafe(`
+        CREATE TRIGGER delay_act_proposal_update
+        BEFORE UPDATE ON act_migration_proposals
+        FOR EACH ROW EXECUTE FUNCTION delay_act_proposal_update()
+      `);
+
+      const decision = repository.saveDecision({
+        runId,
+        proposalKey: lockable.proposalKey,
+        decision: "link_existing",
+        chosenLocalEntityId: localA,
+        decidedBy: "owner",
+      });
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const [sleeping] = await sql!.unsafe(`
+          SELECT 1 AS ready FROM pg_stat_activity
+          WHERE wait_event = 'PgSleep'
+            AND query ILIKE '%act_migration_proposals%'
+          LIMIT 1
+        `);
+        if (sleeping) break;
+        if (attempt === 99) {
+          throw new Error("Decision transaction did not reach its delay trigger.");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      const deleter = await sql!.reserve();
+      try {
+        const pidRows = await deleter<
+          { pid: number }[]
+        >`SELECT pg_backend_pid()::integer AS pid`;
+        const pid = pidRows[0]!.pid;
+        const deletion = Promise.resolve(
+          deleter`DELETE FROM contacts WHERE id = ${localA}`,
+        );
+        await waitForDatabaseLock(sql!, pid);
+        await expect(decision).resolves.toEqual({ changed: true });
+        await deletion;
+      } finally {
+        await deleter.release();
+      }
+      const reloaded = await repository.getPreview(runId, {
+        page: 1,
+        pageSize: 100,
+      });
+      expect(reloaded.rows.find(
+        ({ proposalKey }) => proposalKey === lockable.proposalKey,
+      )?.candidateChoices).toContainEqual({
+        id: localA,
+        label: "Unavailable local record",
+        available: false,
+      });
+    },
+  );
 
   postgresTest("validates approve, link, keep-separate, orphan, and trimmed ignore decisions", async () => {
     const approvable = baseProposal();
@@ -782,7 +954,33 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
 describe("ActMigrationPreviewService", () => {
   it("returns an existing immutable preview before reading the snapshot or local candidates", async () => {
     const reconciliation = report([baseProposal()]);
-    const stored = { runId, rows: [], report: reconciliation, page: 1, pageSize: 50, total: 0 };
+    const stored = {
+      runId,
+      rows: [],
+      report: reconciliation,
+      page: 1,
+      pageSize: 50,
+      total: 0,
+      entityCounts: {
+        organization: 0,
+        contact: 0,
+        organization_contact: 0,
+        booking: 0,
+        booking_contact: 0,
+        calling_list: 0,
+        calling_list_member: 0,
+      },
+      stateCounts: {
+        new: 0,
+        matched_unchanged: 0,
+        change: 0,
+        new_relationship: 0,
+        possible_duplicate: 0,
+        needs_review: 0,
+        ignored: 0,
+        error: 0,
+      },
+    };
     const service = new ActMigrationPreviewService(
       { finalizeSourceSnapshot: async () => { throw new Error("snapshot should not be read"); } } as never,
       { loadCandidateSnapshot: async () => { throw new Error("local candidates should not be read"); } },
@@ -790,10 +988,97 @@ describe("ActMigrationPreviewService", () => {
         getPreviewIfStored: async () => stored,
         getPreview: async () => { throw new Error("stored preview should be returned directly"); },
         storeProposalsIfAbsent: async () => { throw new Error("stored preview should not be written"); },
-        saveDecision: async () => undefined,
+        saveDecision: async () => ({ changed: false }),
       },
     );
 
-    await expect(service.finalizePreview(runId)).resolves.toEqual(stored);
+    await expect(service.finalizePreview(runId)).resolves.toEqual({
+      preview: stored,
+      changed: false,
+    });
   });
+
+  it.each([true, false])(
+    "preserves repository changed=%s after building a new preview",
+    async (changed) => {
+      const reconciliation = report([]);
+      const stored = {
+        runId,
+        rows: [],
+        report: reconciliation,
+        page: 1,
+        pageSize: 50,
+        total: 0,
+        entityCounts: {
+          organization: 0,
+          contact: 0,
+          organization_contact: 0,
+          booking: 0,
+          booking_contact: 0,
+          calling_list: 0,
+          calling_list_member: 0,
+        },
+        stateCounts: {
+          new: 0,
+          matched_unchanged: 0,
+          change: 0,
+          new_relationship: 0,
+          possible_duplicate: 0,
+          needs_review: 0,
+          ignored: 0,
+          error: 0,
+        },
+      };
+      const checkpoints = [
+        "company",
+        "contact",
+        "opportunity",
+        "group",
+      ].map((streamType) => ({
+        id: randomUUID(),
+        runId,
+        streamType,
+        partitionKey: "root",
+        parentSourceId: null,
+        nextSkip: 0,
+        pageSize: 100,
+        queryMode: "projected",
+        status: "complete",
+        retryAfter: null,
+        retryable: true,
+      }));
+      const service = new ActMigrationPreviewService(
+        {
+          finalizeSourceSnapshot: async () => ({
+            runId,
+            records: [],
+            checkpoints,
+            sourceDigest:
+              "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          }),
+        } as never,
+        {
+          loadCandidateSnapshot: async () => ({
+            places: [],
+            people: [],
+            bookings: [],
+            placePeople: [],
+            bookingPeople: [],
+            externalLinks: [],
+          }),
+        },
+        {
+          getPreviewIfStored: async () => null,
+          getPreview: async () => stored,
+          storeProposalsIfAbsent: async () => ({ changed }),
+          saveDecision: async () => ({ changed: false }),
+        },
+      );
+
+      await expect(service.finalizePreview(runId)).resolves.toEqual({
+        preview: stored,
+        changed,
+      });
+    },
+  );
 });
