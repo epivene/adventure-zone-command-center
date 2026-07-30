@@ -1620,29 +1620,55 @@ git commit -m "feat: build Act migration proposals"
 ### Task 7: Store immutable previews and durable review decisions
 
 **Files:**
+- Modify: `features/act-migration/reconciliation.ts`
 - Create: `features/act-migration/preview-repository.ts`
 - Create: `features/act-migration/preview-service.ts`
+- Modify: `tests/unit/act-migration-reconciliation.test.ts`
 - Create: `tests/integration/act-migration-preview-repository.test.ts`
 
 **Interfaces:**
 - Consumes: `buildMigrationProposals()` and `reconcileMigrationPreview()`.
-- Produces: `ActMigrationPreviewRepository`, `DrizzleActMigrationPreviewRepository`, `ActMigrationPreviewService`, `StoredMigrationPreviewPage`, and decision validation.
+- Produces: exported `proposalSnapshotDigest()`,
+  `ActMigrationPreviewRepository`, `DrizzleActMigrationPreviewRepository`,
+  `ActMigrationPreviewService`, `StoredMigrationPreviewPage`, and
+  proposal-aware decision validation.
 
 - [ ] **Step 1: Write preview immutability and decision tests**
 
 Prove:
 
 1. Finalizing a completed snapshot stores source and proposal digests.
-2. Finalizing the same run twice returns the same rows without rematching.
+2. Finalizing the same run twice returns the same rows without reading local
+   candidates, rematching, writing, changing timestamps, or duplicating audit
+   rows.
 3. A different proposal digest for an already-finalized run is rejected.
-4. Preview reads page by entity type and preview state with deterministic ordering.
-5. `approve_proposed` is accepted only for an approvable proposal.
-6. `link_existing` requires one of `candidateLocalIds`.
-7. `keep_separate` is accepted only for Person duplicate/consolidation proposals.
-8. `ignore` requires a nonblank reason stored in decision metadata.
-9. Choosing a primary source Contact requires one of that proposal’s source IDs.
-10. A saved decision survives repository recreation and preview reload.
-11. No decision method writes to organizations, contacts, bookings, relationship tables, or calling-list tables.
+4. A mismatched run/source/report digest, incomplete reconciliation report,
+   unknown source key, duplicate source ownership, or missing/cross-run
+   dependency is rejected atomically.
+5. Reloading every immutable structural proposal field yields the same exact
+   proposal key set, count, and canonical digest.
+6. Preview reads use filtered SQL count/page queries with one-based integer
+   pages, page sizes from 1 through 100, and deterministic target-rank then
+   proposal-key ordering.
+7. `approve_proposed` is accepted only for an approvable proposal.
+8. `link_existing` requires one of `candidateLocalIds`.
+9. `keep_separate` is accepted only for Person duplicate/consolidation
+   proposals, including shared-mailbox collision review, and is rejected for
+   orphaned Contact links.
+10. `ignore` requires a nonblank trimmed reason stored in decision metadata.
+11. Choosing a primary source Contact is allowed only on a Contact proposal
+    and requires one of that proposal’s staged Contact source IDs.
+12. An existing non-null `proposedPrimarySourceId` cannot be overridden;
+    omitted and explicitly-equal choices normalize identically. A multi-Contact
+    consolidation with no proposed primary requires an explicit primary
+    choice.
+13. A saved decision survives repository recreation and preview reload.
+14. An identical decision retry preserves `decidedAt` and creates no audit
+    entry; a changed decision clears stale incompatible metadata.
+15. A forced audit-insert failure rolls back the proposal, referenced staged
+    records, and audit write together.
+16. No decision method writes to organizations, contacts, bookings,
+    relationship tables, or calling-list tables.
 
 Persist and reload `reviewState`, `issueCode`,
 `proposedPrimarySourceId`, and `dependencyProposalKeys` without deriving
@@ -1650,6 +1676,11 @@ them again. Reject a stored
 dependency key that does not belong to the same run. An unresolved
 dependency remains review-only; saving a child decision must not silently
 resolve or apply its parent.
+
+`ActMigrationProposal.reviewState` is immutable proposal evidence and remains
+part of the proposal digest. Decision writes transition only the referenced
+staged-record review states; they never rewrite the stored proposal
+`reviewState`.
 
 The interface must be:
 
@@ -1688,6 +1719,10 @@ export interface ActMigrationPreviewRepository {
     proposals: readonly ActMigrationProposal[];
     report: MigrationReconciliationReport;
   }): Promise<void>;
+  getPreviewIfStored(
+    runId: string,
+    query: MigrationPreviewQuery,
+  ): Promise<StoredMigrationPreviewPage | null>;
   getPreview(
     runId: string,
     query: MigrationPreviewQuery,
@@ -1714,17 +1749,43 @@ Expected: FAIL because the preview repository does not exist.
 
 - [ ] **Step 3: Implement one-time proposal persistence**
 
+Export the canonical proposal hashing implementation from reconciliation as
+`proposalSnapshotDigest()` and reuse it; do not duplicate or subtly vary the
+hash payload in the repository.
+
+The service calls `getPreviewIfStored()` before loading the finalized snapshot
+or local candidates. A hit returns immediately without rematching. The
+repository still validates direct retry inputs after locking the run.
+
+Before insertion, require:
+
+1. `run.sourceDigest === input.sourceDigest === report.sourceDigest`;
+2. `proposalSnapshotDigest(input.proposals) === input.proposalDigest ===
+   report.proposalDigest`;
+3. `report.complete === true`;
+4. every staged source key belongs to this run and is owned by exactly one
+   proposal; and
+5. every dependency key resolves to a proposal in the same input/run.
+
 Use one transaction to:
 
-1. lock the migration run;
+1. lock the migration run `FOR UPDATE`;
 2. verify it is `snapshot_complete` or already `previewed`;
-3. store proposals with `onConflictDoNothing`;
-4. verify every stored proposal fingerprint;
-5. update staged record proposal/review fields;
-6. store both digests and the reconciliation summary;
-7. change the run to `previewed`.
+3. if it is already `previewed`, require
+   `run.sourceDigest === input.sourceDigest` and
+   `run.proposalDigest === input.proposalDigest === report.proposalDigest`;
+   reject a mismatch, otherwise perform a write-free no-op;
+4. insert proposals in deterministic bounded chunks, inside the same
+   transaction, using `onConflictDoNothing`;
+5. reload all immutable structural fields and verify the exact key set, count,
+   and recomputed canonical proposal digest;
+6. update staged record proposal/review fields only after verification;
+7. store both digests and the reconciliation summary;
+8. change the run to `previewed` and set `previewCompletedAt` once.
 
-Reopening a `previewed` run must read stored proposals only.
+This exact structural digest replaces the undefined idea of a per-row proposal
+fingerprint. Reopening a `previewed` run must read stored proposals only and
+must preserve its original completion timestamp.
 
 - [ ] **Step 4: Implement decision validation and auditing**
 
@@ -1741,18 +1802,46 @@ Save the authenticated Clerk user ID in `decidedBy`. Store only decision metadat
 ```
 
 Do not include raw source snapshots in the audit row.
-In the same transaction, update every staged record referenced by the proposal
-from `pending` to `decided` or `ignored`; decision changes must update the
-proposal, referenced records, and audit entry atomically.
+Inside one transaction, lock the run and stored proposal `FOR UPDATE`, require
+the run to be `previewed`, and validate with `allowedDecisionsForProposal()`
+using only the persisted proposal fields.
+
+Normalize decision metadata as a state machine:
+
+- `chosenLocalEntityId` is present only for `link_existing` and must be one of
+  `candidateLocalIds`;
+- `decisionReason` is present only for `ignore`, trimmed, and nonblank;
+- `primarySourceId` is accepted only for Contact proposals and must name a
+  staged Contact record referenced by that proposal. If immutable
+  `proposedPrimarySourceId` is non-null, reject a different supplied value and
+  normalize both omitted and explicitly-equal input to persisted
+  `primarySourceId = null`; effective authority is
+  `primarySourceId ?? proposedPrimarySourceId`. If there is no proposed primary,
+  an approving/linking decision that consolidates multiple Contact source IDs
+  requires and persists an explicit staged Contact source ID;
+- all metadata fields unrelated to the new decision are written as `null`;
+- compare the normalized decision tuple before changing actor/timestamp fields;
+  a semantic retry preserves `decidedAt` and creates no duplicate audit entry.
+
+Later decision changes may transition referenced staged rows from `pending`,
+`decided`, or `ignored` to the next state, but never from `not_required`.
+Proposal, staged-record, and audit writes are atomic. Audit `before` and
+`after` values contain decision metadata only, never raw proposals or source
+snapshots.
 
 - [ ] **Step 5: Run focused tests and commit**
 
 ```powershell
-node node_modules/vitest/vitest.mjs run tests/integration/act-migration-preview-repository.test.ts
+node node_modules/vitest/vitest.mjs run tests/unit/act-migration-reconciliation.test.ts tests/integration/act-migration-preview-repository.test.ts
 npm run typecheck
-git add features/act-migration/preview-repository.ts features/act-migration/preview-service.ts tests/integration/act-migration-preview-repository.test.ts
+git add features/act-migration/reconciliation.ts features/act-migration/preview-repository.ts features/act-migration/preview-service.ts tests/unit/act-migration-reconciliation.test.ts tests/integration/act-migration-preview-repository.test.ts
 git commit -m "feat: store reviewed Act migration previews"
 ```
+
+The repository test must use `crmTestDatabaseUrl()` and report itself as
+PostgreSQL-gated when no disposable URL is configured. A skipped database test
+does not satisfy the Slice 2 release gate: Task 9 must run it against a
+disposable database with `CRM_RELEASE_TESTS=1`.
 
 ---
 
@@ -1915,14 +2004,24 @@ Keep `--maxWorkers=1 --testTimeout=120000 --hookTimeout=120000`.
 - [ ] **Step 4: Run the complete Slice 2 verification gate**
 
 ```powershell
+# Run these in a shell without CRM_TEST_DATABASE_URL or CRM_RELEASE_TESTS.
 node node_modules/vitest/vitest.mjs run tests/unit/act-migration-types.test.ts tests/unit/act-migration-source-parser.test.ts tests/unit/act-migration-matcher.test.ts tests/unit/act-migration-reconciliation.test.ts tests/unit/act-migration-actions.test.ts tests/unit/act-migration-review.test.tsx tests/integration/act-client.test.ts tests/integration/act-migration-client.test.ts tests/integration/act-migration-snapshot-service.test.ts tests/integration/act-migration-docs.test.ts
-npm run test:crm-db
 npm run typecheck
 npm run lint
 npm test
 npm run build
 git diff --check
+
+# In a fresh shell where CRM_TEST_DATABASE_URL names a disposable database:
+$env:CRM_RELEASE_TESTS = "1"
+npm run test:crm-db
+Remove-Item Env:CRM_RELEASE_TESTS
+Remove-Item Env:CRM_TEST_DATABASE_URL
 ```
+
+`test:crm-db` must connect to a disposable PostgreSQL database through
+`CRM_TEST_DATABASE_URL`; a skipped or missing database suite is a failed
+release gate.
 
 The Slice 2 gate passes only when:
 
