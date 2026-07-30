@@ -41,6 +41,47 @@ async function migrationStatements(fileName: string, schemaName: string) {
     .filter(Boolean);
 }
 
+type FakeQueryRow = Record<string, string>;
+
+class FakeReconciliationQuery implements PromiseLike<FakeQueryRow[]> {
+  constructor(private readonly rows: FakeQueryRow[]) {}
+
+  from() {
+    return this;
+  }
+
+  leftJoin() {
+    return this;
+  }
+
+  innerJoin() {
+    return this;
+  }
+
+  where() {
+    return this;
+  }
+
+  then<TResult1 = FakeQueryRow[], TResult2 = never>(
+    onfulfilled?:
+      | ((value: FakeQueryRow[]) => TResult1 | PromiseLike<TResult1>)
+      | null,
+    onrejected?:
+      | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+      | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.rows).then(onfulfilled, onrejected);
+  }
+}
+
+function fakeReconciliationDatabase(resultSets: FakeQueryRow[][]) {
+  let queryIndex = 0;
+  return {
+    select: () =>
+      new FakeReconciliationQuery(resultSets[queryIndex++] ?? []),
+  } as unknown as typeof import("@/db/client").db;
+}
+
 describe("inspectRelationshipInvariants", () => {
   const postgresTest = databaseUrl ? it : it.skip;
   let sql: postgres.Sql | undefined;
@@ -70,6 +111,58 @@ describe("inspectRelationshipInvariants", () => {
       await sql.end({ timeout: 5 });
       sql = undefined;
     }
+  });
+
+  it("sorts every invariant category independently of database row order", async () => {
+    const database = fakeReconciliationDatabase([
+      [
+        { id: ids.personMissingPlaceLinkTwo },
+        { id: ids.personMissingPlaceLink },
+      ],
+      [
+        { id: ids.bookingMissingPersonLinkTwo },
+        { id: ids.bookingMissingPersonLink },
+      ],
+      [
+        {
+          bookingId: ids.bookingWithUnrelatedPersonTwo,
+          contactId: ids.unrelatedPersonTwo,
+        },
+        {
+          bookingId: ids.bookingWithUnrelatedPerson,
+          contactId: ids.unrelatedPerson,
+        },
+      ],
+      [
+        { id: ids.legacyBookingTwo },
+        { id: ids.legacyBooking },
+      ],
+    ]);
+
+    await expect(inspectRelationshipInvariants(database)).resolves.toEqual({
+      contactPrimaryPlaceWithoutAssociation: [
+        ids.personMissingPlaceLink,
+        ids.personMissingPlaceLinkTwo,
+      ],
+      bookingPrimaryPersonWithoutAssociation: [
+        ids.bookingMissingPersonLink,
+        ids.bookingMissingPersonLinkTwo,
+      ],
+      bookingPeopleOutsidePlace: [
+        {
+          bookingId: ids.bookingWithUnrelatedPerson,
+          contactId: ids.unrelatedPerson,
+        },
+        {
+          bookingId: ids.bookingWithUnrelatedPersonTwo,
+          contactId: ids.unrelatedPersonTwo,
+        },
+      ],
+      legacyBookingsWithoutPlace: [
+        ids.legacyBooking,
+        ids.legacyBookingTwo,
+      ],
+    });
   });
 
   postgresTest("returns four empty arrays for a fully valid graph", async () => {
@@ -159,15 +252,15 @@ describe("inspectRelationshipInvariants", () => {
         lastName: "Person",
       },
       {
-        id: ids.personMissingPlaceLink,
-        organizationId: ids.place,
-        firstName: "Missing",
-        lastName: "Place Link",
-      },
-      {
         id: ids.personMissingPlaceLinkTwo,
         organizationId: ids.place,
         firstName: "Missing Two",
+        lastName: "Place Link",
+      },
+      {
+        id: ids.personMissingPlaceLink,
+        organizationId: ids.place,
+        firstName: "Missing",
         lastName: "Place Link",
       },
       {
@@ -202,10 +295,10 @@ describe("inspectRelationshipInvariants", () => {
     ]);
     await db.insert(crmSchema.bookings).values([
       {
-        id: ids.bookingMissingPersonLink,
+        id: ids.bookingMissingPersonLinkTwo,
         organizationId: ids.place,
         primaryContactId: ids.validPerson,
-        name: "Missing Person Link",
+        name: "Missing Person Link Two",
         city: "Shelby",
         region: "MT",
       },
@@ -217,10 +310,10 @@ describe("inspectRelationshipInvariants", () => {
         region: "MT",
       },
       {
-        id: ids.bookingMissingPersonLinkTwo,
+        id: ids.bookingMissingPersonLink,
         organizationId: ids.place,
         primaryContactId: ids.validPerson,
-        name: "Missing Person Link Two",
+        name: "Missing Person Link",
         city: "Shelby",
         region: "MT",
       },
@@ -232,16 +325,16 @@ describe("inspectRelationshipInvariants", () => {
         region: "MT",
       },
       {
-        id: ids.legacyBooking,
+        id: ids.legacyBookingTwo,
         organizationId: null,
-        name: "Legacy",
+        name: "Legacy Two",
         city: "Shelby",
         region: "MT",
       },
       {
-        id: ids.legacyBookingTwo,
+        id: ids.legacyBooking,
         organizationId: null,
-        name: "Legacy Two",
+        name: "Legacy",
         city: "Shelby",
         region: "MT",
       },
