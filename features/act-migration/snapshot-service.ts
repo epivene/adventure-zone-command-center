@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { ActApiError } from "@/features/act-sync/act-errors";
 import type {
@@ -6,9 +6,9 @@ import type {
   ActMigrationSnapshotRepository,
   SnapshotProgress,
 } from "@/features/act-migration/snapshot-repository";
-import type {
-  ActMigrationStreamType,
-  ActPage,
+import {
+  actSourceEntityTypeValues,
+  type ActPage,
 } from "@/features/act-migration/migration-types";
 import type { ActMigrationSourceClient } from "@/features/act-migration/source-client";
 import {
@@ -62,19 +62,38 @@ function relationshipInput(
 }
 
 function stagedItem(
-  streamType: ActMigrationStreamType,
+  checkpoint: ActMigrationCheckpoint,
   item: unknown,
+  itemIndex: number,
 ): StagedSourceItem {
+  const streamType = checkpoint.streamType;
   const parsed = parseSourceItem(
     streamType,
     item as Record<string, unknown>,
   );
   if (!parsed.ok) {
+    const occurrenceHash = createHash("sha256")
+      .update(JSON.stringify([
+        checkpoint.partitionKey,
+        checkpoint.nextSkip,
+        itemIndex,
+        parsed.deterministicErrorKey,
+      ]))
+      .digest("hex");
+    const knownSourceId =
+      streamType === "opportunity_company" ||
+      streamType === "opportunity_contact" ||
+      streamType === "group_contact"
+        ? checkpoint.parentSourceId
+        : null;
+    const knownTargetSourceId = streamType === "company_contact"
+      ? checkpoint.parentSourceId
+      : null;
     return {
       streamType,
-      sourceKey: parsed.deterministicErrorKey,
-      sourceId: null,
-      targetSourceId: null,
+      sourceKey: `error:${streamType}:occurrence:${occurrenceHash}`,
+      sourceId: knownSourceId,
+      targetSourceId: knownTargetSourceId,
       rawSnapshot: parsed.rawSnapshot,
       normalizedSnapshot: {},
       fingerprint: parsed.deterministicErrorKey,
@@ -132,7 +151,8 @@ export class ActMigrationSnapshotService {
         this.now(),
       );
       if (!checkpoint) break;
-      await this.captureCheckpointPage(checkpoint, leaseOwner);
+      const result = await this.captureCheckpointPage(checkpoint, leaseOwner);
+      if (result === "api_failed") break;
     }
     return this.repository.getProgress(runId);
   }
@@ -140,13 +160,14 @@ export class ActMigrationSnapshotService {
   private async captureCheckpointPage(
     checkpoint: ActMigrationCheckpoint,
     leaseOwner: string,
-  ) {
+  ): Promise<"stored" | "api_failed"> {
     try {
       const page = await this.fetchPage(checkpoint);
-      const records = page.items.map((item) =>
+      const records = page.items.map((item, itemIndex) =>
         stagedItem(
-          checkpoint.streamType,
+          checkpoint,
           relationshipInput(checkpoint, item),
+          itemIndex,
         )
       );
       await this.repository.storePage({
@@ -158,17 +179,30 @@ export class ActMigrationSnapshotService {
         queryMode: page.queryMode,
         now: this.now(),
       });
-      await this.repository.enqueueRelationshipCheckpoints(checkpoint.runId);
+      if (
+        page.nextSkip === null &&
+        actSourceEntityTypeValues.some(
+          (streamType) => streamType === checkpoint.streamType,
+        )
+      ) {
+        await this.repository.enqueueRelationshipCheckpoints(checkpoint.runId);
+      }
+      return "stored";
     } catch (error) {
       if (!(error instanceof ActApiError)) throw error;
       await this.repository.failCheckpoint({
         checkpointId: checkpoint.id,
         leaseOwner,
         errorCode: error.code,
-        retryable: error.retryable,
+        retryable:
+          error.retryable ||
+          error.code === "authentication_failed" ||
+          error.code === "permission_denied" ||
+          error.code === "not_configured",
         retryAfter: retryAfterDate(error.retryAfter),
         now: this.now(),
       });
+      return "api_failed";
     }
   }
 

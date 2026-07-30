@@ -445,6 +445,12 @@ describe("ActMigrationSnapshotService", () => {
     }]);
     expect(client.requests.map(({ method }) => method)).toEqual([
       "listCompanies",
+    ]);
+
+    await service.captureNext(run.id, { maxRequests: 1 });
+
+    expect(client.requests.map(({ method }) => method)).toEqual([
+      "listCompanies",
       "listContacts",
     ]);
     expect(repository.checkpoints.slice(0, 2)).toEqual([
@@ -458,6 +464,97 @@ describe("ActMigrationSnapshotService", () => {
         status: "complete",
       }),
     ]);
+  });
+
+  it("stops after one retryable API failure and resumes the same page only on a later capture action", async () => {
+    const { client, repository, service, run } = await setup();
+    client.queue(
+      "listCompanies",
+      new ActApiError("unavailable", true),
+      page([{ id: "company-1" }], 1),
+    );
+
+    await service.captureNext(run.id, { maxRequests: 10 });
+
+    expect(client.requests).toHaveLength(1);
+    expect(client.requests[0]?.request.skip).toBe(0);
+    expect(repository.checkpoints[0]).toMatchObject({
+      streamType: "company",
+      status: "failed",
+      nextSkip: 0,
+      retryable: true,
+    });
+
+    await service.captureNext(run.id, { maxRequests: 1 });
+
+    expect(client.requests).toHaveLength(2);
+    expect(client.requests[1]?.request.skip).toBe(0);
+    expect(repository.records).toEqual([
+      expect.objectContaining({ sourceKey: "company:company-1" }),
+    ]);
+  });
+
+  it("allows an operator-fixed authentication failure to resume the same run and skip", async () => {
+    const { client, repository, service, run, now } = await setup();
+    client.queue(
+      "listCompanies",
+      new ActApiError("authentication_failed", false),
+    );
+
+    await service.captureNext(run.id, { maxRequests: 10 });
+
+    expect(client.requests).toHaveLength(1);
+    expect(repository.failures).toEqual([{
+      errorCode: "authentication_failed",
+      retryable: true,
+      retryAfter: null,
+    }]);
+    expect(repository.checkpoints[0]).toMatchObject({
+      status: "failed",
+      nextSkip: 0,
+      retryable: true,
+    });
+
+    const fixedClient = new FakeSourceClient();
+    fixedClient.queue(
+      "listCompanies",
+      page([{ id: "company-after-auth-fix" }], 1),
+    );
+    const resumedService = new ActMigrationSnapshotService(
+      fixedClient,
+      repository,
+      () => now,
+    );
+    await resumedService.captureNext(run.id, { maxRequests: 1 });
+
+    expect(fixedClient.requests).toEqual([
+      expect.objectContaining({
+        method: "listCompanies",
+        request: expect.objectContaining({ skip: 0 }),
+      }),
+    ]);
+    expect(repository.records).toEqual([
+      expect.objectContaining({
+        sourceKey: "company:company-after-auth-fix",
+      }),
+    ]);
+  });
+
+  it("keeps malformed Act responses nonretryable", async () => {
+    const { client, repository, service, run } = await setup();
+    client.queue(
+      "listCompanies",
+      new ActApiError("invalid_response", false),
+    );
+
+    await service.captureNext(run.id, { maxRequests: 10 });
+
+    expect(client.requests).toHaveLength(1);
+    expect(repository.failures).toEqual([{
+      errorCode: "invalid_response",
+      retryable: false,
+      retryAfter: null,
+    }]);
   });
 
   it("stages deterministic invalid-row errors beside valid rows and continues unrelated checkpoints", async () => {
@@ -479,7 +576,9 @@ describe("ActMigrationSnapshotService", () => {
       errorCode: null,
     });
     expect(repository.records[1]).toMatchObject({
-      sourceKey: expect.stringMatching(/^error:company:[a-f0-9]{64}$/),
+      sourceKey: expect.stringMatching(
+        /^error:company:occurrence:[a-f0-9]{64}$/,
+      ),
       sourceId: null,
       normalizedSnapshot: {},
       errorCode: "missing_source_id",
@@ -506,6 +605,36 @@ describe("ActMigrationSnapshotService", () => {
       nextSkip: 2,
       status: "complete",
     });
+  });
+
+  it("runs post-store relationship discovery only when a root checkpoint completes", async () => {
+    const { client, repository, service, run } = await setup();
+    client.queue(
+      "listCompanies",
+      page([{ id: "company-1" }], 1),
+      page([{ id: "company-2" }], 2),
+      page([], null),
+    );
+
+    await service.captureNext(run.id, { maxRequests: 2 });
+
+    expect(repository.enqueueCalls).toBe(1);
+
+    await service.captureNext(run.id, { maxRequests: 1 });
+
+    expect(repository.enqueueCalls).toBe(3);
+  });
+
+  it("does not rebuild relationship checkpoints after a relationship page", async () => {
+    const { client, repository, service, run } = await setup();
+    client.queue("listContacts", page([{ id: "contact-1" }], null));
+    await service.captureNext(run.id, { maxRequests: 4 });
+    const enqueueCallsAfterRoots = repository.enqueueCalls;
+
+    client.queue("listCompaniesForContact", page([], null));
+    await service.captureNext(run.id, { maxRequests: 1 });
+
+    expect(repository.enqueueCalls).toBe(enqueueCallsAfterRoots + 1);
   });
 
   it("does not request the network again after every checkpoint completes", async () => {
@@ -625,5 +754,52 @@ describe("ActMigrationSnapshotService", () => {
         targetSourceId: "contact-1",
       }),
     ]));
+  });
+
+  it("keeps every malformed relationship occurrence attributable and idempotent across page replay", async () => {
+    const { client, repository, service, run } = await setup();
+    client.queue("listCompanies", page([], null));
+    client.queue("listContacts", page([], null));
+    client.queue("listOpportunities", page([], null));
+    client.queue(
+      "listGroups",
+      page([{ id: "group-1" }, { id: "group-2" }], null),
+    );
+    await service.captureNext(run.id, { maxRequests: 4 });
+
+    client.queue("listContactsForGroup", page([null, null], null));
+    client.queue("listContactsForGroup", page([null], null));
+    await service.captureNext(run.id, { maxRequests: 2 });
+
+    const firstCapture = repository.records.filter(
+      ({ streamType }) => streamType === "group_contact",
+    );
+    expect(firstCapture).toHaveLength(3);
+    expect(firstCapture.map(({ sourceId, targetSourceId }) => ({
+      sourceId,
+      targetSourceId,
+    }))).toEqual([
+      { sourceId: "group-1", targetSourceId: null },
+      { sourceId: "group-1", targetSourceId: null },
+      { sourceId: "group-2", targetSourceId: null },
+    ]);
+    expect(new Set(firstCapture.map(({ sourceKey }) => sourceKey)).size).toBe(3);
+    expect(firstCapture.every(
+      ({ sourceKey }) => /^error:group_contact:occurrence:[a-f0-9]{64}$/.test(sourceKey),
+    )).toBe(true);
+
+    for (const checkpoint of repository.checkpoints) {
+      if (checkpoint.streamType === "group_contact") {
+        checkpoint.status = "pending";
+        checkpoint.nextSkip = 0;
+      }
+    }
+    client.queue("listContactsForGroup", page([null, null], null));
+    client.queue("listContactsForGroup", page([null], null));
+    await service.captureNext(run.id, { maxRequests: 2 });
+
+    expect(repository.records.filter(
+      ({ streamType }) => streamType === "group_contact",
+    )).toEqual(firstCapture);
   });
 });
