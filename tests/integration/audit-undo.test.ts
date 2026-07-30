@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { auditEntries, contacts, organizationContacts } from "@/db/schema";
+import {
+  auditEntries,
+  contacts,
+  organizationContacts,
+  organizations,
+} from "@/db/schema";
 import type {
   AuditChange,
   StoredAuditEntry,
@@ -64,6 +69,7 @@ class InMemoryUndoRepository implements UndoRepository {
         );
         return entry ? cloneEntry(entry) : null;
       },
+      lockContactTargetOrganization: async () => undefined,
       findEntityForUpdate: async (entityType, entityId) => {
         const entity = entities.get(`${entityType}:${entityId}`);
         return entity ? structuredClone(entity) : null;
@@ -122,8 +128,11 @@ class RecordingDrizzleUndoDatabase {
   readonly currentOrganizationId = "33333333-3333-4333-8333-333333333333";
   readonly now = new Date("2026-07-28T15:00:00.000Z");
   readonly associations = new Map<string, Record<string, unknown>>();
+  readonly events: string[] = [];
+  readonly auditWrites: Record<string, unknown>[] = [];
+  failAuditWrite = false;
   private auditReadCount = 0;
-  readonly contact = {
+  contact = {
     id: this.contactId,
     organizationId: this.currentOrganizationId,
     firstName: "Avery",
@@ -152,6 +161,10 @@ class RecordingDrizzleUndoDatabase {
     reversesEntryId: null,
     createdAt: this.now,
   };
+  readonly organization = {
+    id: this.originalOrganizationId,
+    name: "Marias Fair",
+  };
 
   select() {
     return {
@@ -162,10 +175,17 @@ class RecordingDrizzleUndoDatabase {
               ? this.auditReadCount++ === 0 ? [this.auditEntry] : []
               : table === contacts
                 ? [this.contact]
+                : table === organizations
+                  ? [this.organization]
                 : [];
           const terminal = {
             limit: () => terminal,
-            for: async () => records,
+            for: async () => {
+              this.events.push(
+                `lock:${table === organizations ? "organization" : table === contacts ? "contact" : "audit"}`,
+              );
+              return records;
+            },
             then: Promise.resolve(records).then.bind(Promise.resolve(records)),
           };
           return terminal;
@@ -182,6 +202,12 @@ class RecordingDrizzleUndoDatabase {
             `${values.organizationId}:${values.contactId}`,
             { ...values },
           );
+          this.events.push("upsert:relationship");
+        }
+        if (table === auditEntries) {
+          if (this.failAuditWrite) throw new Error("Audit storage is unavailable.");
+          this.auditWrites.push({ ...values });
+          this.events.push("insert:undo-audit");
         }
         return { onConflictDoUpdate: async () => undefined };
       },
@@ -191,7 +217,17 @@ class RecordingDrizzleUndoDatabase {
   update(table: unknown) {
     return {
       set: (values: Record<string, unknown>) => {
-        if (table === contacts) Object.assign(this.contact, values);
+        if (table === contacts) {
+          if (typeof values.organizationId === "string") {
+            if (!this.associations.has(`${values.organizationId}:${this.contactId}`)) {
+              throw new Error("primary pointer requires an association");
+            }
+            this.events.push("update:contact:pointer");
+          } else {
+            this.events.push("update:contact:fields");
+          }
+          Object.assign(this.contact, values);
+        }
         return {
           where: () => ({ returning: async () => [{ ...this.contact }] }),
         };
@@ -200,7 +236,25 @@ class RecordingDrizzleUndoDatabase {
   }
 
   transaction<T>(operation: (transaction: RecordingDrizzleUndoDatabase) => Promise<T>) {
-    return operation(this);
+    const contact = structuredClone(this.contact);
+    const associations = structuredClone(this.associations);
+    const auditWrites = structuredClone(this.auditWrites);
+    this.events.push("transaction:begin");
+    return operation(this).then(
+      (result) => {
+        this.events.push("transaction:commit");
+        return result;
+      },
+      (error) => {
+        this.contact = contact;
+        this.associations.clear();
+        associations.forEach((value, key) => this.associations.set(key, value));
+        this.auditWrites.length = 0;
+        this.auditWrites.push(...auditWrites);
+        this.events.push("transaction:rollback");
+        throw error;
+      },
+    );
   }
 }
 
@@ -215,6 +269,25 @@ describe("UndoService", () => {
     ).resolves.toEqual({ ok: true, value: undefined });
 
     expect(database.contact.organizationId).toBe(database.originalOrganizationId);
+    expect(database.events.filter((event) => event === "lock:organization" || event === "lock:contact")).toEqual([
+      "lock:organization",
+      "lock:contact",
+      "lock:contact",
+    ]);
+    expect(database.events.indexOf("upsert:relationship")).toBeLessThan(
+      database.events.indexOf("update:contact:pointer"),
+    );
+    expect(database.events).toEqual(expect.arrayContaining([
+      "transaction:begin",
+      "insert:undo-audit",
+      "transaction:commit",
+    ]));
+    expect(database.auditWrites).toEqual([
+      expect.objectContaining({
+        action: "undo",
+        reversesEntryId: database.auditEntry.id,
+      }),
+    ]);
     expect([...database.associations.values()]).toEqual([
       expect.objectContaining({
         organizationId: database.originalOrganizationId,
@@ -223,6 +296,22 @@ describe("UndoService", () => {
         source: "undo",
       }),
     ]);
+  });
+
+  it("rolls back a Contact pointer restoration when its undo audit write fails", async () => {
+    const database = new RecordingDrizzleUndoDatabase();
+    database.failAuditWrite = true;
+
+    await expect(
+      new UndoService(new DrizzleUndoRepository(database as never)).undoAuditEntry(
+        database.auditEntry.id,
+      ),
+    ).rejects.toThrow("Audit storage is unavailable.");
+
+    expect(database.contact.organizationId).toBe(database.currentOrganizationId);
+    expect(database.associations).toEqual(new Map());
+    expect(database.auditWrites).toEqual([]);
+    expect(database.events.at(-1)).toBe("transaction:rollback");
   });
 
   it("restores the prior booking status and creates a linked audit entry", async () => {

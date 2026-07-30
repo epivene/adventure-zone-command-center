@@ -58,6 +58,8 @@ class RecordingPullDatabase {
   readonly organizationId = "11111111-1111-4111-8111-111111111111";
   readonly contactId = "22222222-2222-4222-8222-222222222222";
   readonly associations = new Map<string, Record<string, unknown>>();
+  readonly events: string[] = [];
+  contact = { id: this.contactId, organizationId: null as string | null };
 
   select() {
     return {
@@ -65,11 +67,16 @@ class RecordingPullDatabase {
         where: () => {
           const records =
             table === organizations ? [{ id: this.organizationId, name: "Marias Fair" }] :
-            table === contacts ? [{ id: this.contactId }] :
+            table === contacts ? [this.contact] :
             [];
           const terminal = {
             limit: () => terminal,
-            for: async () => records,
+            for: async () => {
+              this.events.push(
+                `lock:${table === organizations ? "organization" : table === contacts ? "contact" : "external"}`,
+              );
+              return records;
+            },
             then: Promise.resolve(records).then.bind(Promise.resolve(records)),
           };
           return terminal;
@@ -82,10 +89,21 @@ class RecordingPullDatabase {
     return {
       values: (values: Record<string, unknown>) => {
         if (table === organizationContacts) {
-          this.associations.set(
-            `${values.organizationId}:${values.contactId}`,
-            { ...values },
-          );
+          const key = `${values.organizationId}:${values.contactId}`;
+          return {
+            onConflictDoUpdate: async (configuration: { set: Record<string, unknown> }) => {
+              const existing = this.associations.get(key);
+              this.associations.set(
+                key,
+                existing ? { ...existing, ...configuration.set } : { ...values },
+              );
+              this.events.push("upsert:relationship");
+            },
+          };
+        }
+        if (table === contacts) {
+          this.contact = { ...this.contact, ...values };
+          this.events.push("insert:contact");
         }
         return {
           onConflictDoNothing: () => ({
@@ -100,9 +118,18 @@ class RecordingPullDatabase {
     };
   }
 
-  update() {
+  update(table: unknown) {
     return {
-      set: () => ({ where: () => ({ returning: async () => [{ id: this.contactId }] }) }),
+      set: (values: Record<string, unknown>) => {
+        if (table === contacts && typeof values.organizationId === "string") {
+          if (!this.associations.has(`${values.organizationId}:${this.contactId}`)) {
+            throw new Error("primary pointer requires an association");
+          }
+          this.contact = { ...this.contact, organizationId: values.organizationId };
+          this.events.push("update:contact:pointer");
+        }
+        return { where: () => ({ returning: async () => [{ id: this.contactId }] }) };
+      },
     };
   }
 
@@ -198,7 +225,7 @@ describe("stored Act sync previews", () => {
 });
 
 describe("DrizzleSyncRepository pull", () => {
-  it("adds the association during an approved Act! Contact pull", async () => {
+  it("locks the target Place and creates the association before the pointer during an approved Act! Contact pull", async () => {
     const database = new RecordingPullDatabase();
 
     const contactId = await new DrizzleSyncRepository(database as never).pullContact(
@@ -207,6 +234,14 @@ describe("DrizzleSyncRepository pull", () => {
     );
 
     expect(contactId).toBe(database.contactId);
+    expect(database.contact.organizationId).toBe(database.organizationId);
+    expect(database.events.filter((event) => event === "lock:organization" || event === "lock:contact")).toEqual([
+      "lock:organization",
+      "lock:contact",
+    ]);
+    expect(database.events.indexOf("upsert:relationship")).toBeLessThan(
+      database.events.indexOf("update:contact:pointer"),
+    );
     expect([...database.associations.values()]).toEqual([
       expect.objectContaining({
         organizationId: database.organizationId,

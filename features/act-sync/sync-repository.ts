@@ -1114,7 +1114,6 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
               .from(organizations)
               .where(eq(organizations.id, current.organizationId))
               .limit(1)
-              .for("update")
           : [];
         before = canonicalContactSnapshot({
           firstName: current.firstName,
@@ -1410,7 +1409,8 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .where(
         sql`lower(regexp_replace(trim(${organizations.name}), '\\s+', ' ', 'g')) = ${normalized}`,
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (existing) return existing.id;
     const [created] = await writer
       .insert(organizations)

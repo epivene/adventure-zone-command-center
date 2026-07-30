@@ -619,6 +619,45 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     record: ActCsvRecord,
     expected: LocalContact,
   ): Promise<LocalContact> {
+    const [candidate] = await this.database
+      .select({ contact: contacts, organization: organizations })
+      .from(contacts)
+      .leftJoin(
+        organizations,
+        eq(contacts.organizationId, organizations.id),
+      )
+      .where(eq(contacts.id, contactId))
+      .limit(1);
+    if (!candidate) throw new Error("Contact disappeared during import.");
+
+    let organization = candidate.organization;
+    if (!record.company) {
+      organization = null;
+    } else if (
+      !organization ||
+      normalize(organization.name) !== normalize(record.company)
+    ) {
+      const [createdOrganization] = await this.database
+        .insert(organizations)
+        .values({ name: record.company })
+        .returning();
+      if (!createdOrganization) {
+        throw new Error("Could not create imported organization.");
+      }
+      organization = createdOrganization;
+    } else {
+      const [lockedOrganization] = await this.database
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, organization.id))
+        .limit(1)
+        .for("update");
+      if (!lockedOrganization) {
+        throw new Error("Imported organization disappeared during import.");
+      }
+      organization = lockedOrganization;
+    }
+
     const [current] = await this.database
       .select({ contact: contacts, organization: organizations })
       .from(contacts)
@@ -638,23 +677,6 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       const error = new Error("Contact changed after the import preview.");
       error.name = "ActImportContactConflictError";
       throw error;
-    }
-
-    let organization = current.organization;
-    if (!record.company) {
-      organization = null;
-    } else if (
-      !organization ||
-      normalize(organization.name) !== normalize(record.company)
-    ) {
-      const [createdOrganization] = await this.database
-        .insert(organizations)
-        .values({ name: record.company })
-        .returning();
-      if (!createdOrganization) {
-        throw new Error("Could not create imported organization.");
-      }
-      organization = createdOrganization;
     }
 
     const [updated] = await this.database

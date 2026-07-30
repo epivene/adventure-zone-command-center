@@ -32,6 +32,7 @@ export type UndoError =
 export interface UndoTransaction {
   findAuditEntryForUpdate(entryId: string): Promise<StoredAuditEntry | null>;
   findUndoFor(entryId: string): Promise<StoredAuditEntry | null>;
+  lockContactTargetOrganization(organizationId: string): Promise<void>;
   findEntityForUpdate(
     entityType: ReversibleEntityType,
     entityId: string,
@@ -170,6 +171,15 @@ export class UndoService {
       const snapshots = reversibleSnapshots(entry);
       if (!snapshots) return err({ code: "NON_REVERSIBLE" });
 
+      if (
+        snapshots.entityType === "contact" &&
+        typeof snapshots.before.organizationId === "string"
+      ) {
+        await transaction.lockContactTargetOrganization(
+          snapshots.before.organizationId,
+        );
+      }
+
       const current = await transaction.findEntityForUpdate(
         snapshots.entityType,
         entry.entityId,
@@ -270,6 +280,18 @@ class DrizzleUndoTransaction implements UndoTransaction {
       .where(eq(auditEntries.reversesEntryId, entryId))
       .limit(1);
     return entry ? storedAuditEntry(entry) : null;
+  }
+
+  async lockContactTargetOrganization(organizationId: string) {
+    const [organization] = await this.database
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1)
+      .for("update");
+    if (!organization) {
+      throw new Error("Cannot restore a Contact primary Place that is missing.");
+    }
   }
 
   async findEntityForUpdate(

@@ -111,6 +111,7 @@ describe("patchContactInTransaction", () => {
       ],
     ]);
     const current = { ...before };
+    let relationshipConflictSet: Record<string, unknown> | null = null;
     const writer = {
       select: () => ({
         from: () => ({
@@ -123,12 +124,14 @@ describe("patchContactInTransaction", () => {
         values: (values: Record<string, unknown>) => {
           if (table === organizationContacts) {
             const existing = associations.get(values.organizationId as string);
-            associations.set(values.organizationId as string, {
-              ...existing,
-              ...values,
-              role: existing?.role ?? null,
-              isPrimary: existing?.isPrimary ?? false,
-            });
+            return {
+              onConflictDoUpdate: async (configuration: { set: Record<string, unknown> }) => {
+                relationshipConflictSet = configuration.set;
+                associations.set(values.organizationId as string, existing
+                  ? { ...existing, ...configuration.set }
+                  : { ...values });
+              },
+            };
           }
           return { onConflictDoUpdate: async () => undefined };
         },
@@ -153,6 +156,11 @@ describe("patchContactInTransaction", () => {
     );
 
     expect(current.organizationId).toBe("33333333-3333-4333-8333-333333333333");
+    expect(relationshipConflictSet).toEqual({
+      active: true,
+      source: "local",
+      updatedAt: now,
+    });
     expect([...associations.values()]).toEqual([
       {
         organizationId: "22222222-2222-4222-8222-222222222222",
@@ -169,7 +177,6 @@ describe("patchContactInTransaction", () => {
         isPrimary: true,
         active: true,
         source: "local",
-        createdAt: now,
         updatedAt: now,
       },
     ]);

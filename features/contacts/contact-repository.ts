@@ -519,6 +519,18 @@ export class DrizzleContactRepository {
     now = new Date(),
   ) {
     return this.database.transaction(async (transaction) => {
+      const [candidate] = await transaction
+        .select({ id: contacts.id })
+        .from(contacts)
+        .where(eq(contacts.id, contactId))
+        .limit(1);
+      if (!candidate) return false;
+
+      const organizationId = await this.resolveOrganizationId(
+        transaction,
+        input.organizationName,
+        now,
+      );
       const [before] = await transaction
         .select({ contact: contacts, organizationName: organizations.name })
         .from(contacts)
@@ -530,12 +542,6 @@ export class DrizzleContactRepository {
         .limit(1)
         .for("update", { of: contacts });
       if (!before) return false;
-
-      const organizationId = await this.resolveOrganizationId(
-        transaction,
-        input.organizationName,
-        now,
-      );
       const { snapshot } = await patchContactInTransaction(
         transaction,
         before.contact,
@@ -598,7 +604,8 @@ export class DrizzleContactRepository {
       .where(
         sql`lower(regexp_replace(trim(${organizations.name}), '\\s+', ' ', 'g')) = ${normalizedName}`,
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (existing) return existing.id;
 
     const [created] = await writer
