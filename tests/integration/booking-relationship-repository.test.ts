@@ -8,6 +8,7 @@ import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as crmSchema from "@/db/schema";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { DrizzleBookingRelationshipRepository } from "@/features/bookings/booking-relationship-repository";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
@@ -35,6 +36,25 @@ async function migrationStatements(fileName: string, schemaName: string) {
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter(Boolean);
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+async function waitForDatabaseLock(sql: postgres.Sql, backendPid: number) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [activity] = await sql.unsafe(`
+      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${backendPid}
+    `);
+    if (activity?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Expected the database session to wait on a lock.");
 }
 
 describe("DrizzleBookingRelationshipRepository (PostgreSQL)", () => {
@@ -333,5 +353,104 @@ describe("DrizzleBookingRelationshipRepository (PostgreSQL)", () => {
       { contact_id: ids.personTwo, is_primary: false },
     ]);
     expect(await sql!.unsafe("SELECT id FROM audit_entries")).toEqual([]);
+  });
+
+  postgresTest("avoids an Activity versus Booking relationship deadlock", async () => {
+    const bookingLockClient = postgres(databaseUrl!, { max: 1 });
+    const bookingWriteClient = postgres(databaseUrl!, { max: 1 });
+    const activityClient = postgres(databaseUrl!, { max: 1 });
+    const observerClient = postgres(databaseUrl!, { max: 1 });
+    const bookingLockHeld = deferred();
+    const releaseBookingLock = deferred();
+    const writes: Promise<unknown>[] = [];
+    let bookingLock: Promise<unknown> | undefined;
+    try {
+      await Promise.all([
+        bookingLockClient.unsafe(
+          `SET search_path TO "${schemaName}", public`,
+        ),
+        bookingWriteClient.unsafe(
+          `SET search_path TO "${schemaName}", public`,
+        ),
+        activityClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        observerClient.unsafe(`SET search_path TO "${schemaName}", public`),
+      ]);
+      await bookingWriteClient.unsafe("SET lock_timeout = '5s'");
+      await activityClient.unsafe("SET lock_timeout = '5s'");
+      const [{ pid: bookingWritePid } = { pid: 0 }] =
+        await bookingWriteClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      const [{ pid: activityPid } = { pid: 0 }] =
+        await activityClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      if (!bookingWritePid || !activityPid) {
+        throw new Error("Could not identify the concurrent database sessions.");
+      }
+
+      bookingLock = bookingLockClient.begin(async (transaction) => {
+        await transaction.unsafe(`
+          SELECT id FROM bookings WHERE id = '${ids.booking}' FOR UPDATE
+        `);
+        bookingLockHeld.resolve();
+        await releaseBookingLock.promise;
+      });
+      await bookingLockHeld.promise;
+
+      const bookingRepository = new DrizzleBookingRelationshipRepository(
+        drizzle({ client: bookingWriteClient, schema: crmSchema }),
+      );
+      const bookingWrite = bookingRepository.changePlace(
+        {
+          bookingId: ids.booking,
+          organizationId: ids.placeOne,
+        },
+        new Date("2026-08-01T15:10:00.000Z"),
+      );
+      writes.push(bookingWrite);
+      await waitForDatabaseLock(observerClient, bookingWritePid);
+
+      const activityRepository = new DrizzleActivityRepository(
+        drizzle({ client: activityClient, schema: crmSchema }),
+      );
+      const activityWrite = activityRepository.create({
+        organizationId: ids.placeOne,
+        contactId: ids.personOne,
+        bookingId: ids.booking,
+        kind: "note",
+        body: "Concurrent Booking relationship check",
+        occurredAt: new Date("2026-08-01T15:11:00.000Z"),
+      });
+      writes.push(activityWrite);
+      await waitForDatabaseLock(observerClient, activityPid);
+
+      releaseBookingLock.resolve();
+      await bookingLock;
+      await expect(
+        Promise.all([bookingWrite, activityWrite]),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          kind: "ok",
+          value: expect.objectContaining({
+            bookingId: ids.booking,
+            organizationId: ids.placeOne,
+          }),
+        }),
+        expect.objectContaining({
+          organizationId: ids.placeOne,
+          contactId: ids.personOne,
+          bookingId: ids.booking,
+        }),
+      ]);
+    } finally {
+      releaseBookingLock.resolve();
+      if (bookingLock) await bookingLock;
+      await Promise.allSettled(writes);
+      await bookingLockClient.end({ timeout: 5 });
+      await bookingWriteClient.end({ timeout: 5 });
+      await activityClient.end({ timeout: 5 });
+      await observerClient.end({ timeout: 5 });
+    }
   });
 });

@@ -17,8 +17,9 @@ import {
   type StoredAuditEntry,
 } from "@/features/audit/audit-service";
 import {
-  ensureBookingContact,
-  setBookingPrimaryContact,
+  lockBookingRelationshipParents,
+  setBookingPrimaryContactAfterParentLocks,
+  type LockedBookingRelationshipParents,
 } from "@/features/bookings/booking-relationship-repository";
 import {
   patchContactInTransaction,
@@ -37,6 +38,10 @@ export interface UndoTransaction {
   findAuditEntryForUpdate(entryId: string): Promise<StoredAuditEntry | null>;
   findUndoFor(entryId: string): Promise<StoredAuditEntry | null>;
   lockContactTargetOrganization(organizationId: string): Promise<void>;
+  prepareBookingRestore?(
+    bookingId: string,
+    fields: Record<string, unknown>,
+  ): Promise<void>;
   findEntityForUpdate(
     entityType: ReversibleEntityType,
     entityId: string,
@@ -183,6 +188,15 @@ export class UndoService {
           snapshots.before.organizationId,
         );
       }
+      if (
+        snapshots.entityType === "booking" &&
+        transaction.prepareBookingRestore
+      ) {
+        await transaction.prepareBookingRestore(
+          entry.entityId,
+          snapshots.before,
+        );
+      }
 
       const current = await transaction.findEntityForUpdate(
         snapshots.entityType,
@@ -264,6 +278,10 @@ class DrizzleUndoTransaction implements UndoTransaction {
     string,
     Record<string, unknown>
   >();
+  private readonly preparedBookingRelationships = new Map<
+    string,
+    LockedBookingRelationshipParents
+  >();
 
   constructor(private readonly database: DrizzleUndoWriter) {}
 
@@ -298,12 +316,41 @@ class DrizzleUndoTransaction implements UndoTransaction {
     }
   }
 
+  async prepareBookingRestore(
+    bookingId: string,
+    fields: Record<string, unknown>,
+  ) {
+    const locked = await lockBookingRelationshipParents(this.database, {
+      bookingId,
+      additionalOrganizationIds:
+        typeof fields.organizationId === "string"
+          ? [fields.organizationId]
+          : [],
+      additionalContactIds:
+        typeof fields.primaryContactId === "string"
+          ? [fields.primaryContactId]
+          : [],
+      includeExistingPeople: true,
+    });
+    this.preparedBookingRelationships.set(bookingId, locked);
+  }
+
   async findEntityForUpdate(
     entityType: ReversibleEntityType,
     entityId: string,
   ): Promise<Record<string, unknown> | null> {
     switch (entityType) {
       case "booking": {
+        const prepared = this.preparedBookingRelationships.get(entityId);
+        if (prepared) {
+          if (prepared.booking) {
+            this.lockedEntities.set(
+              `${entityType}:${entityId}`,
+              prepared.booking,
+            );
+          }
+          return prepared.booking;
+        }
         const [record] = await this.database
           .select()
           .from(bookings)
@@ -365,6 +412,10 @@ class DrizzleUndoTransaction implements UndoTransaction {
     switch (entityType) {
       case "booking": {
         if ("primaryContactId" in values) {
+          const before = this.lockedEntities.get(
+            `${entityType}:${entityId}`,
+          ) as typeof bookings.$inferSelect | undefined;
+          if (!before) return false;
           const restoredPrimaryContactId =
             typeof values.primaryContactId === "string"
               ? values.primaryContactId
@@ -382,20 +433,21 @@ class DrizzleUndoTransaction implements UndoTransaction {
             .returning({ id: bookings.id });
           if (!record) return false;
 
-          if (restoredPrimaryContactId) {
-            await ensureBookingContact(this.database, {
+          await setBookingPrimaryContactAfterParentLocks(
+            this.database,
+            {
+              ...before,
+              ...bookingValues,
+              primaryContactId: null,
+              updatedAt: values.updatedAt as Date,
+            },
+            {
               bookingId: entityId,
               contactId: restoredPrimaryContactId,
               source: "undo",
               now: values.updatedAt as Date,
-            });
-          }
-          await setBookingPrimaryContact(this.database, {
-            bookingId: entityId,
-            contactId: restoredPrimaryContactId,
-            source: "undo",
-            now: values.updatedAt as Date,
-          });
+            },
+          );
           return true;
         }
 

@@ -10,6 +10,7 @@ import type { db as database } from "@/db/client";
 import {
   bookingContacts,
   bookings,
+  contacts,
   organizationContacts,
   organizations,
 } from "@/db/schema";
@@ -39,8 +40,129 @@ export type BookingRelationshipWriter = Pick<
   "select" | "insert" | "update" | "delete"
 >;
 
-export async function ensureBookingContact(
+type BookingRow = typeof bookings.$inferSelect;
+type BookingContactRow = typeof bookingContacts.$inferSelect;
+
+export type LockedBookingRelationshipParents = {
+  booking: BookingRow | null;
+  bookingPeople: BookingContactRow[];
+  organizationIds: ReadonlySet<string>;
+};
+
+class BookingRelationshipsChangedWhileLockingError extends Error {
+  constructor() {
+    super("Booking relationships changed while locks were acquired.");
+    this.name = "BookingRelationshipsChangedWhileLockingError";
+  }
+}
+
+function sortedUniqueIds(ids: Array<string | null | undefined>) {
+  return [...new Set(ids.filter((id): id is string => Boolean(id)))].sort(
+    (left, right) => left.localeCompare(right),
+  );
+}
+
+function sameIds(left: string[], right: string[]) {
+  return left.length === right.length &&
+    left.every((id, index) => id === right[index]);
+}
+
+export async function lockBookingRelationshipParents(
   writer: BookingRelationshipWriter,
+  input: {
+    bookingId: string;
+    additionalOrganizationIds?: string[];
+    additionalContactIds?: string[];
+    includeExistingPeople: boolean;
+  },
+): Promise<LockedBookingRelationshipParents> {
+  const [previewBooking] = await writer
+    .select()
+    .from(bookings)
+    .where(eq(bookings.id, input.bookingId))
+    .limit(1);
+  const previewPeople = input.includeExistingPeople
+    ? await writer
+        .select()
+        .from(bookingContacts)
+        .where(eq(bookingContacts.bookingId, input.bookingId))
+        .orderBy(asc(bookingContacts.contactId))
+    : [];
+
+  const organizationIds = sortedUniqueIds([
+    previewBooking?.organizationId,
+    ...(input.additionalOrganizationIds ?? []),
+  ]);
+  const contactIds = sortedUniqueIds([
+    ...previewPeople.map(({ contactId }) => contactId),
+    ...(input.additionalContactIds ?? []),
+  ]);
+
+  const lockedOrganizations = organizationIds.length > 0
+    ? await writer
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(inArray(organizations.id, organizationIds))
+        .orderBy(asc(organizations.id))
+        .for("update")
+    : [];
+  if (contactIds.length > 0) {
+    await writer
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(inArray(contacts.id, contactIds))
+      .orderBy(asc(contacts.id))
+      .for("update");
+  }
+
+  const [lockedBooking] = await writer
+    .select()
+    .from(bookings)
+    .where(eq(bookings.id, input.bookingId))
+    .limit(1)
+    .for("update");
+  if (
+    Boolean(previewBooking) !== Boolean(lockedBooking) ||
+    (
+      previewBooking &&
+      lockedBooking &&
+      (
+        previewBooking.organizationId !== lockedBooking.organizationId ||
+        previewBooking.primaryContactId !== lockedBooking.primaryContactId
+      )
+    )
+  ) {
+    throw new BookingRelationshipsChangedWhileLockingError();
+  }
+
+  const lockedPeople = input.includeExistingPeople
+    ? await writer
+        .select()
+        .from(bookingContacts)
+        .where(eq(bookingContacts.bookingId, input.bookingId))
+        .orderBy(asc(bookingContacts.contactId))
+        .for("update")
+    : [];
+  if (
+    input.includeExistingPeople &&
+    !sameIds(
+      previewPeople.map(({ contactId }) => contactId),
+      lockedPeople.map(({ contactId }) => contactId),
+    )
+  ) {
+    throw new BookingRelationshipsChangedWhileLockingError();
+  }
+
+  return {
+    booking: lockedBooking ?? null,
+    bookingPeople: lockedPeople,
+    organizationIds: new Set(lockedOrganizations.map(({ id }) => id)),
+  };
+}
+
+export async function ensureBookingContactAfterParentLocks(
+  writer: BookingRelationshipWriter,
+  booking: BookingRow,
   input: {
     bookingId: string;
     contactId: string;
@@ -49,19 +171,6 @@ export async function ensureBookingContact(
     now: Date;
   },
 ): Promise<void> {
-  const [booking] = await writer
-    .select({
-      id: bookings.id,
-      organizationId: bookings.organizationId,
-    })
-    .from(bookings)
-    .where(eq(bookings.id, input.bookingId))
-    .limit(1)
-    .for("update");
-  if (!booking) {
-    throw new Error("Cannot associate a Person with a missing Booking.");
-  }
-
   if (booking.organizationId) {
     const [activeRelationship] = await writer
       .select({ contactId: organizationContacts.contactId })
@@ -103,8 +212,31 @@ export async function ensureBookingContact(
     });
 }
 
-export async function setBookingPrimaryContact(
+export async function ensureBookingContact(
   writer: BookingRelationshipWriter,
+  input: {
+    bookingId: string;
+    contactId: string;
+    role?: string | null;
+    source: RelationshipSource;
+    now: Date;
+  },
+): Promise<void> {
+  const { booking } = await lockBookingRelationshipParents(writer, {
+    bookingId: input.bookingId,
+    additionalContactIds: [input.contactId],
+    includeExistingPeople: false,
+  });
+  if (!booking) {
+    throw new Error("Cannot associate a Person with a missing Booking.");
+  }
+
+  await ensureBookingContactAfterParentLocks(writer, booking, input);
+}
+
+export async function setBookingPrimaryContactAfterParentLocks(
+  writer: BookingRelationshipWriter,
+  booking: BookingRow,
   input: {
     bookingId: string;
     contactId: string | null;
@@ -114,12 +246,9 @@ export async function setBookingPrimaryContact(
   },
 ): Promise<void> {
   if (input.contactId) {
-    await ensureBookingContact(writer, {
-      bookingId: input.bookingId,
+    await ensureBookingContactAfterParentLocks(writer, booking, {
+      ...input,
       contactId: input.contactId,
-      role: input.role,
-      source: input.source,
-      now: input.now,
     });
   }
 
@@ -164,6 +293,28 @@ export async function setBookingPrimaryContact(
     .where(eq(bookings.id, input.bookingId));
 }
 
+export async function setBookingPrimaryContact(
+  writer: BookingRelationshipWriter,
+  input: {
+    bookingId: string;
+    contactId: string | null;
+    role?: string | null;
+    source: RelationshipSource;
+    now: Date;
+  },
+): Promise<void> {
+  const { booking } = await lockBookingRelationshipParents(writer, {
+    bookingId: input.bookingId,
+    additionalContactIds: input.contactId ? [input.contactId] : [],
+    includeExistingPeople: true,
+  });
+  if (!booking) {
+    if (!input.contactId) return;
+    throw new Error("Cannot associate a Person with a missing Booking.");
+  }
+  await setBookingPrimaryContactAfterParentLocks(writer, booking, input);
+}
+
 export interface BookingRelationshipRepository {
   changePlace(
     input: ChangeBookingPlaceInput,
@@ -176,7 +327,6 @@ export interface BookingRelationshipRepository {
 }
 
 type DrizzleDatabase = typeof database;
-type BookingContactRow = typeof bookingContacts.$inferSelect;
 
 function selection(row: BookingContactRow): BookingPersonSelection {
   return {
@@ -200,21 +350,16 @@ implements BookingRelationshipRepository {
     now: Date,
   ): Promise<BookingRelationshipWriteResult<ChangeBookingPlaceResult>> {
     return this.database.transaction(async (transaction) => {
-      const [booking] = await transaction
-        .select()
-        .from(bookings)
-        .where(eq(bookings.id, input.bookingId))
-        .limit(1)
-        .for("update");
+      const locked = await lockBookingRelationshipParents(transaction, {
+        bookingId: input.bookingId,
+        additionalOrganizationIds: [input.organizationId],
+        includeExistingPeople: true,
+      });
+      const { booking } = locked;
       if (!booking) return { kind: "booking_not_found" };
-
-      const [place] = await transaction
-        .select({ id: organizations.id })
-        .from(organizations)
-        .where(eq(organizations.id, input.organizationId))
-        .limit(1)
-        .for("update");
-      if (!place) return { kind: "place_not_found" };
+      if (!locked.organizationIds.has(input.organizationId)) {
+        return { kind: "place_not_found" };
+      }
 
       const retainedPeople = await transaction
         .select({ contactId: bookingContacts.contactId })
@@ -229,12 +374,7 @@ implements BookingRelationshipRepository {
         )
         .where(eq(bookingContacts.bookingId, input.bookingId))
         .for("update");
-      const beforePeople = await transaction
-        .select()
-        .from(bookingContacts)
-        .where(eq(bookingContacts.bookingId, input.bookingId))
-        .orderBy(asc(bookingContacts.contactId))
-        .for("update");
+      const beforePeople = locked.bookingPeople;
       const retainedIds = new Set(
         retainedPeople.map(({ contactId }) => contactId),
       );
@@ -302,16 +442,16 @@ implements BookingRelationshipRepository {
     now: Date,
   ): Promise<BookingRelationshipWriteResult<BookingPersonSelection[]>> {
     return this.database.transaction(async (transaction) => {
-      const [booking] = await transaction
-        .select()
-        .from(bookings)
-        .where(eq(bookings.id, input.bookingId))
-        .limit(1)
-        .for("update");
+      const selectedIds = input.people.map(({ contactId }) => contactId);
+      const locked = await lockBookingRelationshipParents(transaction, {
+        bookingId: input.bookingId,
+        additionalContactIds: selectedIds,
+        includeExistingPeople: true,
+      });
+      const { booking } = locked;
       if (!booking) return { kind: "booking_not_found" };
       if (!booking.organizationId) return { kind: "place_not_found" };
 
-      const selectedIds = input.people.map(({ contactId }) => contactId);
       const activeRelationships = selectedIds.length > 0
         ? await transaction
             .select({ contactId: organizationContacts.contactId })
@@ -339,12 +479,7 @@ implements BookingRelationshipRepository {
         };
       }
 
-      const beforePeople = await transaction
-        .select()
-        .from(bookingContacts)
-        .where(eq(bookingContacts.bookingId, input.bookingId))
-        .orderBy(asc(bookingContacts.contactId))
-        .for("update");
+      const beforePeople = locked.bookingPeople;
       await transaction
         .update(bookings)
         .set({ primaryContactId: null, updatedAt: now })

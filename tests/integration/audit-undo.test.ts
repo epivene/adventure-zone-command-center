@@ -338,14 +338,32 @@ class RecordingBookingUndoDatabase {
   select() {
     return {
       from: (table: unknown) => {
-        const query = {
-          innerJoin: () => query,
-          where: () => {
-            const records =
-              table === auditEntries
-                ? this.auditReadCount++ === 0 ? [this.auditEntry] : []
-                : table === bookings
-                  ? [this.booking]
+        const label =
+          table === auditEntries
+            ? "audit"
+            : table === bookings
+              ? "bookings"
+              : table === organizations
+                ? "organizations"
+                : table === contacts
+                  ? "contacts"
+                  : table === organizationContacts
+                    ? "organization_contacts"
+                    : table === bookingContacts
+                      ? "booking_contacts"
+                      : "unknown";
+        const records = () =>
+          table === auditEntries
+            ? this.auditReadCount++ === 0 ? [this.auditEntry] : []
+            : table === bookings
+              ? [{ ...this.booking }]
+              : table === organizations && this.placeId
+                ? [{ id: this.placeId }]
+                : table === contacts
+                  ? [
+                      { id: this.currentContactId },
+                      { id: this.restoredContactId },
+                    ]
                   : table === organizationContacts &&
                       this.placeId &&
                       this.activeRestoredRelationship
@@ -355,20 +373,31 @@ class RecordingBookingUndoDatabase {
                         active: true,
                       }]
                     : table === bookingContacts
-                      ? [...this.bookingPeople.values()]
+                      ? [...this.bookingPeople.values()].map((person) => ({
+                          ...person,
+                        }))
                       : [];
-            const terminal = {
-              limit: () => terminal,
-              for: async () => {
-                this.events.push(
-                  `lock:${table === bookings ? "booking" : table === auditEntries ? "audit" : "association"}`,
-                );
-                return records;
-              },
-              then: Promise.resolve(records).then.bind(Promise.resolve(records)),
-            };
-            return terminal;
+        const terminal = {
+          innerJoin: () => terminal,
+          where: () => terminal,
+          orderBy: () => terminal,
+          limit: () => terminal,
+          for: async () => {
+            this.events.push(`lock:${label}`);
+            return records();
           },
+          then: (
+            resolve: (value: unknown[]) => unknown,
+            reject?: (reason: unknown) => unknown,
+          ) => {
+            this.events.push(`discover:${label}`);
+            return Promise.resolve(records()).then(resolve, reject);
+          },
+        };
+        const query = {
+          innerJoin: () => query,
+          where: () => terminal,
+          orderBy: () => terminal,
         };
         return query;
       },
@@ -553,6 +582,25 @@ describe("UndoService", () => {
     expect(database.bookingPeople.get(database.currentContactId)).toMatchObject({
       isPrimary: false,
     });
+    expect(
+      database.events.filter(
+        (event) =>
+          event !== "lock:audit" &&
+          event !== "discover:audit" &&
+          (
+            event.startsWith("lock:") ||
+            event.startsWith("discover:")
+          ),
+      ),
+    ).toEqual([
+      "discover:bookings",
+      "discover:booking_contacts",
+      "lock:organizations",
+      "lock:contacts",
+      "lock:bookings",
+      "lock:booking_contacts",
+      "lock:organization_contacts",
+    ]);
     expect(database.events.indexOf("upsert:booking-contact")).toBeLessThan(
       database.events.indexOf("update:booking:pointer"),
     );
