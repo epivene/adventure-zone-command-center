@@ -17,6 +17,7 @@ import {
   auditEntries,
   bookings,
   contacts,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
@@ -313,10 +314,10 @@ export class DrizzleContactRepository {
         input.organizationName,
         now,
       );
-      const [created] = await transaction
+      let [created] = await transaction
         .insert(contacts)
         .values({
-          organizationId,
+          organizationId: null,
           firstName: input.firstName,
           lastName: input.lastName,
           jobTitle: input.jobTitle,
@@ -333,6 +334,23 @@ export class DrizzleContactRepository {
         })
         .returning();
       if (!created) throw new Error("Could not create contact.");
+      if (organizationId) {
+        await transaction.insert(organizationContacts).values({
+          organizationId,
+          contactId: created.id,
+          active: true,
+          source: "local",
+          createdAt: now,
+          updatedAt: now,
+        });
+        const [updated] = await transaction
+          .update(contacts)
+          .set({ organizationId, updatedAt: now })
+          .where(eq(contacts.id, created.id))
+          .returning();
+        if (!updated) throw new Error("Could not set contact organization.");
+        created = updated;
+      }
 
       await transaction.insert(actContactSyncStates).values({
         contactId: created.id,
@@ -409,10 +427,10 @@ export class DrizzleContactRepository {
         input.organizationName,
         now,
       );
-      const [contact] = await transaction
+      let [contact] = await transaction
         .insert(contacts)
         .values({
-          organizationId,
+          organizationId: null,
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -424,6 +442,23 @@ export class DrizzleContactRepository {
         })
         .returning();
       if (!contact) throw new Error("Could not create caller contact.");
+      if (organizationId) {
+        await transaction.insert(organizationContacts).values({
+          organizationId,
+          contactId: contact.id,
+          active: true,
+          source: "local",
+          createdAt: now,
+          updatedAt: now,
+        });
+        const [updated] = await transaction
+          .update(contacts)
+          .set({ organizationId, updatedAt: now })
+          .where(eq(contacts.id, contact.id))
+          .returning();
+        if (!updated) throw new Error("Could not set caller organization.");
+        contact = updated;
+      }
 
       await transaction.insert(actContactSyncStates).values({
         contactId: contact.id,

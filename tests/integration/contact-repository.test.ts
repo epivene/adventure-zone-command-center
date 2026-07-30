@@ -13,6 +13,7 @@ import {
   DrizzleContactRepository,
   phoneMatch,
 } from "@/features/contacts/contact-repository";
+import type { ContactInput } from "@/features/contacts/contact-input";
 import type { ContactListRecord, QuickCallerInput } from "@/features/contacts/contact-types";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
@@ -47,6 +48,20 @@ const quickCaller: QuickCallerInput = {
   reason: "Asked about an August event.",
   eventDate: "2026-08-14",
   eventLocation: "Shelby, MT",
+};
+
+const localContact: ContactInput = {
+  firstName: "Jordan",
+  lastName: "Local",
+  organizationName: "Marias Fair",
+  jobTitle: null,
+  email: null,
+  phone: null,
+  address1: null,
+  address2: null,
+  city: null,
+  region: null,
+  postalCode: null,
 };
 
 describe("contact repository query contract", () => {
@@ -210,6 +225,16 @@ describe("DrizzleContactRepository caller matching and intake", () => {
         act_record_id: null,
       },
     ]);
+    expect(await sql!.unsafe(`
+      SELECT organization_id, contact_id, active, source
+      FROM organization_contacts
+      WHERE contact_id = '${contactId}'
+    `)).toEqual([{
+      organization_id: repositoryIds.organization,
+      contact_id: contactId,
+      active: true,
+      source: "local",
+    }]);
     expect(await sql!.unsafe(`SELECT state, local_dirty FROM act_contact_sync_states WHERE contact_id = '${contactId}'`)).toEqual([
       { state: "waiting", local_dirty: true },
     ]);
@@ -229,6 +254,22 @@ describe("DrizzleContactRepository caller matching and intake", () => {
     expect(await sql!.unsafe(`SELECT act_record_id FROM contacts WHERE id = '${repositoryIds.existingContact}'`)).toEqual([
       { act_record_id: "ACT-CONTACT-1" },
     ]);
+  });
+
+  postgresTest("creates a local contact association before setting its compatibility pointer", async () => {
+    const contactId = await repository.createContact(localContact);
+
+    expect(await sql!.unsafe(`
+      SELECT c.organization_id, oc.active, oc.source
+      FROM contacts c
+      JOIN organization_contacts oc
+        ON oc.organization_id = c.organization_id AND oc.contact_id = c.id
+      WHERE c.id = '${contactId}'
+    `)).toEqual([{
+      organization_id: repositoryIds.organization,
+      active: true,
+      source: "local",
+    }]);
   });
 
   postgresTest("replays one concurrent intake request without duplicate local writes", async () => {
