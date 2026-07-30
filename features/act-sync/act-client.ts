@@ -3,6 +3,7 @@ import type {
   ActConfig,
   ActContactInput,
   ActRateLimit,
+  ActTransport,
   RemoteActContact,
 } from "@/features/act-sync/act-types";
 
@@ -91,7 +92,7 @@ function extractToken(value: unknown) {
   return requiredString(record.token ?? record.access_token ?? record.bearerToken);
 }
 
-export class ActClient {
+export class ActClient implements ActTransport {
   private readonly fetcher: Fetcher;
   private readonly pageSize: number;
   private readonly timeoutMs: number;
@@ -130,22 +131,20 @@ export class ActClient {
     let skip = 0;
     let compatibilityQuery = false;
     for (;;) {
-      const url = new URL(`${this.config.baseUrl}/api/contacts`);
+      const query: Record<string, string> = {};
       if (!compatibilityQuery) {
-        url.searchParams.set(
-          "$select",
-          "id,firstName,lastName,fullName,company,jobTitle,emailAddress,businessPhone,edited",
-        );
-        url.searchParams.set(
-          "$expand",
-          "businessAddress($select=line1,line2,city,state,postalCode)",
-        );
-        url.searchParams.set("$orderby", "id");
+        query.$select =
+          "id,firstName,lastName,fullName,company,jobTitle,emailAddress,businessPhone,edited";
+        query.$expand =
+          "businessAddress($select=line1,line2,city,state,postalCode)";
+        query.$orderby = "id";
       }
-      url.searchParams.set("$skip", String(skip));
-      url.searchParams.set("$top", String(this.pageSize));
-      const value = await this.authenticatedJson(url.toString(), {
+      query.$skip = String(skip);
+      query.$top = String(this.pageSize);
+      const value = await this.requestJson({
+        path: "/api/contacts",
         method: "GET",
+        query,
       });
       const page = Array.isArray(value)
         ? value
@@ -167,10 +166,10 @@ export class ActClient {
   }
 
   async getContact(contactId: string) {
-    const value = await this.authenticatedJson(
-      `${this.config.baseUrl}/api/contacts/${encodeURIComponent(contactId)}`,
-      { method: "GET" },
-    );
+    const value = await this.requestJson({
+      path: `/api/contacts/${encodeURIComponent(contactId)}`,
+      method: "GET",
+    });
     return remoteContact(value);
   }
 
@@ -184,10 +183,10 @@ export class ActClient {
         : error;
     }
     const value = await this.authenticatedJson(
-      `${this.config.baseUrl}/api/contacts`,
       {
+        path: "/api/contacts",
         method: "POST",
-        body: JSON.stringify(payload(input)),
+        body: payload(input),
       },
       token,
     );
@@ -195,14 +194,21 @@ export class ActClient {
   }
 
   async updateContact(contactId: string, input: ActContactInput) {
-    const value = await this.authenticatedJson(
-      `${this.config.baseUrl}/api/contacts/${encodeURIComponent(contactId)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify(payload(input)),
-      },
-    );
+    const value = await this.requestJson({
+      path: `/api/contacts/${encodeURIComponent(contactId)}`,
+      method: "PUT",
+      body: payload(input),
+    });
     return value === null ? this.getContact(contactId) : remoteContact(value);
+  }
+
+  async requestJson(input: {
+    path: `/api/${string}`;
+    method: "GET" | "POST" | "PUT";
+    query?: Readonly<Record<string, string>>;
+    body?: unknown;
+  }) {
+    return this.authenticatedJson(input);
   }
 
   private async getToken(force = false) {
@@ -211,7 +217,7 @@ export class ActClient {
       `${this.config.username}:${this.config.password}`,
       "utf8",
     ).toString("base64");
-    const value = await this.requestJson(
+    const value = await this.fetchJson(
       `${this.config.baseUrl}/authorize`,
       {
         method: "GET",
@@ -226,23 +232,33 @@ export class ActClient {
   }
 
   private async authenticatedJson(
-    url: string,
-    init: RequestInit,
+    input: {
+      path: `/api/${string}`;
+      method: "GET" | "POST" | "PUT";
+      query?: Readonly<Record<string, string>>;
+      body?: unknown;
+    },
     existingToken?: string,
   ) {
     const token = existingToken ?? (await this.getToken());
-    return this.requestJson(url, {
-      ...init,
+    const url = new URL(`${this.config.baseUrl}${input.path}`);
+    for (const [name, value] of Object.entries(input.query ?? {})) {
+      url.searchParams.set(name, value);
+    }
+    return this.fetchJson(url.toString(), {
+      method: input.method,
+      ...(input.body === undefined
+        ? {}
+        : { body: JSON.stringify(input.body) }),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
         "Act-Database-Name": this.config.databaseName,
-        ...init.headers,
       },
     });
   }
 
-  private async requestJson(url: string, init: RequestInit) {
+  private async fetchJson(url: string, init: RequestInit) {
     let response: Response;
     try {
       response = await this.fetcher(url, {
