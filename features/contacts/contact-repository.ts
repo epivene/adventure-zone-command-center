@@ -17,12 +17,15 @@ import {
   auditEntries,
   bookings,
   contacts,
-  organizationContacts,
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import type { ContactInput } from "@/features/contacts/contact-input";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
+import {
+  setContactPrimaryOrganization,
+} from "@/features/relationships/relationship-writer";
+import type { RelationshipSource } from "@/features/relationships/relationship-types";
 import {
   contactSyncStateValues,
   type ContactDetail,
@@ -41,7 +44,10 @@ type OrganizationWriter = Pick<
   DrizzleDatabase,
   "execute" | "select" | "insert"
 >;
-export type ContactPatchWriter = Pick<DrizzleDatabase, "insert" | "update">;
+export type ContactPatchWriter = Pick<
+  DrizzleDatabase,
+  "delete" | "insert" | "select" | "update"
+>;
 
 export function contactSyncState(value: string | null): ContactSyncState {
   return contactSyncStateValues.includes(value as ContactSyncState)
@@ -144,8 +150,21 @@ export async function patchContactInTransaction(
   organizationName: string | null,
   updates: Record<string, unknown>,
   now: Date,
+  source: RelationshipSource = "local",
 ) {
   const contactUpdates: Record<string, unknown> = { ...updates, updatedAt: now };
+  if (Object.hasOwn(updates, "organizationId")) {
+    delete contactUpdates.organizationId;
+    await setContactPrimaryOrganization(writer, {
+      contactId: before.id,
+      organizationId:
+        typeof updates.organizationId === "string"
+          ? updates.organizationId
+          : null,
+      source,
+      now,
+    });
+  }
   if (Object.hasOwn(updates, "phone")) {
     contactUpdates.normalizedPhone = normalizeUsPhone(
       typeof updates.phone === "string" ? updates.phone : null,
@@ -314,7 +333,7 @@ export class DrizzleContactRepository {
         input.organizationName,
         now,
       );
-      let [created] = await transaction
+      const [created] = await transaction
         .insert(contacts)
         .values({
           organizationId: null,
@@ -335,21 +354,12 @@ export class DrizzleContactRepository {
         .returning();
       if (!created) throw new Error("Could not create contact.");
       if (organizationId) {
-        await transaction.insert(organizationContacts).values({
+        await setContactPrimaryOrganization(transaction, {
           organizationId,
           contactId: created.id,
-          active: true,
           source: "local",
-          createdAt: now,
-          updatedAt: now,
+          now,
         });
-        const [updated] = await transaction
-          .update(contacts)
-          .set({ organizationId, updatedAt: now })
-          .where(eq(contacts.id, created.id))
-          .returning();
-        if (!updated) throw new Error("Could not set contact organization.");
-        created = updated;
       }
 
       await transaction.insert(actContactSyncStates).values({
@@ -427,7 +437,7 @@ export class DrizzleContactRepository {
         input.organizationName,
         now,
       );
-      let [contact] = await transaction
+      const [contact] = await transaction
         .insert(contacts)
         .values({
           organizationId: null,
@@ -443,21 +453,12 @@ export class DrizzleContactRepository {
         .returning();
       if (!contact) throw new Error("Could not create caller contact.");
       if (organizationId) {
-        await transaction.insert(organizationContacts).values({
+        await setContactPrimaryOrganization(transaction, {
           organizationId,
           contactId: contact.id,
-          active: true,
           source: "local",
-          createdAt: now,
-          updatedAt: now,
+          now,
         });
-        const [updated] = await transaction
-          .update(contacts)
-          .set({ organizationId, updatedAt: now })
-          .where(eq(contacts.id, contact.id))
-          .returning();
-        if (!updated) throw new Error("Could not set caller organization.");
-        contact = updated;
       }
 
       await transaction.insert(actContactSyncStates).values({

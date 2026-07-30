@@ -91,7 +91,7 @@ export interface CallRepository {
 type DrizzleDatabase = typeof database;
 type DrizzleWriter = Pick<
   DrizzleDatabase,
-  "execute" | "select" | "insert" | "update"
+  "delete" | "execute" | "select" | "insert" | "update"
 >;
 
 function organizationSnapshot(record: typeof organizations.$inferSelect): CallOrganization {

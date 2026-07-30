@@ -2,7 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { contacts, organizations } from "@/db/schema";
+import { contacts, organizationContacts, organizations } from "@/db/schema";
 import { DrizzleActImportRepository } from "@/features/import/act-matcher";
 import type {
   ActCsvRecord,
@@ -80,6 +80,19 @@ class RecordingDrizzleDatabase {
   readonly conditions: SQL[] = [];
   readonly contactUpdates: Record<string, unknown>[] = [];
   readonly locks: { source: unknown; strength: string }[] = [];
+  readonly associations = new Map<string, Record<string, unknown>>([
+    [
+      `${organization.id}:${contactRow.id}`,
+      {
+        organizationId: organization.id,
+        contactId: contactRow.id,
+        role: "Reviewed role",
+        isPrimary: true,
+        active: false,
+        source: "local",
+      },
+    ],
+  ]);
   organizationInsertCount = 0;
 
   select() {
@@ -115,10 +128,24 @@ class RecordingDrizzleDatabase {
 
   insert(table: unknown) {
     if (table === organizations) this.organizationInsertCount += 1;
+    const { associations } = this;
     return {
-      values() {
+      values(values: Record<string, unknown>) {
+        if (table === organizationContacts) {
+          const key = `${values.organizationId}:${values.contactId}`;
+          const existing = associations.get(key);
+          associations.set(key, {
+            ...existing,
+            ...values,
+            role: existing?.role ?? null,
+            isPrimary: existing?.isPrimary ?? false,
+          });
+          return { onConflictDoUpdate: async () => undefined };
+        }
         return {
-          returning: async () => [organization],
+          returning: async () => [
+            table === contacts ? { ...contactRow, ...values } : organization,
+          ],
         };
       },
     };
@@ -168,30 +195,43 @@ describe("DrizzleActImportRepository", () => {
       transaction.updateContact(contactRow.id, record, expected),
     );
 
-    expect(database.locks).toEqual([
+    expect(database.locks[0]).toEqual(
       { source: contacts, strength: "update" },
-    ]);
+    );
   });
 
-  it("preserves an unchanged organization during a phone-only update", async () => {
+  it("adds the association during legacy Act! import create and update", async () => {
     const database = new RecordingDrizzleDatabase();
 
-    const updated = await repository(database).transaction((transaction) =>
-      transaction.updateContact(contactRow.id, record, expected),
+    const importRepository = repository(database);
+    const created = await importRepository.transaction((writer) =>
+      writer.createContact(record),
+    );
+    const updated = await importRepository.transaction((writer) =>
+      writer.updateContact(contactRow.id, record, expected),
     );
 
-    expect(database.organizationInsertCount).toBe(0);
-    expect(database.contactUpdates).toHaveLength(1);
-    expect(database.contactUpdates[0]).toMatchObject({
-      organizationId: organization.id,
+    expect(database.organizationInsertCount).toBe(1);
+    expect(database.contactUpdates.find((values) => "phone" in values)).toMatchObject({
       phone: "(406) 555-0101",
       normalizedPhone: "+14065550101",
     });
+    expect(created.organizationId).toBe(organization.id);
     expect(updated).toMatchObject({
       organizationId: organization.id,
       organizationName: organization.name,
       phone: "(406) 555-0101",
     });
+    expect([...database.associations.values()]).toEqual([
+      expect.objectContaining({
+        organizationId: organization.id,
+        contactId: contactRow.id,
+        role: "Reviewed role",
+        isPrimary: true,
+        active: true,
+        source: "act_import",
+      }),
+    ]);
   });
 
   it("emits organization and contact matching with collapsed whitespace", async () => {

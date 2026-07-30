@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 
+import { contacts, organizationContacts, organizations } from "@/db/schema";
 import {
   buildStoredSyncPreview,
   deriveSyncRunStatus,
+  DrizzleSyncRepository,
   operationClaimDisposition,
   parseStoredSyncRows,
   staleOperationRecovery,
 } from "@/features/act-sync/sync-repository";
+import type { RemoteActContact } from "@/features/act-sync/act-types";
+import type { SyncComparisonRow } from "@/features/act-sync/sync-comparison";
 
 const snapshot = {
   firstName: "Avery",
@@ -36,7 +40,7 @@ const row = {
   actEditedAt: "2026-07-27T12:00:00.000Z",
   allowedDecisions: ["pull", "skip"],
   messages: [],
-};
+} satisfies SyncComparisonRow;
 
 const counts = {
   new_in_act: 1,
@@ -49,6 +53,69 @@ const counts = {
   missing_from_act: 0,
   error: 0,
 };
+
+class RecordingPullDatabase {
+  readonly organizationId = "11111111-1111-4111-8111-111111111111";
+  readonly contactId = "22222222-2222-4222-8222-222222222222";
+  readonly associations = new Map<string, Record<string, unknown>>();
+
+  select() {
+    return {
+      from: (table: unknown) => ({
+        where: () => {
+          const records =
+            table === organizations ? [{ id: this.organizationId, name: "Marias Fair" }] :
+            table === contacts ? [{ id: this.contactId }] :
+            [];
+          const terminal = {
+            limit: () => terminal,
+            for: async () => records,
+            then: Promise.resolve(records).then.bind(Promise.resolve(records)),
+          };
+          return terminal;
+        },
+      }),
+    };
+  }
+
+  insert(table: unknown) {
+    return {
+      values: (values: Record<string, unknown>) => {
+        if (table === organizationContacts) {
+          this.associations.set(
+            `${values.organizationId}:${values.contactId}`,
+            { ...values },
+          );
+        }
+        return {
+          onConflictDoNothing: () => ({
+            returning: async () => [{ entityId: values.entityId }],
+          }),
+          onConflictDoUpdate: async () => undefined,
+          returning: async () => [
+            table === contacts ? { id: this.contactId } : { id: this.organizationId },
+          ],
+        };
+      },
+    };
+  }
+
+  update() {
+    return {
+      set: () => ({ where: () => ({ returning: async () => [{ id: this.contactId }] }) }),
+    };
+  }
+
+  transaction<T>(operation: (transaction: RecordingPullDatabase) => Promise<T>) {
+    return operation(this);
+  }
+}
+
+const remote = {
+  ...snapshot,
+  id: "act-1",
+  editedAt: "2026-07-27T12:00:00.000Z",
+} satisfies RemoteActContact;
 
 describe("stored Act sync previews", () => {
   it("rejects malformed or identity-bearing stored snapshots", () => {
@@ -127,6 +194,27 @@ describe("stored Act sync previews", () => {
         [],
       ),
     ).toThrow("Stored Act! sync operations are malformed.");
+  });
+});
+
+describe("DrizzleSyncRepository pull", () => {
+  it("adds the association during an approved Act! Contact pull", async () => {
+    const database = new RecordingPullDatabase();
+
+    const contactId = await new DrizzleSyncRepository(database as never).pullContact(
+      row,
+      remote,
+    );
+
+    expect(contactId).toBe(database.contactId);
+    expect([...database.associations.values()]).toEqual([
+      expect.objectContaining({
+        organizationId: database.organizationId,
+        contactId: database.contactId,
+        active: true,
+        source: "act_sync",
+      }),
+    ]);
   });
 });
 

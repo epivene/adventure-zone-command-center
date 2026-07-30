@@ -35,6 +35,7 @@ async function migrationStatements(fileName: string, schemaName: string) {
 
 const repositoryIds = {
   organization: "11111111-1111-4111-8111-111111111111",
+  secondOrganization: "33333333-3333-4333-8333-333333333333",
   existingContact: "22222222-2222-4222-8222-222222222222",
 };
 
@@ -183,7 +184,7 @@ describe("DrizzleContactRepository caller matching and intake", () => {
     }
   });
 
-  postgresTest("uses normalized exact lookup and creates the complete local caller intake without changing Act metadata", async () => {
+  postgresTest("creates an active Place-Person association with Quick Add", async () => {
     await expect(repository.findContactsByPhone("406.555.0101")).resolves.toMatchObject({
       kind: "one",
       contact: { id: repositoryIds.existingContact },
@@ -256,7 +257,7 @@ describe("DrizzleContactRepository caller matching and intake", () => {
     ]);
   });
 
-  postgresTest("creates a local contact association before setting its compatibility pointer", async () => {
+  postgresTest("creates an active Place-Person association with a new contact", async () => {
     const contactId = await repository.createContact(localContact);
 
     expect(await sql!.unsafe(`
@@ -270,6 +271,42 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       active: true,
       source: "local",
     }]);
+  });
+
+  postgresTest("keeps the previous association and adds the new one when the primary Place changes", async () => {
+    await sql!`
+      insert into organizations (id, name)
+      values (${repositoryIds.secondOrganization}, 'Toole County Fair')
+    `;
+    const contactId = await repository.createContact(localContact);
+
+    await expect(repository.updateContact(contactId, {
+      ...localContact,
+      organizationName: "Toole County Fair",
+    })).resolves.toBe(true);
+
+    expect(await sql!`
+      select organization_id, contact_id, active
+      from organization_contacts
+      where contact_id = ${contactId}
+      order by organization_id
+    `).toEqual([
+      {
+        organization_id: repositoryIds.organization,
+        contact_id: contactId,
+        active: true,
+      },
+      {
+        organization_id: repositoryIds.secondOrganization,
+        contact_id: contactId,
+        active: true,
+      },
+    ]);
+    expect(await sql!`
+      select organization_id
+      from contacts
+      where id = ${contactId}
+    `).toEqual([{ organization_id: repositoryIds.secondOrganization }]);
   });
 
   postgresTest("replays one concurrent intake request without duplicate local writes", async () => {

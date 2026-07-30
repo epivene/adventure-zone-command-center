@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import { auditEntries, contacts, organizationContacts } from "@/db/schema";
 import type {
   AuditChange,
   StoredAuditEntry,
 } from "@/features/audit/audit-service";
 import {
   UndoService,
+  DrizzleUndoRepository,
   type UndoRepository,
   type UndoTransaction,
 } from "@/features/audit/undo-service";
@@ -114,7 +116,115 @@ function updateBookingStatus(
   });
 }
 
+class RecordingDrizzleUndoDatabase {
+  readonly contactId = "22222222-2222-4222-8222-222222222222";
+  readonly originalOrganizationId = "11111111-1111-4111-8111-111111111111";
+  readonly currentOrganizationId = "33333333-3333-4333-8333-333333333333";
+  readonly now = new Date("2026-07-28T15:00:00.000Z");
+  readonly associations = new Map<string, Record<string, unknown>>();
+  private auditReadCount = 0;
+  readonly contact = {
+    id: this.contactId,
+    organizationId: this.currentOrganizationId,
+    firstName: "Avery",
+    lastName: "Example",
+    email: null,
+    phone: null,
+    normalizedPhone: null,
+    quickAddRequestKey: null,
+    jobTitle: null,
+    address1: null,
+    address2: null,
+    city: null,
+    region: null,
+    postalCode: null,
+    actRecordId: null,
+    createdAt: this.now,
+    updatedAt: this.now,
+  };
+  readonly auditEntry = {
+    id: "audit-1",
+    entityType: "contact",
+    entityId: this.contactId,
+    action: "update",
+    before: { organizationId: this.originalOrganizationId },
+    after: { organizationId: this.currentOrganizationId },
+    reversesEntryId: null,
+    createdAt: this.now,
+  };
+
+  select() {
+    return {
+      from: (table: unknown) => ({
+        where: () => {
+          const records =
+            table === auditEntries
+              ? this.auditReadCount++ === 0 ? [this.auditEntry] : []
+              : table === contacts
+                ? [this.contact]
+                : [];
+          const terminal = {
+            limit: () => terminal,
+            for: async () => records,
+            then: Promise.resolve(records).then.bind(Promise.resolve(records)),
+          };
+          return terminal;
+        },
+      }),
+    };
+  }
+
+  insert(table: unknown) {
+    return {
+      values: (values: Record<string, unknown>) => {
+        if (table === organizationContacts) {
+          this.associations.set(
+            `${values.organizationId}:${values.contactId}`,
+            { ...values },
+          );
+        }
+        return { onConflictDoUpdate: async () => undefined };
+      },
+    };
+  }
+
+  update(table: unknown) {
+    return {
+      set: (values: Record<string, unknown>) => {
+        if (table === contacts) Object.assign(this.contact, values);
+        return {
+          where: () => ({ returning: async () => [{ ...this.contact }] }),
+        };
+      },
+    };
+  }
+
+  transaction<T>(operation: (transaction: RecordingDrizzleUndoDatabase) => Promise<T>) {
+    return operation(this);
+  }
+}
+
 describe("UndoService", () => {
+  it("restores a Contact primary Place through an association-aware undo", async () => {
+    const database = new RecordingDrizzleUndoDatabase();
+
+    await expect(
+      new UndoService(new DrizzleUndoRepository(database as never)).undoAuditEntry(
+        database.auditEntry.id,
+      ),
+    ).resolves.toEqual({ ok: true, value: undefined });
+
+    expect(database.contact.organizationId).toBe(database.originalOrganizationId);
+    expect([...database.associations.values()]).toEqual([
+      expect.objectContaining({
+        organizationId: database.originalOrganizationId,
+        contactId: database.contactId,
+        active: true,
+        source: "undo",
+      }),
+    ]);
+  });
+
   it("restores the prior booking status and creates a linked audit entry", async () => {
     const repository = new InMemoryUndoRepository();
     const change = updateBookingStatus(repository, "unlikely");

@@ -21,6 +21,7 @@ import type {
 } from "@/features/import/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
+import { setContactPrimaryOrganization } from "@/features/relationships/relationship-writer";
 
 export interface ActImportTransaction {
   createContact(record: ActCsvRecord): Promise<LocalContact>;
@@ -589,7 +590,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     const [created] = await this.database
       .insert(contacts)
       .values({
-        organizationId: organization?.id ?? null,
+        organizationId: null,
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
@@ -599,7 +600,18 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       })
       .returning();
     if (!created) throw new Error("Could not create imported contact.");
-    return toLocalContact({ contact: created, organization });
+    if (organization) {
+      await setContactPrimaryOrganization(this.database, {
+        organizationId: organization.id,
+        contactId: created.id,
+        source: "act_import",
+        now: created.updatedAt,
+      });
+    }
+    return toLocalContact({
+      contact: { ...created, organizationId: organization?.id ?? null },
+      organization,
+    });
   }
 
   async updateContact(
@@ -648,7 +660,6 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     const [updated] = await this.database
       .update(contacts)
       .set({
-        organizationId: organization?.id ?? null,
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
@@ -660,7 +671,16 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       .where(eq(contacts.id, contactId))
       .returning();
     if (!updated) throw new Error("Could not update imported contact.");
-    return toLocalContact({ contact: updated, organization });
+    await setContactPrimaryOrganization(this.database, {
+      organizationId: organization?.id ?? null,
+      contactId: updated.id,
+      source: "act_import",
+      now: updated.updatedAt,
+    });
+    return toLocalContact({
+      contact: { ...updated, organizationId: organization?.id ?? null },
+      organization,
+    });
   }
 
   async ensureExternalLink(

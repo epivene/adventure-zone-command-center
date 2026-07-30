@@ -18,6 +18,7 @@ import {
 import type { RemoteActContact } from "@/features/act-sync/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
+import { setContactPrimaryOrganization } from "@/features/relationships/relationship-writer";
 import {
   syncComparisonCategories,
   type LocalSyncContact,
@@ -1134,7 +1135,6 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         await transaction
           .update(contacts)
           .set({
-            organizationId,
             ...this.contactValues(remote),
             actRecordId: remote.id,
             updatedAt: now,
@@ -1144,7 +1144,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         const [created] = await transaction
           .insert(contacts)
           .values({
-            organizationId,
+            organizationId: null,
             ...this.contactValues(remote),
             actRecordId: remote.id,
             createdAt: now,
@@ -1153,6 +1153,15 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
           .returning({ id: contacts.id });
         if (!created) throw new Error("Could not create pulled contact.");
         localContactId = created.id;
+      }
+
+      if (organizationId && localContactId) {
+        await setContactPrimaryOrganization(transaction, {
+          organizationId,
+          contactId: localContactId,
+          source: "act_sync",
+          now,
+        });
       }
 
       await this.ensureExternalLink(

@@ -203,7 +203,7 @@ export class UndoService {
 type DrizzleDatabase = typeof database;
 type DrizzleUndoWriter = Pick<
   DrizzleDatabase,
-  "select" | "insert" | "update"
+  "delete" | "select" | "insert" | "update"
 >;
 
 function storedAuditEntry(
@@ -356,6 +356,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           null,
           databaseFields(entityType, fields),
           values.updatedAt as Date,
+          "undo",
         );
         return true;
       }
