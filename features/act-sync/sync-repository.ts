@@ -1154,14 +1154,12 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         localContactId = created.id;
       }
 
-      if (organizationId && localContactId) {
-        await setContactPrimaryOrganization(transaction, {
-          organizationId,
-          contactId: localContactId,
-          source: "act_sync",
-          now,
-        });
-      }
+      await setContactPrimaryOrganization(transaction, {
+        organizationId,
+        contactId: localContactId,
+        source: "act_sync",
+        now,
+      });
 
       await this.ensureExternalLink(
         transaction,

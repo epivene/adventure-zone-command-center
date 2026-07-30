@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { contacts, organizationContacts, organizations } from "@/db/schema";
+import {
+  actContactSyncStates,
+  contacts,
+  organizationContacts,
+  organizations,
+} from "@/db/schema";
 import {
   buildStoredSyncPreview,
   deriveSyncRunStatus,
@@ -59,7 +64,22 @@ class RecordingPullDatabase {
   readonly contactId = "22222222-2222-4222-8222-222222222222";
   readonly associations = new Map<string, Record<string, unknown>>();
   readonly events: string[] = [];
-  contact = { id: this.contactId, organizationId: null as string | null };
+  readonly primaryOrganizationAssignments: Array<string | null> = [];
+  syncBaseSnapshot: unknown = null;
+  contact = {
+    id: this.contactId,
+    organizationId: null as string | null,
+    firstName: snapshot.firstName,
+    lastName: snapshot.lastName,
+    jobTitle: snapshot.jobTitle,
+    email: snapshot.email,
+    phone: snapshot.phone,
+    address1: snapshot.address1,
+    address2: snapshot.address2,
+    city: snapshot.city,
+    region: snapshot.region,
+    postalCode: snapshot.postalCode,
+  };
 
   select() {
     return {
@@ -101,6 +121,16 @@ class RecordingPullDatabase {
             },
           };
         }
+        if (table === actContactSyncStates) {
+          return {
+            onConflictDoUpdate: async (configuration: {
+              set: Record<string, unknown>;
+            }) => {
+              this.syncBaseSnapshot =
+                configuration.set.baseSnapshot ?? values.baseSnapshot;
+            },
+          };
+        }
         if (table === contacts) {
           this.contact = { ...this.contact, ...values };
           this.events.push("insert:contact");
@@ -121,12 +151,19 @@ class RecordingPullDatabase {
   update(table: unknown) {
     return {
       set: (values: Record<string, unknown>) => {
-        if (table === contacts && typeof values.organizationId === "string") {
-          if (!this.associations.has(`${values.organizationId}:${this.contactId}`)) {
-            throw new Error("primary pointer requires an association");
+        if (table === contacts) {
+          if (Object.hasOwn(values, "organizationId")) {
+            const organizationId = values.organizationId as string | null;
+            if (
+              organizationId !== null &&
+              !this.associations.has(`${organizationId}:${this.contactId}`)
+            ) {
+              throw new Error("primary pointer requires an association");
+            }
+            this.primaryOrganizationAssignments.push(organizationId);
+            this.events.push("update:contact:pointer");
           }
-          this.contact = { ...this.contact, organizationId: values.organizationId };
-          this.events.push("update:contact:pointer");
+          this.contact = { ...this.contact, ...values };
         }
         return { where: () => ({ returning: async () => [{ id: this.contactId }] }) };
       },
@@ -235,6 +272,9 @@ describe("DrizzleSyncRepository pull", () => {
 
     expect(contactId).toBe(database.contactId);
     expect(database.contact.organizationId).toBe(database.organizationId);
+    expect(database.primaryOrganizationAssignments).toEqual([
+      database.organizationId,
+    ]);
     expect(database.events.filter((event) => event === "lock:organization" || event === "lock:contact")).toEqual([
       "lock:organization",
       "lock:contact",
@@ -250,6 +290,57 @@ describe("DrizzleSyncRepository pull", () => {
         source: "act_sync",
       }),
     ]);
+  });
+
+  it("clears a stale primary Place while retaining the historical association when Act has no company", async () => {
+    const database = new RecordingPullDatabase();
+    database.contact.organizationId = database.organizationId;
+    database.associations.set(
+      `${database.organizationId}:${database.contactId}`,
+      {
+        organizationId: database.organizationId,
+        contactId: database.contactId,
+        active: true,
+        source: "local",
+      },
+    );
+    const remoteWithoutOrganization = {
+      ...remote,
+      organizationName: null,
+    } satisfies RemoteActContact;
+    const existingRow = {
+      ...row,
+      category: "changed_in_act",
+      matchReason: "act_record_id",
+      localContactId: database.contactId,
+      baseSnapshot: snapshot,
+      localSnapshot: snapshot,
+      actSnapshot: {
+        ...snapshot,
+        organizationName: null,
+      },
+    } satisfies SyncComparisonRow;
+
+    await new DrizzleSyncRepository(database as never).pullContact(
+      existingRow,
+      remoteWithoutOrganization,
+    );
+
+    expect(database.primaryOrganizationAssignments).toEqual([null]);
+    expect(database.contact.organizationId).toBeNull();
+    expect(
+      database.associations.get(
+        `${database.organizationId}:${database.contactId}`,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        active: true,
+        source: "local",
+      }),
+    );
+    expect(database.syncBaseSnapshot).toEqual(
+      expect.objectContaining({ organizationName: null }),
+    );
   });
 });
 
