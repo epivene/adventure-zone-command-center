@@ -995,37 +995,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
   async assertLocalContactUnchanged(row: SyncComparisonRow) {
     if (!row.localContactId || !row.localSnapshot) return false;
     return this.database.transaction(async (transaction) => {
-      const [current] = await transaction
-        .select()
-        .from(contacts)
-        .where(eq(contacts.id, row.localContactId!))
-        .limit(1)
-        .for("update");
-      if (!current) return false;
-      const [organization] = current.organizationId
-        ? await transaction
-            .select({ name: organizations.name })
-            .from(organizations)
-            .where(eq(organizations.id, current.organizationId))
-            .limit(1)
-            .for("update")
-        : [];
-      return contactSnapshotsEqual(
-        canonicalContactSnapshot({
-          firstName: current.firstName,
-          lastName: current.lastName,
-          organizationName: organization?.name ?? null,
-          jobTitle: current.jobTitle,
-          email: current.email,
-          phone: current.phone,
-          address1: current.address1,
-          address2: current.address2,
-          city: current.city,
-          region: current.region,
-          postalCode: current.postalCode,
-        }),
-        row.localSnapshot,
-      );
+      return Boolean(await this.lockPreviewedLocalContact(transaction, row));
     });
   }
 
@@ -1037,39 +1007,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       throw new LocalContactChangedAfterPreviewError();
     }
     return this.database.transaction(async (transaction) => {
-      const [current] = await transaction
-        .select()
-        .from(contacts)
-        .where(eq(contacts.id, row.localContactId!))
-        .limit(1)
-        .for("update");
-      const [organization] = current?.organizationId
-        ? await transaction
-            .select({ name: organizations.name })
-            .from(organizations)
-            .where(eq(organizations.id, current.organizationId))
-            .limit(1)
-            .for("update")
-        : [];
-      if (
-        !current ||
-        !contactSnapshotsEqual(
-          canonicalContactSnapshot({
-            firstName: current.firstName,
-            lastName: current.lastName,
-            organizationName: organization?.name ?? null,
-            jobTitle: current.jobTitle,
-            email: current.email,
-            phone: current.phone,
-            address1: current.address1,
-            address2: current.address2,
-            city: current.city,
-            region: current.region,
-            postalCode: current.postalCode,
-          }),
-          row.localSnapshot,
-        )
-      ) {
+      if (!(await this.lockPreviewedLocalContact(transaction, row))) {
         throw new LocalContactChangedAfterPreviewError();
       }
       return action();
@@ -1186,37 +1124,11 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
   async completePush(row: SyncComparisonRow, remote: RemoteActContact) {
     if (!row.localContactId) throw new Error("Local contact is missing.");
     await this.database.transaction(async (transaction) => {
-      const [current] = await transaction
-        .select()
-        .from(contacts)
-        .where(eq(contacts.id, row.localContactId!))
-        .limit(1)
-        .for("update");
-      if (!current) throw new Error("Local contact is missing.");
-      const [organization] = current.organizationId
-        ? await transaction
-            .select({ name: organizations.name })
-            .from(organizations)
-            .where(eq(organizations.id, current.organizationId))
-            .limit(1)
-            .for("update")
-        : [];
-      const currentSnapshot = canonicalContactSnapshot({
-        firstName: current.firstName,
-        lastName: current.lastName,
-        organizationName: organization?.name ?? null,
-        jobTitle: current.jobTitle,
-        email: current.email,
-        phone: current.phone,
-        address1: current.address1,
-        address2: current.address2,
-        city: current.city,
-        region: current.region,
-        postalCode: current.postalCode,
-      });
-      if (!contactSnapshotsEqual(currentSnapshot, row.localSnapshot)) {
+      const locked = await this.lockPreviewedLocalContact(transaction, row);
+      if (!locked) {
         throw new LocalContactChangedAfterPreviewError();
       }
+      const { current } = locked;
       const now = new Date();
       await this.ensureExternalLink(
         transaction,
@@ -1241,6 +1153,57 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         after: canonicalContactSnapshot(remote),
       });
     });
+  }
+
+  private async lockPreviewedLocalContact(
+    writer: SyncWriter,
+    row: SyncComparisonRow,
+  ) {
+    if (!row.localContactId || !row.localSnapshot) return null;
+    const [discovered] = await writer
+      .select({ organizationId: contacts.organizationId })
+      .from(contacts)
+      .where(eq(contacts.id, row.localContactId))
+      .limit(1);
+    if (!discovered) return null;
+
+    const [organization] = discovered.organizationId
+      ? await writer
+          .select({ id: organizations.id, name: organizations.name })
+          .from(organizations)
+          .where(eq(organizations.id, discovered.organizationId))
+          .limit(1)
+          .for("update")
+      : [];
+    const [current] = await writer
+      .select()
+      .from(contacts)
+      .where(eq(contacts.id, row.localContactId))
+      .limit(1)
+      .for("update");
+    if (
+      !current ||
+      current.organizationId !== discovered.organizationId ||
+      (discovered.organizationId && !organization)
+    ) {
+      return null;
+    }
+
+    const currentSnapshot = canonicalContactSnapshot({
+      firstName: current.firstName,
+      lastName: current.lastName,
+      organizationName: organization?.name ?? null,
+      jobTitle: current.jobTitle,
+      email: current.email,
+      phone: current.phone,
+      address1: current.address1,
+      address2: current.address2,
+      city: current.city,
+      region: current.region,
+      postalCode: current.postalCode,
+    });
+    if (!contactSnapshotsEqual(currentSnapshot, row.localSnapshot)) return null;
+    return { current, currentSnapshot };
   }
 
   async linkContact(

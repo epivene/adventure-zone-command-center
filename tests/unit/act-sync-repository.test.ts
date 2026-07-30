@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  actExternalLinks,
   actContactSyncStates,
+  auditEntries,
   contacts,
   organizationContacts,
   organizations,
@@ -10,6 +12,7 @@ import {
   buildStoredSyncPreview,
   deriveSyncRunStatus,
   DrizzleSyncRepository,
+  LocalContactChangedAfterPreviewError,
   operationClaimDisposition,
   parseStoredSyncRows,
   staleOperationRecovery,
@@ -175,11 +178,121 @@ class RecordingPullDatabase {
   }
 }
 
+class RecordingSnapshotDatabase {
+  readonly organizationId = "11111111-1111-4111-8111-111111111111";
+  readonly changedOrganizationId =
+    "33333333-3333-4333-8333-333333333333";
+  readonly contactId = "22222222-2222-4222-8222-222222222222";
+  readonly events: string[] = [];
+  contact = {
+    id: this.contactId,
+    organizationId: this.organizationId,
+    firstName: snapshot.firstName,
+    lastName: snapshot.lastName,
+    jobTitle: snapshot.jobTitle,
+    email: snapshot.email,
+    phone: snapshot.phone,
+    address1: snapshot.address1,
+    address2: snapshot.address2,
+    city: snapshot.city,
+    region: snapshot.region,
+    postalCode: snapshot.postalCode,
+  };
+  changeAfterPlaceLock: Partial<typeof this.contact> | null = null;
+
+  private records(table: unknown) {
+    if (table === contacts) return [{ ...this.contact }];
+    if (table === organizations) {
+      return [{ id: this.organizationId, name: snapshot.organizationName }];
+    }
+    return [];
+  }
+
+  select() {
+    return {
+      from: (table: unknown) => ({
+        where: () => {
+          const terminal = {
+            limit: () => terminal,
+            for: async () => {
+              if (table === organizations) {
+                this.events.push("lock:organization");
+                if (this.changeAfterPlaceLock) {
+                  this.contact = {
+                    ...this.contact,
+                    ...this.changeAfterPlaceLock,
+                  };
+                }
+              } else if (table === contacts) {
+                this.events.push("lock:contact");
+              }
+              return this.records(table);
+            },
+            then: (
+              resolve: (value: unknown[]) => unknown,
+              reject?: (reason: unknown) => unknown,
+            ) => {
+              if (table === contacts) this.events.push("discover:contact");
+              return Promise.resolve(this.records(table)).then(resolve, reject);
+            },
+          };
+          return terminal;
+        },
+      }),
+    };
+  }
+
+  insert(table: unknown) {
+    return {
+      values: () => {
+        if (table === actExternalLinks) {
+          return {
+            onConflictDoNothing: () => ({
+              returning: async () => [{ entityId: this.contactId }],
+            }),
+          };
+        }
+        if (table === actContactSyncStates) {
+          return {
+            onConflictDoUpdate: async () => undefined,
+          };
+        }
+        if (table === auditEntries) return {};
+        throw new Error("Unexpected insert in Act snapshot test.");
+      },
+    };
+  }
+
+  update(table: unknown) {
+    return {
+      set: (values: Record<string, unknown>) => {
+        if (table === contacts) {
+          this.contact = { ...this.contact, ...values };
+        }
+        return { where: async () => undefined };
+      },
+    };
+  }
+
+  transaction<T>(operation: (transaction: RecordingSnapshotDatabase) => Promise<T>) {
+    return operation(this);
+  }
+}
+
 const remote = {
   ...snapshot,
   id: "act-1",
   editedAt: "2026-07-27T12:00:00.000Z",
 } satisfies RemoteActContact;
+
+const existingRow = {
+  ...row,
+  category: "changed_in_app",
+  matchReason: "act_record_id",
+  localContactId: "22222222-2222-4222-8222-222222222222",
+  baseSnapshot: snapshot,
+  localSnapshot: snapshot,
+} satisfies SyncComparisonRow;
 
 describe("stored Act sync previews", () => {
   it("rejects malformed or identity-bearing stored snapshots", () => {
@@ -341,6 +454,90 @@ describe("DrizzleSyncRepository pull", () => {
     expect(database.syncBaseSnapshot).toEqual(
       expect.objectContaining({ organizationName: null }),
     );
+  });
+});
+
+describe("DrizzleSyncRepository snapshot locking", () => {
+  it("discovers the current Place, then locks Place before Person when checking a preview", async () => {
+    const database = new RecordingSnapshotDatabase();
+
+    await expect(
+      new DrizzleSyncRepository(
+        database as never,
+      ).assertLocalContactUnchanged(existingRow),
+    ).resolves.toBe(true);
+
+    expect(database.events).toEqual([
+      "discover:contact",
+      "lock:organization",
+      "lock:contact",
+    ]);
+  });
+
+  it("keeps the canonical Place then Person locks while an Act push is in flight", async () => {
+    const database = new RecordingSnapshotDatabase();
+    let actionCalled = false;
+
+    await expect(
+      new DrizzleSyncRepository(database as never).withLockedLocalContact(
+        existingRow,
+        async () => {
+          actionCalled = true;
+          return "pushed";
+        },
+      ),
+    ).resolves.toBe("pushed");
+
+    expect(actionCalled).toBe(true);
+    expect(database.events).toEqual([
+      "discover:contact",
+      "lock:organization",
+      "lock:contact",
+    ]);
+  });
+
+  it("locks Place before Person when completing a pushed snapshot", async () => {
+    const database = new RecordingSnapshotDatabase();
+
+    await new DrizzleSyncRepository(database as never).completePush(
+      existingRow,
+      remote,
+    );
+
+    expect(database.events).toEqual([
+      "discover:contact",
+      "lock:organization",
+      "lock:contact",
+    ]);
+  });
+
+  it("rejects a changed primary Place pointer after discovery", async () => {
+    const database = new RecordingSnapshotDatabase();
+    database.changeAfterPlaceLock = {
+      organizationId: database.changedOrganizationId,
+    };
+
+    await expect(
+      new DrizzleSyncRepository(
+        database as never,
+      ).assertLocalContactUnchanged(existingRow),
+    ).resolves.toBe(false);
+  });
+
+  it("rejects a changed Contact snapshot after the Place lock and before the Person lock", async () => {
+    const database = new RecordingSnapshotDatabase();
+    database.changeAfterPlaceLock = { firstName: "Changed" };
+    let actionCalled = false;
+
+    await expect(
+      new DrizzleSyncRepository(database as never).withLockedLocalContact(
+        existingRow,
+        async () => {
+          actionCalled = true;
+        },
+      ),
+    ).rejects.toBeInstanceOf(LocalContactChangedAfterPreviewError);
+    expect(actionCalled).toBe(false);
   });
 });
 

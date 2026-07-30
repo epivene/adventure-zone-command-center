@@ -7,6 +7,8 @@ import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import * as crmSchema from "@/db/schema";
+import { DrizzleSyncRepository } from "@/features/act-sync/sync-repository";
+import type { SyncComparisonRow } from "@/features/act-sync/sync-comparison";
 import {
   buildContactSearchCondition,
   contactSyncState,
@@ -49,7 +51,7 @@ async function waitForDatabaseLock(sql: postgres.Sql, backendPid: number) {
     if (activity?.wait_event_type === "Lock") return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
-  throw new Error("Expected the Contact update to wait on the Place lock.");
+  throw new Error("Expected the database session to wait on a lock.");
 }
 
 function queryTerminal<T>(records: T[]) {
@@ -560,6 +562,112 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       if (placeLock) await placeLock;
       if (update) await Promise.allSettled([update]);
       await lockClient.end({ timeout: 5 });
+      await updateClient.end({ timeout: 5 });
+      await observerClient.end({ timeout: 5 });
+    }
+  });
+
+  postgresTest("avoids a Contact update versus Act snapshot deadlock with Place then Person locks", async () => {
+    const personLockClient = postgres(databaseUrl!, { max: 1 });
+    const actClient = postgres(databaseUrl!, { max: 1 });
+    const updateClient = postgres(databaseUrl!, { max: 1 });
+    const observerClient = postgres(databaseUrl!, { max: 1 });
+    const personLockHeld = deferred();
+    const releasePersonLock = deferred();
+    const writes: Promise<unknown>[] = [];
+    let personLock: Promise<unknown> | undefined;
+    try {
+      await Promise.all([
+        personLockClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        actClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        updateClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        observerClient.unsafe(`SET search_path TO "${schemaName}", public`),
+      ]);
+      await actClient.unsafe("SET lock_timeout = '5s'");
+      await updateClient.unsafe("SET lock_timeout = '5s'");
+      const [{ pid: actPid } = { pid: 0 }] =
+        await actClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      const [{ pid: updatePid } = { pid: 0 }] =
+        await updateClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      if (!actPid || !updatePid) {
+        throw new Error("Could not identify the concurrent database sessions.");
+      }
+
+      personLock = personLockClient.begin(async (transaction) => {
+        await transaction.unsafe(`
+          SELECT id FROM contacts
+          WHERE id = '${repositoryIds.existingContact}'
+          FOR UPDATE
+        `);
+        personLockHeld.resolve();
+        await releasePersonLock.promise;
+      });
+      await personLockHeld.promise;
+
+      const previewSnapshot = {
+        firstName: "Avery",
+        lastName: "Example",
+        organizationName: "Marias Fair",
+        jobTitle: null,
+        email: null,
+        phone: "(406) 555-0101",
+        address1: null,
+        address2: null,
+        city: null,
+        region: null,
+        postalCode: null,
+      };
+      const previewRow = {
+        rowId: `local:${repositoryIds.existingContact}`,
+        category: "changed_in_app",
+        matchReason: "act_record_id",
+        localContactId: repositoryIds.existingContact,
+        actRecordId: "ACT-CONTACT-1",
+        candidateLocalContactIds: [repositoryIds.existingContact],
+        candidateActRecordIds: ["ACT-CONTACT-1"],
+        baseSnapshot: previewSnapshot,
+        localSnapshot: previewSnapshot,
+        actSnapshot: previewSnapshot,
+        actEditedAt: null,
+        allowedDecisions: ["push", "skip"],
+        messages: [],
+      } satisfies SyncComparisonRow;
+      const actRepository = new DrizzleSyncRepository(
+        drizzle({ client: actClient, schema: crmSchema }),
+      );
+      const actSnapshot = actRepository.assertLocalContactUnchanged(previewRow);
+      writes.push(actSnapshot);
+      await waitForDatabaseLock(observerClient, actPid);
+
+      const updateRepository = new DrizzleContactRepository(
+        drizzle({ client: updateClient, schema: crmSchema }),
+      );
+      const contactUpdate = updateRepository.updateContact(
+        repositoryIds.existingContact,
+        {
+          ...localContact,
+          organizationName: "Marias Fair",
+        },
+      );
+      writes.push(contactUpdate);
+      await waitForDatabaseLock(observerClient, updatePid);
+
+      releasePersonLock.resolve();
+      await personLock;
+      await expect(Promise.all([actSnapshot, contactUpdate])).resolves.toEqual([
+        true,
+        true,
+      ]);
+    } finally {
+      releasePersonLock.resolve();
+      if (personLock) await personLock;
+      await Promise.allSettled(writes);
+      await personLockClient.end({ timeout: 5 });
+      await actClient.end({ timeout: 5 });
       await updateClient.end({ timeout: 5 });
       await observerClient.end({ timeout: 5 });
     }
