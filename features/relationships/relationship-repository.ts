@@ -141,14 +141,6 @@ export class DrizzleRelationshipRepository implements RelationshipRepository {
     now: Date,
   ): Promise<RelationshipWriteResult | { kind: "cleared" }> {
     return this.database.transaction(async (transaction) => {
-      const [person] = await transaction
-        .select({ id: contacts.id, organizationId: contacts.organizationId })
-        .from(contacts)
-        .where(eq(contacts.id, input.contactId))
-        .limit(1)
-        .for("update");
-      if (!person) return { kind: "person_not_found" };
-
       if (input.organizationId) {
         const [place] = await transaction
           .select({ id: organizations.id })
@@ -158,6 +150,14 @@ export class DrizzleRelationshipRepository implements RelationshipRepository {
           .for("update");
         if (!place) return { kind: "place_not_found" };
       }
+
+      const [person] = await transaction
+        .select({ id: contacts.id, organizationId: contacts.organizationId })
+        .from(contacts)
+        .where(eq(contacts.id, input.contactId))
+        .limit(1)
+        .for("update");
+      if (!person) return { kind: "person_not_found" };
 
       const beforeRelationship = person.organizationId
         ? await lockedRelationship(transaction, person.organizationId, input.contactId)
