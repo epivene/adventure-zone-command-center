@@ -171,6 +171,18 @@ function sourceDigest(records: readonly StagedSourceItem[]) {
     .digest("hex");
 }
 
+function relationshipCheckpointIdentity(input: {
+  streamType: string;
+  partitionKey: string;
+  parentSourceId: string | null;
+}) {
+  return JSON.stringify([
+    input.streamType,
+    input.partitionKey,
+    input.parentSourceId,
+  ]);
+}
+
 export class DrizzleActMigrationSnapshotRepository
   implements ActMigrationSnapshotRepository
 {
@@ -494,10 +506,14 @@ export class DrizzleActMigrationSnapshotRepository
       (checkpoint) =>
         checkpoint.status === "failed" && checkpoint.retryable,
     );
-    const retryAfter = retryableFailures
-      .map((checkpoint) => checkpoint.retryAfter)
-      .filter((value): value is Date => value !== null)
-      .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
+    const retryAfter = retryableFailures.some(
+      (checkpoint) => checkpoint.retryAfter === null,
+    )
+      ? null
+      : retryableFailures
+        .map((checkpoint) => checkpoint.retryAfter)
+        .filter((value): value is Date => value !== null)
+        .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
     return {
       runId,
       status: run.status as ActMigrationRunStatus,
@@ -548,18 +564,54 @@ export class DrizzleActMigrationSnapshotRepository
           asc(actMigrationRecords.sourceKey),
           asc(actMigrationRecords.id),
         );
-      const expectedRelationships = storedRecords.reduce((total, record) => {
-        if (record.errorCode || !record.sourceId) return total;
-        if (record.streamType === "contact" || record.streamType === "group") {
-          return total + 1;
+      const expectedRelationships = storedRecords.flatMap((record) => {
+        if (record.errorCode || !record.sourceId) return [];
+        if (record.streamType === "contact") {
+          return [{
+            streamType: "company_contact",
+            partitionKey: `contact:${record.sourceId}`,
+            parentSourceId: record.sourceId,
+          }];
         }
-        if (record.streamType === "opportunity") return total + 2;
-        return total;
-      }, 0);
-      const relationshipCount = storedCheckpoints.length - rootCount;
+        if (record.streamType === "opportunity") {
+          return [
+            {
+              streamType: "opportunity_company",
+              partitionKey: `opportunity:${record.sourceId}:companies`,
+              parentSourceId: record.sourceId,
+            },
+            {
+              streamType: "opportunity_contact",
+              partitionKey: `opportunity:${record.sourceId}:contacts`,
+              parentSourceId: record.sourceId,
+            },
+          ];
+        }
+        if (record.streamType === "group") {
+          return [{
+            streamType: "group_contact",
+            partitionKey: `group:${record.sourceId}:contacts`,
+            parentSourceId: record.sourceId,
+          }];
+        }
+        return [];
+      });
+      const expectedRelationshipIdentities = new Set(
+        expectedRelationships.map(relationshipCheckpointIdentity),
+      );
+      const storedRelationships = storedCheckpoints.filter(
+        ({ partitionKey, streamType }) =>
+          partitionKey !== ROOT_PARTITION_KEY ||
+          !(actSourceEntityTypeValues as readonly string[]).includes(streamType),
+      );
       if (
         rootCount !== actSourceEntityTypeValues.length ||
-        relationshipCount !== expectedRelationships ||
+        storedRelationships.length !== expectedRelationshipIdentities.size ||
+        storedRelationships.some((checkpoint) =>
+          !expectedRelationshipIdentities.has(
+            relationshipCheckpointIdentity(checkpoint),
+          )
+        ) ||
         storedCheckpoints.some(({ status }) => status !== "complete")
       ) {
         throw new Error("Act migration checkpoint set is incomplete.");

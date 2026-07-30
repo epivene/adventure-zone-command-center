@@ -51,6 +51,219 @@ function staged(
   };
 }
 
+const finalizationRunId = "11111111-1111-4111-8111-111111111111";
+const finalizationDate = new Date("2026-07-30T15:00:00.000Z");
+
+function storedCheckpoint(
+  streamType: string,
+  partitionKey: string,
+  parentSourceId: string | null,
+) {
+  return {
+    id: randomUUID(),
+    runId: finalizationRunId,
+    streamType,
+    partitionKey,
+    parentSourceId,
+    nextSkip: 0,
+    pageSize: 100,
+    queryMode: "projected",
+    status: "complete",
+    leaseOwner: null,
+    leaseExpiresAt: null,
+    retryAfter: null,
+    retryable: true,
+    attemptCount: 1,
+    recordsStaged: 0,
+    errorCode: null,
+    completedAt: finalizationDate,
+    createdAt: finalizationDate,
+    updatedAt: finalizationDate,
+  };
+}
+
+class FinalizationQuery {
+  private table: unknown;
+  private updating = false;
+
+  constructor(private readonly database: FinalizationDatabase) {}
+
+  from(table: unknown) {
+    this.table = table;
+    return this;
+  }
+
+  where() {
+    return this;
+  }
+
+  limit() {
+    return this;
+  }
+
+  orderBy() {
+    return this;
+  }
+
+  set() {
+    this.updating = true;
+    return this;
+  }
+
+  for() {
+    return Promise.resolve(this.rows());
+  }
+
+  then<TResult1 = unknown[], TResult2 = never>(
+    onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.rows()).then(onfulfilled, onrejected);
+  }
+
+  private rows() {
+    if (this.updating) {
+      this.database.runUpdates += 1;
+      return [];
+    }
+    if (this.table === crmSchema.actMigrationRuns) {
+      return [{
+        id: finalizationRunId,
+        requestKey: "22222222-2222-4222-8222-222222222222",
+        sourceDatabaseKey: "act-production-copy",
+        requestedBy: "snapshot-test",
+        status: "snapshotting",
+        sourceDigest: null,
+        proposalDigest: null,
+        summary: null,
+        lastErrorCode: null,
+        snapshotCompletedAt: null,
+        previewCompletedAt: null,
+        startedAt: finalizationDate,
+        createdAt: finalizationDate,
+        updatedAt: finalizationDate,
+      }];
+    }
+    if (this.table === crmSchema.actMigrationCheckpoints) {
+      return this.database.checkpoints;
+    }
+    if (this.table === crmSchema.actMigrationRecords) {
+      return [{
+        id: "33333333-3333-4333-8333-333333333333",
+        runId: finalizationRunId,
+        streamType: "contact",
+        sourceKey: "contact:contact-1",
+        sourceId: "contact-1",
+        targetSourceId: null,
+        rawSnapshot: { id: "contact-1" },
+        normalizedSnapshot: { displayName: "Contact One" },
+        fingerprint: "contact-fingerprint",
+        proposedAction: null,
+        reviewState: "not_required",
+        proposalKey: null,
+        matchedEntityType: null,
+        matchedEntityId: null,
+        appliedEntityId: null,
+        errorCode: null,
+        errorFields: [],
+        createdAt: finalizationDate,
+        updatedAt: finalizationDate,
+      }];
+    }
+    return [];
+  }
+}
+
+class FinalizationDatabase {
+  runUpdates = 0;
+
+  constructor(readonly checkpoints: unknown[]) {}
+
+  transaction<T>(operation: (transaction: FinalizationDatabase) => Promise<T>) {
+    return operation(this);
+  }
+
+  select() {
+    return new FinalizationQuery(this);
+  }
+
+  update(table: unknown) {
+    return new FinalizationQuery(this).from(table);
+  }
+}
+
+describe("snapshot finalization relationship identity", () => {
+  it.each([
+    {
+      mismatch: "stream",
+      relationship: storedCheckpoint(
+        "group_contact",
+        "contact:contact-1",
+        "contact-1",
+      ),
+    },
+    {
+      mismatch: "partition",
+      relationship: storedCheckpoint(
+        "company_contact",
+        "contact:wrong",
+        "contact-1",
+      ),
+    },
+    {
+      mismatch: "parent",
+      relationship: storedCheckpoint(
+        "company_contact",
+        "contact:contact-1",
+        "wrong-contact",
+      ),
+    },
+  ])(
+    "rejects an equal-sized completed relationship set with the wrong $mismatch",
+    async ({ relationship }) => {
+      const roots = ["company", "contact", "opportunity", "group"].map(
+        (streamType) => storedCheckpoint(streamType, "root", null),
+      );
+      const database = new FinalizationDatabase([...roots, relationship]);
+      const repository = new DrizzleActMigrationSnapshotRepository(
+        database as never,
+      );
+
+      await expect(
+        repository.finalizeSourceSnapshot(finalizationRunId),
+      ).rejects.toThrow("incomplete");
+      expect(database.runUpdates).toBe(0);
+    },
+  );
+});
+
+describe("snapshot progress retry scheduling", () => {
+  it("reports retry now when any retryable failure has no retry-after time", async () => {
+    const futureRetry = new Date("2026-07-30T16:00:00.000Z");
+    const database = new FinalizationDatabase([
+      {
+        ...storedCheckpoint("company", "root", null),
+        status: "failed",
+        retryAfter: null,
+      },
+      {
+        ...storedCheckpoint("contact", "root", null),
+        status: "failed",
+        retryAfter: futureRetry,
+      },
+    ]);
+    const repository = new DrizzleActMigrationSnapshotRepository(
+      database as never,
+    );
+
+    await expect(repository.getProgress(finalizationRunId)).resolves.toMatchObject({
+      failedCheckpoints: 2,
+      retryable: true,
+      retryAfter: null,
+    });
+  });
+});
+
 describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
   let sql: postgres.Sql | undefined;
   let schemaName = "";
@@ -411,6 +624,80 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
       await expect(
         repository.finalizeSourceSnapshot(failedRun.id),
       ).rejects.toThrow("incomplete");
+    },
+  );
+
+  postgresTest(
+    "rejects an equal-sized completed relationship checkpoint with a wrong stream, partition, or parent",
+    async () => {
+      const mismatches = [
+        {
+          streamType: "group_contact",
+          partitionKey: "contact:contact-1",
+          parentSourceId: "contact-1",
+        },
+        {
+          streamType: "company_contact",
+          partitionKey: "contact:wrong",
+          parentSourceId: "contact-1",
+        },
+        {
+          streamType: "company_contact",
+          partitionKey: "contact:contact-1",
+          parentSourceId: "wrong-contact",
+        },
+      ] as const;
+
+      for (const [scenario, mismatch] of mismatches.entries()) {
+        const run = await createRun();
+        for (let root = 0; root < 4; root += 1) {
+          const checkpoint = await repository.claimNextCheckpoint(
+            run.id,
+            `root-worker-${scenario}-${root}`,
+            new Date(`2026-07-30T15:0${root}:00.000Z`),
+          );
+          await repository.storePage({
+            checkpointId: checkpoint!.id,
+            leaseOwner: `root-worker-${scenario}-${root}`,
+            expectedSkip: 0,
+            records: checkpoint!.streamType === "contact"
+              ? [staged("contact", "contact-1")]
+              : [],
+            nextSkip: null,
+            queryMode: "projected",
+            now: new Date(`2026-07-30T15:0${root}:01.000Z`),
+          });
+        }
+        await repository.enqueueRelationshipCheckpoints(run.id);
+        const relationship = await repository.claimNextCheckpoint(
+          run.id,
+          `relationship-worker-${scenario}`,
+          new Date("2026-07-30T15:05:00.000Z"),
+        );
+        await repository.storePage({
+          checkpointId: relationship!.id,
+          leaseOwner: `relationship-worker-${scenario}`,
+          expectedSkip: 0,
+          records: [],
+          nextSkip: null,
+          queryMode: "projected",
+          now: new Date("2026-07-30T15:05:01.000Z"),
+        });
+        await sql!.unsafe(`
+          UPDATE act_migration_checkpoints
+          SET stream_type = '${mismatch.streamType}',
+              partition_key = '${mismatch.partitionKey}',
+              parent_source_id = '${mismatch.parentSourceId}'
+          WHERE id = '${relationship!.id}'
+        `);
+
+        await expect(
+          repository.finalizeSourceSnapshot(run.id),
+        ).rejects.toThrow("incomplete");
+        expect(await sql!.unsafe(`
+          SELECT status FROM act_migration_runs WHERE id = '${run.id}'
+        `)).toEqual([{ status: "snapshotting" }]);
+      }
     },
   );
 

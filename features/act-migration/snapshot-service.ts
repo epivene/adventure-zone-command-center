@@ -18,7 +18,20 @@ import {
 
 function retryAfterDate(value: string | null) {
   if (!value) return null;
-  const parsed = new Date(value);
+  const normalized = value.trim();
+  if (/^\d+$/.test(normalized)) {
+    const seconds = Number(normalized);
+    const milliseconds = seconds * 1_000;
+    if (
+      !Number.isSafeInteger(seconds) ||
+      !Number.isSafeInteger(milliseconds)
+    ) {
+      return null;
+    }
+    const parsedEpoch = new Date(milliseconds);
+    return Number.isNaN(parsedEpoch.getTime()) ? null : parsedEpoch;
+  }
+  const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
@@ -110,6 +123,7 @@ export class ActMigrationSnapshotService {
       10,
       Math.max(1, options.maxRequests ?? 10),
     );
+    await this.repository.enqueueRelationshipCheckpoints(runId);
     for (let request = 0; request < maxRequests; request += 1) {
       const leaseOwner = randomUUID();
       const checkpoint = await this.repository.claimNextCheckpoint(

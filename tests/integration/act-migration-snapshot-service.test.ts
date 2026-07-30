@@ -116,6 +116,7 @@ class InMemorySnapshotRepository
     retryAfter: Date | null;
   }> = [];
   enqueueCalls = 0;
+  enqueueFailureAfterRootCompletion: Error | null = null;
   private runId = randomUUID();
   private status: ActMigrationRunStatus = "snapshotting";
 
@@ -236,6 +237,11 @@ class InMemorySnapshotRepository
     );
     if (roots.length !== 4 || roots.some(({ status }) => status !== "complete")) {
       return;
+    }
+    if (this.enqueueFailureAfterRootCompletion) {
+      const failure = this.enqueueFailureAfterRootCompletion;
+      this.enqueueFailureAfterRootCompletion = null;
+      throw failure;
     }
     for (const record of this.records) {
       if (record.errorCode || !record.sourceId) continue;
@@ -421,6 +427,39 @@ describe("ActMigrationSnapshotService", () => {
     ]);
   });
 
+  it("honors epoch-seconds rate-limit resets without immediately retrying the failed page", async () => {
+    const { client, repository, service, run, now } = await setup();
+    now.setTime(new Date("2026-07-27T20:00:00.000Z").getTime());
+    client.queue(
+      "listCompanies",
+      new ActApiError("rate_limited", true, "1785186000"),
+    );
+    client.queue("listContacts", page([], null));
+
+    await service.captureNext(run.id, { maxRequests: 2 });
+
+    expect(repository.failures).toEqual([{
+      errorCode: "rate_limited",
+      retryable: true,
+      retryAfter: new Date("2026-07-27T21:00:00.000Z"),
+    }]);
+    expect(client.requests.map(({ method }) => method)).toEqual([
+      "listCompanies",
+      "listContacts",
+    ]);
+    expect(repository.checkpoints.slice(0, 2)).toEqual([
+      expect.objectContaining({
+        streamType: "company",
+        status: "failed",
+        nextSkip: 0,
+      }),
+      expect.objectContaining({
+        streamType: "contact",
+        status: "complete",
+      }),
+    ]);
+  });
+
   it("stages deterministic invalid-row errors beside valid rows and continues unrelated checkpoints", async () => {
     const { client, repository, service, run } = await setup();
     client.queue(
@@ -478,6 +517,48 @@ describe("ActMigrationSnapshotService", () => {
 
     expect(requestsAfterCompletion).toBe(4);
     expect(client.requests).toHaveLength(4);
+  });
+
+  it("repairs relationship checkpoints on resume after enqueue fails following the last root commit", async () => {
+    const { client, repository, service, run } = await setup();
+    client.queue("listGroups", page([{ id: "group-1" }], null));
+    client.queue("listContactsForGroup", page([], null));
+
+    await service.captureNext(run.id, { maxRequests: 3 });
+    repository.enqueueFailureAfterRootCompletion = new Error(
+      "enqueue interrupted",
+    );
+    await expect(
+      service.captureNext(run.id, { maxRequests: 1 }),
+    ).rejects.toThrow("enqueue interrupted");
+
+    expect(repository.checkpoints).toHaveLength(4);
+    expect(repository.checkpoints.every(
+      ({ status }) => status === "complete",
+    )).toBe(true);
+    expect(repository.records).toEqual([
+      expect.objectContaining({
+        streamType: "group",
+        sourceId: "group-1",
+      }),
+    ]);
+
+    const requestsBeforeResume = client.requests.length;
+    await service.captureNext(run.id, { maxRequests: 1 });
+
+    expect(client.requests).toHaveLength(requestsBeforeResume + 1);
+    expect(client.requests.at(-1)).toMatchObject({
+      method: "listContactsForGroup",
+      parentSourceId: "group-1",
+    });
+    expect(repository.checkpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        streamType: "group_contact",
+        partitionKey: "group:group-1:contacts",
+        parentSourceId: "group-1",
+        status: "complete",
+      }),
+    ]));
   });
 
   it("starts relationship requests only after all roots complete and preserves semantic relationship ids", async () => {
