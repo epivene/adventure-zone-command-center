@@ -79,6 +79,8 @@ export type CallContext = {
   contact: CallContact | null;
   booking: CallBooking | null;
   followUp: CallFollowUp | null;
+  contactHasActiveOrganizationRelationship: boolean | null;
+  contactHasBookingRelationship: boolean | null;
 };
 
 export type CompletedCall = {

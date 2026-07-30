@@ -28,6 +28,36 @@ const followUps: (FollowUpSummary & { contactId: string | null })[] = [
 ];
 
 describe("Today dashboard components", () => {
+  it("surfaces package totals, pending requests, and operational warnings in the queue and next call", () => {
+    const operations = {
+      packageNames: ["Adventure Zone", "Weekend Warriors"],
+      sharedAttractionTotal: 11,
+      pendingRequestCount: 1,
+      leg: null,
+      warnings: [{
+        id: "overlap",
+        kind: "resource" as const,
+        severity: "blocking" as const,
+        message: "Paintball overlaps another event.",
+        href: "/bookings/booking-1/edit#resource-warnings",
+      }],
+    };
+    render(
+      <>
+        <FollowUpList
+          followUps={[{ ...followUps[0]!, operations }]}
+          now={now}
+        />
+        <NextCallCard followUp={{ ...followUps[0]!, operations }} />
+      </>,
+    );
+
+    expect(screen.getAllByText("2 packages · 11 attractions")).toHaveLength(2);
+    expect(screen.getAllByText("1 pending request")).toHaveLength(2);
+    expect(screen.getAllByRole("link", {
+      name: "Paintball overlaps another event.",
+    })).toHaveLength(2);
+  });
   it("keeps the overdue call list visibly labeled for the command center", () => {
     render(<FollowUpList followUps={followUps} now={now} />);
 
@@ -129,13 +159,13 @@ describe("Today dashboard components", () => {
         contractCount={2}
         followUpCount={3}
         newLeadCount={4}
-        routeWarningCount={0}
+        visibleRouteWarningCount={0}
       />,
     );
 
     expect(screen.getByText("Follow-ups due")).toBeVisible();
     expect(screen.getByText("New leads")).toBeVisible();
     expect(screen.getByText("Contracts")).toBeVisible();
-    expect(screen.getByText("Route warnings")).toBeVisible();
+    expect(screen.getByText("Visible route warnings")).toBeVisible();
   });
 });

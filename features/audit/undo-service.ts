@@ -17,6 +17,11 @@ import {
   type StoredAuditEntry,
 } from "@/features/audit/audit-service";
 import {
+  lockBookingRelationshipParents,
+  setBookingPrimaryContactAfterParentLocks,
+  type LockedBookingRelationshipParents,
+} from "@/features/bookings/booking-relationship-repository";
+import {
   patchContactInTransaction,
   type ContactPatchWriter,
 } from "@/features/contacts/contact-repository";
@@ -32,6 +37,11 @@ export type UndoError =
 export interface UndoTransaction {
   findAuditEntryForUpdate(entryId: string): Promise<StoredAuditEntry | null>;
   findUndoFor(entryId: string): Promise<StoredAuditEntry | null>;
+  lockContactTargetOrganization(organizationId: string): Promise<void>;
+  prepareBookingRestore?(
+    bookingId: string,
+    fields: Record<string, unknown>,
+  ): Promise<void>;
   findEntityForUpdate(
     entityType: ReversibleEntityType,
     entityId: string,
@@ -170,6 +180,24 @@ export class UndoService {
       const snapshots = reversibleSnapshots(entry);
       if (!snapshots) return err({ code: "NON_REVERSIBLE" });
 
+      if (
+        snapshots.entityType === "contact" &&
+        typeof snapshots.before.organizationId === "string"
+      ) {
+        await transaction.lockContactTargetOrganization(
+          snapshots.before.organizationId,
+        );
+      }
+      if (
+        snapshots.entityType === "booking" &&
+        transaction.prepareBookingRestore
+      ) {
+        await transaction.prepareBookingRestore(
+          entry.entityId,
+          snapshots.before,
+        );
+      }
+
       const current = await transaction.findEntityForUpdate(
         snapshots.entityType,
         entry.entityId,
@@ -203,7 +231,7 @@ export class UndoService {
 type DrizzleDatabase = typeof database;
 type DrizzleUndoWriter = Pick<
   DrizzleDatabase,
-  "select" | "insert" | "update"
+  "delete" | "select" | "insert" | "update"
 >;
 
 function storedAuditEntry(
@@ -250,6 +278,10 @@ class DrizzleUndoTransaction implements UndoTransaction {
     string,
     Record<string, unknown>
   >();
+  private readonly preparedBookingRelationships = new Map<
+    string,
+    LockedBookingRelationshipParents
+  >();
 
   constructor(private readonly database: DrizzleUndoWriter) {}
 
@@ -272,12 +304,53 @@ class DrizzleUndoTransaction implements UndoTransaction {
     return entry ? storedAuditEntry(entry) : null;
   }
 
+  async lockContactTargetOrganization(organizationId: string) {
+    const [organization] = await this.database
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1)
+      .for("update");
+    if (!organization) {
+      throw new Error("Cannot restore a Contact primary Place that is missing.");
+    }
+  }
+
+  async prepareBookingRestore(
+    bookingId: string,
+    fields: Record<string, unknown>,
+  ) {
+    const locked = await lockBookingRelationshipParents(this.database, {
+      bookingId,
+      additionalOrganizationIds:
+        typeof fields.organizationId === "string"
+          ? [fields.organizationId]
+          : [],
+      additionalContactIds:
+        typeof fields.primaryContactId === "string"
+          ? [fields.primaryContactId]
+          : [],
+      includeExistingPeople: true,
+    });
+    this.preparedBookingRelationships.set(bookingId, locked);
+  }
+
   async findEntityForUpdate(
     entityType: ReversibleEntityType,
     entityId: string,
   ): Promise<Record<string, unknown> | null> {
     switch (entityType) {
       case "booking": {
+        const prepared = this.preparedBookingRelationships.get(entityId);
+        if (prepared) {
+          if (prepared.booking) {
+            this.lockedEntities.set(
+              `${entityType}:${entityId}`,
+              prepared.booking,
+            );
+          }
+          return prepared.booking;
+        }
         const [record] = await this.database
           .select()
           .from(bookings)
@@ -338,6 +411,46 @@ class DrizzleUndoTransaction implements UndoTransaction {
     const values = { ...databaseFields(entityType, fields), updatedAt: new Date() };
     switch (entityType) {
       case "booking": {
+        if ("primaryContactId" in values) {
+          const before = this.lockedEntities.get(
+            `${entityType}:${entityId}`,
+          ) as typeof bookings.$inferSelect | undefined;
+          if (!before) return false;
+          const restoredPrimaryContactId =
+            typeof values.primaryContactId === "string"
+              ? values.primaryContactId
+              : null;
+          const bookingValues = { ...values };
+          delete bookingValues.primaryContactId;
+          const [record] = await this.database
+            .update(bookings)
+            .set({
+              ...bookingValues,
+              primaryContactId: null,
+              updatedAt: values.updatedAt,
+            })
+            .where(eq(bookings.id, entityId))
+            .returning({ id: bookings.id });
+          if (!record) return false;
+
+          await setBookingPrimaryContactAfterParentLocks(
+            this.database,
+            {
+              ...before,
+              ...bookingValues,
+              primaryContactId: null,
+              updatedAt: values.updatedAt as Date,
+            },
+            {
+              bookingId: entityId,
+              contactId: restoredPrimaryContactId,
+              source: "undo",
+              now: values.updatedAt as Date,
+            },
+          );
+          return true;
+        }
+
         const [record] = await this.database
           .update(bookings)
           .set(values)
@@ -356,6 +469,7 @@ class DrizzleUndoTransaction implements UndoTransaction {
           null,
           databaseFields(entityType, fields),
           values.updatedAt as Date,
+          "undo",
         );
         return true;
       }

@@ -51,8 +51,8 @@ If the value is empty, the app uses its plain local fallback style.
 
 ## CRM database and authenticated release gate
 
-All five high-risk PostgreSQL suites use one variable:
-`CRM_TEST_DATABASE_URL`. It must name a disposable database where the tests
+All high-risk PostgreSQL suites use one variable: `CRM_TEST_DATABASE_URL`.
+It must name a disposable database where the tests
 may create and drop isolated schemas. Never point it at production or at a
 database containing data that must survive. Local `npm test` runs remain
 developer-friendly and skip these suites when the variable is absent.
@@ -62,9 +62,10 @@ Release mode fails closed instead:
 CRM_TEST_DATABASE_URL=postgresql://... npm run test:release
 ```
 
-`test:release` first sets `CRM_RELEASE_TESTS=1` and runs the migration,
-organization, activity, call, and contact PostgreSQL suites. Missing
-`CRM_TEST_DATABASE_URL` is an immediate error, not a skip. The later
+`test:release` first sets `CRM_RELEASE_TESTS=1` and runs the registered CRM,
+relationship, package, and resource PostgreSQL suites serially with hosted
+database timeouts. Missing `CRM_TEST_DATABASE_URL` is an immediate error, not
+a skip. The later
 authenticated Playwright phase also requires installed Chromium,
 `DATABASE_URL` pointing at the migrated disposable application database,
 valid Clerk public/secret keys, the configured owner ID, and

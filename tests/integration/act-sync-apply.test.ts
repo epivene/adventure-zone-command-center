@@ -494,6 +494,7 @@ describe("ActSyncService apply", () => {
     expect(repository.localContacts.get("local-10")).toMatchObject({
       actRecordId: "act-1",
       email: "avery@example.com",
+      organizationName: "Marias Fair",
     });
     expect(client.getCalls).toBe(0);
   });

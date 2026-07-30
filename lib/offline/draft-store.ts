@@ -38,11 +38,11 @@ export function saveDraft<T>(key: string, data: T): DraftStorageResult {
   }
 
   try {
-    localStorage.setItem(storageKey(key), serialized);
+    window.localStorage.setItem(storageKey(key), serialized);
     try {
-      const suppressed = sessionStorage.getItem(serverSavedKey(key));
+      const suppressed = window.sessionStorage.getItem(serverSavedKey(key));
       if (suppressed && suppressed !== serialized) {
-        sessionStorage.removeItem(serverSavedKey(key));
+        window.sessionStorage.removeItem(serverSavedKey(key));
       }
     } catch {
       // The durable local draft is still usable when session storage is absent.
@@ -55,10 +55,10 @@ export function saveDraft<T>(key: string, data: T): DraftStorageResult {
 
 export function loadDraft<T>(key: string): T | null {
   try {
-    const serialized = localStorage.getItem(storageKey(key));
+    const serialized = window.localStorage.getItem(storageKey(key));
     if (!serialized) return null;
     try {
-      if (sessionStorage.getItem(serverSavedKey(key)) === serialized) {
+      if (window.sessionStorage.getItem(serverSavedKey(key)) === serialized) {
         return null;
       }
     } catch {
@@ -82,15 +82,15 @@ export function loadDraft<T>(key: string): T | null {
 export function deleteDraft(key: string): DraftStorageResult {
   let staleCopy: string | null = null;
   try {
-    staleCopy = localStorage.getItem(storageKey(key));
+    staleCopy = window.localStorage.getItem(storageKey(key));
   } catch {
     // The removal attempt below remains authoritative.
   }
 
   try {
-    localStorage.removeItem(storageKey(key));
+    window.localStorage.removeItem(storageKey(key));
     try {
-      sessionStorage.removeItem(serverSavedKey(key));
+      window.sessionStorage.removeItem(serverSavedKey(key));
     } catch {
       // A successful local deletion needs no fallback marker.
     }
@@ -98,7 +98,7 @@ export function deleteDraft(key: string): DraftStorageResult {
   } catch {
     if (staleCopy) {
       try {
-        sessionStorage.setItem(serverSavedKey(key), staleCopy);
+        window.sessionStorage.setItem(serverSavedKey(key), staleCopy);
       } catch {
         // The caller still receives a failure and keeps server state authoritative.
       }

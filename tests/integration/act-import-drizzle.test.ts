@@ -2,7 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
-import { contacts, organizations } from "@/db/schema";
+import { contacts, organizationContacts, organizations } from "@/db/schema";
 import { DrizzleActImportRepository } from "@/features/import/act-matcher";
 import type {
   ActCsvRecord,
@@ -64,29 +64,23 @@ const expected: LocalContact = {
   phone: contactRow.phone,
 };
 
-type ThenableRows = PromiseLike<
-  { contact: ContactRow; organization: OrganizationRow | null }[]
-> & {
-  limit: (count: number) => ThenableRows;
-  for: (
-    strength: string,
-    options?: unknown,
-  ) => Promise<
-    { contact: ContactRow; organization: OrganizationRow | null }[]
-  >;
-};
-
 class RecordingDrizzleDatabase {
   readonly conditions: SQL[] = [];
-  readonly contactUpdates: Record<string, unknown>[] = [];
-  readonly locks: { source: unknown; strength: string }[] = [];
-  organizationInsertCount = 0;
+  readonly events: string[] = [];
+  readonly associations = new Map<string, Record<string, unknown>>();
+  contact: ContactRow = structuredClone(contactRow);
+  relationshipConflictSet: Record<string, unknown> | null = null;
 
-  select() {
-    const { conditions, locks } = this;
+  select(selection?: Record<string, unknown>) {
+    const { conditions, events } = this;
     return {
       from(source: unknown) {
-        const rows = [{ contact: contactRow, organization }];
+        const rows =
+          source === organizations
+            ? [organization]
+            : source === contacts && selection && "id" in selection
+              ? [{ id: contactRow.id }]
+              : [{ contact: structuredClone(contactRow), organization }];
         const builder = {
           innerJoin() {
             return builder;
@@ -100,11 +94,15 @@ class RecordingDrizzleDatabase {
             const terminal = {
               limit: () => terminal,
               for: async (strength: string) => {
-                locks.push({ source, strength });
+                if (strength === "update") {
+                  events.push(
+                    `lock:${source === organizations ? "organization" : "contact"}`,
+                  );
+                }
                 return rows;
               },
               then: promise.then.bind(promise),
-            } as ThenableRows;
+            };
             return terminal;
           },
         };
@@ -114,9 +112,29 @@ class RecordingDrizzleDatabase {
   }
 
   insert(table: unknown) {
-    if (table === organizations) this.organizationInsertCount += 1;
+    const { associations, events } = this;
     return {
-      values() {
+      values: (values: Record<string, unknown>) => {
+        if (table === organizationContacts) {
+          const key = `${values.organizationId}:${values.contactId}`;
+          return {
+            onConflictDoUpdate: async (configuration: { set: Record<string, unknown> }) => {
+              this.relationshipConflictSet = configuration.set;
+              const existing = associations.get(key);
+              associations.set(
+                key,
+                existing ? { ...existing, ...configuration.set } : { ...values },
+              );
+              events.push("upsert:relationship");
+            },
+          };
+        }
+        if (table === contacts) {
+          this.contact = { ...this.contact, ...values };
+          events.push("insert:contact");
+          return { returning: async () => [this.contact] };
+        }
+        if (table === organizations) events.push("insert:organization");
         return {
           returning: async () => [organization],
         };
@@ -125,19 +143,24 @@ class RecordingDrizzleDatabase {
   }
 
   update(table: unknown) {
-    const { contactUpdates } = this;
     return {
-      set(values: Record<string, unknown>) {
-        if (table === contacts) contactUpdates.push(values);
+      set: (values: Record<string, unknown>) => {
+        if (table === contacts) {
+          if (typeof values.organizationId === "string") {
+            const key = `${values.organizationId}:${this.contact.id}`;
+            if (!this.associations.has(key)) {
+              throw new Error("primary pointer requires an association");
+            }
+            this.events.push("update:contact:pointer");
+          } else {
+            this.events.push("update:contact:fields");
+          }
+          this.contact = { ...this.contact, ...values };
+        }
         return {
-          where() {
+          where: () => {
             return {
-              returning: async () => [
-                {
-                  ...contactRow,
-                  ...values,
-                },
-              ],
+              returning: async () => [this.contact],
             };
           },
         };
@@ -161,36 +184,62 @@ function repository(database: RecordingDrizzleDatabase) {
 }
 
 describe("DrizzleActImportRepository", () => {
-  it("locks the matched contact before comparing the preview snapshot", async () => {
+  it("locks the target Place before the Contact during legacy import update", async () => {
     const database = new RecordingDrizzleDatabase();
 
     await repository(database).transaction((transaction) =>
       transaction.updateContact(contactRow.id, record, expected),
     );
 
-    expect(database.locks).toEqual([
-      { source: contacts, strength: "update" },
+    expect(database.events.filter((event) => event.startsWith("lock:"))).toEqual([
+      "lock:organization",
+      "lock:contact",
+      "lock:contact",
     ]);
   });
 
-  it("preserves an unchanged organization during a phone-only update", async () => {
+  it("creates an association before the compatibility pointer during legacy Act! import create", async () => {
     const database = new RecordingDrizzleDatabase();
 
-    const updated = await repository(database).transaction((transaction) =>
-      transaction.updateContact(contactRow.id, record, expected),
+    const created = await repository(database).transaction((writer) =>
+      writer.createContact(record),
     );
 
-    expect(database.organizationInsertCount).toBe(0);
-    expect(database.contactUpdates).toHaveLength(1);
-    expect(database.contactUpdates[0]).toMatchObject({
+    expect(created.organizationId).toBe(organization.id);
+    expect(database.contact.organizationId).toBe(organization.id);
+    expect(database.events).toContain("upsert:relationship");
+    expect(database.events.indexOf("upsert:relationship")).toBeLessThan(
+      database.events.indexOf("update:contact:pointer"),
+    );
+  });
+
+  it("reactivates the target association without overwriting reviewed fields during legacy Act! import update", async () => {
+    const database = new RecordingDrizzleDatabase();
+    database.associations.set(`${organization.id}:${contactRow.id}`, {
       organizationId: organization.id,
-      phone: "(406) 555-0101",
-      normalizedPhone: "+14065550101",
+      contactId: contactRow.id,
+      role: "Reviewed role",
+      isPrimary: true,
+      active: false,
+      source: "local",
     });
-    expect(updated).toMatchObject({
-      organizationId: organization.id,
-      organizationName: organization.name,
-      phone: "(406) 555-0101",
+
+    const updated = await repository(database).transaction((writer) =>
+      writer.updateContact(contactRow.id, record, expected),
+    );
+
+    expect(updated.organizationId).toBe(organization.id);
+    expect(database.contact.organizationId).toBe(organization.id);
+    expect(database.relationshipConflictSet).toEqual({
+      active: true,
+      source: "act_import",
+      updatedAt: expect.any(Date),
+    });
+    expect(database.associations.get(`${organization.id}:${contactRow.id}`)).toMatchObject({
+      role: "Reviewed role",
+      isPrimary: true,
+      active: true,
+      source: "act_import",
     });
   });
 

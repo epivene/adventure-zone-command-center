@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getTableConfig } from "drizzle-orm/pg-core";
+import * as databaseSchema from "@/db/schema";
 import {
   activities,
   actContactSyncStates,
@@ -10,14 +11,20 @@ import {
   activityRevisions,
   auditEntries,
   bookings,
+  bookingContacts,
   callSessions,
   contacts,
   followUps,
   organizations,
+  organizationContacts,
   travelLegs,
 } from "@/db/schema";
 import { initialTravelLegs } from "@/db/seed";
 import { bookingStatusValues } from "@/features/bookings/booking-types";
+import {
+  requestApprovalStatusValues,
+  specialRequestTreatmentValues,
+} from "@/features/packages/package-types";
 
 describe("booking status contract", () => {
   it("contains the approved workflow in order", () => {
@@ -31,6 +38,58 @@ describe("booking status contract", () => {
 });
 
 describe("database schema contract", () => {
+  it("exports normalized Place-Person and Booking-Person relationships", () => {
+    expect(Object.keys(organizationContacts)).toEqual(expect.arrayContaining([
+      "id",
+      "organizationId",
+      "contactId",
+      "role",
+      "isPrimary",
+      "active",
+      "source",
+      "createdAt",
+      "updatedAt",
+    ]));
+    expect(Object.keys(bookingContacts)).toEqual(expect.arrayContaining([
+      "id",
+      "bookingId",
+      "contactId",
+      "role",
+      "isPrimary",
+      "source",
+      "createdAt",
+      "updatedAt",
+    ]));
+
+    expect(
+      getTableConfig(organizationContacts).uniqueConstraints
+        .map((constraint) => constraint.name),
+    ).toContain("organization_contacts_organization_contact_unique");
+    expect(
+      getTableConfig(organizationContacts).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("organization_contacts_one_active_primary");
+    expect(
+      getTableConfig(organizationContacts).checks.map((check) => check.name),
+    ).toContain("organization_contacts_primary_is_active");
+    expect(
+      getTableConfig(bookingContacts).uniqueConstraints
+        .map((constraint) => constraint.name),
+    ).toContain("booking_contacts_booking_contact_unique");
+    expect(
+      getTableConfig(bookingContacts).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    ).toContain("booking_contacts_one_primary");
+    expect(
+      getTableConfig(contacts).foreignKeys.map((key) => key.getName()),
+    ).toContain("contacts_primary_organization_contact_fk");
+    expect(
+      getTableConfig(bookings).foreignKeys.map((key) => key.getName()),
+    ).toContain("bookings_primary_booking_contact_fk");
+  });
+
   it("exports the Stage 1 normalized tables", () => {
     expect(Object.keys(contacts)).toEqual(expect.arrayContaining([
       "id", "organizationId", "firstName", "lastName", "email", "phone",
@@ -152,5 +211,144 @@ describe("travel-leg seed contract", () => {
     expect(
       getTableConfig(travelLegs).checks.map((constraint) => constraint.name),
     ).toContain("travel_legs_sort_order_between_1_and_4");
+  });
+});
+
+describe("package and resource schema contract", () => {
+  it("adds shared attraction totals and all eight package/resource tables", () => {
+    expect(bookings.physicalAttractionTotal).toBeDefined();
+    expect(bookings.attractionTotalApprovalReason).toBeDefined();
+    expect(databaseSchema.packageTemplates.code).toBeDefined();
+    expect(databaseSchema.bookingPackageSelections.bookingId).toBeDefined();
+    expect(databaseSchema.bookingSpecialRequests.treatment).toBeDefined();
+    expect(databaseSchema.resources.countsAsAttraction).toBeDefined();
+    expect(databaseSchema.resourcePackageTags.packageTemplateId).toBeDefined();
+    expect(databaseSchema.bookingResourceAssignments.resourceId).toBeDefined();
+    expect(
+      databaseSchema.bookingResourcePackageAttributions.packageTemplateId,
+    ).toBeDefined();
+    expect(databaseSchema.resourceConflictOverrides.conflictKey).toBeDefined();
+  });
+
+  it("uses the package policy request values at the database boundary", () => {
+    expect(databaseSchema.specialRequestTreatmentValues).toBe(
+      specialRequestTreatmentValues,
+    );
+    expect(databaseSchema.requestApprovalStatusValues).toBe(
+      requestApprovalStatusValues,
+    );
+    expect(databaseSchema.resourceStatusValues).toEqual([
+      "available",
+      "unavailable",
+      "maintenance",
+      "archived",
+    ]);
+
+    expect(
+      getTableConfig(databaseSchema.bookingSpecialRequests).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toEqual(expect.arrayContaining([
+      "booking_special_requests_description_nonblank",
+      "booking_special_requests_treatment_valid",
+      "booking_special_requests_approval_status_valid",
+    ]));
+    expect(
+      getTableConfig(databaseSchema.resources).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toEqual(expect.arrayContaining([
+      "resources_code_nonblank",
+      "resources_name_nonblank",
+      "resources_category_nonblank",
+      "resources_status_valid",
+      "resources_setup_minutes_nonnegative",
+      "resources_teardown_minutes_nonnegative",
+      "resources_minimum_transfer_minutes_nonnegative",
+    ]));
+  });
+
+  it("prevents duplicate selections, assignments, tags, attributions, and overrides", () => {
+    const uniqueIndexNames = [
+      databaseSchema.packageTemplates,
+      databaseSchema.bookingPackageSelections,
+      databaseSchema.resources,
+      databaseSchema.resourcePackageTags,
+      databaseSchema.bookingResourceAssignments,
+      databaseSchema.bookingResourcePackageAttributions,
+      databaseSchema.resourceConflictOverrides,
+    ].flatMap((table) =>
+      getTableConfig(table).indexes
+        .filter((index) => index.config.unique)
+        .map((index) => index.config.name),
+    );
+
+    expect(uniqueIndexNames).toEqual(expect.arrayContaining([
+      "package_templates_code_unique",
+      "booking_package_selections_booking_package_unique",
+      "resources_code_unique",
+      "resource_package_tags_resource_package_unique",
+      "booking_resource_assignments_booking_resource_unique",
+      "booking_resource_package_attributions_assignment_package_unique",
+      "resource_conflict_overrides_booking_conflict_unique",
+    ]));
+  });
+
+  it("indexes resource assignment lookups and special-request operations filters", () => {
+    const indexColumns = [
+      databaseSchema.bookingResourceAssignments,
+      databaseSchema.bookingSpecialRequests,
+    ].flatMap((table) =>
+      getTableConfig(table).indexes.map((index) => ({
+        name: index.config.name,
+        columns: index.config.columns.map((column) =>
+          "name" in column ? column.name : undefined
+        ),
+      })),
+    );
+
+    expect(indexColumns).toEqual(expect.arrayContaining([
+      {
+        name: "booking_resource_assignments_resource_id_idx",
+        columns: ["resource_id"],
+      },
+      {
+        name: "booking_special_requests_booking_status_treatment_idx",
+        columns: ["booking_id", "approval_status", "treatment"],
+      },
+    ]));
+  });
+
+  it("keeps package/resource child rows connected through foreign keys", () => {
+    expect(
+      getTableConfig(databaseSchema.bookingPackageSelections).foreignKeys,
+    ).toHaveLength(2);
+    expect(
+      getTableConfig(databaseSchema.bookingSpecialRequests).foreignKeys,
+    ).toHaveLength(1);
+    expect(getTableConfig(databaseSchema.resourcePackageTags).foreignKeys)
+      .toHaveLength(2);
+    expect(
+      getTableConfig(databaseSchema.bookingResourceAssignments).foreignKeys,
+    ).toHaveLength(2);
+    expect(
+      getTableConfig(databaseSchema.bookingResourcePackageAttributions)
+        .foreignKeys,
+    ).toHaveLength(2);
+    expect(
+      getTableConfig(databaseSchema.resourceConflictOverrides).foreignKeys,
+    ).toHaveLength(2);
+  });
+
+  it("requires nonblank conflict override audit metadata", () => {
+    expect(
+      getTableConfig(databaseSchema.resourceConflictOverrides).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toEqual(expect.arrayContaining([
+      "resource_conflict_overrides_conflict_key_nonblank",
+      "resource_conflict_overrides_reason_nonblank",
+      "resource_conflict_overrides_acknowledged_by_nonblank",
+    ]));
   });
 });

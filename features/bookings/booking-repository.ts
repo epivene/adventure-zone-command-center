@@ -2,10 +2,18 @@ import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   auditEntries,
+  bookingContacts,
+  bookingPackageSelections,
+  bookingResourceAssignments,
+  bookingResourcePackageAttributions,
+  bookingSpecialRequests,
   bookings,
   contacts,
   followUps,
   organizations,
+  packageTemplates,
+  resourcePackageTags,
+  resources,
   travelLegs,
 } from "@/db/schema";
 import type {
@@ -15,6 +23,8 @@ import type {
 import type { BookingEditInput } from "@/features/bookings/booking-input";
 import { bookingEditPreservesFollowUpPlan } from "@/features/bookings/booking-edit-policy";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import type { BookingSpecialRequest } from "@/features/packages/package-repository";
+import type { ResourceWarning } from "@/features/resources/resource-types";
 
 export type Booking = {
   id: string;
@@ -71,9 +81,50 @@ export type BookingDetail = {
   booking: typeof bookings.$inferSelect;
   organization: typeof organizations.$inferSelect | null;
   contact: typeof contacts.$inferSelect | null;
+  people: BookingPerson[];
   travelLeg: typeof travelLegs.$inferSelect | null;
   followUps: (typeof followUps.$inferSelect)[];
   auditEntries: (typeof auditEntries.$inferSelect)[];
+};
+
+export type BookingPerson = {
+  id: string;
+  name: string;
+  role: string | null;
+  isPrimary: boolean;
+};
+
+export type BookingPackageOption = {
+  id: string;
+  code: string;
+  name: string;
+  baseAttractionCount: number;
+  active: boolean;
+  selected: boolean;
+};
+
+export type BookingResourceOption = {
+  id: string;
+  code: string;
+  name: string;
+  status: "available" | "unavailable" | "maintenance" | "archived";
+  countsAsAttraction: boolean;
+  packageTemplateIds: string[];
+  assigned: boolean;
+  assignmentId: string | null;
+  attributionSource: "inferred" | "manual";
+  attributedPackageIds: string[];
+};
+
+export type BookingPackageResourceEditorModel = {
+  bookingId: string;
+  physicalAttractionTotal: number | null;
+  attractionTotalApprovalReason: string | null;
+  packageOptions: BookingPackageOption[];
+  resourceOptions: BookingResourceOption[];
+  assignedAttractionCount: number;
+  specialRequests: BookingSpecialRequest[];
+  warnings: ResourceWarning[];
 };
 
 export interface BookingTransaction {
@@ -305,11 +356,31 @@ export class DrizzleBookingRepository implements BookingRepository {
 
     if (!record) return null;
 
-    const bookingFollowUps = await this.database
-      .select()
-      .from(followUps)
-      .where(eq(followUps.bookingId, bookingId))
-      .orderBy(desc(followUps.dueAt));
+    const [bookingFollowUps, people] = await Promise.all([
+      this.database
+        .select()
+        .from(followUps)
+        .where(eq(followUps.bookingId, bookingId))
+        .orderBy(desc(followUps.dueAt)),
+      this.database
+        .select({
+          id: contacts.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          role: bookingContacts.role,
+          isPrimary: bookingContacts.isPrimary,
+        })
+        .from(bookingContacts)
+        .innerJoin(contacts, eq(bookingContacts.contactId, contacts.id))
+        .where(eq(bookingContacts.bookingId, bookingId))
+        .orderBy(
+          desc(bookingContacts.isPrimary),
+          asc(bookingContacts.role),
+          asc(contacts.lastName),
+          asc(contacts.firstName),
+          asc(contacts.id),
+        ),
+    ]);
     const followUpIds = bookingFollowUps.map((followUp) => followUp.id);
     const auditFilter =
       followUpIds.length > 0
@@ -335,8 +406,147 @@ export class DrizzleBookingRepository implements BookingRepository {
 
     return {
       ...record,
+      people: people.map((person) => ({
+        id: person.id,
+        name: `${person.firstName} ${person.lastName}`.trim(),
+        role: person.role,
+        isPrimary: person.isPrimary,
+      })),
       followUps: bookingFollowUps,
       auditEntries: history,
+    };
+  }
+
+  async getPackageResourceEditorModel(
+    bookingId: string,
+    warnings: ResourceWarning[] = [],
+  ): Promise<BookingPackageResourceEditorModel | null> {
+    const [booking] = await this.database
+      .select({
+        id: bookings.id,
+        physicalAttractionTotal: bookings.physicalAttractionTotal,
+        attractionTotalApprovalReason: bookings.attractionTotalApprovalReason,
+      })
+      .from(bookings)
+      .where(eq(bookings.id, bookingId))
+      .limit(1);
+    if (!booking) return null;
+
+    const [
+      selections,
+      templateRows,
+      assignmentRows,
+      tagRows,
+      attributionRows,
+      requests,
+    ] = await Promise.all([
+      this.database
+        .select({ packageTemplateId: bookingPackageSelections.packageTemplateId })
+        .from(bookingPackageSelections)
+        .where(eq(bookingPackageSelections.bookingId, bookingId)),
+      this.database
+        .select()
+        .from(packageTemplates)
+        .orderBy(asc(packageTemplates.name), asc(packageTemplates.id)),
+      this.database
+        .select({ assignment: bookingResourceAssignments, resource: resources })
+        .from(bookingResourceAssignments)
+        .innerJoin(
+          resources,
+          eq(bookingResourceAssignments.resourceId, resources.id),
+        )
+        .where(eq(bookingResourceAssignments.bookingId, bookingId))
+        .orderBy(asc(resources.name), asc(resources.id)),
+      this.database
+        .select()
+        .from(resourcePackageTags),
+      this.database
+        .select({
+          assignmentId:
+            bookingResourcePackageAttributions.bookingResourceAssignmentId,
+          packageTemplateId:
+            bookingResourcePackageAttributions.packageTemplateId,
+        })
+        .from(bookingResourcePackageAttributions)
+        .innerJoin(
+          bookingResourceAssignments,
+          eq(
+            bookingResourcePackageAttributions.bookingResourceAssignmentId,
+            bookingResourceAssignments.id,
+          ),
+        )
+        .where(eq(bookingResourceAssignments.bookingId, bookingId)),
+      this.database
+        .select()
+        .from(bookingSpecialRequests)
+        .where(eq(bookingSpecialRequests.bookingId, bookingId))
+        .orderBy(desc(bookingSpecialRequests.createdAt), asc(bookingSpecialRequests.id)),
+    ]);
+    const selectedIds = new Set(
+      selections.map(({ packageTemplateId }) => packageTemplateId),
+    );
+    const assignedByResource = new Map(
+      assignmentRows.map((row) => [row.resource.id, row]),
+    );
+    const allResourceRows = await this.database
+      .select()
+      .from(resources)
+      .orderBy(asc(resources.name), asc(resources.id));
+    const visibleResources = allResourceRows.filter(
+      (resource) =>
+        resource.status === "available" || assignedByResource.has(resource.id),
+    );
+
+    const resourceOptions = visibleResources.map((resource) => {
+      const row = assignedByResource.get(resource.id);
+      const packageTemplateIds = tagRows
+        .filter(({ resourceId }) => resourceId === resource.id)
+        .map(({ packageTemplateId }) => packageTemplateId)
+        .sort();
+      const persistedAttributions = row
+        ? attributionRows
+            .filter(({ assignmentId }) => assignmentId === row.assignment.id)
+            .map(({ packageTemplateId }) => packageTemplateId)
+            .sort()
+        : [];
+      const attributionSource = row?.assignment.attributionSource ?? "inferred";
+      return {
+        id: resource.id,
+        code: resource.code,
+        name: resource.name,
+        status: resource.status,
+        countsAsAttraction: resource.countsAsAttraction,
+        packageTemplateIds,
+        assigned: Boolean(row),
+        assignmentId: row?.assignment.id ?? null,
+        attributionSource,
+        attributedPackageIds:
+          row && attributionSource === "inferred"
+            ? packageTemplateIds.filter((packageId) => selectedIds.has(packageId))
+            : persistedAttributions,
+      };
+    });
+
+    return {
+      bookingId,
+      physicalAttractionTotal: booking.physicalAttractionTotal,
+      attractionTotalApprovalReason: booking.attractionTotalApprovalReason,
+      packageOptions: templateRows
+        .filter((template) => template.active || selectedIds.has(template.id))
+        .map((template) => ({
+          id: template.id,
+          code: template.code,
+          name: template.name,
+          baseAttractionCount: template.baseAttractionCount,
+          active: template.active,
+          selected: selectedIds.has(template.id),
+        })),
+      resourceOptions,
+      assignedAttractionCount: resourceOptions.filter(
+        (resource) => resource.assigned && resource.countsAsAttraction,
+      ).length,
+      specialRequests: requests,
+      warnings,
     };
   }
 

@@ -22,9 +22,9 @@ const ids = {
   contact: "44444444-4444-4444-8444-444444444444",
   mariasBooking: "55555555-5555-4555-8555-555555555555",
   northBooking: "66666666-6666-4666-8666-666666666666",
-  southBooking: "77777777-7777-4777-877777777777",
-  northLeg: "88888888-8888-4888-888888888888",
-  southLeg: "99999999-9999-4999-899999999999",
+  southBooking: "77777777-7777-4777-8777-777777777777",
+  northLeg: "88888888-8888-4888-8888-888888888888",
+  southLeg: "99999999-9999-4999-8999-999999999999",
   missing: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
 
@@ -90,15 +90,24 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     ]);
     await db.insert(crmSchema.contacts).values({
       id: ids.contact,
-      organizationId: ids.marias,
+      organizationId: null,
       firstName: "Avery",
       lastName: "Example",
     });
+    await db.insert(crmSchema.organizationContacts).values({
+      organizationId: ids.marias,
+      contactId: ids.contact,
+      active: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE contacts SET organization_id = '${ids.marias}' WHERE id = '${ids.contact}'
+    `);
     await db.insert(crmSchema.bookings).values([
       {
         id: ids.mariasBooking,
         organizationId: ids.marias,
-        primaryContactId: ids.contact,
+        primaryContactId: null,
         name: "Marias County Fair",
         city: "Shelby",
         region: "MT",
@@ -121,6 +130,15 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
         travelLegId: ids.southLeg,
       },
     ]);
+    await db.insert(crmSchema.bookingContacts).values({
+      bookingId: ids.mariasBooking,
+      contactId: ids.contact,
+      isPrimary: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE bookings SET primary_contact_id = '${ids.contact}' WHERE id = '${ids.mariasBooking}'
+    `);
   });
 
   afterEach(async () => {
@@ -216,14 +234,13 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     expect(bounded.records.map((record) => record.id)).toEqual([ids.north]);
 
     await sql!.unsafe(`
-      INSERT INTO contacts (
-        id, organization_id, first_name, last_name
-      ) VALUES (
-        'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        '${ids.marias}',
-        'Bailey',
-        'Second'
-      );
+      INSERT INTO contacts (id, organization_id, first_name, last_name)
+      VALUES ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', NULL, 'Bailey', 'Second');
+      INSERT INTO organization_contacts (organization_id, contact_id, source)
+      VALUES ('${ids.marias}', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'legacy_backfill');
+      UPDATE contacts
+      SET organization_id = '${ids.marias}'
+      WHERE id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
       INSERT INTO bookings (
         id, organization_id, name, city, region
       ) VALUES (
@@ -275,12 +292,209 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
         { organizationId: ids.marias, enabled: true, reason: "Repeated cancellations." },
         new Date("2026-07-28T15:00:00.000Z"),
       ),
-    ).rejects.toThrow("audit rejected");
+    ).rejects.toHaveProperty("cause.message", "audit rejected");
     expect(await sql!.unsafe(`SELECT last_resort FROM organizations WHERE id = '${ids.marias}'`)).toEqual([
       { last_resort: false },
     ]);
     expect(await sql!.unsafe(`SELECT count(*) AS value FROM audit_entries WHERE entity_id = '${ids.marias}'`)).toEqual([
       { value: "0" },
+    ]);
+  });
+
+  postgresTest("reads the complete active Place-Person and Booking-Person graph", async () => {
+    const db = drizzle({ client: sql!, schema: crmSchema });
+    const additionalPerson = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const roleFirstPerson = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const lastNameFirstPerson = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const firstNameFirstLowIdPerson = "abababab-abab-4aba-8aba-abababababab";
+    const firstNameFirstHighIdPerson = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const firstNameLastPerson = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    await db.insert(crmSchema.contacts).values([
+      {
+        id: additionalPerson,
+        organizationId: null,
+        firstName: "Zulu",
+        lastName: "Primary",
+      },
+      {
+        id: roleFirstPerson,
+        organizationId: null,
+        firstName: "Role",
+        lastName: "First",
+      },
+      {
+        id: lastNameFirstPerson,
+        organizationId: null,
+        firstName: "Zoe",
+        lastName: "Able",
+      },
+      {
+        id: firstNameFirstLowIdPerson,
+        organizationId: null,
+        firstName: "Amy",
+        lastName: "Tie",
+      },
+      {
+        id: firstNameFirstHighIdPerson,
+        organizationId: null,
+        firstName: "Amy",
+        lastName: "Tie",
+      },
+      {
+        id: firstNameLastPerson,
+        organizationId: null,
+        firstName: "Zed",
+        lastName: "Tie",
+      },
+    ]);
+    await db.insert(crmSchema.organizationContacts).values([
+      {
+        organizationId: ids.marias,
+        contactId: additionalPerson,
+        role: "Director",
+        isPrimary: true,
+      },
+      {
+        organizationId: ids.marias,
+        contactId: roleFirstPerson,
+        role: "Coordinator",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: lastNameFirstPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: firstNameFirstLowIdPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: firstNameFirstHighIdPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: firstNameLastPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.north,
+        contactId: ids.contact,
+        role: "Shared",
+        active: true,
+      },
+      {
+        organizationId: ids.south,
+        contactId: ids.contact,
+        role: "Former",
+        active: false,
+      },
+    ]);
+    await sql!.unsafe(`
+      UPDATE contacts SET organization_id = '${ids.marias}'
+      WHERE id = '${additionalPerson}'
+    `);
+    await db.insert(crmSchema.bookingContacts).values({
+      bookingId: ids.mariasBooking,
+      contactId: additionalPerson,
+      role: "Coordinator",
+      isPrimary: false,
+    });
+
+    expect((await repository.getOrganizationSummary(ids.marias))?.contacts).toEqual([
+      {
+        id: additionalPerson,
+        name: "Zulu Primary",
+        role: "Director",
+        isPrimary: true,
+        phone: null,
+        email: null,
+      },
+      expect.objectContaining({
+        id: roleFirstPerson,
+        name: "Role First",
+        role: "Coordinator",
+      }),
+      expect.objectContaining({
+        id: lastNameFirstPerson,
+        name: "Zoe Able",
+        role: "Staff",
+      }),
+      expect.objectContaining({
+        id: firstNameFirstLowIdPerson,
+        name: "Amy Tie",
+        role: "Staff",
+      }),
+      expect.objectContaining({
+        id: firstNameFirstHighIdPerson,
+        name: "Amy Tie",
+        role: "Staff",
+      }),
+      expect.objectContaining({
+        id: firstNameLastPerson,
+        name: "Zed Tie",
+        role: "Staff",
+      }),
+      {
+        id: ids.contact,
+        name: "Avery Example",
+        role: null,
+        isPrimary: false,
+        phone: null,
+        email: null,
+      },
+    ]);
+    expect((await repository.getOrganizationSummary(ids.north))?.contacts).toEqual([
+      expect.objectContaining({ id: ids.contact, role: "Shared" }),
+    ]);
+    expect((await repository.getOrganizationSummary(ids.south))?.contacts).toEqual([]);
+    expect((await repository.getOrganizationSummary(ids.south))?.id).toBe(ids.south);
+    const list = await repository.listOrganizations({
+      search: "",
+      lastResort: "all",
+      travelLegId: null,
+      page: 1,
+      pageSize: 10,
+    });
+    expect(Object.fromEntries(
+      list.records.map(({ id, contactCount }) => [id, contactCount]),
+    )).toEqual({
+      [ids.marias]: 7,
+      [ids.north]: 1,
+      [ids.south]: 0,
+    });
+
+    expect((await contactRepository.getContactDetail(ids.contact))?.places).toEqual([
+      expect.objectContaining({
+        id: ids.marias,
+        isPrimaryPlace: true,
+        active: true,
+      }),
+      expect.objectContaining({
+        id: ids.south,
+        isPrimaryPlace: false,
+        active: false,
+      }),
+      expect.objectContaining({
+        id: ids.north,
+        isPrimaryPlace: false,
+        active: true,
+      }),
+    ]);
+    expect((await contactRepository.getContactDetail(additionalPerson))?.relatedBookings)
+      .toEqual([expect.objectContaining({ id: ids.mariasBooking })]);
+    expect((await bookingRepository.getBookingDetail(ids.mariasBooking))?.people).toEqual([
+      expect.objectContaining({ id: ids.contact, isPrimary: true }),
+      expect.objectContaining({
+        id: additionalPerson,
+        role: "Coordinator",
+        isPrimary: false,
+      }),
+    ]);
+    expect(await sql!.unsafe("SELECT count(*) AS value FROM contacts")).toEqual([
+      { value: "7" },
     ]);
   });
 });

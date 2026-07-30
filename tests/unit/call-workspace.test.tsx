@@ -58,6 +58,32 @@ const workspace = {
 };
 
 describe("CallWorkspace", () => {
+  it("shows the booking package/resource operations snapshot without querying it", () => {
+    render(
+      <CallWorkspace
+        {...workspace}
+        onComplete={vi.fn()}
+        operations={{
+        packageNames: ["Adventure Zone", "Weekend Warriors"],
+        sharedAttractionTotal: 11,
+        pendingRequestCount: 1,
+        leg: { id: "leg-1", name: "North", color: "#123456" },
+        warnings: [{
+          id: "overlap-key",
+          kind: "resource",
+          severity: "blocking",
+          message: "Paintball overlaps another event.",
+          href: "/bookings/booking-1/edit#resource-warnings",
+        }],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Adventure Zone + Weekend Warriors")).toBeVisible();
+    expect(screen.getByText("2 packages · 11 attractions")).toBeVisible();
+    expect(screen.getByText("1 pending special request")).toBeVisible();
+    expect(screen.getByText("Paintball overlaps another event.")).toBeVisible();
+  });
   it("keeps a failed call entry intact while showing the required context and approved choices", async () => {
     const user = userEvent.setup();
     const onComplete = vi.fn<

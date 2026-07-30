@@ -11,11 +11,25 @@ import {
 } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { bookings, contacts, organizations, travelLegs } from "@/db/schema";
+import {
+  bookings,
+  contacts,
+  organizationContacts,
+  organizations,
+  travelLegs,
+} from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import type { SetLastResortInput } from "@/features/organizations/last-resort-input";
 
-export type OrganizationContact = { id: string; name: string };
+export type OrganizationPerson = {
+  id: string;
+  name: string;
+  role: string | null;
+  isPrimary: boolean;
+  phone: string | null;
+  email: string | null;
+};
+export type OrganizationContact = OrganizationPerson;
 export type OrganizationBooking = {
   id: string;
   name: string;
@@ -175,8 +189,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     const [[contactTotalRecord], [bookingTotalRecord]] = await Promise.all([
       this.database
         .select({ value: count() })
-        .from(contacts)
-        .where(eq(contacts.organizationId, organizationId)),
+        .from(organizationContacts)
+        .where(and(
+          eq(organizationContacts.organizationId, organizationId),
+          eq(organizationContacts.active, true),
+        )),
       this.database
         .select({ value: count() })
         .from(bookings)
@@ -195,16 +212,30 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       bookingPageCount,
     );
 
-    const [organizationContacts, organizationBookings] = await Promise.all([
+    const [organizationPeople, organizationBookings] = await Promise.all([
       this.database
         .select({
           id: contacts.id,
           firstName: contacts.firstName,
           lastName: contacts.lastName,
+          role: organizationContacts.role,
+          isPrimary: organizationContacts.isPrimary,
+          phone: contacts.phone,
+          email: contacts.email,
         })
-        .from(contacts)
-        .where(eq(contacts.organizationId, organizationId))
-        .orderBy(asc(contacts.lastName), asc(contacts.firstName), asc(contacts.id))
+        .from(organizationContacts)
+        .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
+        .where(and(
+          eq(organizationContacts.organizationId, organizationId),
+          eq(organizationContacts.active, true),
+        ))
+        .orderBy(
+          desc(organizationContacts.isPrimary),
+          asc(organizationContacts.role),
+          asc(contacts.lastName),
+          asc(contacts.firstName),
+          asc(contacts.id),
+        )
         .limit(query.pageSize)
         .offset((contactPage - 1) * query.pageSize),
       this.database
@@ -223,9 +254,13 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       lastResort: organization.lastResort,
       lastResortReason: organization.lastResortReason,
       lastResortChangedAt: organization.lastResortChangedAt,
-      contacts: organizationContacts.map((contact) => ({
+      contacts: organizationPeople.map((contact) => ({
         id: contact.id,
         name: `${contact.firstName} ${contact.lastName}`.trim(),
+        role: contact.role,
+        isPrimary: contact.isPrimary,
+        phone: contact.phone,
+        email: contact.email,
       })),
       bookings: organizationBookings.map(toOrganizationBooking),
       contactTotal,
@@ -261,12 +296,15 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     const [contactCounts, bookingCounts] = await Promise.all([
       this.database
         .select({
-          organizationId: contacts.organizationId,
+          organizationId: organizationContacts.organizationId,
           value: count(),
         })
-        .from(contacts)
-        .where(inArray(contacts.organizationId, organizationIds))
-        .groupBy(contacts.organizationId),
+        .from(organizationContacts)
+        .where(and(
+          inArray(organizationContacts.organizationId, organizationIds),
+          eq(organizationContacts.active, true),
+        ))
+        .groupBy(organizationContacts.organizationId),
       this.database
         .select({
           organizationId: bookings.organizationId,
@@ -277,9 +315,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .groupBy(bookings.organizationId),
     ]);
     const contactCountByOrganization = new Map(
-      contactCounts
-        .filter((record) => record.organizationId !== null)
-        .map((record) => [record.organizationId!, record.value]),
+      contactCounts.map((record) => [record.organizationId, record.value]),
     );
     const bookingCountByOrganization = new Map(
       bookingCounts

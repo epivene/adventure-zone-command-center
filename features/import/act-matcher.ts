@@ -21,6 +21,7 @@ import type {
 } from "@/features/import/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
+import { setContactPrimaryOrganization } from "@/features/relationships/relationship-writer";
 
 export interface ActImportTransaction {
   createContact(record: ActCsvRecord): Promise<LocalContact>;
@@ -589,7 +590,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     const [created] = await this.database
       .insert(contacts)
       .values({
-        organizationId: organization?.id ?? null,
+        organizationId: null,
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
@@ -599,7 +600,18 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       })
       .returning();
     if (!created) throw new Error("Could not create imported contact.");
-    return toLocalContact({ contact: created, organization });
+    if (organization) {
+      await setContactPrimaryOrganization(this.database, {
+        organizationId: organization.id,
+        contactId: created.id,
+        source: "act_import",
+        now: created.updatedAt,
+      });
+    }
+    return toLocalContact({
+      contact: { ...created, organizationId: organization?.id ?? null },
+      organization,
+    });
   }
 
   async updateContact(
@@ -607,6 +619,45 @@ class DrizzleActImportTransaction implements ActImportTransaction {
     record: ActCsvRecord,
     expected: LocalContact,
   ): Promise<LocalContact> {
+    const [candidate] = await this.database
+      .select({ contact: contacts, organization: organizations })
+      .from(contacts)
+      .leftJoin(
+        organizations,
+        eq(contacts.organizationId, organizations.id),
+      )
+      .where(eq(contacts.id, contactId))
+      .limit(1);
+    if (!candidate) throw new Error("Contact disappeared during import.");
+
+    let organization = candidate.organization;
+    if (!record.company) {
+      organization = null;
+    } else if (
+      !organization ||
+      normalize(organization.name) !== normalize(record.company)
+    ) {
+      const [createdOrganization] = await this.database
+        .insert(organizations)
+        .values({ name: record.company })
+        .returning();
+      if (!createdOrganization) {
+        throw new Error("Could not create imported organization.");
+      }
+      organization = createdOrganization;
+    } else {
+      const [lockedOrganization] = await this.database
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, organization.id))
+        .limit(1)
+        .for("update");
+      if (!lockedOrganization) {
+        throw new Error("Imported organization disappeared during import.");
+      }
+      organization = lockedOrganization;
+    }
+
     const [current] = await this.database
       .select({ contact: contacts, organization: organizations })
       .from(contacts)
@@ -628,27 +679,9 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       throw error;
     }
 
-    let organization = current.organization;
-    if (!record.company) {
-      organization = null;
-    } else if (
-      !organization ||
-      normalize(organization.name) !== normalize(record.company)
-    ) {
-      const [createdOrganization] = await this.database
-        .insert(organizations)
-        .values({ name: record.company })
-        .returning();
-      if (!createdOrganization) {
-        throw new Error("Could not create imported organization.");
-      }
-      organization = createdOrganization;
-    }
-
     const [updated] = await this.database
       .update(contacts)
       .set({
-        organizationId: organization?.id ?? null,
         ...splitContactName(record.contact),
         email: record.email,
         phone: record.phone,
@@ -660,7 +693,16 @@ class DrizzleActImportTransaction implements ActImportTransaction {
       .where(eq(contacts.id, contactId))
       .returning();
     if (!updated) throw new Error("Could not update imported contact.");
-    return toLocalContact({ contact: updated, organization });
+    await setContactPrimaryOrganization(this.database, {
+      organizationId: organization?.id ?? null,
+      contactId: updated.id,
+      source: "act_import",
+      now: updated.updatedAt,
+    });
+    return toLocalContact({
+      contact: { ...updated, organizationId: organization?.id ?? null },
+      organization,
+    });
   }
 
   async ensureExternalLink(

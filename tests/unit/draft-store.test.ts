@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import "../setup-browser-storage";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -10,8 +11,8 @@ import {
 
 describe("booking draft storage", () => {
   beforeEach(() => {
-    localStorage.clear();
-    sessionStorage.clear();
+    window.localStorage.clear();
+    window.sessionStorage.clear();
     vi.useRealTimers();
   });
 
@@ -31,7 +32,7 @@ describe("booking draft storage", () => {
     expect(saveDraft("booking:new", { name: "Draft Fair" })).toEqual({
       ok: true,
     });
-    expect(localStorage.getItem("azcc:draft:booking:new")).toBe(
+    expect(window.localStorage.getItem("azcc:draft:booking:new")).toBe(
       JSON.stringify({
         version: 1,
         savedAt: "2026-07-25T15:30:00.000Z",
@@ -48,7 +49,7 @@ describe("booking draft storage", () => {
       ok: false,
       error: "serialization_failed",
     });
-    expect(localStorage.getItem("azcc:draft:booking:new")).toBeNull();
+    expect(window.localStorage.getItem("azcc:draft:booking:new")).toBeNull();
   });
 
   it("returns a typed failure when local storage rejects the write", () => {
@@ -66,10 +67,10 @@ describe("booking draft storage", () => {
   });
 
   it("ignores corrupt or incompatible records", () => {
-    localStorage.setItem("azcc:draft:booking:new", "{bad json");
+    window.localStorage.setItem("azcc:draft:booking:new", "{bad json");
     expect(loadDraft("booking:new")).toBeNull();
 
-    localStorage.setItem(
+    window.localStorage.setItem(
       "azcc:draft:booking:new",
       JSON.stringify({ version: 99, savedAt: "yesterday", data: { name: "Old" } }),
     );

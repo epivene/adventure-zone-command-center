@@ -14,6 +14,7 @@ import type {
   EditActivityInput,
 } from "@/features/activities/activity-types";
 import type { BookingStatus } from "@/features/bookings/booking-types";
+import type { BookingOperationsSummary } from "@/features/bookings/booking-operations-summary";
 import type { CallDisposition, CompleteCallInput } from "@/features/calls/call-types";
 import {
   BUSINESS_TIME_ZONE,
@@ -52,6 +53,7 @@ export function CallWorkspace({
   createActivity,
   editActivity,
   loadRevisions = async () => ({ ok: true, revisions: [] }),
+  operations = null,
 }: {
   organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
   contact: {
@@ -73,6 +75,7 @@ export function CallWorkspace({
     activityId: string,
     page?: number,
   ) => Promise<ActivityRevisionResult>;
+  operations?: BookingOperationsSummary | null;
 }) {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [requestKey, setRequestKey] = useState<string | null>(null);
@@ -282,7 +285,54 @@ export function CallWorkspace({
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="booking-snapshot-title">
             <h2 className="text-xl font-bold" id="booking-snapshot-title">Booking snapshot</h2>
-            {booking ? <div className="mt-3 grid gap-1 text-sm"><p className="font-semibold text-base">{booking.name}</p><p>{booking.city}, {booking.region}</p><p className="capitalize">{booking.status.replaceAll("_", " ")}</p><p>{formatDate(booking.startsAt)}</p><a className="link mt-2" href={`/bookings/${booking.id}`}>Open full booking record</a></div> : <p className="mt-3 text-sm text-slate-600">No booking is linked to this call.</p>}
+            {booking ? (
+              <div className="mt-3 grid gap-1 text-sm">
+                <p className="font-semibold text-base">{booking.name}</p>
+                <p>{booking.city}, {booking.region}</p>
+                <p className="capitalize">{booking.status.replaceAll("_", " ")}</p>
+                <p>{formatDate(booking.startsAt)}</p>
+                {operations ? (
+                  <div className="mt-2 grid gap-1 border-t border-slate-200 pt-2">
+                    <p className="font-semibold">
+                      {operations.packageNames.join(" + ") || "No packages"}
+                    </p>
+                    <p>
+                      {operations.packageNames.length}{" "}
+                      {operations.packageNames.length === 1 ? "package" : "packages"} ·{" "}
+                      {operations.sharedAttractionTotal ?? "No"} attractions
+                    </p>
+                    {operations.pendingRequestCount > 0 ? (
+                      <p className="font-semibold text-amber-800">
+                        {operations.pendingRequestCount} pending special{" "}
+                        {operations.pendingRequestCount === 1 ? "request" : "requests"}
+                      </p>
+                    ) : null}
+                    {operations.leg ? (
+                      <p>Travel leg: {operations.leg.name}</p>
+                    ) : null}
+                    {operations.warnings.length ? (
+                      <ul className="mt-1 grid gap-1">
+                        {operations.warnings.map((warning) => (
+                          <li key={warning.id}>
+                            <a
+                              className={
+                                warning.severity === "blocking"
+                                  ? "font-semibold text-rose-700"
+                                  : "font-semibold text-amber-800"
+                              }
+                              href={warning.href}
+                            >
+                              {warning.message}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                <a className="link mt-2" href={`/bookings/${booking.id}`}>Open full booking record</a>
+              </div>
+            ) : <p className="mt-3 text-sm text-slate-600">No booking is linked to this call.</p>}
           </section>
         </aside>
       </div>

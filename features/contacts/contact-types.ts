@@ -71,10 +71,20 @@ export type ContactRelatedBooking = {
   status: string;
 };
 
+export type PersonPlace = {
+  id: string;
+  name: string;
+  role: string | null;
+  isPrimaryPerson: boolean;
+  isPrimaryPlace: boolean;
+  active: boolean;
+};
+
 export type ContactDetail = {
   contact: ContactListRecord & {
     actRecordId: string | null;
     createdAt: Date;
   };
+  places: PersonPlace[];
   relatedBookings: ContactRelatedBooking[];
 };

@@ -1,6 +1,6 @@
 import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createDrizzleTodayDashboardRepository,
@@ -10,11 +10,94 @@ import {
   TODAY_PLAN_PAGE_SIZE,
   TODAY_UPCOMING_EVENT_LIMIT,
   upcomingEventsCondition,
+  enrichTodayDashboardOperations,
 } from "@/features/follow-ups/today-query";
 
 const dialect = new PgDialect();
 
 describe("Today bounded-query contract", () => {
+  it("batches the visible dashboard slice and counts each distinct visible route warning once", async () => {
+    const getForBookings = vi.fn(async () => new Map([
+      ["booking-1", {
+        packageNames: ["Adventure Zone"],
+        sharedAttractionTotal: 10,
+        pendingRequestCount: 0,
+        leg: null,
+        warnings: [{
+          id: "shared-route-warning",
+          kind: "route" as const,
+          severity: "warning" as const,
+          message: "Transfer trip is missing.",
+          href: "/bookings/booking-1/edit#resource-warnings",
+        }],
+      }],
+      ["booking-2", {
+        packageNames: ["Weekend Warriors"],
+        sharedAttractionTotal: 5,
+        pendingRequestCount: 1,
+        leg: null,
+        warnings: [{
+          id: "shared-route-warning",
+          kind: "route" as const,
+          severity: "warning" as const,
+          message: "Transfer trip is missing.",
+          href: "/bookings/booking-2/edit#resource-warnings",
+        }],
+      }],
+    ]));
+    const getForBooking = vi.fn(() => {
+      throw new Error("N+1");
+    });
+    const dashboard = await enrichTodayDashboardOperations({
+      followUpCount: 0,
+      newLeadCount: 0,
+      contractCount: 0,
+      visibleRouteWarningCount: 0,
+      nextCall: null,
+      followUps: [{
+        id: "follow-up-1",
+        organizationId: null,
+        contactId: null,
+        bookingId: "booking-1",
+        bookingName: "County Fair",
+        kind: "call",
+        dueAt: new Date("2026-08-01T12:00:00.000Z"),
+        createdAt: new Date("2026-07-29T12:00:00.000Z"),
+        status: "due",
+        probability: "likely",
+      }],
+      followUpTotal: TODAY_FOLLOW_UP_PAGE_SIZE + 1,
+      followUpPage: 1,
+      followUpPageCount: 2,
+      needsFollowUpPlan: [{
+        id: "booking-2",
+        name: "Needs Plan Fair",
+        status: "new_lead",
+        probability: "possible",
+      }],
+      needsFollowUpPlanTotal: TODAY_PLAN_PAGE_SIZE + 1,
+      needsFollowUpPlanPage: 1,
+      needsFollowUpPlanPageCount: 2,
+      upcomingEvents: [{
+        id: "booking-1",
+        name: "County Fair",
+        city: "Shelby",
+        region: "MT",
+        startsAt: new Date("2026-08-10T12:00:00.000Z"),
+      }],
+    }, { getForBooking, getForBookings });
+
+    expect(getForBookings).toHaveBeenCalledWith(["booking-1", "booking-2"]);
+    expect(getForBooking).not.toHaveBeenCalled();
+    expect(dashboard.followUps[0]?.operations?.sharedAttractionTotal).toBe(10);
+    expect(
+      dashboard.needsFollowUpPlan[0]?.operations?.pendingRequestCount,
+    ).toBe(1);
+    expect(dashboard.upcomingEvents[0]?.operations?.packageNames).toEqual([
+      "Adventure Zone",
+    ]);
+    expect(dashboard.visibleRouteWarningCount).toBe(1);
+  });
   it("keeps the work queue on open follow-ups and bounded page sizes", () => {
     const query = dialect.sqlToQuery(openFollowUpsCondition());
 

@@ -22,6 +22,28 @@ const migrationPreflightScript = path.join(
 );
 const temporaryRoots: string[] = [];
 
+function environmentWithFixturePath(binaryDirectory: string): NodeJS.ProcessEnv {
+  const existingPath = Object.entries(process.env).find(
+    ([key]) => key.toLowerCase() === "path",
+  )?.[1];
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) => key.toLowerCase() !== "path"),
+  );
+
+  return {
+    ...environment,
+    NODE_ENV: process.env.NODE_ENV,
+    PATH: `${binaryDirectory}${path.delimiter}${existingPath ?? ""}`,
+  };
+}
+
+function shellPathSuffix(...segments: string[]): RegExp {
+  const escapedSegments = segments.map((segment) =>
+    segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+  );
+  return new RegExp(`${escapedSegments.join(String.raw`[\\/]`)}$`);
+}
+
 async function executable(filePath: string, source: string) {
   await writeFile(filePath, source, { mode: 0o700 });
   await chmod(filePath, 0o700);
@@ -71,12 +93,19 @@ async function fixture() {
   const backupDirectory = path.join(root, "backups");
   const temporaryDirectory = path.join(root, "tmp");
   const commandLog = path.join(root, "command-log");
+  const bashEnvironment = path.join(root, "bash-env.sh");
   await Promise.all([
     mkdir(binaryDirectory),
     mkdir(backupDirectory),
     mkdir(temporaryDirectory),
     mkdir(commandLog),
   ]);
+  await writeFile(
+    bashEnvironment,
+    `fixture_root=$(dirname -- "$COMMAND_LOG")
+export PATH="$fixture_root/bin:$PATH"
+`,
+  );
 
   await executable(
     path.join(binaryDirectory, "pg_dump"),
@@ -137,9 +166,9 @@ fi
     temporaryDirectory,
     commandLog,
     env: {
-      ...process.env,
-      PATH: `${binaryDirectory}:${process.env.PATH ?? ""}`,
+      ...environmentWithFixturePath(binaryDirectory),
       TMPDIR: temporaryDirectory,
+      BASH_ENV: bashEnvironment,
       COMMAND_LOG: commandLog,
       DATABASE_URL: "postgresql://backup-user@example.test/adventure_zone",
       BACKUP_ENCRYPTION_PASSPHRASE: "correct horse battery staple",
@@ -261,7 +290,13 @@ printf '%s\\n' "$output" > "$COMMAND_LOG/success-output"
       "--cipher-algo",
       "AES256",
       "--output",
-      path.join(context.backupDirectory, files[0]!),
+      expect.stringMatching(
+        shellPathSuffix(
+          path.basename(context.root),
+          "backups",
+          files[0]!,
+        ),
+      ),
       expect.stringMatching(/adventure-zone-backup\..+\.dump$/),
     ]);
     expect(`${result.stdout}${result.stderr}`).not.toContain(

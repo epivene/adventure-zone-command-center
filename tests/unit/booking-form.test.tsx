@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import "../setup-browser-storage";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -22,8 +23,8 @@ import { followUpCompletionInputSchema } from "@/features/bookings/follow-up-com
 
 afterEach(() => {
   cleanup();
-  localStorage.clear();
-  sessionStorage.clear();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   routerPush.mockReset();
   vi.restoreAllMocks();
 });
@@ -105,7 +106,7 @@ describe("BookingForm", () => {
 
   it("restores a local draft only after the user explicitly chooses it", async () => {
     const user = userEvent.setup();
-    localStorage.setItem(
+    window.localStorage.setItem(
       "azcc:draft:booking:new",
       JSON.stringify({
         version: 1,
@@ -139,7 +140,7 @@ describe("BookingForm", () => {
 
     expect(screen.getByText("Local draft — not saved")).toBeVisible();
     expect(
-      JSON.parse(localStorage.getItem("azcc:draft:booking:new") ?? "{}").data,
+      JSON.parse(window.localStorage.getItem("azcc:draft:booking:new") ?? "{}").data,
     ).toMatchObject({ name: "Offline Fair" });
   });
 
@@ -161,7 +162,7 @@ describe("BookingForm", () => {
   it("deletes a local draft and navigates only after explicit server success", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: true });
-    localStorage.setItem(
+    window.localStorage.setItem(
       "azcc:draft:booking:edit:123",
       JSON.stringify({
         version: 1,
@@ -187,7 +188,7 @@ describe("BookingForm", () => {
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(onSubmit).toHaveBeenCalledOnce();
-    expect(localStorage.getItem("azcc:draft:booking:edit:123")).toBeNull();
+    expect(window.localStorage.getItem("azcc:draft:booking:edit:123")).toBeNull();
     expect(routerPush).toHaveBeenCalledWith("/bookings/123");
   });
 
@@ -214,7 +215,7 @@ describe("BookingForm", () => {
     expect(screen.getByText("Local draft — not saved")).toBeVisible();
     expect(
       JSON.parse(
-        localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
+        window.localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
       ).data,
     ).toMatchObject({ name: "Unconfirmed Fair" });
     expect(routerPush).not.toHaveBeenCalled();
@@ -243,7 +244,7 @@ describe("BookingForm", () => {
     expect(screen.getByText("Local draft — not saved")).toBeVisible();
     expect(
       JSON.parse(
-        localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
+        window.localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
       ).data,
     ).toMatchObject({ name: "Rejected Fair" });
     expect(routerPush).not.toHaveBeenCalled();
@@ -252,7 +253,7 @@ describe("BookingForm", () => {
   it("keeps a local draft when the server rejects the save", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: false, error: "Try again." });
-    localStorage.setItem(
+    window.localStorage.setItem(
       "azcc:draft:booking:edit:123",
       JSON.stringify({
         version: 1,
@@ -280,7 +281,7 @@ describe("BookingForm", () => {
     expect(screen.getByText("Local draft — not saved")).toBeVisible();
     expect(
       JSON.parse(
-        localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
+        window.localStorage.getItem("azcc:draft:booking:edit:123") ?? "{}",
       ).data,
     ).toMatchObject({ name: "Saved Fair" });
   });
@@ -288,7 +289,7 @@ describe("BookingForm", () => {
   it("keeps server confirmation authoritative when local draft cleanup fails", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue({ ok: true });
-    localStorage.setItem(
+    window.localStorage.setItem(
       "azcc:draft:booking:edit:123",
       JSON.stringify({
         version: 1,

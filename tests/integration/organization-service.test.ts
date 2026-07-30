@@ -27,8 +27,22 @@ class InMemoryOrganizationRepository implements OrganizationRepository {
     lastResortReason: null,
     lastResortChangedAt: null,
     contacts: [
-      { id: "contact-1", name: "Avery Example" },
-      { id: "contact-2", name: "Casey Example" },
+      {
+        id: "contact-1",
+        name: "Avery Example",
+        role: null,
+        isPrimary: false,
+        phone: null,
+        email: null,
+      },
+      {
+        id: "contact-2",
+        name: "Casey Example",
+        role: null,
+        isPrimary: false,
+        phone: null,
+        email: null,
+      },
     ],
     bookings: [
       {

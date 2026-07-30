@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { followUpHref } from "@/components/today/next-call-card";
+import { BookingOperations } from "@/components/today/booking-operations";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
 import {
   BUSINESS_TIME_ZONE,
@@ -31,7 +32,10 @@ export function FollowUpList({
   ).length;
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section
+      aria-label="Follow-up queue"
+      className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">Overdue follow-ups</h2>
@@ -66,6 +70,7 @@ export function FollowUpList({
                   <p className="mt-0.5 text-sm capitalize text-slate-600">
                     {formatKind(followUp.kind)}
                   </p>
+                  <BookingOperations operations={followUp.operations} />
                 </div>
                 <p
                   className={`text-sm font-semibold ${

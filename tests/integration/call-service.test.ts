@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -15,6 +16,7 @@ import type {
   CallContext,
   CompleteCallInput,
 } from "@/features/calls/call-types";
+import { DrizzleRelationshipRepository } from "@/features/relationships/relationship-repository";
 import * as crmSchema from "@/db/schema";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
@@ -32,6 +34,25 @@ async function migrationStatements(fileName: string, schemaName: string) {
     .split("--> statement-breakpoint")
     .map((statement) => statement.trim())
     .filter(Boolean);
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((complete) => {
+    resolve = complete;
+  });
+  return { promise, resolve };
+}
+
+async function waitForDatabaseLock(sql: postgres.Sql, backendPid: number) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const [activity] = await sql.unsafe(`
+      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${backendPid}
+    `);
+    if (activity?.wait_event_type === "Lock") return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error("Expected the database session to wait on a lock.");
 }
 
 const ids = {
@@ -107,6 +128,8 @@ class InMemoryCallRepository implements CallRepository {
       outcome: null,
       nextFollowUpId: null,
     },
+    contactHasActiveOrganizationRelationship: true,
+    contactHasBookingRelationship: true,
   };
   public readonly writes: string[] = [];
   public readonly payloads: Record<string, unknown[]> = {};
@@ -386,8 +409,79 @@ describe("CallService.complete", () => {
       ...repository.context.contact!,
       organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     };
+    repository.context.contactHasActiveOrganizationRelationship = false;
 
     await expect(new CallService(repository).complete(input())).resolves.toEqual({
+      ok: false,
+      error: { code: "CONTACT_ORGANIZATION_MISMATCH" },
+    });
+    expect(repository.writes).toEqual([]);
+  });
+
+  it("opens a call for a Person at a secondary active Place", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.booking = null;
+    repository.context.followUp = null;
+    repository.context.contact = {
+      ...repository.context.contact!,
+      organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contactHasActiveOrganizationRelationship = true;
+    repository.context.contactHasBookingRelationship = null;
+
+    await expect(new CallService(repository).complete(input({
+      bookingId: null,
+      followUpId: null,
+      approvedBookingUpdates: null,
+      resultingBookingStatus: null,
+    }))).resolves.toMatchObject({ ok: true });
+  });
+
+  it("opens a Booking call for an additional involved Person", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.followUp = null;
+    repository.context.booking = {
+      ...repository.context.booking!,
+      primaryContactId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contactHasActiveOrganizationRelationship = true;
+    repository.context.contactHasBookingRelationship = true;
+
+    await expect(new CallService(repository).complete(input({
+      followUpId: null,
+    }))).resolves.toMatchObject({ ok: true });
+  });
+
+  it("opens a booking-only follow-up for a linked additional Person", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.followUp = {
+      ...repository.context.followUp!,
+      contactId: null,
+    };
+    repository.context.booking = {
+      ...repository.context.booking!,
+      primaryContactId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contactHasActiveOrganizationRelationship = true;
+    repository.context.contactHasBookingRelationship = true;
+
+    await expect(new CallService(repository).complete(input())).resolves
+      .toMatchObject({ ok: true });
+  });
+
+  it("rejects a call when the Place-Person relationship is inactive", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.booking = null;
+    repository.context.followUp = null;
+    repository.context.contactHasActiveOrganizationRelationship = false;
+    repository.context.contactHasBookingRelationship = null;
+
+    await expect(new CallService(repository).complete(input({
+      bookingId: null,
+      followUpId: null,
+      approvedBookingUpdates: null,
+      resultingBookingStatus: null,
+    }))).resolves.toEqual({
       ok: false,
       error: { code: "CONTACT_ORGANIZATION_MISMATCH" },
     });
@@ -448,6 +542,7 @@ describe("CallService.complete", () => {
       ...repository.context.contact!,
       organizationId: null,
     };
+    repository.context.contactHasBookingRelationship = false;
     repository.context.followUp = null;
 
     await expect(new CallService(repository).complete(input({
@@ -624,14 +719,23 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     await db.insert(crmSchema.organizations).values({ id: ids.organization, name: "Marias Fair" });
     await db.insert(crmSchema.contacts).values({
       id: ids.contact,
-      organizationId: ids.organization,
+      organizationId: null,
       firstName: "Avery",
       lastName: "Example",
     });
+    await db.insert(crmSchema.organizationContacts).values({
+      organizationId: ids.organization,
+      contactId: ids.contact,
+      active: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE contacts SET organization_id = '${ids.organization}' WHERE id = '${ids.contact}'
+    `);
     await db.insert(crmSchema.bookings).values({
       id: ids.booking,
       organizationId: ids.organization,
-      primaryContactId: ids.contact,
+      primaryContactId: null,
       name: "Marias County Fair",
       venueName: "Do Not Rewrite Venue",
       address1: "17 Sentinel Road",
@@ -646,6 +750,15 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       probability: "unlikely",
       notes: "Original notes must survive.",
     });
+    await db.insert(crmSchema.bookingContacts).values({
+      bookingId: ids.booking,
+      contactId: ids.contact,
+      isPrimary: true,
+      source: "legacy_backfill",
+    });
+    await sql.unsafe(`
+      UPDATE bookings SET primary_contact_id = '${ids.contact}' WHERE id = '${ids.booking}'
+    `);
     await db.insert(crmSchema.followUps).values({
       id: ids.followUp,
       organizationId: ids.organization,
@@ -693,25 +806,46 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     expect(await sql!.unsafe("SELECT disposition, follow_up_id FROM call_sessions")).toEqual([
       { disposition: "proposal_sent", follow_up_id: ids.followUp },
     ]);
-    expect(await sql!.unsafe(`SELECT completed_at, outcome, next_follow_up_id FROM follow_ups WHERE id = '${ids.followUp}'`)).toEqual([
-      { completed_at: new Date("2026-08-01T15:10:00.000Z"), outcome: "proposal_contract_sent", next_follow_up_id: expect.any(String) },
+    expect(await db.select({
+      completedAt: crmSchema.followUps.completedAt,
+      outcome: crmSchema.followUps.outcome,
+      nextFollowUpId: crmSchema.followUps.nextFollowUpId,
+    }).from(crmSchema.followUps).where(eq(crmSchema.followUps.id, ids.followUp))).toEqual([
+      {
+        completedAt: new Date("2026-08-01T15:10:00.000Z"),
+        outcome: "proposal_contract_sent",
+        nextFollowUpId: expect.any(String),
+      },
     ]);
     expect(await sql!.unsafe("SELECT kind, booking_id, organization_id, contact_id FROM follow_ups WHERE id <> $1", [ids.followUp])).toEqual([
       { kind: "send quote", booking_id: ids.booking, organization_id: ids.organization, contact_id: ids.contact },
     ]);
-    expect(await sql!.unsafe(`SELECT status, notes, venue_name, address_1, city, region, postal_code, latitude, longitude, starts_at, ends_at, probability FROM bookings WHERE id = '${ids.booking}'`)).toEqual([
+    expect(await db.select({
+      status: crmSchema.bookings.status,
+      notes: crmSchema.bookings.notes,
+      venueName: crmSchema.bookings.venueName,
+      address1: crmSchema.bookings.address1,
+      city: crmSchema.bookings.city,
+      region: crmSchema.bookings.region,
+      postalCode: crmSchema.bookings.postalCode,
+      latitude: crmSchema.bookings.latitude,
+      longitude: crmSchema.bookings.longitude,
+      startsAt: crmSchema.bookings.startsAt,
+      endsAt: crmSchema.bookings.endsAt,
+      probability: crmSchema.bookings.probability,
+    }).from(crmSchema.bookings).where(eq(crmSchema.bookings.id, ids.booking))).toEqual([
       {
         status: "pending_contract",
         notes: "Proposal sent during call.",
-        venue_name: "Do Not Rewrite Venue",
-        address_1: "17 Sentinel Road",
+        venueName: "Do Not Rewrite Venue",
+        address1: "17 Sentinel Road",
         city: "Sentinel City",
         region: "mT",
-        postal_code: "59999",
+        postalCode: "59999",
         latitude: 46.85,
         longitude: -111.99,
-        starts_at: new Date("2026-08-15T15:00:00.000Z"),
-        ends_at: new Date("2026-08-16T15:00:00.000Z"),
+        startsAt: new Date("2026-08-15T15:00:00.000Z"),
+        endsAt: new Date("2026-08-16T15:00:00.000Z"),
         probability: "unlikely",
       },
     ]);
@@ -729,6 +863,168 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       { entity_type: "follow_up", action: "completed" },
       { entity_type: "follow_up", action: "create" },
     ]);
+  });
+
+  postgresTest("derives active/inactive Place and linked/unlinked Booking relationship flags", async () => {
+    const db = drizzle({ client: sql!, schema: crmSchema });
+    const activeLinkedPerson = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const inactiveLinkedPerson = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const activeUnlinkedPerson = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    await db.insert(crmSchema.contacts).values([
+      {
+        id: activeLinkedPerson,
+        organizationId: null,
+        firstName: "Active",
+        lastName: "Linked",
+      },
+      {
+        id: inactiveLinkedPerson,
+        organizationId: null,
+        firstName: "Inactive",
+        lastName: "Linked",
+      },
+      {
+        id: activeUnlinkedPerson,
+        organizationId: null,
+        firstName: "Active",
+        lastName: "Unlinked",
+      },
+    ]);
+    await db.insert(crmSchema.organizationContacts).values([
+      {
+        organizationId: ids.organization,
+        contactId: activeLinkedPerson,
+        active: true,
+      },
+      {
+        organizationId: ids.organization,
+        contactId: inactiveLinkedPerson,
+        active: false,
+      },
+      {
+        organizationId: ids.organization,
+        contactId: activeUnlinkedPerson,
+        active: true,
+      },
+    ]);
+    await db.insert(crmSchema.bookingContacts).values([
+      {
+        bookingId: ids.booking,
+        contactId: activeLinkedPerson,
+        isPrimary: false,
+      },
+      {
+        bookingId: ids.booking,
+        contactId: inactiveLinkedPerson,
+        isPrimary: false,
+      },
+    ]);
+    const repository = new DrizzleCallRepository(db);
+    const lock = (contactId: string) =>
+      repository.transaction((transaction) =>
+        transaction.lockContext(input({
+          contactId,
+          followUpId: null,
+        })));
+
+    await expect(lock(activeLinkedPerson)).resolves.toMatchObject({
+      contactHasActiveOrganizationRelationship: true,
+      contactHasBookingRelationship: true,
+    });
+    await expect(lock(inactiveLinkedPerson)).resolves.toMatchObject({
+      contactHasActiveOrganizationRelationship: false,
+      contactHasBookingRelationship: true,
+    });
+    await expect(lock(activeUnlinkedPerson)).resolves.toMatchObject({
+      contactHasActiveOrganizationRelationship: true,
+      contactHasBookingRelationship: false,
+    });
+  });
+
+  postgresTest("avoids a call context versus Place-first relationship deadlock", async () => {
+    const personLockClient = postgres(databaseUrl!, { max: 1 });
+    const callClient = postgres(databaseUrl!, { max: 1 });
+    const relationshipClient = postgres(databaseUrl!, { max: 1 });
+    const observerClient = postgres(databaseUrl!, { max: 1 });
+    const personLockHeld = deferred();
+    const releasePersonLock = deferred();
+    const writes: Promise<unknown>[] = [];
+    let personLock: Promise<unknown> | undefined;
+    try {
+      await Promise.all([
+        personLockClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        callClient.unsafe(`SET search_path TO "${schemaName}", public`),
+        relationshipClient.unsafe(
+          `SET search_path TO "${schemaName}", public`,
+        ),
+        observerClient.unsafe(`SET search_path TO "${schemaName}", public`),
+      ]);
+      await callClient.unsafe("SET lock_timeout = '5s'");
+      await relationshipClient.unsafe("SET lock_timeout = '5s'");
+      const [{ pid: callPid } = { pid: 0 }] =
+        await callClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      const [{ pid: relationshipPid } = { pid: 0 }] =
+        await relationshipClient.unsafe<{ pid: number }[]>(
+          "SELECT pg_backend_pid() AS pid",
+        );
+      if (!callPid || !relationshipPid) {
+        throw new Error("Could not identify the concurrent database sessions.");
+      }
+
+      personLock = personLockClient.begin(async (transaction) => {
+        await transaction.unsafe(`
+          SELECT id FROM contacts WHERE id = '${ids.contact}' FOR UPDATE
+        `);
+        personLockHeld.resolve();
+        await releasePersonLock.promise;
+      });
+      await personLockHeld.promise;
+
+      const callRepository = new DrizzleCallRepository(
+        drizzle({ client: callClient, schema: crmSchema }),
+      );
+      const callContext = callRepository.transaction((transaction) =>
+        transaction.lockContext(input()));
+      writes.push(callContext);
+      await waitForDatabaseLock(observerClient, callPid);
+
+      const relationshipRepository = new DrizzleRelationshipRepository(
+        drizzle({ client: relationshipClient, schema: crmSchema }),
+      );
+      const relationshipWrite =
+        relationshipRepository.associatePersonWithPlace(
+          {
+            organizationId: ids.organization,
+            contactId: ids.contact,
+            role: "Event Director",
+          },
+          new Date("2026-08-01T15:10:00.000Z"),
+        );
+      writes.push(relationshipWrite);
+      await waitForDatabaseLock(observerClient, relationshipPid);
+
+      releasePersonLock.resolve();
+      await personLock;
+      await expect(
+        Promise.all([callContext, relationshipWrite]),
+      ).resolves.toEqual([
+        expect.objectContaining({
+          organization: expect.objectContaining({ id: ids.organization }),
+          contact: expect.objectContaining({ id: ids.contact }),
+        }),
+        expect.objectContaining({ kind: "ok" }),
+      ]);
+    } finally {
+      releasePersonLock.resolve();
+      if (personLock) await personLock;
+      await Promise.allSettled(writes);
+      await personLockClient.end({ timeout: 5 });
+      await callClient.end({ timeout: 5 });
+      await relationshipClient.end({ timeout: 5 });
+      await observerClient.end({ timeout: 5 });
+    }
   });
 
   postgresTest("serializes concurrent completion replays to one call write set", async () => {
@@ -798,7 +1094,7 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       lastResortConfirmed: true,
       approvedContactUpdates: { phone: "406-555-0101" },
       approvedBookingUpdates: { notes: "This must roll back." },
-    }))).rejects.toThrow("call audit rejected");
+    }))).rejects.toHaveProperty("cause.message", "call audit rejected");
 
     expect(await sql!.unsafe("SELECT count(*) AS value FROM activities")).toEqual([{ value: "0" }]);
     expect(await sql!.unsafe("SELECT count(*) AS value FROM call_sessions")).toEqual([{ value: "0" }]);

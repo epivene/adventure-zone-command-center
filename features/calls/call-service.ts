@@ -87,19 +87,12 @@ function validateCanonicalContext(
       if (followUp.bookingId === null) {
         return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
       }
-      if (
-        booking?.primaryContactId &&
-        value.contactId !== booking.primaryContactId
-      ) {
-        return err({ code: "CONTACT_BOOKING_MISMATCH" });
-      }
     }
   }
   if (
-    booking?.primaryContactId &&
+    booking &&
     contact &&
-    contact.id !== booking.primaryContactId &&
-    followUp?.contactId !== contact.id
+    context.contactHasBookingRelationship === false
   ) {
     return err({ code: "CONTACT_BOOKING_MISMATCH" });
   }
@@ -107,8 +100,9 @@ function validateCanonicalContext(
   const organizationId =
     value.organizationId ?? canonicalOrganizationId(context);
   if (
-    contact?.organizationId &&
-    contact.organizationId !== organizationId
+    contact &&
+    organizationId &&
+    context.contactHasActiveOrganizationRelationship === false
   ) {
     return err({ code: "CONTACT_ORGANIZATION_MISMATCH" });
   }

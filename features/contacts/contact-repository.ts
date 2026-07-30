@@ -15,13 +15,19 @@ import {
   actContactSyncStates,
   activities,
   auditEntries,
+  bookingContacts,
   bookings,
   contacts,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import type { ContactInput } from "@/features/contacts/contact-input";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
+import {
+  setContactPrimaryOrganization,
+} from "@/features/relationships/relationship-writer";
+import type { RelationshipSource } from "@/features/relationships/relationship-types";
 import {
   contactSyncStateValues,
   type ContactDetail,
@@ -40,7 +46,17 @@ type OrganizationWriter = Pick<
   DrizzleDatabase,
   "execute" | "select" | "insert"
 >;
-export type ContactPatchWriter = Pick<DrizzleDatabase, "insert" | "update">;
+export type ContactPatchWriter = Pick<
+  DrizzleDatabase,
+  "delete" | "insert" | "select" | "update"
+>;
+
+class ContactDisappearedDuringUpdateError extends Error {
+  constructor() {
+    super("Contact disappeared during update.");
+    this.name = "ContactDisappearedDuringUpdateError";
+  }
+}
 
 export function contactSyncState(value: string | null): ContactSyncState {
   return contactSyncStateValues.includes(value as ContactSyncState)
@@ -143,8 +159,21 @@ export async function patchContactInTransaction(
   organizationName: string | null,
   updates: Record<string, unknown>,
   now: Date,
+  source: RelationshipSource = "local",
 ) {
   const contactUpdates: Record<string, unknown> = { ...updates, updatedAt: now };
+  if (Object.hasOwn(updates, "organizationId")) {
+    delete contactUpdates.organizationId;
+    await setContactPrimaryOrganization(writer, {
+      contactId: before.id,
+      organizationId:
+        typeof updates.organizationId === "string"
+          ? updates.organizationId
+          : null,
+      source,
+      now,
+    });
+  }
   if (Object.hasOwn(updates, "phone")) {
     contactUpdates.normalizedPhone = normalizeUsPhone(
       typeof updates.phone === "string" ? updates.phone : null,
@@ -258,7 +287,25 @@ export class DrizzleContactRepository {
       .limit(1);
     if (!record) return null;
 
-    const relatedBookings = await this.database
+    const [placeRows, relatedBookings] = await Promise.all([
+      this.database
+        .select({
+          relationship: organizationContacts,
+          organization: organizations,
+        })
+        .from(organizationContacts)
+        .innerJoin(
+          organizations,
+          eq(organizationContacts.organizationId, organizations.id),
+        )
+        .where(eq(organizationContacts.contactId, contactId))
+        .orderBy(
+          desc(sql`${organizationContacts.organizationId} = ${record.contact.organizationId}`),
+          asc(organizationContacts.role),
+          asc(organizations.name),
+          asc(organizations.id),
+        ),
+      this.database
       .select({
         id: bookings.id,
         name: bookings.name,
@@ -267,9 +314,11 @@ export class DrizzleContactRepository {
         startsAt: bookings.startsAt,
         status: bookings.status,
       })
-      .from(bookings)
-      .where(eq(bookings.primaryContactId, contactId))
-      .orderBy(desc(bookings.startsAt), asc(bookings.name));
+      .from(bookingContacts)
+      .innerJoin(bookings, eq(bookingContacts.bookingId, bookings.id))
+      .where(eq(bookingContacts.contactId, contactId))
+      .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
+    ]);
 
     return {
       contact: {
@@ -277,6 +326,15 @@ export class DrizzleContactRepository {
         actRecordId: record.contact.actRecordId,
         createdAt: record.contact.createdAt,
       },
+      places: placeRows.map(({ relationship, organization }) => ({
+        id: organization.id,
+        name: organization.name,
+        role: relationship.role,
+        isPrimaryPerson: relationship.isPrimary,
+        isPrimaryPlace:
+          relationship.organizationId === record.contact.organizationId,
+        active: relationship.active,
+      })),
       relatedBookings,
     };
   }
@@ -316,7 +374,7 @@ export class DrizzleContactRepository {
       const [created] = await transaction
         .insert(contacts)
         .values({
-          organizationId,
+          organizationId: null,
           firstName: input.firstName,
           lastName: input.lastName,
           jobTitle: input.jobTitle,
@@ -333,6 +391,14 @@ export class DrizzleContactRepository {
         })
         .returning();
       if (!created) throw new Error("Could not create contact.");
+      if (organizationId) {
+        await setContactPrimaryOrganization(transaction, {
+          organizationId,
+          contactId: created.id,
+          source: "local",
+          now,
+        });
+      }
 
       await transaction.insert(actContactSyncStates).values({
         contactId: created.id,
@@ -412,7 +478,7 @@ export class DrizzleContactRepository {
       const [contact] = await transaction
         .insert(contacts)
         .values({
-          organizationId,
+          organizationId: null,
           firstName: input.firstName,
           lastName: input.lastName,
           email: input.email,
@@ -424,6 +490,14 @@ export class DrizzleContactRepository {
         })
         .returning();
       if (!contact) throw new Error("Could not create caller contact.");
+      if (organizationId) {
+        await setContactPrimaryOrganization(transaction, {
+          organizationId,
+          contactId: contact.id,
+          source: "local",
+          now,
+        });
+      }
 
       await transaction.insert(actContactSyncStates).values({
         contactId: contact.id,
@@ -482,52 +556,63 @@ export class DrizzleContactRepository {
     input: ContactInput,
     now = new Date(),
   ) {
-    return this.database.transaction(async (transaction) => {
-      const [before] = await transaction
-        .select({ contact: contacts, organizationName: organizations.name })
-        .from(contacts)
-        .leftJoin(
-          organizations,
-          eq(contacts.organizationId, organizations.id),
-        )
-        .where(eq(contacts.id, contactId))
-        .limit(1)
-        .for("update", { of: contacts });
-      if (!before) return false;
+    try {
+      return await this.database.transaction(async (transaction) => {
+        const [candidate] = await transaction
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(eq(contacts.id, contactId))
+          .limit(1);
+        if (!candidate) return false;
 
-      const organizationId = await this.resolveOrganizationId(
-        transaction,
-        input.organizationName,
-        now,
-      );
-      const { snapshot } = await patchContactInTransaction(
-        transaction,
-        before.contact,
-        input.organizationName,
-        {
-          organizationId,
-          firstName: input.firstName,
-          lastName: input.lastName,
-          jobTitle: input.jobTitle,
-          email: input.email,
-          phone: input.phone,
-          address1: input.address1,
-          address2: input.address2,
-          city: input.city,
-          region: input.region,
-          postalCode: input.postalCode,
-        } as Partial<Omit<ContactFields, "organizationName">>,
-        now,
-      );
-      await recordAuditEntry(transaction, {
-        entityType: "contact",
-        entityId: contactId,
-        action: "update",
-        before: contactAuditSnapshot(before.contact, before.organizationName),
-        after: snapshot,
+        const organizationId = await this.resolveOrganizationId(
+          transaction,
+          input.organizationName,
+          now,
+        );
+        const [before] = await transaction
+          .select({ contact: contacts, organizationName: organizations.name })
+          .from(contacts)
+          .leftJoin(
+            organizations,
+            eq(contacts.organizationId, organizations.id),
+          )
+          .where(eq(contacts.id, contactId))
+          .limit(1)
+          .for("update", { of: contacts });
+        if (!before) throw new ContactDisappearedDuringUpdateError();
+        const { snapshot } = await patchContactInTransaction(
+          transaction,
+          before.contact,
+          input.organizationName,
+          {
+            organizationId,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            jobTitle: input.jobTitle,
+            email: input.email,
+            phone: input.phone,
+            address1: input.address1,
+            address2: input.address2,
+            city: input.city,
+            region: input.region,
+            postalCode: input.postalCode,
+          } as Partial<Omit<ContactFields, "organizationName">>,
+          now,
+        );
+        await recordAuditEntry(transaction, {
+          entityType: "contact",
+          entityId: contactId,
+          action: "update",
+          before: contactAuditSnapshot(before.contact, before.organizationName),
+          after: snapshot,
+        });
+        return true;
       });
-      return true;
-    });
+    } catch (error) {
+      if (error instanceof ContactDisappearedDuringUpdateError) return false;
+      throw error;
+    }
   }
 
   async listRecentAuditEntries(contactId: string) {
@@ -562,7 +647,8 @@ export class DrizzleContactRepository {
       .where(
         sql`lower(regexp_replace(trim(${organizations.name}), '\\s+', ' ', 'g')) = ${normalizedName}`,
       )
-      .limit(1);
+      .limit(1)
+      .for("update");
     if (existing) return existing.id;
 
     const [created] = await writer

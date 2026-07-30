@@ -1,8 +1,15 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { db as database } from "@/db/client";
-import { bookings, contacts, followUps, organizations } from "@/db/schema";
+import {
+  bookingContacts,
+  bookings,
+  contacts,
+  followUps,
+  organizationContacts,
+  organizations,
+} from "@/db/schema";
 import type { ActivityParent } from "@/features/activities/activity-types";
 import type { BookingStatus } from "@/features/bookings/booking-types";
 
@@ -56,6 +63,11 @@ export interface CallWorkspaceContextRepository {
   findContact(id: string): Promise<CallWorkspaceContact | null>;
   findBooking(id: string): Promise<CallWorkspaceBooking | null>;
   findFollowUp(id: string): Promise<CallWorkspaceFollowUp | null>;
+  hasActiveOrganizationContact(
+    organizationId: string,
+    contactId: string,
+  ): Promise<boolean>;
+  hasBookingContact(bookingId: string, contactId: string): Promise<boolean>;
 }
 
 export type CallWorkspaceQuery = {
@@ -114,28 +126,30 @@ export async function loadCallWorkspaceContext(
   const bookingId = requestedBookingId ?? followUp?.bookingId ?? null;
   const booking = bookingId ? await repository.findBooking(bookingId) : null;
   if (bookingId && !booking) return { ok: false };
-  if (
-    booking &&
-    requestedContactId &&
-    booking.primaryContactId &&
-    requestedContactId !== booking.primaryContactId &&
-    !followUp?.contactId
-  ) {
-    return { ok: false };
-  }
-
   const contactId = requestedContactId ?? followUp?.contactId ?? booking?.primaryContactId ?? null;
   const contact = contactId ? await repository.findContact(contactId) : null;
   if (contactId && !contact) return { ok: false };
 
-  const organizationIds = [
-    requestedOrganizationId,
-    followUp?.organizationId,
-    booking?.organizationId,
-    contact?.organizationId,
-  ].filter((id): id is string => Boolean(id));
-  if (new Set(organizationIds).size > 1) return { ok: false };
-  const organizationId = requestedOrganizationId ?? organizationIds[0] ?? null;
+  const organizationId =
+    requestedOrganizationId ??
+    followUp?.organizationId ??
+    booking?.organizationId ??
+    contact?.organizationId ??
+    null;
+  if (
+    (followUp?.organizationId && followUp.organizationId !== organizationId) ||
+    (booking?.organizationId && booking.organizationId !== organizationId)
+  ) return { ok: false };
+  if (
+    organizationId &&
+    contactId &&
+    !(await repository.hasActiveOrganizationContact(organizationId, contactId))
+  ) return { ok: false };
+  if (
+    booking &&
+    contactId &&
+    !(await repository.hasBookingContact(booking.id, contactId))
+  ) return { ok: false };
   const organization = organizationId
     ? await repository.findOrganization(organizationId)
     : null;
@@ -202,5 +216,33 @@ export class DrizzleCallWorkspaceContextRepository
         dueAt: record.dueAt,
       }
       : null;
+  }
+
+  async hasActiveOrganizationContact(
+    organizationId: string,
+    contactId: string,
+  ): Promise<boolean> {
+    const [record] = await this.database
+      .select({ id: organizationContacts.id })
+      .from(organizationContacts)
+      .where(and(
+        eq(organizationContacts.organizationId, organizationId),
+        eq(organizationContacts.contactId, contactId),
+        eq(organizationContacts.active, true),
+      ))
+      .limit(1);
+    return Boolean(record);
+  }
+
+  async hasBookingContact(bookingId: string, contactId: string): Promise<boolean> {
+    const [record] = await this.database
+      .select({ id: bookingContacts.id })
+      .from(bookingContacts)
+      .where(and(
+        eq(bookingContacts.bookingId, bookingId),
+        eq(bookingContacts.contactId, contactId),
+      ))
+      .limit(1);
+    return Boolean(record);
   }
 }
