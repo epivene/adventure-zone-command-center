@@ -431,6 +431,23 @@ describe("CallService.complete", () => {
     }))).resolves.toMatchObject({ ok: true });
   });
 
+  it("opens a booking-only follow-up for a linked additional Person", async () => {
+    const repository = new InMemoryCallRepository();
+    repository.context.followUp = {
+      ...repository.context.followUp!,
+      contactId: null,
+    };
+    repository.context.booking = {
+      ...repository.context.booking!,
+      primaryContactId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    repository.context.contactHasActiveOrganizationRelationship = true;
+    repository.context.contactHasBookingRelationship = true;
+
+    await expect(new CallService(repository).complete(input())).resolves
+      .toMatchObject({ ok: true });
+  });
+
   it("rejects a call when the Place-Person relationship is inactive", async () => {
     const repository = new InMemoryCallRepository();
     repository.context.booking = null;
@@ -804,6 +821,82 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       { entity_type: "follow_up", action: "completed" },
       { entity_type: "follow_up", action: "create" },
     ]);
+  });
+
+  postgresTest("derives active/inactive Place and linked/unlinked Booking relationship flags", async () => {
+    const db = drizzle({ client: sql!, schema: crmSchema });
+    const activeLinkedPerson = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const inactiveLinkedPerson = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const activeUnlinkedPerson = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    await db.insert(crmSchema.contacts).values([
+      {
+        id: activeLinkedPerson,
+        organizationId: null,
+        firstName: "Active",
+        lastName: "Linked",
+      },
+      {
+        id: inactiveLinkedPerson,
+        organizationId: null,
+        firstName: "Inactive",
+        lastName: "Linked",
+      },
+      {
+        id: activeUnlinkedPerson,
+        organizationId: null,
+        firstName: "Active",
+        lastName: "Unlinked",
+      },
+    ]);
+    await db.insert(crmSchema.organizationContacts).values([
+      {
+        organizationId: ids.organization,
+        contactId: activeLinkedPerson,
+        active: true,
+      },
+      {
+        organizationId: ids.organization,
+        contactId: inactiveLinkedPerson,
+        active: false,
+      },
+      {
+        organizationId: ids.organization,
+        contactId: activeUnlinkedPerson,
+        active: true,
+      },
+    ]);
+    await db.insert(crmSchema.bookingContacts).values([
+      {
+        bookingId: ids.booking,
+        contactId: activeLinkedPerson,
+        isPrimary: false,
+      },
+      {
+        bookingId: ids.booking,
+        contactId: inactiveLinkedPerson,
+        isPrimary: false,
+      },
+    ]);
+    const repository = new DrizzleCallRepository(db);
+    const lock = (contactId: string) =>
+      repository.transaction((transaction) =>
+        transaction.lockContext(input({
+          contactId,
+          followUpId: null,
+        })));
+
+    await expect(lock(activeLinkedPerson)).resolves.toMatchObject({
+      contactHasActiveOrganizationRelationship: true,
+      contactHasBookingRelationship: true,
+    });
+    await expect(lock(inactiveLinkedPerson)).resolves.toMatchObject({
+      contactHasActiveOrganizationRelationship: false,
+      contactHasBookingRelationship: true,
+    });
+    await expect(lock(activeUnlinkedPerson)).resolves.toMatchObject({
+      contactHasActiveOrganizationRelationship: true,
+      contactHasBookingRelationship: false,
+    });
   });
 
   postgresTest("serializes concurrent completion replays to one call write set", async () => {

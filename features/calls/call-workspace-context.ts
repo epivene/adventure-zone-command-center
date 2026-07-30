@@ -148,7 +148,6 @@ export async function loadCallWorkspaceContext(
   if (
     booking &&
     contactId &&
-    booking.primaryContactId !== contactId &&
     !(await repository.hasBookingContact(booking.id, contactId))
   ) return { ok: false };
   const organization = organizationId

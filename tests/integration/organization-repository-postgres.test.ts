@@ -304,18 +304,80 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
   postgresTest("reads the complete active Place-Person and Booking-Person graph", async () => {
     const db = drizzle({ client: sql!, schema: crmSchema });
     const additionalPerson = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-    await db.insert(crmSchema.contacts).values({
-      id: additionalPerson,
-      organizationId: null,
-      firstName: "Bailey",
-      lastName: "Additional",
-    });
+    const roleFirstPerson = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    const lastNameFirstPerson = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+    const firstNameFirstLowIdPerson = "abababab-abab-4aba-8aba-abababababab";
+    const firstNameFirstHighIdPerson = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const firstNameLastPerson = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    await db.insert(crmSchema.contacts).values([
+      {
+        id: additionalPerson,
+        organizationId: null,
+        firstName: "Zulu",
+        lastName: "Primary",
+      },
+      {
+        id: roleFirstPerson,
+        organizationId: null,
+        firstName: "Role",
+        lastName: "First",
+      },
+      {
+        id: lastNameFirstPerson,
+        organizationId: null,
+        firstName: "Zoe",
+        lastName: "Able",
+      },
+      {
+        id: firstNameFirstLowIdPerson,
+        organizationId: null,
+        firstName: "Amy",
+        lastName: "Tie",
+      },
+      {
+        id: firstNameFirstHighIdPerson,
+        organizationId: null,
+        firstName: "Amy",
+        lastName: "Tie",
+      },
+      {
+        id: firstNameLastPerson,
+        organizationId: null,
+        firstName: "Zed",
+        lastName: "Tie",
+      },
+    ]);
     await db.insert(crmSchema.organizationContacts).values([
       {
         organizationId: ids.marias,
         contactId: additionalPerson,
         role: "Director",
         isPrimary: true,
+      },
+      {
+        organizationId: ids.marias,
+        contactId: roleFirstPerson,
+        role: "Coordinator",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: lastNameFirstPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: firstNameFirstLowIdPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: firstNameFirstHighIdPerson,
+        role: "Staff",
+      },
+      {
+        organizationId: ids.marias,
+        contactId: firstNameLastPerson,
+        role: "Staff",
       },
       {
         organizationId: ids.north,
@@ -344,12 +406,37 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     expect((await repository.getOrganizationSummary(ids.marias))?.contacts).toEqual([
       {
         id: additionalPerson,
-        name: "Bailey Additional",
+        name: "Zulu Primary",
         role: "Director",
         isPrimary: true,
         phone: null,
         email: null,
       },
+      expect.objectContaining({
+        id: roleFirstPerson,
+        name: "Role First",
+        role: "Coordinator",
+      }),
+      expect.objectContaining({
+        id: lastNameFirstPerson,
+        name: "Zoe Able",
+        role: "Staff",
+      }),
+      expect.objectContaining({
+        id: firstNameFirstLowIdPerson,
+        name: "Amy Tie",
+        role: "Staff",
+      }),
+      expect.objectContaining({
+        id: firstNameFirstHighIdPerson,
+        name: "Amy Tie",
+        role: "Staff",
+      }),
+      expect.objectContaining({
+        id: firstNameLastPerson,
+        name: "Zed Tie",
+        role: "Staff",
+      }),
       {
         id: ids.contact,
         name: "Avery Example",
@@ -364,6 +451,20 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
     ]);
     expect((await repository.getOrganizationSummary(ids.south))?.contacts).toEqual([]);
     expect((await repository.getOrganizationSummary(ids.south))?.id).toBe(ids.south);
+    const list = await repository.listOrganizations({
+      search: "",
+      lastResort: "all",
+      travelLegId: null,
+      page: 1,
+      pageSize: 10,
+    });
+    expect(Object.fromEntries(
+      list.records.map(({ id, contactCount }) => [id, contactCount]),
+    )).toEqual({
+      [ids.marias]: 7,
+      [ids.north]: 1,
+      [ids.south]: 0,
+    });
 
     expect((await contactRepository.getContactDetail(ids.contact))?.places).toEqual([
       expect.objectContaining({
@@ -393,7 +494,7 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
       }),
     ]);
     expect(await sql!.unsafe("SELECT count(*) AS value FROM contacts")).toEqual([
-      { value: "2" },
+      { value: "7" },
     ]);
   });
 });

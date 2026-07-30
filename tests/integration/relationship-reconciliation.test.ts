@@ -21,6 +21,11 @@ const ids = {
   bookingMissingPersonLink: "66666666-6666-4666-8666-666666666666",
   bookingWithUnrelatedPerson: "77777777-7777-4777-8777-777777777777",
   legacyBooking: "88888888-8888-4888-8888-888888888888",
+  personMissingPlaceLinkTwo: "99999999-9999-4999-8999-999999999999",
+  bookingMissingPersonLinkTwo: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  unrelatedPersonTwo: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  bookingWithUnrelatedPersonTwo: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  legacyBookingTwo: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
 };
 
 function testSchemaName() {
@@ -70,21 +75,60 @@ describe("inspectRelationshipInvariants", () => {
   postgresTest("returns four empty arrays for a fully valid graph", async () => {
     const db = drizzle({ client: sql!, schema: crmSchema });
     await db.insert(crmSchema.organizations).values({ id: ids.place, name: "Fair" });
-    await db.insert(crmSchema.contacts).values({
-      id: ids.validPerson,
-      organizationId: null,
-      firstName: "Valid",
-      lastName: "Person",
-    });
-    await db.insert(crmSchema.organizationContacts).values({
-      organizationId: ids.place,
-      contactId: ids.validPerson,
-      active: true,
-      isPrimary: true,
-    });
+    await db.insert(crmSchema.contacts).values([
+      {
+        id: ids.validPerson,
+        organizationId: null,
+        firstName: "Valid",
+        lastName: "Primary",
+      },
+      {
+        id: ids.unrelatedPerson,
+        organizationId: null,
+        firstName: "Valid",
+        lastName: "Additional",
+      },
+    ]);
+    await db.insert(crmSchema.organizationContacts).values([
+      {
+        organizationId: ids.place,
+        contactId: ids.validPerson,
+        active: true,
+        isPrimary: true,
+      },
+      {
+        organizationId: ids.place,
+        contactId: ids.unrelatedPerson,
+        active: true,
+      },
+    ]);
     await sql!.unsafe(`
       UPDATE contacts SET organization_id = '${ids.place}'
-      WHERE id = '${ids.validPerson}'
+      WHERE id IN ('${ids.validPerson}', '${ids.unrelatedPerson}')
+    `);
+    await db.insert(crmSchema.bookings).values({
+      id: ids.bookingWithUnrelatedPerson,
+      organizationId: ids.place,
+      primaryContactId: null,
+      name: "Valid Booking",
+      city: "Shelby",
+      region: "MT",
+    });
+    await db.insert(crmSchema.bookingContacts).values([
+      {
+        bookingId: ids.bookingWithUnrelatedPerson,
+        contactId: ids.validPerson,
+        isPrimary: true,
+      },
+      {
+        bookingId: ids.bookingWithUnrelatedPerson,
+        contactId: ids.unrelatedPerson,
+        isPrimary: false,
+      },
+    ]);
+    await sql!.unsafe(`
+      UPDATE bookings SET primary_contact_id = '${ids.validPerson}'
+      WHERE id = '${ids.bookingWithUnrelatedPerson}'
     `);
 
     await expect(inspectRelationshipInvariants(db)).resolves.toEqual({
@@ -121,9 +165,21 @@ describe("inspectRelationshipInvariants", () => {
         lastName: "Place Link",
       },
       {
+        id: ids.personMissingPlaceLinkTwo,
+        organizationId: ids.place,
+        firstName: "Missing Two",
+        lastName: "Place Link",
+      },
+      {
         id: ids.unrelatedPerson,
         organizationId: ids.otherPlace,
         firstName: "Unrelated",
+        lastName: "Person",
+      },
+      {
+        id: ids.unrelatedPersonTwo,
+        organizationId: ids.otherPlace,
+        firstName: "Unrelated Two",
         lastName: "Person",
       },
     ]);
@@ -136,6 +192,11 @@ describe("inspectRelationshipInvariants", () => {
       {
         organizationId: ids.otherPlace,
         contactId: ids.unrelatedPerson,
+        active: true,
+      },
+      {
+        organizationId: ids.otherPlace,
+        contactId: ids.unrelatedPersonTwo,
         active: true,
       },
     ]);
@@ -156,27 +217,71 @@ describe("inspectRelationshipInvariants", () => {
         region: "MT",
       },
       {
+        id: ids.bookingMissingPersonLinkTwo,
+        organizationId: ids.place,
+        primaryContactId: ids.validPerson,
+        name: "Missing Person Link Two",
+        city: "Shelby",
+        region: "MT",
+      },
+      {
+        id: ids.bookingWithUnrelatedPersonTwo,
+        organizationId: ids.place,
+        name: "Unrelated Person Two",
+        city: "Shelby",
+        region: "MT",
+      },
+      {
         id: ids.legacyBooking,
         organizationId: null,
         name: "Legacy",
         city: "Shelby",
         region: "MT",
       },
+      {
+        id: ids.legacyBookingTwo,
+        organizationId: null,
+        name: "Legacy Two",
+        city: "Shelby",
+        region: "MT",
+      },
     ]);
-    await db.insert(crmSchema.bookingContacts).values({
-      bookingId: ids.bookingWithUnrelatedPerson,
-      contactId: ids.unrelatedPerson,
-      isPrimary: false,
-    });
-
-    await expect(inspectRelationshipInvariants(db)).resolves.toEqual({
-      contactPrimaryPlaceWithoutAssociation: [ids.personMissingPlaceLink],
-      bookingPrimaryPersonWithoutAssociation: [ids.bookingMissingPersonLink],
-      bookingPeopleOutsidePlace: [{
+    await db.insert(crmSchema.bookingContacts).values([
+      {
+        bookingId: ids.bookingWithUnrelatedPersonTwo,
+        contactId: ids.unrelatedPersonTwo,
+        isPrimary: false,
+      },
+      {
         bookingId: ids.bookingWithUnrelatedPerson,
         contactId: ids.unrelatedPerson,
-      }],
-      legacyBookingsWithoutPlace: [ids.legacyBooking],
+        isPrimary: false,
+      },
+    ]);
+
+    await expect(inspectRelationshipInvariants(db)).resolves.toEqual({
+      contactPrimaryPlaceWithoutAssociation: [
+        ids.personMissingPlaceLink,
+        ids.personMissingPlaceLinkTwo,
+      ],
+      bookingPrimaryPersonWithoutAssociation: [
+        ids.bookingMissingPersonLink,
+        ids.bookingMissingPersonLinkTwo,
+      ],
+      bookingPeopleOutsidePlace: [
+        {
+          bookingId: ids.bookingWithUnrelatedPerson,
+          contactId: ids.unrelatedPerson,
+        },
+        {
+          bookingId: ids.bookingWithUnrelatedPersonTwo,
+          contactId: ids.unrelatedPersonTwo,
+        },
+      ],
+      legacyBookingsWithoutPlace: [
+        ids.legacyBooking,
+        ids.legacyBookingTwo,
+      ],
     });
   });
 });

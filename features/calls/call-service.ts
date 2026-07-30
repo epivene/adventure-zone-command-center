@@ -87,12 +87,6 @@ function validateCanonicalContext(
       if (followUp.bookingId === null) {
         return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
       }
-      if (
-        booking?.primaryContactId &&
-        value.contactId !== booking.primaryContactId
-      ) {
-        return err({ code: "CONTACT_BOOKING_MISMATCH" });
-      }
     }
   }
   if (

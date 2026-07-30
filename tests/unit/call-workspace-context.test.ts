@@ -26,7 +26,7 @@ type FollowUpRecord = {
 class RecordingContextRepository implements CallWorkspaceContextRepository {
   calls: string[] = [];
   activeOrganizationContacts = new Set<string>();
-  bookingContacts = new Set<string>();
+  bookingContacts = new Set<string>([`${bookingId}:${contactId}`]);
 
   constructor(private readonly followUpRecord: FollowUpRecord = {
     id: followUpId,
@@ -181,6 +181,17 @@ describe("loadCallWorkspaceContext", () => {
         contact: { id: secondaryContactId },
       },
     });
+  });
+
+  it("rejects a compatibility-primary Booking Person without a Booking relationship", async () => {
+    const repository = new RecordingContextRepository();
+    repository.bookingContacts.delete(`${bookingId}:${contactId}`);
+
+    await expect(loadCallWorkspaceContext({
+      bookingId,
+      contactId,
+    }, repository)).resolves.toEqual({ ok: false });
+    expect(repository.calls).toContain(`booking-contact:${bookingId}:${contactId}`);
   });
 
   it("accepts Today-generated booking follow-up queries for both primary fallback and explicit same-org contacts", async () => {
