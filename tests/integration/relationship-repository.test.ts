@@ -256,7 +256,7 @@ describe("DrizzleRelationshipRepository (PostgreSQL)", () => {
       organizationId: ids.placeOne,
       contactId: ids.personTwo,
       active: false,
-    }, now)).rejects.toThrow("relationship audit rejected");
+    }, now)).rejects.toHaveProperty("cause.message", "relationship audit rejected");
     expect(await sql!.unsafe(`
       SELECT active FROM organization_contacts
       WHERE organization_id = '${ids.placeOne}' AND contact_id = '${ids.personTwo}'

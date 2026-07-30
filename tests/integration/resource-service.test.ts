@@ -722,7 +722,7 @@ describe("ResourceService PostgreSQL transactions", () => {
       bookingId: postgresIds.booking,
       resourceIds: [postgresIds.resource],
       actorId: "owner_pg",
-    })).rejects.toThrow("resource audit rejected");
+    })).rejects.toHaveProperty("cause.message", "resource audit rejected");
     expect(await sql!.unsafe(`
       SELECT count(*) AS value FROM booking_resource_assignments
       WHERE booking_id = '${postgresIds.booking}'
@@ -759,7 +759,7 @@ describe("ResourceService PostgreSQL transactions", () => {
       conflictKey: oldKey,
       reason: "This override must roll back",
       actorId: "owner_pg",
-    })).rejects.toThrow("override audit rejected");
+    })).rejects.toHaveProperty("cause.message", "override audit rejected");
     expect(await sql!.unsafe(`
       SELECT count(*) AS value FROM resource_conflict_overrides
       WHERE booking_id = '${postgresIds.booking}'

@@ -366,14 +366,23 @@ export interface ResourceSettingsRepository {
 }
 
 function isDuplicateResourceCode(error: unknown) {
-  if (!error || typeof error !== "object") return false;
-  const record = error as Record<string, unknown>;
-  return (
-    record.constraint_name === "resources_code_unique" ||
-    record.constraint === "resources_code_unique" ||
-    (typeof record.message === "string" &&
-      record.message.includes("resources_code_unique"))
-  );
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && typeof current === "object" && !seen.has(current)) {
+    seen.add(current);
+    const record = current as Record<string, unknown>;
+    if (
+      record.code === "23505" &&
+      (
+        record.constraint_name === "resources_code_unique" ||
+        record.constraint === "resources_code_unique"
+      )
+    ) {
+      return true;
+    }
+    current = record.cause;
+  }
+  return false;
 }
 
 function resourceSettingsSnapshot(

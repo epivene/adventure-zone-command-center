@@ -340,7 +340,7 @@ describe("ActivityService", () => {
         body: "Replacement text.",
         reason: "Corrected the note.",
       }),
-    ).rejects.toThrow("activity audit rejected");
+    ).rejects.toHaveProperty("cause.message", "activity audit rejected");
     expect(await service.listTimeline({ organizationId: ids.organization })).toEqual([
       expect.objectContaining({ id: activity.id, body: "Original text.", revisionCount: 0 }),
     ]);

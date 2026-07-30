@@ -715,7 +715,7 @@ describe("PackageService PostgreSQL transactions", () => {
         bookingResourceAssignmentId: postgresIds.assignment,
         packageTemplateIds: [],
       }],
-    })).rejects.toThrow("package audit rejected");
+    })).rejects.toHaveProperty("cause.message", "package audit rejected");
     expect(await sql!.unsafe(`
       SELECT physical_attraction_total FROM bookings
       WHERE id = '${postgresIds.booking}'
@@ -755,7 +755,7 @@ describe("PackageService PostgreSQL transactions", () => {
       bookingId: postgresIds.booking,
       description: "Rollback creation",
       treatment: "note_only",
-    })).rejects.toThrow("request audit rejected");
+    })).rejects.toHaveProperty("cause.message", "request audit rejected");
     expect(await sql!.unsafe(
       "SELECT count(*) AS value FROM booking_special_requests",
     )).toEqual([{ value: "0" }]);
@@ -776,7 +776,7 @@ describe("PackageService PostgreSQL transactions", () => {
       specialRequestId: added.value.id,
       decision: "declined",
       reason: "Unavailable",
-    })).rejects.toThrow("request audit rejected");
+    })).rejects.toHaveProperty("cause.message", "request audit rejected");
     expect(await sql!.unsafe(`
       SELECT approval_status, decision_reason, decided_at
       FROM booking_special_requests WHERE id = '${added.value.id}'

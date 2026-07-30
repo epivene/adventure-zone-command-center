@@ -341,7 +341,7 @@ describe("DrizzleBookingRelationshipRepository (PostgreSQL)", () => {
     await expect(repository.replacePeople({
       bookingId: ids.booking,
       people: [{ contactId: ids.personTwo, role: null, isPrimary: true }],
-    }, now)).rejects.toThrow("booking contact insert rejected");
+    }, now)).rejects.toHaveProperty("cause.message", "booking contact insert rejected");
     expect(await sql!.unsafe(`
       SELECT primary_contact_id FROM bookings WHERE id = '${ids.booking}'
     `)).toEqual([{ primary_contact_id: ids.personOne }]);

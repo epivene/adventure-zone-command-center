@@ -22,9 +22,9 @@ const ids = {
   contact: "44444444-4444-4444-8444-444444444444",
   mariasBooking: "55555555-5555-4555-8555-555555555555",
   northBooking: "66666666-6666-4666-8666-666666666666",
-  southBooking: "77777777-7777-4777-877777777777",
-  northLeg: "88888888-8888-4888-888888888888",
-  southLeg: "99999999-9999-4999-899999999999",
+  southBooking: "77777777-7777-4777-8777-777777777777",
+  northLeg: "88888888-8888-4888-8888-888888888888",
+  southLeg: "99999999-9999-4999-8999-999999999999",
   missing: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
 };
 
@@ -292,7 +292,7 @@ describe("DrizzleOrganizationRepository (PostgreSQL)", () => {
         { organizationId: ids.marias, enabled: true, reason: "Repeated cancellations." },
         new Date("2026-07-28T15:00:00.000Z"),
       ),
-    ).rejects.toThrow("audit rejected");
+    ).rejects.toHaveProperty("cause.message", "audit rejected");
     expect(await sql!.unsafe(`SELECT last_resort FROM organizations WHERE id = '${ids.marias}'`)).toEqual([
       { last_resort: false },
     ]);

@@ -184,7 +184,7 @@ describe("package/resource settings PostgreSQL persistence", () => {
       name: "Adventure Zone Deluxe",
       baseAttractionCount: 11,
       active: false,
-    }, "owner_1")).rejects.toThrow("package settings audit rejected");
+    }, "owner_1")).rejects.toHaveProperty("cause.message", "package settings audit rejected");
 
     expect(await sql!.unsafe(`
       SELECT name, base_attraction_count, active
@@ -452,7 +452,7 @@ describe("package/resource settings PostgreSQL persistence", () => {
       teardownMinutes: 0,
       minimumTransferMinutes: 60,
       status: "archived",
-    }, "owner_1")).rejects.toThrow("resource settings audit rejected");
+    }, "owner_1")).rejects.toHaveProperty("cause.message", "resource settings audit rejected");
 
     expect(await sql!.unsafe(`
       SELECT name, status FROM resources WHERE id = '${ids.resource}'
@@ -536,5 +536,44 @@ describe("package/resource settings PostgreSQL persistence", () => {
     }, "owner_1")).rejects.toEqual(
       new ResourceSettingsError("UNKNOWN_TRAVEL_LEG"),
     );
+  });
+
+  postgresTest("does not map an unrelated wrapped failure when query parameters mention the constraint", async () => {
+    await sql!.unsafe(`
+      CREATE FUNCTION "${schemaName}".reject_unrelated_resource_audit() RETURNS trigger
+      LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.entity_type = 'resource' THEN
+          RAISE EXCEPTION 'unrelated resource audit rejected';
+        END IF;
+        RETURN NEW;
+      END;
+      $$;
+      CREATE TRIGGER reject_unrelated_resource_audit
+      BEFORE INSERT ON audit_entries
+      FOR EACH ROW EXECUTE FUNCTION "${schemaName}".reject_unrelated_resource_audit();
+    `);
+
+    await expect(resourceRepository.upsertResource({
+      id: null,
+      code: "resources_code_unique",
+      name: "Constraint-name sentinel",
+      category: "equipment",
+      countsAsAttraction: false,
+      packageTemplateIds: [],
+      normalTravelLegId: null,
+      movable: false,
+      setupMinutes: 0,
+      teardownMinutes: 0,
+      minimumTransferMinutes: 0,
+      status: "available",
+    }, "owner_1")).rejects.toHaveProperty(
+      "cause.message",
+      "unrelated resource audit rejected",
+    );
+    expect(await sql!.unsafe(`
+      SELECT count(*) AS value FROM resources
+      WHERE code = 'resources_code_unique'
+    `)).toEqual([{ value: "0" }]);
   });
 });

@@ -867,7 +867,8 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       CREATE TRIGGER reject_caller_note BEFORE INSERT ON activities
       FOR EACH ROW EXECUTE FUNCTION "${schemaName}".reject_caller_note();
     `);
-    await expect(repository.createQuickCaller(quickCaller)).rejects.toThrow("note rejected");
+    await expect(repository.createQuickCaller(quickCaller))
+      .rejects.toHaveProperty("cause.message", "note rejected");
     expect(await sql!.unsafe("SELECT count(*) AS value FROM contacts")).toEqual([{ value: "1" }]);
     expect(await sql!.unsafe("SELECT count(*) AS value FROM audit_entries")).toEqual([{ value: "0" }]);
     await sql!.unsafe("DROP TRIGGER reject_caller_note ON activities");
@@ -881,7 +882,8 @@ describe("DrizzleContactRepository caller matching and intake", () => {
       CREATE TRIGGER reject_caller_audit BEFORE INSERT ON audit_entries
       FOR EACH ROW EXECUTE FUNCTION "${schemaName}".reject_caller_audit();
     `);
-    await expect(repository.createQuickCaller(quickCaller)).rejects.toThrow("activity audit rejected");
+    await expect(repository.createQuickCaller(quickCaller))
+      .rejects.toHaveProperty("cause.message", "activity audit rejected");
     expect(await sql!.unsafe("SELECT count(*) AS value FROM contacts")).toEqual([{ value: "1" }]);
     expect(await sql!.unsafe("SELECT count(*) AS value FROM activities")).toEqual([{ value: "0" }]);
     expect(await sql!.unsafe("SELECT count(*) AS value FROM audit_entries")).toEqual([{ value: "0" }]);

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -805,25 +806,46 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
     expect(await sql!.unsafe("SELECT disposition, follow_up_id FROM call_sessions")).toEqual([
       { disposition: "proposal_sent", follow_up_id: ids.followUp },
     ]);
-    expect(await sql!.unsafe(`SELECT completed_at, outcome, next_follow_up_id FROM follow_ups WHERE id = '${ids.followUp}'`)).toEqual([
-      { completed_at: new Date("2026-08-01T15:10:00.000Z"), outcome: "proposal_contract_sent", next_follow_up_id: expect.any(String) },
+    expect(await db.select({
+      completedAt: crmSchema.followUps.completedAt,
+      outcome: crmSchema.followUps.outcome,
+      nextFollowUpId: crmSchema.followUps.nextFollowUpId,
+    }).from(crmSchema.followUps).where(eq(crmSchema.followUps.id, ids.followUp))).toEqual([
+      {
+        completedAt: new Date("2026-08-01T15:10:00.000Z"),
+        outcome: "proposal_contract_sent",
+        nextFollowUpId: expect.any(String),
+      },
     ]);
     expect(await sql!.unsafe("SELECT kind, booking_id, organization_id, contact_id FROM follow_ups WHERE id <> $1", [ids.followUp])).toEqual([
       { kind: "send quote", booking_id: ids.booking, organization_id: ids.organization, contact_id: ids.contact },
     ]);
-    expect(await sql!.unsafe(`SELECT status, notes, venue_name, address_1, city, region, postal_code, latitude, longitude, starts_at, ends_at, probability FROM bookings WHERE id = '${ids.booking}'`)).toEqual([
+    expect(await db.select({
+      status: crmSchema.bookings.status,
+      notes: crmSchema.bookings.notes,
+      venueName: crmSchema.bookings.venueName,
+      address1: crmSchema.bookings.address1,
+      city: crmSchema.bookings.city,
+      region: crmSchema.bookings.region,
+      postalCode: crmSchema.bookings.postalCode,
+      latitude: crmSchema.bookings.latitude,
+      longitude: crmSchema.bookings.longitude,
+      startsAt: crmSchema.bookings.startsAt,
+      endsAt: crmSchema.bookings.endsAt,
+      probability: crmSchema.bookings.probability,
+    }).from(crmSchema.bookings).where(eq(crmSchema.bookings.id, ids.booking))).toEqual([
       {
         status: "pending_contract",
         notes: "Proposal sent during call.",
-        venue_name: "Do Not Rewrite Venue",
-        address_1: "17 Sentinel Road",
+        venueName: "Do Not Rewrite Venue",
+        address1: "17 Sentinel Road",
         city: "Sentinel City",
         region: "mT",
-        postal_code: "59999",
+        postalCode: "59999",
         latitude: 46.85,
         longitude: -111.99,
-        starts_at: new Date("2026-08-15T15:00:00.000Z"),
-        ends_at: new Date("2026-08-16T15:00:00.000Z"),
+        startsAt: new Date("2026-08-15T15:00:00.000Z"),
+        endsAt: new Date("2026-08-16T15:00:00.000Z"),
         probability: "unlikely",
       },
     ]);
@@ -1072,7 +1094,7 @@ describe("DrizzleCallRepository (PostgreSQL)", () => {
       lastResortConfirmed: true,
       approvedContactUpdates: { phone: "406-555-0101" },
       approvedBookingUpdates: { notes: "This must roll back." },
-    }))).rejects.toThrow("call audit rejected");
+    }))).rejects.toHaveProperty("cause.message", "call audit rejected");
 
     expect(await sql!.unsafe("SELECT count(*) AS value FROM activities")).toEqual([{ value: "0" }]);
     expect(await sql!.unsafe("SELECT count(*) AS value FROM call_sessions")).toEqual([{ value: "0" }]);
