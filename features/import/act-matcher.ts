@@ -721,12 +721,7 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         actRecordId: externalId,
         importRunId,
       })
-      .onConflictDoNothing({
-        target: [
-          actExternalLinks.sourceEntityType,
-          actExternalLinks.actRecordId,
-        ],
-      })
+      .onConflictDoNothing()
       .returning({ entityId: actExternalLinks.entityId });
     if (created) return "linked" as const;
 

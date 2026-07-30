@@ -1509,12 +1509,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         entityId: contactId,
         actRecordId,
       })
-      .onConflictDoNothing({
-        target: [
-          actExternalLinks.sourceEntityType,
-          actExternalLinks.actRecordId,
-        ],
-      })
+      .onConflictDoNothing()
       .returning({ entityId: actExternalLinks.entityId });
     if (created) return;
     const [existing] = await writer

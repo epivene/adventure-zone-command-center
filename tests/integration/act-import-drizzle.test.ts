@@ -197,25 +197,30 @@ class ExternalLinkRecordingDatabase {
     if (table !== actExternalLinks) throw new Error("Unexpected table.");
     return {
       values: (values: Record<string, unknown>) => ({
-        onConflictDoNothing: () => ({
-          returning: async () => {
-            const sourceOwner = this.links.find(
-              (link) =>
-                link.sourceEntityType === values.sourceEntityType &&
-                link.actRecordId === values.actRecordId,
-            );
-            const existingPrimary = this.links.find(
-              (link) =>
-                link.entityType === values.entityType &&
-                link.entityId === values.entityId &&
-                link.sourceEntityType === values.sourceEntityType &&
-                link.isPrimary === true,
-            );
-            if (sourceOwner || existingPrimary) return [];
-            this.links.push({ ...values });
-            return [{ entityId: values.entityId }];
-          },
-        }),
+        onConflictDoNothing: (...arguments_: unknown[]) => {
+          if (arguments_.length > 0) {
+            throw new Error("Expected targetless canonical-link conflict handling.");
+          }
+          return {
+            returning: async () => {
+              const sourceOwner = this.links.find(
+                (link) =>
+                  link.sourceEntityType === values.sourceEntityType &&
+                  link.actRecordId === values.actRecordId,
+              );
+              const existingPrimary = this.links.find(
+                (link) =>
+                  link.entityType === values.entityType &&
+                  link.entityId === values.entityId &&
+                  link.sourceEntityType === values.sourceEntityType &&
+                  link.isPrimary === true,
+              );
+              if (sourceOwner || existingPrimary) return [];
+              this.links.push({ ...values });
+              return [{ entityId: values.entityId }];
+            },
+          };
+        },
       }),
     };
   }

@@ -64,6 +64,7 @@ describe("Act migration staging migration", () => {
         singleLink: "99999999-9999-4999-8999-999999999999",
         reviewLinkOne: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
         reviewLinkTwo: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        sourceIndexContact: "18181818-1818-4818-8818-181818181818",
         activity: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
         call: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
         package: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
@@ -85,7 +86,8 @@ describe("Act migration staging migration", () => {
             VALUES
               ('${ids.contact}', 'Primary', 'Person', 'ACT-CONTACT-1'),
               ('${ids.singleLinkContact}', 'Single', 'Link', NULL),
-              ('${ids.reviewContact}', 'Review', 'Needed', NULL);
+              ('${ids.reviewContact}', 'Review', 'Needed', NULL),
+              ('${ids.sourceIndexContact}', 'Source', 'Index', NULL);
             INSERT INTO ${schema}.organization_contacts (
               organization_id, contact_id, is_primary, active, source
             ) VALUES (
@@ -288,6 +290,8 @@ describe("Act migration staging migration", () => {
               'ACT-CONTACT-ALIAS', false, 'pull_only'
             );
             DO $$
+            DECLARE
+              violated_constraint text;
             BEGIN
               BEGIN
                 INSERT INTO ${schema}.act_migration_records (
@@ -300,6 +304,26 @@ describe("Act migration staging migration", () => {
                 RAISE EXCEPTION 'duplicate staging record was accepted';
               EXCEPTION WHEN unique_violation THEN
                 NULL;
+              END;
+              BEGIN
+                INSERT INTO ${schema}.act_external_links (
+                  entity_type, source_entity_type, entity_id, act_record_id,
+                  is_primary, sync_mode
+                ) VALUES (
+                  'contact', 'contact', '${ids.sourceIndexContact}',
+                  'ACT-CONTACT-REVIEW-1', false, 'pull_only'
+                );
+                RAISE EXCEPTION 'duplicate source ownership was accepted';
+              EXCEPTION WHEN unique_violation THEN
+                GET STACKED DIAGNOSTICS
+                  violated_constraint = CONSTRAINT_NAME;
+                IF violated_constraint <>
+                  'act_external_links_source_external_id_unique'
+                THEN
+                  RAISE EXCEPTION
+                    'unexpected duplicate source constraint: %',
+                    violated_constraint;
+                END IF;
               END;
               BEGIN
                 INSERT INTO ${schema}.act_external_links (
