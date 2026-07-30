@@ -17,6 +17,10 @@ import {
   type StoredAuditEntry,
 } from "@/features/audit/audit-service";
 import {
+  ensureBookingContact,
+  setBookingPrimaryContact,
+} from "@/features/bookings/booking-relationship-repository";
+import {
   patchContactInTransaction,
   type ContactPatchWriter,
 } from "@/features/contacts/contact-repository";
@@ -360,6 +364,41 @@ class DrizzleUndoTransaction implements UndoTransaction {
     const values = { ...databaseFields(entityType, fields), updatedAt: new Date() };
     switch (entityType) {
       case "booking": {
+        if ("primaryContactId" in values) {
+          const restoredPrimaryContactId =
+            typeof values.primaryContactId === "string"
+              ? values.primaryContactId
+              : null;
+          const bookingValues = { ...values };
+          delete bookingValues.primaryContactId;
+          const [record] = await this.database
+            .update(bookings)
+            .set({
+              ...bookingValues,
+              primaryContactId: null,
+              updatedAt: values.updatedAt,
+            })
+            .where(eq(bookings.id, entityId))
+            .returning({ id: bookings.id });
+          if (!record) return false;
+
+          if (restoredPrimaryContactId) {
+            await ensureBookingContact(this.database, {
+              bookingId: entityId,
+              contactId: restoredPrimaryContactId,
+              source: "undo",
+              now: values.updatedAt as Date,
+            });
+          }
+          await setBookingPrimaryContact(this.database, {
+            bookingId: entityId,
+            contactId: restoredPrimaryContactId,
+            source: "undo",
+            now: values.updatedAt as Date,
+          });
+          return true;
+        }
+
         const [record] = await this.database
           .update(bookings)
           .set(values)

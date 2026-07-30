@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   auditEntries,
+  bookingContacts,
+  bookings,
   contacts,
   organizationContacts,
   organizations,
@@ -16,6 +18,7 @@ import {
   type UndoRepository,
   type UndoTransaction,
 } from "@/features/audit/undo-service";
+import { setBookingPrimaryContact } from "@/features/bookings/booking-relationship-repository";
 
 type Entity = Record<string, unknown> & { id: string };
 
@@ -258,6 +261,222 @@ class RecordingDrizzleUndoDatabase {
   }
 }
 
+class RecordingBookingUndoDatabase {
+  readonly bookingId = "55555555-5555-4555-8555-555555555555";
+  readonly placeId: string | null;
+  readonly restoredContactId = "66666666-6666-4666-8666-666666666666";
+  readonly currentContactId = "77777777-7777-4777-8777-777777777777";
+  readonly now = new Date("2026-07-29T12:00:00.000Z");
+  readonly bookingPeople = new Map<string, Record<string, unknown>>();
+  readonly events: string[] = [];
+  readonly auditWrites: Record<string, unknown>[] = [];
+  failAuditWrite = false;
+  activeRestoredRelationship: boolean;
+  private auditReadCount = 0;
+  private lastEnsuredContactId: string | null = null;
+  booking = {
+    id: this.bookingId,
+    organizationId: null as string | null,
+    primaryContactId: this.currentContactId as string | null,
+    name: "Neverwinter Adventure",
+    venueName: null,
+    address1: null,
+    city: "Denver",
+    region: "CO",
+    postalCode: null,
+    latitude: null,
+    longitude: null,
+    startsAt: null,
+    endsAt: null,
+    status: "new_lead",
+    probability: "possible",
+    travelLegId: null,
+    actRecordId: null,
+    notes: null,
+    physicalAttractionTotal: null,
+    attractionTotalApprovalReason: null,
+    createdAt: this.now,
+    updatedAt: this.now,
+  };
+  auditEntry: StoredAuditEntry;
+
+  constructor(options: {
+    placeId: string | null;
+    activeRestoredRelationship?: boolean;
+    statusOnly?: boolean;
+  }) {
+    this.placeId = options.placeId;
+    this.activeRestoredRelationship =
+      options.activeRestoredRelationship ?? Boolean(options.placeId);
+    this.booking.organizationId = options.placeId;
+    this.bookingPeople.set(this.currentContactId, {
+      bookingId: this.bookingId,
+      contactId: this.currentContactId,
+      role: null,
+      isPrimary: true,
+      source: "local",
+      createdAt: this.now,
+      updatedAt: this.now,
+    });
+    this.auditEntry = {
+      id: "audit-booking-1",
+      entityType: "booking",
+      entityId: this.bookingId,
+      action: "update",
+      before: options.statusOnly
+        ? { status: "new_lead" }
+        : { primaryContactId: this.restoredContactId },
+      after: options.statusOnly
+        ? { status: "unlikely" }
+        : { primaryContactId: this.currentContactId },
+      reversesEntryId: null,
+      createdAt: this.now,
+    };
+    if (options.statusOnly) this.booking.status = "unlikely";
+  }
+
+  select() {
+    return {
+      from: (table: unknown) => {
+        const query = {
+          innerJoin: () => query,
+          where: () => {
+            const records =
+              table === auditEntries
+                ? this.auditReadCount++ === 0 ? [this.auditEntry] : []
+                : table === bookings
+                  ? [this.booking]
+                  : table === organizationContacts &&
+                      this.placeId &&
+                      this.activeRestoredRelationship
+                    ? [{
+                        organizationId: this.placeId,
+                        contactId: this.restoredContactId,
+                        active: true,
+                      }]
+                    : table === bookingContacts
+                      ? [...this.bookingPeople.values()]
+                      : [];
+            const terminal = {
+              limit: () => terminal,
+              for: async () => {
+                this.events.push(
+                  `lock:${table === bookings ? "booking" : table === auditEntries ? "audit" : "association"}`,
+                );
+                return records;
+              },
+              then: Promise.resolve(records).then.bind(Promise.resolve(records)),
+            };
+            return terminal;
+          },
+        };
+        return query;
+      },
+    };
+  }
+
+  insert(table: unknown) {
+    return {
+      values: (values: Record<string, unknown> | Record<string, unknown>[]) => {
+        const records = Array.isArray(values) ? values : [values];
+        if (table === bookingContacts) {
+          for (const record of records) {
+            const contactId = record.contactId as string;
+            this.lastEnsuredContactId = contactId;
+            this.bookingPeople.set(contactId, {
+              ...this.bookingPeople.get(contactId),
+              ...record,
+            });
+            this.events.push("upsert:booking-contact");
+          }
+        }
+        if (table === auditEntries) {
+          if (this.failAuditWrite) throw new Error("Audit storage is unavailable.");
+          this.auditWrites.push({ ...records[0] });
+          this.events.push("insert:undo-audit");
+        }
+        return {
+          onConflictDoUpdate: async () => undefined,
+          then: Promise.resolve().then.bind(Promise.resolve()),
+        };
+      },
+    };
+  }
+
+  update(table: unknown) {
+    return {
+      set: (values: Record<string, unknown>) => ({
+        where: () => {
+          if (table === bookings) {
+            if (typeof values.primaryContactId === "string") {
+              if (!this.bookingPeople.has(values.primaryContactId)) {
+                throw new Error("primary pointer requires a Booking Person");
+              }
+              this.events.push("update:booking:pointer");
+            } else if ("primaryContactId" in values) {
+              this.events.push("clear:booking:pointer");
+            } else {
+              this.events.push("update:booking:fields");
+            }
+            Object.assign(this.booking, values);
+          }
+          if (table === bookingContacts) {
+            if (values.isPrimary === false) {
+              this.bookingPeople.forEach((person) => {
+                person.isPrimary = false;
+                Object.assign(person, values);
+              });
+              this.events.push("clear:booking-contact:primary");
+            } else if (values.isPrimary === true && this.lastEnsuredContactId) {
+              Object.assign(
+                this.bookingPeople.get(this.lastEnsuredContactId)!,
+                values,
+              );
+              this.events.push("set:booking-contact:primary");
+            }
+          }
+          const record = table === bookings
+            ? { ...this.booking }
+            : this.lastEnsuredContactId
+              ? { ...this.bookingPeople.get(this.lastEnsuredContactId) }
+              : {};
+          const terminal = {
+            returning: async () => [record],
+            then: Promise.resolve([record]).then.bind(Promise.resolve([record])),
+          };
+          return terminal;
+        },
+      }),
+    };
+  }
+
+  delete() {
+    return { where: async () => undefined };
+  }
+
+  transaction<T>(operation: (transaction: RecordingBookingUndoDatabase) => Promise<T>) {
+    const booking = structuredClone(this.booking);
+    const bookingPeople = structuredClone(this.bookingPeople);
+    const auditWrites = structuredClone(this.auditWrites);
+    this.events.push("transaction:begin");
+    return operation(this).then(
+      (result) => {
+        this.events.push("transaction:commit");
+        return result;
+      },
+      (error) => {
+        this.booking = booking;
+        this.bookingPeople.clear();
+        bookingPeople.forEach((value, key) => this.bookingPeople.set(key, value));
+        this.auditWrites.length = 0;
+        this.auditWrites.push(...auditWrites);
+        this.events.push("transaction:rollback");
+        throw error;
+      },
+    );
+  }
+}
+
 describe("UndoService", () => {
   it("restores a Contact primary Place through an association-aware undo", async () => {
     const database = new RecordingDrizzleUndoDatabase();
@@ -312,6 +531,108 @@ describe("UndoService", () => {
     expect(database.associations).toEqual(new Map());
     expect(database.auditWrites).toEqual([]);
     expect(database.events.at(-1)).toBe("transaction:rollback");
+  });
+
+  it("restores a Booking primary Person through an association-aware undo", async () => {
+    const database = new RecordingBookingUndoDatabase({
+      placeId: "88888888-8888-4888-8888-888888888888",
+    });
+
+    await expect(
+      new UndoService(new DrizzleUndoRepository(database as never)).undoAuditEntry(
+        database.auditEntry.id,
+      ),
+    ).resolves.toEqual({ ok: true, value: undefined });
+
+    expect(database.booking.primaryContactId).toBe(database.restoredContactId);
+    expect(database.bookingPeople.get(database.restoredContactId)).toMatchObject({
+      contactId: database.restoredContactId,
+      isPrimary: true,
+      source: "undo",
+    });
+    expect(database.bookingPeople.get(database.currentContactId)).toMatchObject({
+      isPrimary: false,
+    });
+    expect(database.events.indexOf("upsert:booking-contact")).toBeLessThan(
+      database.events.indexOf("update:booking:pointer"),
+    );
+    expect(database.auditWrites).toEqual([
+      expect.objectContaining({
+        action: "undo",
+        reversesEntryId: database.auditEntry.id,
+      }),
+    ]);
+  });
+
+  it("undoes a legacy Place-less Booking without inventing a Place", async () => {
+    const database = new RecordingBookingUndoDatabase({ placeId: null });
+
+    await expect(
+      new UndoService(new DrizzleUndoRepository(database as never)).undoAuditEntry(
+        database.auditEntry.id,
+      ),
+    ).resolves.toEqual({ ok: true, value: undefined });
+
+    expect(database.booking.organizationId).toBeNull();
+    expect(database.booking.primaryContactId).toBe(database.restoredContactId);
+    expect(database.bookingPeople.get(database.restoredContactId)).toMatchObject({
+      source: "undo",
+      isPrimary: true,
+    });
+  });
+
+  it("rolls back Booking undo when the restored Person is outside its Place", async () => {
+    const database = new RecordingBookingUndoDatabase({
+      placeId: "88888888-8888-4888-8888-888888888888",
+      activeRestoredRelationship: false,
+    });
+
+    await expect(
+      new UndoService(new DrizzleUndoRepository(database as never)).undoAuditEntry(
+        database.auditEntry.id,
+      ),
+    ).rejects.toThrow("not actively associated");
+
+    expect(database.booking.primaryContactId).toBe(database.currentContactId);
+    expect(database.bookingPeople.has(database.restoredContactId)).toBe(false);
+    expect(database.auditWrites).toEqual([]);
+    expect(database.events.at(-1)).toBe("transaction:rollback");
+  });
+
+  it("leaves an untouched legacy Place-less Booking readable", async () => {
+    const database = new RecordingBookingUndoDatabase({
+      placeId: null,
+      statusOnly: true,
+    });
+
+    await expect(
+      new UndoService(new DrizzleUndoRepository(database as never)).undoAuditEntry(
+        database.auditEntry.id,
+      ),
+    ).resolves.toEqual({ ok: true, value: undefined });
+
+    expect(database.booking).toMatchObject({
+      organizationId: null,
+      status: "new_lead",
+      primaryContactId: database.currentContactId,
+    });
+    expect(database.bookingPeople.get(database.currentContactId)).toMatchObject({
+      isPrimary: true,
+    });
+  });
+
+  it("does not grant local writers the legacy Place-less undo exception", async () => {
+    const database = new RecordingBookingUndoDatabase({ placeId: null });
+
+    await expect(setBookingPrimaryContact(database as never, {
+      bookingId: database.bookingId,
+      contactId: database.restoredContactId,
+      source: "local",
+      now: database.now,
+    })).rejects.toThrow("has no Place");
+
+    expect(database.booking.primaryContactId).toBe(database.currentContactId);
+    expect(database.bookingPeople.has(database.restoredContactId)).toBe(false);
   });
 
   it("restores the prior booking status and creates a linked audit entry", async () => {
