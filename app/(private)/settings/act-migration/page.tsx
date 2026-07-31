@@ -10,7 +10,7 @@ import {
 import type { MigrationPreviewQuery } from "@/features/act-migration/preview-repository";
 import { createActMigrationWorkspaceReader } from "@/features/act-migration/runtime";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { getActEnvironment } from "@/lib/env";
+import { getActEnvironment, isActMigrationApplyEnabled } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -126,6 +126,7 @@ export default async function ActMigrationPage({
       </header>
 
       <ActMigrationReview
+        applyEnabled={isActMigrationApplyEnabled()}
         configured={configured}
         key={version}
         maskedDatabase={maskedDatabase}

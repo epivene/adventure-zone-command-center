@@ -28,6 +28,9 @@ export const actMigrationRunStatusValues = [
   "snapshot_complete",
   "matching",
   "previewed",
+  "applying",
+  "partially_applied",
+  "applied",
   "failed",
 ] as const;
 export type ActMigrationRunStatus =
@@ -62,9 +65,31 @@ export const migrationDecisionValues = [
   "approve_proposed",
   "link_existing",
   "keep_separate",
+  "confirm_static_group",
   "ignore",
 ] as const;
 export type MigrationDecision = (typeof migrationDecisionValues)[number];
+
+export const migrationApplyBatchStatusValues = [
+  "pending",
+  "applying",
+  "partially_applied",
+  "applied",
+  "failed",
+] as const;
+export type MigrationApplyBatchStatus =
+  (typeof migrationApplyBatchStatusValues)[number];
+
+export const migrationApplyOperationStatusValues = [
+  "pending",
+  "leased",
+  "blocked",
+  "applied",
+  "ignored",
+  "failed",
+] as const;
+export type MigrationApplyOperationStatus =
+  (typeof migrationApplyOperationStatusValues)[number];
 
 export const migrationReviewStateValues = [
   "not_required",
@@ -251,6 +276,13 @@ export function allowedDecisionsForProposal(input: {
   candidateLocalIds: readonly string[];
 }): readonly MigrationDecision[] {
   if (input.state === "error" || input.state === "ignored") return [];
+  if (
+    input.state === "needs_review" &&
+    input.targetEntityType === "calling_list" &&
+    input.issueCode === "group_membership_semantics_unknown"
+  ) {
+    return ["confirm_static_group", "ignore"];
+  }
   if (
     input.issueCode !== null &&
     unresolvedProposalIssues.has(input.issueCode)

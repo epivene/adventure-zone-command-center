@@ -23,6 +23,8 @@ import {
 } from "@/features/bookings/booking-types";
 import {
   actMigrationCheckpointStatusValues,
+  migrationApplyBatchStatusValues,
+  migrationApplyOperationStatusValues,
   actMigrationRunStatusValues,
   actMigrationStreamTypeValues,
   actQueryModeValues,
@@ -940,6 +942,187 @@ export const actMigrationProposals = pgTable(
       "act_migration_proposals_dependency_proposal_keys_array",
       sql`jsonb_typeof(${table.dependencyProposalKeys}) = 'array'`,
     ),
+  ],
+);
+
+export const callingLists = pgTable(
+  "calling_lists",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    kind: text("kind").notNull(),
+    filterVersion: integer("filter_version"),
+    filterDefinition: jsonb("filter_definition").$type<Record<string, unknown>>(),
+    sourceStatus: text("source_status").default("active").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check(
+      "calling_lists_name_nonblank",
+      sql`nullif(trim(${table.name}), '') is not null`,
+    ),
+    check(
+      "calling_lists_kind_valid",
+      sql`${table.kind} in ('static', 'dynamic')`,
+    ),
+    check(
+      "calling_lists_filter_definition_valid",
+      sql`(${table.kind} = 'static' and ${table.filterVersion} is null and ${table.filterDefinition} is null) or (${table.kind} = 'dynamic' and ${table.filterVersion} = 1 and ${table.filterDefinition} is not null and jsonb_typeof(${table.filterDefinition}) = 'object')`,
+    ),
+    check(
+      "calling_lists_source_status_valid",
+      sql`${table.sourceStatus} in ('active', 'inactive')`,
+    ),
+    index("calling_lists_dynamic_kind_idx")
+      .on(table.kind)
+      .where(sql`${table.kind} = 'dynamic'`),
+  ],
+);
+
+export const callingListMemberships = pgTable(
+  "calling_list_memberships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    callingListId: uuid("calling_list_id")
+      .notNull()
+      .references(() => callingLists.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id")
+      .notNull()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    source: text("source").default("act_migration").notNull(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("calling_list_memberships_list_contact_unique").on(
+      table.callingListId,
+      table.contactId,
+    ),
+    check(
+      "calling_list_memberships_source_valid",
+      sql`${table.source} in ('act_migration', 'manual')`,
+    ),
+    index("calling_list_memberships_active_idx")
+      .on(table.callingListId, table.contactId)
+      .where(sql`${table.active}`),
+  ],
+);
+
+export const actMigrationApplyBatches = pgTable(
+  "act_migration_apply_batches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestKey: uuid("request_key").notNull(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actMigrationRuns.id, { onDelete: "cascade" }),
+    requestedBy: text("requested_by").notNull(),
+    status: text("status").default("pending").notNull(),
+    manifestDigest: text("manifest_digest").notNull(),
+    summary: jsonb("summary").$type<Record<string, unknown>>(),
+    lastErrorCode: text("last_error_code"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("act_migration_apply_batches_request_key_unique").on(
+      table.requestKey,
+    ),
+    check(
+      "act_migration_apply_batches_status_valid",
+      sql`${table.status} in (${sqlTextValues(migrationApplyBatchStatusValues)})`,
+    ),
+    check(
+      "act_migration_apply_batches_requested_by_nonblank",
+      sql`btrim(${table.requestedBy}) <> ''`,
+    ),
+    check(
+      "act_migration_apply_batches_manifest_digest_nonblank",
+      sql`btrim(${table.manifestDigest}) <> ''`,
+    ),
+    index("act_migration_apply_batches_run_id_idx").on(table.runId),
+  ],
+);
+
+export const actMigrationApplyOperations = pgTable(
+  "act_migration_apply_operations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    batchId: uuid("batch_id")
+      .notNull()
+      .references(() => actMigrationApplyBatches.id, { onDelete: "cascade" }),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actMigrationRuns.id, { onDelete: "cascade" }),
+    proposalKey: text("proposal_key").notNull(),
+    targetEntityType: text("target_entity_type").notNull(),
+    dependencyProposalKeys: jsonb("dependency_proposal_keys")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    status: text("status").default("pending").notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    appliedEntityId: uuid("applied_entity_id"),
+    errorCode: text("error_code"),
+    retryable: boolean("retryable").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("act_migration_apply_operations_run_proposal_unique").on(
+      table.runId,
+      table.proposalKey,
+    ),
+    check(
+      "act_migration_apply_operations_target_entity_type_valid",
+      sql`${table.targetEntityType} in (${sqlTextValues(migrationTargetEntityTypeValues)})`,
+    ),
+    check(
+      "act_migration_apply_operations_dependency_proposal_keys_array",
+      sql`jsonb_typeof(${table.dependencyProposalKeys}) = 'array'`,
+    ),
+    check(
+      "act_migration_apply_operations_status_valid",
+      sql`${table.status} in (${sqlTextValues(migrationApplyOperationStatusValues)})`,
+    ),
+    check(
+      "act_migration_apply_operations_attempt_count_nonnegative",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "act_migration_apply_operations_lease_valid",
+      sql`(${table.status} = 'leased') = (${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null)`,
+    ),
+    index("act_migration_apply_operations_run_batch_idx").on(
+      table.runId,
+      table.batchId,
+    ),
+    index("act_migration_apply_operations_runnable_claim_idx")
+      .on(table.batchId, table.status, table.leaseExpiresAt)
+      .where(sql`${table.status} in ('pending', 'leased') and ${table.retryable}`),
   ],
 );
 

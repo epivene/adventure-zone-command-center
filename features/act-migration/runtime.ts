@@ -1,5 +1,3 @@
-import { ActClient } from "@/features/act-sync/act-client";
-import { ActApiError } from "@/features/act-sync/act-errors";
 import { DrizzleLocalCandidateRepository } from "@/features/act-migration/local-candidate-repository";
 import {
   DrizzleActMigrationPreviewRepository,
@@ -7,18 +5,37 @@ import {
   type StoredMigrationPreviewPage,
 } from "@/features/act-migration/preview-repository";
 import { ActMigrationPreviewService } from "@/features/act-migration/preview-service";
+import { DrizzleActMigrationApplyRepository } from "@/features/act-migration/apply-repository";
+import { ActMigrationApplyService } from "@/features/act-migration/apply-service";
+import { MigrationCallingListApplyRepository } from "@/features/act-migration/calling-list-apply-repository";
+import { MigrationEntityApplyRepository } from "@/features/act-migration/entity-apply-repository";
+import { MigrationRelationshipApplyRepository } from "@/features/act-migration/relationship-apply-repository";
 import {
   ActMigrationRunNotFoundError,
   DrizzleActMigrationSnapshotRepository,
   type SnapshotProgress,
 } from "@/features/act-migration/snapshot-repository";
 import { ActMigrationSnapshotService } from "@/features/act-migration/snapshot-service";
-import { HttpActMigrationSourceClient } from "@/features/act-migration/source-client";
 import { getActEnvironment } from "@/lib/env";
+
+export type StoredMigrationApplyState = {
+  ready: boolean;
+  summary: {
+    approved: number;
+    pending: number;
+    blocked: number;
+    ignored: number;
+    applied: number;
+    failed: number;
+  };
+  byTarget: Record<string, Record<string, number>>;
+  bulkEligible: number;
+};
 
 export type StoredMigrationWorkspace = {
   progress: SnapshotProgress;
   preview: StoredMigrationPreviewPage | null;
+  apply?: StoredMigrationApplyState;
 };
 
 export interface ActMigrationWorkspaceReader {
@@ -34,6 +51,12 @@ async function migrationDatabase() {
 
 export async function createActMigrationCaptureService() {
   const environment = getActEnvironment();
+  const [{ ActApiError }, { ActClient }, { HttpActMigrationSourceClient }] =
+    await Promise.all([
+      import("@/features/act-sync/act-errors"),
+      import("@/features/act-sync/act-client"),
+      import("@/features/act-migration/source-client"),
+    ]);
   if (!environment.configured) {
     throw new ActApiError("not_configured", false);
   }
@@ -62,12 +85,32 @@ export async function createActMigrationWorkspaceReader():
         throw error;
       }
       if (!progress) return null;
+      const preview = await previews.getPreviewIfStored(progress.runId, input.query);
+      const reviewSummary = preview?.reviewSummary ?? {
+        approved: 0,
+        pending: 0,
+        blocked: 0,
+        ignored: 0,
+        byTarget: {},
+        bulkEligible: 0,
+      };
       return {
         progress,
-        preview: await previews.getPreviewIfStored(
-          progress.runId,
-          input.query,
-        ),
+        preview,
+        ...(preview
+          ? {
+              apply: {
+                ready: progress.status === "previewed" && preview.report.complete,
+                summary: {
+                  ...reviewSummary,
+                  applied: 0,
+                  failed: reviewSummary.blocked,
+                },
+                byTarget: reviewSummary.byTarget,
+                bulkEligible: reviewSummary.bulkEligible,
+              },
+            }
+          : {}),
       };
     },
   };
@@ -79,5 +122,38 @@ export async function createActMigrationPreviewService() {
     new DrizzleActMigrationSnapshotRepository(database),
     new DrizzleLocalCandidateRepository(database),
     new DrizzleActMigrationPreviewRepository(database),
+  );
+}
+
+export async function createActMigrationApplyService() {
+  const database = await migrationDatabase();
+  const entities = new MigrationEntityApplyRepository(database);
+  const relationships = new MigrationRelationshipApplyRepository(database);
+  const callingLists = new MigrationCallingListApplyRepository(database);
+  return new ActMigrationApplyService(
+    new DrizzleActMigrationApplyRepository(database),
+    {
+      organization: {
+        apply: (operation) => entities.applyOrganization(operation),
+      },
+      contact: {
+        apply: (operation) => entities.applyContact(operation),
+      },
+      organization_contact: {
+        apply: (operation) => relationships.applyOrganizationContact(operation),
+      },
+      booking: {
+        apply: (operation) => relationships.applyBooking(operation),
+      },
+      booking_contact: {
+        apply: (operation) => relationships.applyBookingContact(operation),
+      },
+      calling_list: {
+        apply: (operation) => callingLists.applyCallingList(operation),
+      },
+      calling_list_member: {
+        apply: (operation) => callingLists.applyMembership(operation),
+      },
+    },
   );
 }

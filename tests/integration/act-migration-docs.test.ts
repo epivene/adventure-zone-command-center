@@ -81,7 +81,7 @@ describe("Act migration operations documentation", () => {
     expect(contents).toContain("stored preview");
     expect(contents).toContain("stored review decisions");
     expect(contents).toContain("never silently fetches or rematches");
-    expect(contents).toContain("no Apply or Import action");
+    expect(contents).toMatch(/apply\s+action unavailable/);
     expect(contents).toMatch(
       /after a timeout or uncertain result,\s+reload and select or resume the newest stored run/i,
     );
@@ -118,6 +118,19 @@ describe("Act migration operations documentation", () => {
     expect(contents).toMatch(
       /The stored summary does not contain the unsupported Group\s+count\./,
     );
+    expect(contents).toContain("ACT_MIGRATION_APPLY_ENABLED=false");
+    expect(contents).toContain("confirm_static_group");
+    expect(contents).toContain("fresh preview");
+    expect(contents).toMatch(/backup\s+and restore/);
+    expect(contents).toContain("small pilot batch");
+    expect(contents).toContain("Stop conditions");
+    expect(contents).toContain("Disable the apply flag");
+    expect(contents).toContain("Retry procedure");
+    expect(contents).toContain("Evidence retention");
+    expect(contents).toContain("act_migration_apply_batches");
+    expect(contents).toContain("act_migration_apply_operations");
+    expect(contents).toContain("act_external_links");
+    expect(contents).toContain("audit_entries");
 
     const commandBlockList = [
       ...contents.matchAll(/```[^\n]*\n([\s\S]*?)```/g),

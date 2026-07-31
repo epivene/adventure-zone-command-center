@@ -1,15 +1,18 @@
-# Act! Migration Staging and Preview Operations
+# Act! Migration Staging, Review, and Apply Operations
 
 This runbook covers the Slice 2 staging and review workflow for Companies,
 Contacts, Opportunities, Groups, and their supported relationships. Capture
 uses the read-only Act! API. The workflow writes durable snapshot,
 checkpoint, preview, decision, and audit metadata in the application database,
-but it does not apply CRM records in either system.
+but the preview workflow does not apply CRM records in either system. The
+separate reviewed local apply workflow is disabled by default and is described
+in section 13.
 
 The migration workflow is separate from the existing reviewed Contact sync.
-It has no Apply or Import action. A saved approval is a stored review decision
-only; it is never an applied or imported Place, Person, Booking, relationship,
-or Calling list change.
+Its saved approvals remain review decisions until the owner deliberately starts
+a separately feature-flagged local apply batch. Approval alone never creates,
+updates, merges, or synchronizes a Place, Person, Booking, relationship, or
+Calling list.
 
 ## Safety boundaries
 
@@ -464,3 +467,133 @@ finally {
 Do not report the Slice 2 gate as passed unless the exact commit passes the
 focused suite, typecheck, lint, full unit/integration suite, production build,
 diff check, and the serial PostgreSQL suites with zero skips or failures.
+
+## 13. Reviewed local apply release gate
+
+The reviewed apply action writes only local Command Center records. It never
+calls a mutating Act! API endpoint. The owner must deploy with
+`ACT_MIGRATION_APPLY_ENABLED=false` (or leave it unset); only the exact value
+`true` enables apply. A deployment with the flag disabled must keep the apply
+action unavailable even when proposals are approved.
+
+### Before enabling the flag
+
+1. Take a fresh encrypted production backup and complete a documented backup
+   and restore drill against an explicitly disposable database. A backup file
+   without a successful restore is not sufficient.
+2. Deploy the schema and code with `ACT_MIGRATION_APPLY_ENABLED=false`. Run the
+   focused release checks and the real disposable-PostgreSQL gate on that exact
+   commit. A skipped, gated, or unavailable database suite stops the release.
+3. Capture a fresh preview after deployment. Do not apply an older preview to
+   newly captured Group proposals: every new Group proposal needs its own
+   individual `confirm_static_group` decision after the reviewer verifies that
+   it is a static Group and its membership semantics are understood.
+4. Reconcile the fresh preview and record only proposal totals, automatically
+   reconciled, approved, scheduled, applied, ignored, pending, blocked, and
+   failed counts, plus source, proposal, manifest, and applied-result digests.
+   The proposal total must equal reconciled + applied + ignored + pending +
+   blocked + failed. Approved and scheduled are progress counts and may overlap
+   those final categories.
+5. Confirm the apply manifest contains only reviewed decisions. Stable matches
+   are automatically reconciled and do not write CRM records. Ignore and error
+   proposals are not silently retried or transformed into apply operations.
+
+### PII-free before/after evidence queries
+
+Run the following parameterized, read-only queries immediately before the
+pilot, after each batch, and after the final reconciliation. Bind `:run_id` in
+the approved query console; never paste a UUID into SQL text. These queries
+return only IDs, timestamps, states, counts, and digests. Do not add columns
+for snapshots, display values, decision reasons, source IDs, names, addresses,
+or other PII to an evidence query.
+
+```sql
+SELECT 'organizations' AS table_name, count(*) AS row_count,
+       max(updated_at) AS max_updated_at
+FROM organizations
+UNION ALL SELECT 'contacts', count(*), max(updated_at) FROM contacts
+UNION ALL SELECT 'bookings', count(*), max(updated_at) FROM bookings
+UNION ALL SELECT 'organization_contacts', count(*), max(updated_at)
+FROM organization_contacts
+UNION ALL SELECT 'booking_contacts', count(*), max(updated_at)
+FROM booking_contacts
+UNION ALL SELECT 'calling_lists', count(*), max(updated_at) FROM calling_lists
+UNION ALL SELECT 'calling_list_memberships', count(*), max(updated_at)
+FROM calling_list_memberships
+ORDER BY table_name;
+```
+
+```sql
+SELECT id, status, manifest_digest, started_at, completed_at
+FROM act_migration_apply_batches
+WHERE run_id = :run_id
+ORDER BY created_at, id;
+
+SELECT status, count(*)::bigint AS operation_count, max(updated_at) AS max_updated_at
+FROM act_migration_apply_operations
+WHERE run_id = :run_id
+GROUP BY status
+ORDER BY status;
+
+SELECT entity_type, count(*)::bigint AS link_count, max(created_at) AS max_created_at
+FROM act_external_links
+WHERE entity_type IN ('organization', 'contact', 'booking', 'calling_list')
+GROUP BY entity_type
+ORDER BY entity_type;
+
+SELECT action, count(*)::bigint AS audit_count, max(created_at) AS max_created_at
+FROM audit_entries
+WHERE action = 'act_migration_applied'
+  AND after ->> 'runId' = :run_id
+GROUP BY action;
+```
+
+The first result is the before/after CRM, calling-list, and membership count
+baseline. The other results are the before/after apply-batch, operation,
+external-link, and audit counts. Retain the result files in the restricted
+evidence location; no snapshots or decision reasons are permitted.
+
+### Small pilot batch and Stop conditions
+
+Enable `ACT_MIGRATION_APPLY_ENABLED=true` only in the approved production
+maintenance window, then start one small pilot batch (no more than 25 approved
+operations). Do not start a second batch until the first batch's count-only
+reconciliation and the before/after queries are captured and accepted.
+
+Stop conditions:
+
+- any unexpected CRM, Calling-list, membership, external-link, or audit count;
+- a digest mismatch, missing fresh preview, unconfirmed Group, blocked
+  dependency, failed operation, or non-retryable error;
+- an observed mutation to Act!, a credential/PII exposure, or uncertainty
+  about which batch or deployment produced the evidence.
+
+On any stop condition, do not continue, retry blindly, edit rows manually, or
+start another batch. Preserve the run and evidence, then disable the flag.
+
+### Disable the apply flag
+
+Set `ACT_MIGRATION_APPLY_ENABLED=false` in the production secret store and
+redeploy the same approved artifact or a forward fix. Confirm the owner can no
+longer start, continue, or retry an apply batch. This flag does not roll back
+already committed local records; use the backup/restore procedure or a
+separately reviewed forward remediation when required.
+
+### Retry procedure
+
+Retry only a displayed retryable operation after the recorded error has been
+understood and the count-only state query shows the same run and batch. Use the
+same run and batch; do not make a new preview or batch to bypass a failure.
+The queue reclaims expired leases and preserves applied operations. A failed or
+blocked operation requires reconciliation and explicit operator approval before
+any retry. Never retry an unconfirmed Group; first perform individual static
+verification and save `confirm_static_group`.
+
+### Evidence retention
+
+Keep the release commit SHA, deployment ID, operator, UTC timestamps, run and
+batch IDs, count-only before/after query outputs, reconciliation totals, and
+all four digests in restricted operations storage under the existing retention
+policy. Keep the restore-drill evidence and release-gate output with it. Do
+not retain raw Act! rows, display snapshots, decision reasons, credentials, or
+screenshots containing PII.

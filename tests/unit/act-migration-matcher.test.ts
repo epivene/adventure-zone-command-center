@@ -1166,6 +1166,15 @@ describe("buildMigrationProposals", () => {
       proposals,
       "group_contact:GROUP-1:CONTACT-PENDING",
     );
+    expect(proposal(proposals, "group:GROUP-1")).toMatchObject({
+      state: "needs_review",
+      targetEntityType: "calling_list",
+      issueCode: "group_membership_semantics_unknown",
+    });
+    expect(groupMember).toMatchObject({
+      state: "new_relationship",
+      targetEntityType: "calling_list_member",
+    });
     expect(groupMember.dependencyProposalKeys).toHaveLength(2);
     expect(groupMember.dependencyProposalKeys).toEqual(
       expect.arrayContaining([
@@ -1366,7 +1375,7 @@ describe("buildMigrationProposals", () => {
       proposal(proposals, "group_contact:GROUP-1:CONTACT-1"),
     ).toMatchObject({
       targetEntityType: "calling_list_member",
-      state: "ignored",
+      state: "new_relationship",
       issueCode: "group_membership_semantics_unknown",
     });
     expect(proposal(proposals, "error:contact:conflict")).toMatchObject({

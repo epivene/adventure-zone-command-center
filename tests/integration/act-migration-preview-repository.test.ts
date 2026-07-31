@@ -11,6 +11,7 @@ import * as crmSchema from "@/db/schema";
 import {
   DrizzleActMigrationPreviewRepository,
 } from "@/features/act-migration/preview-repository";
+import type { BulkReviewScope } from "@/features/act-migration/bulk-review";
 import { ActMigrationPreviewService } from "@/features/act-migration/preview-service";
 import { proposalSnapshotDigest } from "@/features/act-migration/reconciliation";
 import { ActMigrationRunNotFoundError } from "@/features/act-migration/snapshot-repository";
@@ -183,6 +184,7 @@ function errorCauseMessages(error: unknown) {
 describe("preview decision run lookup", () => {
   it("distinguishes a missing run from a stored run in the wrong status", async () => {
     const repositoryWithRunRows = (runRows: unknown[]) => {
+      let selectCount = 0;
       const query = {
         from() {
           return this;
@@ -194,7 +196,7 @@ describe("preview decision run lookup", () => {
           return this;
         },
         for() {
-          return Promise.resolve(runRows);
+          return Promise.resolve(selectCount++ === 0 ? runRows : []);
         },
       };
       const database = {
@@ -971,6 +973,148 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     ]));
   });
 
+  postgresTest("bounds concurrent server-scoped bulk approvals and skips ineligible proposals", async () => {
+    const bulkProposals = Array.from({ length: 100 }, (_, index) => proposal({
+      proposalKey: `organization:bulk-${index.toString().padStart(3, "0")}`,
+      sourceRecordKeys: [`company:bulk-${index}`],
+    }));
+    const ineligible = proposal({
+      proposalKey: "organization:bulk-change",
+      sourceRecordKeys: ["company:bulk-change"],
+      state: "change",
+    });
+    await store([...bulkProposals, ineligible]);
+    const scope: BulkReviewScope = {
+      runId,
+      target: "organization",
+      state: "new",
+      decision: "approve_proposed",
+      actor: "owner",
+    };
+
+    const results = await Promise.all([
+      repository.saveBulkDecision(scope),
+      repository.saveBulkDecision(scope),
+    ]);
+    const [changedRows, audits, changeProposal] = await Promise.all([
+      sql!.unsafe(`
+        SELECT proposal_key FROM act_migration_proposals
+        WHERE decision = 'approve_proposed' ORDER BY proposal_key
+      `),
+      auditRows(),
+      sql!.unsafe(`
+        SELECT decision, review_state FROM act_migration_proposals
+        WHERE proposal_key = 'organization:bulk-change'
+      `),
+    ]);
+
+    expect(results.reduce((total, result) => total + result.changed, 0)).toBeLessThanOrEqual(100);
+    expect(new Set(changedRows.map(({ proposal_key }) => proposal_key)).size).toBe(changedRows.length);
+    expect(audits).toHaveLength(changedRows.length);
+    expect(changedRows).toHaveLength(100);
+    expect(changeProposal).toEqual([{ decision: null, review_state: "pending" }]);
+    await expect(repository.saveBulkDecision(scope)).resolves.toEqual({
+      changed: 0,
+      remaining: 0,
+    });
+  });
+
+  postgresTest("confirms only owner-owned unknown-semantics Groups as static", async () => {
+    const staticGroup = proposal({
+      proposalKey: "calling_list:group-static",
+      state: "needs_review",
+      targetEntityType: "calling_list",
+      sourceRecordKeys: ["group:group-static"],
+      issueCode: "group_membership_semantics_unknown",
+    });
+    const wrongTarget = proposal({
+      proposalKey: "organization:wrong-target",
+      state: "needs_review",
+      targetEntityType: "organization",
+      sourceRecordKeys: ["company:wrong-target"],
+      issueCode: "group_membership_semantics_unknown",
+    });
+    const wrongIssue = proposal({
+      proposalKey: "calling_list:wrong-issue",
+      state: "needs_review",
+      targetEntityType: "calling_list",
+      sourceRecordKeys: ["group:wrong-issue"],
+      issueCode: "group_target_unavailable",
+    });
+    const hasCandidate = proposal({
+      proposalKey: "calling_list:has-candidate",
+      state: "needs_review",
+      targetEntityType: "calling_list",
+      sourceRecordKeys: ["group:has-candidate"],
+      issueCode: "group_membership_semantics_unknown",
+      candidateLocalIds: [localA],
+    });
+    const wrongOwner = proposal({
+      proposalKey: "calling_list:wrong-owner",
+      state: "needs_review",
+      targetEntityType: "calling_list",
+      sourceRecordKeys: ["contact:wrong-owner"],
+      issueCode: "group_membership_semantics_unknown",
+    });
+    await store([staticGroup, wrongTarget, wrongIssue, hasCandidate, wrongOwner]);
+
+    for (const invalid of [wrongTarget, wrongIssue]) {
+      await expect(repository.saveDecision({
+        runId,
+        proposalKey: invalid.proposalKey,
+        decision: "confirm_static_group",
+        decidedBy: "owner",
+      })).rejects.toThrow("not allowed");
+    }
+    for (const invalid of [hasCandidate, wrongOwner]) {
+      await expect(repository.saveDecision({
+        runId,
+        proposalKey: invalid.proposalKey,
+        decision: "confirm_static_group",
+        decidedBy: "owner",
+      })).rejects.toThrow("owner-owned");
+    }
+    await repository.saveDecision({
+      runId,
+      proposalKey: staticGroup.proposalKey,
+      decision: "confirm_static_group",
+      ignoreReason: "must not be saved",
+      decidedBy: "owner",
+    });
+
+    expect(await Promise.all([
+      sql!.unsafe(`
+        SELECT review_state, decision, decision_reason, decided_by, decided_at
+        FROM act_migration_proposals WHERE proposal_key = '${staticGroup.proposalKey}'
+      `),
+      sql!.unsafe(`
+        SELECT review_state FROM act_migration_records WHERE source_key = 'group:group-static'
+      `),
+    ])).toEqual([
+      [expect.objectContaining({
+        review_state: "decided",
+        decision: "confirm_static_group",
+        decision_reason: null,
+        decided_by: "owner",
+        decided_at: expect.any(Date),
+      })],
+      [{ review_state: "decided" }],
+    ]);
+    const [audit] = await auditRows();
+    expect(audit?.after).toMatchObject({
+      decision: "confirm_static_group",
+      actor: "owner",
+      sourceId: "group-static",
+      timestamp: expect.any(String),
+    });
+    expect(Object.keys(audit!.after).toSorted()).toEqual([
+      "actor",
+      "decision",
+      "sourceId",
+      "timestamp",
+    ]);
+  });
+
   postgresTest("enforces Contact primary authority and canonical proposed-primary decisions", async () => {
     const primary = proposal({
       proposalKey: "contact:proposed-primary",
@@ -1318,6 +1462,7 @@ describe("ActMigrationPreviewService", () => {
         getPreview: async () => { throw new Error("stored preview should be returned directly"); },
         storeProposalsIfAbsent: async () => { throw new Error("stored preview should not be written"); },
         saveDecision: async () => ({ changed: false }),
+        saveBulkDecision: async () => ({ changed: 0, remaining: 0 }),
       },
     );
 
@@ -1401,6 +1546,7 @@ describe("ActMigrationPreviewService", () => {
           getPreview: async () => stored,
           storeProposalsIfAbsent: async () => ({ changed }),
           saveDecision: async () => ({ changed: false }),
+          saveBulkDecision: async () => ({ changed: 0, remaining: 0 }),
         },
       );
 

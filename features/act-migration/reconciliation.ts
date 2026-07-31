@@ -13,6 +13,11 @@ import {
   sourceSnapshotDigest,
   type FinalizedSourceSnapshot,
 } from "@/features/act-migration/snapshot-repository";
+import type { MigrationApplyManifest } from "@/features/act-migration/apply-types";
+import type {
+  MigrationApplyCounts,
+  MigrationApplyWorkspace,
+} from "@/features/act-migration/apply-repository";
 
 export type MigrationReconciliationReport = {
   sourceCounts: Record<ActSourceEntityType, number>;
@@ -30,6 +35,24 @@ export type MigrationReconciliationReport = {
   complete: boolean;
 };
 
+/** Count-only evidence for a reviewed manifest and its local CRM apply queue. */
+export type MigrationApplyReconciliationReport = {
+  proposalTotal: number;
+  /** Stable Act! links that required no local CRM write. */
+  reconciled: number;
+  /** Reviewed proposals that the manifest permits the queue to apply. */
+  approved: number;
+  /** Approved proposals with a durable apply operation. */
+  scheduled: number;
+  applied: number;
+  ignored: number;
+  pending: number;
+  blocked: number;
+  failed: number;
+  manifestDigest: string;
+  appliedResultDigest: string;
+};
+
 function canonicalValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalValue);
   if (!value || typeof value !== "object") return value;
@@ -44,6 +67,92 @@ function digest(value: unknown) {
   return createHash("sha256")
     .update(JSON.stringify(canonicalValue(value)))
     .digest("hex");
+}
+
+function operationCountTotal(counts: MigrationApplyCounts) {
+  return counts.pending + counts.leased + counts.blocked + counts.applied +
+    counts.ignored + counts.failed;
+}
+
+function countOnlyApplyWorkspace(workspace: MigrationApplyWorkspace) {
+  return {
+    runId: workspace.runId,
+    runStatus: workspace.runStatus,
+    counts: workspace.counts,
+    batches: workspace.batches.map((batch) => ({
+      id: batch.id,
+      status: batch.status,
+      manifestDigest: batch.manifestDigest,
+      summary: batch.summary,
+    })),
+  };
+}
+
+/**
+ * Reconciles immutable manifest categories with durable local apply-operation
+ * categories. It intentionally accepts and emits counts and digests only;
+ * snapshots, review reasons, source values, and CRM record values never enter
+ * operational reconciliation evidence.
+ */
+export function reconcileMigrationApply(input: {
+  manifest: MigrationApplyManifest;
+  workspace?: MigrationApplyWorkspace;
+}): MigrationApplyReconciliationReport {
+  const { manifest, workspace } = input;
+  const manifestCounts = manifest.counts;
+  const scheduledCounts = workspace?.counts;
+  const scheduled = scheduledCounts?.total ?? 0;
+
+  if (
+    scheduled < 0 ||
+    scheduled > manifestCounts.runnable ||
+    (scheduledCounts && operationCountTotal(scheduledCounts) !== scheduled)
+  ) {
+    throw new Error("Act migration apply workspace counts are inconsistent.");
+  }
+
+  const applied = scheduledCounts?.applied ?? 0;
+  const ignored = manifestCounts.ignored + (scheduledCounts?.ignored ?? 0);
+  const blocked = scheduledCounts?.blocked ?? 0;
+  const failed = manifestCounts.failed + (scheduledCounts?.failed ?? 0);
+  const pending = manifestCounts.pending + (scheduledCounts?.pending ?? 0) +
+    (scheduledCounts?.leased ?? 0) + (manifestCounts.runnable - scheduled);
+  const proposalTotal = manifestCounts.reconciled + applied + ignored + pending +
+    blocked + failed;
+
+  if (proposalTotal !== manifestCounts.proposalTotal) {
+    throw new Error("Act migration apply reconciliation does not cover every proposal.");
+  }
+
+  return {
+    proposalTotal,
+    reconciled: manifestCounts.reconciled,
+    approved: manifestCounts.runnable,
+    scheduled,
+    applied,
+    ignored,
+    pending,
+    blocked,
+    failed,
+    manifestDigest: manifest.digest,
+    appliedResultDigest: digest({
+      manifestDigest: manifest.digest,
+      workspace: countOnlyApplyWorkspace(workspace ?? {
+        runId: "",
+        runStatus: "not_scheduled",
+        counts: {
+          pending: 0,
+          leased: 0,
+          blocked: 0,
+          applied: 0,
+          ignored: 0,
+          failed: 0,
+          total: 0,
+        },
+        batches: [],
+      }),
+    }),
+  };
 }
 
 function countValues<T extends string>(

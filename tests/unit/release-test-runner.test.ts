@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import packageJson from "@/package.json";
 import { runReleaseTests } from "@/scripts/run-release-tests";
 
 describe("release test runner", () => {
@@ -87,5 +88,19 @@ describe("release test runner", () => {
 
     expect(status).toBe(23);
     expect(attempts).toBe(2);
+  });
+
+  it("keeps every reviewed-import PostgreSQL suite in the release database gate", () => {
+    const databaseSuites = packageJson.scripts["test:crm-db"]
+      .split(/\s+/)
+      .filter((argument) => argument.startsWith("tests/integration/"));
+
+    expect(databaseSuites).toEqual(expect.arrayContaining([
+      "tests/integration/act-reviewed-import-migration.test.ts",
+      "tests/integration/act-migration-apply-repository.test.ts",
+      "tests/integration/act-migration-entity-apply.test.ts",
+      "tests/integration/act-migration-relationship-apply.test.ts",
+      "tests/integration/act-migration-calling-list-apply.test.ts",
+    ]));
   });
 });

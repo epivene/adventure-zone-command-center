@@ -1186,6 +1186,70 @@ describe("Act migration review workspace", () => {
     expect(markup).not.toContain("raw-source-candidate");
   });
 
+  it("offers the single reviewed-import confirmation only for a complete enabled workspace", async () => {
+    const startApplyAction = vi.fn(() => new Promise<never>(() => {}));
+    const user = userEvent.setup();
+    const staticGroup = proposal({
+      proposalKey: "calling_list:ACT-GROUP",
+      targetEntityType: "calling_list",
+      state: "needs_review",
+      issueCode: "group_membership_semantics_unknown",
+      sourceRecordKeys: ["group:ACT-GROUP"],
+    });
+    const reviewedWorkspace = {
+      ...workspace(
+        progress({
+          completedCheckpoints: 8,
+          totalCheckpoints: 8,
+          status: "previewed",
+        }),
+        preview({ rows: [staticGroup] }),
+      ),
+      apply: {
+        ready: true,
+        summary: { approved: 25, pending: 7, blocked: 2, ignored: 3, applied: 0, failed: 0 },
+        byTarget: {},
+        bulkEligible: 0,
+      },
+    } as unknown as StoredMigrationWorkspace;
+
+    render(
+      <ActMigrationReview
+        {...props({
+          applyEnabled: true,
+          startApplyAction,
+          workspace: reviewedWorkspace,
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Confirm static Group" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /bulk approve/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Approved 25 · Pending 7 · Blocked 2 · Ignored 3")).toBeVisible();
+    const button = screen.getByRole("button", { name: "Import approved records" });
+    await user.click(button);
+    expect(startApplyAction).toHaveBeenCalledTimes(1);
+    await user.dblClick(button);
+    expect(startApplyAction).toHaveBeenCalledTimes(1);
+  });
+
+  it("hides import for incomplete work and disables it when the flag is off", () => {
+    const apply = {
+      ready: true,
+      summary: { approved: 1, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 },
+      byTarget: {},
+      bulkEligible: 1,
+    };
+    const completeWorkspace = {
+      ...workspace(progress({ completedCheckpoints: 8, totalCheckpoints: 8, status: "previewed" }), preview()),
+      apply,
+    } as unknown as StoredMigrationWorkspace;
+    const view = render(<ActMigrationReview {...props({ applyEnabled: false, workspace: completeWorkspace })} />);
+    expect(screen.getByRole("button", { name: "Import approved records" })).toBeDisabled();
+    view.rerender(<ActMigrationReview {...props({ applyEnabled: true, workspace: { ...completeWorkspace, apply: { ...apply, ready: false } } })} />);
+    expect(screen.queryByRole("button", { name: "Import approved records" })).not.toBeInTheDocument();
+  });
+
   it("adds Act! migration beside unchanged Act! Sync in desktop and mobile Settings", () => {
     render(<AppShell><p>Settings page</p></AppShell>);
 

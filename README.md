@@ -23,9 +23,14 @@ are server-only and must not use a `NEXT_PUBLIC_` prefix.
 
 - [Deployment and release](docs/operations/deployment.md)
 - [Act! contact sync](docs/operations/act-sync.md)
+- [Act! migration staging, review, and guarded local apply](docs/operations/act-migration.md)
 - [Act! CSV import fallback](docs/operations/act-import.md)
 - [Backup and restore](docs/operations/backup-and-restore.md)
 
 The Act! sync is always manual: **Sync with Act!** creates a stored preview,
 and a separate **Apply approved** action performs only the decisions selected
 by the owner.
+
+The separate Act! migration workflow is read-only against Act! and applies
+reviewed changes locally only when `ACT_MIGRATION_APPLY_ENABLED=true`; leave
+the flag unset or `false` until the migration runbook release gate is complete.
