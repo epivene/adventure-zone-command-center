@@ -1191,7 +1191,7 @@ export function buildMigrationProposals(input: {
     add(
       proposal({
         proposalKey: `calling_list:${group.sourceKey}`,
-        state: "ignored",
+        state: link ? "ignored" : "needs_review",
         targetEntityType: "calling_list",
         sourceRecordKeys: [group.sourceKey],
         matchReason: link
@@ -1221,7 +1221,7 @@ export function buildMigrationProposals(input: {
     add(
       proposal({
         proposalKey: `calling_list_member:${edge.sourceKey}`,
-        state: "ignored",
+        state: "new_relationship",
         targetEntityType: "calling_list_member",
         sourceRecordKeys: [edge.sourceKey],
         matchReason: "group_membership_semantics_unknown",

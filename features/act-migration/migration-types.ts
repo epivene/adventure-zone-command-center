@@ -277,6 +277,13 @@ export function allowedDecisionsForProposal(input: {
 }): readonly MigrationDecision[] {
   if (input.state === "error" || input.state === "ignored") return [];
   if (
+    input.state === "needs_review" &&
+    input.targetEntityType === "calling_list" &&
+    input.issueCode === "group_membership_semantics_unknown"
+  ) {
+    return ["confirm_static_group", "ignore"];
+  }
+  if (
     input.issueCode !== null &&
     unresolvedProposalIssues.has(input.issueCode)
   ) {

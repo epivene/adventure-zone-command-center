@@ -149,6 +149,14 @@ describe("Act migration contracts", () => {
     ).toEqual(["ignore"]);
     expect(
       allowedDecisionsForProposal({
+        state: "needs_review",
+        targetEntityType: "calling_list",
+        issueCode: "group_membership_semantics_unknown",
+        candidateLocalIds: [],
+      }),
+    ).toEqual(["confirm_static_group", "ignore"]);
+    expect(
+      allowedDecisionsForProposal({
         state: "error",
         targetEntityType: "contact",
         issueCode: "source_record_error",

@@ -644,6 +644,23 @@ export class DrizzleActMigrationPreviewRepository
       if (suppliedPrimary && !contactSourceIds.includes(suppliedPrimary)) {
         throw new Error("Act migration primary source choice is not part of this Contact proposal.");
       }
+      const isStaticGroupConfirmation = input.decision === "confirm_static_group";
+      const groupRecord = referencedRecords[0];
+      if (
+        isStaticGroupConfirmation &&
+        (proposal.targetEntityType !== "calling_list" ||
+          proposal.issueCode !== "group_membership_semantics_unknown" ||
+          proposal.candidateLocalIds.length !== 0 ||
+          proposal.sourceRecordKeys.length !== 1 ||
+          referencedRecords.length !== 1 ||
+          groupRecord?.streamType !== "group" ||
+          !groupRecord.sourceId ||
+          groupRecord.sourceKey !== `group:${groupRecord.sourceId}`)
+      ) {
+        throw new Error(
+          "Act migration static Group confirmation requires its owner-owned unknown-semantics Group proposal.",
+        );
+      }
       let primarySourceId: string | null = null;
       if (isApprovingOrLinking && isContact) {
         if (proposal.proposedPrimarySourceId !== null) {
@@ -715,7 +732,14 @@ export class DrizzleActMigrationPreviewRepository
         entityId: proposal.id,
         action: "review_decision_changed",
         before: previousDecision,
-        after: nextDecision,
+        after: isStaticGroupConfirmation
+          ? {
+            decision: input.decision,
+            actor: input.decidedBy,
+            timestamp: now.toISOString(),
+            sourceId: groupRecord!.sourceId!,
+          }
+          : nextDecision,
       });
       return { changed: true };
     });
