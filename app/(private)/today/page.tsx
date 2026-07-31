@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { FollowUpList } from "@/components/today/follow-up-list";
-import { NextCallCard } from "@/components/today/next-call-card";
+import { eventProfileHref, NextCallCard } from "@/components/today/next-call-card";
 import { SummaryCards } from "@/components/today/summary-cards";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { getTodayDashboard } from "@/features/follow-ups/today-query";
@@ -62,6 +62,17 @@ export default async function TodayPage({
     followUps: requestedFollowUpPage,
     needsFollowUpPlan: requestedPlanPage,
   });
+  const firstNewLead = dashboard.needsFollowUpPlan.find(
+    (booking) => booking.status === "new_lead",
+  );
+  const newLeadHref = firstNewLead
+    ? eventProfileHref({
+        organizationId: firstNewLead.organizationId ?? null,
+        contactId: firstNewLead.primaryContactId,
+        bookingId: firstNewLead.id,
+        mode: "prospect",
+      }) ?? undefined
+    : undefined;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -84,6 +95,7 @@ export default async function TodayPage({
         contractCount={dashboard.contractCount}
         followUpCount={dashboard.followUpCount}
         newLeadCount={dashboard.newLeadCount}
+        newLeadHref={newLeadHref}
         visibleRouteWarningCount={dashboard.visibleRouteWarningCount}
       />
 
@@ -140,7 +152,12 @@ export default async function TodayPage({
                 <li key={booking.id}>
                   <Link
                     className="font-semibold text-slate-950 hover:text-orange-700"
-                    href={`/bookings/${booking.id}`}
+                    href={eventProfileHref({
+                      organizationId: booking.organizationId ?? null,
+                      contactId: booking.primaryContactId,
+                      bookingId: booking.id,
+                      mode: booking.status === "new_lead" ? "prospect" : undefined,
+                    }) ?? `/bookings/${booking.id}`}
                   >
                     {booking.name}
                   </Link>
@@ -202,7 +219,11 @@ export default async function TodayPage({
                   <div>
                     <Link
                       className="font-semibold text-slate-950 hover:text-orange-700"
-                      href={`/bookings/${event.id}`}
+                      href={eventProfileHref({
+                        organizationId: event.organizationId ?? null,
+                        contactId: event.primaryContactId,
+                        bookingId: event.id,
+                      }) ?? `/bookings/${event.id}`}
                     >
                       {event.name}
                     </Link>
