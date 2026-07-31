@@ -10,6 +10,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const router = vi.hoisted(() => ({
@@ -276,9 +277,8 @@ describe("Act migration review workspace", () => {
     );
     await waitFor(() => expect(continueAction).toHaveBeenCalledTimes(1));
     expect(startAction).toHaveBeenCalledWith(requestKey);
-    expect(router.replace).toHaveBeenCalledWith(
-      `/settings/act-migration?runId=${runId}&page=1&pageSize=50`,
-    );
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
     expect(maximumActive).toBe(1);
 
     await act(async () => {
@@ -290,6 +290,8 @@ describe("Act migration review workspace", () => {
       });
     });
     await waitFor(() => expect(continueAction).toHaveBeenCalledTimes(2));
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
     expect(maximumActive).toBe(1);
 
     await act(async () => {
@@ -304,7 +306,10 @@ describe("Act migration review workspace", () => {
 
     expect(maximumActive).toBe(1);
     expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
-    expect(router.refresh).toHaveBeenCalledTimes(2);
+    expect(router.replace).toHaveBeenCalledWith(
+      `/settings/act-migration?runId=${runId}&page=1&pageSize=50`,
+    );
+    expect(router.refresh).not.toHaveBeenCalled();
 
     const check = user.click(
       screen.getByRole("button", { name: "Check again" }),
@@ -320,6 +325,86 @@ describe("Act migration review workspace", () => {
     });
     await check;
     expect(maximumActive).toBe(1);
+    expect(router.replace).toHaveBeenCalledOnce();
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("processes a completed start result under React StrictMode", async () => {
+    const startAction = vi.fn(async () => ({
+      ok: true as const,
+      changed: false,
+      runId,
+      progress: progress(),
+    }));
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <ActMigrationReview
+          {...props({ workspace: null, startAction })}
+        />
+      </StrictMode>,
+    );
+
+    await user.click(screen.getByRole("button", {
+      name: "Start preview snapshot",
+    }));
+
+    expect(startAction).toHaveBeenCalledOnce();
+    expect(router.replace).toHaveBeenCalledWith(
+      `/settings/act-migration?runId=${runId}&page=1&pageSize=50`,
+    );
+    expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
+  });
+
+  it("refreshes stored progress after an automatic continuation error", async () => {
+    const startAction = vi.fn(async () => ({
+      ok: true as const,
+      changed: true,
+      runId,
+      progress: progress(),
+    }));
+    let resolveContinue!: (value: {
+      ok: false;
+      error: string;
+      retryable: true;
+      retryAfter: null;
+    }) => void;
+    const continueAction = vi.fn(() => new Promise<{
+      ok: false;
+      error: string;
+      retryable: true;
+      retryAfter: null;
+    }>((resolve) => {
+      resolveContinue = resolve;
+    }));
+    const user = userEvent.setup();
+    render(
+      <ActMigrationReview
+        {...props({ workspace: null, startAction, continueAction })}
+      />,
+    );
+
+    const click = user.click(screen.getByRole("button", {
+      name: "Start preview snapshot",
+    }));
+
+    await waitFor(() => expect(continueAction).toHaveBeenCalledOnce());
+    expect(router.replace).not.toHaveBeenCalled();
+    expect(router.refresh).not.toHaveBeenCalled();
+    await act(async () => {
+      resolveContinue({
+        ok: false,
+        error: "Act! is temporarily unavailable.",
+        retryable: true,
+        retryAfter: null,
+      });
+    });
+    await click;
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Act! is temporarily unavailable.",
+    );
+    expect(router.replace).toHaveBeenCalledOnce();
+    expect(router.refresh).not.toHaveBeenCalled();
   });
 
   it("uses an in-flight guard to reject synchronous double starts", async () => {
@@ -427,11 +512,11 @@ describe("Act migration review workspace", () => {
       .not.toBeInTheDocument();
   });
 
-  it("finalizes the selected stored page only after all checkpoints complete", async () => {
+  it("adopts an already-stored preview when finalization reports changed false", async () => {
     const storedPreview = preview({ page: 2, pageSize: 25 });
     const finalizeAction = vi.fn(async () => ({
       ok: true as const,
-      changed: true,
+      changed: false,
       runId,
       preview: storedPreview,
     }));
@@ -467,7 +552,11 @@ describe("Act migration review workspace", () => {
         state: "needs_review",
       },
     });
-    expect(router.refresh).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("heading", { name: "Stored preview proposals" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Finalize preview" }))
+      .not.toBeInTheDocument();
   });
 
   it("uses the selected interruption for Resume eligibility and respects retryAfter", () => {
@@ -591,6 +680,7 @@ describe("Act migration review workspace", () => {
     );
     expect(screen.queryByRole("button", { name: "Resume" }))
       .not.toBeInTheDocument();
+    expect(router.refresh).toHaveBeenCalledOnce();
   });
 
   it("uses server-computed facet counts and URL navigation with selected-page rows only", () => {
@@ -756,6 +846,87 @@ describe("Act migration review workspace", () => {
     });
   });
 
+  it("serializes decision saves across proposal rows with a synchronous guard", async () => {
+    let resolveFirst!: (value: {
+      ok: true;
+      changed: false;
+      runId: string;
+      proposalKey: string;
+    }) => void;
+    const firstSave = new Promise<{
+      ok: true;
+      changed: false;
+      runId: string;
+      proposalKey: string;
+    }>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const saveDecisionAction = vi.fn()
+      .mockImplementationOnce(() => firstSave)
+      .mockResolvedValueOnce({
+        ok: true as const,
+        changed: false,
+        runId,
+        proposalKey: "contact:ACT-101",
+      });
+    const rows = [
+      proposal({
+        decision: "keep_separate",
+        decidedBy: "owner-42",
+        decidedAt: new Date("2030-01-02T03:04:05.000Z"),
+      }),
+      proposal({
+        id: "66666666-6666-4666-8666-666666666666",
+        proposalKey: "contact:ACT-101",
+        sourceRecordKeys: ["contact:ACT-101"],
+        decision: "keep_separate",
+        decidedBy: "owner-42",
+        decidedAt: new Date("2030-01-02T03:04:05.000Z"),
+      }),
+    ];
+    render(
+      <ActMigrationReview
+        {...props({
+          saveDecisionAction,
+          workspace: workspace(
+            progress({
+              completedCheckpoints: 8,
+              totalCheckpoints: 8,
+              status: "previewed",
+            }),
+            preview({ rows }),
+          ),
+        })}
+      />,
+    );
+    const saveButtons = screen.getAllByRole("button", {
+      name: "Save decision",
+    });
+
+    act(() => {
+      saveButtons[0]!.click();
+      saveButtons[1]!.click();
+    });
+
+    expect(saveDecisionAction).toHaveBeenCalledOnce();
+    expect(saveButtons.every((button) => button.hasAttribute("disabled")))
+      .toBe(true);
+
+    await act(async () => {
+      resolveFirst({
+        ok: true,
+        changed: false,
+        runId,
+        proposalKey: "contact:ACT-100",
+      });
+    });
+    expect(saveButtons.every((button) => !button.hasAttribute("disabled")))
+      .toBe(true);
+
+    saveButtons[1]!.click();
+    await waitFor(() => expect(saveDecisionAction).toHaveBeenCalledTimes(2));
+  });
+
   it("restores persisted decision metadata after remount without rendering raw inputs", () => {
     const persisted = proposal({
       candidateLocalIds: [candidateId, "raw-source-candidate"],
@@ -784,6 +955,23 @@ describe("Act migration review workspace", () => {
       decidedBy: "owner-42",
       decidedAt: new Date("2030-01-02T03:04:05.000Z"),
     });
+    const approvedProposedPrimary = proposal({
+      id: "77777777-7777-4777-8777-777777777777",
+      proposalKey: "contact:ACT-PROPOSED",
+      sourceRecordKeys: ["contact:ACT-PROPOSED"],
+      state: "new",
+      issueCode: null,
+      decision: "approve_proposed",
+      primarySourceId: null,
+      proposedPrimarySourceId: "ACT-PROPOSED",
+      decidedBy: "owner-42",
+      decidedAt: new Date("2030-01-02T03:04:05.000Z"),
+      primarySourceChoices: [{
+        id: "ACT-PROPOSED",
+        label: "ACT-PROPOSED",
+        available: true,
+      }],
+    });
     const safeProps = props({
       databaseName: "RawDatabase3125",
       password: "raw-password",
@@ -801,6 +989,7 @@ describe("Act migration review workspace", () => {
               rawSnapshot: { password: "snapshot-password" },
             } as StoredMigrationProposal,
             ignored,
+            approvedProposedPrimary,
           ],
         }),
       ),
@@ -810,12 +999,15 @@ describe("Act migration review workspace", () => {
     expect(screen.getByText("Decision: Link existing")).toBeVisible();
     expect(screen.getByText("Candidate: Local Avery Example")).toBeVisible();
     expect(screen.getByText("Primary Act! Contact: ACT-100")).toBeVisible();
+    expect(
+      screen.getByText("Primary Act! Contact: ACT-PROPOSED"),
+    ).toBeVisible();
     expect(screen.getByText("Reason: Reviewed duplicate source")).toBeVisible();
     expect(
       screen.getAllByText(
         "Reviewed by owner-42 at 2030-01-02T03:04:05.000Z",
       ),
-    ).toHaveLength(2);
+    ).toHaveLength(3);
     first.unmount();
     render(<ActMigrationReview {...safeProps} />);
     expect(screen.getByText("Decision: Link existing")).toBeVisible();

@@ -193,7 +193,7 @@ function PersistedDecision({ row }: { row: StoredMigrationProposal }) {
   );
   const primary = selectedChoiceLabel(
     row.primarySourceChoices,
-    row.primarySourceId,
+    row.primarySourceId ?? row.proposedPrimarySourceId,
   );
   return (
     <div className="mt-3 grid gap-1 rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
@@ -391,6 +391,9 @@ export function ActMigrationReview({
   const [currentProgress, setCurrentProgress] = useState(
     workspace?.progress ?? null,
   );
+  const [currentPreview, setCurrentPreview] = useState(
+    workspace?.preview ?? null,
+  );
   const [failure, setFailure] = useState<ActMigrationActionError | null>(null);
   const [checkAgain, setCheckAgain] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -398,6 +401,7 @@ export function ActMigrationReview({
   const [status, setStatus] = useState<string | null>(null);
   const [, setClock] = useState(() => now());
   const inFlight = useRef(false);
+  const decisionSave = useRef<symbol | null>(null);
   const mounted = useRef(true);
   const generation = useRef(0);
   const activeRun = useRef(workspace?.progress.runId ?? null);
@@ -410,9 +414,12 @@ export function ActMigrationReview({
     }
   }, [workspace?.progress.runId]);
 
-  useEffect(() => () => {
-    mounted.current = false;
-    generation.current += 1;
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      generation.current += 1;
+    };
   }, []);
 
   const progressFailure = selectedInterruption(currentProgress);
@@ -449,17 +456,19 @@ export function ActMigrationReview({
 
   function acceptProgressResult(
     result: Extract<ActMigrationProgressActionResult, { ok: true }>,
+    navigation: { refresh: boolean },
   ) {
     setCurrentProgress(result.progress);
     setFailure(null);
     setCheckAgain(!result.changed);
-    if (result.changed) router.refresh();
+    if (result.changed) navigation.refresh = true;
     return shouldContinue(result);
   }
 
   async function continueSerially(
     runId: string,
     workflowGeneration: number,
+    navigation: { refresh: boolean },
   ) {
     while (current(workflowGeneration, runId)) {
       const result = await continueAction(runId);
@@ -467,9 +476,10 @@ export function ActMigrationReview({
       if (!result.ok) {
         setFailure(result);
         setCheckAgain(false);
+        navigation.refresh = true;
         return;
       }
-      if (!acceptProgressResult(result)) return;
+      if (!acceptProgressResult(result, navigation)) return;
     }
   }
 
@@ -491,21 +501,38 @@ export function ActMigrationReview({
     setBusy(false);
   }
 
+  function flushNavigation(
+    workflowGeneration: number,
+    navigation: { refresh: boolean; replace: string | null },
+  ) {
+    if (!current(workflowGeneration)) return;
+    if (navigation.replace) {
+      router.replace(navigation.replace);
+    } else if (navigation.refresh) {
+      router.refresh();
+    }
+  }
+
   async function start() {
     const workflowGeneration = startWorkflow(null);
     if (workflowGeneration === null) return;
+    const navigation = { refresh: false, replace: null as string | null };
     try {
       const result = await startAction(requestKeyFactory());
       if (!current(workflowGeneration)) return;
       if (!result.ok) {
         setFailure(result);
-        router.refresh();
+        navigation.refresh = true;
         return;
       }
       activeRun.current = result.runId;
-      router.replace(queryHref({ runId: result.runId, query }));
-      if (acceptProgressResult(result)) {
-        await continueSerially(result.runId, workflowGeneration);
+      navigation.replace = queryHref({ runId: result.runId, query });
+      if (acceptProgressResult(result, navigation)) {
+        await continueSerially(
+          result.runId,
+          workflowGeneration,
+          navigation,
+        );
       }
     } catch {
       if (current(workflowGeneration)) {
@@ -518,6 +545,7 @@ export function ActMigrationReview({
       }
     } finally {
       finishWorkflow(workflowGeneration);
+      flushNavigation(workflowGeneration, navigation);
     }
   }
 
@@ -526,16 +554,18 @@ export function ActMigrationReview({
     if (!runId) return;
     const workflowGeneration = startWorkflow(runId);
     if (workflowGeneration === null) return;
+    const navigation = { refresh: false, replace: null };
     try {
       const result = await action(runId);
       if (!current(workflowGeneration, runId)) return;
       if (!result.ok) {
         setFailure(result);
         setCheckAgain(false);
+        navigation.refresh = true;
         return;
       }
-      if (acceptProgressResult(result)) {
-        await continueSerially(runId, workflowGeneration);
+      if (acceptProgressResult(result, navigation)) {
+        await continueSerially(runId, workflowGeneration, navigation);
       }
     } catch {
       if (current(workflowGeneration, runId)) {
@@ -548,6 +578,7 @@ export function ActMigrationReview({
       }
     } finally {
       finishWorkflow(workflowGeneration);
+      flushNavigation(workflowGeneration, navigation);
     }
   }
 
@@ -564,6 +595,7 @@ export function ActMigrationReview({
         return;
       }
       setFailure(null);
+      setCurrentPreview(result.preview);
       setStatus("Stored preview ready.");
       if (result.changed) router.refresh();
     } catch {
@@ -585,7 +617,9 @@ export function ActMigrationReview({
     input: Omit<Parameters<SaveDecisionAction>[0], "runId">,
   ) {
     const runId = currentProgress?.runId;
-    if (!runId || savingProposal) return;
+    if (!runId || decisionSave.current) return;
+    const token = Symbol(row.proposalKey);
+    decisionSave.current = token;
     setSavingProposal(row.proposalKey);
     setStatus(null);
     try {
@@ -603,11 +637,14 @@ export function ActMigrationReview({
     } catch {
       setStatus("The review decision could not be saved.");
     } finally {
-      setSavingProposal(null);
+      if (decisionSave.current === token) {
+        decisionSave.current = null;
+        if (mounted.current) setSavingProposal(null);
+      }
     }
   }
 
-  const preview = workspace?.preview ?? null;
+  const preview = currentPreview;
   const runId = currentProgress?.runId ?? null;
   const incomplete = Boolean(
     currentProgress &&
@@ -869,7 +906,7 @@ export function ActMigrationReview({
                     ) : null}
                     <PersistedDecision row={row} />
                     <ProposalDecision
-                      busy={savingProposal === row.proposalKey}
+                      busy={savingProposal !== null}
                       onSave={saveDecision}
                       row={row}
                     />
