@@ -7,6 +7,7 @@ import type { LocalCandidateRepository } from "@/features/act-migration/local-ca
 import { buildMigrationProposals } from "@/features/act-migration/matcher";
 import {
   groupExactPlaceDuplicates,
+  normalizePlaceIdentity,
   type PlaceIdentityRow,
 } from "@/features/act-migration/place-identity";
 import {
@@ -74,7 +75,7 @@ function consolidateExactDuplicatePlaces(input: {
 
   for (const [groupKey, rows] of groups) {
     // A missing location is a near-match signal, never an automatic merge.
-    if (rows.length < 2 || !rows[0]?.location) continue;
+    if (rows.length < 2 || !normalizePlaceIdentity(rows[0]!).location) continue;
     const sourceIds = rows.map(({ sourceId }) => sourceId).toSorted();
     const proposalKeys = rows.map(({ sourceKey }) => `organization:${sourceKey}`);
     const groupProposals = proposalKeys.map((proposalKey) =>

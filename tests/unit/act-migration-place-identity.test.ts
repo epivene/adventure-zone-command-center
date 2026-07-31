@@ -30,4 +30,18 @@ describe("place identity", () => {
       [rows[1], rows[0]],
     ]);
   });
+
+  it("keeps distinct identities separate when normalized parts contain the key delimiter", () => {
+    const rows = [
+      { sourceId: "A", name: "North|South", location: "Denver" },
+      { sourceId: "B", name: "North", location: "South|Denver" },
+    ];
+
+    const groups = groupExactPlaceDuplicates(rows);
+
+    expect([...groups.values()].map((group) => group.map(({ sourceId }) => sourceId).join(",")).toSorted()).toEqual([
+      "A",
+      "B",
+    ]);
+  });
 });

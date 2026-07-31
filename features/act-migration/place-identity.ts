@@ -32,7 +32,7 @@ export function normalizePlaceIdentity(
 
 export function placeIdentityGroupKey(input: PlaceIdentityInput) {
   const identity = normalizePlaceIdentity(input);
-  return `${identity.name}|${identity.location}`;
+  return JSON.stringify([identity.name, identity.location]);
 }
 
 /** Groups rows deterministically without mutating their original display data. */
