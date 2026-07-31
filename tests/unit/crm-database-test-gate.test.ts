@@ -4,16 +4,211 @@ import packageJson from "@/package.json";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
 describe("CRM PostgreSQL test gate", () => {
-  it("uses the single disposable database URL", () => {
-    expect(crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: "postgres://example.test/crm" })).toBe(
-      "postgres://example.test/crm",
+  it.each([
+    "postgres://database.example/crm_test",
+    "postgresql://database.example/test-crm",
+    "postgres://database.example/test",
+    "postgres://database.example/CRM_TEST_BACKUP",
+    "postgres://localhost/crm_test",
+    "postgres://[::1]/crm_test",
+    "postgres://operator:secret@database.example:5432/crm_test",
+    "postgres://operator:p%40ss@localhost/crm_test",
+    "postgres://operator:secret@[::1]:5432/crm_test",
+  ])("accepts a PostgreSQL URL with a delimited test database name", (url) => {
+    expect(crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toBe(url);
+  });
+
+  it.each([
+    [
+      "comma-separated hosts",
+      "postgres://prod,other/crm_test",
+      "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "comma-separated hosts with ports",
+      "postgres://prod:5432,other:5432/crm_test",
+      "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "encoded comma-separated hosts",
+      "postgres://prod%2Cother/crm_test",
+      "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "multiple credential separators hiding comma-separated hosts",
+      "postgres://operator@prod.example,other.example@safe.example/crm_test",
+      "CRM_TEST_DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding encoded comma-separated hosts",
+      "postgres://operator@prod.example%2Cother.example@safe.example/crm_test",
+      "CRM_TEST_DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding port-qualified hosts",
+      "postgres://operator@prod.example:5432,other.example:5432@safe.example/crm_test",
+      "CRM_TEST_DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+  ])("rejects a multihost authority: %s", (_case, url, expectedError) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      expectedError,
     );
+  });
+
+  it.each([
+    ["host", "postgres://safe.example/crm_test?host=prod.example"],
+    ["hostname", "postgres://safe.example/crm_test?hostname=prod.example"],
+    ["hostaddr", "postgres://safe.example/crm_test?hostaddr=192.0.2.1"],
+  ])("rejects a host override parameter: %s", (_case, url) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      "CRM_TEST_DATABASE_URL must not use host override parameters.",
+    );
+  });
+
+  it.each([
+    ["a malformed URL", "not-a-url"],
+    ["a non-PostgreSQL URL", "https://database.example/crm_test"],
+  ])("rejects %s", (_case, url) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      "CRM_TEST_DATABASE_URL must be a valid PostgreSQL URL.",
+    );
+  });
+
+  it.each([
+    ["a missing host", "postgres:///crm_test"],
+    ["a missing database", "postgres://database.example"],
+  ])("rejects %s", (_case, url) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      "CRM_TEST_DATABASE_URL must include a host and database name.",
+    );
+  });
+
+  it.each([
+    ["ordinary production name", "postgres://database.example/crm"],
+    ["embedded token", "postgres://database.example/contest"],
+    ["test prefix without a delimiter", "postgres://database.example/testing"],
+  ])("rejects a production-shaped database name: %s", (_case, url) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      "CRM_TEST_DATABASE_URL database name must contain a delimited 'test' token.",
+    );
+  });
+
+  it("rejects the same normalized database identity as DATABASE_URL", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL:
+          "postgres://DB.EXAMPLE:5432/CRM_TEST?sslmode=require",
+        DATABASE_URL: "postgresql://db.example/crm_test",
+      }),
+    ).toThrow(
+      "CRM_TEST_DATABASE_URL must not identify the same database as DATABASE_URL.",
+    );
+  });
+
+  it("treats terminal DNS dots as the same database host identity", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://prod.example./crm_test",
+        DATABASE_URL: "postgres://prod.example/crm_test",
+      }),
+    ).toThrow(
+      "CRM_TEST_DATABASE_URL must not identify the same database as DATABASE_URL.",
+    );
+  });
+
+  it.each([
+    [
+      "comma-separated hosts",
+      "postgres://prod.example,other.example/crm",
+      "DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "multiple credential separators hiding comma-separated hosts",
+      "postgres://operator@prod.example,other.example@safe.example/crm",
+      "DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding encoded comma-separated hosts",
+      "postgres://operator@prod.example%2Cother.example@safe.example/crm",
+      "DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding port-qualified hosts",
+      "postgres://operator@prod.example:5432,other.example:5432@safe.example/crm",
+      "DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+  ])(
+    "rejects a multihost DATABASE_URL before identity comparison: %s",
+    (_case, url, expectedError) => {
+      expect(() =>
+        crmTestDatabaseUrl({
+          CRM_TEST_DATABASE_URL: "postgres://safe.example/crm_test",
+          DATABASE_URL: url,
+        }),
+      ).toThrow(expectedError);
+    },
+  );
+
+  it("allows a disposable test database distinct from DATABASE_URL", () => {
+    const url = "postgres://database.example/crm_test";
+    expect(
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: url,
+        DATABASE_URL: "postgres://database.example/crm",
+      }),
+    ).toBe(url);
+  });
+
+  it("rejects inherited PGPORT before it can align an omitted test URL port with DATABASE_URL", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://database.example/crm_test",
+        DATABASE_URL: "postgres://database.example:6543/crm_test",
+        PGPORT: "6543",
+      }),
+    ).toThrow("PGPORT must be unset when CRM_TEST_DATABASE_URL is set.");
+  });
+
+  it("rejects a whitespace-only inherited PGPORT", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://database.example/crm_test",
+        PGPORT: " ",
+      }),
+    ).toThrow("PGPORT must be unset when CRM_TEST_DATABASE_URL is set.");
+  });
+
+  it("allows an explicitly empty PGPORT", () => {
+    const url = "postgres://database.example/crm_test";
+    expect(
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: url,
+        PGPORT: "",
+      }),
+    ).toBe(url);
+  });
+
+  it("fails closed when DATABASE_URL cannot be compared safely", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://database.example/crm_test",
+        DATABASE_URL: "not-a-url",
+      }),
+    ).toThrow("DATABASE_URL must be a valid PostgreSQL URL.");
   });
 
   it("fails closed for release tests without the disposable database URL", () => {
     expect(() => crmTestDatabaseUrl({ CRM_RELEASE_TESTS: "1" })).toThrow(
       "CRM_TEST_DATABASE_URL must be set when CRM_RELEASE_TESTS=1.",
     );
+  });
+
+  it("remains optional outside release mode when no test URL is supplied", () => {
+    expect(crmTestDatabaseUrl({ DATABASE_URL: "not-a-url" })).toBeUndefined();
+  });
+
+  it("does not inspect inherited PGPORT outside release mode without a test URL", () => {
+    expect(crmTestDatabaseUrl({ PGPORT: "6543" })).toBeUndefined();
   });
 
   it("runs exactly the registered PostgreSQL suites in the release database command", () => {
@@ -37,6 +232,10 @@ describe("CRM PostgreSQL test gate", () => {
       "tests/integration/relationship-repository.test.ts",
       "tests/integration/booking-relationship-repository.test.ts",
       "tests/integration/relationship-reconciliation.test.ts",
+      "tests/integration/act-migration-local-candidate-repository.test.ts",
+      "tests/integration/act-migration-staging-migration.test.ts",
+      "tests/integration/act-migration-snapshot-repository.test.ts",
+      "tests/integration/act-migration-preview-repository.test.ts",
     ]);
   });
 

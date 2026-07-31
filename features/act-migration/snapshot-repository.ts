@@ -1,0 +1,961 @@
+import { createHash } from "node:crypto";
+
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
+
+import type { db as database } from "@/db/client";
+import {
+  actMigrationCheckpoints,
+  actMigrationRecords,
+  actMigrationRuns,
+} from "@/db/schema";
+import {
+  actSourceEntityTypeValues,
+  actMigrationStreamTypeValues,
+  migrationStreamRank,
+  type ActMigrationCheckpointStatus,
+  type ActMigrationRunStatus,
+  type ActMigrationStreamType,
+  type ActQueryMode,
+} from "@/features/act-migration/migration-types";
+import type { ActApiErrorCode } from "@/features/act-sync/act-errors";
+import type { StagedSourceItem } from "@/features/act-migration/source-parser";
+
+type DrizzleDatabase = typeof database;
+
+export const ACT_MIGRATION_CHECKPOINT_LEASE_MS = 5 * 60 * 1_000;
+const ROOT_PAGE_SIZE = 100;
+const ROOT_PARTITION_KEY = "root";
+
+export type ActMigrationCheckpoint = {
+  id: string;
+  runId: string;
+  streamType: ActMigrationStreamType;
+  partitionKey: string;
+  parentSourceId: string | null;
+  nextSkip: number;
+  pageSize: number;
+  queryMode: ActQueryMode;
+  status: ActMigrationCheckpointStatus;
+  retryAfter: Date | null;
+  retryable: boolean;
+};
+
+export type SnapshotProgress = {
+  runId: string;
+  status: ActMigrationRunStatus;
+  completedCheckpoints: number;
+  totalCheckpoints: number;
+  stagedRecords: number;
+  failedCheckpoints: number;
+  retryable: boolean;
+  retryAfter: Date | null;
+  streams: readonly SnapshotStreamProgress[];
+  interruption: SnapshotInterruption | null;
+};
+
+export type SnapshotStreamProgress = {
+  streamType: ActMigrationStreamType;
+  completedCheckpoints: number;
+  totalCheckpoints: number;
+  stagedRecords: number;
+  failedCheckpoints: number;
+  retryable: boolean;
+  retryAfter: Date | null;
+  errorCode: ActApiErrorCode | "unknown" | null;
+};
+
+export type SnapshotInterruption = {
+  code: ActApiErrorCode | "unknown";
+  retryable: boolean;
+  retryAfter: Date | null;
+};
+
+export class ActMigrationRunNotFoundError extends Error {
+  constructor() {
+    super("Act migration run is missing.");
+    this.name = "ActMigrationRunNotFoundError";
+  }
+}
+
+export class ActMigrationRunConflictError extends Error {
+  constructor() {
+    super("Act migration request key conflicts with an existing run.");
+    this.name = "ActMigrationRunConflictError";
+  }
+}
+
+export class ActMigrationLeaseConflictError extends Error {
+  constructor() {
+    super("Act migration checkpoint lease or skip no longer matches.");
+    this.name = "ActMigrationLeaseConflictError";
+  }
+}
+
+export type FinalizedSourceSnapshot = {
+  runId: string;
+  records: readonly StagedSourceItem[];
+  checkpoints: readonly ActMigrationCheckpoint[];
+  sourceDigest: string;
+};
+
+export interface ActMigrationSnapshotRepository {
+  createRun(input: {
+    requestKey: string;
+    sourceDatabaseKey: string;
+    requestedBy: string;
+  }): Promise<{ id: string; created: boolean }>;
+  claimNextCheckpoint(
+    runId: string,
+    leaseOwner: string,
+    now: Date,
+  ): Promise<ActMigrationCheckpoint | null>;
+  storePage(input: {
+    checkpointId: string;
+    leaseOwner: string;
+    expectedSkip: number;
+    records: readonly StagedSourceItem[];
+    nextSkip: number | null;
+    queryMode: ActQueryMode;
+    now: Date;
+  }): Promise<void>;
+  failCheckpoint(input: {
+    checkpointId: string;
+    leaseOwner: string;
+    errorCode: string;
+    retryable: boolean;
+    retryAfter: Date | null;
+    now: Date;
+  }): Promise<void>;
+  enqueueRelationshipCheckpoints(runId: string): Promise<void>;
+  getProgress(runId: string): Promise<SnapshotProgress>;
+  getLatestProgress(): Promise<SnapshotProgress | null>;
+  finalizeSourceSnapshot(runId: string): Promise<FinalizedSourceSnapshot>;
+}
+
+type StoredCheckpoint = typeof actMigrationCheckpoints.$inferSelect;
+type StoredRecord = typeof actMigrationRecords.$inferSelect;
+
+function checkpointValue(row: StoredCheckpoint): ActMigrationCheckpoint {
+  return {
+    id: row.id,
+    runId: row.runId,
+    streamType: row.streamType as ActMigrationStreamType,
+    partitionKey: row.partitionKey,
+    parentSourceId: row.parentSourceId,
+    nextSkip: row.nextSkip,
+    pageSize: row.pageSize,
+    queryMode: row.queryMode as ActQueryMode,
+    status: row.status as ActMigrationCheckpointStatus,
+    retryAfter: row.retryAfter,
+    retryable: row.retryable,
+  };
+}
+
+function stagedRecordValue(row: StoredRecord): StagedSourceItem {
+  return {
+    streamType: row.streamType as ActMigrationStreamType,
+    sourceKey: row.sourceKey,
+    sourceId: row.sourceId,
+    targetSourceId: row.targetSourceId,
+    rawSnapshot: row.rawSnapshot,
+    normalizedSnapshot: row.normalizedSnapshot,
+    fingerprint: row.fingerprint,
+    errorCode: row.errorCode,
+    errorFields: row.errorFields ?? [],
+  };
+}
+
+function stagedRecordInsert(
+  runId: string,
+  record: StagedSourceItem,
+  now: Date,
+) {
+  return {
+    runId,
+    streamType: record.streamType,
+    sourceKey: record.sourceKey,
+    sourceId: record.sourceId,
+    targetSourceId: record.targetSourceId,
+    rawSnapshot: record.rawSnapshot,
+    normalizedSnapshot: record.normalizedSnapshot,
+    fingerprint: record.fingerprint,
+    proposedAction: record.errorCode ? "error" : null,
+    errorCode: record.errorCode,
+    errorFields: record.errorFields,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function streamOrder(column: typeof actMigrationCheckpoints.streamType) {
+  return sql<number>`case ${column}
+    when 'company' then 0
+    when 'contact' then 1
+    when 'opportunity' then 2
+    when 'group' then 3
+    when 'company_contact' then 4
+    when 'opportunity_company' then 5
+    when 'opportunity_contact' then 6
+    when 'group_contact' then 7
+    else 8 end`;
+}
+
+function recordStreamOrder(column: typeof actMigrationRecords.streamType) {
+  return sql<number>`case ${column}
+    when 'company' then 0
+    when 'contact' then 1
+    when 'opportunity' then 2
+    when 'group' then 3
+    when 'company_contact' then 4
+    when 'opportunity_company' then 5
+    when 'opportunity_contact' then 6
+    when 'group_contact' then 7
+    else 8 end`;
+}
+
+export function sourceSnapshotDigest(records: readonly StagedSourceItem[]) {
+  return createHash("sha256")
+    .update(JSON.stringify(
+      records
+        .toSorted(
+          (left, right) =>
+            migrationStreamRank(left.streamType) -
+              migrationStreamRank(right.streamType) ||
+            left.sourceKey.localeCompare(right.sourceKey) ||
+            left.fingerprint.localeCompare(right.fingerprint),
+        )
+        .map((record) => ({
+          streamType: record.streamType,
+          sourceKey: record.sourceKey,
+          sourceId: record.sourceId,
+          targetSourceId: record.targetSourceId,
+          fingerprint: record.fingerprint,
+          errorCode: record.errorCode,
+          errorFields: record.errorFields,
+        })),
+    ))
+    .digest("hex");
+}
+
+function relationshipCheckpointIdentity(input: {
+  streamType: string;
+  partitionKey: string;
+  parentSourceId: string | null;
+}) {
+  return JSON.stringify([
+    input.streamType,
+    input.partitionKey,
+    input.parentSourceId,
+  ]);
+}
+
+function sameSourceIdentity(
+  left: StagedSourceItem,
+  right: StagedSourceItem,
+) {
+  return (
+    left.fingerprint === right.fingerprint &&
+    left.sourceId === right.sourceId &&
+    left.targetSourceId === right.targetSourceId &&
+    left.errorCode === right.errorCode
+  );
+}
+
+function duplicateConflictRecord(
+  record: StagedSourceItem,
+  baseline: StagedSourceItem,
+): StagedSourceItem {
+  const conflictHash = createHash("sha256")
+    .update(JSON.stringify([
+      record.streamType,
+      record.sourceKey,
+      record.sourceId,
+      record.targetSourceId,
+      record.fingerprint,
+      record.errorCode,
+    ]))
+    .digest("hex");
+  const errorFields = [
+    record.fingerprint === baseline.fingerprint ? null : "fingerprint",
+    record.sourceId === baseline.sourceId ? null : "sourceId",
+    record.targetSourceId === baseline.targetSourceId
+      ? null
+      : "targetSourceId",
+  ].filter((field): field is string => field !== null);
+  return {
+    streamType: record.streamType,
+    sourceKey: `error:${record.streamType}:duplicate:${conflictHash}`,
+    sourceId: record.sourceId,
+    targetSourceId: record.targetSourceId,
+    rawSnapshot: record.rawSnapshot,
+    normalizedSnapshot: {
+      conflictingFingerprint: record.fingerprint,
+    },
+    fingerprint: conflictHash,
+    errorCode: "duplicate_source_id_conflict",
+    errorFields,
+  };
+}
+
+export function planStagedPageRecords(
+  existingRecords: readonly StagedSourceItem[],
+  incomingRecords: readonly StagedSourceItem[],
+) {
+  const recordsBySourceKey = new Map(
+    existingRecords.map((record) => [record.sourceKey, record]),
+  );
+  const canonicalRecords: StagedSourceItem[] = [];
+  const conflictRecords = new Map<string, StagedSourceItem>();
+  for (const record of incomingRecords) {
+    const baseline = recordsBySourceKey.get(record.sourceKey);
+    if (!baseline) {
+      recordsBySourceKey.set(record.sourceKey, record);
+      canonicalRecords.push(record);
+      continue;
+    }
+    if (sameSourceIdentity(baseline, record)) continue;
+    const conflict = duplicateConflictRecord(record, baseline);
+    conflictRecords.set(conflict.sourceKey, conflict);
+  }
+  return {
+    canonicalRecords,
+    conflictRecords: [...conflictRecords.values()],
+  };
+}
+
+export class DrizzleActMigrationSnapshotRepository
+  implements ActMigrationSnapshotRepository
+{
+  constructor(private readonly database: DrizzleDatabase) {}
+
+  createRun(input: {
+    requestKey: string;
+    sourceDatabaseKey: string;
+    requestedBy: string;
+  }): Promise<{ id: string; created: boolean }> {
+    return this.database.transaction(async (transaction) => {
+      const [created] = await transaction
+        .insert(actMigrationRuns)
+        .values(input)
+        .onConflictDoNothing({ target: actMigrationRuns.requestKey })
+        .returning({ id: actMigrationRuns.id });
+      const [existing] = created
+        ? []
+        : await transaction
+          .select({
+            id: actMigrationRuns.id,
+            sourceDatabaseKey: actMigrationRuns.sourceDatabaseKey,
+            requestedBy: actMigrationRuns.requestedBy,
+          })
+          .from(actMigrationRuns)
+          .where(eq(actMigrationRuns.requestKey, input.requestKey))
+          .limit(1);
+      const run = created ?? existing;
+      if (!run) throw new Error("Could not create the Act migration run.");
+      if (
+        !created &&
+        (existing?.sourceDatabaseKey !== input.sourceDatabaseKey ||
+          existing.requestedBy !== input.requestedBy)
+      ) {
+        throw new ActMigrationRunConflictError();
+      }
+
+      await transaction
+        .insert(actMigrationCheckpoints)
+        .values(actSourceEntityTypeValues.map((streamType) => ({
+          runId: run.id,
+          streamType,
+          partitionKey: ROOT_PARTITION_KEY,
+          pageSize: ROOT_PAGE_SIZE,
+        })))
+        .onConflictDoNothing({
+          target: [
+            actMigrationCheckpoints.runId,
+            actMigrationCheckpoints.streamType,
+            actMigrationCheckpoints.partitionKey,
+          ],
+        });
+      return { id: run.id, created: Boolean(created) };
+    });
+  }
+
+  claimNextCheckpoint(
+    runId: string,
+    leaseOwner: string,
+    now: Date,
+  ): Promise<ActMigrationCheckpoint | null> {
+    return this.database.transaction(async (transaction) => {
+      const eligible = or(
+        eq(actMigrationCheckpoints.status, "pending"),
+        and(
+          eq(actMigrationCheckpoints.status, "fetching"),
+          lte(actMigrationCheckpoints.leaseExpiresAt, now),
+        ),
+        and(
+          eq(actMigrationCheckpoints.status, "failed"),
+          eq(actMigrationCheckpoints.retryable, true),
+          or(
+            isNull(actMigrationCheckpoints.retryAfter),
+            lte(actMigrationCheckpoints.retryAfter, now),
+          ),
+        ),
+      );
+      const [checkpoint] = await transaction
+        .select()
+        .from(actMigrationCheckpoints)
+        .where(and(eq(actMigrationCheckpoints.runId, runId), eligible))
+        .orderBy(
+          streamOrder(actMigrationCheckpoints.streamType),
+          asc(actMigrationCheckpoints.partitionKey),
+          asc(actMigrationCheckpoints.id),
+        )
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (!checkpoint) return null;
+
+      const leaseExpiresAt = new Date(
+        now.getTime() + ACT_MIGRATION_CHECKPOINT_LEASE_MS,
+      );
+      const [claimed] = await transaction
+        .update(actMigrationCheckpoints)
+        .set({
+          status: "fetching",
+          leaseOwner,
+          leaseExpiresAt,
+          retryAfter: null,
+          errorCode: null,
+          attemptCount: sql`${actMigrationCheckpoints.attemptCount} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(actMigrationCheckpoints.id, checkpoint.id))
+        .returning();
+      return claimed ? checkpointValue(claimed) : null;
+    });
+  }
+
+  storePage(input: {
+    checkpointId: string;
+    leaseOwner: string;
+    expectedSkip: number;
+    records: readonly StagedSourceItem[];
+    nextSkip: number | null;
+    queryMode: ActQueryMode;
+    now: Date;
+  }): Promise<void> {
+    return this.database.transaction(async (transaction) => {
+      const guard = and(
+        eq(actMigrationCheckpoints.id, input.checkpointId),
+        eq(actMigrationCheckpoints.status, "fetching"),
+        eq(actMigrationCheckpoints.leaseOwner, input.leaseOwner),
+        eq(actMigrationCheckpoints.nextSkip, input.expectedSkip),
+      );
+      const [lockedRun] = await transaction
+        .select({ id: actMigrationRuns.id })
+        .from(actMigrationRuns)
+        .innerJoin(
+          actMigrationCheckpoints,
+          eq(actMigrationCheckpoints.runId, actMigrationRuns.id),
+        )
+        .where(guard)
+        .limit(1)
+        .for("key share", { of: actMigrationRuns });
+      if (!lockedRun) {
+        throw new ActMigrationLeaseConflictError();
+      }
+      const [checkpoint] = await transaction
+        .select({
+          id: actMigrationCheckpoints.id,
+          runId: actMigrationCheckpoints.runId,
+          streamType: actMigrationCheckpoints.streamType,
+        })
+        .from(actMigrationCheckpoints)
+        .where(guard)
+        .limit(1)
+        .for("update");
+      if (!checkpoint || checkpoint.runId !== lockedRun.id) {
+        throw new ActMigrationLeaseConflictError();
+      }
+      if (input.records.some(
+        (record) => record.streamType !== checkpoint.streamType,
+      )) {
+        throw new Error("Act migration page stream does not match its checkpoint.");
+      }
+
+      const sourceKeys = [...new Set(
+        input.records.map((record) => record.sourceKey),
+      )];
+      const existingBefore = sourceKeys.length === 0
+        ? []
+        : await transaction
+          .select()
+          .from(actMigrationRecords)
+          .where(and(
+            eq(actMigrationRecords.runId, checkpoint.runId),
+            eq(actMigrationRecords.streamType, checkpoint.streamType),
+            inArray(actMigrationRecords.sourceKey, sourceKeys),
+          ))
+          .for("update");
+      const knownSourceKeys = new Set(
+        existingBefore.map((record) => record.sourceKey),
+      );
+      const candidatesBySourceKey = new Map<string, StagedSourceItem>();
+      for (const record of input.records) {
+        if (
+          !knownSourceKeys.has(record.sourceKey) &&
+          !candidatesBySourceKey.has(record.sourceKey)
+        ) {
+          candidatesBySourceKey.set(record.sourceKey, record);
+        }
+      }
+      const canonicalCandidates = [...candidatesBySourceKey.values()];
+      const insertedCanonical = canonicalCandidates.length === 0
+        ? []
+        : await transaction
+          .insert(actMigrationRecords)
+          .values(canonicalCandidates.map((record) =>
+            stagedRecordInsert(checkpoint.runId, record, input.now)
+          ))
+          .onConflictDoNothing({
+            target: [
+              actMigrationRecords.runId,
+              actMigrationRecords.streamType,
+              actMigrationRecords.sourceKey,
+            ],
+          })
+          .returning({ id: actMigrationRecords.id });
+      const existingAfter = sourceKeys.length === 0
+        ? []
+        : await transaction
+          .select()
+          .from(actMigrationRecords)
+          .where(and(
+            eq(actMigrationRecords.runId, checkpoint.runId),
+            eq(actMigrationRecords.streamType, checkpoint.streamType),
+            inArray(actMigrationRecords.sourceKey, sourceKeys),
+          ))
+          .for("update");
+      const planned = planStagedPageRecords(
+        existingAfter.map(stagedRecordValue),
+        input.records,
+      );
+      const insertedConflicts = planned.conflictRecords.length === 0
+        ? []
+        : await transaction
+          .insert(actMigrationRecords)
+          .values(planned.conflictRecords.map((record) =>
+            stagedRecordInsert(checkpoint.runId, record, input.now)
+          ))
+          .onConflictDoNothing({
+            target: [
+              actMigrationRecords.runId,
+              actMigrationRecords.streamType,
+              actMigrationRecords.sourceKey,
+            ],
+          })
+          .returning({ id: actMigrationRecords.id });
+
+      const complete = input.nextSkip === null;
+      const [advanced] = await transaction
+        .update(actMigrationCheckpoints)
+        .set({
+          nextSkip: input.nextSkip ?? input.expectedSkip,
+          queryMode: input.queryMode,
+          status: complete ? "complete" : "pending",
+          leaseOwner: null,
+          leaseExpiresAt: null,
+          retryAfter: null,
+          retryable: true,
+          recordsStaged:
+            sql`${actMigrationCheckpoints.recordsStaged} + ${
+              insertedCanonical.length + insertedConflicts.length
+            }`,
+          errorCode: null,
+          completedAt: complete ? input.now : null,
+          updatedAt: input.now,
+        })
+        .where(guard)
+        .returning({ id: actMigrationCheckpoints.id });
+      if (!advanced) {
+        throw new ActMigrationLeaseConflictError();
+      }
+    });
+  }
+
+  async failCheckpoint(input: {
+    checkpointId: string;
+    leaseOwner: string;
+    errorCode: string;
+    retryable: boolean;
+    retryAfter: Date | null;
+    now: Date;
+  }) {
+    const [failed] = await this.database
+      .update(actMigrationCheckpoints)
+      .set({
+        status: "failed",
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        retryAfter: input.retryAfter,
+        retryable: input.retryable,
+        errorCode: input.errorCode,
+        updatedAt: input.now,
+      })
+      .where(and(
+        eq(actMigrationCheckpoints.id, input.checkpointId),
+        eq(actMigrationCheckpoints.status, "fetching"),
+        eq(actMigrationCheckpoints.leaseOwner, input.leaseOwner),
+      ))
+      .returning({ id: actMigrationCheckpoints.id });
+    if (!failed) {
+      throw new ActMigrationLeaseConflictError();
+    }
+  }
+
+  enqueueRelationshipCheckpoints(runId: string): Promise<void> {
+    return this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({ id: actMigrationRuns.id })
+        .from(actMigrationRuns)
+        .where(eq(actMigrationRuns.id, runId))
+        .limit(1)
+        .for("key share", { of: actMigrationRuns });
+      if (!run) return;
+
+      const roots = await transaction
+        .select({
+          id: actMigrationCheckpoints.id,
+          streamType: actMigrationCheckpoints.streamType,
+          status: actMigrationCheckpoints.status,
+        })
+        .from(actMigrationCheckpoints)
+        .where(and(
+          eq(actMigrationCheckpoints.runId, runId),
+          eq(actMigrationCheckpoints.partitionKey, ROOT_PARTITION_KEY),
+          inArray(actMigrationCheckpoints.streamType, actSourceEntityTypeValues),
+        ))
+        .orderBy(streamOrder(actMigrationCheckpoints.streamType))
+        .for("update");
+      if (
+        roots.length !== actSourceEntityTypeValues.length ||
+        roots.some(({ status }) => status !== "complete")
+      ) {
+        return;
+      }
+
+      const parents = await transaction
+        .select({
+          streamType: actMigrationRecords.streamType,
+          sourceId: actMigrationRecords.sourceId,
+        })
+        .from(actMigrationRecords)
+        .where(and(
+          eq(actMigrationRecords.runId, runId),
+          inArray(actMigrationRecords.streamType, [
+            "contact",
+            "opportunity",
+            "group",
+          ]),
+          isNull(actMigrationRecords.errorCode),
+        ))
+        .orderBy(
+          recordStreamOrder(actMigrationRecords.streamType),
+          asc(actMigrationRecords.sourceId),
+        );
+
+      const checkpoints = parents.flatMap(({ streamType, sourceId }) => {
+        if (!sourceId) return [];
+        if (streamType === "contact") {
+          return [{
+            runId,
+            streamType: "company_contact",
+            partitionKey: `contact:${sourceId}`,
+            parentSourceId: sourceId,
+            pageSize: ROOT_PAGE_SIZE,
+          }];
+        }
+        if (streamType === "opportunity") {
+          return [
+            {
+              runId,
+              streamType: "opportunity_company",
+              partitionKey: `opportunity:${sourceId}:companies`,
+              parentSourceId: sourceId,
+              pageSize: ROOT_PAGE_SIZE,
+            },
+            {
+              runId,
+              streamType: "opportunity_contact",
+              partitionKey: `opportunity:${sourceId}:contacts`,
+              parentSourceId: sourceId,
+              pageSize: ROOT_PAGE_SIZE,
+            },
+          ];
+        }
+        return [{
+          runId,
+          streamType: "group_contact",
+          partitionKey: `group:${sourceId}:contacts`,
+          parentSourceId: sourceId,
+          pageSize: ROOT_PAGE_SIZE,
+        }];
+      });
+      if (checkpoints.length === 0) return;
+      await transaction
+        .insert(actMigrationCheckpoints)
+        .values(checkpoints)
+        .onConflictDoNothing({
+          target: [
+            actMigrationCheckpoints.runId,
+            actMigrationCheckpoints.streamType,
+            actMigrationCheckpoints.partitionKey,
+          ],
+        });
+    });
+  }
+
+  async getProgress(runId: string): Promise<SnapshotProgress> {
+    const [run] = await this.database
+      .select({ id: actMigrationRuns.id, status: actMigrationRuns.status })
+      .from(actMigrationRuns)
+      .where(eq(actMigrationRuns.id, runId))
+      .limit(1);
+    if (!run) throw new ActMigrationRunNotFoundError();
+    const checkpoints = await this.database
+      .select({
+        id: actMigrationCheckpoints.id,
+        streamType: actMigrationCheckpoints.streamType,
+        partitionKey: actMigrationCheckpoints.partitionKey,
+        status: actMigrationCheckpoints.status,
+        retryable: actMigrationCheckpoints.retryable,
+        retryAfter: actMigrationCheckpoints.retryAfter,
+        errorCode: actMigrationCheckpoints.errorCode,
+      })
+      .from(actMigrationCheckpoints)
+      .where(eq(actMigrationCheckpoints.runId, runId));
+    const records = await this.database
+      .select({ streamType: actMigrationRecords.streamType })
+      .from(actMigrationRecords)
+      .where(eq(actMigrationRecords.runId, runId));
+    const errorCode = (
+      value: string | null,
+    ): ActApiErrorCode | "unknown" | null =>
+      value === "not_configured" ||
+        value === "authentication_failed" ||
+        value === "permission_denied" ||
+        value === "rate_limited" ||
+        value === "unavailable" ||
+        value === "invalid_response"
+        ? value
+        : value === null
+          ? null
+          : "unknown";
+    const failureOrder = (
+      left: (typeof checkpoints)[number],
+      right: (typeof checkpoints)[number],
+    ) =>
+      Number(left.retryable) - Number(right.retryable) ||
+      migrationStreamRank(left.streamType as ActMigrationStreamType) -
+        migrationStreamRank(right.streamType as ActMigrationStreamType) ||
+      left.partitionKey.localeCompare(right.partitionKey) ||
+      left.id.localeCompare(right.id);
+    const failures = checkpoints
+      .filter(({ status }) => status === "failed")
+      .toSorted(failureOrder);
+    const retryableFailures = failures.filter(({ retryable }) => retryable);
+    const aggregateRetryAfter = retryableFailures.some(
+      ({ retryAfter }) => retryAfter === null,
+    )
+      ? null
+      : retryableFailures
+        .flatMap(({ retryAfter }) => retryAfter ? [retryAfter] : [])
+        .toSorted((left, right) => left.getTime() - right.getTime())[0] ?? null;
+    const streams = actMigrationStreamTypeValues.map((streamType) => {
+      const streamCheckpoints = checkpoints.filter(
+        (checkpoint) => checkpoint.streamType === streamType,
+      );
+      const streamFailures = streamCheckpoints
+        .filter(({ status }) => status === "failed")
+        .toSorted(failureOrder);
+      const interruption = streamFailures[0] ?? null;
+      return {
+        streamType,
+        completedCheckpoints: streamCheckpoints.filter(
+          ({ status }) => status === "complete",
+        ).length,
+        totalCheckpoints: streamCheckpoints.length,
+        stagedRecords: records.filter(
+          (record) => record.streamType === streamType,
+        ).length,
+        failedCheckpoints: streamFailures.length,
+        retryable: interruption?.retryable ?? false,
+        retryAfter: interruption?.retryAfter ?? null,
+        errorCode: errorCode(interruption?.errorCode ?? null),
+      };
+    });
+    const interruption = failures[0] ?? null;
+    return {
+      runId,
+      status: run.status as ActMigrationRunStatus,
+      completedCheckpoints: checkpoints.filter(
+        ({ status }) => status === "complete",
+      ).length,
+      totalCheckpoints: checkpoints.length,
+      stagedRecords: records.length,
+      failedCheckpoints: failures.length,
+      retryable: retryableFailures.length > 0,
+      retryAfter: aggregateRetryAfter,
+      streams,
+      interruption: interruption
+        ? {
+            code: errorCode(interruption.errorCode) ?? "unknown",
+            retryable: interruption.retryable,
+            retryAfter: interruption.retryAfter,
+          }
+        : null,
+    };
+  }
+
+  async getLatestProgress(): Promise<SnapshotProgress | null> {
+    const [run] = await this.database
+      .select({ id: actMigrationRuns.id })
+      .from(actMigrationRuns)
+      .orderBy(desc(actMigrationRuns.createdAt), desc(actMigrationRuns.id))
+      .limit(1);
+    return run ? this.getProgress(run.id) : null;
+  }
+
+  finalizeSourceSnapshot(runId: string): Promise<FinalizedSourceSnapshot> {
+    return this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select()
+        .from(actMigrationRuns)
+        .where(eq(actMigrationRuns.id, runId))
+        .limit(1)
+        .for("update");
+      if (!run) throw new ActMigrationRunNotFoundError();
+      if (
+        run.status !== "snapshotting" &&
+        run.status !== "snapshot_complete" &&
+        run.status !== "matching" &&
+        run.status !== "previewed"
+      ) {
+        throw new Error(
+          `Act migration run cannot finalize from status ${run.status}.`,
+        );
+      }
+
+      const storedCheckpoints = await transaction
+        .select()
+        .from(actMigrationCheckpoints)
+        .where(eq(actMigrationCheckpoints.runId, runId))
+        .orderBy(
+          streamOrder(actMigrationCheckpoints.streamType),
+          asc(actMigrationCheckpoints.partitionKey),
+          asc(actMigrationCheckpoints.id),
+        )
+        .for("update");
+      const rootCount = storedCheckpoints.filter(
+        ({ partitionKey, streamType }) =>
+          partitionKey === ROOT_PARTITION_KEY &&
+          (actSourceEntityTypeValues as readonly string[]).includes(streamType),
+      ).length;
+      const storedRecords = await transaction
+        .select()
+        .from(actMigrationRecords)
+        .where(eq(actMigrationRecords.runId, runId))
+        .orderBy(
+          recordStreamOrder(actMigrationRecords.streamType),
+          asc(actMigrationRecords.sourceKey),
+          asc(actMigrationRecords.id),
+        );
+      const expectedRelationships = storedRecords.flatMap((record) => {
+        if (record.errorCode || !record.sourceId) return [];
+        if (record.streamType === "contact") {
+          return [{
+            streamType: "company_contact",
+            partitionKey: `contact:${record.sourceId}`,
+            parentSourceId: record.sourceId,
+          }];
+        }
+        if (record.streamType === "opportunity") {
+          return [
+            {
+              streamType: "opportunity_company",
+              partitionKey: `opportunity:${record.sourceId}:companies`,
+              parentSourceId: record.sourceId,
+            },
+            {
+              streamType: "opportunity_contact",
+              partitionKey: `opportunity:${record.sourceId}:contacts`,
+              parentSourceId: record.sourceId,
+            },
+          ];
+        }
+        if (record.streamType === "group") {
+          return [{
+            streamType: "group_contact",
+            partitionKey: `group:${record.sourceId}:contacts`,
+            parentSourceId: record.sourceId,
+          }];
+        }
+        return [];
+      });
+      const expectedRelationshipIdentities = new Set(
+        expectedRelationships.map(relationshipCheckpointIdentity),
+      );
+      const storedRelationships = storedCheckpoints.filter(
+        ({ partitionKey, streamType }) =>
+          partitionKey !== ROOT_PARTITION_KEY ||
+          !(actSourceEntityTypeValues as readonly string[]).includes(streamType),
+      );
+      if (
+        rootCount !== actSourceEntityTypeValues.length ||
+        storedRelationships.length !== expectedRelationshipIdentities.size ||
+        storedRelationships.some((checkpoint) =>
+          !expectedRelationshipIdentities.has(
+            relationshipCheckpointIdentity(checkpoint),
+          )
+        ) ||
+        storedCheckpoints.some(({ status }) => status !== "complete")
+      ) {
+        throw new Error("Act migration checkpoint set is incomplete.");
+      }
+
+      const records = storedRecords.map(stagedRecordValue);
+      const checkpoints = storedCheckpoints.map(checkpointValue);
+      const digest = sourceSnapshotDigest(records);
+      if (run.status === "snapshotting") {
+        const completedAt = run.snapshotCompletedAt ?? new Date();
+        await transaction
+          .update(actMigrationRuns)
+          .set({
+            status: "snapshot_complete",
+            sourceDigest: digest,
+            snapshotCompletedAt: completedAt,
+            updatedAt: completedAt,
+          })
+          .where(eq(actMigrationRuns.id, runId));
+      } else if (run.sourceDigest !== digest) {
+        throw new Error(
+          "Act migration source digest does not match the finalized snapshot.",
+        );
+      }
+      return {
+        runId,
+        records,
+        checkpoints,
+        sourceDigest: digest,
+      };
+    });
+  }
+}

@@ -151,6 +151,7 @@ class InMemoryApplyRepository implements SyncApplyRepository {
   appliedPulls: string[] = [];
   appliedPushes: string[] = [];
   linked: { localContactId: string; actRecordId: string }[] = [];
+  writableActRecord = true;
   failFinishOnce = false;
   failRememberOnce = false;
   rememberFailureOnce: Error | null = null;
@@ -375,6 +376,10 @@ class InMemoryApplyRepository implements SyncApplyRepository {
     );
   }
 
+  async assertActRecordWritable() {
+    return this.writableActRecord;
+  }
+
   async withLockedLocalContact<T>(
     row: SyncComparisonRow,
     action: () => Promise<T>,
@@ -590,6 +595,23 @@ describe("ActSyncService apply", () => {
         "Command Center changed after this preview. Create a new preview.",
     });
     expect(client.getCalls).toBe(0);
+    expect(client.updateCalls).toBe(0);
+  });
+
+  it("does not update Act through a pull-only Contact alias", async () => {
+    const changedLocal = local({ phone: "406-555-9999" });
+    const alias = remote({ id: "act-alias" });
+    const rows = compareContactSets([changedLocal], [alias]);
+    const repository = new InMemoryApplyRepository(rows, [changedLocal]);
+    repository.writableActRecord = false;
+    const client = new FakeApplyClient([alias]);
+
+    const result = await new ActSyncService(client, repository).apply(
+      "run-1",
+      [{ rowId: rows[0]!.rowId, decision: "push" }],
+    );
+
+    expect(result.rows[0]).toMatchObject({ status: "failed" });
     expect(client.updateCalls).toBe(0);
   });
 

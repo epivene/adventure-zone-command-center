@@ -382,6 +382,17 @@ export class ActSyncService {
           retryable: false,
         };
       }
+      if (
+        row.actRecordId &&
+        !(await repository.assertActRecordWritable(row))
+      ) {
+        return {
+          rowId: row.rowId,
+          status: "failed",
+          error: "Act! aliases are pull-only and cannot receive updates.",
+          retryable: false,
+        };
+      }
       const push = await repository.withLockedLocalContact(row, async () => {
         if (row.actRecordId) {
           const current = await this.currentRemote(client, row);

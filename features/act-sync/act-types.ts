@@ -19,3 +19,14 @@ export type ActRateLimit = {
   remaining: string | null;
   reset: string | null;
 };
+
+export interface ActTransport {
+  testConnection(): Promise<{ ok: true }>;
+  requestJson(input: {
+    path: `/api/${string}`;
+    method: "GET" | "POST" | "PUT";
+    query?: Readonly<Record<string, string>>;
+    body?: unknown;
+  }): Promise<unknown>;
+  readonly rateLimit: ActRateLimit;
+}

@@ -139,6 +139,7 @@ export interface SyncApplyRepository extends SyncRepository {
     actRecordId: string,
   ): Promise<void>;
   assertLocalContactUnchanged(row: SyncComparisonRow): Promise<boolean>;
+  assertActRecordWritable(row: SyncComparisonRow): Promise<boolean>;
   withLockedLocalContact<T>(
     row: SyncComparisonRow,
     action: () => Promise<T>,
@@ -468,6 +469,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
         actExternalLinks,
         and(
           eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.isPrimary, true),
+          eq(actExternalLinks.syncMode, "two_way"),
           eq(actExternalLinks.entityId, contacts.id),
         ),
       )
@@ -999,6 +1003,31 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
     });
   }
 
+  async assertActRecordWritable(row: SyncComparisonRow) {
+    if (!row.localContactId || !row.actRecordId) return false;
+    const links = await this.database
+      .select({
+        actRecordId: actExternalLinks.actRecordId,
+        isPrimary: actExternalLinks.isPrimary,
+        syncMode: actExternalLinks.syncMode,
+      })
+      .from(actExternalLinks)
+      .where(
+        and(
+          eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.entityId, row.localContactId),
+        ),
+      );
+    if (links.length === 0) return true;
+    return links.some(
+      (link) =>
+        link.actRecordId === row.actRecordId &&
+        link.isPrimary &&
+        link.syncMode === "two_way",
+    );
+  }
+
   async withLockedLocalContact<T>(
     row: SyncComparisonRow,
     action: () => Promise<T>,
@@ -1023,6 +1052,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
           .where(
             and(
               eq(actExternalLinks.entityType, "contact"),
+              eq(actExternalLinks.sourceEntityType, "contact"),
+              eq(actExternalLinks.isPrimary, true),
+              eq(actExternalLinks.syncMode, "two_way"),
               eq(actExternalLinks.actRecordId, remote.id),
             ),
           )
@@ -1497,12 +1529,13 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .insert(actExternalLinks)
       .values({
         entityType: "contact",
+        sourceEntityType: "contact",
+        isPrimary: true,
+        syncMode: "two_way",
         entityId: contactId,
         actRecordId,
       })
-      .onConflictDoNothing({
-        target: [actExternalLinks.entityType, actExternalLinks.actRecordId],
-      })
+      .onConflictDoNothing()
       .returning({ entityId: actExternalLinks.entityId });
     if (created) return;
     const [existing] = await writer
@@ -1511,6 +1544,9 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
       .where(
         and(
           eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.isPrimary, true),
+          eq(actExternalLinks.syncMode, "two_way"),
           eq(actExternalLinks.actRecordId, actRecordId),
         ),
       )

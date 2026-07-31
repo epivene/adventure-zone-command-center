@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 
 import {
   actExternalLinks,
@@ -298,6 +300,150 @@ class RecordingSnapshotDatabase {
   }
 }
 
+class CanonicalLinkListDatabase {
+  readonly contact = {
+    id: "22222222-2222-4222-8222-222222222222",
+    organizationId: null,
+    firstName: snapshot.firstName,
+    lastName: snapshot.lastName,
+    jobTitle: snapshot.jobTitle,
+    email: snapshot.email,
+    phone: snapshot.phone,
+    address1: snapshot.address1,
+    address2: snapshot.address2,
+    city: snapshot.city,
+    region: snapshot.region,
+    postalCode: snapshot.postalCode,
+    actRecordId: "direct-act-id",
+  };
+  readonly links = [
+    {
+      actRecordId: "pull-only-alias",
+      sourceEntityType: "contact",
+      isPrimary: false,
+      syncMode: "pull_only",
+    },
+    {
+      actRecordId: "primary-two-way",
+      sourceEntityType: "contact",
+      isPrimary: true,
+      syncMode: "two_way",
+    },
+  ];
+  private canonicalLinkPredicate = false;
+
+  select() {
+    const builder = {
+      from: () => {
+        return builder;
+      },
+      leftJoin: (table: unknown, condition: SQL) => {
+        if (table === actExternalLinks) {
+          const query = new PgDialect().sqlToQuery(condition);
+          this.canonicalLinkPredicate = [
+            "contact",
+            "contact",
+            true,
+            "two_way",
+          ].every((value) => query.params.includes(value));
+        }
+        return builder;
+      },
+      then: (
+        resolve: (value: unknown[]) => unknown,
+        reject?: (reason: unknown) => unknown,
+      ) => {
+        const selectedLinks = this.canonicalLinkPredicate
+          ? this.links.filter(
+              (link) =>
+                link.sourceEntityType === "contact" &&
+                link.isPrimary &&
+                link.syncMode === "two_way",
+            )
+          : this.links;
+        return Promise.resolve(
+          selectedLinks.map((link) => ({
+            contact: this.contact,
+            organizationName: null,
+            externalActRecordId: link.actRecordId,
+            baseSnapshot: null,
+            actEditedAt: null,
+          })),
+        ).then(resolve, reject);
+      },
+    };
+    return builder;
+  }
+}
+
+class CanonicalLinkConflictDatabase {
+  readonly contactId = "22222222-2222-4222-8222-222222222222";
+  readonly links: Record<string, unknown>[] = [
+    {
+      entityType: "contact",
+      sourceEntityType: "contact",
+      entityId: this.contactId,
+      actRecordId: "existing-primary",
+      isPrimary: true,
+      syncMode: "two_way",
+    },
+  ];
+
+  insert(table: unknown) {
+    if (table !== actExternalLinks) throw new Error("Unexpected table.");
+    return {
+      values: (values: Record<string, unknown>) => ({
+        onConflictDoNothing: (...arguments_: unknown[]) => {
+          if (arguments_.length > 0) {
+            throw new Error("Expected targetless canonical-link conflict handling.");
+          }
+          return {
+            returning: async () => {
+              const sourceOwner = this.links.find(
+                (link) =>
+                  link.sourceEntityType === values.sourceEntityType &&
+                  link.actRecordId === values.actRecordId,
+              );
+              const existingPrimary = this.links.find(
+                (link) =>
+                  link.entityType === values.entityType &&
+                  link.entityId === values.entityId &&
+                  link.sourceEntityType === values.sourceEntityType &&
+                  link.isPrimary === true,
+              );
+              if (sourceOwner || existingPrimary) return [];
+              this.links.push({ ...values });
+              return [{ entityId: values.entityId }];
+            },
+          };
+        },
+      }),
+    };
+  }
+
+  select() {
+    return {
+      from: (table: unknown) => {
+        if (table !== actExternalLinks) throw new Error("Unexpected table.");
+        return {
+          where: (condition: SQL) => {
+            const query = new PgDialect().sqlToQuery(condition);
+            const externalId = query.params.at(-1);
+            const rows = this.links.filter(
+              (link) =>
+                link.sourceEntityType === "contact" &&
+                link.isPrimary === true &&
+                link.syncMode === "two_way" &&
+                link.actRecordId === externalId,
+            );
+            return { limit: async () => rows };
+          },
+        };
+      },
+    };
+  }
+}
+
 const remote = {
   ...snapshot,
   id: "act-1",
@@ -390,6 +536,44 @@ describe("stored Act sync previews", () => {
         [],
       ),
     ).toThrow("Stored Act! sync operations are malformed.");
+  });
+});
+
+describe("DrizzleSyncRepository local Contact discovery", () => {
+  it("selects only the primary two-way Contact link and ignores pull-only aliases", async () => {
+    const database = new CanonicalLinkListDatabase();
+
+    const contacts = await new DrizzleSyncRepository(
+      database as never,
+    ).listLocalContacts();
+
+    expect(contacts).toHaveLength(1);
+    expect(contacts[0]?.actRecordId).toBe("primary-two-way");
+  });
+
+  it("translates a different primary Act id conflict without leaking raw uniqueness", async () => {
+    const database = new CanonicalLinkConflictDatabase();
+    const repository = new DrizzleSyncRepository(database as never);
+    const ensureExternalLink = (
+      repository as unknown as {
+        ensureExternalLink(
+          writer: CanonicalLinkConflictDatabase,
+          contactId: string,
+          actRecordId: string,
+        ): Promise<void>;
+      }
+    ).ensureExternalLink.bind(repository);
+
+    await expect(
+      ensureExternalLink(database, database.contactId, "different-act-id"),
+    ).rejects.toThrow("Act! record is already linked to another contact.");
+    expect(database.links).toEqual([
+      expect.objectContaining({
+        actRecordId: "existing-primary",
+        isPrimary: true,
+        syncMode: "two_way",
+      }),
+    ]);
   });
 });
 
