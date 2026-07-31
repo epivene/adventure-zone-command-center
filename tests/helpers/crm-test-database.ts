@@ -94,6 +94,11 @@ export function crmTestDatabaseUrl(
     throw new Error("CRM_TEST_DATABASE_URL must be set when CRM_RELEASE_TESTS=1.");
   }
   if (!databaseUrl) return undefined;
+  if (environment.PGPORT) {
+    throw new Error(
+      "PGPORT must be unset when CRM_TEST_DATABASE_URL is set.",
+    );
+  }
 
   const testIdentity = databaseIdentity(
     databaseUrl,

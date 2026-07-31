@@ -323,7 +323,10 @@ survive. `CRM_RELEASE_TESTS=1` is mandatory so missing database configuration
 fails closed; skipped or gated PostgreSQL suites fail the release.
 
 In a fresh PowerShell session, obtain `CRM_TEST_DATABASE_URL` from the approved
-secret store. Its database name must contain a case-insensitive, delimited
+secret store and ensure inherited `PGPORT` is unset. The installed client uses
+`PGPORT` when a URL omits its port, so the preflight rejects every nonempty
+value, including whitespace; put any nondefault port explicitly in each URL.
+The test URL's database name must contain a case-insensitive, delimited
 `test` token, such as exact `test`, `crm_test`, or `test-crm`; a substring in a
 word such as `contest` or `testing` is rejected. The preflight below also
 rejects malformed/non-PostgreSQL URLs, missing host/database values, and the
@@ -424,6 +427,9 @@ function ConvertTo-PostgresDatabaseIdentity {
 }
 
 try {
+  if (-not [string]::IsNullOrEmpty($env:PGPORT)) {
+    throw "PGPORT must be unset when CRM_TEST_DATABASE_URL is set."
+  }
   $testIdentity = ConvertTo-PostgresDatabaseIdentity `
     -Value $env:CRM_TEST_DATABASE_URL `
     -VariableName "CRM_TEST_DATABASE_URL"

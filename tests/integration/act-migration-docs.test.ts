@@ -111,6 +111,7 @@ describe("Act migration operations documentation", () => {
     );
     expect(contents).toContain("host override parameters are not allowed");
     expect(contents).toContain("terminal DNS dots");
+    expect(contents).toContain("inherited `PGPORT`");
     expect(contents).toContain("unsupported_group_count");
     expect(contents).toContain("group_target_unavailable");
     expect(contents).toContain("group_membership_semantics_unknown");
@@ -136,12 +137,16 @@ describe("Act migration operations documentation", () => {
     expect(databaseGateBlock).toContain(
       '[regex]::Matches($authority, "@").Count',
     );
+    expect(databaseGateBlock).toContain("$env:PGPORT");
     expect(databaseGateBlock).toContain("TrimEnd");
     expect(databaseGateBlock).toContain(
       "(?i)(^|[^a-z0-9])test($|[^a-z0-9])",
     );
     expect(databaseGateBlock?.indexOf("[Uri]::TryCreate")).toBeLessThan(
       databaseGateBlock?.indexOf('$env:CRM_RELEASE_TESTS = "1"') ?? -1,
+    );
+    expect(databaseGateBlock?.indexOf("$env:PGPORT")).toBeLessThan(
+      databaseGateBlock?.indexOf("npm run test:crm-db") ?? -1,
     );
   });
 });

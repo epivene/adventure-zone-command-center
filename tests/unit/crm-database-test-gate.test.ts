@@ -159,6 +159,35 @@ describe("CRM PostgreSQL test gate", () => {
     ).toBe(url);
   });
 
+  it("rejects inherited PGPORT before it can align an omitted test URL port with DATABASE_URL", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://database.example/crm_test",
+        DATABASE_URL: "postgres://database.example:6543/crm_test",
+        PGPORT: "6543",
+      }),
+    ).toThrow("PGPORT must be unset when CRM_TEST_DATABASE_URL is set.");
+  });
+
+  it("rejects a whitespace-only inherited PGPORT", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://database.example/crm_test",
+        PGPORT: " ",
+      }),
+    ).toThrow("PGPORT must be unset when CRM_TEST_DATABASE_URL is set.");
+  });
+
+  it("allows an explicitly empty PGPORT", () => {
+    const url = "postgres://database.example/crm_test";
+    expect(
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: url,
+        PGPORT: "",
+      }),
+    ).toBe(url);
+  });
+
   it("fails closed when DATABASE_URL cannot be compared safely", () => {
     expect(() =>
       crmTestDatabaseUrl({
@@ -176,6 +205,10 @@ describe("CRM PostgreSQL test gate", () => {
 
   it("remains optional outside release mode when no test URL is supplied", () => {
     expect(crmTestDatabaseUrl({ DATABASE_URL: "not-a-url" })).toBeUndefined();
+  });
+
+  it("does not inspect inherited PGPORT outside release mode without a test URL", () => {
+    expect(crmTestDatabaseUrl({ PGPORT: "6543" })).toBeUndefined();
   });
 
   it("runs exactly the registered PostgreSQL suites in the release database command", () => {
