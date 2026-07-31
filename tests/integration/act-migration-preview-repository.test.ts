@@ -472,6 +472,18 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     })).rejects.toThrow("not an exact duplicate-place group");
   });
 
+  postgresTest("rejects forged exact-group metadata for one staged company", async () => {
+    const forged = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1"],
+      duplicateGroupKey: '["forged","1 main"]',
+      duplicateSourceIds: ["company-1", "company-2"],
+    });
+    await expect(store([forged], {
+      automaticApprovalProposalKeys: [forged.proposalKey],
+    })).rejects.toThrow("not an exact duplicate-place group");
+  });
+
   postgresTest("counts an unlinked matched-unchanged proposal as pending review", async () => {
     const unchanged = proposal({
       proposalKey: "organization:company-1",

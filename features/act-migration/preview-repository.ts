@@ -29,6 +29,7 @@ import {
   type BulkReviewScope,
 } from "@/features/act-migration/bulk-review";
 import { isExactDuplicatePlaceGroup } from "@/features/act-migration/auto-review";
+import { groupExactPlaceDuplicates, normalizePlaceIdentity } from "@/features/act-migration/place-identity";
 import {
   proposalSnapshotDigest,
   type MigrationReconciliationReport,
@@ -226,6 +227,31 @@ function proposalInsert(
   };
 }
 
+function isLockedExactDuplicateGroup(
+  proposal: ActMigrationProposal,
+  records: readonly { sourceKey: string; sourceId: string | null; streamType: string; normalizedSnapshot: Record<string, unknown> }[],
+) {
+  if (!isExactDuplicatePlaceGroup(proposal)) return false;
+  const sourceKeys = new Set(proposal.sourceRecordKeys);
+  const companies = records.filter((record) => sourceKeys.has(record.sourceKey));
+  if (companies.length !== sourceKeys.size || companies.some((record) => record.streamType !== "company" || record.sourceId === null)) return false;
+  const sourceIds = companies.map((record) => record.sourceId!).toSorted();
+  if (JSON.stringify(sourceIds) !== JSON.stringify([...(proposal.duplicateSourceIds ?? [])].toSorted())) return false;
+  const groups = groupExactPlaceDuplicates(companies.flatMap((record) => {
+    const snapshot = record.normalizedSnapshot;
+    const name = snapshot.displayName;
+    if (typeof name !== "string") return [];
+    const location = [snapshot.address1, snapshot.address2, snapshot.city, snapshot.region, snapshot.postalCode]
+      .filter((value): value is string => typeof value === "string").join(" ");
+    return [{ sourceId: record.sourceId!, name, location: location || null }];
+  }));
+  const group = groups.get(proposal.duplicateGroupKey!);
+  return Boolean(
+    group && group.length > 1 && group[0]!.location !== null &&
+    normalizePlaceIdentity(group[0]!).location,
+  );
+}
+
 function reportValue(value: unknown): MigrationReconciliationReport {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Stored Act migration reconciliation report is malformed.");
@@ -358,6 +384,7 @@ export class DrizzleActMigrationPreviewRepository
           sourceKey: actMigrationRecords.sourceKey,
           sourceId: actMigrationRecords.sourceId,
           streamType: actMigrationRecords.streamType,
+          normalizedSnapshot: actMigrationRecords.normalizedSnapshot,
         })
         .from(actMigrationRecords)
         .where(eq(actMigrationRecords.runId, input.runId))
@@ -399,7 +426,7 @@ export class DrizzleActMigrationPreviewRepository
       const automaticApprovals = new Set(input.automaticApprovalProposalKeys ?? []);
       if ([...automaticApprovals].some((key) => {
         const proposal = input.proposals.find((value) => value.proposalKey === key);
-        return !proposal || !isExactDuplicatePlaceGroup(proposal);
+        return !proposal || !isLockedExactDuplicateGroup(proposal, stagedRecords);
       })) {
         throw new Error("Act migration automatic approval is not an exact duplicate-place group.");
       }
