@@ -236,6 +236,11 @@ describe("CRM PostgreSQL test gate", () => {
       "tests/integration/act-migration-staging-migration.test.ts",
       "tests/integration/act-migration-snapshot-repository.test.ts",
       "tests/integration/act-migration-preview-repository.test.ts",
+      "tests/integration/act-reviewed-import-migration.test.ts",
+      "tests/integration/act-migration-apply-repository.test.ts",
+      "tests/integration/act-migration-entity-apply.test.ts",
+      "tests/integration/act-migration-relationship-apply.test.ts",
+      "tests/integration/act-migration-calling-list-apply.test.ts",
     ]);
   });
 

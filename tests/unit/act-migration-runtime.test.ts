@@ -221,6 +221,21 @@ describe("Act migration runtime", () => {
     await expect(reader.getWorkspace({ runId, query })).resolves.toEqual({
       progress,
       preview,
+      apply: {
+        ready: undefined,
+        summary: {
+          approved: 0,
+          pending: 0,
+          blocked: 0,
+          ignored: 0,
+          applied: 0,
+          failed: 0,
+          bulkEligible: 0,
+          byTarget: {},
+        },
+        byTarget: {},
+        bulkEligible: 0,
+      },
     });
 
     expect(mocks.databaseModuleLoaded).toHaveBeenCalledOnce();
