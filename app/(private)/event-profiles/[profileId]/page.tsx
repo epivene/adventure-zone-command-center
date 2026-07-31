@@ -16,7 +16,13 @@ export default async function EventProfilePage({
   searchParams,
 }: {
   params: Promise<{ profileId: string }>;
-  searchParams: Promise<{ contactId?: string | string[] }>;
+  searchParams: Promise<{
+    contactId?: string | string[];
+    bookingId?: string | string[];
+    followUpId?: string | string[];
+    action?: string | string[];
+    mode?: string | string[];
+  }>;
 }) {
   await requireOwner();
   const { profileId } = await params;
@@ -29,5 +35,20 @@ export default async function EventProfilePage({
   );
   if (!profile) notFound();
 
-  return <EventProfileWorkspace profile={profile} />;
+  const requestedAction = firstValue(query.action);
+  const action = requestedAction === "call" || requestedAction === "follow-up"
+    ? requestedAction
+    : undefined;
+  const mode = firstValue(query.mode) === "prospect" ? "prospect" : undefined;
+  return (
+    <EventProfileWorkspace
+      profile={profile}
+      context={{
+        bookingId: firstValue(query.bookingId),
+        followUpId: firstValue(query.followUpId),
+        action,
+        mode,
+      }}
+    />
+  );
 }

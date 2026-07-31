@@ -7,9 +7,23 @@ function formatDate(value: Date | null) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Denver" }).format(value);
 }
 
-function callHref(profile: EventProfile) {
+export type EventProfileWorkspaceContext = {
+  bookingId?: string;
+  followUpId?: string;
+  action?: "call" | "follow-up";
+  mode?: "prospect";
+};
+
+function callHref(
+  profile: EventProfile,
+  context: EventProfileWorkspaceContext = {},
+) {
   const query = new URLSearchParams({ organizationId: profile.id });
   if (profile.selectedContactId) query.set("contactId", profile.selectedContactId);
+  if (context.bookingId) query.set("bookingId", context.bookingId);
+  if (context.followUpId) query.set("followUpId", context.followUpId);
+  if (context.action) query.set("action", context.action);
+  if (context.mode) query.set("mode", context.mode);
   return `/calls/new?${query}`;
 }
 
@@ -17,8 +31,20 @@ function titleCase(value: string) {
   return value.replaceAll("_", " ");
 }
 
-export function EventProfileWorkspace({ profile }: { profile: EventProfile }) {
+export function EventProfileWorkspace({
+  profile,
+  context = {},
+}: {
+  profile: EventProfile;
+  context?: EventProfileWorkspaceContext;
+}) {
   const selectedContact = profile.contacts.find(({ id }) => id === profile.selectedContactId) ?? null;
+  const selectedBooking = context.bookingId
+    ? profile.bookings.find(({ id }) => id === context.bookingId) ?? null
+    : null;
+  const selectedFollowUp = context.followUpId
+    ? profile.followUps.find(({ id }) => id === context.followUpId) ?? null
+    : null;
   const placeLocation = [profile.place.address1, profile.place.city, profile.place.region, profile.place.postalCode]
     .filter(Boolean)
     .join(", ");
@@ -34,10 +60,18 @@ export function EventProfileWorkspace({ profile }: { profile: EventProfile }) {
             {profile.place.phone ? <p className="mt-1 text-sm text-slate-600">{profile.place.phone}</p> : null}
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="button-primary text-center" href={callHref(profile)}>Record call outcome</Link>
+            <Link className="button-primary text-center" href={callHref(profile, context)}>Record call outcome</Link>
             <Link className="button-secondary text-center" href="/event-profiles/new">New event</Link>
           </div>
         </div>
+        {context.mode === "prospect" || context.action || selectedBooking || selectedFollowUp ? (
+          <div className="mt-4 flex flex-wrap gap-2 text-sm" role="status">
+            {context.mode === "prospect" ? <span className="rounded-full bg-orange-100 px-2.5 py-1 font-semibold text-orange-900">Prospect mode</span> : null}
+            {context.action ? <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold capitalize text-slate-800">{context.action} action selected</span> : null}
+            {selectedBooking ? <span className="rounded-full bg-indigo-100 px-2.5 py-1 font-semibold text-indigo-900">Selected booking context: {selectedBooking.name}</span> : null}
+            {selectedFollowUp ? <span className="rounded-full bg-rose-100 px-2.5 py-1 font-semibold text-rose-900">Selected follow-up context: {titleCase(selectedFollowUp.kind)}</span> : null}
+          </div>
+        ) : null}
         {profile.place.lastResort ? (
           <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-950" role="alert">
             Last Resort: {profile.place.lastResortReason || "Review this event before making commitments."}
@@ -82,7 +116,7 @@ export function EventProfileWorkspace({ profile }: { profile: EventProfile }) {
             <h2 className="text-xl font-bold" id="event-follow-ups-title">Follow-up</h2>
             {profile.followUps.length ? <ul className="mt-3 grid gap-3">
               {profile.followUps.map((followUp) => <li className="text-sm" key={followUp.id}>
-                <p className="font-semibold capitalize">{titleCase(followUp.kind)}</p>
+                <p className="font-semibold capitalize">{titleCase(followUp.kind)} {followUp.id === context.followUpId ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-900">Selected follow-up context</span> : null}</p>
                 <p className="text-slate-600">{followUp.completedAt ? `Completed ${formatDate(followUp.completedAt)}` : `Due ${formatDate(followUp.dueAt)}`}</p>
               </li>)}
             </ul> : <p className="mt-3 text-sm text-slate-600">No follow-up is scheduled.</p>}
@@ -93,6 +127,7 @@ export function EventProfileWorkspace({ profile }: { profile: EventProfile }) {
             {profile.bookings.length ? <ul className="mt-3 grid gap-4">
               {profile.bookings.map((booking) => <li className="grid gap-1 text-sm" key={booking.id}>
                 <Link className="font-semibold hover:text-orange-700" href={`/bookings/${booking.id}`}>{booking.name}</Link>
+                {booking.id === context.bookingId ? <span className="w-fit rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-900">Selected booking context</span> : null}
                 <p className="capitalize text-slate-600">{titleCase(booking.status)} · {formatDate(booking.startsAt)}</p>
                 <p className="text-slate-600">{booking.city}, {booking.region}</p>
                 {booking.notes ? <p className="mt-1 whitespace-pre-wrap text-slate-700">{booking.notes}</p> : null}

@@ -108,4 +108,26 @@ describe("EventProfileWorkspace", () => {
     expect(screen.getByText("Colorado Pride Leads")).toBeVisible();
     expect(screen.getByText("COMPANY-10-MILE")).toBeVisible();
   });
+
+  it("renders Today booking, follow-up, action, and prospect context and carries it into the call", () => {
+    render(
+      <EventProfileWorkspace
+        profile={profile}
+        context={{
+          bookingId: "33333333-3333-4333-8333-333333333333",
+          followUpId: "55555555-5555-4555-8555-555555555555",
+          action: "call",
+          mode: "prospect",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Prospect mode")).toBeVisible();
+    expect(screen.getByText("Selected booking context")).toBeVisible();
+    expect(screen.getByText("Selected follow-up context")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Record call outcome" })).toHaveAttribute(
+      "href",
+      "/calls/new?organizationId=11111111-1111-4111-8111-111111111111&contactId=22222222-2222-4222-8222-222222222222&bookingId=33333333-3333-4333-8333-333333333333&followUpId=55555555-5555-4555-8555-555555555555&action=call&mode=prospect",
+    );
+  });
 });
