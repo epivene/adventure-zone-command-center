@@ -182,8 +182,8 @@ export const travelLegs = pgTable(
   },
   (table) => [
     check(
-      "travel_legs_sort_order_between_1_and_4",
-      sql`${table.sortOrder} between 1 and 4`,
+      "travel_legs_sort_order_between_1_and_9",
+      sql`${table.sortOrder} between 1 and 9`,
     ),
   ],
 );
