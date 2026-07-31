@@ -324,50 +324,41 @@ describe("places and contacts migration release gate", () => {
     expect(canonicalPlace).toMatchObject({
       duplicateSourceIds: ["PLACE-A", "PLACE-B", "PLACE-C"],
       sourceRecordKeys: ["company:PLACE-A", "company:PLACE-B", "company:PLACE-C"],
+      reviewState: "decided",
     });
     expect(proposals.filter(({ targetEntityType }) => targetEntityType === "organization")).toHaveLength(2);
     expect(nearMatch).toMatchObject({ state: "possible_duplicate", reviewState: "pending" });
 
-    const approved = proposals.map((proposal) =>
-      proposal === nearMatch
-        ? { ...proposal, decision: null }
-        : {
-            ...proposal,
-            reviewState: "decided" as const,
-            decision: "approve_proposed" as const,
-            primarySourceId:
-              proposal.targetEntityType === "contact"
-                ? proposal.sourceRecordKeys[0]!.slice("contact:".length)
-                : null,
-            chosenLocalEntityId: null,
-          },
-    ) satisfies MigrationApplyProposal[];
+    const reviewed = proposals.map((proposal) => ({
+      ...proposal,
+      decision: null,
+      primarySourceId: null,
+      chosenLocalEntityId: null,
+    })) satisfies MigrationApplyProposal[];
     const manifest = buildMigrationApplyManifest({
       sourceDigest: source.sourceDigest,
       previewSourceDigest: source.sourceDigest,
-      // Decisions are persisted before apply and therefore belong to the
-      // reviewed preview digest presented to the apply boundary.
-      previewProposalDigest: proposalSnapshotDigest(approved),
-      proposals: approved,
+      previewProposalDigest: proposalSnapshotDigest(reviewed),
+      proposals: reviewed,
       stableLinks: [],
     });
 
-    expect(manifest.counts).toMatchObject({ proposalTotal: 7, runnable: 6, pending: 1 });
+    expect(manifest.counts).toMatchObject({ proposalTotal: 6, runnable: 5, pending: 1 });
     expect(manifest.entries).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ proposalKey: "organization:company:PLACE-NEAR" }),
     ]));
 
-    const applyRepository = new PersistentApplyRepository(approved);
+    const applyRepository = new PersistentApplyRepository(reviewed);
     const started = await new ActMigrationApplyService(applyRepository, {}).start({
       requestKey: "33333333-3333-4333-8333-333333333333",
       runId,
       requestedBy: "owner",
       manifest,
     });
-    expect(started).toMatchObject({ changed: true, counts: { pending: 6, total: 6 } });
+    expect(started).toMatchObject({ changed: true, counts: { pending: 5, total: 5 } });
 
     const contactProposalKey = (sourceId: string) => {
-      const proposal = approved.find(({ targetEntityType, sourceRecordKeys }) =>
+      const proposal = reviewed.find(({ targetEntityType, sourceRecordKeys }) =>
         targetEntityType === "contact" && sourceRecordKeys.includes(`contact:${sourceId}`),
       );
       if (!proposal) throw new Error(`Release fixture contact proposal is missing: ${sourceId}`);
@@ -377,7 +368,17 @@ describe("places and contacts migration release gate", () => {
     const relationshipOperations = applyRepository.storedOperations().filter(
       ({ targetEntityType }) => targetEntityType === "organization_contact",
     );
-    expect(relationshipOperations).toHaveLength(3);
+    expect(relationshipOperations).toHaveLength(2);
+    expect(relationshipOperations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposal: expect.objectContaining({
+          sourceRecordKeys: [
+            "company_contact:PLACE-A:CONTACT-SHARED",
+            "company_contact:PLACE-B:CONTACT-SHARED",
+          ],
+        }),
+      }),
+    ]));
     const relationshipContacts = new Set<string>();
     for (const operation of relationshipOperations) {
       const relationshipRecord = operation.proposal.sourceRecordKeys
@@ -414,8 +415,8 @@ describe("places and contacts migration release gate", () => {
     const firstApply = await applyService.continue({ runId, batchId });
     const replay = await applyService.continue({ runId, batchId });
 
-    expect(firstApply).toMatchObject({ changed: true, counts: { applied: 6, total: 6 } });
-    expect(replay).toMatchObject({ changed: false, counts: { applied: 6, total: 6 } });
+    expect(firstApply).toMatchObject({ changed: true, counts: { applied: 5, total: 5 } });
+    expect(replay).toMatchObject({ changed: false, counts: { applied: 5, total: 5 } });
     expect(applyRepository.storedOperations().every(({ status }) => status === "applied")).toBe(true);
     expect(commandCenter.places).toHaveLength(1);
     expect(commandCenter.places.get(canonicalPlace!.proposalKey)).toEqual(new Set(["PLACE-A", "PLACE-B", "PLACE-C"]));

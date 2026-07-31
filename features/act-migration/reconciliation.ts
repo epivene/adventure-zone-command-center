@@ -18,6 +18,9 @@ import type {
   MigrationApplyCounts,
   MigrationApplyWorkspace,
 } from "@/features/act-migration/apply-repository";
+import {
+  autoReviewMigrationProposals,
+} from "@/features/act-migration/auto-review";
 
 export type MigrationReconciliationReport = {
   sourceCounts: Record<ActSourceEntityType, number>;
@@ -30,6 +33,8 @@ export type MigrationReconciliationReport = {
   duplicateSourceIdConflicts: number;
   incompleteCheckpoints: number;
   failedCheckpoints: number;
+  autoApproved?: number;
+  reviewRequired?: number;
   sourceDigest: string;
   proposalDigest: string;
   complete: boolean;
@@ -359,6 +364,7 @@ export function reconcileMigrationPreview(input: {
     ({ status }) => status === "failed",
   ).length;
 
+  const automaticReview = autoReviewMigrationProposals(input.proposals);
   return {
     sourceCounts: countValues(actSourceEntityTypeValues, entityStreams),
     relationshipCounts: countValues(
@@ -388,6 +394,8 @@ export function reconcileMigrationPreview(input: {
     ).length,
     incompleteCheckpoints,
     failedCheckpoints,
+    autoApproved: automaticReview.approvedProposalKeys.length,
+    reviewRequired: automaticReview.pendingProposalKeys.length,
     sourceDigest: input.source.sourceDigest,
     proposalDigest: proposalSnapshotDigest(input.proposals),
     complete:

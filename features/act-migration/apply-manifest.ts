@@ -9,6 +9,9 @@ import {
 import {
   proposalSnapshotDigest,
 } from "@/features/act-migration/reconciliation";
+import {
+  autoReviewMigrationProposals,
+} from "@/features/act-migration/auto-review";
 import type {
   MigrationApplyCounts,
   MigrationApplyManifest,
@@ -140,6 +143,9 @@ export function buildMigrationApplyManifest(
 
   type ProposalDisposition = "runnable" | "reconciled" | "ignored" | "pending" | "failed";
   const dispositions = new Map<string, ProposalDisposition>();
+  const automaticApprovals = new Set(
+    autoReviewMigrationProposals(input.proposals).approvedProposalKeys,
+  );
   for (const proposal of input.proposals) {
     if (proposal.state === "matched_unchanged") {
       if (!hasCanonicalStableLinks(proposal, input)) {
@@ -164,11 +170,11 @@ export function buildMigrationApplyManifest(
         "Act migration Group proposals require an individual static Group confirmation.",
       );
     }
-    if (proposal.decision === null) {
+    if (proposal.decision === null && !automaticApprovals.has(proposal.proposalKey)) {
       dispositions.set(proposal.proposalKey, "pending");
       continue;
     }
-    if (!isDecisionValid(proposal)) {
+    if (proposal.decision !== null && !isDecisionValid(proposal)) {
       throw new Error("Act migration proposal has an invalid reviewed decision.");
     }
     dispositions.set(proposal.proposalKey, "runnable");
@@ -213,7 +219,7 @@ export function buildMigrationApplyManifest(
       canonicalTargetLocalEntityId:
         proposal.chosenLocalEntityId ?? proposal.proposedLocalId,
       canonicalSourceIds: [...(proposal.duplicateSourceIds ?? [])].toSorted(),
-      decision: proposal.decision!,
+      decision: proposal.decision ?? "approve_proposed",
       chosenLocalEntityId: proposal.chosenLocalEntityId,
       primarySourceId: proposal.primarySourceId,
       targetEntityType: proposal.targetEntityType,

@@ -13,6 +13,9 @@ import {
 import {
   reconcileMigrationPreview,
 } from "@/features/act-migration/reconciliation";
+import {
+  autoReviewMigrationProposals,
+} from "@/features/act-migration/auto-review";
 import type { ActMigrationSnapshotRepository } from "@/features/act-migration/snapshot-repository";
 import type {
   ActMigrationProposal,
@@ -100,7 +103,7 @@ function consolidateExactDuplicatePlaces(input: {
     }
   }
 
-  return input.proposals.flatMap((proposal) => {
+  const remapped = input.proposals.flatMap((proposal) => {
     const canonicalProposalKey = canonicalKeyByProposalKey.get(proposal.proposalKey);
     if (canonicalProposalKey && canonicalProposalKey !== proposal.proposalKey) {
       return [];
@@ -121,6 +124,37 @@ function consolidateExactDuplicatePlaces(input: {
       ).toSorted(),
     }];
   });
+  const relationshipGroups = Map.groupBy(
+    remapped.filter((proposal) =>
+      proposal.targetEntityType === "organization_contact" &&
+      proposal.state === "new_relationship" &&
+      proposal.issueCode === null,
+    ),
+    (proposal) => `${proposal.targetEntityType}|${proposal.dependencyProposalKeys.join("|")}`,
+  );
+  const canonicalRelationshipKeys = new Map<string, string>();
+  const mergedRelationships = new Map<string, ActMigrationProposal>();
+  for (const relationships of relationshipGroups.values()) {
+    if (relationships.length < 2) continue;
+    const canonical = [...relationships].toSorted((left, right) =>
+      left.proposalKey.localeCompare(right.proposalKey),
+    )[0]!;
+    const sourceRecordKeys = relationships.flatMap((proposal) => proposal.sourceRecordKeys)
+      .filter((key, index, values) => values.indexOf(key) === index)
+      .toSorted();
+    mergedRelationships.set(canonical.proposalKey, {
+      ...canonical,
+      sourceRecordKeys,
+    });
+    for (const relationship of relationships) {
+      canonicalRelationshipKeys.set(relationship.proposalKey, canonical.proposalKey);
+    }
+  }
+  return remapped.flatMap((proposal) => {
+    const canonicalKey = canonicalRelationshipKeys.get(proposal.proposalKey);
+    if (canonicalKey && canonicalKey !== proposal.proposalKey) return [];
+    return [mergedRelationships.get(proposal.proposalKey) ?? proposal];
+  });
 }
 
 export class ActMigrationPreviewService {
@@ -139,10 +173,11 @@ export class ActMigrationPreviewService {
 
     const source = await this.snapshots.finalizeSourceSnapshot(runId);
     const local = await this.localCandidates.loadCandidateSnapshot();
-    const proposals = consolidateExactDuplicatePlaces({
+    const consolidated = consolidateExactDuplicatePlaces({
       source,
       proposals: buildMigrationProposals({ source, local }),
     });
+    const proposals = autoReviewMigrationProposals(consolidated).proposals;
     const report = reconcileMigrationPreview({ source, proposals });
     const storedResult = await this.previews.storeProposalsIfAbsent({
       runId,
