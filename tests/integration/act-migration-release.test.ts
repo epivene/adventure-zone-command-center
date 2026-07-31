@@ -49,17 +49,17 @@ function emptyCandidates(): LocalMigrationCandidateSnapshot {
   return {
     places: [{
       id: "near-match-local-place",
-      name: "Adventure Fair",
-      normalizedName: "adventure fair",
+      name: "10 Mile Pride Festival",
+      normalizedName: "10 mile pride festival",
       placeType: "other",
       actIndustry: null,
       phone: null,
       normalizedPhone: null,
-      address1: "1 Existing Way",
+      address1: "12 Main Street",
       address2: null,
-      city: "Boulder",
+      city: "Frisco",
       region: "CO",
-      normalizedCity: "boulder",
+      normalizedCity: "frisco",
       normalizedRegion: "co",
       postalCode: null,
       website: null,
@@ -236,61 +236,100 @@ class PersistentApplyRepository implements ActMigrationApplyRepository {
   }
 }
 
-class ReadOnlyActMutator {
-  readonly write = vi.fn();
+class ReadOnlyActAdapter {
+  readonly writes = vi.fn();
 }
 
-type FixtureCommandCenter = {
-  places: Map<string, Set<string>>;
-  contacts: Set<string>;
-  placeContacts: Map<string, Set<string>>;
+type EventProfileState = {
+  sourceIds: string[];
+  phones: string[];
+  notes: string[];
+  contactSourceIds: string[];
 };
 
-function commandCenterTargets(input: {
-  commandCenter: FixtureCommandCenter;
-  canonicalPlaceKey: string;
-  act: ReadOnlyActMutator;
-}) {
-  const assertNoActWrites = () => expect(input.act.write).not.toHaveBeenCalled();
-  return {
-    organization: { apply: async (operation: MigrationApplyOperation) => {
-      assertNoActWrites();
-      const sources = input.commandCenter.places.get(operation.proposalKey) ?? new Set<string>();
-      for (const sourceId of operation.proposal.duplicateSourceIds ?? []) sources.add(sourceId);
-      input.commandCenter.places.set(operation.proposalKey, sources);
-      return { entityId: operation.proposalKey, changed: sources.size > 0 };
-    } },
-    contact: { apply: async (operation: MigrationApplyOperation) => {
-      assertNoActWrites();
-      const changed = !input.commandCenter.contacts.has(operation.proposalKey);
-      input.commandCenter.contacts.add(operation.proposalKey);
-      return { entityId: operation.proposalKey, changed };
-    } },
-    organization_contact: { apply: async (operation: MigrationApplyOperation) => {
-      assertNoActWrites();
-      const contactDependency = operation.dependencyProposalKeys.find((key) => key.startsWith("contact:"));
-      if (!contactDependency) throw new Error("Release fixture relationship contact dependency is missing.");
-      const relationships = input.commandCenter.placeContacts.get(input.canonicalPlaceKey) ?? new Set<string>();
-      const changed = !relationships.has(contactDependency);
-      relationships.add(contactDependency);
-      input.commandCenter.placeContacts.set(input.canonicalPlaceKey, relationships);
-      return { entityId: `${input.canonicalPlaceKey}:${contactDependency}`, changed };
-    } },
-  };
+type ContactState = {
+  sourceIds: string[];
+  phones: string[];
+  emails: string[];
+};
+
+/** Stateful local Command Center target used by the release gate. */
+class StatefulCommandCenter {
+  readonly profiles = new Map<string, EventProfileState>();
+  readonly contacts = new Map<string, ContactState>();
+  readonly relationships = new Set<string>();
+
+  constructor(private readonly act: ReadOnlyActAdapter) {}
+
+  private assertLocalOnly() {
+    expect(this.act.writes).not.toHaveBeenCalled();
+  }
+
+  private array(snapshot: Record<string, unknown>, key: string) {
+    const value = snapshot[key];
+    if (typeof value !== "string") return [];
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+      ? [...new Set(parsed)]
+      : [];
+  }
+
+  targets() {
+    return {
+      organization: { apply: async (operation: MigrationApplyOperation) => {
+        this.assertLocalOnly();
+        const snapshot = operation.proposal.displaySnapshot;
+        const next: EventProfileState = {
+          sourceIds: [...(operation.proposal.duplicateSourceIds ?? [])],
+          phones: this.array(snapshot, "mergedPhones"),
+          notes: this.array(snapshot, "mergedNotes"),
+          contactSourceIds: this.array(snapshot, "mergedContactSourceIds"),
+        };
+        const previous = this.profiles.get(operation.proposalKey);
+        this.profiles.set(operation.proposalKey, next);
+        return { entityId: operation.proposalKey, changed: JSON.stringify(previous) !== JSON.stringify(next) };
+      } },
+      contact: { apply: async (operation: MigrationApplyOperation) => {
+        this.assertLocalOnly();
+        const sourceIds = operation.proposal.sourceRecordKeys
+          .filter((key) => key.startsWith("contact:"))
+          .map((key) => key.slice("contact:".length));
+        const snapshot = operation.proposal.displaySnapshot;
+        const next: ContactState = {
+          sourceIds,
+          phones: this.array(snapshot, "phones"),
+          emails: this.array(snapshot, "emails"),
+        };
+        const previous = this.contacts.get(operation.proposalKey);
+        this.contacts.set(operation.proposalKey, next);
+        return { entityId: operation.proposalKey, changed: JSON.stringify(previous) !== JSON.stringify(next) };
+      } },
+      organization_contact: { apply: async (operation: MigrationApplyOperation) => {
+        this.assertLocalOnly();
+        const organization = operation.dependencyProposalKeys.find((key) => key.startsWith("organization:"));
+        const contact = operation.dependencyProposalKeys.find((key) => key.startsWith("contact:"));
+        if (!organization || !contact) throw new Error("Release fixture relationship dependencies are missing.");
+        const key = `${organization}:${contact}`;
+        const changed = !this.relationships.has(key);
+        this.relationships.add(key);
+        return { entityId: key, changed };
+      } },
+    };
+  }
 }
 
-describe("places and contacts migration release gate", () => {
-  it("consolidates exact places, queues non-exact work, and applies the auto-approved group idempotently without Act! writes", async () => {
+describe("event profile migration release gate", () => {
+  it("consolidates the 10 Mile Pride profile, leaves only its near-match queued, and replays local apply without Act! writes", async () => {
     const records = [
-      record("company", { id: "PLACE-C", name: "Adventure Fair, Inc.", address: { line1: "123 Main St.", city: "Denver", state: "CO" } }),
-      record("company", { id: "PLACE-A", name: " adventure fair inc ", address: { line1: "123 Main St", city: "Denver", state: "CO" } }),
-      record("company", { id: "PLACE-B", name: "Adventure Fair Inc", address: { line1: "123 Main St", city: "Denver", state: "CO" } }),
-      record("company", { id: "PLACE-NEAR", name: "Adventure Fair", address: { line1: "999 Broadway", city: "Boulder", state: "CO" } }),
-      record("contact", { id: "CONTACT-SHARED", firstName: "Ada", lastName: "Shared", emailAddress: "ada@example.test" }),
-      record("contact", { id: "CONTACT-UNIQUE", firstName: "Bea", lastName: "Unique", emailAddress: "bea@example.test" }),
-      record("company_contact", { sourceId: "PLACE-A", targetSourceId: "CONTACT-SHARED" }),
-      record("company_contact", { sourceId: "PLACE-B", targetSourceId: "CONTACT-SHARED" }),
-      record("company_contact", { sourceId: "PLACE-C", targetSourceId: "CONTACT-UNIQUE" }),
+      record("company", { id: "PRIDE-C", name: "10 Mile Pride", phone: "970-555-0103", notes: "Prefers a Saturday headline.", address: { line1: "10 Main St", city: "Breckenridge", state: "CO" } }),
+      record("company", { id: "PRIDE-A", name: " 10 mile pride ", phone: "970-555-0101", notes: "Requested a sponsor packet.", address: { line1: "10 Main St.", city: "Breckenridge", state: "CO" } }),
+      record("company", { id: "PRIDE-B", name: "10 MILE PRIDE", phone: "970-555-0102", notes: "Call the events team after Labor Day.", address: { line1: "10 Main St", city: "Breckenridge", state: "CO" } }),
+      record("company", { id: "PRIDE-NEAR", name: "10 Mile Pride Festival", address: { line1: "11 Main Street", city: "Frisco", state: "CO" } }),
+      record("contact", { id: "CONTACT-SHARED", firstName: "Avery", lastName: "Able", emailAddress: "avery@example.test", businessPhone: "970-555-0111", notes: "Primary coordinator." }),
+      record("contact", { id: "CONTACT-UNIQUE", firstName: "Bailey", lastName: "Baker", emailAddress: "bailey@example.test", businessPhone: "970-555-0112", notes: "Works vendor check-in." }),
+      record("company_contact", { sourceId: "PRIDE-A", targetSourceId: "CONTACT-SHARED" }),
+      record("company_contact", { sourceId: "PRIDE-B", targetSourceId: "CONTACT-SHARED" }),
+      record("company_contact", { sourceId: "PRIDE-C", targetSourceId: "CONTACT-UNIQUE" }),
     ];
     const source = {
       runId,
@@ -315,16 +354,21 @@ describe("places and contacts migration release gate", () => {
     await previewService.finalizePreview(runId);
     const proposals = previewInput!.proposals;
     const canonicalPlace = proposals.find(
-      ({ proposalKey }) => proposalKey === "organization:company:PLACE-A",
+      ({ proposalKey }) => proposalKey === "organization:company:PRIDE-A",
     );
     const nearMatch = proposals.find(
-      ({ proposalKey }) => proposalKey === "organization:company:PLACE-NEAR",
+      ({ proposalKey }) => proposalKey === "organization:company:PRIDE-NEAR",
     );
 
     expect(canonicalPlace).toMatchObject({
-      duplicateSourceIds: ["PLACE-A", "PLACE-B", "PLACE-C"],
-      sourceRecordKeys: ["company:PLACE-A", "company:PLACE-B", "company:PLACE-C"],
+      duplicateSourceIds: ["PRIDE-A", "PRIDE-B", "PRIDE-C"],
+      sourceRecordKeys: ["company:PRIDE-A", "company:PRIDE-B", "company:PRIDE-C"],
       reviewState: "decided",
+      displaySnapshot: expect.objectContaining({
+        mergedContactSourceIds: '["CONTACT-SHARED","CONTACT-UNIQUE"]',
+        mergedPhones: '["970-555-0101","970-555-0102","970-555-0103","970-555-0111","970-555-0112"]',
+        mergedNotes: '["Call the events team after Labor Day.","Prefers a Saturday headline.","Primary coordinator.","Requested a sponsor packet.","Works vendor check-in."]',
+      }),
     });
     expect(proposals.filter(({ targetEntityType }) => targetEntityType === "organization")).toHaveLength(2);
     expect(nearMatch).toMatchObject({ state: "possible_duplicate", reviewState: "pending" });
@@ -335,10 +379,10 @@ describe("places and contacts migration release gate", () => {
     expect(consolidatedRelationships).toEqual(expect.arrayContaining([
       expect.objectContaining({
         sourceRecordKeys: [
-          "company_contact:PLACE-A:CONTACT-SHARED",
-          "company_contact:PLACE-B:CONTACT-SHARED",
+          "company_contact:PRIDE-A:CONTACT-SHARED",
+          "company_contact:PRIDE-B:CONTACT-SHARED",
         ],
-        reviewState: "pending",
+        reviewState: "decided",
       }),
     ]));
 
@@ -356,9 +400,13 @@ describe("places and contacts migration release gate", () => {
       stableLinks: [],
     });
 
-    expect(manifest.counts).toMatchObject({ proposalTotal: 6, runnable: 1, pending: 5 });
+    expect(manifest.counts).toMatchObject({ proposalTotal: 6, runnable: 5, pending: 1 });
+    expect(manifest.entries.map(({ proposalKey }) => proposalKey)).toEqual(expect.arrayContaining([
+      canonicalPlace!.proposalKey,
+      ...consolidatedRelationships.map(({ proposalKey }) => proposalKey),
+    ]));
     expect(manifest.entries).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ proposalKey: "organization:company:PLACE-NEAR" }),
+      expect.objectContaining({ proposalKey: nearMatch!.proposalKey }),
     ]));
 
     const applyRepository = new PersistentApplyRepository(reviewed);
@@ -368,76 +416,37 @@ describe("places and contacts migration release gate", () => {
       requestedBy: "owner",
       manifest,
     });
-    expect(started).toMatchObject({ changed: true, counts: { pending: 1, total: 1 } });
+    expect(started).toMatchObject({ changed: true, counts: { pending: 5, total: 5 } });
 
-    const relationshipOperations = applyRepository.storedOperations().filter(
-      ({ targetEntityType }) => targetEntityType === "organization_contact",
-    );
-    expect(relationshipOperations).toHaveLength(0);
-
-    const commandCenter = {
-      places: new Map<string, Set<string>>(),
-      contacts: new Set<string>(),
-      placeContacts: new Map<string, Set<string>>(),
-    };
-    const act = new ReadOnlyActMutator();
+    const act = new ReadOnlyActAdapter();
+    const commandCenter = new StatefulCommandCenter(act);
     const applyService = new ActMigrationApplyService(
       applyRepository,
-      commandCenterTargets({
-        commandCenter,
-        canonicalPlaceKey: canonicalPlace!.proposalKey,
-        act,
-      }),
+      commandCenter.targets(),
     );
 
     const firstApply = await applyService.continue({ runId, batchId });
     const replay = await applyService.continue({ runId, batchId });
 
-    expect(firstApply).toMatchObject({ changed: true, counts: { applied: 1, total: 1 } });
-    expect(replay).toMatchObject({ changed: false, counts: { applied: 1, total: 1 } });
+    expect(firstApply).toMatchObject({ changed: true, counts: { applied: 5, total: 5 } });
+    expect(replay).toMatchObject({ changed: false, counts: { applied: 5, total: 5 } });
     expect(applyRepository.storedOperations().every(({ status }) => status === "applied")).toBe(true);
-    expect(commandCenter.places).toHaveLength(1);
-    expect(commandCenter.places.get(canonicalPlace!.proposalKey)).toEqual(new Set(["PLACE-A", "PLACE-B", "PLACE-C"]));
-    expect(commandCenter.contacts).toEqual(new Set());
-    expect(commandCenter.placeContacts).toEqual(new Map());
-
-    const explicitlyApproved = reviewed.map((proposal) =>
-      proposal.proposalKey === nearMatch?.proposalKey
-        ? proposal
-        : {
-            ...proposal,
-            reviewState: "decided" as const,
-            decision: "approve_proposed" as const,
-            primarySourceId: proposal.targetEntityType === "contact"
-              ? proposal.sourceRecordKeys[0]!.slice("contact:".length)
-              : null,
-          },
-    ) satisfies MigrationApplyProposal[];
-    const reviewedManifest = buildMigrationApplyManifest({
-      sourceDigest: source.sourceDigest,
-      previewSourceDigest: source.sourceDigest,
-      previewProposalDigest: proposalSnapshotDigest(explicitlyApproved),
-      proposals: explicitlyApproved,
-      stableLinks: [],
+    expect(commandCenter.profiles).toHaveLength(1);
+    expect(commandCenter.profiles.get(canonicalPlace!.proposalKey)).toEqual({
+      sourceIds: ["PRIDE-A", "PRIDE-B", "PRIDE-C"],
+      phones: ["970-555-0101", "970-555-0102", "970-555-0103", "970-555-0111", "970-555-0112"],
+      notes: ["Call the events team after Labor Day.", "Prefers a Saturday headline.", "Primary coordinator.", "Requested a sponsor packet.", "Works vendor check-in."],
+      contactSourceIds: ["CONTACT-SHARED", "CONTACT-UNIQUE"],
     });
-    const reviewedRepository = new PersistentApplyRepository(explicitlyApproved);
-    await new ActMigrationApplyService(reviewedRepository, {}).start({
-      requestKey: "44444444-4444-4444-8444-444444444444",
-      runId,
-      requestedBy: "owner",
-      manifest: reviewedManifest,
-    });
-    const reviewedApply = new ActMigrationApplyService(
-      reviewedRepository,
-      commandCenterTargets({ commandCenter, canonicalPlaceKey: canonicalPlace!.proposalKey, act }),
-    );
-    expect(await reviewedApply.continue({ runId, batchId })).toMatchObject({ changed: true, counts: { applied: 5, total: 5 } });
-    expect(await reviewedApply.continue({ runId, batchId })).toMatchObject({ changed: false, counts: { applied: 5, total: 5 } });
-    const approvedContactProposalKeys = explicitlyApproved
+    const approvedContactProposalKeys = reviewed
       .filter(({ targetEntityType }) => targetEntityType === "contact")
       .map(({ proposalKey }) => proposalKey);
-    expect(commandCenter.contacts).toEqual(new Set(approvedContactProposalKeys));
-    expect(commandCenter.placeContacts.get(canonicalPlace!.proposalKey)).toEqual(new Set(approvedContactProposalKeys));
-    expect(act.write).not.toHaveBeenCalled();
+    expect([...commandCenter.contacts.keys()]).toEqual(expect.arrayContaining(approvedContactProposalKeys));
+    expect(commandCenter.contacts).toHaveLength(2);
+    expect(commandCenter.relationships).toEqual(new Set([
+      `${canonicalPlace!.proposalKey}:contact:contact:CONTACT-SHARED`,
+      `${canonicalPlace!.proposalKey}:contact:contact:CONTACT-UNIQUE`,
+    ]));
+    expect(act.writes).not.toHaveBeenCalled();
   });
 });

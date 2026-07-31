@@ -23,10 +23,11 @@ export function isExactDuplicatePlaceGroup(proposal: ActMigrationProposal) {
 }
 
 /**
- * Decides only an exact duplicate-place group. Stable unchanged proposals are
- * reported as reconciliation candidates but retain their canonical-link gate
- * at the manifest boundary. Candidate matches, source conflicts, ordinary
- * new records, relationships, and changed records remain outside this policy.
+ * Decides an exact duplicate-place group plus its safe, new Contact and
+ * Place-Person children. Stable unchanged proposals are reported as
+ * reconciliation candidates but retain their canonical-link gate at the
+ * manifest boundary. Candidate matches, source conflicts, unrelated new
+ * records, and changed records remain outside this policy.
  */
 export function autoReviewMigrationProposals(
   proposals: readonly ActMigrationProposal[],
@@ -45,6 +46,39 @@ export function autoReviewMigrationProposals(
       isExactDuplicatePlaceGroup(proposal) ? [proposal.proposalKey] : [],
     ),
   );
+  const proposalsByKey = new Map(
+    proposals.map((proposal) => [proposal.proposalKey, proposal]),
+  );
+  const exactGroupRelationships = proposals.filter((proposal) =>
+    proposal.targetEntityType === "organization_contact" &&
+    proposal.state === "new_relationship" &&
+    proposal.issueCode === null &&
+    proposal.dependencyProposalKeys.some((key) => approved.has(key)),
+  );
+  const exactGroupContactKeys = new Set(
+    exactGroupRelationships.flatMap((proposal) =>
+      proposal.dependencyProposalKeys.filter((key) =>
+        proposalsByKey.get(key)?.targetEntityType === "contact",
+      ),
+    ),
+  );
+
+  for (const key of exactGroupContactKeys) {
+    const proposal = proposalsByKey.get(key);
+    if (
+      proposal?.targetEntityType === "contact" &&
+      proposal.state === "new" &&
+      proposal.issueCode === null &&
+      proposal.candidateLocalIds.length === 0
+    ) {
+      approved.add(key);
+    }
+  }
+  for (const proposal of exactGroupRelationships) {
+    if (proposal.dependencyProposalKeys.every((key) => approved.has(key))) {
+      approved.add(proposal.proposalKey);
+    }
+  }
 
   const reviewed = proposals.map((proposal) =>
     approved.has(proposal.proposalKey)

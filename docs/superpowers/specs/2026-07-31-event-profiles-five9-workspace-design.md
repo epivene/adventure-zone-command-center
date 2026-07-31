@@ -74,3 +74,12 @@ Existing URLs remain compatible and redirect into the unified flow where practic
 - A caller can complete a call and create/schedule a booking from one profile workspace.
 - No manual review is required for exact duplicate groups or safe unchanged records.
 - Only genuinely ambiguous records remain in the review queue.
+
+## Verified rollout sequence
+
+1. Stage the complete Act! snapshot and verify the source checkpoint is complete.
+2. Review the preview: an exact normalized event/place group and its unambiguous new Contacts and Place-Person links are approved automatically; possible duplicates remain queued.
+3. Start the local Command Center apply batch, continue it to completion, then repeat the same request to verify the replay is unchanged. Do not perform any Act! write.
+4. From Today, open the event-profile link with its Contact, booking, and follow-up context. Record the call outcome from that profile and confirm the resulting booking status and next follow-up retain that context.
+
+The automated release fixture covers this sequence with three `10 Mile Pride` Breckenridge source rows, their unique contacts and conflicting phones/notes, plus one Frisco near-match. The database-backed release suite remains gated on a disposable `CRM_TEST_DATABASE_URL`; it must run before production rollout when that environment is available.

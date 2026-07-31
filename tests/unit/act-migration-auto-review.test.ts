@@ -27,7 +27,7 @@ function proposal(
 }
 
 describe("autoReviewMigrationProposals", () => {
-  it("approves only an exact duplicate group while leaving ordinary new work pending", () => {
+  it("approves safe contacts and relationships attached to an exact duplicate group", () => {
     const exactPlace = proposal("organization:company:ACT-1", {
       sourceRecordKeys: ["company:ACT-1", "company:ACT-2"],
       duplicateGroupKey: '["example fair","1 main denver co"]',
@@ -60,13 +60,12 @@ describe("autoReviewMigrationProposals", () => {
     ]);
 
     expect(result.approvedProposalKeys).toEqual([
-      "organization:company:ACT-1",
-    ]);
-    expect(result.reconciledProposalKeys).toEqual(["organization:stable"]);
-    expect(result.pendingProposalKeys).toEqual([
       "contact:CONTACT-1",
+      "organization:company:ACT-1",
       "organization_contact:ACT-1:CONTACT-1",
     ]);
+    expect(result.reconciledProposalKeys).toEqual(["organization:stable"]);
+    expect(result.pendingProposalKeys).toEqual([]);
     expect(result.proposals).toEqual(expect.arrayContaining([
       expect.objectContaining({
         proposalKey: exactPlace.proposalKey,
@@ -74,7 +73,7 @@ describe("autoReviewMigrationProposals", () => {
       }),
       expect.objectContaining({
         proposalKey: relationship.proposalKey,
-        reviewState: "pending",
+        reviewState: "decided",
       }),
     ]));
   });
