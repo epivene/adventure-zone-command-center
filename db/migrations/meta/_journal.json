@@ -85,6 +85,13 @@
       "when": 1785529200000,
       "tag": "0011_place_duplicate_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785532800000,
+      "tag": "0012_apply_resolved_dependencies",
+      "breakpoints": true
     }
   ]
 }

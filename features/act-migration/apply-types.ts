@@ -43,7 +43,15 @@ export type MigrationApplyManifestEntry = {
   targetEntityType: MigrationTargetEntityType;
   sourceRecordKeys: readonly string[];
   dependencyProposalKeys: readonly string[];
+  /** Dependencies reconciled to an existing canonical entity instead of queued. */
+  resolvedDependencies: readonly MigrationResolvedDependency[];
   operationRank: number;
+};
+
+export type MigrationResolvedDependency = {
+  proposalKey: string;
+  targetEntityType: MigrationTargetEntityType;
+  entityId: string;
 };
 
 export type MigrationApplyTargetCounts = {

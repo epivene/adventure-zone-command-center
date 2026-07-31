@@ -125,7 +125,7 @@ describe("buildMigrationApplyManifest", () => {
     );
   });
 
-  it("reconciles stable no-ops only when every source identity has a canonical link", () => {
+  it("keeps stable no-ops pending until every source identity has a canonical link", () => {
     const unchanged = proposal("organization:stable", "organization", {
       state: "matched_unchanged",
       reviewState: "not_required",
@@ -135,7 +135,11 @@ describe("buildMigrationApplyManifest", () => {
     });
     const value = input([unchanged]);
 
-    expect(() => buildMigrationApplyManifest(value)).toThrow("stable link");
+    expect(buildMigrationApplyManifest(value).counts).toMatchObject({
+      proposalTotal: 1,
+      pending: 1,
+      runnable: 0,
+    });
 
     const manifest = buildMigrationApplyManifest({
       ...value,
@@ -194,7 +198,7 @@ describe("buildMigrationApplyManifest", () => {
     expect(manifest.counts).toMatchObject({ runnable: 0, pending: 2 });
   });
 
-  it("rejects an ambiguous canonical stable link", () => {
+  it("keeps an ambiguous stable proposal pending while allowing unrelated approved work", () => {
     const unchanged = proposal("organization:stable", "organization", {
       state: "matched_unchanged",
       reviewState: "not_required",
@@ -202,15 +206,55 @@ describe("buildMigrationApplyManifest", () => {
       proposedLocalId: "organization-local-id",
       sourceRecordKeys: ["company:ACT-1"],
     });
-    const value = input([unchanged]);
+    const approved = proposal("contact:approved", "contact");
+    const value = input([unchanged, approved]);
 
-    expect(() => buildMigrationApplyManifest({
+    const manifest = buildMigrationApplyManifest({
       ...value,
       stableLinks: [
         { targetEntityType: "organization", localEntityId: "organization-local-id", sourceRecordKey: "company:ACT-1" },
         { targetEntityType: "organization", localEntityId: "another-local-id", sourceRecordKey: "company:ACT-1" },
       ],
-    })).toThrow("ambiguous canonical stable link");
+    });
+
+    expect(manifest.entries.map(({ proposalKey }) => proposalKey)).toEqual([
+      "contact:approved",
+    ]);
+    expect(manifest.counts).toMatchObject({ runnable: 1, pending: 1 });
+  });
+
+  it("records the canonical ID of a reconciled dependency for queued children", () => {
+    const existingPlace = proposal("organization:stable", "organization", {
+      state: "matched_unchanged",
+      reviewState: "not_required",
+      decision: null,
+      proposedLocalId: "organization-local-id",
+      sourceRecordKeys: ["company:ACT-1"],
+    });
+    const relationship = proposal("organization_contact:stable:PERSON", "organization_contact", {
+      state: "new_relationship",
+      dependencyProposalKeys: ["organization:stable"],
+    });
+
+    const manifest = buildMigrationApplyManifest({
+      ...input([existingPlace, relationship]),
+      stableLinks: [{
+        targetEntityType: "organization",
+        localEntityId: "organization-local-id",
+        sourceRecordKey: "company:ACT-1",
+      }],
+    });
+
+    expect(manifest.entries).toEqual([
+      expect.objectContaining({
+        proposalKey: "organization_contact:stable:PERSON",
+        resolvedDependencies: [{
+          proposalKey: "organization:stable",
+          targetEntityType: "organization",
+          entityId: "organization-local-id",
+        }],
+      }),
+    ]);
   });
 
   it("keeps ignored, pending, and failed-preview proposals out of operations while counting them", () => {

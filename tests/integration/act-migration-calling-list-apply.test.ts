@@ -35,7 +35,7 @@ function operation(input: {
 }): MigrationApplyOperation {
   return {
     id: randomUUID(), batchId, runId, proposalKey: input.proposalKey,
-    targetEntityType: input.targetEntityType, dependencyProposalKeys: input.dependencyProposalKeys ?? [],
+    targetEntityType: input.targetEntityType, dependencyProposalKeys: input.dependencyProposalKeys ?? [], resolvedDependencies: [],
     status: "leased", attemptCount: 1, leaseOwner: "worker", leaseExpiresAt: null,
     appliedEntityId: null, errorCode: null, retryable: true,
     proposal: {

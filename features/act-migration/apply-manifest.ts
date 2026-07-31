@@ -71,9 +71,6 @@ function hasCanonicalStableLinks(
         link.targetEntityType === proposal.targetEntityType &&
         link.sourceRecordKey === sourceRecordKey,
     );
-    if (links.length > 1) {
-      throw new Error("Act migration proposal has an ambiguous canonical stable link.");
-    }
     return links.length === 1 && links[0]!.localEntityId === proposal.proposedLocalId;
   });
 }
@@ -146,9 +143,10 @@ export function buildMigrationApplyManifest(
   for (const proposal of input.proposals) {
     if (proposal.state === "matched_unchanged") {
       if (!hasCanonicalStableLinks(proposal, input)) {
-        throw new Error(
-          "Act migration matched_unchanged proposal is missing a canonical stable link.",
-        );
+        // Stable-link ambiguity and absence both leave this proposal unresolved.
+        // Other independently approved proposals remain safe to queue.
+        dispositions.set(proposal.proposalKey, "pending");
+        continue;
       }
       dispositions.set(proposal.proposalKey, "reconciled");
       continue;
@@ -201,6 +199,10 @@ export function buildMigrationApplyManifest(
   const counts = emptyCounts();
   counts.proposalTotal = input.proposals.length;
   const entries: MigrationApplyManifestEntry[] = [];
+  const proposalsByKey = new Map(input.proposals.map((proposal) => [
+    proposal.proposalKey,
+    proposal,
+  ]));
   for (const proposal of input.proposals) {
     const disposition = dispositions.get(proposal.proposalKey)!;
     increment(counts, proposal.targetEntityType, disposition);
@@ -217,6 +219,16 @@ export function buildMigrationApplyManifest(
       targetEntityType: proposal.targetEntityType,
       sourceRecordKeys: [...proposal.sourceRecordKeys].toSorted(),
       dependencyProposalKeys: [...proposal.dependencyProposalKeys].toSorted(),
+      resolvedDependencies: proposal.dependencyProposalKeys.flatMap((dependencyKey) => {
+        if (dispositions.get(dependencyKey) !== "reconciled") return [];
+        const dependency = proposalsByKey.get(dependencyKey);
+        if (!dependency?.proposedLocalId) return [];
+        return [{
+          proposalKey: dependencyKey,
+          targetEntityType: dependency.targetEntityType,
+          entityId: dependency.proposedLocalId,
+        }];
+      }).toSorted((left, right) => left.proposalKey.localeCompare(right.proposalKey)),
       operationRank: migrationTargetRank(proposal.targetEntityType),
     });
   }

@@ -16,6 +16,7 @@ import {
 import type {
   MigrationApplyManifest,
   MigrationApplyProposal,
+  MigrationResolvedDependency,
   MigrationStableLink,
 } from "@/features/act-migration/apply-types";
 import {
@@ -44,6 +45,7 @@ export type MigrationApplyOperation = {
   proposalKey: string;
   targetEntityType: MigrationTargetEntityType;
   dependencyProposalKeys: readonly string[];
+  resolvedDependencies: readonly MigrationResolvedDependency[];
   status: MigrationApplyOperationStatus;
   attemptCount: number;
   leaseOwner: string | null;
@@ -205,6 +207,7 @@ function operationValue(
     proposalKey: row.proposalKey,
     targetEntityType: row.targetEntityType as MigrationTargetEntityType,
     dependencyProposalKeys: row.dependencyProposalKeys,
+    resolvedDependencies: row.resolvedDependencies as MigrationResolvedDependency[],
     status: row.status as MigrationApplyOperationStatus,
     attemptCount: row.attemptCount,
     leaseOwner: row.leaseOwner,
@@ -283,8 +286,9 @@ async function updateDependencyBlocks(
   ]));
   for (const operation of operations) {
     if (operation.status !== "pending" && operation.status !== "blocked") continue;
-    const ready = operation.dependencyProposalKeys.every(
-      (key) => byProposalKey.get(key)?.status === "applied",
+    const resolvedKeys = new Set(operation.resolvedDependencies.map(({ proposalKey }) => proposalKey));
+    const ready = operation.dependencyProposalKeys.every((key) =>
+      resolvedKeys.has(key) || byProposalKey.get(key)?.status === "applied",
     );
     const nextStatus = ready ? "pending" : "blocked";
     if (operation.status === nextStatus) continue;
@@ -435,6 +439,7 @@ export class DrizzleActMigrationApplyRepository
           proposalKey: entry.proposalKey,
           targetEntityType: entry.targetEntityType,
           dependencyProposalKeys: [...entry.dependencyProposalKeys],
+          resolvedDependencies: [...entry.resolvedDependencies],
           status: "pending",
           retryable: true,
           createdAt: input.now,

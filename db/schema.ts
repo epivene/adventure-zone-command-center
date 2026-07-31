@@ -1085,6 +1085,10 @@ export const actMigrationApplyOperations = pgTable(
       .$type<string[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
+    resolvedDependencies: jsonb("resolved_dependencies")
+      .$type<{ proposalKey: string; targetEntityType: string; entityId: string }[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     status: text("status").default("pending").notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     leaseOwner: text("lease_owner"),
@@ -1112,6 +1116,10 @@ export const actMigrationApplyOperations = pgTable(
     check(
       "act_migration_apply_operations_dependency_proposal_keys_array",
       sql`jsonb_typeof(${table.dependencyProposalKeys}) = 'array'`,
+    ),
+    check(
+      "act_migration_apply_operations_resolved_dependencies_array",
+      sql`jsonb_typeof(${table.resolvedDependencies}) = 'array'`,
     ),
     check(
       "act_migration_apply_operations_status_valid",

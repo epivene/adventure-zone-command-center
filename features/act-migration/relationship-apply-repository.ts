@@ -86,9 +86,18 @@ export class MigrationRelationshipApplyRepository {
       eq(actMigrationApplyOperations.runId, operation.runId),
       inArray(actMigrationApplyOperations.proposalKey, [...operation.dependencyProposalKeys]),
     )).orderBy(asc(actMigrationApplyOperations.proposalKey)).for("update");
-    const values = new Map(rows.flatMap((row) => row.status === "applied" && row.appliedEntityId
-      ? [[row.proposalKey, { targetEntityType: row.targetEntityType, entityId: row.appliedEntityId }] as const]
-      : []));
+    const values = new Map<string, { targetEntityType: string; entityId: string }>(operation.resolvedDependencies.map((dependency) => [
+      dependency.proposalKey,
+      { targetEntityType: dependency.targetEntityType, entityId: dependency.entityId },
+    ] as const));
+    for (const row of rows) {
+      if (row.status === "applied" && row.appliedEntityId) {
+        values.set(row.proposalKey, {
+          targetEntityType: row.targetEntityType,
+          entityId: row.appliedEntityId,
+        });
+      }
+    }
     if (values.size !== operation.dependencyProposalKeys.length) {
       throw new Error("Act migration dependency is not applied.");
     }

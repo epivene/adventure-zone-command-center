@@ -31,11 +31,12 @@ function operation(input: {
   targetEntityType: "organization_contact" | "booking" | "booking_contact";
   sourceRecordKeys: string[];
   dependencyProposalKeys: string[];
+  resolvedDependencies?: MigrationApplyOperation["resolvedDependencies"];
   displaySnapshot?: Record<string, string | number | boolean | null>;
 }): MigrationApplyOperation {
   return {
     id: randomUUID(), batchId, runId, proposalKey: input.proposalKey,
-    targetEntityType: input.targetEntityType, dependencyProposalKeys: input.dependencyProposalKeys,
+    targetEntityType: input.targetEntityType, dependencyProposalKeys: input.dependencyProposalKeys, resolvedDependencies: input.resolvedDependencies ?? [],
     status: "leased", attemptCount: 1, leaseOwner: "worker", leaseExpiresAt: null,
     appliedEntityId: null, errorCode: null, retryable: true,
     proposal: {
@@ -117,6 +118,42 @@ describe("MigrationRelationshipApplyRepository (PostgreSQL)", () => {
       eq(crmSchema.organizationContacts.organizationId, placeId),
       eq(crmSchema.organizationContacts.contactId, personId),
     ))).toMatchObject([{ id: first.entityId, active: true, isPrimary: true, source: "act_migration" }]);
+  });
+
+  postgresTest("uses a reconciled canonical Place ID without a parent apply operation", async () => {
+    await database.delete(crmSchema.actMigrationApplyOperations).where(and(
+      eq(crmSchema.actMigrationApplyOperations.runId, runId),
+      eq(crmSchema.actMigrationApplyOperations.proposalKey, "organization:place"),
+    ));
+    await database.insert(crmSchema.actMigrationRecords).values({
+      runId,
+      streamType: "company_contact",
+      sourceKey: "company_contact:PLACE:PERSON",
+      sourceId: "PLACE",
+      targetSourceId: "PERSON",
+      rawSnapshot: {},
+      normalizedSnapshot: { sourceId: "PLACE", targetSourceId: "PERSON" },
+      fingerprint: "reconciled-relationship",
+    });
+    const value = operation({
+      proposalKey: "organization_contact:reconciled-place-person",
+      targetEntityType: "organization_contact",
+      sourceRecordKeys: ["company_contact:PLACE:PERSON"],
+      dependencyProposalKeys: ["organization:place", "contact:person"],
+      resolvedDependencies: [{
+        proposalKey: "organization:place",
+        targetEntityType: "organization",
+        entityId: placeId,
+      }],
+    });
+
+    await expect(repository.applyOrganizationContact(value)).resolves.toMatchObject({
+      changed: true,
+    });
+    expect(await database.select().from(crmSchema.organizationContacts).where(and(
+      eq(crmSchema.organizationContacts.organizationId, placeId),
+      eq(crmSchema.organizationContacts.contactId, personId),
+    ))).toHaveLength(1);
   });
 
   postgresTest("creates a Booking from dependency IDs without a Person and retains unrelated operational history on retry", async () => {

@@ -61,3 +61,30 @@ The PostgreSQL integration suites were skipped because `CRM_TEST_DATABASE_URL` i
 
 - Disposable PostgreSQL validation could not run locally because no `CRM_TEST_DATABASE_URL` was supplied. This is the only outstanding verification gap.
 - `ActMigrationApplyService` already processes claimed operations serially and the repository ranks organizations before contacts and relationships; no orchestration code change was necessary for the canonical-place ordering requirement.
+
+## Fix round 1
+
+- Ambiguous or absent canonical stable links now leave only that `matched_unchanged` proposal pending. Manifest construction continues, so independent approved work can still be queued.
+- Reconciled dependencies now persist their canonical existing IDs on child queue operations. The queue treats those dependencies as ready without creating a synthetic parent operation, and relationship/calling-list apply paths use the resolved IDs.
+- Added regression coverage for both manifest behavior and PostgreSQL queue/apply behavior.
+
+### Validation
+
+```text
+npx vitest run tests/unit/act-migration-apply-manifest.test.ts tests/unit/act-migration-preview.test.ts tests/integration/act-migration-apply-repository.test.ts tests/integration/act-migration-entity-apply.test.ts tests/integration/act-migration-relationship-apply.test.ts --maxWorkers=1 --testTimeout=120000 --hookTimeout=120000
+Test Files  2 passed | 3 skipped (5)
+Tests       11 passed | 13 skipped (24)
+
+npm run typecheck
+exit 0
+
+git diff --check
+exit 0
+```
+
+PostgreSQL-only integration cases were skipped. Exact environment check output:
+
+```text
+CRM_TEST_DATABASE_URL is not configured
+.env is absent
+```

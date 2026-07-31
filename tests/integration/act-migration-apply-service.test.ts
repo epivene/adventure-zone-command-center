@@ -50,7 +50,7 @@ function batch(created = true): MigrationApplyBatch & { created: boolean } {
 function operation(index: number): MigrationApplyOperation {
   return {
     id: `operation-${index}`, batchId, runId, proposalKey: `organization:${index}`,
-    targetEntityType: "organization", dependencyProposalKeys: [], status: "leased",
+    targetEntityType: "organization", dependencyProposalKeys: [], resolvedDependencies: [], status: "leased",
     attemptCount: 1, leaseOwner: "worker", leaseExpiresAt: null, appliedEntityId: null,
     errorCode: null, retryable: true,
     proposal: {
