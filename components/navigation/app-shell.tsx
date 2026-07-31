@@ -53,6 +53,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
               <Link
                 className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+                href="/settings/act-migration"
+              >
+                Act! migration
+              </Link>
+              <Link
+                className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
                 href="/settings/import"
               >
                 Import fallback
@@ -96,6 +102,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               href="/settings/act-sync"
             >
               Act! Sync
+            </Link>
+            <Link
+              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+              href="/settings/act-migration"
+            >
+              Act! migration
             </Link>
             <Link
               className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
