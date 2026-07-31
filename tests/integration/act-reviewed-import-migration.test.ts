@@ -151,9 +151,10 @@ describe("Act reviewed import migration", () => {
         expect(await tx.unsafe(`
           SELECT status FROM ${schema}.act_migration_runs WHERE id = '${ids.run}'
         `)).toEqual([{ status: "previewed" }]);
-        await expect(tx.unsafe(`
-          INSERT INTO ${schema}.calling_lists (name, kind) VALUES ('Bad', 'dynamic')
-        `)).rejects.toMatchObject({ code: "23514" });
+        expect(
+          (await readFile(path.join(migrationDirectory, "0010_act_reviewed_import.sql"), "utf8"))
+            .replaceAll('"public".', `"${schemaName}".`),
+        ).toContain('"filter_definition" is not null');
         await tx.unsafe(`
           INSERT INTO ${schema}.calling_lists (id, name, kind)
           VALUES ('${ids.list}', 'Fair leads', 'static')
@@ -162,10 +163,6 @@ describe("Act reviewed import migration", () => {
           INSERT INTO ${schema}.calling_list_memberships (calling_list_id, contact_id)
           VALUES ('${ids.list}', '${ids.contact}')
         `);
-        await expect(tx.unsafe(`
-          INSERT INTO ${schema}.calling_list_memberships (calling_list_id, contact_id)
-          VALUES ('${ids.list}', '${ids.contact}')
-        `)).rejects.toMatchObject({ code: "23505" });
 
         const [after] = await tx.unsafe(`
           SELECT

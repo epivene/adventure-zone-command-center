@@ -65,7 +65,7 @@ CREATE TABLE "calling_lists" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "calling_lists_name_nonblank" CHECK (nullif(trim("calling_lists"."name"), '') is not null),
 	CONSTRAINT "calling_lists_kind_valid" CHECK ("calling_lists"."kind" in ('static', 'dynamic')),
-	CONSTRAINT "calling_lists_filter_definition_valid" CHECK (("calling_lists"."kind" = 'static' and "calling_lists"."filter_version" is null and "calling_lists"."filter_definition" is null) or ("calling_lists"."kind" = 'dynamic' and "calling_lists"."filter_version" = 1 and jsonb_typeof("calling_lists"."filter_definition") = 'object')),
+	CONSTRAINT "calling_lists_filter_definition_valid" CHECK (("calling_lists"."kind" = 'static' and "calling_lists"."filter_version" is null and "calling_lists"."filter_definition" is null) or ("calling_lists"."kind" = 'dynamic' and "calling_lists"."filter_version" = 1 and "calling_lists"."filter_definition" is not null and jsonb_typeof("calling_lists"."filter_definition") = 'object')),
 	CONSTRAINT "calling_lists_source_status_valid" CHECK ("calling_lists"."source_status" in ('active', 'inactive'))
 );
 --> statement-breakpoint

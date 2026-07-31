@@ -972,7 +972,7 @@ export const callingLists = pgTable(
     ),
     check(
       "calling_lists_filter_definition_valid",
-      sql`(${table.kind} = 'static' and ${table.filterVersion} is null and ${table.filterDefinition} is null) or (${table.kind} = 'dynamic' and ${table.filterVersion} = 1 and jsonb_typeof(${table.filterDefinition}) = 'object')`,
+      sql`(${table.kind} = 'static' and ${table.filterVersion} is null and ${table.filterDefinition} is null) or (${table.kind} = 'dynamic' and ${table.filterVersion} = 1 and ${table.filterDefinition} is not null and jsonb_typeof(${table.filterDefinition}) = 'object')`,
     ),
     check(
       "calling_lists_source_status_valid",

@@ -3205,7 +3205,7 @@
         },
         "calling_lists_filter_definition_valid": {
           "name": "calling_lists_filter_definition_valid",
-          "value": "(\"calling_lists\".\"kind\" = 'static' and \"calling_lists\".\"filter_version\" is null and \"calling_lists\".\"filter_definition\" is null) or (\"calling_lists\".\"kind\" = 'dynamic' and \"calling_lists\".\"filter_version\" = 1 and jsonb_typeof(\"calling_lists\".\"filter_definition\") = 'object')"
+          "value": "(\"calling_lists\".\"kind\" = 'static' and \"calling_lists\".\"filter_version\" is null and \"calling_lists\".\"filter_definition\" is null) or (\"calling_lists\".\"kind\" = 'dynamic' and \"calling_lists\".\"filter_version\" = 1 and \"calling_lists\".\"filter_definition\" is not null and jsonb_typeof(\"calling_lists\".\"filter_definition\") = 'object')"
         },
         "calling_lists_source_status_valid": {
           "name": "calling_lists_source_status_valid",
