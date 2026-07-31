@@ -37,6 +37,12 @@ export function EventProfileForm({
   const [includeBooking, setIncludeBooking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  function availableContacts(index: number) {
+    return contacts.filter((contact) =>
+      contact.id === contactDrafts[index]?.id ||
+      !contactDrafts.some((draft, draftIndex) => draftIndex !== index && draft.id === contact.id),
+    );
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -103,11 +109,11 @@ export function EventProfileForm({
           Add an existing contact
           <select aria-label="Add an existing contact" onChange={(event) => { const id = event.currentTarget.value; setContactDrafts((drafts) => drafts.map((draft, index) => index === 0 ? { ...draft, id } : draft)); }} value={contactDrafts[0]?.id ?? ""}>
             <option value="">Create a new contact</option>
-            {contacts.map((item) => <option key={item.id} value={item.id}>{item.name}{item.organizationName ? ` — ${item.organizationName}` : ""}</option>)}
+            {availableContacts(0).map((item) => <option key={item.id} value={item.id}>{item.name}{item.organizationName ? ` — ${item.organizationName}` : ""}</option>)}
           </select>
         </label>
         {contactDrafts.map((draft, index) => <div className="grid gap-4 rounded-lg border border-slate-200 p-4 sm:grid-cols-2" key={index}>
-          {index > 0 ? <label className="grid gap-1.5 font-medium sm:col-span-2">Contact {index + 1} (existing)<select aria-label={`Contact ${index + 1} existing contact`} onChange={(event) => { const id = event.currentTarget.value; setContactDrafts((drafts) => drafts.map((item, itemIndex) => itemIndex === index ? { ...item, id } : item)); }} value={draft.id}><option value="">Create a new contact</option>{contacts.map((item) => <option key={item.id} value={item.id}>{item.name}{item.organizationName ? ` — ${item.organizationName}` : ""}</option>)}</select></label> : null}
+          {index > 0 ? <label className="grid gap-1.5 font-medium sm:col-span-2">Contact {index + 1} (existing)<select aria-label={`Contact ${index + 1} existing contact`} onChange={(event) => { const id = event.currentTarget.value; setContactDrafts((drafts) => drafts.map((item, itemIndex) => itemIndex === index ? { ...item, id } : item)); }} value={draft.id}><option value="">Create a new contact</option>{availableContacts(index).map((item) => <option key={item.id} value={item.id}>{item.name}{item.organizationName ? ` — ${item.organizationName}` : ""}</option>)}</select></label> : null}
           {!draft.id ? <><label className="grid gap-1.5 font-medium sm:col-span-2">{index === 0 ? "Contact name" : `Contact ${index + 1} name`}<input name={`contactName-${index}`} required /></label><label className="grid gap-1.5 font-medium">Phone<input defaultValue={draft.phone} name={`phone-${index}`} /></label><label className="grid gap-1.5 font-medium">Email<input name={`email-${index}`} type="email" /></label><label className="grid gap-1.5 font-medium sm:col-span-2">Role (optional)<input name={`role-${index}`} /></label></> : null}
           {index > 0 ? <button className="button-secondary justify-self-start" onClick={() => setContactDrafts((drafts) => drafts.filter((_, itemIndex) => itemIndex !== index))} type="button">Remove contact</button> : null}
         </div>)}

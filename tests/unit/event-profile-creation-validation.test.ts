@@ -18,4 +18,9 @@ describe("event profile creation validation", () => {
   it("rejects malformed new-event state codes at the server boundary", () => {
     expect(creationSchema.safeParse({ ...base, event: { ...base.event, region: "Colorado" } }).success).toBe(false);
   });
+
+  it("rejects duplicate existing contact IDs at the server boundary", () => {
+    const selected = { ...base.contacts[0], id: "11111111-1111-4111-8111-111111111111" };
+    expect(creationSchema.safeParse({ ...base, contacts: [selected, selected] }).success).toBe(false);
+  });
 });

@@ -82,4 +82,12 @@ describe("EventProfileForm", () => {
       expect.objectContaining({ name: "Bailey Stone" }),
     ] }));
   });
+
+  it("does not offer an already selected contact in a second contact row", async () => {
+    const user = userEvent.setup();
+    render(<EventProfileForm contacts={contacts} events={events} onSubmit={vi.fn()} />);
+    await user.selectOptions(screen.getByLabelText("Add an existing contact"), "contact-1");
+    await user.click(screen.getByRole("button", { name: "Add another contact" }));
+    expect(screen.getByRole("combobox", { name: "Contact 2 existing contact" })).not.toContainHTML('value="contact-1"');
+  });
 });

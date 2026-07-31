@@ -18,6 +18,8 @@ export const creationSchema = z.object({
   contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string() })).min(1),
   booking: z.object({ enabled: z.boolean(), name: z.string(), nextActionKind: z.string(), nextActionDueAt: z.string() }),
 }).superRefine((input, context) => {
+  const selectedIds = input.contacts.map((contact) => contact.id).filter((id): id is string => Boolean(id));
+  if (new Set(selectedIds).size !== selectedIds.length) context.addIssue({ code: "custom", message: "Choose each existing contact only once." });
   if (input.event.id ? !uuid.safeParse(input.event.id).success : !input.event.name.trim() || !input.event.city.trim() || input.event.region.trim().length !== 2) context.addIssue({ code: "custom", message: "Choose an event or enter its name, city, and two-letter state." });
   for (const contact of input.contacts) {
     if (contact.id ? !uuid.safeParse(contact.id).success : !contact.name.trim()) context.addIssue({ code: "custom", message: "Choose a contact or enter a contact name." });
