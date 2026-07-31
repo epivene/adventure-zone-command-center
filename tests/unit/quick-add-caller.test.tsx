@@ -122,11 +122,11 @@ describe("QuickAddCaller", () => {
     expect(screen.getByLabelText("Reason for calling")).toHaveValue("Asked about an August event.");
   });
 
-  it("makes Quick Add reachable from both responsive navigation variants", () => {
+  it("makes event profile creation reachable from both responsive navigation variants", () => {
     render(<AppShell><p>Page content</p></AppShell>);
 
-    const links = screen.getAllByRole("link", { name: "Quick Add caller" });
+    const links = screen.getAllByRole("link", { name: "New event profile" });
     expect(links).toHaveLength(2);
-    for (const link of links) expect(link).toHaveAttribute("href", "/quick-add");
+    for (const link of links) expect(link).toHaveAttribute("href", "/event-profiles/new");
   });
 });

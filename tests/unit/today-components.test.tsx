@@ -64,21 +64,21 @@ describe("Today dashboard components", () => {
     expect(screen.getByRole("heading", { name: "Overdue follow-ups" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
       "href",
-      "/calls/new?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call",
+      "/event-profiles/organization-1?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call&action=follow-up",
     );
     expect(screen.getByText("1 overdue")).toBeVisible();
   });
 
-  it("opens the next call in the Call Workspace with its complete context", () => {
+  it("opens the next call in the event profile with its complete context", () => {
     render(<NextCallCard followUp={followUps[0]!} />);
 
     expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
       "href",
-      "/calls/new?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call",
+      "/event-profiles/organization-1?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call&action=call",
     );
   });
 
-  it("keeps a non-call booking follow-up on its booking record", () => {
+  it("opens a non-call booking follow-up in its event profile", () => {
     render(
       <FollowUpList
         followUps={[{ ...followUps[0]!, kind: "send_information" }]}
@@ -88,11 +88,11 @@ describe("Today dashboard components", () => {
 
     expect(screen.getByRole("link", { name: "Overdue County Fair" })).toHaveAttribute(
       "href",
-      "/bookings/booking-1",
+      "/event-profiles/organization-1?contactId=contact-1&bookingId=booking-1&followUpId=overdue-call&action=follow-up",
     );
   });
 
-  it("opens a contact-only call in the workspace without inventing a booking", () => {
+  it("opens a contact-only follow-up in its profile without inventing a booking", () => {
     render(
       <FollowUpList
         followUps={[
@@ -108,11 +108,11 @@ describe("Today dashboard components", () => {
 
     expect(screen.getByRole("link", { name: "Jordan Caller" })).toHaveAttribute(
       "href",
-      "/calls/new?contactId=contact-1&followUpId=overdue-call",
+      "/event-profiles/organization-1?contactId=contact-1&followUpId=overdue-call&action=follow-up",
     );
   });
 
-  it("keeps an organization-only non-call follow-up on its organization record", () => {
+  it("opens an organization-only non-call follow-up in its event profile", () => {
     render(
       <FollowUpList
         followUps={[
@@ -130,7 +130,7 @@ describe("Today dashboard components", () => {
 
     expect(screen.getByRole("link", { name: "County Fair Office" })).toHaveAttribute(
       "href",
-      "/organizations/organization-1",
+      "/event-profiles/organization-1?followUpId=overdue-call&action=follow-up",
     );
   });
 

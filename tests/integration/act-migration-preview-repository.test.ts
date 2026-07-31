@@ -235,7 +235,11 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   let database: ReturnType<typeof drizzle<typeof crmSchema>>;
   let repository: DrizzleActMigrationPreviewRepository;
 
-  async function insertRecord(sourceKey: string, reviewState = "not_required") {
+  async function insertRecord(
+    sourceKey: string,
+    reviewState = "not_required",
+    normalizedSnapshot: Record<string, unknown> = { label: sourceKey },
+  ) {
     await database.insert(crmSchema.actMigrationRecords).values({
       runId,
       streamType: streamType(sourceKey),
@@ -243,7 +247,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceId: sourceId(sourceKey),
       targetSourceId: null,
       rawSnapshot: { id: sourceId(sourceKey), confidential: "not-audit" },
-      normalizedSnapshot: { label: sourceKey },
+      normalizedSnapshot,
       fingerprint: `fingerprint:${sourceKey}`,
       reviewState,
     });
@@ -266,6 +270,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceDigest?: string;
       proposalDigest?: string;
       report?: ReturnType<typeof report>;
+      automaticApprovalProposalKeys?: readonly string[];
     } = {},
   ) {
     await ensureProposalRecords(proposals);
@@ -275,6 +280,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceDigest: options.sourceDigest ?? reconciliation.sourceDigest,
       proposalDigest: options.proposalDigest ?? reconciliation.proposalDigest,
       proposals,
+      automaticApprovalProposalKeys: options.automaticApprovalProposalKeys,
       report: reconciliation,
     });
   }
@@ -427,6 +433,65 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     expect(preview.rows).toHaveLength(2);
     expect(preview.rows.find(({ proposalKey }) => proposalKey === detailed.proposalKey)).toMatchObject(detailed);
     expect(proposalSnapshotDigest(preview.rows)).toBe(proposalSnapshotDigest(proposals));
+  });
+
+  postgresTest("persists exact-group automatic approval for preview summaries", async () => {
+    const exactGroup = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1", "company:company-2"],
+      reviewState: "decided",
+      duplicateGroupKey: '["example fair","1 main denver co"]',
+      duplicateSourceIds: ["company-1", "company-2"],
+      matchReason: "exact_normalized_place_duplicate_group",
+    });
+
+    await insertRecord("company:company-1", "not_required", {
+      displayName: "Example Fair", address1: "1 Main", address2: null, city: "Denver", region: "CO", postalCode: null,
+    });
+    await insertRecord("company:company-2", "not_required", {
+      displayName: "Example Fair", address1: "1 Main", address2: null, city: "Denver", region: "CO", postalCode: null,
+    });
+    await store([exactGroup], {
+      automaticApprovalProposalKeys: [exactGroup.proposalKey],
+    });
+
+    const preview = await repository.getPreview(runId, { page: 1, pageSize: 50 });
+    expect(preview.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKey: exactGroup.proposalKey,
+        reviewState: "decided",
+        decision: "approve_proposed",
+        decidedBy: "act-migration:auto-review",
+        decidedAt: expect.any(Date),
+      }),
+    ]));
+    expect(preview.reviewSummary).toMatchObject({ approved: 1, pending: 0 });
+  });
+
+  postgresTest("rejects automatic approval for a possible duplicate", async () => {
+    const ambiguous = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1"],
+      state: "possible_duplicate",
+      candidateLocalIds: [localA],
+      proposedLocalId: localA,
+    });
+
+    await expect(store([ambiguous], {
+      automaticApprovalProposalKeys: [ambiguous.proposalKey],
+    })).rejects.toThrow("not an exact duplicate-place group");
+  });
+
+  postgresTest("rejects forged exact-group metadata for one staged company", async () => {
+    const forged = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1"],
+      duplicateGroupKey: '["forged","1 main"]',
+      duplicateSourceIds: ["company-1", "company-2"],
+    });
+    await expect(store([forged], {
+      automaticApprovalProposalKeys: [forged.proposalKey],
+    })).rejects.toThrow("not an exact duplicate-place group");
   });
 
   postgresTest("counts an unlinked matched-unchanged proposal as pending review", async () => {

@@ -112,6 +112,8 @@ export interface TodayDashboardRepository {
 
 export type FollowUpPlanItem = {
   id: string;
+  organizationId?: string | null;
+  primaryContactId?: string | null;
   name: string;
   status: BookingStatus;
   probability: Probability;
@@ -120,6 +122,8 @@ export type FollowUpPlanItem = {
 
 export type UpcomingEvent = {
   id: string;
+  organizationId?: string | null;
+  primaryContactId?: string | null;
   name: string;
   city: string;
   region: string;
@@ -521,6 +525,8 @@ export async function getTodayDashboard(
     followUpPageCount,
     needsFollowUpPlan: planResult.records.map((booking) => ({
       id: booking.id,
+      organizationId: booking.organizationId,
+      primaryContactId: booking.primaryContactId,
       name: booking.name,
       status: booking.status,
       probability: booking.probability,
@@ -535,6 +541,8 @@ export async function getTodayDashboard(
       )
       .map((booking) => ({
         id: booking.id,
+        organizationId: booking.organizationId,
+        primaryContactId: booking.primaryContactId,
         name: booking.name,
         city: booking.city,
         region: booking.region,

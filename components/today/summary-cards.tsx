@@ -1,8 +1,11 @@
+import Link from "next/link";
+
 type SummaryCardsProps = {
   followUpCount: number;
   newLeadCount: number;
   contractCount: number;
   visibleRouteWarningCount: number;
+  newLeadHref?: string;
 };
 
 const cards = [
@@ -19,17 +22,31 @@ const cards = [
 export function SummaryCards(props: SummaryCardsProps) {
   return (
     <section aria-label="Today summary" className="grid grid-cols-2 gap-3 md:grid-cols-4">
-      {cards.map((card) => (
-        <article
-          className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-          key={card.key}
-        >
+      {cards.map((card) => {
+        const content = <>
           <p className="text-sm font-semibold text-slate-600">{card.label}</p>
           <p className={`mt-2 text-3xl font-bold tracking-tight ${card.tone}`}>
             {props[card.key]}
           </p>
-        </article>
-      ))}
+        </>;
+        return card.key === "newLeadCount" && props.newLeadHref ? (
+          <Link
+            aria-label={card.label}
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-orange-300 hover:bg-orange-50"
+            href={props.newLeadHref}
+            key={card.key}
+          >
+            {content}
+          </Link>
+        ) : (
+          <article
+            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+            key={card.key}
+          >
+            {content}
+          </article>
+        );
+      })}
     </section>
   );
 }

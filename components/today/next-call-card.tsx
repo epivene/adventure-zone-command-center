@@ -19,7 +19,37 @@ export function callWorkspaceHref(followUp: FollowUpSummary) {
   return `/calls/new?${parameters.toString()}`;
 }
 
+type EventProfileLinkContext = {
+  organizationId: string | null;
+  contactId?: string | null;
+  bookingId?: string | null;
+  followUpId?: string | null;
+  action?: "call" | "follow-up";
+  mode?: "prospect";
+};
+
+export function eventProfileHref(context: EventProfileLinkContext) {
+  if (!context.organizationId) return null;
+
+  const parameters = new URLSearchParams();
+  if (context.contactId) parameters.set("contactId", context.contactId);
+  if (context.bookingId) parameters.set("bookingId", context.bookingId);
+  if (context.followUpId) parameters.set("followUpId", context.followUpId);
+  if (context.action) parameters.set("action", context.action);
+  if (context.mode) parameters.set("mode", context.mode);
+  const query = parameters.toString();
+  return `/event-profiles/${context.organizationId}${query ? `?${query}` : ""}`;
+}
+
 export function followUpHref(followUp: FollowUpSummary) {
+  const profileHref = eventProfileHref({
+    organizationId: followUp.organizationId,
+    contactId: followUp.contactId,
+    bookingId: followUp.bookingId,
+    followUpId: followUp.id,
+    action: "follow-up",
+  });
+  if (profileHref) return profileHref;
   if (followUp.kind === "call") return callWorkspaceHref(followUp);
   if (followUp.bookingId) return `/bookings/${followUp.bookingId}`;
   if (followUp.contactId) return `/contacts/${followUp.contactId}`;
@@ -27,6 +57,16 @@ export function followUpHref(followUp: FollowUpSummary) {
 }
 
 export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null }) {
+  const profileHref = followUp
+    ? eventProfileHref({
+        organizationId: followUp.organizationId,
+        contactId: followUp.contactId,
+        bookingId: followUp.bookingId,
+        followUpId: followUp.id,
+        action: "call",
+      })
+    : null;
+
   return (
     <section className="rounded-xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
       <p className="text-sm font-bold uppercase tracking-[0.14em] text-orange-800">
@@ -36,7 +76,7 @@ export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null })
         <div className="mt-3">
           <Link
             className="text-xl font-bold text-slate-950 hover:text-orange-800"
-            href={callWorkspaceHref(followUp)}
+            href={profileHref ?? callWorkspaceHref(followUp)}
           >
             {followUp.bookingName}
           </Link>

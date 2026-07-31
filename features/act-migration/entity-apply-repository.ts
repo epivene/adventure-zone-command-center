@@ -17,6 +17,27 @@ type DrizzleDatabase = typeof database;
 type Transaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
 type Values = Record<string, unknown>;
 
+function mergedProfileHistory(snapshot: Record<string, unknown>) {
+  const values = Object.fromEntries([
+    ["contactSourceIds", snapshot.mergedContactSourceIds],
+    ["phones", snapshot.mergedPhones],
+    ["notes", snapshot.mergedNotes],
+    ["bookingSourceIds", snapshot.mergedBookingSourceIds],
+    ["groupSourceIds", snapshot.mergedGroupSourceIds],
+  ].flatMap(([key, value]) => {
+    if (typeof value !== "string") return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+        ? [[key, [...new Set(parsed)].toSorted()]]
+        : [];
+    } catch {
+      return [];
+    }
+  }));
+  return Object.keys(values).length ? values : null;
+}
+
 export type MigrationEntityApplyResult = { entityId: string; changed: boolean };
 
 function text(value: unknown): string | null {
@@ -131,6 +152,9 @@ export class MigrationEntityApplyRepository {
         actor: input.actor,
         changedFields: input.changedFields,
         sourceIds: input.sourceIds,
+        mergedProfileHistory: input.entityType === "organization"
+          ? mergedProfileHistory(input.operation.proposal.displaySnapshot)
+          : null,
       },
     });
   }
@@ -194,11 +218,14 @@ export class MigrationEntityApplyRepository {
     if (existingId) {
       const [current] = await transaction.select().from(organizations).where(eq(organizations.id, existingId)).limit(1).for("update");
       if (!current) throw new Error("Act migration Organization target is missing.");
-      const changed = changedFields(current, values);
-      if (Object.keys(changed).length) entity = (await transaction.update(organizations).set({ ...changed, updatedAt: new Date() }).where(eq(organizations.id, current.id)).returning())[0]!;
-      else entity = current;
-      mappedChanged = Object.keys(changed).length > 0;
-      mappedFields = Object.keys(changed);
+      if (operation.proposal.decision === "link_existing") entity = current;
+      else {
+        const changed = changedFields(current, values);
+        if (Object.keys(changed).length) entity = (await transaction.update(organizations).set({ ...changed, updatedAt: new Date() }).where(eq(organizations.id, current.id)).returning())[0]!;
+        else entity = current;
+        mappedChanged = Object.keys(changed).length > 0;
+        mappedFields = Object.keys(changed);
+      }
     } else {
       entity = (await transaction.insert(organizations).values(values).returning())[0]!;
       mappedChanged = true;
@@ -224,11 +251,14 @@ export class MigrationEntityApplyRepository {
     if (existingId) {
       const [current] = await transaction.select().from(contacts).where(eq(contacts.id, existingId)).limit(1).for("update");
       if (!current) throw new Error("Act migration Contact target is missing.");
-      const changed = changedFields(current, values);
-      if (Object.keys(changed).length) entity = (await transaction.update(contacts).set({ ...changed, updatedAt: new Date() }).where(eq(contacts.id, current.id)).returning())[0]!;
-      else entity = current;
-      mappedChanged = Object.keys(changed).length > 0;
-      mappedFields = Object.keys(changed);
+      if (operation.proposal.decision === "link_existing") entity = current;
+      else {
+        const changed = changedFields(current, values);
+        if (Object.keys(changed).length) entity = (await transaction.update(contacts).set({ ...changed, updatedAt: new Date() }).where(eq(contacts.id, current.id)).returning())[0]!;
+        else entity = current;
+        mappedChanged = Object.keys(changed).length > 0;
+        mappedFields = Object.keys(changed);
+      }
     } else {
       entity = (await transaction.insert(contacts).values(values).returning())[0]!;
       mappedChanged = true;

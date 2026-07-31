@@ -28,6 +28,8 @@ import {
   type BulkReviewDependencyStates,
   type BulkReviewScope,
 } from "@/features/act-migration/bulk-review";
+import { isExactDuplicatePlaceGroup } from "@/features/act-migration/auto-review";
+import { groupExactPlaceDuplicates, normalizePlaceIdentity } from "@/features/act-migration/place-identity";
 import {
   proposalSnapshotDigest,
   type MigrationReconciliationReport,
@@ -97,6 +99,8 @@ export interface ActMigrationPreviewRepository {
     sourceDigest: string;
     proposalDigest: string;
     proposals: readonly ActMigrationProposal[];
+    /** System-reviewed exact duplicate groups to persist as approve-proposed. */
+    automaticApprovalProposalKeys?: readonly string[];
     report: MigrationReconciliationReport;
   }): Promise<{ changed: boolean }>;
   getPreviewIfStored(
@@ -195,7 +199,12 @@ function structuralProposal(row: StoredProposalRow): ActMigrationProposal {
   };
 }
 
-function proposalInsert(runId: string, proposal: ActMigrationProposal) {
+function proposalInsert(
+  runId: string,
+  proposal: ActMigrationProposal,
+  automaticallyApproved: boolean,
+) {
+  const reviewedAt = automaticallyApproved ? new Date() : null;
   return {
     runId,
     proposalKey: proposal.proposalKey,
@@ -212,7 +221,35 @@ function proposalInsert(runId: string, proposal: ActMigrationProposal) {
     dependencyProposalKeys: [...proposal.dependencyProposalKeys],
     matchReason: proposal.matchReason,
     displaySnapshot: proposal.displaySnapshot,
+    decision: automaticallyApproved ? "approve_proposed" : null,
+    decidedBy: automaticallyApproved ? "act-migration:auto-review" : null,
+    decidedAt: reviewedAt,
   };
+}
+
+function isLockedExactDuplicateGroup(
+  proposal: ActMigrationProposal,
+  records: readonly { sourceKey: string; sourceId: string | null; streamType: string; normalizedSnapshot: Record<string, unknown> }[],
+) {
+  if (!isExactDuplicatePlaceGroup(proposal)) return false;
+  const sourceKeys = new Set(proposal.sourceRecordKeys);
+  const companies = records.filter((record) => sourceKeys.has(record.sourceKey));
+  if (companies.length !== sourceKeys.size || companies.some((record) => record.streamType !== "company" || record.sourceId === null)) return false;
+  const sourceIds = companies.map((record) => record.sourceId!).toSorted();
+  if (JSON.stringify(sourceIds) !== JSON.stringify([...(proposal.duplicateSourceIds ?? [])].toSorted())) return false;
+  const groups = groupExactPlaceDuplicates(companies.flatMap((record) => {
+    const snapshot = record.normalizedSnapshot;
+    const name = snapshot.displayName;
+    if (typeof name !== "string") return [];
+    const location = [snapshot.address1, snapshot.address2, snapshot.city, snapshot.region, snapshot.postalCode]
+      .filter((value): value is string => typeof value === "string").join(" ");
+    return [{ sourceId: record.sourceId!, name, location: location || null }];
+  }));
+  const group = groups.get(proposal.duplicateGroupKey!);
+  return Boolean(
+    group && group.length > 1 && group[0]!.location !== null &&
+    normalizePlaceIdentity(group[0]!).location,
+  );
 }
 
 function reportValue(value: unknown): MigrationReconciliationReport {
@@ -297,6 +334,7 @@ export class DrizzleActMigrationPreviewRepository
     sourceDigest: string;
     proposalDigest: string;
     proposals: readonly ActMigrationProposal[];
+    automaticApprovalProposalKeys?: readonly string[];
     report: MigrationReconciliationReport;
   }): Promise<{ changed: boolean }> {
     return this.database.transaction(async (transaction) => {
@@ -346,6 +384,7 @@ export class DrizzleActMigrationPreviewRepository
           sourceKey: actMigrationRecords.sourceKey,
           sourceId: actMigrationRecords.sourceId,
           streamType: actMigrationRecords.streamType,
+          normalizedSnapshot: actMigrationRecords.normalizedSnapshot,
         })
         .from(actMigrationRecords)
         .where(eq(actMigrationRecords.runId, input.runId))
@@ -384,11 +423,22 @@ export class DrizzleActMigrationPreviewRepository
         migrationTargetRank(left.targetEntityType) - migrationTargetRank(right.targetEntityType) ||
         left.proposalKey.localeCompare(right.proposalKey),
       );
+      const automaticApprovals = new Set(input.automaticApprovalProposalKeys ?? []);
+      if ([...automaticApprovals].some((key) => {
+        const proposal = input.proposals.find((value) => value.proposalKey === key);
+        return !proposal || !isLockedExactDuplicateGroup(proposal, stagedRecords);
+      })) {
+        throw new Error("Act migration automatic approval is not an exact duplicate-place group.");
+      }
       for (let offset = 0; offset < ordered.length; offset += INSERT_CHUNK_SIZE) {
         await transaction
           .insert(actMigrationProposals)
           .values(ordered.slice(offset, offset + INSERT_CHUNK_SIZE).map((proposal) =>
-            proposalInsert(input.runId, proposal)
+            proposalInsert(
+              input.runId,
+              proposal,
+              automaticApprovals.has(proposal.proposalKey),
+            )
           ))
           .onConflictDoNothing({
             target: [actMigrationProposals.runId, actMigrationProposals.proposalKey],

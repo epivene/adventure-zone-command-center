@@ -13,6 +13,9 @@ import {
 import {
   reconcileMigrationPreview,
 } from "@/features/act-migration/reconciliation";
+import {
+  autoReviewMigrationProposals,
+} from "@/features/act-migration/auto-review";
 import type { ActMigrationSnapshotRepository } from "@/features/act-migration/snapshot-repository";
 import type {
   ActMigrationProposal,
@@ -26,6 +29,76 @@ const DEFAULT_QUERY: MigrationPreviewQuery = { page: 1, pageSize: 50 };
 type StagedCompany = PlaceIdentityRow & {
   sourceKey: string;
 };
+
+type StagedRecord = FinalizedSourceSnapshot["records"][number];
+
+function uniqueJson(values: readonly string[]) {
+  return JSON.stringify([
+    ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+  ].toSorted());
+}
+
+function snapshotText(record: StagedRecord, key: string) {
+  const value = record.normalizedSnapshot[key] ?? record.rawSnapshot[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Retain the deduplicated profile evidence represented by an exact-place
+ * group. The canonical proposal remains scalar for apply compatibility while
+ * its owner-only preview includes every unique source value and source ID.
+ */
+function mergedEventProfileHistory(
+  source: FinalizedSourceSnapshot,
+  companySourceIds: readonly string[],
+) {
+  const companyIds = new Set(companySourceIds);
+  const companyContacts = source.records.filter((record) =>
+    record.streamType === "company_contact" &&
+    record.sourceId !== null &&
+    companyIds.has(record.sourceId) &&
+    record.targetSourceId !== null,
+  );
+  const contactIds = new Set(companyContacts.flatMap((record) =>
+    record.targetSourceId ? [record.targetSourceId] : [],
+  ));
+  const bookingIds = new Set(source.records.flatMap((record) =>
+    record.streamType === "opportunity_company" &&
+    record.targetSourceId !== null &&
+    companyIds.has(record.targetSourceId)
+      ? [record.sourceId]
+      : [],
+  ));
+  const groupIds = new Set(source.records.flatMap((record) =>
+    record.streamType === "group_contact" &&
+    record.targetSourceId !== null &&
+    contactIds.has(record.targetSourceId)
+      ? [record.sourceId]
+      : [],
+  ));
+  const relatedRecords = source.records.filter((record) =>
+    (record.streamType === "company" && record.sourceId !== null && companyIds.has(record.sourceId)) ||
+    (record.streamType === "contact" && record.sourceId !== null && contactIds.has(record.sourceId)) ||
+    (record.streamType === "opportunity" && record.sourceId !== null && bookingIds.has(record.sourceId)),
+  );
+  const phones = relatedRecords.flatMap((record) => {
+    const phone = snapshotText(record, "phone");
+    return phone ? [phone] : [];
+  });
+  const notes = relatedRecords.flatMap((record) =>
+    ["notes", "note"].flatMap((key) => {
+      const note = snapshotText(record, key);
+      return note ? [note] : [];
+    }),
+  );
+  return {
+    mergedContactSourceIds: uniqueJson([...contactIds]),
+    mergedPhones: uniqueJson(phones),
+    mergedNotes: uniqueJson(notes),
+    mergedBookingSourceIds: uniqueJson([...bookingIds].filter((id): id is string => id !== null)),
+    mergedGroupSourceIds: uniqueJson([...groupIds].filter((id): id is string => id !== null)),
+  };
+}
 
 function stagedCompanies(source: FinalizedSourceSnapshot): StagedCompany[] {
   return source.records.flatMap((record) => {
@@ -100,7 +173,7 @@ function consolidateExactDuplicatePlaces(input: {
     }
   }
 
-  return input.proposals.flatMap((proposal) => {
+  const remapped = input.proposals.flatMap((proposal) => {
     const canonicalProposalKey = canonicalKeyByProposalKey.get(proposal.proposalKey);
     if (canonicalProposalKey && canonicalProposalKey !== proposal.proposalKey) {
       return [];
@@ -114,12 +187,47 @@ function consolidateExactDuplicatePlaces(input: {
             duplicateGroupKey: merged.groupKey,
             duplicateSourceIds: merged.sourceIds,
             matchReason: "exact_normalized_place_duplicate_group",
+            displaySnapshot: {
+              ...proposal.displaySnapshot,
+              ...mergedEventProfileHistory(input.source, merged.sourceIds),
+            },
           }
         : {}),
       dependencyProposalKeys: proposal.dependencyProposalKeys.map(
         (key) => canonicalKeyByProposalKey.get(key) ?? key,
       ).toSorted(),
     }];
+  });
+  const relationshipGroups = Map.groupBy(
+    remapped.filter((proposal) =>
+      proposal.targetEntityType === "organization_contact" &&
+      proposal.state === "new_relationship" &&
+      proposal.issueCode === null,
+    ),
+    (proposal) => `${proposal.targetEntityType}|${proposal.dependencyProposalKeys.join("|")}`,
+  );
+  const canonicalRelationshipKeys = new Map<string, string>();
+  const mergedRelationships = new Map<string, ActMigrationProposal>();
+  for (const relationships of relationshipGroups.values()) {
+    if (relationships.length < 2) continue;
+    const canonical = [...relationships].toSorted((left, right) =>
+      left.proposalKey.localeCompare(right.proposalKey),
+    )[0]!;
+    const sourceRecordKeys = relationships.flatMap((proposal) => proposal.sourceRecordKeys)
+      .filter((key, index, values) => values.indexOf(key) === index)
+      .toSorted();
+    mergedRelationships.set(canonical.proposalKey, {
+      ...canonical,
+      sourceRecordKeys,
+    });
+    for (const relationship of relationships) {
+      canonicalRelationshipKeys.set(relationship.proposalKey, canonical.proposalKey);
+    }
+  }
+  return remapped.flatMap((proposal) => {
+    const canonicalKey = canonicalRelationshipKeys.get(proposal.proposalKey);
+    if (canonicalKey && canonicalKey !== proposal.proposalKey) return [];
+    return [mergedRelationships.get(proposal.proposalKey) ?? proposal];
   });
 }
 
@@ -139,16 +247,19 @@ export class ActMigrationPreviewService {
 
     const source = await this.snapshots.finalizeSourceSnapshot(runId);
     const local = await this.localCandidates.loadCandidateSnapshot();
-    const proposals = consolidateExactDuplicatePlaces({
+    const consolidated = consolidateExactDuplicatePlaces({
       source,
       proposals: buildMigrationProposals({ source, local }),
     });
+    const automaticReview = autoReviewMigrationProposals(consolidated);
+    const proposals = automaticReview.proposals;
     const report = reconcileMigrationPreview({ source, proposals });
     const storedResult = await this.previews.storeProposalsIfAbsent({
       runId,
       sourceDigest: source.sourceDigest,
       proposalDigest: report.proposalDigest,
       proposals,
+      automaticApprovalProposalKeys: automaticReview.approvedProposalKeys,
       report,
     });
     return {
