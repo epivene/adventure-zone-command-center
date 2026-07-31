@@ -37,6 +37,7 @@ Never commit values to `.env.example`, logs, screenshots, or support tickets.
 | `ACT_DATABASE_NAME` | Act! database identifier | Secret configuration |
 | `ACT_USERNAME` | Shared Act! login | Secret |
 | `ACT_PASSWORD` | Shared Act! password | Secret |
+| `ACT_MIGRATION_APPLY_ENABLED` | Enables reviewed local Act! migration apply only when exactly `true` | Server-only; default `false` |
 
 Set `OWNER_CLERK_USER_ID` to the owner's exact Clerk user ID, not an email
 address or display name. Sign in as the owner and confirm `/today` loads. Then
@@ -79,6 +80,16 @@ must be exactly `https://apius.act.com/act.web.api`; do not substitute the Act!
 browser URL. Never put Act! values in `NEXT_PUBLIC_` variables. See
 [act-sync.md](./act-sync.md) for connection testing, preview/apply safety,
 recovery, and password rotation.
+
+## Reviewed Act! migration apply release gate
+
+Deploy the reviewed migration code with `ACT_MIGRATION_APPLY_ENABLED=false` or
+unset. The flag is fail-closed and must remain disabled until the operator has
+completed the fresh-preview, backup/restore, disposable-PostgreSQL, and
+count-only reconciliation gates in [act-migration.md](./act-migration.md).
+Enable the flag only for an approved small pilot batch, disable it immediately
+on a documented stop condition, and retain the PII-free evidence described in
+that runbook. The migration workflow never writes to Act!.
 
 ## Database migration and four-leg seed
 

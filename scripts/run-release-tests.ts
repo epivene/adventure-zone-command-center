@@ -19,7 +19,9 @@ type ReleaseTestRunnerOptions = {
   run?: ReleaseCommandRunner;
 };
 
-const releaseCommands = [
+// `test:crm-db` is the authoritative, serial inventory of real PostgreSQL
+// suites, including the reviewed-import apply repositories.
+export const releaseCommands = [
   ["run", "test:crm-db"],
   ["run", "lint"],
   ["run", "typecheck"],
