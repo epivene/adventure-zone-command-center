@@ -33,6 +33,7 @@ import {
 import type {
   MigrationPreviewQuery,
   StoredMigrationChoice,
+  StoredMigrationPreviewPage,
   StoredMigrationProposal,
 } from "@/features/act-migration/preview-repository";
 import type { StoredMigrationWorkspace } from "@/features/act-migration/runtime";
@@ -391,9 +392,8 @@ export function ActMigrationReview({
   const [currentProgress, setCurrentProgress] = useState(
     workspace?.progress ?? null,
   );
-  const [currentPreview, setCurrentPreview] = useState(
-    workspace?.preview ?? null,
-  );
+  const [finalizedPreview, setFinalizedPreview] =
+    useState<StoredMigrationPreviewPage | null>(null);
   const [failure, setFailure] = useState<ActMigrationActionError | null>(null);
   const [checkAgain, setCheckAgain] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -595,7 +595,7 @@ export function ActMigrationReview({
         return;
       }
       setFailure(null);
-      setCurrentPreview(result.preview);
+      setFinalizedPreview(result.preview);
       setStatus("Stored preview ready.");
       if (result.changed) router.refresh();
     } catch {
@@ -644,7 +644,7 @@ export function ActMigrationReview({
     }
   }
 
-  const preview = currentPreview;
+  const preview = workspace?.preview ?? finalizedPreview;
   const runId = currentProgress?.runId ?? null;
   const incomplete = Boolean(
     currentProgress &&

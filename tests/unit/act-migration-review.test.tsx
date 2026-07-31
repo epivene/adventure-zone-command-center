@@ -725,6 +725,91 @@ describe("Act migration review workspace", () => {
     expect(screen.getByText("Page 3 of 4")).toBeVisible();
   });
 
+  it("adopts a new server-selected empty page when navigation rerenders the same workspace", () => {
+    const completedProgress = progress({
+      completedCheckpoints: 8,
+      totalCheckpoints: 8,
+      status: "previewed",
+    });
+    const firstPage = preview({
+      page: 4,
+      pageSize: 50,
+      total: 181,
+      rows: [],
+    });
+    const secondPage = preview({
+      page: 2,
+      pageSize: 50,
+      total: 51,
+      rows: [],
+      entityCounts: {
+        organization: 700,
+        contact: 701,
+        organization_contact: 702,
+        booking: 703,
+        booking_contact: 704,
+        calling_list: 705,
+        calling_list_member: 706,
+      },
+      stateCounts: {
+        new: 800,
+        matched_unchanged: 801,
+        change: 802,
+        new_relationship: 803,
+        possible_duplicate: 804,
+        needs_review: 805,
+        ignored: 806,
+        error: 807,
+      },
+    });
+    const view = render(
+      <ActMigrationReview
+        {...props({
+          query: {
+            page: 4,
+            pageSize: 50,
+            targetEntityType: "contact",
+            state: "needs_review",
+          },
+          workspace: workspace(completedProgress, firstPage),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Page 4 of 4")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Places 70" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Previous page" }))
+      .toHaveAttribute(
+        "href",
+        `/settings/act-migration?runId=${runId}&page=3&pageSize=50&targetEntityType=contact&state=needs_review`,
+      );
+
+    view.rerender(
+      <ActMigrationReview
+        {...props({
+          query: {
+            page: 2,
+            pageSize: 50,
+            targetEntityType: "contact",
+            state: "needs_review",
+          },
+          workspace: workspace(completedProgress, secondPage),
+        })}
+      />,
+    );
+
+    expect(screen.getByText("Page 2 of 2")).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Places 700" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Needs review 805" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Previous page" }))
+      .toHaveAttribute(
+        "href",
+        `/settings/act-migration?runId=${runId}&page=1&pageSize=50&targetEntityType=contact&state=needs_review`,
+      );
+    expect(screen.queryByRole("link", { name: "Next page" }))
+      .not.toBeInTheDocument();
+  });
+
   it("shows every required reconciliation problem category from the stored report", () => {
     render(
       <ActMigrationReview
