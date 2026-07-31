@@ -34,6 +34,7 @@ function splitName(name: string) {
 }
 
 export async function createEventProfileAction(input: EventProfileCreationInput): Promise<{ ok: true; profileId: string } | { ok: false; error: string }> {
+  "use server";
   await requireOwner();
   const parsed = creationSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Review the event profile details." };
