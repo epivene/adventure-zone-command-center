@@ -75,8 +75,8 @@ export default async function TodayPage({
             Calls and decisions that need your attention first.
           </p>
         </div>
-        <Link className="button-primary text-center" href="/bookings/new">
-          New booking
+        <Link className="button-primary text-center" href="/event-profiles/new">
+          New event
         </Link>
       </header>
 

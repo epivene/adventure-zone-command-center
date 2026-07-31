@@ -10,14 +10,14 @@ const navigation = [
   { href: "/routes", label: "Routes" },
 ];
 
-function QuickAddButton({ className }: { className: string }) {
+function CreateEventButton({ className }: { className: string }) {
   return (
     <Link
-      aria-label="Quick Add caller"
+      aria-label="New event profile"
       className={`${className} w-full rounded-lg bg-orange-600 px-4 py-3 text-center font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600`}
-      href="/quick-add"
+      href="/event-profiles/new"
     >
-      Quick Add
+      New event
     </Link>
   );
 }
@@ -72,7 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </details>
         </nav>
-        <QuickAddButton className="mt-auto" />
+        <CreateEventButton className="mt-auto" />
       </aside>
 
       <main className="min-h-screen px-4 py-6 pb-28 md:ml-64 md:px-8 md:py-8 md:pb-8">
@@ -123,7 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </details>
-        <QuickAddButton className="flex items-center" />
+        <CreateEventButton className="flex items-center" />
       </nav>
     </div>
   );

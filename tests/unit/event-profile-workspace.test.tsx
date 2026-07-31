@@ -97,6 +97,10 @@ describe("EventProfileWorkspace", () => {
       "href",
       "/calls/new?organizationId=11111111-1111-4111-8111-111111111111&contactId=22222222-2222-4222-8222-222222222222",
     );
+    expect(screen.getByRole("link", { name: "New event" })).toHaveAttribute(
+      "href",
+      "/event-profiles/new",
+    );
     expect(screen.getByText("Asked for an updated proposal.")).toBeVisible();
     expect(screen.getByText(/prepare quote/i)).toBeVisible();
     expect(screen.getByText("10 Mile Pride 2026")).toBeVisible();

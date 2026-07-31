@@ -33,7 +33,10 @@ export function EventProfileWorkspace({ profile }: { profile: EventProfile }) {
             <p className="mt-2 text-slate-600">{placeLocation || "Location not recorded"}</p>
             {profile.place.phone ? <p className="mt-1 text-sm text-slate-600">{profile.place.phone}</p> : null}
           </div>
-          <Link className="button-primary text-center" href={callHref(profile)}>Record call outcome</Link>
+          <div className="flex flex-wrap gap-3">
+            <Link className="button-primary text-center" href={callHref(profile)}>Record call outcome</Link>
+            <Link className="button-secondary text-center" href="/event-profiles/new">New event</Link>
+          </div>
         </div>
         {profile.place.lastResort ? (
           <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-950" role="alert">
