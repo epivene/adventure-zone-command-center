@@ -75,6 +75,19 @@ export type StoredMigrationPreviewPage = {
   total: number;
   entityCounts: Record<MigrationTargetEntityType, number>;
   stateCounts: Record<MigrationPreviewState, number>;
+  reviewSummary?: {
+    approved: number;
+    pending: number;
+    blocked: number;
+    ignored: number;
+    byTarget: Record<MigrationTargetEntityType, {
+      approved: number;
+      pending: number;
+      blocked: number;
+      ignored: number;
+    }>;
+    bulkEligible: number;
+  };
 };
 
 export interface ActMigrationPreviewRepository {
@@ -440,7 +453,7 @@ export class DrizzleActMigrationPreviewRepository
       .from(actMigrationRuns)
       .where(eq(actMigrationRuns.id, runId))
       .limit(1);
-    if (!run || run.status !== "previewed") return null;
+    if (!run || !["previewed", "applying", "partially_applied", "applied", "failed"].includes(run.status)) return null;
     if (!run.sourceDigest || !run.proposalDigest || !run.summary) {
       throw new Error("Stored Act migration preview is incomplete.");
     }
@@ -593,6 +606,39 @@ export class DrizzleActMigrationPreviewRepository
         Number(stateRows.find((row) => row.value === value)?.total ?? 0),
       ]),
     ) as Record<MigrationPreviewState, number>;
+    const reviewRows = await this.database.select({
+      target: actMigrationProposals.targetEntityType,
+      state: actMigrationProposals.state,
+      decision: actMigrationProposals.decision,
+    }).from(actMigrationProposals).where(eq(actMigrationProposals.runId, runId));
+    const byTarget = Object.fromEntries(migrationTargetEntityTypeValues.map((target) => [
+      target,
+      { approved: 0, pending: 0, blocked: 0, ignored: 0 },
+    ])) as NonNullable<StoredMigrationPreviewPage["reviewSummary"]>["byTarget"];
+    const reviewSummary = { approved: 0, pending: 0, blocked: 0, ignored: 0, byTarget, bulkEligible: 0 };
+    for (const value of reviewRows) {
+      const target = value.target as MigrationTargetEntityType;
+      const bucket = byTarget[target];
+      if (value.decision === "ignore" || value.state === "ignored") {
+        reviewSummary.ignored += 1;
+        bucket.ignored += 1;
+      } else if (value.state === "error") {
+        reviewSummary.blocked += 1;
+        bucket.blocked += 1;
+      } else if (value.decision) {
+        reviewSummary.approved += 1;
+        bucket.approved += 1;
+      } else if (value.state !== "matched_unchanged") {
+        reviewSummary.pending += 1;
+        bucket.pending += 1;
+      }
+      if (
+        query.targetEntityType === target &&
+        query.state === value.state &&
+        value.decision === null &&
+        value.state === "new"
+      ) reviewSummary.bulkEligible += 1;
+    }
     return {
       runId,
       rows: storedRows,
@@ -602,6 +648,7 @@ export class DrizzleActMigrationPreviewRepository
       total,
       entityCounts,
       stateCounts,
+      reviewSummary,
     };
   }
 

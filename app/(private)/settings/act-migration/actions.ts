@@ -177,7 +177,9 @@ const applyManifestSchema = z.object({
 const startApplySchema = z.object({
   requestKey: uuidSchema,
   runId: uuidSchema,
-  manifest: applyManifestSchema,
+  // The server rebuilds the manifest from the immutable preview.  Retain this
+  // optional shape only for older callers; it is verified if supplied.
+  manifest: applyManifestSchema.optional(),
 }).strict();
 const continueApplySchema = z.object({
   runId: uuidSchema,
@@ -412,7 +414,7 @@ function applySuccess(
 export async function startActMigrationApplyAction(input: {
   requestKey: string;
   runId: string;
-  manifest: MigrationApplyManifest;
+  manifest?: MigrationApplyManifest;
 }): Promise<ActMigrationApplyActionResult> {
   const actor = await requireOwner();
   const parsed = startApplySchema.safeParse(input);
@@ -423,7 +425,7 @@ export async function startActMigrationApplyAction(input: {
       await createActMigrationApplyService()
     ).start({
       ...parsed.data,
-      manifest: parsed.data.manifest as MigrationApplyManifest,
+      manifest: parsed.data.manifest as MigrationApplyManifest | undefined,
       requestedBy: actor.userId,
     });
     changedPath(result.changed);

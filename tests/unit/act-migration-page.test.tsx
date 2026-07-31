@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   createPreview: vi.fn(),
   createReader: vi.fn(),
   getActEnvironment: vi.fn(),
+  isActMigrationApplyEnabled: vi.fn(),
   getWorkspace: vi.fn(),
   receivedProps: vi.fn(),
   requireOwner: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/lib/auth/require-owner", () => ({
 }));
 vi.mock("@/lib/env", () => ({
   getActEnvironment: mocks.getActEnvironment,
+  isActMigrationApplyEnabled: mocks.isActMigrationApplyEnabled,
 }));
 vi.mock("@/features/act-migration/runtime", () => ({
   createActMigrationCaptureService: mocks.createCapture,
@@ -79,6 +81,7 @@ beforeEach(() => {
     },
   });
   mocks.getWorkspace.mockResolvedValue(workspace);
+  mocks.isActMigrationApplyEnabled.mockReturnValue(false);
   mocks.createReader.mockResolvedValue({
     getWorkspace: mocks.getWorkspace,
   });

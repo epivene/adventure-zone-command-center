@@ -10,13 +10,17 @@ import {
 } from "react";
 
 import {
+  bulkReviewActMigrationAction,
   continueActMigrationAction,
   finalizeActMigrationPreviewAction,
   resumeActMigrationAction,
   saveActMigrationDecisionAction,
+  startActMigrationApplyAction,
   startActMigrationAction,
   type ActMigrationActionError,
   type ActMigrationDecisionActionResult,
+  type ActMigrationApplyActionResult,
+  type ActMigrationBulkDecisionActionResult,
   type ActMigrationPreviewActionResult,
   type ActMigrationProgressActionResult,
 } from "@/app/(private)/settings/act-migration/actions";
@@ -57,6 +61,17 @@ type SaveDecisionAction = (input: {
   primarySourceId?: string;
   ignoreReason?: string;
 }) => Promise<ActMigrationDecisionActionResult>;
+type StartApplyAction = (input: {
+  requestKey: string;
+  runId: string;
+}) => Promise<ActMigrationApplyActionResult>;
+type BulkDecisionAction = (input: {
+  runId: string;
+  target: MigrationTargetEntityType;
+  state: MigrationPreviewState;
+  decision: "approve_proposed" | "ignore";
+  reason?: string;
+}) => Promise<ActMigrationBulkDecisionActionResult>;
 
 type Props = {
   configured: boolean;
@@ -68,6 +83,9 @@ type Props = {
   resumeAction?: ProgressAction;
   finalizeAction?: FinalizeAction;
   saveDecisionAction?: SaveDecisionAction;
+  applyEnabled?: boolean;
+  startApplyAction?: StartApplyAction;
+  bulkDecisionAction?: BulkDecisionAction;
   requestKeyFactory?: () => string;
   now?: () => number;
 };
@@ -283,6 +301,13 @@ function ProposalDecision({
     });
   }
 
+  async function confirmStaticGroup() {
+    await onSave(row, {
+      proposalKey: row.proposalKey,
+      decision: "confirm_static_group",
+    });
+  }
+
   return (
     <form className="mt-4 grid gap-3 border-t border-slate-200 pt-4" onSubmit={submit}>
       <label className="grid gap-1 text-sm font-semibold text-slate-700">
@@ -377,6 +402,16 @@ function ProposalDecision({
           {error}
         </p>
       ) : null}
+      {allowed.includes("confirm_static_group") ? (
+        <button
+          className="button-primary justify-self-start"
+          disabled={busy}
+          onClick={confirmStaticGroup}
+          type="button"
+        >
+          Confirm static Group
+        </button>
+      ) : null}
       <button className="button-secondary justify-self-start" disabled={busy || !decision} type="submit">
         Save decision
       </button>
@@ -394,6 +429,9 @@ export function ActMigrationReview({
   resumeAction = resumeActMigrationAction,
   finalizeAction = finalizeActMigrationPreviewAction,
   saveDecisionAction = saveActMigrationDecisionAction,
+  applyEnabled = false,
+  startApplyAction = startActMigrationApplyAction as unknown as StartApplyAction,
+  bulkDecisionAction = bulkReviewActMigrationAction,
   requestKeyFactory = () => crypto.randomUUID(),
   now = () => Date.now(),
 }: Props) {
@@ -408,12 +446,16 @@ export function ActMigrationReview({
   const [busy, setBusy] = useState(false);
   const [savingProposal, setSavingProposal] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [applyBusy, setApplyBusy] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkIgnoreReason, setBulkIgnoreReason] = useState("");
   const [, setClock] = useState(() => now());
   const inFlight = useRef(false);
   const decisionSave = useRef<symbol | null>(null);
   const mounted = useRef(true);
   const generation = useRef(0);
   const activeRun = useRef(workspace?.progress.runId ?? null);
+  const applyRequestKey = useRef<string | null>(null);
 
   useEffect(() => {
     const nextRun = workspace?.progress.runId ?? null;
@@ -653,6 +695,51 @@ export function ActMigrationReview({
     }
   }
 
+  async function startApply() {
+    const apply = workspace?.apply;
+    if (!apply || !apply.ready || !runId || applyBusy) return;
+    const requestKey = applyRequestKey.current ?? requestKeyFactory();
+    applyRequestKey.current = requestKey;
+    setApplyBusy(true);
+    setStatus(null);
+    try {
+      const result = await startApplyAction({ requestKey, runId });
+      if (!result.ok) {
+        setStatus(result.error);
+        return;
+      }
+      setStatus("Reviewed import scheduled.");
+      router.refresh();
+    } catch {
+      setStatus("The reviewed import could not be started.");
+    } finally {
+      if (mounted.current) setApplyBusy(false);
+    }
+  }
+
+  async function saveBulkDecision(decision: "approve_proposed" | "ignore") {
+    if (!runId || !query.targetEntityType || !query.state || bulkBusy) return;
+    const reason = bulkIgnoreReason.trim();
+    if (decision === "ignore" && !reason) {
+      setStatus("Enter a reason before ignoring this scope.");
+      return;
+    }
+    setBulkBusy(true);
+    try {
+      const result = await bulkDecisionAction({
+        runId,
+        target: query.targetEntityType,
+        state: query.state,
+        decision,
+        ...(decision === "ignore" ? { reason } : {}),
+      });
+      setStatus(result.ok ? `${result.changed} proposals updated; ${result.remaining} remain.` : result.error);
+      if (result.ok) router.refresh();
+    } finally {
+      if (mounted.current) setBulkBusy(false);
+    }
+  }
+
   const preview = workspace?.preview ?? finalizedPreview;
   const runId = currentProgress?.runId ?? null;
   const incomplete = Boolean(
@@ -663,6 +750,8 @@ export function ActMigrationReview({
       currentProgress.interruption === null,
   );
   const canResume = Boolean(runId && visibleFailure?.retryable);
+  const apply = workspace?.apply;
+  const canApply = Boolean(apply && apply.ready && complete(currentProgress));
 
   return (
     <section aria-labelledby="act-migration-heading" className="grid gap-6">
@@ -819,6 +908,34 @@ export function ActMigrationReview({
             <h2 className="text-xl font-bold" id="proposal-review-heading">
               Stored preview proposals
             </h2>
+            {apply ? (
+              <section aria-labelledby="reviewed-import-heading" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="font-bold" id="reviewed-import-heading">Reviewed import</h3>
+                <p className="mt-2 text-sm text-slate-700">
+                  Approved {apply.summary.approved} · Pending {apply.summary.pending} · Blocked {apply.summary.blocked} · Ignored {apply.summary.ignored}
+                </p>
+                <p className="mt-2 text-sm text-slate-600">Importing writes approved records to Command Center only; the Act! source remains unchanged.</p>
+                {apply.summary.failed > 0 ? <p className="mt-2 text-sm font-semibold text-red-800">{apply.summary.failed} failed operations need attention before retry.</p> : null}
+                {apply.summary.blocked > 0 ? <p className="mt-2 text-sm font-semibold text-amber-800">{apply.summary.blocked} operations are waiting for their approved dependencies.</p> : null}
+                {canApply ? (
+                  <button className="button-primary mt-4" disabled={applyBusy || !applyEnabled} onClick={startApply} type="button">
+                    Import approved records
+                  </button>
+                ) : null}
+                {!applyEnabled && canApply ? <p className="mt-2 text-sm text-slate-600">Reviewed import is disabled in this environment.</p> : null}
+              </section>
+            ) : null}
+            {apply?.bulkEligible && query.targetEntityType && query.state ? (
+              <section aria-label="Bulk review" className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-sm font-semibold text-slate-800">{apply.bulkEligible} proposals in this scope can be approved in one bounded request.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button className="button-secondary" disabled={bulkBusy} onClick={() => saveBulkDecision("approve_proposed")} type="button">Bulk approve eligible</button>
+                  <label className="sr-only" htmlFor="bulk-ignore-reason">Ignore reason</label>
+                  <input className="min-h-11 rounded-lg border border-slate-300 px-3" id="bulk-ignore-reason" onChange={(event) => setBulkIgnoreReason(event.target.value)} placeholder="Ignore reason" value={bulkIgnoreReason} />
+                  <button className="button-secondary" disabled={bulkBusy || !bulkIgnoreReason.trim()} onClick={() => saveBulkDecision("ignore")} type="button">Bulk ignore</button>
+                </div>
+              </section>
+            ) : null}
             <div aria-label="Entity facets" className="flex gap-2 overflow-x-auto" role="tablist">
               <Link
                 aria-selected={!query.targetEntityType}

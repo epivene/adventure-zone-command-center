@@ -75,7 +75,7 @@ export class ActMigrationApplyService {
     requestKey: string;
     runId: string;
     requestedBy: string;
-    manifest: MigrationApplyManifest;
+    manifest?: MigrationApplyManifest;
   }): Promise<ActMigrationApplyResult> {
     const batch = await this.repository.createBatchIfAbsent({
       ...input,

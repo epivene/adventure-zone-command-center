@@ -83,7 +83,7 @@ export interface ActMigrationApplyRepository {
     requestKey: string;
     runId: string;
     requestedBy: string;
-    manifest: MigrationApplyManifest;
+    manifest?: MigrationApplyManifest;
     now: Date;
   }): Promise<MigrationApplyBatch & { created: boolean }>;
   claimNextOperation(
@@ -324,7 +324,7 @@ export class DrizzleActMigrationApplyRepository
     requestKey: string;
     runId: string;
     requestedBy: string;
-    manifest: MigrationApplyManifest;
+    manifest?: MigrationApplyManifest;
     now: Date;
   }): Promise<MigrationApplyBatch & { created: boolean }> {
     return this.database.transaction(async (transaction) => {
@@ -332,7 +332,10 @@ export class DrizzleActMigrationApplyRepository
         .where(eq(actMigrationApplyBatches.requestKey, input.requestKey))
         .limit(1).for("update");
       if (existing) {
-        if (existing.runId !== input.runId || existing.manifestDigest !== input.manifest.digest) {
+        if (
+          existing.runId !== input.runId ||
+          (input.manifest && existing.manifestDigest !== input.manifest.digest)
+        ) {
           throw new Error("Act migration apply request key conflicts with an existing batch.");
         }
         const operations = await operationsForBatch(transaction, existing.id);
@@ -401,7 +404,11 @@ export class DrizzleActMigrationApplyRepository
         proposals: structural,
         stableLinks,
       });
-      if (migrationApplyManifestDigest(input.manifest) !== input.manifest.digest || manifest.digest !== input.manifest.digest) {
+      if (
+        input.manifest &&
+        (migrationApplyManifestDigest(input.manifest) !== input.manifest.digest ||
+          manifest.digest !== input.manifest.digest)
+      ) {
         throw new Error("Act migration apply manifest does not match the reviewed preview.");
       }
       const [batch] = await transaction.insert(actMigrationApplyBatches).values({
