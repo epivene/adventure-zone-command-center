@@ -161,9 +161,12 @@ sanitized error. Capture and retain:
 - Places without People and multi-Place People;
 - Opportunities without a reliable Place and Opportunities without a reliable
   Person;
-- unsupported Groups and duplicate source ID conflicts;
+- duplicate source ID conflicts;
 - incomplete and failed checkpoint counts;
 - the source digest, proposal digest, and complete flag.
+
+Unsupported Groups are counted separately from stored proposal rows in the
+read-only evidence query in section 9.
 
 The complete flag is acceptable only with a nonempty checkpoint set, zero
 incomplete checkpoints, zero failed checkpoints, unique proposal ownership,
@@ -193,9 +196,26 @@ FROM act_migration_runs
 WHERE id = :run_id;
 ```
 
-The stored `summary` contains counts and digests only. It is the obtainable
-source for root, relationship, preview-state, edge-case, and checkpoint counts.
-Capture the output without adding source rows or display values.
+The stored `summary` contains counts and digests only and supplies its stored
+report fields: root, relationship, preview-state, report edge-case, and
+checkpoint counts. The stored summary does not contain the unsupported Group
+count. Capture the output without adding source rows or display values.
+
+Retrieve that missing count with this PII-safe parameterized aggregate:
+
+```sql
+SELECT count(*)::bigint AS unsupported_group_count
+FROM act_migration_proposals
+WHERE run_id = :run_id
+  AND target_entity_type = 'calling_list'
+  AND issue_code IN (
+    'group_target_unavailable',
+    'group_membership_semantics_unknown'
+  );
+```
+
+This query returns only the count of unsupported Group calling-list proposals;
+it does not select proposal snapshots, reasons, or display values.
 
 Before starting the run and again after review, execute this read-only query:
 
@@ -233,6 +253,7 @@ evidence:
   the masked Act! database suffix;
 - the parameterized `act_migration_runs` result containing status, stored
   count-only summary, source digest, and proposal digest;
+- the parameterized `unsupported_group_count` result;
 - the before/after five-table row-count and `max(updated_at)` results;
 - the mutation-safety test result, including the no-Calling-list-storage
   boundary;
@@ -306,7 +327,11 @@ secret store. Its database name must contain a case-insensitive, delimited
 `test` token, such as exact `test`, `crm_test`, or `test-crm`; a substring in a
 word such as `contest` or `testing` is rejected. The preflight below also
 rejects malformed/non-PostgreSQL URLs, missing host/database values, and the
-same normalized host, port, and database identity as `DATABASE_URL`.
+same normalized host, port, and database identity as `DATABASE_URL`. Each URL
+must use exactly one URL authority host; raw or encoded comma-separated hosts
+are rejected, and `host`, `hostname`, and `hostaddr` host override parameters
+are not allowed. One or more terminal DNS dots are removed before host identity
+comparison. Localhost and bracketed IPv6 hosts remain valid.
 
 ```powershell
 function ConvertTo-PostgresDatabaseIdentity {
@@ -315,14 +340,54 @@ function ConvertTo-PostgresDatabaseIdentity {
     [string]$VariableName
   )
 
+  if ([string]::IsNullOrWhiteSpace($Value) -or $Value.Trim() -ne $Value) {
+    throw "$VariableName must be a valid PostgreSQL URL."
+  }
+
+  $schemeEnd = $Value.IndexOf("://")
+  if ($schemeEnd -lt 0) {
+    throw "$VariableName must be a valid PostgreSQL URL."
+  }
+  $authorityStart = $schemeEnd + 3
+  $authorityEnd = $Value.IndexOfAny(
+    [char[]]@("/", "?", "#"),
+    $authorityStart
+  )
+  $authority = if ($authorityEnd -lt 0) {
+    $Value.Substring($authorityStart)
+  }
+  else {
+    $Value.Substring($authorityStart, $authorityEnd - $authorityStart)
+  }
+  $hostAuthority = $authority.Substring($authority.LastIndexOf("@") + 1)
+  try {
+    $decodedHostAuthority = [Uri]::UnescapeDataString($hostAuthority)
+  }
+  catch {
+    throw "$VariableName must be a valid PostgreSQL URL."
+  }
+  if ($decodedHostAuthority.Contains(",")) {
+    throw "$VariableName must use exactly one URL authority host."
+  }
+
   $uri = $null
   if (
-    [string]::IsNullOrWhiteSpace($Value) -or
-    $Value.Trim() -ne $Value -or
     -not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or
     $uri.Scheme -notin @("postgres", "postgresql")
   ) {
     throw "$VariableName must be a valid PostgreSQL URL."
+  }
+  if ($uri.Host.Contains(",")) {
+    throw "$VariableName must use exactly one URL authority host."
+  }
+  try {
+    $decodedQuery = [Uri]::UnescapeDataString($uri.Query)
+  }
+  catch {
+    throw "$VariableName must be a valid PostgreSQL URL."
+  }
+  if ($decodedQuery -match "(?i)(?:^\?|&)(?:host|hostname|hostaddr)=") {
+    throw "$VariableName host override parameters are not allowed."
   }
 
   try {
@@ -333,8 +398,9 @@ function ConvertTo-PostgresDatabaseIdentity {
   catch {
     throw "$VariableName must be a valid PostgreSQL URL."
   }
+  $normalizedHost = $uri.DnsSafeHost.ToLowerInvariant().TrimEnd([char]".")
   if (
-    [string]::IsNullOrWhiteSpace($uri.Host) -or
+    [string]::IsNullOrWhiteSpace($normalizedHost) -or
     [string]::IsNullOrWhiteSpace($databaseName)
   ) {
     throw "$VariableName must include a host and database name."
@@ -344,7 +410,7 @@ function ConvertTo-PostgresDatabaseIdentity {
   return [PSCustomObject]@{
     Database = $databaseName.ToLowerInvariant()
     Identity = "{0}|{1}|{2}" -f @(
-      $uri.DnsSafeHost.ToLowerInvariant(),
+      $normalizedHost,
       $port,
       $databaseName.ToLowerInvariant()
     )

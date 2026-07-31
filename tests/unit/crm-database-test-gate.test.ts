@@ -9,8 +9,33 @@ describe("CRM PostgreSQL test gate", () => {
     "postgresql://database.example/test-crm",
     "postgres://database.example/test",
     "postgres://database.example/CRM_TEST_BACKUP",
+    "postgres://localhost/crm_test",
+    "postgres://[::1]/crm_test",
   ])("accepts a PostgreSQL URL with a delimited test database name", (url) => {
     expect(crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toBe(url);
+  });
+
+  it.each([
+    ["comma-separated hosts", "postgres://prod,other/crm_test"],
+    [
+      "comma-separated hosts with ports",
+      "postgres://prod:5432,other:5432/crm_test",
+    ],
+    ["encoded comma-separated hosts", "postgres://prod%2Cother/crm_test"],
+  ])("rejects a multihost authority: %s", (_case, url) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    );
+  });
+
+  it.each([
+    ["host", "postgres://safe.example/crm_test?host=prod.example"],
+    ["hostname", "postgres://safe.example/crm_test?hostname=prod.example"],
+    ["hostaddr", "postgres://safe.example/crm_test?hostaddr=192.0.2.1"],
+  ])("rejects a host override parameter: %s", (_case, url) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      "CRM_TEST_DATABASE_URL must not use host override parameters.",
+    );
   });
 
   it.each([
@@ -51,6 +76,26 @@ describe("CRM PostgreSQL test gate", () => {
     ).toThrow(
       "CRM_TEST_DATABASE_URL must not identify the same database as DATABASE_URL.",
     );
+  });
+
+  it("treats terminal DNS dots as the same database host identity", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://prod.example./crm_test",
+        DATABASE_URL: "postgres://prod.example/crm_test",
+      }),
+    ).toThrow(
+      "CRM_TEST_DATABASE_URL must not identify the same database as DATABASE_URL.",
+    );
+  });
+
+  it("rejects a multihost DATABASE_URL before identity comparison", () => {
+    expect(() =>
+      crmTestDatabaseUrl({
+        CRM_TEST_DATABASE_URL: "postgres://safe.example/crm_test",
+        DATABASE_URL: "postgres://prod.example,other.example/crm",
+      }),
+    ).toThrow("DATABASE_URL must use exactly one URL authority host.");
   });
 
   it("allows a disposable test database distinct from DATABASE_URL", () => {

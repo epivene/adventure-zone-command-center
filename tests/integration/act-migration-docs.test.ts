@@ -105,6 +105,15 @@ describe("Act migration operations documentation", () => {
     expect(contents).toContain("organization_contacts");
     expect(contents).toContain("booking_contacts");
     expect(contents).toMatch(/delimited\s+`test` token/);
+    expect(contents).toContain("exactly one URL authority host");
+    expect(contents).toContain("host override parameters are not allowed");
+    expect(contents).toContain("terminal DNS dots");
+    expect(contents).toContain("unsupported_group_count");
+    expect(contents).toContain("group_target_unavailable");
+    expect(contents).toContain("group_membership_semantics_unknown");
+    expect(contents).toMatch(
+      /The stored summary does not contain the unsupported Group\s+count\./,
+    );
 
     const commandBlockList = [
       ...contents.matchAll(/```[^\n]*\n([\s\S]*?)```/g),
@@ -120,6 +129,8 @@ describe("Act migration operations documentation", () => {
     expect(databaseGateBlock).toBeDefined();
     expect(databaseGateBlock).toContain("[Uri]::TryCreate");
     expect(databaseGateBlock).toContain("$env:DATABASE_URL");
+    expect(databaseGateBlock).toContain("Host.Contains");
+    expect(databaseGateBlock).toContain("TrimEnd");
     expect(databaseGateBlock).toContain(
       "(?i)(^|[^a-z0-9])test($|[^a-z0-9])",
     );
