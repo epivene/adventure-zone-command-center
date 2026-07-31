@@ -44,9 +44,22 @@ When a merge is approved, relationship inserts must be idempotent and deduplicat
 4. Apply only approved proposals to Command Center, leaving unresolved proposals queued.
 5. Re-run reconciliation and verify canonical place/contact counts before enabling production apply.
 
+## Apply workflow
+
+The migration must provide a complete path from preview to Command Center without requiring a hidden environment switch for normal users:
+
+1. After a preview is finalized, show an **Apply approved changes** action alongside the reconciliation summary.
+2. The action opens one confirmation step that summarizes the approved places, contacts, relationships, and calling lists to be written.
+3. Applying writes only approved proposals to Command Center. Act! remains read-only and is never modified by this workflow.
+4. Unresolved duplicates, ambiguous matches, missing relationships, and explicitly ignored proposals remain queued for later review.
+5. The apply operation is idempotent and reports successes, skips, and failures so a small first batch can be verified before applying the remainder.
+
+The default deployment may still protect this action behind an operational rollout control, but the product must expose a clear enabled path when the rollout is authorized; preview-only state must not be the only available end state.
+
 ## Validation
 
 - Unit tests cover normalization, exact-match grouping, near-match separation, and stable canonical selection.
 - Integration tests cover idempotent relationship migration and provenance retention.
 - UI tests cover Places/Contacts labels and back-navigation behavior.
 - A preview-only run must demonstrate that duplicate source rows consolidate without changing Act! records.
+- An apply test must demonstrate that approved records reach Command Center, unresolved records remain queued, and repeating the apply does not duplicate data.
