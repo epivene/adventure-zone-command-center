@@ -12,9 +12,11 @@ import {
 import {
   bulkReviewActMigrationAction,
   continueActMigrationAction,
+  continueActMigrationApplyAction,
   finalizeActMigrationPreviewAction,
   resumeActMigrationAction,
   saveActMigrationDecisionAction,
+  retryActMigrationApplyAction,
   startActMigrationApplyAction,
   startActMigrationAction,
   type ActMigrationActionError,
@@ -64,6 +66,12 @@ type SaveDecisionAction = (input: {
 type StartApplyAction = (input: {
   requestKey: string;
   runId: string;
+  previewDigest: string;
+  confirmationToken: "apply-approved-changes";
+}) => Promise<ActMigrationApplyActionResult>;
+type ContinueApplyAction = (input: {
+  runId: string;
+  batchId: string;
 }) => Promise<ActMigrationApplyActionResult>;
 type BulkDecisionAction = (input: {
   runId: string;
@@ -83,8 +91,26 @@ type Props = {
   resumeAction?: ProgressAction;
   finalizeAction?: FinalizeAction;
   saveDecisionAction?: SaveDecisionAction;
+  applyRollout?: "enabled" | "disabled";
+  reviewedImport?: {
+    previewDigest: string;
+    ready: boolean;
+    summary: {
+      approved: number;
+      pending: number;
+      blocked: number;
+      ignored: number;
+      applied: number;
+      failed: number;
+    };
+    byTarget: Record<string, Record<string, number>>;
+    bulkEligible: number;
+  } | null;
+  /** @deprecated Pass applyRollout from the page instead. */
   applyEnabled?: boolean;
   startApplyAction?: StartApplyAction;
+  continueApplyAction?: ContinueApplyAction;
+  retryApplyAction?: ContinueApplyAction;
   bulkDecisionAction?: BulkDecisionAction;
   requestKeyFactory?: () => string;
   now?: () => number;
@@ -168,6 +194,20 @@ function databaseStatus(configured: boolean, maskedDatabase: string | null) {
   return `Act! connection settings found${
     maskedDatabase ? ` · Database ${maskedDatabase}` : ""
   }`;
+}
+
+function approvedTargetCount(
+  byTarget: Record<string, Record<string, number>>,
+  ...targets: string[]
+) {
+  return targets.reduce(
+    (total, target) => total + (byTarget[target]?.approved ?? 0),
+    0,
+  );
+}
+
+function unresolvedCopy(count: number) {
+  return `${count} unresolved ${count === 1 ? "proposal remains" : "proposals remain"} queued for review.`;
 }
 
 function queryHref(input: {
@@ -429,8 +469,12 @@ export function ActMigrationReview({
   resumeAction = resumeActMigrationAction,
   finalizeAction = finalizeActMigrationPreviewAction,
   saveDecisionAction = saveActMigrationDecisionAction,
+  applyRollout,
+  reviewedImport,
   applyEnabled = false,
   startApplyAction = startActMigrationApplyAction as unknown as StartApplyAction,
+  continueApplyAction = continueActMigrationApplyAction,
+  retryApplyAction = retryActMigrationApplyAction,
   bulkDecisionAction = bulkReviewActMigrationAction,
   requestKeyFactory = () => crypto.randomUUID(),
   now = () => Date.now(),
@@ -447,6 +491,9 @@ export function ActMigrationReview({
   const [savingProposal, setSavingProposal] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [applyBusy, setApplyBusy] = useState(false);
+  const [applyConfirmationOpen, setApplyConfirmationOpen] = useState(false);
+  const [applyResult, setApplyResult] =
+    useState<Extract<ActMigrationApplyActionResult, { ok: true }> | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkIgnoreReason, setBulkIgnoreReason] = useState("");
   const [, setClock] = useState(() => now());
@@ -696,22 +743,53 @@ export function ActMigrationReview({
   }
 
   async function startApply() {
-    const apply = workspace?.apply;
-    if (!apply || !apply.ready || !runId || applyBusy) return;
+    const apply = reviewedImport ?? (workspace?.apply && workspace.preview ? {
+      previewDigest: workspace.preview.report.proposalDigest,
+      ...workspace.apply,
+    } : null);
+    if (!apply || !apply.ready || !runId || applyBusy || apply.summary.approved < 1) return;
     const requestKey = applyRequestKey.current ?? requestKeyFactory();
     applyRequestKey.current = requestKey;
     setApplyBusy(true);
     setStatus(null);
     try {
-      const result = await startApplyAction({ requestKey, runId });
+      const result = await startApplyAction({
+        requestKey,
+        runId,
+        previewDigest: apply.previewDigest,
+        confirmationToken: "apply-approved-changes",
+      });
       if (!result.ok) {
         setStatus(result.error);
         return;
       }
-      setStatus("Reviewed import scheduled.");
+      setApplyConfirmationOpen(false);
+      setApplyResult(result);
+      setStatus("Reviewed import queue started.");
       router.refresh();
     } catch {
       setStatus("The reviewed import could not be started.");
+    } finally {
+      if (mounted.current) setApplyBusy(false);
+    }
+  }
+
+  async function advanceApply(action: ContinueApplyAction) {
+    const result = applyResult;
+    if (!result || applyBusy) return;
+    setApplyBusy(true);
+    setStatus(null);
+    try {
+      const next = await action({ runId: result.runId, batchId: result.batchId });
+      if (!next.ok) {
+        setStatus(next.error);
+        return;
+      }
+      setApplyResult(next);
+      setStatus("Reviewed import progress updated.");
+      router.refresh();
+    } catch {
+      setStatus("The reviewed import could not be updated.");
     } finally {
       if (mounted.current) setApplyBusy(false);
     }
@@ -750,8 +828,23 @@ export function ActMigrationReview({
       currentProgress.interruption === null,
   );
   const canResume = Boolean(runId && visibleFailure?.retryable);
-  const apply = workspace?.apply;
-  const canApply = Boolean(apply && apply.ready && complete(currentProgress));
+  const apply = reviewedImport ?? (workspace?.apply && workspace.preview ? {
+    previewDigest: workspace.preview.report.proposalDigest,
+    ...workspace.apply,
+  } : null);
+  const rolloutEnabled = applyRollout
+    ? applyRollout === "enabled"
+    : applyEnabled;
+  const canApply = Boolean(
+    apply &&
+      apply.ready &&
+      apply.summary.approved > 0 &&
+      complete(currentProgress) &&
+      rolloutEnabled,
+  );
+  const unresolved = apply
+    ? apply.summary.pending + apply.summary.blocked
+    : 0;
 
   return (
     <section aria-labelledby="act-migration-heading" className="grid gap-6">
@@ -915,14 +1008,40 @@ export function ActMigrationReview({
                   Approved {apply.summary.approved} · Pending {apply.summary.pending} · Blocked {apply.summary.blocked} · Ignored {apply.summary.ignored}
                 </p>
                 <p className="mt-2 text-sm text-slate-600">Importing writes approved records to Command Center only; the Act! source remains unchanged.</p>
+                {unresolved > 0 ? <p className="mt-2 text-sm font-semibold text-amber-800">{unresolvedCopy(unresolved)}</p> : null}
                 {apply.summary.failed > 0 ? <p className="mt-2 text-sm font-semibold text-red-800">{apply.summary.failed} failed operations need attention before retry.</p> : null}
-                {apply.summary.blocked > 0 ? <p className="mt-2 text-sm font-semibold text-amber-800">{apply.summary.blocked} operations are waiting for their approved dependencies.</p> : null}
                 {canApply ? (
-                  <button className="button-primary mt-4" disabled={applyBusy || !applyEnabled} onClick={startApply} type="button">
-                    Import approved records
+                  <button className="button-primary mt-4" disabled={applyBusy} onClick={() => setApplyConfirmationOpen(true)} type="button">
+                    Apply approved changes
                   </button>
                 ) : null}
-                {!applyEnabled && canApply ? <p className="mt-2 text-sm text-slate-600">Reviewed import is disabled in this environment.</p> : null}
+                {!rolloutEnabled ? <p className="mt-2 text-sm text-slate-600">Reviewed import rollout is disabled in this environment.</p> : null}
+                {applyConfirmationOpen && canApply ? (
+                  <section aria-labelledby="apply-confirmation-heading" className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                    <h4 className="font-bold" id="apply-confirmation-heading">Confirm approved changes</h4>
+                    <p className="mt-1 text-sm text-slate-700">Only approved records are written to Command Center. Act! remains unchanged.</p>
+                    <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                      <div><dt className="font-semibold">Places</dt><dd>{approvedTargetCount(apply.byTarget, "organization")}</dd></div>
+                      <div><dt className="font-semibold">Contacts</dt><dd>{approvedTargetCount(apply.byTarget, "contact")}</dd></div>
+                      <div><dt className="font-semibold">Relationships</dt><dd>{approvedTargetCount(apply.byTarget, "organization_contact", "booking", "booking_contact")}</dd></div>
+                      <div><dt className="font-semibold">Calling lists</dt><dd>{approvedTargetCount(apply.byTarget, "calling_list", "calling_list_member")}</dd></div>
+                    </dl>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button className="button-primary" disabled={applyBusy} onClick={startApply} type="button">Import approved records</button>
+                      <button className="button-secondary" disabled={applyBusy} onClick={() => setApplyConfirmationOpen(false)} type="button">Cancel</button>
+                    </div>
+                  </section>
+                ) : null}
+                {applyResult ? (
+                  <section aria-label="Reviewed import results" className="mt-4 rounded-lg bg-slate-50 p-4 text-sm">
+                    <p className="font-semibold">Succeeded {applyResult.counts.applied} · Skipped {applyResult.counts.ignored} · Blocked {applyResult.counts.blocked} · Failed {applyResult.counts.failed}</p>
+                    <p className="mt-1 text-slate-600">{applyResult.counts.pending + applyResult.counts.leased} approved operations remain queued.</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {applyResult.counts.pending + applyResult.counts.leased > 0 ? <button className="button-secondary" disabled={applyBusy} onClick={() => advanceApply(continueApplyAction)} type="button">Continue reviewed import</button> : null}
+                      {applyResult.counts.failed > 0 ? <button className="button-secondary" disabled={applyBusy} onClick={() => advanceApply(retryApplyAction)} type="button">Retry failed operations</button> : null}
+                    </div>
+                  </section>
+                ) : null}
               </section>
             ) : null}
             {apply?.bulkEligible && query.targetEntityType && query.state ? (

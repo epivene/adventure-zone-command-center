@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   createApply: vi.fn(),
   createCapture: vi.fn(),
   createPreview: vi.fn(),
+  createWorkspaceReader: vi.fn(),
   getActEnvironment: vi.fn(),
   isActMigrationApplyEnabled: vi.fn(),
   requireOwner: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("@/features/act-migration/runtime", () => ({
   createActMigrationApplyService: mocks.createApply,
   createActMigrationCaptureService: mocks.createCapture,
   createActMigrationPreviewService: mocks.createPreview,
+  createActMigrationWorkspaceReader: mocks.createWorkspaceReader,
 }));
 vi.mock("next/cache", () => ({
   revalidatePath: mocks.revalidatePath,
@@ -162,6 +164,21 @@ beforeEach(() => {
   mocks.createCapture.mockResolvedValue(mocks.capture);
   mocks.createPreview.mockResolvedValue(mocks.preview);
   mocks.createApply.mockResolvedValue(mocks.apply);
+  mocks.createWorkspaceReader.mockResolvedValue({
+    getWorkspace: vi.fn().mockResolvedValue({
+      progress: { ...progress, status: "previewed", completedCheckpoints: 8 },
+      preview: {
+        ...preview,
+        report: { ...preview.report, complete: true, proposalDigest: "reviewed-preview" },
+      },
+      apply: {
+        ready: true,
+        summary: { approved: 1, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 },
+        byTarget: {},
+        bulkEligible: 0,
+      },
+    }),
+  });
   mocks.isActMigrationApplyEnabled.mockReturnValue(true);
 });
 
@@ -207,7 +224,8 @@ describe("Act migration owner actions", () => {
       () => startActMigrationApplyAction({
         runId: "invalid-run-id",
         requestKey: "invalid-request-key",
-        manifest,
+        previewDigest: "reviewed-preview",
+        confirmationToken: "apply-approved-changes",
       }),
     ],
     [
@@ -327,7 +345,8 @@ describe("Act migration owner actions", () => {
     await expect(startActMigrationApplyAction({
       runId,
       requestKey: "not-a-request-key",
-      manifest,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "apply-approved-changes",
     })).resolves.toMatchObject({ ok: false });
     await expect(continueActMigrationApplyAction({
       runId,
@@ -488,7 +507,12 @@ describe("Act migration owner actions", () => {
   });
 
   it.each([
-    ["start", () => startActMigrationApplyAction({ requestKey, runId, manifest })],
+    ["start", () => startActMigrationApplyAction({
+      requestKey,
+      runId,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "apply-approved-changes",
+    })],
     ["continue", () => continueActMigrationApplyAction({ runId, batchId: applyBatchId })],
     ["retry", () => retryActMigrationApplyAction({ runId, batchId: applyBatchId })],
   ])("fails closed before constructing the %s apply service", async (_name, invoke) => {
@@ -520,7 +544,8 @@ describe("Act migration owner actions", () => {
     await expect(startActMigrationApplyAction({
       requestKey,
       runId,
-      manifest,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "apply-approved-changes",
     })).resolves.toEqual({
       ok: true,
       runId,
@@ -535,9 +560,65 @@ describe("Act migration owner actions", () => {
       requestKey,
       runId,
       requestedBy: "owner-user",
-      manifest,
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/act-migration");
+  });
+
+  it("rejects a stale reviewed preview before constructing the apply queue", async () => {
+    mocks.createWorkspaceReader.mockResolvedValueOnce({
+      getWorkspace: vi.fn().mockResolvedValue({
+        progress: { ...progress, status: "previewed", completedCheckpoints: 8 },
+        preview: { ...preview, report: { ...preview.report, complete: true, proposalDigest: "new-preview" } },
+        apply: { ready: true, summary: { approved: 1, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 }, byTarget: {}, bulkEligible: 0 },
+      }),
+    });
+
+    await expect(startActMigrationApplyAction({
+      requestKey,
+      runId,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "apply-approved-changes",
+    })).resolves.toEqual({
+      ok: false,
+      error: "The reviewed preview changed. Refresh before applying.",
+      retryable: false,
+      retryAfter: null,
+    });
+    expect(mocks.createApply).not.toHaveBeenCalled();
+  });
+
+  it("rejects a preview with no server-approved work before constructing the apply queue", async () => {
+    mocks.createWorkspaceReader.mockResolvedValueOnce({
+      getWorkspace: vi.fn().mockResolvedValue({
+        progress: { ...progress, status: "previewed", completedCheckpoints: 8 },
+        preview: { ...preview, report: { ...preview.report, complete: true, proposalDigest: "reviewed-preview" } },
+        apply: { ready: true, summary: { approved: 0, pending: 1, blocked: 0, ignored: 0, applied: 0, failed: 0 }, byTarget: {}, bulkEligible: 0 },
+      }),
+    });
+
+    await expect(startActMigrationApplyAction({
+      requestKey,
+      runId,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "apply-approved-changes",
+    })).resolves.toEqual({
+      ok: false,
+      error: "Approved changes are not ready to apply.",
+      retryable: false,
+      retryAfter: null,
+    });
+    expect(mocks.createApply).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed confirmation before inspecting or starting apply", async () => {
+    await expect(startActMigrationApplyAction({
+      requestKey,
+      runId,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "no" as never,
+    })).resolves.toMatchObject({ ok: false });
+    expect(mocks.createWorkspaceReader).not.toHaveBeenCalled();
+    expect(mocks.createApply).not.toHaveBeenCalled();
   });
 
   it.each([

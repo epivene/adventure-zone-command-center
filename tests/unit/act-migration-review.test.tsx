@@ -1186,7 +1186,7 @@ describe("Act migration review workspace", () => {
     expect(markup).not.toContain("raw-source-candidate");
   });
 
-  it("offers the single reviewed-import confirmation only for a complete enabled workspace", async () => {
+  it("shows approved work in one confirmation before applying a complete authorized preview", async () => {
     const startApplyAction = vi.fn(() => new Promise<never>(() => {}));
     const user = userEvent.setup();
     const staticGroup = proposal({
@@ -1226,14 +1226,30 @@ describe("Act migration review workspace", () => {
     expect(screen.getByRole("button", { name: "Confirm static Group" })).toBeVisible();
     expect(screen.queryByRole("button", { name: /bulk approve/i })).not.toBeInTheDocument();
     expect(screen.getByText("Approved 25 · Pending 7 · Blocked 2 · Ignored 3")).toBeVisible();
-    const button = screen.getByRole("button", { name: "Import approved records" });
+    const button = screen.getByRole("button", { name: "Apply approved changes" });
     await user.click(button);
+    expect(screen.getByRole("heading", { name: "Confirm approved changes" })).toBeVisible();
+    const confirmation = screen.getByRole("heading", { name: "Confirm approved changes" }).closest("section");
+    expect(confirmation).not.toBeNull();
+    for (const label of ["Places", "Contacts", "Relationships", "Calling lists"]) {
+      const item = within(confirmation!).getByText(label).parentElement;
+      expect(item).not.toBeNull();
+      expect(within(item!).getByText("0")).toBeVisible();
+    }
+    const confirm = screen.getByRole("button", { name: "Import approved records" });
+    await user.click(confirm);
     expect(startApplyAction).toHaveBeenCalledTimes(1);
-    await user.dblClick(button);
+    expect(startApplyAction).toHaveBeenCalledWith({
+      requestKey,
+      runId,
+      previewDigest: "safe-proposal-digest",
+      confirmationToken: "apply-approved-changes",
+    });
+    await user.dblClick(confirm);
     expect(startApplyAction).toHaveBeenCalledTimes(1);
   });
 
-  it("hides import for incomplete work and disables it when the flag is off", () => {
+  it("keeps unresolved work queued and explains when rollout authorization is disabled", () => {
     const apply = {
       ready: true,
       summary: { approved: 1, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 },
@@ -1245,9 +1261,54 @@ describe("Act migration review workspace", () => {
       apply,
     } as unknown as StoredMigrationWorkspace;
     const view = render(<ActMigrationReview {...props({ applyEnabled: false, workspace: completeWorkspace })} />);
-    expect(screen.getByRole("button", { name: "Import approved records" })).toBeDisabled();
-    view.rerender(<ActMigrationReview {...props({ applyEnabled: true, workspace: { ...completeWorkspace, apply: { ...apply, ready: false } } })} />);
-    expect(screen.queryByRole("button", { name: "Import approved records" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply approved changes" })).not.toBeInTheDocument();
+    expect(screen.getByText("Reviewed import rollout is disabled in this environment.")).toBeVisible();
+    view.rerender(<ActMigrationReview {...props({ applyEnabled: true, workspace: { ...completeWorkspace, apply: { ...apply, ready: false, summary: { ...apply.summary, pending: 1 } } } })} />);
+    expect(screen.queryByRole("button", { name: "Apply approved changes" })).not.toBeInTheDocument();
+    expect(screen.getByText("1 unresolved proposal remains queued for review.")).toBeVisible();
+  });
+
+  it("shows queue results and retries only the same failed batch", async () => {
+    const startApplyAction = vi.fn(async () => ({
+      ok: true as const,
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+      changed: true,
+      counts: { pending: 0, leased: 0, blocked: 2, applied: 3, ignored: 4, failed: 1, total: 10 },
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    }));
+    const retryApplyAction = vi.fn(async () => ({
+      ok: true as const,
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+      changed: false,
+      counts: { pending: 0, leased: 0, blocked: 2, applied: 4, ignored: 4, failed: 0, total: 10 },
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    }));
+    const user = userEvent.setup();
+    const reviewedWorkspace = {
+      ...workspace(progress({ completedCheckpoints: 8, totalCheckpoints: 8, status: "previewed" }), preview()),
+      apply: {
+        ready: true,
+        summary: { approved: 1, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 },
+        byTarget: {},
+        bulkEligible: 0,
+      },
+    } as unknown as StoredMigrationWorkspace;
+    render(<ActMigrationReview {...props({ applyEnabled: true, startApplyAction, retryApplyAction, workspace: reviewedWorkspace })} />);
+
+    await user.click(screen.getByRole("button", { name: "Apply approved changes" }));
+    await user.click(screen.getByRole("button", { name: "Import approved records" }));
+    expect(screen.getByText("Succeeded 3 · Skipped 4 · Blocked 2 · Failed 1")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Retry failed operations" }));
+    expect(retryApplyAction).toHaveBeenCalledWith({
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+    });
   });
 
   it("adds Act! migration beside unchanged Act! Sync in desktop and mobile Settings", () => {

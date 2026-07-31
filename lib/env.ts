@@ -59,6 +59,18 @@ export function parseActMigrationApplyEnabled(source: EnvironmentSource) {
   return source.ACT_MIGRATION_APPLY_ENABLED === "true";
 }
 
+export type ActMigrationApplyRollout = "enabled" | "disabled";
+
+export function parseActMigrationApplyRollout(
+  source: EnvironmentSource,
+): ActMigrationApplyRollout {
+  return parseActMigrationApplyEnabled(source) ? "enabled" : "disabled";
+}
+
+export function getActMigrationApplyRollout(): ActMigrationApplyRollout {
+  return parseActMigrationApplyRollout(process.env);
+}
+
 export function isActMigrationApplyEnabled() {
-  return parseActMigrationApplyEnabled(process.env);
+  return getActMigrationApplyRollout() === "enabled";
 }
