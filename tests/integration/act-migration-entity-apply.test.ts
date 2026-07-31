@@ -79,13 +79,57 @@ describe("MigrationEntityApplyRepository (PostgreSQL)", () => {
     expect(await database.select().from(crmSchema.auditEntries)).toHaveLength(1);
   });
 
-  postgresTest("links an approved existing organization without overwriting operational fields", async () => {
+  postgresTest("links an approved existing organization without overwriting local CRM fields", async () => {
     const organizationId = "55555555-5555-4555-8555-555555555555";
-    await database.insert(crmSchema.organizations).values({ id: organizationId, name: "Local name", lastResort: true, lastResortReason: "manual policy" });
+    await database.insert(crmSchema.organizations).values({
+      id: organizationId, name: "Local name", placeType: "venue", actIndustry: "Local industry",
+      phone: "720-555-0100", normalizedPhone: "+17205550100", address1: "2 Local Ave", address2: "Suite 3",
+      city: "Boulder", region: "CO", postalCode: "80302", website: "https://local.example.test",
+      lastResort: true, lastResortReason: "manual policy",
+    });
     await database.insert(crmSchema.actMigrationRecords).values({ runId, streamType: "company", sourceKey: "company:acme", sourceId: "acme", rawSnapshot: {}, normalizedSnapshot: { displayName: "ACT Name", phone: "303-555-0100", industry: "Events", address1: null, address2: null, city: null, region: null, postalCode: null, website: null }, fingerprint: "company" });
     const result = await repository.applyOrganization(operation({ proposalKey: "organization:acme", targetEntityType: "organization", proposal: { proposalKey: "organization:acme", state: "possible_duplicate", reviewState: "decided", targetEntityType: "organization", sourceRecordKeys: ["company:acme"], candidateLocalIds: [organizationId], proposedLocalId: organizationId, proposedPrimarySourceId: null, issueCode: null, dependencyProposalKeys: [], matchReason: "fixture", displaySnapshot: {}, decision: "link_existing", chosenLocalEntityId: organizationId, primarySourceId: null } }));
     expect(result).toEqual({ entityId: organizationId, changed: true });
-    expect(await database.select().from(crmSchema.organizations).where(eq(crmSchema.organizations.id, organizationId))).toMatchObject([{ name: "ACT Name", lastResort: true, lastResortReason: "manual policy", actRecordId: "acme" }]);
+    expect(await database.select().from(crmSchema.organizations).where(eq(crmSchema.organizations.id, organizationId))).toMatchObject([{
+      name: "Local name", placeType: "venue", actIndustry: "Local industry", phone: "720-555-0100",
+      normalizedPhone: "+17205550100", address1: "2 Local Ave", address2: "Suite 3", city: "Boulder",
+      region: "CO", postalCode: "80302", website: "https://local.example.test", lastResort: true,
+      lastResortReason: "manual policy", actRecordId: "acme",
+    }]);
+    expect(await database.select().from(crmSchema.actExternalLinks).where(eq(crmSchema.actExternalLinks.entityId, organizationId))).toEqual([
+      expect.objectContaining({ actRecordId: "acme", isPrimary: false, syncMode: "pull_only" }),
+    ]);
+  });
+
+  postgresTest("links an approved existing contact without overwriting local CRM fields", async () => {
+    const contactId = "66666666-6666-4666-8666-666666666666";
+    await database.insert(crmSchema.contacts).values({
+      id: contactId, firstName: "Local", lastName: "Person", email: "local@example.test", phone: "720-555-0200",
+      normalizedPhone: "+17205550200", jobTitle: "Local title", address1: "4 Local Ave", address2: "Floor 2",
+      city: "Golden", region: "CO", postalCode: "80401",
+    });
+    await database.insert(crmSchema.actMigrationRecords).values({
+      runId, streamType: "contact", sourceKey: "contact:grace", sourceId: "grace", rawSnapshot: {},
+      normalizedSnapshot: { firstName: "Grace", lastName: "Hopper", email: "grace@example.test", phone: "303-555-0200", jobTitle: "ACT title", address1: "1 ACT Way", address2: null, city: "Denver", region: "CO", postalCode: "80202" }, fingerprint: "contact",
+    });
+    const result = await repository.applyContact(operation({
+      proposalKey: "contact:grace",
+      proposal: {
+        proposalKey: "contact:grace", state: "possible_duplicate", reviewState: "decided", targetEntityType: "contact",
+        sourceRecordKeys: ["contact:grace"], candidateLocalIds: [contactId], proposedLocalId: contactId,
+        proposedPrimarySourceId: "grace", issueCode: null, dependencyProposalKeys: [], matchReason: "fixture",
+        displaySnapshot: {}, decision: "link_existing", chosenLocalEntityId: contactId, primarySourceId: "grace",
+      },
+    }));
+    expect(result).toEqual({ entityId: contactId, changed: true });
+    expect(await database.select().from(crmSchema.contacts).where(eq(crmSchema.contacts.id, contactId))).toMatchObject([{
+      firstName: "Local", lastName: "Person", email: "local@example.test", phone: "720-555-0200",
+      normalizedPhone: "+17205550200", jobTitle: "Local title", address1: "4 Local Ave", address2: "Floor 2",
+      city: "Golden", region: "CO", postalCode: "80401", actRecordId: "grace",
+    }]);
+    expect(await database.select().from(crmSchema.actExternalLinks).where(eq(crmSchema.actExternalLinks.entityId, contactId))).toEqual([
+      expect.objectContaining({ actRecordId: "grace", isPrimary: true, syncMode: "two_way" }),
+    ]);
   });
 
   postgresTest("creates one canonical place for duplicate sources, keeps every source link, and is idempotent", async () => {

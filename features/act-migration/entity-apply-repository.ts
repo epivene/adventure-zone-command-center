@@ -218,11 +218,14 @@ export class MigrationEntityApplyRepository {
     if (existingId) {
       const [current] = await transaction.select().from(organizations).where(eq(organizations.id, existingId)).limit(1).for("update");
       if (!current) throw new Error("Act migration Organization target is missing.");
-      const changed = changedFields(current, values);
-      if (Object.keys(changed).length) entity = (await transaction.update(organizations).set({ ...changed, updatedAt: new Date() }).where(eq(organizations.id, current.id)).returning())[0]!;
-      else entity = current;
-      mappedChanged = Object.keys(changed).length > 0;
-      mappedFields = Object.keys(changed);
+      if (operation.proposal.decision === "link_existing") entity = current;
+      else {
+        const changed = changedFields(current, values);
+        if (Object.keys(changed).length) entity = (await transaction.update(organizations).set({ ...changed, updatedAt: new Date() }).where(eq(organizations.id, current.id)).returning())[0]!;
+        else entity = current;
+        mappedChanged = Object.keys(changed).length > 0;
+        mappedFields = Object.keys(changed);
+      }
     } else {
       entity = (await transaction.insert(organizations).values(values).returning())[0]!;
       mappedChanged = true;
@@ -248,11 +251,14 @@ export class MigrationEntityApplyRepository {
     if (existingId) {
       const [current] = await transaction.select().from(contacts).where(eq(contacts.id, existingId)).limit(1).for("update");
       if (!current) throw new Error("Act migration Contact target is missing.");
-      const changed = changedFields(current, values);
-      if (Object.keys(changed).length) entity = (await transaction.update(contacts).set({ ...changed, updatedAt: new Date() }).where(eq(contacts.id, current.id)).returning())[0]!;
-      else entity = current;
-      mappedChanged = Object.keys(changed).length > 0;
-      mappedFields = Object.keys(changed);
+      if (operation.proposal.decision === "link_existing") entity = current;
+      else {
+        const changed = changedFields(current, values);
+        if (Object.keys(changed).length) entity = (await transaction.update(contacts).set({ ...changed, updatedAt: new Date() }).where(eq(contacts.id, current.id)).returning())[0]!;
+        else entity = current;
+        mappedChanged = Object.keys(changed).length > 0;
+        mappedFields = Object.keys(changed);
+      }
     } else {
       entity = (await transaction.insert(contacts).values(values).returning())[0]!;
       mappedChanged = true;
