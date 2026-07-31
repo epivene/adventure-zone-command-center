@@ -339,8 +339,16 @@ function ProposalDecision({
             }
             disabled={busy}
             name="primarySourceId"
+            required={
+              row.proposedPrimarySourceId === null &&
+              availablePrimarySources.length > 1
+            }
           >
-            <option value="">Use proposed primary</option>
+            <option value="">
+              {row.proposedPrimarySourceId === null
+                ? "Choose primary..."
+                : "Use proposed primary"}
+            </option>
             {availablePrimarySources.map((choice) => (
               <option key={choice.id} value={choice.id}>
                 {choice.label}
@@ -676,6 +684,16 @@ export function ActMigrationReview({
               type="button"
             >
               Start preview snapshot
+            </button>
+          ) : null}
+          {currentProgress ? (
+            <button
+              className="button-secondary"
+              disabled={busy || !configured}
+              onClick={start}
+              type="button"
+            >
+              Start fresh preview snapshot
             </button>
           ) : null}
           {incomplete && !visibleFailure ? (

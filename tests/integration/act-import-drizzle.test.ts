@@ -234,7 +234,11 @@ class ExternalLinkRecordingDatabase {
             const query = new PgDialect().sqlToQuery(condition);
             const externalId = query.params.at(-1);
             const rows = this.links.filter(
-              (link) => link.actRecordId === externalId,
+              (link) =>
+                link.actRecordId === externalId &&
+                (!query.params.includes(true) || link.isPrimary === true) &&
+                (!query.params.includes("two_way") ||
+                  link.syncMode === "two_way"),
             );
             return { limit: async () => rows };
           },
@@ -247,6 +251,28 @@ class ExternalLinkRecordingDatabase {
     operation: (transaction: ExternalLinkRecordingDatabase) => Promise<T>,
   ) {
     return operation(this);
+  }
+}
+
+class ExternalLookupRecordingDatabase {
+  condition: SQL | null = null;
+
+  select() {
+    return {
+      from: (table: unknown) => {
+        if (table !== actExternalLinks) throw new Error("Unexpected table.");
+        return {
+          innerJoin: () => ({
+            leftJoin: () => ({
+              where: async (condition: SQL) => {
+                this.condition = condition;
+                return [];
+              },
+            }),
+          }),
+        };
+      },
+    };
   }
 }
 
@@ -286,6 +312,44 @@ describe("DrizzleActImportRepository", () => {
         isPrimary: true,
         syncMode: "two_way",
       }),
+    ]);
+  });
+
+  it("rejects a pull-only alias even when it belongs to the same Contact", async () => {
+    const database = new ExternalLinkRecordingDatabase();
+    database.links.push({
+      entityType: "contact",
+      sourceEntityType: "contact",
+      entityId: contactRow.id,
+      actRecordId: "ACT-CONTACT-ALIAS",
+      isPrimary: false,
+      syncMode: "pull_only",
+    });
+    const importRepository = new DrizzleActImportRepository(database as never);
+
+    await expect(importRepository.transaction((transaction) =>
+      transaction.ensureExternalLink(
+        "ACT-CONTACT-ALIAS",
+        contactRow.id,
+        "77777777-7777-4777-8777-777777777777",
+      ),
+    )).resolves.toBe("conflict");
+  });
+
+  it("matches external ids only through primary two-way Contact links", async () => {
+    const database = new ExternalLookupRecordingDatabase();
+    const importRepository = new DrizzleActImportRepository(database as never);
+
+    await importRepository.findByExternalId("ACT-CONTACT-ALIAS");
+
+    expect(database.condition).not.toBeNull();
+    const query = new PgDialect().sqlToQuery(database.condition!);
+    expect(query.params).toEqual([
+      "contact",
+      "contact",
+      true,
+      "two_way",
+      "ACT-CONTACT-ALIAS",
     ]);
   });
 

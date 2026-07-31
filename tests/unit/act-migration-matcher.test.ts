@@ -429,6 +429,41 @@ describe("buildMigrationProposals", () => {
     });
   });
 
+  it("allows approving a new Contact consolidation with a chosen primary", () => {
+    const records = [
+      staged("contact", {
+        id: "CONTACT-NEW-A",
+        fullName: "New Person",
+        emailAddress: "new@example.com",
+      }),
+      staged("contact", {
+        id: "CONTACT-NEW-B",
+        fullName: "New Person",
+        emailAddress: "new@example.com",
+      }),
+    ];
+
+    const proposals = buildMigrationProposals({
+      source: source(records),
+      local: emptyLocal,
+    });
+    const consolidation = proposal(proposals, "contact:CONTACT-NEW-A");
+
+    expect(consolidation).toMatchObject({
+      state: "needs_review",
+      issueCode: "ambiguous_person_match",
+      proposedLocalId: null,
+      proposedPrimarySourceId: null,
+      sourceRecordKeys: [
+        "contact:CONTACT-NEW-A",
+        "contact:CONTACT-NEW-B",
+      ],
+    });
+    expect(allowedDecisionsForProposal(consolidation)).toContain(
+      "approve_proposed",
+    );
+  });
+
   it("uses a pull-only alias for identity but never to propose Person field changes", () => {
     const record = staged("contact", {
       id: "CONTACT-ALIAS",

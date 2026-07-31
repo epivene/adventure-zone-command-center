@@ -356,6 +356,34 @@ describe("Act migration review workspace", () => {
     expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
   });
 
+  it("starts a fresh snapshot after a stored completed run", async () => {
+    const completed = progress({
+      status: "previewed",
+      completedCheckpoints: 8,
+    });
+    const startAction = vi.fn(async () => ({
+      ok: true as const,
+      changed: false,
+      runId: "99999999-9999-4999-8999-999999999999",
+      progress: completed,
+    }));
+    const user = userEvent.setup();
+    render(
+      <ActMigrationReview
+        {...props({
+          workspace: workspace(completed, preview()),
+          startAction,
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", {
+      name: "Start fresh preview snapshot",
+    }));
+
+    expect(startAction).toHaveBeenCalledWith(requestKey);
+  });
+
   it("refreshes stored progress after an automatic continuation error", async () => {
     const startAction = vi.fn(async () => ({
       ok: true as const,
@@ -928,6 +956,59 @@ describe("Act migration review workspace", () => {
       proposalKey: "contact:ACT-100",
       decision: "ignore",
       ignoreReason: "Reviewed duplicate",
+    });
+  });
+
+  it("requires a primary Act Contact when approving a new consolidation", async () => {
+    const saveDecisionAction = vi.fn(async () => ({
+      ok: true as const,
+      changed: true,
+      runId,
+      proposalKey: "contact:ACT-100",
+    }));
+    const user = userEvent.setup();
+    const row = proposal({
+      state: "needs_review",
+      candidateLocalIds: [],
+      sourceRecordKeys: ["contact:ACT-100", "contact:ACT-101"],
+      proposedPrimarySourceId: null,
+      primarySourceChoices: [
+        { id: "ACT-100", label: "ACT-100", available: true },
+        { id: "ACT-101", label: "ACT-101", available: true },
+      ],
+    });
+    render(
+      <ActMigrationReview
+        {...props({
+          saveDecisionAction,
+          workspace: workspace(
+            progress({
+              completedCheckpoints: 8,
+              totalCheckpoints: 8,
+              status: "previewed",
+            }),
+            preview({ rows: [row] }),
+          ),
+        })}
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Decision for contact:ACT-100"),
+      "approve_proposed",
+    );
+    const primary = screen.getByLabelText(
+      "Primary Act! Contact for contact:ACT-100",
+    );
+    expect(primary).toBeRequired();
+    await user.selectOptions(primary, "ACT-101");
+    await user.click(screen.getByRole("button", { name: "Save decision" }));
+
+    expect(saveDecisionAction).toHaveBeenCalledWith({
+      runId,
+      proposalKey: "contact:ACT-100",
+      decision: "approve_proposed",
+      primarySourceId: "ACT-101",
     });
   });
 

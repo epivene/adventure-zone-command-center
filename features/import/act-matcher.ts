@@ -735,6 +735,8 @@ class DrizzleActImportTransaction implements ActImportTransaction {
         and(
           eq(actExternalLinks.entityType, "contact"),
           eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.isPrimary, true),
+          eq(actExternalLinks.syncMode, "two_way"),
           eq(actExternalLinks.actRecordId, externalId),
         ),
       )
@@ -797,7 +799,15 @@ export class DrizzleActImportRepository implements ActImportRepository {
         organizations,
         eq(contacts.organizationId, organizations.id),
       )
-      .where(eq(actExternalLinks.actRecordId, externalId));
+      .where(
+        and(
+          eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.isPrimary, true),
+          eq(actExternalLinks.syncMode, "two_way"),
+          eq(actExternalLinks.actRecordId, externalId),
+        ),
+      );
     return records.map(toLocalContact);
   }
 

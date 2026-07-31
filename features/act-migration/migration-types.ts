@@ -262,6 +262,14 @@ export function allowedDecisionsForProposal(input: {
     (decision) =>
       decision !== "link_existing" || input.candidateLocalIds.length > 0,
   );
+  if (
+    input.state === "needs_review" &&
+    input.targetEntityType === "contact" &&
+    input.issueCode === "ambiguous_person_match" &&
+    input.candidateLocalIds.length === 0
+  ) {
+    decisions.unshift("approve_proposed");
+  }
   return decisions.filter(
     (decision) =>
       decision !== "keep_separate" ||

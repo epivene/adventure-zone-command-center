@@ -139,6 +139,7 @@ export interface SyncApplyRepository extends SyncRepository {
     actRecordId: string,
   ): Promise<void>;
   assertLocalContactUnchanged(row: SyncComparisonRow): Promise<boolean>;
+  assertActRecordWritable(row: SyncComparisonRow): Promise<boolean>;
   withLockedLocalContact<T>(
     row: SyncComparisonRow,
     action: () => Promise<T>,
@@ -1000,6 +1001,31 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
     return this.database.transaction(async (transaction) => {
       return Boolean(await this.lockPreviewedLocalContact(transaction, row));
     });
+  }
+
+  async assertActRecordWritable(row: SyncComparisonRow) {
+    if (!row.localContactId || !row.actRecordId) return false;
+    const links = await this.database
+      .select({
+        actRecordId: actExternalLinks.actRecordId,
+        isPrimary: actExternalLinks.isPrimary,
+        syncMode: actExternalLinks.syncMode,
+      })
+      .from(actExternalLinks)
+      .where(
+        and(
+          eq(actExternalLinks.entityType, "contact"),
+          eq(actExternalLinks.sourceEntityType, "contact"),
+          eq(actExternalLinks.entityId, row.localContactId),
+        ),
+      );
+    if (links.length === 0) return true;
+    return links.some(
+      (link) =>
+        link.actRecordId === row.actRecordId &&
+        link.isPrimary &&
+        link.syncMode === "two_way",
+    );
   }
 
   async withLockedLocalContact<T>(
