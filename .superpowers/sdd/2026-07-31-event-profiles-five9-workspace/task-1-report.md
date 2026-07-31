@@ -16,3 +16,13 @@
 ## Scope note
 
 The workspace is intentionally read-focused in this task. Its call-outcome control deep-links into the existing call workflow; later tasks will route Today actions and creation flows into the profile context.
+
+## Fix round 1: contact-scoped operational history
+
+- Extended the repository predicates for activities and follow-ups to include records attached solely to any active contact associated with the event profile, alongside place- and booking-scoped records.
+- Added a repository regression test that models a contact-only activity and follow-up; it returns those rows only when the emitted query includes that active contact scope.
+
+### Fix verification
+
+- `npm test -- tests/unit/event-profile-repository.test.ts tests/unit/event-profile-workspace.test.tsx tests/unit/places-contacts-navigation.test.tsx` — 3 files, 7 tests passed.
+- `npm run typecheck` — passed.

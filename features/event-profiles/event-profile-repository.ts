@@ -266,12 +266,17 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
-    const profileCondition = bookingIds.length
-      ? or(eq(activities.organizationId, profileId), inArray(activities.bookingId, bookingIds))
-      : eq(activities.organizationId, profileId);
-    const followUpCondition = bookingIds.length
-      ? or(eq(followUps.organizationId, profileId), inArray(followUps.bookingId, bookingIds))
-      : eq(followUps.organizationId, profileId);
+    const contactIds = profileContacts.map((contact) => contact.id);
+    const profileCondition = or(
+      eq(activities.organizationId, profileId),
+      ...(bookingIds.length ? [inArray(activities.bookingId, bookingIds)] : []),
+      ...(contactIds.length ? [inArray(activities.contactId, contactIds)] : []),
+    )!;
+    const followUpCondition = or(
+      eq(followUps.organizationId, profileId),
+      ...(bookingIds.length ? [inArray(followUps.bookingId, bookingIds)] : []),
+      ...(contactIds.length ? [inArray(followUps.contactId, contactIds)] : []),
+    )!;
     const [profileActivities, profileFollowUps, groupMemberships] = await Promise.all([
       this.database.select({
         id: activities.id,

@@ -1,7 +1,18 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  activities,
+  actExternalLinks,
+  bookings,
+  callingListMemberships,
+  followUps,
+  organizationContacts,
+  organizations,
+} from "@/db/schema";
+import {
   buildEventProfile,
+  DrizzleEventProfileRepository,
   type EventProfileRecordSet,
 } from "@/features/event-profiles/event-profile-repository";
 
@@ -127,5 +138,66 @@ describe("buildEventProfile", () => {
   it("uses the requested associated contact or falls back to the stable primary contact", () => {
     expect(buildEventProfile(records, id.blair).selectedContactId).toBe(id.blair);
     expect(buildEventProfile(records, "not-associated").selectedContactId).toBe(id.avery);
+  });
+
+  it("includes rows attached solely to an active associated contact", async () => {
+    const contactOnlyActivity = {
+      id: "88888888-8888-4888-8888-888888888888",
+      contactId: id.blair,
+      bookingId: null,
+      kind: "email",
+      body: "Contact-only activity.",
+      occurredAt: new Date("2026-07-03T16:00:00Z"),
+    };
+    const contactOnlyFollowUp = {
+      id: "99999999-9999-4999-8999-999999999999",
+      contactId: id.blair,
+      bookingId: null,
+      kind: "send_contract",
+      dueAt: new Date("2026-07-04T16:00:00Z"),
+      completedAt: null,
+    };
+    const dialect = new PgDialect();
+    const rowsFor = (table: unknown, condition: unknown) => {
+      const includesContact = () => {
+        const query = dialect.sqlToQuery(condition as never);
+        return query.sql.includes('"contact_id" in')
+          && query.params.includes(id.blair);
+      };
+      if (table === organizations) return [records.place];
+      if (table === organizationContacts) return records.contacts;
+      if (table === bookings) return records.bookings;
+      if (table === activities) return includesContact() ? [contactOnlyActivity] : [];
+      if (table === followUps) return includesContact() ? [contactOnlyFollowUp] : [];
+      if (table === callingListMemberships || table === actExternalLinks) return [];
+      throw new Error("Unexpected event profile query");
+    };
+    const database = {
+      select: () => {
+        let table: unknown;
+        let condition: unknown;
+        const chain = {
+          from: (value: unknown) => {
+            table = value;
+            return chain;
+          },
+          innerJoin: () => chain,
+          leftJoin: () => chain,
+          where: (value: unknown) => {
+            condition = value;
+            return chain;
+          },
+          orderBy: () => Promise.resolve(rowsFor(table, condition)),
+          limit: () => Promise.resolve(rowsFor(table, condition)),
+        };
+        return chain;
+      },
+    };
+
+    const profile = await new DrizzleEventProfileRepository(database as never)
+      .getEventProfile(id.profile);
+
+    expect(profile?.notes).toEqual([expect.objectContaining(contactOnlyActivity)]);
+    expect(profile?.followUps).toEqual([expect.objectContaining(contactOnlyFollowUp)]);
   });
 });
