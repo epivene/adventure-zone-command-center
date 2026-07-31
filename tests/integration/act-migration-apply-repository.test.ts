@@ -12,7 +12,10 @@ import {
   DrizzleActMigrationApplyRepository,
 } from "@/features/act-migration/apply-repository";
 import { buildMigrationApplyManifest } from "@/features/act-migration/apply-manifest";
-import type { MigrationApplyProposal } from "@/features/act-migration/apply-types";
+import type {
+  MigrationApplyProposal,
+  MigrationStableLink,
+} from "@/features/act-migration/apply-types";
 import { proposalSnapshotDigest } from "@/features/act-migration/reconciliation";
 import { crmTestDatabaseUrl } from "@/tests/helpers/crm-test-database";
 
@@ -61,7 +64,10 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
   let database: ReturnType<typeof drizzle<typeof crmSchema>>;
   let repository: DrizzleActMigrationApplyRepository;
 
-  async function storePreview(proposals: readonly MigrationApplyProposal[]) {
+  async function storePreview(
+    proposals: readonly MigrationApplyProposal[],
+    stableLinks: readonly MigrationStableLink[] = [],
+  ) {
     const digest = proposalSnapshotDigest(proposals);
     await database.update(crmSchema.actMigrationRuns)
       .set({ status: "previewed", sourceDigest, proposalDigest: digest, summary: { complete: true } })
@@ -76,6 +82,8 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
       candidateLocalIds: [...row.candidateLocalIds],
       proposedLocalId: row.proposedLocalId,
       proposedPrimarySourceId: row.proposedPrimarySourceId,
+      duplicateGroupKey: row.duplicateGroupKey ?? null,
+      duplicateSourceIds: [...(row.duplicateSourceIds ?? [])],
       issueCode: row.issueCode,
       dependencyProposalKeys: [...row.dependencyProposalKeys],
       matchReason: row.matchReason,
@@ -89,7 +97,7 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
       previewSourceDigest: sourceDigest,
       previewProposalDigest: digest,
       proposals,
-      stableLinks: [],
+      stableLinks,
     });
   }
 
@@ -137,6 +145,25 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
     expect(await sql!.unsafe(`SELECT proposal_key FROM act_migration_apply_operations`)).toEqual([{ proposal_key: "organization:one" }]);
   });
 
+  postgresTest("retains duplicate-place provenance when rebuilding the reviewed manifest", async () => {
+    const manifest = await storePreview([
+      proposal({
+        proposalKey: "organization:company:ACT-1",
+        sourceRecordKeys: ["company:ACT-1", "company:ACT-2"],
+        duplicateGroupKey: '["example place","1 main denver co"]',
+        duplicateSourceIds: ["ACT-1", "ACT-2"],
+      }),
+    ]);
+
+    await expect(repository.createBatchIfAbsent({
+      requestKey: "33333333-3333-4333-8333-333333333333",
+      runId,
+      requestedBy: "owner",
+      manifest,
+      now: new Date("2026-07-31T12:00:00Z"),
+    })).resolves.toMatchObject({ created: true });
+  });
+
   postgresTest("leases distinct dependency-ready operations, blocks unresolved children, and releases expired leases", async () => {
     const manifest = await storePreview([
       proposal({ proposalKey: "organization:parent" }),
@@ -155,6 +182,83 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
     expect(await sql!.unsafe(`SELECT proposal_key, status FROM act_migration_apply_operations ORDER BY proposal_key`)).toContainEqual({ proposal_key: "contact:child", status: "blocked" });
     await repository.releaseExpiredLeases(batch.id, new Date("2026-07-31T12:04:00Z"));
     expect(await repository.claimNextOperation(batch.id, "worker-d", new Date("2026-07-31T12:04:00Z"))).toMatchObject({ status: "leased" });
+  });
+
+  postgresTest("queues a child of a reconciled canonical place with its existing canonical ID", async () => {
+    const organizationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const existingPlace = proposal({
+      proposalKey: "organization:company:ACT-1",
+      state: "matched_unchanged",
+      reviewState: "not_required",
+      decision: null,
+      proposedLocalId: organizationId,
+      sourceRecordKeys: ["company:ACT-1"],
+    });
+    const relationship = proposal({
+      proposalKey: "organization_contact:ACT-1:CONTACT-1",
+      targetEntityType: "organization_contact",
+      state: "new_relationship",
+      sourceRecordKeys: ["company_contact:ACT-1:CONTACT-1"],
+      dependencyProposalKeys: ["organization:company:ACT-1"],
+    });
+    await database.insert(crmSchema.actMigrationRecords).values([
+      {
+        runId,
+        streamType: "company",
+        sourceKey: "company:ACT-1",
+        sourceId: "ACT-1",
+        targetSourceId: null,
+        rawSnapshot: {},
+        normalizedSnapshot: {},
+        fingerprint: "company-fingerprint",
+      },
+      {
+        runId,
+        streamType: "company_contact",
+        sourceKey: "company_contact:ACT-1:CONTACT-1",
+        sourceId: "ACT-1",
+        targetSourceId: "CONTACT-1",
+        rawSnapshot: {},
+        normalizedSnapshot: {},
+        fingerprint: "relationship-fingerprint",
+      },
+    ]);
+    await database.insert(crmSchema.actExternalLinks).values({
+      entityType: "organization",
+      sourceEntityType: "company",
+      entityId: organizationId,
+      actRecordId: "ACT-1",
+      isPrimary: false,
+      syncMode: "pull_only",
+      migrationRunId: runId,
+    });
+    const manifest = await storePreview([existingPlace, relationship], [{
+      targetEntityType: "organization",
+      localEntityId: organizationId,
+      sourceRecordKey: "company:ACT-1",
+    }]);
+
+    const batch = await repository.createBatchIfAbsent({
+      requestKey: "33333333-3333-4333-8333-333333333333",
+      runId,
+      requestedBy: "owner",
+      manifest,
+      now: new Date("2026-07-31T12:00:00Z"),
+    });
+    const operation = await repository.claimNextOperation(
+      batch.id,
+      "worker-a",
+      new Date("2026-07-31T12:01:00Z"),
+    );
+
+    expect(operation).toMatchObject({
+      proposalKey: "organization_contact:ACT-1:CONTACT-1",
+      resolvedDependencies: [{
+        proposalKey: "organization:company:ACT-1",
+        targetEntityType: "organization",
+        entityId: organizationId,
+      }],
+    });
   });
 
   postgresTest("requeues retryable failures, retains deterministic failures, and updates batch counts", async () => {

@@ -15,6 +15,7 @@ import {
   createActMigrationApplyService,
   createActMigrationCaptureService,
   createActMigrationPreviewService,
+  createActMigrationWorkspaceReader,
 } from "@/features/act-migration/runtime";
 import {
   ActMigrationLeaseConflictError,
@@ -34,7 +35,6 @@ import {
 } from "@/features/act-migration/migration-types";
 import type { MigrationApplyCounts as QueueApplyCounts } from "@/features/act-migration/apply-repository";
 import type { ActMigrationApplyResult } from "@/features/act-migration/apply-service";
-import type { MigrationApplyManifest } from "@/features/act-migration/apply-types";
 import { ActApiError } from "@/features/act-sync/act-errors";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { getActEnvironment, isActMigrationApplyEnabled } from "@/lib/env";
@@ -135,51 +135,11 @@ const bulkDecisionSchema = z.object({
     });
   }
 });
-const applyTargetCountsSchema = z.object({
-  runnable: z.number().safe().int().nonnegative(),
-  reconciled: z.number().safe().int().nonnegative(),
-  ignored: z.number().safe().int().nonnegative(),
-  pending: z.number().safe().int().nonnegative(),
-  failed: z.number().safe().int().nonnegative(),
-}).strict();
-const applyManifestSchema = z.object({
-  sourceDigest: boundedText(128),
-  previewProposalDigest: boundedText(128),
-  entries: z.array(z.object({
-    proposalKey: boundedText(ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH),
-    decision: z.enum(migrationDecisionValues),
-    chosenLocalEntityId: uuidSchema.nullable(),
-    primarySourceId: boundedText(ACT_MIGRATION_SOURCE_ID_MAX_LENGTH).nullable(),
-    targetEntityType: z.enum(migrationTargetEntityTypeValues),
-    sourceRecordKeys: z.array(boundedText(ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH)),
-    dependencyProposalKeys: z.array(boundedText(ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH)),
-    operationRank: z.number().safe().int().nonnegative(),
-  }).strict()).max(100_000),
-  counts: z.object({
-    proposalTotal: z.number().safe().int().nonnegative(),
-    runnable: z.number().safe().int().nonnegative(),
-    reconciled: z.number().safe().int().nonnegative(),
-    ignored: z.number().safe().int().nonnegative(),
-    pending: z.number().safe().int().nonnegative(),
-    failed: z.number().safe().int().nonnegative(),
-    byTarget: z.object({
-      organization: applyTargetCountsSchema,
-      contact: applyTargetCountsSchema,
-      organization_contact: applyTargetCountsSchema,
-      booking: applyTargetCountsSchema,
-      booking_contact: applyTargetCountsSchema,
-      calling_list: applyTargetCountsSchema,
-      calling_list_member: applyTargetCountsSchema,
-    }).strict(),
-  }).strict(),
-  digest: boundedText(128),
-}).strict();
 const startApplySchema = z.object({
   requestKey: uuidSchema,
   runId: uuidSchema,
-  // The server rebuilds the manifest from the immutable preview.  Retain this
-  // optional shape only for older callers; it is verified if supplied.
-  manifest: applyManifestSchema.optional(),
+  previewDigest: boundedText(128),
+  confirmationToken: z.literal("apply-approved-changes"),
 }).strict();
 const continueApplySchema = z.object({
   runId: uuidSchema,
@@ -414,18 +374,53 @@ function applySuccess(
 export async function startActMigrationApplyAction(input: {
   requestKey: string;
   runId: string;
-  manifest?: MigrationApplyManifest;
+  previewDigest: string;
+  confirmationToken: "apply-approved-changes";
 }): Promise<ActMigrationApplyActionResult> {
   const actor = await requireOwner();
   const parsed = startApplySchema.safeParse(input);
   if (!parsed.success) return actionError(parsed.error);
   if (!isActMigrationApplyEnabled()) return applyDisabledError();
   try {
+    const workspace = await (await createActMigrationWorkspaceReader())
+      .getWorkspace({ runId: parsed.data.runId, query: { page: 1, pageSize: 1 } });
+    if (
+      !workspace?.preview ||
+      !workspace.apply?.ready ||
+      workspace.apply.summary.approved < 1
+    ) {
+      return {
+        ok: false,
+        error: "Approved changes are not ready to apply.",
+        retryable: false,
+        retryAfter: null,
+      };
+    }
+    if (workspace.preview.report.proposalDigest !== parsed.data.previewDigest) {
+      return {
+        ok: false,
+        error: "The reviewed preview changed. Refresh before applying.",
+        retryable: false,
+        retryAfter: null,
+      };
+    }
+    if (workspace.apply.batch) {
+      return {
+        ok: true,
+        runId: parsed.data.runId,
+        batchId: workspace.apply.batch.id,
+        changed: false,
+        counts: workspace.apply.batch.counts,
+        retryable: workspace.apply.batch.counts.failed > 0,
+        retryAfter: null,
+        errorCode: null,
+      };
+    }
     const result = await (
       await createActMigrationApplyService()
     ).start({
-      ...parsed.data,
-      manifest: parsed.data.manifest as MigrationApplyManifest | undefined,
+      requestKey: parsed.data.requestKey,
+      runId: parsed.data.runId,
       requestedBy: actor.userId,
     });
     changedPath(result.changed);

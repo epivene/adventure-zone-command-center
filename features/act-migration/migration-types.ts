@@ -226,6 +226,10 @@ export type ActMigrationProposal = {
   candidateLocalIds: readonly string[];
   proposedLocalId: string | null;
   proposedPrimarySourceId: string | null;
+  /** Present only when exact Act! place rows were consolidated in preview. */
+  duplicateGroupKey?: string | null;
+  /** All Act! company IDs represented by an exact duplicate-place proposal. */
+  duplicateSourceIds?: readonly string[];
   matchReason: string;
   issueCode: MigrationIssueCode | null;
   dependencyProposalKeys: readonly string[];

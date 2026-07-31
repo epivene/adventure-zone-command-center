@@ -33,12 +33,21 @@ function organizationHref(
   organizationId: string,
   contactPage: number,
   bookingPage: number,
+  returnTo: string,
 ) {
   const query = new URLSearchParams();
   if (contactPage > 1) query.set("contactPage", String(contactPage));
   if (bookingPage > 1) query.set("bookingPage", String(bookingPage));
+  if (returnTo !== "/organizations") query.set("returnTo", returnTo);
   const serialized = query.toString();
   return `/organizations/${organizationId}${serialized ? `?${serialized}` : ""}`;
+}
+
+function safePlacesReturnTo(value: string | string[] | undefined) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate && /^\/organizations(?:[?#]|$)/.test(candidate)
+    ? candidate
+    : "/organizations";
 }
 
 export default async function OrganizationDetailPage({
@@ -49,6 +58,7 @@ export default async function OrganizationDetailPage({
   searchParams: Promise<{
     contactPage?: string | string[];
     bookingPage?: string | string[];
+    returnTo?: string | string[];
   }>;
 }) {
   await requireOwner();
@@ -56,6 +66,7 @@ export default async function OrganizationDetailPage({
   const query = await searchParams;
   const requestedContactPage = positivePage(query.contactPage);
   const requestedBookingPage = positivePage(query.bookingPage);
+  const returnTo = safePlacesReturnTo(query.returnTo);
   if (!organizationIdSchema.safeParse(organizationId).success) notFound();
   const { db } = await import("@/db/client");
   const organization = await new DrizzleOrganizationRepository(db).getOrganizationSummary(
@@ -74,8 +85,8 @@ export default async function OrganizationDetailPage({
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
       <header>
-        <Link className="text-sm font-semibold text-slate-600 hover:text-orange-700" href="/organizations">
-          ← Back to organizations
+        <Link className="text-sm font-semibold text-slate-600 hover:text-orange-700" href={returnTo}>
+          ← Back to Places
         </Link>
         <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -142,6 +153,7 @@ export default async function OrganizationDetailPage({
                       organization.id,
                       (organization.contactPage ?? 1) - 1,
                       organization.bookingPage ?? 1,
+                      returnTo,
                     )}
                   >
                     Previous contacts
@@ -155,6 +167,7 @@ export default async function OrganizationDetailPage({
                       organization.id,
                       (organization.contactPage ?? 1) + 1,
                       organization.bookingPage ?? 1,
+                      returnTo,
                     )}
                   >
                     Next contacts
@@ -202,6 +215,7 @@ export default async function OrganizationDetailPage({
                       organization.id,
                       organization.contactPage ?? 1,
                       (organization.bookingPage ?? 1) - 1,
+                      returnTo,
                     )}
                   >
                     Previous bookings
@@ -215,6 +229,7 @@ export default async function OrganizationDetailPage({
                       organization.id,
                       organization.contactPage ?? 1,
                       (organization.bookingPage ?? 1) + 1,
+                      returnTo,
                     )}
                   >
                     Next bookings

@@ -1,4 +1,4 @@
-import { and, asc, count, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -6,6 +6,7 @@ import {
   actMigrationRecords,
   actMigrationRuns,
   actMigrationApplyOperations,
+  actExternalLinks,
   auditEntries,
   bookings,
   contacts,
@@ -157,6 +158,8 @@ function proposalValue(
     candidateLocalIds: row.candidateLocalIds,
     proposedLocalId: row.proposedLocalId,
     proposedPrimarySourceId: row.proposedPrimarySourceId,
+    duplicateGroupKey: row.duplicateGroupKey,
+    duplicateSourceIds: row.duplicateSourceIds,
     issueCode: row.issueCode as ActMigrationProposal["issueCode"],
     dependencyProposalKeys: row.dependencyProposalKeys,
     matchReason: row.matchReason ?? "",
@@ -183,6 +186,8 @@ function structuralProposal(row: StoredProposalRow): ActMigrationProposal {
     candidateLocalIds: proposal.candidateLocalIds,
     proposedLocalId: proposal.proposedLocalId,
     proposedPrimarySourceId: proposal.proposedPrimarySourceId,
+    duplicateGroupKey: proposal.duplicateGroupKey,
+    duplicateSourceIds: proposal.duplicateSourceIds,
     issueCode: proposal.issueCode,
     dependencyProposalKeys: proposal.dependencyProposalKeys,
     matchReason: proposal.matchReason,
@@ -201,6 +206,8 @@ function proposalInsert(runId: string, proposal: ActMigrationProposal) {
     candidateLocalIds: [...proposal.candidateLocalIds],
     proposedLocalId: proposal.proposedLocalId,
     proposedPrimarySourceId: proposal.proposedPrimarySourceId,
+    duplicateGroupKey: proposal.duplicateGroupKey ?? null,
+    duplicateSourceIds: [...(proposal.duplicateSourceIds ?? [])],
     issueCode: proposal.issueCode,
     dependencyProposalKeys: [...proposal.dependencyProposalKeys],
     matchReason: proposal.matchReason,
@@ -610,7 +617,55 @@ export class DrizzleActMigrationPreviewRepository
       target: actMigrationProposals.targetEntityType,
       state: actMigrationProposals.state,
       decision: actMigrationProposals.decision,
+      proposedLocalId: actMigrationProposals.proposedLocalId,
+      sourceRecordKeys: actMigrationProposals.sourceRecordKeys,
     }).from(actMigrationProposals).where(eq(actMigrationProposals.runId, runId));
+    const matchedUnchanged = reviewRows.filter((value) =>
+      value.state === "matched_unchanged" && value.decision === null
+    );
+    const matchedSourceKeys = [...new Set(
+      matchedUnchanged.flatMap((value) => value.sourceRecordKeys),
+    )];
+    const matchedRecords = matchedSourceKeys.length === 0
+      ? []
+      : await this.database.select({
+        sourceKey: actMigrationRecords.sourceKey,
+        sourceId: actMigrationRecords.sourceId,
+        sourceEntityType: actMigrationRecords.streamType,
+      }).from(actMigrationRecords).where(and(
+        eq(actMigrationRecords.runId, runId),
+        inArray(actMigrationRecords.sourceKey, matchedSourceKeys),
+      ));
+    const stableIdentities = matchedRecords.flatMap((record) =>
+      record.sourceId === null ? [] : [{
+        sourceEntityType: record.sourceEntityType,
+        actRecordId: record.sourceId,
+      }]
+    );
+    const stableLinks = stableIdentities.length === 0
+      ? []
+      : await this.database.select({
+        entityType: actExternalLinks.entityType,
+        entityId: actExternalLinks.entityId,
+        sourceEntityType: actExternalLinks.sourceEntityType,
+        actRecordId: actExternalLinks.actRecordId,
+      }).from(actExternalLinks).where(or(...stableIdentities.map((identity) => and(
+        eq(actExternalLinks.sourceEntityType, identity.sourceEntityType),
+        eq(actExternalLinks.actRecordId, identity.actRecordId),
+      ))));
+    const matchedRecordByKey = new Map(
+      matchedRecords.map((record) => [record.sourceKey, record]),
+    );
+    const lacksCanonicalStableLink = (value: typeof matchedUnchanged[number]) =>
+      !value.proposedLocalId || value.sourceRecordKeys.some((sourceRecordKey) => {
+        const record = matchedRecordByKey.get(sourceRecordKey);
+        return !record?.sourceId || !stableLinks.some((link) =>
+          link.entityType === value.target &&
+          link.entityId === value.proposedLocalId &&
+          link.sourceEntityType === record.sourceEntityType &&
+          link.actRecordId === record.sourceId
+        );
+      });
     const byTarget = Object.fromEntries(migrationTargetEntityTypeValues.map((target) => [
       target,
       { approved: 0, pending: 0, blocked: 0, ignored: 0 },
@@ -628,7 +683,10 @@ export class DrizzleActMigrationPreviewRepository
       } else if (value.decision) {
         reviewSummary.approved += 1;
         bucket.approved += 1;
-      } else if (value.state !== "matched_unchanged") {
+      } else if (
+        value.state !== "matched_unchanged" ||
+        lacksCanonicalStableLink(value)
+      ) {
         reviewSummary.pending += 1;
         bucket.pending += 1;
       }

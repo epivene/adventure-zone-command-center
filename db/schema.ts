@@ -888,6 +888,11 @@ export const actMigrationProposals = pgTable(
     proposedLocalId: uuid("proposed_local_id"),
     issueCode: text("issue_code"),
     proposedPrimarySourceId: text("proposed_primary_source_id"),
+    duplicateGroupKey: text("duplicate_group_key"),
+    duplicateSourceIds: jsonb("duplicate_source_ids")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     dependencyProposalKeys: jsonb("dependency_proposal_keys")
       .$type<string[]>()
       .default(sql`'[]'::jsonb`)
@@ -937,6 +942,10 @@ export const actMigrationProposals = pgTable(
     check(
       "act_migration_proposals_proposed_primary_source_id_nonblank",
       sql`${table.proposedPrimarySourceId} is null or btrim(${table.proposedPrimarySourceId}) <> ''`,
+    ),
+    check(
+      "act_migration_proposals_duplicate_source_ids_array",
+      sql`jsonb_typeof(${table.duplicateSourceIds}) = 'array'`,
     ),
     check(
       "act_migration_proposals_dependency_proposal_keys_array",
@@ -1076,6 +1085,10 @@ export const actMigrationApplyOperations = pgTable(
       .$type<string[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
+    resolvedDependencies: jsonb("resolved_dependencies")
+      .$type<{ proposalKey: string; targetEntityType: string; entityId: string }[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
     status: text("status").default("pending").notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     leaseOwner: text("lease_owner"),
@@ -1103,6 +1116,10 @@ export const actMigrationApplyOperations = pgTable(
     check(
       "act_migration_apply_operations_dependency_proposal_keys_array",
       sql`jsonb_typeof(${table.dependencyProposalKeys}) = 'array'`,
+    ),
+    check(
+      "act_migration_apply_operations_resolved_dependencies_array",
+      sql`jsonb_typeof(${table.resolvedDependencies}) = 'array'`,
     ),
     check(
       "act_migration_apply_operations_status_valid",

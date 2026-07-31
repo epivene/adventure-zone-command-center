@@ -10,7 +10,7 @@ import {
 import type { MigrationPreviewQuery } from "@/features/act-migration/preview-repository";
 import { createActMigrationWorkspaceReader } from "@/features/act-migration/runtime";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { getActEnvironment, isActMigrationApplyEnabled } from "@/lib/env";
+import { getActEnvironment, getActMigrationApplyRollout } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +102,11 @@ export default async function ActMigrationPage({
         workspace.progress.failedCheckpoints,
         workspace.progress.interruption?.code ?? "",
         workspace.progress.interruption?.retryAfter?.getTime() ?? "",
+        workspace.apply?.batch?.id ?? "",
+        workspace.apply?.batch?.status ?? "",
+        ...(workspace.apply?.batch
+          ? Object.values(workspace.apply.batch.counts)
+          : []),
         ...(workspace.preview?.rows.map((row) =>
           `${row.proposalKey}:${row.decision ?? ""}:${
             row.decidedAt?.getTime() ?? ""
@@ -126,11 +131,19 @@ export default async function ActMigrationPage({
       </header>
 
       <ActMigrationReview
-        applyEnabled={isActMigrationApplyEnabled()}
+        applyRollout={getActMigrationApplyRollout()}
         configured={configured}
         key={version}
         maskedDatabase={maskedDatabase}
         query={query}
+        reviewedImport={workspace?.preview && workspace.apply ? {
+          previewDigest: workspace.preview.report.proposalDigest,
+          ready: workspace.apply.ready,
+          summary: workspace.apply.summary,
+          byTarget: workspace.apply.byTarget,
+          bulkEligible: workspace.apply.bulkEligible,
+          batch: workspace.apply.batch,
+        } : null}
         workspace={workspace}
       />
     </div>

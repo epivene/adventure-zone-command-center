@@ -16,6 +16,7 @@ import {
 import type {
   MigrationApplyManifest,
   MigrationApplyProposal,
+  MigrationResolvedDependency,
   MigrationStableLink,
 } from "@/features/act-migration/apply-types";
 import {
@@ -44,6 +45,7 @@ export type MigrationApplyOperation = {
   proposalKey: string;
   targetEntityType: MigrationTargetEntityType;
   dependencyProposalKeys: readonly string[];
+  resolvedDependencies: readonly MigrationResolvedDependency[];
   status: MigrationApplyOperationStatus;
   attemptCount: number;
   leaseOwner: string | null;
@@ -130,6 +132,8 @@ function proposalValue(row: StoredProposal): MigrationApplyProposal {
     candidateLocalIds: row.candidateLocalIds,
     proposedLocalId: row.proposedLocalId,
     proposedPrimarySourceId: row.proposedPrimarySourceId,
+    duplicateGroupKey: row.duplicateGroupKey,
+    duplicateSourceIds: row.duplicateSourceIds,
     issueCode: row.issueCode as ActMigrationProposal["issueCode"],
     dependencyProposalKeys: row.dependencyProposalKeys,
     matchReason: row.matchReason ?? "",
@@ -203,6 +207,7 @@ function operationValue(
     proposalKey: row.proposalKey,
     targetEntityType: row.targetEntityType as MigrationTargetEntityType,
     dependencyProposalKeys: row.dependencyProposalKeys,
+    resolvedDependencies: row.resolvedDependencies as MigrationResolvedDependency[],
     status: row.status as MigrationApplyOperationStatus,
     attemptCount: row.attemptCount,
     leaseOwner: row.leaseOwner,
@@ -281,8 +286,9 @@ async function updateDependencyBlocks(
   ]));
   for (const operation of operations) {
     if (operation.status !== "pending" && operation.status !== "blocked") continue;
-    const ready = operation.dependencyProposalKeys.every(
-      (key) => byProposalKey.get(key)?.status === "applied",
+    const resolvedKeys = new Set(operation.resolvedDependencies.map(({ proposalKey }) => proposalKey));
+    const ready = operation.dependencyProposalKeys.every((key) =>
+      resolvedKeys.has(key) || byProposalKey.get(key)?.status === "applied",
     );
     const nextStatus = ready ? "pending" : "blocked";
     if (operation.status === nextStatus) continue;
@@ -368,33 +374,36 @@ export class DrizzleActMigrationApplyRepository
         eq(actMigrationRecords.runId, input.runId),
         inArray(actMigrationRecords.sourceKey, sourceKeys),
       )).for("update");
-      const stableLocalIds = [...new Set(proposals.flatMap((proposal) =>
-        proposal.state === "matched_unchanged" && proposal.proposedLocalId
-          ? [proposal.proposedLocalId]
-          : [],
-      ))];
-      const links = stableLocalIds.length === 0 ? [] : await transaction.select({
+      const stableSourceIdentities = records.flatMap((record) =>
+        record.sourceId === null ? [] : [{
+          sourceEntityType: record.streamType,
+          actRecordId: record.sourceId,
+        }],
+      );
+      const links = stableSourceIdentities.length === 0 ? [] : await transaction.select({
         entityType: actExternalLinks.entityType,
         localEntityId: actExternalLinks.entityId,
         sourceEntityType: actExternalLinks.sourceEntityType,
         actRecordId: actExternalLinks.actRecordId,
-      }).from(actExternalLinks).where(inArray(actExternalLinks.entityId, stableLocalIds)).for("update");
+      }).from(actExternalLinks).where(or(...stableSourceIdentities.map((identity) => and(
+        eq(actExternalLinks.sourceEntityType, identity.sourceEntityType),
+        eq(actExternalLinks.actRecordId, identity.actRecordId),
+      )))).for("update");
       const recordByKey = new Map(records.map((record) => [record.sourceKey, record]));
       const stableLinks: MigrationStableLink[] = proposals.flatMap((proposal) => {
         if (proposal.state !== "matched_unchanged" || !proposal.proposedLocalId) return [];
         return proposal.sourceRecordKeys.flatMap((sourceRecordKey) => {
           const record = recordByKey.get(sourceRecordKey);
-          const link = record && links.find((candidate) =>
-            candidate.entityType === proposal.targetEntityType &&
-            candidate.localEntityId === proposal.proposedLocalId &&
-            candidate.sourceEntityType === record.streamType &&
-            candidate.actRecordId === record.sourceId,
-          );
-          return link ? [{
-            targetEntityType: proposal.targetEntityType as MigrationTargetEntityType,
-            localEntityId: proposal.proposedLocalId!,
-            sourceRecordKey,
-          }] : [];
+          return record && record.sourceId !== null
+            ? links.filter((candidate) =>
+                candidate.sourceEntityType === record.streamType &&
+                candidate.actRecordId === record.sourceId,
+              ).map((link) => ({
+                targetEntityType: link.entityType as MigrationTargetEntityType,
+                localEntityId: link.localEntityId,
+                sourceRecordKey,
+              }))
+            : [];
         });
       });
       const manifest = buildMigrationApplyManifest({
@@ -430,6 +439,7 @@ export class DrizzleActMigrationApplyRepository
           proposalKey: entry.proposalKey,
           targetEntityType: entry.targetEntityType,
           dependencyProposalKeys: [...entry.dependencyProposalKeys],
+          resolvedDependencies: [...entry.resolvedDependencies],
           status: "pending",
           retryable: true,
           createdAt: input.now,

@@ -87,4 +87,31 @@ describe("MigrationEntityApplyRepository (PostgreSQL)", () => {
     expect(result).toEqual({ entityId: organizationId, changed: true });
     expect(await database.select().from(crmSchema.organizations).where(eq(crmSchema.organizations.id, organizationId))).toMatchObject([{ name: "ACT Name", lastResort: true, lastResortReason: "manual policy", actRecordId: "acme" }]);
   });
+
+  postgresTest("creates one canonical place for duplicate sources, keeps every source link, and is idempotent", async () => {
+    await database.insert(crmSchema.actMigrationRecords).values([
+      { runId, streamType: "company", sourceKey: "company:ACT-1", sourceId: "ACT-1", rawSnapshot: {}, normalizedSnapshot: { displayName: "Example Place", phone: null, industry: null, address1: "1 Main", address2: null, city: "Denver", region: "CO", postalCode: "80202", website: null }, fingerprint: "company-one" },
+      { runId, streamType: "company", sourceKey: "company:ACT-2", sourceId: "ACT-2", rawSnapshot: {}, normalizedSnapshot: { displayName: "Example Place", phone: null, industry: null, address1: "1 Main", address2: null, city: "Denver", region: "CO", postalCode: "80202", website: null }, fingerprint: "company-two" },
+    ]);
+    const value = operation({
+      proposalKey: "organization:company:ACT-1",
+      targetEntityType: "organization",
+      proposal: {
+        proposalKey: "organization:company:ACT-1", state: "new", reviewState: "decided", targetEntityType: "organization",
+        sourceRecordKeys: ["company:ACT-1", "company:ACT-2"], candidateLocalIds: [], proposedLocalId: null, proposedPrimarySourceId: null,
+        duplicateGroupKey: '["example place","1 main denver co"]', duplicateSourceIds: ["ACT-1", "ACT-2"], issueCode: null,
+        dependencyProposalKeys: [], matchReason: "exact_normalized_place_duplicate_group", displaySnapshot: {}, decision: "approve_proposed",
+        chosenLocalEntityId: null, primarySourceId: null,
+      },
+    });
+
+    const first = await repository.applyOrganization(value);
+    await expect(repository.applyOrganization(value)).resolves.toEqual({ entityId: first.entityId, changed: false });
+
+    expect(await database.select().from(crmSchema.organizations)).toHaveLength(1);
+    expect(await database.select({ actRecordId: crmSchema.actExternalLinks.actRecordId })
+      .from(crmSchema.actExternalLinks)
+      .where(eq(crmSchema.actExternalLinks.entityId, first.entityId)))
+      .toEqual([{ actRecordId: "ACT-1" }, { actRecordId: "ACT-2" }]);
+  });
 });

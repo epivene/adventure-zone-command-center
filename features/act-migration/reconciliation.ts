@@ -178,6 +178,8 @@ function canonicalProposals(proposals: readonly ActMigrationProposal[]) {
       candidateLocalIds: [...value.candidateLocalIds].toSorted(),
       proposedLocalId: value.proposedLocalId,
       proposedPrimarySourceId: value.proposedPrimarySourceId,
+      duplicateGroupKey: value.duplicateGroupKey ?? null,
+      duplicateSourceIds: [...(value.duplicateSourceIds ?? [])].toSorted(),
       issueCode: value.issueCode,
       dependencyProposalKeys: [...value.dependencyProposalKeys].toSorted(),
       matchReason: value.matchReason,

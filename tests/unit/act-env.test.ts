@@ -4,6 +4,7 @@ import {
   isActMigrationApplyEnabled,
   parseActEnvironment,
   parseActMigrationApplyEnabled,
+  parseActMigrationApplyRollout,
 } from "@/lib/env";
 
 describe("Act environment", () => {
@@ -16,6 +17,16 @@ describe("Act environment", () => {
     ).toBe(false);
     expect(parseActMigrationApplyEnabled({})).toBe(false);
     expect(isActMigrationApplyEnabled()).toBe(false);
+  });
+
+  it("exposes the rollout state explicitly while failing closed", () => {
+    expect(
+      parseActMigrationApplyRollout({ ACT_MIGRATION_APPLY_ENABLED: "true" }),
+    ).toBe("enabled");
+    expect(
+      parseActMigrationApplyRollout({ ACT_MIGRATION_APPLY_ENABLED: "TRUE" }),
+    ).toBe("disabled");
+    expect(parseActMigrationApplyRollout({})).toBe("disabled");
   });
 
   it("returns an unconfigured state when no Act values exist", () => {

@@ -31,13 +31,27 @@ export type MigrationApplyManifestInput = {
 
 export type MigrationApplyManifestEntry = {
   proposalKey: string;
+  /** The reviewed proposal that owns the canonical local target. */
+  canonicalTargetProposalKey: string;
+  /** A reviewed existing/local target when it is already known. */
+  canonicalTargetLocalEntityId: string | null;
+  /** All source IDs represented by an exact duplicate-place group. */
+  canonicalSourceIds: readonly string[];
   decision: MigrationDecision;
   chosenLocalEntityId: string | null;
   primarySourceId: string | null;
   targetEntityType: MigrationTargetEntityType;
   sourceRecordKeys: readonly string[];
   dependencyProposalKeys: readonly string[];
+  /** Dependencies reconciled to an existing canonical entity instead of queued. */
+  resolvedDependencies: readonly MigrationResolvedDependency[];
   operationRank: number;
+};
+
+export type MigrationResolvedDependency = {
+  proposalKey: string;
+  targetEntityType: MigrationTargetEntityType;
+  entityId: string;
 };
 
 export type MigrationApplyTargetCounts = {
