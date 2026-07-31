@@ -24,6 +24,19 @@ const events = [
 const contacts = [
   { id: "contact-1", name: "Avery Example", organizationName: "Marias Fair" },
 ];
+const eventProfiles = {
+  "event-1": {
+    city: "Shelby",
+    region: "MT",
+    contacts: [{
+      id: "contact-1", name: "Avery Example", phone: "406-555-0199",
+      email: "avery@example.test", role: "Coordinator", isPrimary: true,
+    }],
+    bookings: [{ id: "booking-1", name: "Marias Fair 2026" }],
+    followUps: [{ id: "follow-up-1", kind: "call" }],
+    groups: [{ id: "group-1", name: "Annual partners" }],
+  },
+};
 
 describe("EventProfileForm", () => {
   it("creates an event and a contact before optionally creating a booking", async () => {
@@ -46,7 +59,7 @@ describe("EventProfileForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       event: { id: null, name: "Cascade Festival", city: "Helena", region: "MT" },
-      contacts: [{ id: null, name: "Jordan Rivera", phone: "406-555-0199", email: "", role: "" }],
+      contacts: [{ id: null, name: "Jordan Rivera", phone: "406-555-0199", email: "", role: "", primary: true }],
       booking: { enabled: true, name: "Cascade Festival 2026", nextActionKind: "call", nextActionDueAt: "2026-08-01" },
     });
     expect(routerPush).toHaveBeenCalledWith("/event-profiles/created-event");
@@ -63,10 +76,38 @@ describe("EventProfileForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       event: { id: "event-1", name: "", city: "", region: "" },
-      contacts: [{ id: "contact-1", name: "", phone: "", email: "", role: "" }],
+      contacts: [{ id: "contact-1", name: "Avery Example", phone: "", email: "", role: "", primary: true }],
       booking: { enabled: false, name: "", nextActionKind: "call", nextActionDueAt: "" },
     });
     expect(routerPush).toHaveBeenCalledWith("/event-profiles/event-1");
+  });
+
+  it("prefills an existing event's editable contact rows and submits their edits", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true, profileId: "event-1" });
+    render(<EventProfileForm contacts={contacts} eventProfiles={eventProfiles} events={events} onSubmit={onSubmit} />);
+
+    await user.selectOptions(screen.getByLabelText("Find an existing event"), "event-1");
+
+    expect(screen.getByLabelText("Contact name")).toHaveValue("Avery Example");
+    expect(screen.getByLabelText("Phone")).toHaveValue("406-555-0199");
+    expect(screen.getByLabelText("Email")).toHaveValue("avery@example.test");
+    expect(screen.getByLabelText("Role (optional)")).toHaveValue("Coordinator");
+    expect(screen.getByLabelText("Primary contact")).toBeChecked();
+    expect(screen.getByText("Marias Fair 2026")).toBeInTheDocument();
+    expect(screen.getByText("Annual partners")).toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Phone"));
+    await user.type(screen.getByLabelText("Phone"), "406-555-0110");
+    await user.click(screen.getByRole("button", { name: "Create event profile" }));
+
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      event: { id: "event-1", name: "", city: "Shelby", region: "MT" },
+      contacts: [{
+        id: "contact-1", name: "Avery Example", phone: "406-555-0110",
+        email: "avery@example.test", role: "Coordinator", primary: true,
+      }],
+    }));
   });
 
   it("submits every added contact so the server can persist all event relationships", async () => {
