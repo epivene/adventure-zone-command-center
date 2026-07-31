@@ -11,20 +11,47 @@ describe("CRM PostgreSQL test gate", () => {
     "postgres://database.example/CRM_TEST_BACKUP",
     "postgres://localhost/crm_test",
     "postgres://[::1]/crm_test",
+    "postgres://operator:secret@database.example:5432/crm_test",
+    "postgres://operator:p%40ss@localhost/crm_test",
+    "postgres://operator:secret@[::1]:5432/crm_test",
   ])("accepts a PostgreSQL URL with a delimited test database name", (url) => {
     expect(crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toBe(url);
   });
 
   it.each([
-    ["comma-separated hosts", "postgres://prod,other/crm_test"],
+    [
+      "comma-separated hosts",
+      "postgres://prod,other/crm_test",
+      "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    ],
     [
       "comma-separated hosts with ports",
       "postgres://prod:5432,other:5432/crm_test",
-    ],
-    ["encoded comma-separated hosts", "postgres://prod%2Cother/crm_test"],
-  ])("rejects a multihost authority: %s", (_case, url) => {
-    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
       "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "encoded comma-separated hosts",
+      "postgres://prod%2Cother/crm_test",
+      "CRM_TEST_DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "multiple credential separators hiding comma-separated hosts",
+      "postgres://operator@prod.example,other.example@safe.example/crm_test",
+      "CRM_TEST_DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding encoded comma-separated hosts",
+      "postgres://operator@prod.example%2Cother.example@safe.example/crm_test",
+      "CRM_TEST_DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding port-qualified hosts",
+      "postgres://operator@prod.example:5432,other.example:5432@safe.example/crm_test",
+      "CRM_TEST_DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+  ])("rejects a multihost authority: %s", (_case, url, expectedError) => {
+    expect(() => crmTestDatabaseUrl({ CRM_TEST_DATABASE_URL: url })).toThrow(
+      expectedError,
     );
   });
 
@@ -89,14 +116,38 @@ describe("CRM PostgreSQL test gate", () => {
     );
   });
 
-  it("rejects a multihost DATABASE_URL before identity comparison", () => {
-    expect(() =>
-      crmTestDatabaseUrl({
-        CRM_TEST_DATABASE_URL: "postgres://safe.example/crm_test",
-        DATABASE_URL: "postgres://prod.example,other.example/crm",
-      }),
-    ).toThrow("DATABASE_URL must use exactly one URL authority host.");
-  });
+  it.each([
+    [
+      "comma-separated hosts",
+      "postgres://prod.example,other.example/crm",
+      "DATABASE_URL must use exactly one URL authority host.",
+    ],
+    [
+      "multiple credential separators hiding comma-separated hosts",
+      "postgres://operator@prod.example,other.example@safe.example/crm",
+      "DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding encoded comma-separated hosts",
+      "postgres://operator@prod.example%2Cother.example@safe.example/crm",
+      "DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+    [
+      "multiple credential separators hiding port-qualified hosts",
+      "postgres://operator@prod.example:5432,other.example:5432@safe.example/crm",
+      "DATABASE_URL must use at most one raw @ credential separator.",
+    ],
+  ])(
+    "rejects a multihost DATABASE_URL before identity comparison: %s",
+    (_case, url, expectedError) => {
+      expect(() =>
+        crmTestDatabaseUrl({
+          CRM_TEST_DATABASE_URL: "postgres://safe.example/crm_test",
+          DATABASE_URL: url,
+        }),
+      ).toThrow(expectedError);
+    },
+  );
 
   it("allows a disposable test database distinct from DATABASE_URL", () => {
     const url = "postgres://database.example/crm_test";

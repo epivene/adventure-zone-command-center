@@ -329,9 +329,12 @@ word such as `contest` or `testing` is rejected. The preflight below also
 rejects malformed/non-PostgreSQL URLs, missing host/database values, and the
 same normalized host, port, and database identity as `DATABASE_URL`. Each URL
 must use exactly one URL authority host; raw or encoded comma-separated hosts
-are rejected, and `host`, `hostname`, and `hostaddr` host override parameters
+are rejected. Each authority may contain at most one raw `@` credential
+separator; additional separators are rejected before the client can reinterpret
+hidden hosts. The `host`, `hostname`, and `hostaddr` host override parameters
 are not allowed. One or more terminal DNS dots are removed before host identity
-comparison. Localhost and bracketed IPv6 hosts remain valid.
+comparison. Single-separator credentials, localhost, bracketed IPv6 hosts, and
+explicit ports remain valid.
 
 ```powershell
 function ConvertTo-PostgresDatabaseIdentity {
@@ -359,7 +362,10 @@ function ConvertTo-PostgresDatabaseIdentity {
   else {
     $Value.Substring($authorityStart, $authorityEnd - $authorityStart)
   }
-  $hostAuthority = $authority.Substring($authority.LastIndexOf("@") + 1)
+  if ([regex]::Matches($authority, "@").Count -gt 1) {
+    throw "$VariableName must use at most one raw @ credential separator."
+  }
+  $hostAuthority = $authority.Substring($authority.IndexOf("@") + 1)
   try {
     $decodedHostAuthority = [Uri]::UnescapeDataString($hostAuthority)
   }

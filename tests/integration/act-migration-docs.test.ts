@@ -106,6 +106,9 @@ describe("Act migration operations documentation", () => {
     expect(contents).toContain("booking_contacts");
     expect(contents).toMatch(/delimited\s+`test` token/);
     expect(contents).toContain("exactly one URL authority host");
+    expect(contents).toMatch(
+      /at most one raw `@` credential\s+separator/,
+    );
     expect(contents).toContain("host override parameters are not allowed");
     expect(contents).toContain("terminal DNS dots");
     expect(contents).toContain("unsupported_group_count");
@@ -130,6 +133,9 @@ describe("Act migration operations documentation", () => {
     expect(databaseGateBlock).toContain("[Uri]::TryCreate");
     expect(databaseGateBlock).toContain("$env:DATABASE_URL");
     expect(databaseGateBlock).toContain("Host.Contains");
+    expect(databaseGateBlock).toContain(
+      '[regex]::Matches($authority, "@").Count',
+    );
     expect(databaseGateBlock).toContain("TrimEnd");
     expect(databaseGateBlock).toContain(
       "(?i)(^|[^a-z0-9])test($|[^a-z0-9])",

@@ -14,7 +14,13 @@ function rejectMultihostAuthority(value: string, variableName: string) {
   const authorityEnd = remainder.search(/[/?#]/);
   const authority =
     authorityEnd < 0 ? remainder : remainder.slice(0, authorityEnd);
-  const hostAuthority = authority.slice(authority.lastIndexOf("@") + 1);
+  const credentialSeparator = authority.indexOf("@");
+  if (credentialSeparator !== authority.lastIndexOf("@")) {
+    throw new Error(
+      `${variableName} must use at most one raw @ credential separator.`,
+    );
+  }
+  const hostAuthority = authority.slice(credentialSeparator + 1);
   let decodedHostAuthority: string;
   try {
     decodedHostAuthority = decodeURIComponent(hostAuthority);
