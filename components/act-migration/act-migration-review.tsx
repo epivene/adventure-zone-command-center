@@ -108,6 +108,7 @@ const decisionLabels: Record<MigrationDecision, string> = {
   approve_proposed: "Approve proposed",
   link_existing: "Link existing",
   keep_separate: "Keep separate",
+  confirm_static_group: "Confirm static Group",
   ignore: "Ignore",
 };
 

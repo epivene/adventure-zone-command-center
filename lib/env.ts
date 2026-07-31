@@ -11,7 +11,7 @@ const actEnvironmentSchema = z.object({
   ACT_PASSWORD: z.string().min(1),
 });
 
-type EnvironmentSource = Record<string, string | undefined>;
+export type EnvironmentSource = Record<string, string | undefined>;
 
 export function getServerEnvironment() {
   return serverEnvironmentSchema.parse({
@@ -53,4 +53,12 @@ export function parseActEnvironment(source: EnvironmentSource):
 
 export function getActEnvironment() {
   return parseActEnvironment(process.env);
+}
+
+export function parseActMigrationApplyEnabled(source: EnvironmentSource) {
+  return source.ACT_MIGRATION_APPLY_ENABLED === "true";
+}
+
+export function isActMigrationApplyEnabled() {
+  return parseActMigrationApplyEnabled(process.env);
 }

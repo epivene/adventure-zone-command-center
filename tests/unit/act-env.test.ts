@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 
-import { parseActEnvironment } from "@/lib/env";
+import {
+  isActMigrationApplyEnabled,
+  parseActEnvironment,
+  parseActMigrationApplyEnabled,
+} from "@/lib/env";
 
 describe("Act environment", () => {
+  it("enables reviewed apply only for the exact lowercase true flag", () => {
+    expect(
+      parseActMigrationApplyEnabled({ ACT_MIGRATION_APPLY_ENABLED: "true" }),
+    ).toBe(true);
+    expect(
+      parseActMigrationApplyEnabled({ ACT_MIGRATION_APPLY_ENABLED: "TRUE" }),
+    ).toBe(false);
+    expect(parseActMigrationApplyEnabled({})).toBe(false);
+    expect(isActMigrationApplyEnabled()).toBe(false);
+  });
+
   it("returns an unconfigured state when no Act values exist", () => {
     expect(parseActEnvironment({})).toEqual({ configured: false });
   });

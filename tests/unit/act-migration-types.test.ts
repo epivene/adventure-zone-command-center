@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  actMigrationRunStatusValues,
   allowedDecisionsForProposal,
   allowedDecisionsForPreviewState,
   isMigrationDecision,
   isMigrationTargetEntityType,
+  migrationApplyBatchStatusValues,
+  migrationApplyOperationStatusValues,
+  migrationDecisionValues,
   migrationIssueCodeValues,
   migrationStreamRank,
   migrationTargetRank,
@@ -13,8 +17,36 @@ import {
   type ActMigrationStreamType,
   type MigrationTargetEntityType,
 } from "@/features/act-migration/migration-types";
+import {
+  ACT_MIGRATION_APPLY_BATCH_SIZE,
+  ACT_MIGRATION_BULK_DECISION_SIZE,
+} from "@/features/act-migration/action-limits";
 
 describe("Act migration contracts", () => {
+  it("defines the reviewed-import run, decision, batch, and operation contracts", () => {
+    expect(migrationDecisionValues).toContain("confirm_static_group");
+    expect(actMigrationRunStatusValues).toEqual(
+      expect.arrayContaining(["applying", "partially_applied", "applied"]),
+    );
+    expect(migrationApplyBatchStatusValues).toEqual([
+      "pending",
+      "applying",
+      "partially_applied",
+      "applied",
+      "failed",
+    ]);
+    expect(migrationApplyOperationStatusValues).toEqual([
+      "pending",
+      "leased",
+      "blocked",
+      "applied",
+      "ignored",
+      "failed",
+    ]);
+    expect(ACT_MIGRATION_APPLY_BATCH_SIZE).toBe(25);
+    expect(ACT_MIGRATION_BULK_DECISION_SIZE).toBe(100);
+  });
+
   it("orders root entities before relationship streams", () => {
     const streams: ActMigrationStreamType[] = [
       "group_contact",
