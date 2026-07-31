@@ -3,10 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { buildMigrationApplyManifest } from "@/features/act-migration/apply-manifest";
 import { ActMigrationApplyService } from "@/features/act-migration/apply-service";
 import type {
+  ActMigrationApplyRepository,
+  MigrationApplyBatch,
+  MigrationApplyCounts,
   MigrationApplyOperation,
   MigrationApplyWorkspace,
 } from "@/features/act-migration/apply-repository";
-import type { MigrationApplyProposal } from "@/features/act-migration/apply-types";
+import type {
+  MigrationApplyManifest,
+  MigrationApplyProposal,
+} from "@/features/act-migration/apply-types";
 import type { LocalMigrationCandidateSnapshot } from "@/features/act-migration/migration-types";
 import { ActMigrationPreviewService } from "@/features/act-migration/preview-service";
 import { proposalSnapshotDigest } from "@/features/act-migration/reconciliation";
@@ -67,25 +73,209 @@ function emptyCandidates(): LocalMigrationCandidateSnapshot {
   };
 }
 
-function applyOperation(
-  proposal: MigrationApplyProposal,
-): MigrationApplyOperation {
+function operationCounts(
+  operations: Iterable<MigrationApplyOperation>,
+): MigrationApplyCounts {
+  const counts: MigrationApplyCounts = {
+    pending: 0,
+    leased: 0,
+    blocked: 0,
+    applied: 0,
+    ignored: 0,
+    failed: 0,
+    total: 0,
+  };
+  for (const operation of operations) {
+    counts[operation.status] += 1;
+    counts.total += 1;
+  }
+  return counts;
+}
+
+function batchStatus(counts: MigrationApplyCounts): MigrationApplyBatch["status"] {
+  if (counts.failed > 0) return counts.applied > 0 ? "partially_applied" : "failed";
+  if (counts.pending > 0 || counts.leased > 0 || counts.blocked > 0) {
+    return counts.applied > 0 ? "partially_applied" : "applying";
+  }
+  return "applied";
+}
+
+class PersistentApplyRepository implements ActMigrationApplyRepository {
+  private batch: MigrationApplyBatch | null = null;
+  private readonly operations = new Map<string, MigrationApplyOperation>();
+
+  constructor(private readonly proposals: readonly MigrationApplyProposal[]) {}
+
+  async createBatchIfAbsent(input: {
+    requestKey: string;
+    runId: string;
+    requestedBy: string;
+    manifest?: MigrationApplyManifest;
+    now: Date;
+  }) {
+    if (this.batch) return { ...this.batch, created: false };
+    if (!input.manifest) throw new Error("Release fixture requires a reviewed apply manifest.");
+    for (const entry of input.manifest.entries) {
+      const proposal = this.proposals.find(({ proposalKey }) => proposalKey === entry.proposalKey);
+      if (!proposal) throw new Error(`Release fixture proposal is missing: ${entry.proposalKey}`);
+      this.operations.set(entry.proposalKey, {
+        id: `operation:${entry.proposalKey}`,
+        batchId,
+        runId: input.runId,
+        proposalKey: entry.proposalKey,
+        targetEntityType: entry.targetEntityType,
+        dependencyProposalKeys: entry.dependencyProposalKeys,
+        resolvedDependencies: entry.resolvedDependencies,
+        status: "pending",
+        attemptCount: 0,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+        appliedEntityId: null,
+        errorCode: null,
+        retryable: true,
+        proposal,
+      });
+    }
+    const counts = operationCounts(this.operations.values());
+    this.batch = {
+      id: batchId,
+      requestKey: input.requestKey,
+      runId: input.runId,
+      requestedBy: input.requestedBy,
+      status: batchStatus(counts),
+      manifestDigest: input.manifest.digest,
+      summary: counts,
+      lastErrorCode: null,
+      startedAt: input.now,
+      completedAt: null,
+    };
+    return { ...this.batch, created: true };
+  }
+
+  async claimNextOperation(batch: string, leaseOwner: string, now: Date) {
+    if (batch !== batchId || !this.batch) return null;
+    const candidate = [...this.operations.values()]
+      .filter((operation) => operation.status === "pending")
+      .find((operation) => operation.dependencyProposalKeys.every((key) =>
+        operation.resolvedDependencies.some(({ proposalKey }) => proposalKey === key) ||
+        this.operations.get(key)?.status === "applied",
+      ));
+    if (!candidate) return null;
+    candidate.status = "leased";
+    candidate.attemptCount += 1;
+    candidate.leaseOwner = leaseOwner;
+    candidate.leaseExpiresAt = now;
+    this.refresh();
+    return { ...candidate };
+  }
+
+  async completeOperation(input: {
+    operationId: string;
+    leaseOwner: string;
+    entityId: string;
+    now: Date;
+  }) {
+    const operation = [...this.operations.values()].find(({ id }) => id === input.operationId);
+    if (!operation || operation.status !== "leased" || operation.leaseOwner !== input.leaseOwner) {
+      throw new Error("Release fixture operation lease no longer matches.");
+    }
+    operation.status = "applied";
+    operation.appliedEntityId = input.entityId;
+    operation.leaseOwner = null;
+    operation.leaseExpiresAt = null;
+    this.refresh();
+  }
+
+  async failOperation(input: {
+    operationId: string;
+    leaseOwner: string;
+    errorCode: string;
+    retryable: boolean;
+    now: Date;
+  }) {
+    const operation = [...this.operations.values()].find(({ id }) => id === input.operationId);
+    if (!operation || operation.status !== "leased" || operation.leaseOwner !== input.leaseOwner) {
+      throw new Error("Release fixture operation lease no longer matches.");
+    }
+    operation.status = input.retryable ? "pending" : "failed";
+    operation.errorCode = input.errorCode;
+    operation.retryable = input.retryable;
+    operation.leaseOwner = null;
+    operation.leaseExpiresAt = null;
+    this.refresh();
+  }
+
+  async releaseExpiredLeases() {
+    return 0;
+  }
+
+  async getApplyWorkspace(requestedRunId: string): Promise<MigrationApplyWorkspace> {
+    if (requestedRunId !== runId || !this.batch) throw new Error("Release fixture batch is missing.");
+    this.refresh();
+    return {
+      runId,
+      runStatus: this.batch.status,
+      counts: this.batch.summary,
+      batches: [{ ...this.batch, summary: { ...this.batch.summary } }],
+    };
+  }
+
+  storedOperations() {
+    return [...this.operations.values()].map((operation) => ({ ...operation }));
+  }
+
+  private refresh() {
+    if (!this.batch) return;
+    const summary = operationCounts(this.operations.values());
+    this.batch = {
+      ...this.batch,
+      status: batchStatus(summary),
+      summary,
+      completedAt: summary.pending || summary.leased || summary.blocked ? null : new Date(),
+    };
+  }
+}
+
+class ReadOnlyActMutator {
+  readonly write = vi.fn();
+}
+
+type FixtureCommandCenter = {
+  places: Map<string, Set<string>>;
+  contacts: Set<string>;
+  placeContacts: Map<string, Set<string>>;
+};
+
+function commandCenterTargets(input: {
+  commandCenter: FixtureCommandCenter;
+  canonicalPlaceKey: string;
+  act: ReadOnlyActMutator;
+}) {
+  const assertNoActWrites = () => expect(input.act.write).not.toHaveBeenCalled();
   return {
-    id: `operation:${proposal.proposalKey}`,
-    batchId,
-    runId,
-    proposalKey: proposal.proposalKey,
-    targetEntityType: proposal.targetEntityType,
-    dependencyProposalKeys: proposal.dependencyProposalKeys,
-    resolvedDependencies: [],
-    status: "leased",
-    attemptCount: 1,
-    leaseOwner: "release-fixture-worker",
-    leaseExpiresAt: null,
-    appliedEntityId: null,
-    errorCode: null,
-    retryable: true,
-    proposal,
+    organization: { apply: async (operation: MigrationApplyOperation) => {
+      assertNoActWrites();
+      const sources = input.commandCenter.places.get(operation.proposalKey) ?? new Set<string>();
+      for (const sourceId of operation.proposal.duplicateSourceIds ?? []) sources.add(sourceId);
+      input.commandCenter.places.set(operation.proposalKey, sources);
+      return { entityId: operation.proposalKey, changed: sources.size > 0 };
+    } },
+    contact: { apply: async (operation: MigrationApplyOperation) => {
+      assertNoActWrites();
+      const changed = !input.commandCenter.contacts.has(operation.proposalKey);
+      input.commandCenter.contacts.add(operation.proposalKey);
+      return { entityId: operation.proposalKey, changed };
+    } },
+    organization_contact: { apply: async (operation: MigrationApplyOperation) => {
+      assertNoActWrites();
+      const contactDependency = operation.dependencyProposalKeys.find((key) => key.startsWith("contact:"));
+      if (!contactDependency) throw new Error("Release fixture relationship contact dependency is missing.");
+      const relationships = input.commandCenter.placeContacts.get(input.canonicalPlaceKey) ?? new Set<string>();
+      const changed = !relationships.has(contactDependency);
+      relationships.add(contactDependency);
+      input.commandCenter.placeContacts.set(input.canonicalPlaceKey, relationships);
+      return { entityId: `${input.canonicalPlaceKey}:${contactDependency}`, changed };
+    } },
   };
 }
 
@@ -167,78 +357,79 @@ describe("places and contacts migration release gate", () => {
       expect.objectContaining({ proposalKey: "organization:company:PLACE-NEAR" }),
     ]));
 
-    const operations = manifest.entries.map((entry) =>
-      applyOperation(approved.find(({ proposalKey }) => proposalKey === entry.proposalKey)!),
+    const applyRepository = new PersistentApplyRepository(approved);
+    const started = await new ActMigrationApplyService(applyRepository, {}).start({
+      requestKey: "33333333-3333-4333-8333-333333333333",
+      runId,
+      requestedBy: "owner",
+      manifest,
+    });
+    expect(started).toMatchObject({ changed: true, counts: { pending: 6, total: 6 } });
+
+    const contactProposalKey = (sourceId: string) => {
+      const proposal = approved.find(({ targetEntityType, sourceRecordKeys }) =>
+        targetEntityType === "contact" && sourceRecordKeys.includes(`contact:${sourceId}`),
+      );
+      if (!proposal) throw new Error(`Release fixture contact proposal is missing: ${sourceId}`);
+      return proposal.proposalKey;
+    };
+    const recordBySourceKey = new Map(records.map((value) => [value.sourceKey, value]));
+    const relationshipOperations = applyRepository.storedOperations().filter(
+      ({ targetEntityType }) => targetEntityType === "organization_contact",
     );
+    expect(relationshipOperations).toHaveLength(3);
+    const relationshipContacts = new Set<string>();
+    for (const operation of relationshipOperations) {
+      const relationshipRecord = operation.proposal.sourceRecordKeys
+        .map((sourceKey) => recordBySourceKey.get(sourceKey))
+        .find((value) => value?.streamType === "company_contact");
+      expect(relationshipRecord).toBeDefined();
+      expect(relationshipRecord!.targetSourceId).not.toBeNull();
+      const expectedContact = contactProposalKey(relationshipRecord!.targetSourceId!);
+      expect(new Set(operation.dependencyProposalKeys)).toEqual(
+        new Set([canonicalPlace!.proposalKey, expectedContact]),
+      );
+      relationshipContacts.add(expectedContact);
+    }
+    expect(relationshipContacts).toEqual(new Set([
+      contactProposalKey("CONTACT-SHARED"),
+      contactProposalKey("CONTACT-UNIQUE"),
+    ]));
+
     const commandCenter = {
       places: new Map<string, Set<string>>(),
       contacts: new Set<string>(),
-      placeContacts: new Set<string>(),
+      placeContacts: new Map<string, Set<string>>(),
     };
-    const actWrites: string[] = [];
-    const counts = () => ({
-      pending: operations.length,
-      leased: 0,
-      blocked: 0,
-      applied: manifest.entries.length - operations.length,
-      ignored: 0,
-      failed: 0,
-      total: manifest.entries.length,
-    });
-    const workspace = (): MigrationApplyWorkspace => ({
-      runId,
-      runStatus: operations.length ? "applying" : "applied",
-      counts: counts(),
-      batches: [{
-        id: batchId,
-        requestKey: "33333333-3333-4333-8333-333333333333",
-        runId,
-        requestedBy: "owner",
-        status: operations.length ? "applying" : "applied",
-        manifestDigest: manifest.digest,
-        summary: counts(),
-        lastErrorCode: null,
-        startedAt: null,
-        completedAt: null,
-      }],
-    });
-    const applyService = new ActMigrationApplyService({
-      createBatchIfAbsent: vi.fn(),
-      claimNextOperation: vi.fn(async () => operations.shift() ?? null),
-      completeOperation: vi.fn(),
-      failOperation: vi.fn(),
-      releaseExpiredLeases: vi.fn().mockResolvedValue(0),
-      getApplyWorkspace: vi.fn(async () => workspace()),
-    }, {
-      organization: { apply: async (operation) => {
-        const sources = commandCenter.places.get(operation.proposalKey) ?? new Set<string>();
-        for (const sourceId of operation.proposal.duplicateSourceIds ?? []) sources.add(sourceId);
-        commandCenter.places.set(operation.proposalKey, sources);
-        return { entityId: operation.proposalKey, changed: sources.size > 0 };
-      } },
-      contact: { apply: async (operation) => {
-        const changed = !commandCenter.contacts.has(operation.proposalKey);
-        commandCenter.contacts.add(operation.proposalKey);
-        return { entityId: operation.proposalKey, changed };
-      } },
-      organization_contact: { apply: async (operation) => {
-        const contactDependency = operation.dependencyProposalKeys.find((key) => key.startsWith("contact:"));
-        const key = `${canonicalPlace!.proposalKey}:${contactDependency}`;
-        const changed = !commandCenter.placeContacts.has(key);
-        commandCenter.placeContacts.add(key);
-        return { entityId: key, changed };
-      } },
-    });
+    const act = new ReadOnlyActMutator();
+    const applyService = new ActMigrationApplyService(
+      applyRepository,
+      commandCenterTargets({
+        commandCenter,
+        canonicalPlaceKey: canonicalPlace!.proposalKey,
+        act,
+      }),
+    );
 
     const firstApply = await applyService.continue({ runId, batchId });
     const replay = await applyService.continue({ runId, batchId });
 
     expect(firstApply).toMatchObject({ changed: true, counts: { applied: 6, total: 6 } });
     expect(replay).toMatchObject({ changed: false, counts: { applied: 6, total: 6 } });
+    expect(applyRepository.storedOperations().every(({ status }) => status === "applied")).toBe(true);
     expect(commandCenter.places).toHaveLength(1);
     expect(commandCenter.places.get(canonicalPlace!.proposalKey)).toEqual(new Set(["PLACE-A", "PLACE-B", "PLACE-C"]));
-    expect(commandCenter.contacts).toHaveLength(2);
-    expect(commandCenter.placeContacts).toHaveLength(2);
-    expect(actWrites).toEqual([]);
+    expect(commandCenter.contacts).toEqual(new Set([
+      contactProposalKey("CONTACT-SHARED"),
+      contactProposalKey("CONTACT-UNIQUE"),
+    ]));
+    expect(commandCenter.placeContacts).toEqual(new Map([[
+      canonicalPlace!.proposalKey,
+      new Set([
+        contactProposalKey("CONTACT-SHARED"),
+        contactProposalKey("CONTACT-UNIQUE"),
+      ]),
+    ]]));
+    expect(act.write).not.toHaveBeenCalled();
   });
 });
