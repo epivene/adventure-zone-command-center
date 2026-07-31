@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
@@ -17,9 +20,10 @@ export type EventProfileWorkspaceContext = {
 function callHref(
   profile: EventProfile,
   context: EventProfileWorkspaceContext = {},
+  selectedContactId: string | null = profile.selectedContactId,
 ) {
   const query = new URLSearchParams({ organizationId: profile.id });
-  if (profile.selectedContactId) query.set("contactId", profile.selectedContactId);
+  if (selectedContactId) query.set("contactId", selectedContactId);
   if (context.bookingId) query.set("bookingId", context.bookingId);
   if (context.followUpId) query.set("followUpId", context.followUpId);
   if (context.action) query.set("action", context.action);
@@ -38,7 +42,8 @@ export function EventProfileWorkspace({
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
 }) {
-  const selectedContact = profile.contacts.find(({ id }) => id === profile.selectedContactId) ?? null;
+  const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
+  const selectedContact = profile.contacts.find(({ id }) => id === selectedContactId) ?? null;
   const selectedBooking = context.bookingId
     ? profile.bookings.find(({ id }) => id === context.bookingId) ?? null
     : null;
@@ -60,7 +65,7 @@ export function EventProfileWorkspace({
             {profile.place.phone ? <p className="mt-1 text-sm text-slate-600">{profile.place.phone}</p> : null}
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="button-primary text-center" href={callHref(profile, context)}>Record call outcome</Link>
+            <Link className="button-primary text-center" href={callHref(profile, context, selectedContactId)}>Record call outcome</Link>
             <Link className="button-secondary text-center" href="/event-profiles/new">New event</Link>
           </div>
         </div>
@@ -112,6 +117,22 @@ export function EventProfileWorkspace({
         </div>
 
         <aside className="grid gap-5">
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="calling-queue-title">
+            <h2 className="text-xl font-bold" id="calling-queue-title">Calling queue</h2>
+            {selectedContact ? <div className="mt-3 grid gap-3">
+              <p aria-live="polite" className="font-semibold">Current caller: {selectedContact.name}</p>
+              <div className="flex flex-wrap gap-2">
+                {selectedContact.phone ? <a className="button-primary text-center" href={`tel:${selectedContact.phone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">No phone recorded</span>}
+                {profile.contacts.length > 1 ? <button className="button-secondary" onClick={() => {
+                  const index = profile.contacts.findIndex(({ id }) => id === selectedContactId);
+                  setSelectedContactId(profile.contacts[(index + 1) % profile.contacts.length]!.id);
+                }} type="button">Next caller</button> : null}
+              </div>
+            </div> : <p className="mt-3 text-sm text-slate-600">No caller is available for this event.</p>}
+            {profile.contacts.length > 1 ? <ul className="mt-4 grid gap-2" aria-label="Caller queue">
+              {profile.contacts.map((contact) => <li key={contact.id}><button className={contact.id === selectedContactId ? "w-full rounded-lg bg-orange-100 px-3 py-2 text-left font-semibold text-orange-950" : "w-full rounded-lg bg-slate-50 px-3 py-2 text-left font-semibold text-slate-800 hover:bg-slate-100"} onClick={() => setSelectedContactId(contact.id)} type="button">{contact.name}</button></li>)}
+            </ul> : null}
+          </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-follow-ups-title">
             <h2 className="text-xl font-bold" id="event-follow-ups-title">Follow-up</h2>
             {profile.followUps.length ? <ul className="mt-3 grid gap-3">
@@ -146,7 +167,6 @@ export function EventProfileWorkspace({
           </section>
         </aside>
       </div>
-      {selectedContact ? <p className="sr-only">Current caller: {selectedContact.name}</p> : null}
     </div>
   );
 }

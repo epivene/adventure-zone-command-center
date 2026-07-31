@@ -2,6 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
@@ -129,5 +130,25 @@ describe("EventProfileWorkspace", () => {
       "href",
       "/calls/new?organizationId=11111111-1111-4111-8111-111111111111&contactId=22222222-2222-4222-8222-222222222222&bookingId=33333333-3333-4333-8333-333333333333&followUpId=55555555-5555-4555-8555-555555555555&action=call&mode=prospect",
     );
+  });
+
+  it("lets callers select a contact from the queue and advance to the next caller", async () => {
+    const user = userEvent.setup();
+    const queuedProfile = {
+      ...profile,
+      contacts: [...profile.contacts, {
+        id: "77777777-7777-4777-8777-777777777777",
+        name: "Blair Bell", role: "Operations", isPrimary: false,
+        phone: "970-555-0102", email: "blair@example.com", source: "local", actRecordId: null,
+      }],
+    };
+    render(<EventProfileWorkspace profile={queuedProfile} />);
+
+    expect(screen.getByText("Current caller: Avery Able")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Blair Bell" }));
+    expect(screen.getByText("Current caller: Blair Bell")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Call Blair Bell" })).toHaveAttribute("href", "tel:9705550102");
+    await user.click(screen.getByRole("button", { name: "Next caller" }));
+    expect(screen.getByText("Current caller: Avery Able")).toBeInTheDocument();
   });
 });
