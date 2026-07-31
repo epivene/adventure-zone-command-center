@@ -67,6 +67,16 @@ proposal is applied, its decision is immutable. Each apply batch stores a
 manifest digest over the proposal keys, decisions, chosen local IDs, selected
 primary Act! Contact IDs, and dependency keys that the batch will execute.
 
+The official Act! Group model exposes Group identity, descriptive fields,
+hierarchy, contact count, and relationships, but does not expose whether a
+Group is static or dynamic and does not return a dynamic Group's OData filter.
+Consequently, staged membership alone is never treated as proof that a Group
+is static. Static import requires an explicit owner confirmation after checking
+the Group in Act!. References:
+
+- [Act! Web API Swagger schema](https://actforweb.actops.com/act.web.api/swagger/docs/v1)
+- [Act! OData querying reference](https://actforweb.actops.com/act.web.api/OData/index)
+
 Only the configured owner may bulk-review, create an apply batch, continue or
 retry a batch, or revise an unapplied decision. The existing server-side owner
 check remains mandatory on every action.
@@ -183,6 +193,8 @@ remains.
 - `link_existing` attaches the stable Act! identity to the selected local
   entity without overwriting its existing local fields.
 - `keep_separate` creates a distinct Person despite the possible match.
+- `confirm_static_group` records that the owner verified the Group is static
+  in Act! and permits its frozen explicit memberships to import.
 - `ignore` performs no CRM write and retains a required reason.
 - `matched_unchanged` requires an already-valid stable source link and needs no
   owner decision. A missing link is an invariant violation and blocks apply.
@@ -202,7 +214,8 @@ Bulk approval is available only for:
 
 Bulk approval is not available for `change`, `possible_duplicate`,
 `needs_review`, any proposal with unresolved dependencies, any dynamic Group,
-or any consolidated Person requiring a primary source choice.
+any Group requiring static confirmation, or any consolidated Person requiring
+a primary source choice.
 
 The command accepts a run ID, target entity type, preview state, and current
 filter scope rather than a browser-supplied list of arbitrary proposal keys.
@@ -280,7 +293,11 @@ contact pointer only for the approved primary relationship.
 
 **Calling lists:** An explicit Group creates a static source-backed list. A
 dynamic Group creates a dynamic source-backed list only after exact filter
-conversion. All Group external links are pull-only.
+conversion. Because the current Act! read model supplies neither a static flag
+nor a dynamic rule, a Group can enter the static path only through its
+individual `confirm_static_group` decision. That decision is unavailable to
+bulk actions and its audit entry records only the decision, actor, timestamp,
+and source ID—not display values. All Group external links are pull-only.
 
 **Calling-list memberships:** Explicit Group-Contact relationships create or
 reactivate unique static-list memberships after both the list and Person are
@@ -413,6 +430,8 @@ explicit workflow and continues to honor primary-link authority.
 - Explicit Groups and memberships import as static source-backed calling
   lists.
 - Dynamic Groups import only with an exactly reproducible local rule.
+- No Group membership snapshot imports without an individual owner
+  `confirm_static_group` decision or an exactly converted dynamic rule.
 - Repeating or racing an apply request creates no duplicate entity,
   relationship, external link, calling list, or membership.
 - A failed or crashed worker resumes from durable operation state.
