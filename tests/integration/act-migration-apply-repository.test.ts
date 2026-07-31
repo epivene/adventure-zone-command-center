@@ -96,7 +96,7 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
   beforeEach(async () => {
     if (!databaseUrl) return;
     schemaName = testSchemaName();
-    const setupSql = postgres(databaseUrl, { max: 1 });
+    const setupSql = postgres(databaseUrl, { max: 1, connection: { search_path: `${schemaName},public` } });
     try {
       await setupSql.unsafe(`CREATE SCHEMA "${schemaName}"`);
       const journal = JSON.parse(await readFile(path.join(migrationDirectory, "meta", "_journal.json"), "utf8")) as { entries: { tag: string }[] };

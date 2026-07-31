@@ -50,7 +50,7 @@ describe("MigrationEntityApplyRepository (PostgreSQL)", () => {
     if (!databaseUrl) return;
     const schema = testSchemaName();
     schemaName = schema;
-    const setup = postgres(databaseUrl, { max: 1 });
+    const setup = postgres(databaseUrl, { max: 1, connection: { search_path: `${schema},public` } });
     try {
       await setup.unsafe(`CREATE SCHEMA "${schema}"`);
       const journal = JSON.parse(await readFile(path.join(migrationDirectory, "meta", "_journal.json"), "utf8")) as { entries: { tag: string }[] };
