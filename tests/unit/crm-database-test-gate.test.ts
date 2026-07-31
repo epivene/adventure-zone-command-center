@@ -232,6 +232,7 @@ describe("CRM PostgreSQL test gate", () => {
       "tests/integration/relationship-repository.test.ts",
       "tests/integration/booking-relationship-repository.test.ts",
       "tests/integration/relationship-reconciliation.test.ts",
+      "tests/integration/act-migration-local-candidate-repository.test.ts",
       "tests/integration/act-migration-staging-migration.test.ts",
       "tests/integration/act-migration-snapshot-repository.test.ts",
       "tests/integration/act-migration-preview-repository.test.ts",

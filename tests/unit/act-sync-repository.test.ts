@@ -333,15 +333,14 @@ class CanonicalLinkListDatabase {
   private canonicalLinkPredicate = false;
 
   select() {
-    const database = this;
     const builder = {
-      from() {
+      from: () => {
         return builder;
       },
-      leftJoin(table: unknown, condition: SQL) {
+      leftJoin: (table: unknown, condition: SQL) => {
         if (table === actExternalLinks) {
           const query = new PgDialect().sqlToQuery(condition);
-          database.canonicalLinkPredicate = [
+          this.canonicalLinkPredicate = [
             "contact",
             "contact",
             true,
@@ -350,21 +349,21 @@ class CanonicalLinkListDatabase {
         }
         return builder;
       },
-      then(
+      then: (
         resolve: (value: unknown[]) => unknown,
         reject?: (reason: unknown) => unknown,
-      ) {
-        const selectedLinks = database.canonicalLinkPredicate
-          ? database.links.filter(
+      ) => {
+        const selectedLinks = this.canonicalLinkPredicate
+          ? this.links.filter(
               (link) =>
                 link.sourceEntityType === "contact" &&
                 link.isPrimary &&
                 link.syncMode === "two_way",
             )
-          : database.links;
+          : this.links;
         return Promise.resolve(
           selectedLinks.map((link) => ({
-            contact: database.contact,
+            contact: this.contact,
             organizationName: null,
             externalActRecordId: link.actRecordId,
             baseSnapshot: null,

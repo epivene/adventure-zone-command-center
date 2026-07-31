@@ -58,6 +58,9 @@ function previewQuery(
 
 function maskDatabase(databaseName: string) {
   const normalized = databaseName.trim();
+  if (normalized.length <= 4) {
+    return "•".repeat(4);
+  }
   const visible = normalized.slice(-4);
   return `${"•".repeat(Math.max(4, normalized.length - visible.length))}${visible}`;
 }

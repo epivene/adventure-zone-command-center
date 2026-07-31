@@ -216,4 +216,24 @@ describe("Act migration page boundary", () => {
     expect(JSON.stringify(props)).not.toContain("raw-shared-user");
     expect(JSON.stringify(props)).not.toContain("raw-shared-password");
   });
+
+  it("fully masks database names that are four characters or shorter", async () => {
+    mocks.getActEnvironment.mockReturnValueOnce({
+      configured: true,
+      config: {
+        baseUrl: "https://example.invalid",
+        databaseName: "ACT",
+        username: "raw-shared-user",
+        password: "raw-shared-password",
+      },
+    });
+
+    render(await ActMigrationPage({
+      searchParams: Promise.resolve({}),
+    }));
+
+    const props = mocks.receivedProps.mock.calls[0]![0];
+    expect(props.maskedDatabase).toBe("••••");
+    expect(JSON.stringify(props)).not.toContain("ACT");
+  });
 });
