@@ -56,6 +56,13 @@ The migration must provide a complete path from preview to Command Center withou
 
 The default deployment may still protect this action behind an operational rollout control, but the product must expose a clear enabled path when the rollout is authorized; preview-only state must not be the only available end state.
 
+### Production rollout gate
+
+1. Merge the verified release and deploy with reviewed-import apply disabled.
+2. Obtain explicit operator authorization before enabling `ACT_MIGRATION_APPLY_ENABLED=true`.
+3. Apply one small approved batch, then verify the Command Center reconciliation counts, duplicate-place provenance, queued unresolved proposals, and the absence of Act! writes.
+4. Continue with later approved batches only after that verification is recorded; otherwise disable the apply flag and investigate from the durable apply batch and audit evidence.
+
 ## Validation
 
 - Unit tests cover normalization, exact-match grouping, near-match separation, and stable canonical selection.
