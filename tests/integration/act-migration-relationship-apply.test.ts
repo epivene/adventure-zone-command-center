@@ -97,6 +97,28 @@ describe("MigrationRelationshipApplyRepository (PostgreSQL)", () => {
     await expect(repository.applyOrganizationContact(value)).resolves.toMatchObject({ changed: false });
   });
 
+  postgresTest("writes one active Place-Person relationship for duplicate source place contacts", async () => {
+    await database.insert(crmSchema.actMigrationRecords).values([
+      { runId, streamType: "company_contact", sourceKey: "company_contact:PLACE-1:PERSON", sourceId: "PLACE-1", targetSourceId: "PERSON", rawSnapshot: {}, normalizedSnapshot: { sourceId: "PLACE-1", targetSourceId: "PERSON" }, fingerprint: "relationship-one" },
+      { runId, streamType: "company_contact", sourceKey: "company_contact:PLACE-2:PERSON", sourceId: "PLACE-2", targetSourceId: "PERSON", rawSnapshot: {}, normalizedSnapshot: { sourceId: "PLACE-2", targetSourceId: "PERSON" }, fingerprint: "relationship-two" },
+    ]);
+    const value = operation({
+      proposalKey: "organization_contact:canonical-place:PERSON",
+      targetEntityType: "organization_contact",
+      sourceRecordKeys: ["company_contact:PLACE-1:PERSON", "company_contact:PLACE-2:PERSON"],
+      dependencyProposalKeys: ["organization:place", "contact:person"],
+      displaySnapshot: { isPrimary: true },
+    });
+
+    const first = await repository.applyOrganizationContact(value);
+    await expect(repository.applyOrganizationContact(value)).resolves.toEqual({ entityId: first.entityId, changed: false });
+
+    expect(await database.select().from(crmSchema.organizationContacts).where(and(
+      eq(crmSchema.organizationContacts.organizationId, placeId),
+      eq(crmSchema.organizationContacts.contactId, personId),
+    ))).toMatchObject([{ id: first.entityId, active: true, isPrimary: true, source: "act_migration" }]);
+  });
+
   postgresTest("creates a Booking from dependency IDs without a Person and retains unrelated operational history on retry", async () => {
     await database.insert(crmSchema.actMigrationRecords).values({ runId, streamType: "opportunity", sourceKey: "opportunity:OPPORTUNITY", sourceId: "OPPORTUNITY", rawSnapshot: { name: "Do not use" }, normalizedSnapshot: { displayName: "ACT Opportunity", estimatedCloseDate: "2026-09-10T00:00:00.000Z", actualCloseDate: null }, fingerprint: "opportunity" });
     const value = operation({ proposalKey: "booking:opportunity", targetEntityType: "booking", sourceRecordKeys: ["opportunity:OPPORTUNITY"], dependencyProposalKeys: ["organization:place"] });

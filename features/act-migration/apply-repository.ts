@@ -130,6 +130,8 @@ function proposalValue(row: StoredProposal): MigrationApplyProposal {
     candidateLocalIds: row.candidateLocalIds,
     proposedLocalId: row.proposedLocalId,
     proposedPrimarySourceId: row.proposedPrimarySourceId,
+    duplicateGroupKey: row.duplicateGroupKey,
+    duplicateSourceIds: row.duplicateSourceIds,
     issueCode: row.issueCode as ActMigrationProposal["issueCode"],
     dependencyProposalKeys: row.dependencyProposalKeys,
     matchReason: row.matchReason ?? "",
@@ -368,33 +370,36 @@ export class DrizzleActMigrationApplyRepository
         eq(actMigrationRecords.runId, input.runId),
         inArray(actMigrationRecords.sourceKey, sourceKeys),
       )).for("update");
-      const stableLocalIds = [...new Set(proposals.flatMap((proposal) =>
-        proposal.state === "matched_unchanged" && proposal.proposedLocalId
-          ? [proposal.proposedLocalId]
-          : [],
-      ))];
-      const links = stableLocalIds.length === 0 ? [] : await transaction.select({
+      const stableSourceIdentities = records.flatMap((record) =>
+        record.sourceId === null ? [] : [{
+          sourceEntityType: record.streamType,
+          actRecordId: record.sourceId,
+        }],
+      );
+      const links = stableSourceIdentities.length === 0 ? [] : await transaction.select({
         entityType: actExternalLinks.entityType,
         localEntityId: actExternalLinks.entityId,
         sourceEntityType: actExternalLinks.sourceEntityType,
         actRecordId: actExternalLinks.actRecordId,
-      }).from(actExternalLinks).where(inArray(actExternalLinks.entityId, stableLocalIds)).for("update");
+      }).from(actExternalLinks).where(or(...stableSourceIdentities.map((identity) => and(
+        eq(actExternalLinks.sourceEntityType, identity.sourceEntityType),
+        eq(actExternalLinks.actRecordId, identity.actRecordId),
+      )))).for("update");
       const recordByKey = new Map(records.map((record) => [record.sourceKey, record]));
       const stableLinks: MigrationStableLink[] = proposals.flatMap((proposal) => {
         if (proposal.state !== "matched_unchanged" || !proposal.proposedLocalId) return [];
         return proposal.sourceRecordKeys.flatMap((sourceRecordKey) => {
           const record = recordByKey.get(sourceRecordKey);
-          const link = record && links.find((candidate) =>
-            candidate.entityType === proposal.targetEntityType &&
-            candidate.localEntityId === proposal.proposedLocalId &&
-            candidate.sourceEntityType === record.streamType &&
-            candidate.actRecordId === record.sourceId,
-          );
-          return link ? [{
-            targetEntityType: proposal.targetEntityType as MigrationTargetEntityType,
-            localEntityId: proposal.proposedLocalId!,
-            sourceRecordKey,
-          }] : [];
+          return record && record.sourceId !== null
+            ? links.filter((candidate) =>
+                candidate.sourceEntityType === record.streamType &&
+                candidate.actRecordId === record.sourceId,
+              ).map((link) => ({
+                targetEntityType: link.entityType as MigrationTargetEntityType,
+                localEntityId: link.localEntityId,
+                sourceRecordKey,
+              }))
+            : [];
         });
       });
       const manifest = buildMigrationApplyManifest({

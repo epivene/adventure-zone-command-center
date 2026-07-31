@@ -65,14 +65,17 @@ function hasCanonicalStableLinks(
   input: MigrationApplyManifestInput,
 ) {
   if (proposal.proposedLocalId === null) return false;
-  return proposal.sourceRecordKeys.every((sourceRecordKey) =>
-    input.stableLinks.some(
+  return proposal.sourceRecordKeys.every((sourceRecordKey) => {
+    const links = input.stableLinks.filter(
       (link) =>
         link.targetEntityType === proposal.targetEntityType &&
-        link.localEntityId === proposal.proposedLocalId &&
         link.sourceRecordKey === sourceRecordKey,
-    ),
-  );
+    );
+    if (links.length > 1) {
+      throw new Error("Act migration proposal has an ambiguous canonical stable link.");
+    }
+    return links.length === 1 && links[0]!.localEntityId === proposal.proposedLocalId;
+  });
 }
 
 function isUnconfirmedStaticGroup(proposal: MigrationApplyProposal) {
@@ -138,9 +141,8 @@ export function buildMigrationApplyManifest(
     }
   }
 
-  const counts = emptyCounts();
-  counts.proposalTotal = input.proposals.length;
-  const entries: MigrationApplyManifestEntry[] = [];
+  type ProposalDisposition = "runnable" | "reconciled" | "ignored" | "pending" | "failed";
+  const dispositions = new Map<string, ProposalDisposition>();
   for (const proposal of input.proposals) {
     if (proposal.state === "matched_unchanged") {
       if (!hasCanonicalStableLinks(proposal, input)) {
@@ -148,15 +150,15 @@ export function buildMigrationApplyManifest(
           "Act migration matched_unchanged proposal is missing a canonical stable link.",
         );
       }
-      increment(counts, proposal.targetEntityType, "reconciled");
+      dispositions.set(proposal.proposalKey, "reconciled");
       continue;
     }
     if (proposal.state === "error") {
-      increment(counts, proposal.targetEntityType, "failed");
+      dispositions.set(proposal.proposalKey, "failed");
       continue;
     }
     if (proposal.state === "ignored" || proposal.decision === "ignore") {
-      increment(counts, proposal.targetEntityType, "ignored");
+      dispositions.set(proposal.proposalKey, "ignored");
       continue;
     }
     if (isUnconfirmedStaticGroup(proposal)) {
@@ -165,15 +167,51 @@ export function buildMigrationApplyManifest(
       );
     }
     if (proposal.decision === null) {
-      increment(counts, proposal.targetEntityType, "pending");
+      dispositions.set(proposal.proposalKey, "pending");
       continue;
     }
     if (!isDecisionValid(proposal)) {
       throw new Error("Act migration proposal has an invalid reviewed decision.");
     }
+    dispositions.set(proposal.proposalKey, "runnable");
+  }
+
+  // A reviewed child cannot safely enter the durable queue while its canonical
+  // parent is unresolved. Keeping it pending preserves the group for review
+  // instead of creating a permanently blocked operation.
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const proposal of input.proposals) {
+      if (dispositions.get(proposal.proposalKey) !== "runnable") continue;
+      const hasUnresolvedDependency = proposal.dependencyProposalKeys.some(
+        (dependencyKey) => {
+          if (resolvedProposalKeys.has(dependencyKey)) return false;
+          const dependency = dispositions.get(dependencyKey);
+          return dependency !== "runnable" && dependency !== "reconciled";
+        },
+      );
+      if (hasUnresolvedDependency) {
+        dispositions.set(proposal.proposalKey, "pending");
+        changed = true;
+      }
+    }
+  }
+
+  const counts = emptyCounts();
+  counts.proposalTotal = input.proposals.length;
+  const entries: MigrationApplyManifestEntry[] = [];
+  for (const proposal of input.proposals) {
+    const disposition = dispositions.get(proposal.proposalKey)!;
+    increment(counts, proposal.targetEntityType, disposition);
+    if (disposition !== "runnable") continue;
     entries.push({
       proposalKey: proposal.proposalKey,
-      decision: proposal.decision,
+      canonicalTargetProposalKey: proposal.proposalKey,
+      canonicalTargetLocalEntityId:
+        proposal.chosenLocalEntityId ?? proposal.proposedLocalId,
+      canonicalSourceIds: [...(proposal.duplicateSourceIds ?? [])].toSorted(),
+      decision: proposal.decision!,
       chosenLocalEntityId: proposal.chosenLocalEntityId,
       primarySourceId: proposal.primarySourceId,
       targetEntityType: proposal.targetEntityType,
@@ -181,7 +219,6 @@ export function buildMigrationApplyManifest(
       dependencyProposalKeys: [...proposal.dependencyProposalKeys].toSorted(),
       operationRank: migrationTargetRank(proposal.targetEntityType),
     });
-    increment(counts, proposal.targetEntityType, "runnable");
   }
 
   entries.sort(

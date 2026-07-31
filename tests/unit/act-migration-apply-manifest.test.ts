@@ -155,6 +155,64 @@ describe("buildMigrationApplyManifest", () => {
     });
   });
 
+  it("carries a duplicate place group's canonical identity and all source IDs", () => {
+    const canonicalPlace = proposal("organization:company:ACT-1", "organization", {
+      sourceRecordKeys: ["company:ACT-1", "company:ACT-2"],
+      duplicateGroupKey: '["example place","1 main denver co"]',
+      duplicateSourceIds: ["ACT-1", "ACT-2"],
+    });
+
+    const manifest = buildMigrationApplyManifest(input([canonicalPlace]));
+
+    expect(manifest.entries).toEqual([
+      expect.objectContaining({
+        proposalKey: "organization:company:ACT-1",
+        canonicalTargetProposalKey: "organization:company:ACT-1",
+        canonicalTargetLocalEntityId: null,
+        canonicalSourceIds: ["ACT-1", "ACT-2"],
+      }),
+    ]);
+  });
+
+  it("keeps approved children pending while their duplicate-place canonical target is unresolved", () => {
+    const canonicalPlace = proposal("organization:company:ACT-1", "organization", {
+      state: "needs_review",
+      reviewState: "pending",
+      decision: null,
+      sourceRecordKeys: ["company:ACT-1", "company:ACT-2"],
+      duplicateGroupKey: '["example place","1 main denver co"]',
+      duplicateSourceIds: ["ACT-1", "ACT-2"],
+    });
+    const relationship = proposal("organization_contact:ACT-1:PERSON", "organization_contact", {
+      state: "new_relationship",
+      dependencyProposalKeys: ["organization:company:ACT-1"],
+    });
+
+    const manifest = buildMigrationApplyManifest(input([canonicalPlace, relationship]));
+
+    expect(manifest.entries).toEqual([]);
+    expect(manifest.counts).toMatchObject({ runnable: 0, pending: 2 });
+  });
+
+  it("rejects an ambiguous canonical stable link", () => {
+    const unchanged = proposal("organization:stable", "organization", {
+      state: "matched_unchanged",
+      reviewState: "not_required",
+      decision: null,
+      proposedLocalId: "organization-local-id",
+      sourceRecordKeys: ["company:ACT-1"],
+    });
+    const value = input([unchanged]);
+
+    expect(() => buildMigrationApplyManifest({
+      ...value,
+      stableLinks: [
+        { targetEntityType: "organization", localEntityId: "organization-local-id", sourceRecordKey: "company:ACT-1" },
+        { targetEntityType: "organization", localEntityId: "another-local-id", sourceRecordKey: "company:ACT-1" },
+      ],
+    })).toThrow("ambiguous canonical stable link");
+  });
+
   it("keeps ignored, pending, and failed-preview proposals out of operations while counting them", () => {
     const manifest = buildMigrationApplyManifest(input([
       proposal("organization:approved", "organization"),

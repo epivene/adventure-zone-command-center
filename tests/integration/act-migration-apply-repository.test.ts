@@ -76,6 +76,8 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
       candidateLocalIds: [...row.candidateLocalIds],
       proposedLocalId: row.proposedLocalId,
       proposedPrimarySourceId: row.proposedPrimarySourceId,
+      duplicateGroupKey: row.duplicateGroupKey ?? null,
+      duplicateSourceIds: [...(row.duplicateSourceIds ?? [])],
       issueCode: row.issueCode,
       dependencyProposalKeys: [...row.dependencyProposalKeys],
       matchReason: row.matchReason,
@@ -135,6 +137,25 @@ describe("DrizzleActMigrationApplyRepository (PostgreSQL)", () => {
     await expect(repository.createBatchIfAbsent({ ...input, runId: "44444444-4444-4444-8444-444444444444" })).rejects.toThrow("request key");
     expect(await sql!.unsafe(`SELECT status FROM act_migration_runs WHERE id = '${runId}'`)).toEqual([{ status: "applying" }]);
     expect(await sql!.unsafe(`SELECT proposal_key FROM act_migration_apply_operations`)).toEqual([{ proposal_key: "organization:one" }]);
+  });
+
+  postgresTest("retains duplicate-place provenance when rebuilding the reviewed manifest", async () => {
+    const manifest = await storePreview([
+      proposal({
+        proposalKey: "organization:company:ACT-1",
+        sourceRecordKeys: ["company:ACT-1", "company:ACT-2"],
+        duplicateGroupKey: '["example place","1 main denver co"]',
+        duplicateSourceIds: ["ACT-1", "ACT-2"],
+      }),
+    ]);
+
+    await expect(repository.createBatchIfAbsent({
+      requestKey: "33333333-3333-4333-8333-333333333333",
+      runId,
+      requestedBy: "owner",
+      manifest,
+      now: new Date("2026-07-31T12:00:00Z"),
+    })).resolves.toMatchObject({ created: true });
   });
 
   postgresTest("leases distinct dependency-ready operations, blocks unresolved children, and releases expired leases", async () => {
