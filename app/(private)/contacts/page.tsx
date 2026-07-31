@@ -33,9 +33,9 @@ export default async function ContactsPage({
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">
             Relationships
           </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">Contacts</h1>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">People</h1>
           <p className="mt-2 max-w-2xl text-slate-600">
-            Find event contacts, see their related bookings, and keep local
+            Find people, see the places and bookings they belong to, and keep local
             edits ready for your next approved Act! sync.
           </p>
         </div>

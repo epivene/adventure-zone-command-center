@@ -33,18 +33,18 @@ export function OrganizationList({
         method="get"
       >
         <label className="grid gap-1 text-sm font-semibold">
-          Search accounts
+          Search places and people
           <input
             defaultValue={query.search}
             name="q"
-            placeholder="Organization name"
+            placeholder="Place name"
             type="search"
           />
         </label>
         <label className="grid gap-1 text-sm font-semibold">
-          Account status
+          Place status
           <select defaultValue={query.lastResort} name="lastResort">
-            <option value="all">All accounts</option>
+            <option value="all">All places</option>
             <option value="only">Last Resort only</option>
           </select>
         </label>
@@ -70,7 +70,7 @@ export function OrganizationList({
       </form>
 
       <p aria-live="polite" className="text-sm text-slate-600">
-        Showing {organizations.records.length} of {organizations.total} accounts
+        Showing {organizations.records.length} of {organizations.total} places
       </p>
 
       {organizations.records.length ? (
@@ -96,7 +96,7 @@ export function OrganizationList({
                     ) : null}
                   </div>
                   <p className="mt-1 text-sm text-slate-600">
-                    {organization.contactCount} contacts · {organization.bookingCount} bookings
+                    {organization.contactCount} people to call · {organization.bookingCount} booking opportunities
                   </p>
                   {organization.lastResortReason ? (
                     <p className="mt-2 text-sm text-rose-800">
@@ -105,7 +105,7 @@ export function OrganizationList({
                   ) : null}
                 </div>
                 <Link className="button-secondary text-center" href={`/organizations/${organization.id}`}>
-                  View account
+                  View place and people
                 </Link>
               </div>
             </li>
@@ -113,7 +113,7 @@ export function OrganizationList({
         </ul>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="font-semibold">No accounts match these filters.</p>
+          <p className="font-semibold">No places match these filters.</p>
           <Link className="button-secondary mt-3 inline-flex" href={listHref({ search: "", lastResort: "all", travelLegId: null, page: 1, pageSize: 50 })}>
             Reset filters
           </Link>
