@@ -400,6 +400,44 @@ describe("places and contacts migration release gate", () => {
     expect(commandCenter.places.get(canonicalPlace!.proposalKey)).toEqual(new Set(["PLACE-A", "PLACE-B", "PLACE-C"]));
     expect(commandCenter.contacts).toEqual(new Set());
     expect(commandCenter.placeContacts).toEqual(new Map());
+
+    const explicitlyApproved = reviewed.map((proposal) =>
+      proposal.proposalKey === nearMatch?.proposalKey
+        ? proposal
+        : {
+            ...proposal,
+            reviewState: "decided" as const,
+            decision: "approve_proposed" as const,
+            primarySourceId: proposal.targetEntityType === "contact"
+              ? proposal.sourceRecordKeys[0]!.slice("contact:".length)
+              : null,
+          },
+    ) satisfies MigrationApplyProposal[];
+    const reviewedManifest = buildMigrationApplyManifest({
+      sourceDigest: source.sourceDigest,
+      previewSourceDigest: source.sourceDigest,
+      previewProposalDigest: proposalSnapshotDigest(explicitlyApproved),
+      proposals: explicitlyApproved,
+      stableLinks: [],
+    });
+    const reviewedRepository = new PersistentApplyRepository(explicitlyApproved);
+    await new ActMigrationApplyService(reviewedRepository, {}).start({
+      requestKey: "44444444-4444-4444-8444-444444444444",
+      runId,
+      requestedBy: "owner",
+      manifest: reviewedManifest,
+    });
+    const reviewedApply = new ActMigrationApplyService(
+      reviewedRepository,
+      commandCenterTargets({ commandCenter, canonicalPlaceKey: canonicalPlace!.proposalKey, act }),
+    );
+    expect(await reviewedApply.continue({ runId, batchId })).toMatchObject({ changed: true, counts: { applied: 5, total: 5 } });
+    expect(await reviewedApply.continue({ runId, batchId })).toMatchObject({ changed: false, counts: { applied: 5, total: 5 } });
+    const approvedContactProposalKeys = explicitlyApproved
+      .filter(({ targetEntityType }) => targetEntityType === "contact")
+      .map(({ proposalKey }) => proposalKey);
+    expect(commandCenter.contacts).toEqual(new Set(approvedContactProposalKeys));
+    expect(commandCenter.placeContacts.get(canonicalPlace!.proposalKey)).toEqual(new Set(approvedContactProposalKeys));
     expect(act.write).not.toHaveBeenCalled();
   });
 });

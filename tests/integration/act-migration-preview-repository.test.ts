@@ -235,7 +235,11 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
   let database: ReturnType<typeof drizzle<typeof crmSchema>>;
   let repository: DrizzleActMigrationPreviewRepository;
 
-  async function insertRecord(sourceKey: string, reviewState = "not_required") {
+  async function insertRecord(
+    sourceKey: string,
+    reviewState = "not_required",
+    normalizedSnapshot: Record<string, unknown> = { label: sourceKey },
+  ) {
     await database.insert(crmSchema.actMigrationRecords).values({
       runId,
       streamType: streamType(sourceKey),
@@ -243,7 +247,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceId: sourceId(sourceKey),
       targetSourceId: null,
       rawSnapshot: { id: sourceId(sourceKey), confidential: "not-audit" },
-      normalizedSnapshot: { label: sourceKey },
+      normalizedSnapshot,
       fingerprint: `fingerprint:${sourceKey}`,
       reviewState,
     });
@@ -441,6 +445,12 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       matchReason: "exact_normalized_place_duplicate_group",
     });
 
+    await insertRecord("company:company-1", "not_required", {
+      displayName: "Example Fair", address1: "1 Main", address2: null, city: "Denver", region: "CO", postalCode: null,
+    });
+    await insertRecord("company:company-2", "not_required", {
+      displayName: "Example Fair", address1: "1 Main", address2: null, city: "Denver", region: "CO", postalCode: null,
+    });
     await store([exactGroup], {
       automaticApprovalProposalKeys: [exactGroup.proposalKey],
     });
