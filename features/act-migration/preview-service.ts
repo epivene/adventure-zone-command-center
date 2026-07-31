@@ -30,6 +30,76 @@ type StagedCompany = PlaceIdentityRow & {
   sourceKey: string;
 };
 
+type StagedRecord = FinalizedSourceSnapshot["records"][number];
+
+function uniqueJson(values: readonly string[]) {
+  return JSON.stringify([
+    ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+  ].toSorted());
+}
+
+function snapshotText(record: StagedRecord, key: string) {
+  const value = record.normalizedSnapshot[key] ?? record.rawSnapshot[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/**
+ * Retain the deduplicated profile evidence represented by an exact-place
+ * group. The canonical proposal remains scalar for apply compatibility while
+ * its owner-only preview includes every unique source value and source ID.
+ */
+function mergedEventProfileHistory(
+  source: FinalizedSourceSnapshot,
+  companySourceIds: readonly string[],
+) {
+  const companyIds = new Set(companySourceIds);
+  const companyContacts = source.records.filter((record) =>
+    record.streamType === "company_contact" &&
+    record.sourceId !== null &&
+    companyIds.has(record.sourceId) &&
+    record.targetSourceId !== null,
+  );
+  const contactIds = new Set(companyContacts.flatMap((record) =>
+    record.targetSourceId ? [record.targetSourceId] : [],
+  ));
+  const bookingIds = new Set(source.records.flatMap((record) =>
+    record.streamType === "opportunity_company" &&
+    record.targetSourceId !== null &&
+    companyIds.has(record.targetSourceId)
+      ? [record.sourceId]
+      : [],
+  ));
+  const groupIds = new Set(source.records.flatMap((record) =>
+    record.streamType === "group_contact" &&
+    record.targetSourceId !== null &&
+    contactIds.has(record.targetSourceId)
+      ? [record.sourceId]
+      : [],
+  ));
+  const relatedRecords = source.records.filter((record) =>
+    (record.streamType === "company" && record.sourceId !== null && companyIds.has(record.sourceId)) ||
+    (record.streamType === "contact" && record.sourceId !== null && contactIds.has(record.sourceId)) ||
+    (record.streamType === "opportunity" && record.sourceId !== null && bookingIds.has(record.sourceId)),
+  );
+  const phones = relatedRecords.flatMap((record) => {
+    const phone = snapshotText(record, "phone");
+    return phone ? [phone] : [];
+  });
+  const notes = relatedRecords.flatMap((record) =>
+    ["notes", "note"].flatMap((key) => {
+      const note = snapshotText(record, key);
+      return note ? [note] : [];
+    }),
+  );
+  return {
+    mergedContactSourceIds: uniqueJson([...contactIds]),
+    mergedPhones: uniqueJson(phones),
+    mergedNotes: uniqueJson(notes),
+    mergedBookingSourceIds: uniqueJson([...bookingIds].filter((id): id is string => id !== null)),
+    mergedGroupSourceIds: uniqueJson([...groupIds].filter((id): id is string => id !== null)),
+  };
+}
+
 function stagedCompanies(source: FinalizedSourceSnapshot): StagedCompany[] {
   return source.records.flatMap((record) => {
     if (
@@ -117,6 +187,10 @@ function consolidateExactDuplicatePlaces(input: {
             duplicateGroupKey: merged.groupKey,
             duplicateSourceIds: merged.sourceIds,
             matchReason: "exact_normalized_place_duplicate_group",
+            displaySnapshot: {
+              ...proposal.displaySnapshot,
+              ...mergedEventProfileHistory(input.source, merged.sourceIds),
+            },
           }
         : {}),
       dependencyProposalKeys: proposal.dependencyProposalKeys.map(
@@ -177,13 +251,15 @@ export class ActMigrationPreviewService {
       source,
       proposals: buildMigrationProposals({ source, local }),
     });
-    const proposals = autoReviewMigrationProposals(consolidated).proposals;
+    const automaticReview = autoReviewMigrationProposals(consolidated);
+    const proposals = automaticReview.proposals;
     const report = reconcileMigrationPreview({ source, proposals });
     const storedResult = await this.previews.storeProposalsIfAbsent({
       runId,
       sourceDigest: source.sourceDigest,
       proposalDigest: report.proposalDigest,
       proposals,
+      automaticApprovalProposalKeys: automaticReview.approvedProposalKeys,
       report,
     });
     return {

@@ -266,6 +266,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceDigest?: string;
       proposalDigest?: string;
       report?: ReturnType<typeof report>;
+      automaticApprovalProposalKeys?: readonly string[];
     } = {},
   ) {
     await ensureProposalRecords(proposals);
@@ -275,6 +276,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       sourceDigest: options.sourceDigest ?? reconciliation.sourceDigest,
       proposalDigest: options.proposalDigest ?? reconciliation.proposalDigest,
       proposals,
+      automaticApprovalProposalKeys: options.automaticApprovalProposalKeys,
       report: reconciliation,
     });
   }
@@ -427,6 +429,33 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     expect(preview.rows).toHaveLength(2);
     expect(preview.rows.find(({ proposalKey }) => proposalKey === detailed.proposalKey)).toMatchObject(detailed);
     expect(proposalSnapshotDigest(preview.rows)).toBe(proposalSnapshotDigest(proposals));
+  });
+
+  postgresTest("persists exact-group automatic approval for preview summaries", async () => {
+    const exactGroup = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1", "company:company-2"],
+      reviewState: "decided",
+      duplicateGroupKey: '["example fair","1 main denver co"]',
+      duplicateSourceIds: ["company-1", "company-2"],
+      matchReason: "exact_normalized_place_duplicate_group",
+    });
+
+    await store([exactGroup], {
+      automaticApprovalProposalKeys: [exactGroup.proposalKey],
+    });
+
+    const preview = await repository.getPreview(runId, { page: 1, pageSize: 50 });
+    expect(preview.rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        proposalKey: exactGroup.proposalKey,
+        reviewState: "decided",
+        decision: "approve_proposed",
+        decidedBy: "act-migration:auto-review",
+        decidedAt: expect.any(Date),
+      }),
+    ]));
+    expect(preview.reviewSummary).toMatchObject({ approved: 1, pending: 0 });
   });
 
   postgresTest("counts an unlinked matched-unchanged proposal as pending review", async () => {

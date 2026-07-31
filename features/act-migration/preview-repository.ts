@@ -97,6 +97,8 @@ export interface ActMigrationPreviewRepository {
     sourceDigest: string;
     proposalDigest: string;
     proposals: readonly ActMigrationProposal[];
+    /** System-reviewed exact duplicate groups to persist as approve-proposed. */
+    automaticApprovalProposalKeys?: readonly string[];
     report: MigrationReconciliationReport;
   }): Promise<{ changed: boolean }>;
   getPreviewIfStored(
@@ -195,7 +197,12 @@ function structuralProposal(row: StoredProposalRow): ActMigrationProposal {
   };
 }
 
-function proposalInsert(runId: string, proposal: ActMigrationProposal) {
+function proposalInsert(
+  runId: string,
+  proposal: ActMigrationProposal,
+  automaticallyApproved: boolean,
+) {
+  const reviewedAt = automaticallyApproved ? new Date() : null;
   return {
     runId,
     proposalKey: proposal.proposalKey,
@@ -212,6 +219,9 @@ function proposalInsert(runId: string, proposal: ActMigrationProposal) {
     dependencyProposalKeys: [...proposal.dependencyProposalKeys],
     matchReason: proposal.matchReason,
     displaySnapshot: proposal.displaySnapshot,
+    decision: automaticallyApproved ? "approve_proposed" : null,
+    decidedBy: automaticallyApproved ? "act-migration:auto-review" : null,
+    decidedAt: reviewedAt,
   };
 }
 
@@ -297,6 +307,7 @@ export class DrizzleActMigrationPreviewRepository
     sourceDigest: string;
     proposalDigest: string;
     proposals: readonly ActMigrationProposal[];
+    automaticApprovalProposalKeys?: readonly string[];
     report: MigrationReconciliationReport;
   }): Promise<{ changed: boolean }> {
     return this.database.transaction(async (transaction) => {
@@ -384,11 +395,19 @@ export class DrizzleActMigrationPreviewRepository
         migrationTargetRank(left.targetEntityType) - migrationTargetRank(right.targetEntityType) ||
         left.proposalKey.localeCompare(right.proposalKey),
       );
+      const automaticApprovals = new Set(input.automaticApprovalProposalKeys ?? []);
+      if ([...automaticApprovals].some((key) => !proposalKeySet.has(key))) {
+        throw new Error("Act migration automatic approval is absent from this preview.");
+      }
       for (let offset = 0; offset < ordered.length; offset += INSERT_CHUNK_SIZE) {
         await transaction
           .insert(actMigrationProposals)
           .values(ordered.slice(offset, offset + INSERT_CHUNK_SIZE).map((proposal) =>
-            proposalInsert(input.runId, proposal)
+            proposalInsert(
+              input.runId,
+              proposal,
+              automaticApprovals.has(proposal.proposalKey),
+            )
           ))
           .onConflictDoNothing({
             target: [actMigrationProposals.runId, actMigrationProposals.proposalKey],

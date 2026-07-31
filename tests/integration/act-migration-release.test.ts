@@ -280,7 +280,7 @@ function commandCenterTargets(input: {
 }
 
 describe("places and contacts migration release gate", () => {
-  it("consolidates exact places, queues the near-match, and applies the approved group idempotently without Act! writes", async () => {
+  it("consolidates exact places, queues non-exact work, and applies the auto-approved group idempotently without Act! writes", async () => {
     const records = [
       record("company", { id: "PLACE-C", name: "Adventure Fair, Inc.", address: { line1: "123 Main St.", city: "Denver", state: "CO" } }),
       record("company", { id: "PLACE-A", name: " adventure fair inc ", address: { line1: "123 Main St", city: "Denver", state: "CO" } }),
@@ -328,6 +328,19 @@ describe("places and contacts migration release gate", () => {
     });
     expect(proposals.filter(({ targetEntityType }) => targetEntityType === "organization")).toHaveLength(2);
     expect(nearMatch).toMatchObject({ state: "possible_duplicate", reviewState: "pending" });
+    const consolidatedRelationships = proposals.filter(
+      ({ targetEntityType }) => targetEntityType === "organization_contact",
+    );
+    expect(consolidatedRelationships).toHaveLength(2);
+    expect(consolidatedRelationships).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRecordKeys: [
+          "company_contact:PLACE-A:CONTACT-SHARED",
+          "company_contact:PLACE-B:CONTACT-SHARED",
+        ],
+        reviewState: "pending",
+      }),
+    ]));
 
     const reviewed = proposals.map((proposal) => ({
       ...proposal,
@@ -343,7 +356,7 @@ describe("places and contacts migration release gate", () => {
       stableLinks: [],
     });
 
-    expect(manifest.counts).toMatchObject({ proposalTotal: 6, runnable: 5, pending: 1 });
+    expect(manifest.counts).toMatchObject({ proposalTotal: 6, runnable: 1, pending: 5 });
     expect(manifest.entries).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ proposalKey: "organization:company:PLACE-NEAR" }),
     ]));
@@ -355,47 +368,12 @@ describe("places and contacts migration release gate", () => {
       requestedBy: "owner",
       manifest,
     });
-    expect(started).toMatchObject({ changed: true, counts: { pending: 5, total: 5 } });
+    expect(started).toMatchObject({ changed: true, counts: { pending: 1, total: 1 } });
 
-    const contactProposalKey = (sourceId: string) => {
-      const proposal = reviewed.find(({ targetEntityType, sourceRecordKeys }) =>
-        targetEntityType === "contact" && sourceRecordKeys.includes(`contact:${sourceId}`),
-      );
-      if (!proposal) throw new Error(`Release fixture contact proposal is missing: ${sourceId}`);
-      return proposal.proposalKey;
-    };
-    const recordBySourceKey = new Map(records.map((value) => [value.sourceKey, value]));
     const relationshipOperations = applyRepository.storedOperations().filter(
       ({ targetEntityType }) => targetEntityType === "organization_contact",
     );
-    expect(relationshipOperations).toHaveLength(2);
-    expect(relationshipOperations).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        proposal: expect.objectContaining({
-          sourceRecordKeys: [
-            "company_contact:PLACE-A:CONTACT-SHARED",
-            "company_contact:PLACE-B:CONTACT-SHARED",
-          ],
-        }),
-      }),
-    ]));
-    const relationshipContacts = new Set<string>();
-    for (const operation of relationshipOperations) {
-      const relationshipRecord = operation.proposal.sourceRecordKeys
-        .map((sourceKey) => recordBySourceKey.get(sourceKey))
-        .find((value) => value?.streamType === "company_contact");
-      expect(relationshipRecord).toBeDefined();
-      expect(relationshipRecord!.targetSourceId).not.toBeNull();
-      const expectedContact = contactProposalKey(relationshipRecord!.targetSourceId!);
-      expect(new Set(operation.dependencyProposalKeys)).toEqual(
-        new Set([canonicalPlace!.proposalKey, expectedContact]),
-      );
-      relationshipContacts.add(expectedContact);
-    }
-    expect(relationshipContacts).toEqual(new Set([
-      contactProposalKey("CONTACT-SHARED"),
-      contactProposalKey("CONTACT-UNIQUE"),
-    ]));
+    expect(relationshipOperations).toHaveLength(0);
 
     const commandCenter = {
       places: new Map<string, Set<string>>(),
@@ -415,22 +393,13 @@ describe("places and contacts migration release gate", () => {
     const firstApply = await applyService.continue({ runId, batchId });
     const replay = await applyService.continue({ runId, batchId });
 
-    expect(firstApply).toMatchObject({ changed: true, counts: { applied: 5, total: 5 } });
-    expect(replay).toMatchObject({ changed: false, counts: { applied: 5, total: 5 } });
+    expect(firstApply).toMatchObject({ changed: true, counts: { applied: 1, total: 1 } });
+    expect(replay).toMatchObject({ changed: false, counts: { applied: 1, total: 1 } });
     expect(applyRepository.storedOperations().every(({ status }) => status === "applied")).toBe(true);
     expect(commandCenter.places).toHaveLength(1);
     expect(commandCenter.places.get(canonicalPlace!.proposalKey)).toEqual(new Set(["PLACE-A", "PLACE-B", "PLACE-C"]));
-    expect(commandCenter.contacts).toEqual(new Set([
-      contactProposalKey("CONTACT-SHARED"),
-      contactProposalKey("CONTACT-UNIQUE"),
-    ]));
-    expect(commandCenter.placeContacts).toEqual(new Map([[
-      canonicalPlace!.proposalKey,
-      new Set([
-        contactProposalKey("CONTACT-SHARED"),
-        contactProposalKey("CONTACT-UNIQUE"),
-      ]),
-    ]]));
+    expect(commandCenter.contacts).toEqual(new Set());
+    expect(commandCenter.placeContacts).toEqual(new Map());
     expect(act.write).not.toHaveBeenCalled();
   });
 });
