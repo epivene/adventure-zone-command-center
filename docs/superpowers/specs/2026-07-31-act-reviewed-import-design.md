@@ -61,11 +61,12 @@ The importer reads only the selected completed `act_migration_runs` snapshot,
 its staged records, its proposal digest, and its stored review decisions. It
 does not reread live Act! data during apply.
 
-The stored source and proposal snapshots remain immutable. An unapplied
-proposal decision may be revised by the owner. Once an operation for a
-proposal is applied, its decision is immutable. Each apply batch stores a
-manifest digest over the proposal keys, decisions, chosen local IDs, selected
-primary Act! Contact IDs, and dependency keys that the batch will execute.
+The stored source and proposal snapshots remain immutable. A proposal decision
+may be revised by the owner until an apply operation is created for that
+proposal. Scheduling freezes the decision and its choices; retries reuse that
+exact operation. Each apply batch stores a manifest digest over the proposal
+keys, decisions, chosen local IDs, selected primary Act! Contact IDs, and
+dependency keys that the batch will execute.
 
 The official Act! Group model exposes Group identity, descriptive fields,
 hierarchy, contact count, and relationships, but does not expose whether a
@@ -199,9 +200,9 @@ remains.
 - `matched_unchanged` requires an already-valid stable source link and needs no
   owner decision. A missing link is an invariant violation and blocks apply.
 
-An applied proposal decision cannot be changed. A decision whose dependencies
-changed after preview fails manifest validation rather than applying a
-different result.
+A scheduled or applied proposal decision cannot be changed. A decision whose
+dependencies changed after preview fails manifest validation rather than
+applying a different result.
 
 ### 6.2 Bulk decisions
 
