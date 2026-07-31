@@ -642,7 +642,9 @@ Reuse the current filter chips and pagination. Render bulk controls only when th
 
 - [ ] **Step 4: Run UI tests**
 
-Run: `npx vitest run tests/unit/act-migration-page.test.tsx tests/unit/act-migration-review.test.tsx tests/e2e/accessibility.spec.ts`
+Run unit tests: `npx vitest run tests/unit/act-migration-page.test.tsx tests/unit/act-migration-review.test.tsx`
+
+Run the production-built accessibility spec: `npx playwright test tests/e2e/accessibility.spec.ts`
 
 Expected: PASS.
 
