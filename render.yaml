@@ -27,4 +27,4 @@ services:
       - key: ACT_PASSWORD
         sync: false
       - key: ACT_MIGRATION_APPLY_ENABLED
-        value: "false"
+        value: "true"
