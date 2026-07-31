@@ -46,7 +46,7 @@ describe("EventProfileForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       event: { id: null, name: "Cascade Festival", city: "Helena", region: "MT" },
-      contact: { id: null, name: "Jordan Rivera", phone: "406-555-0199", email: "", role: "" },
+      contacts: [{ id: null, name: "Jordan Rivera", phone: "406-555-0199", email: "", role: "" }],
       booking: { enabled: true, name: "Cascade Festival 2026", nextActionKind: "call", nextActionDueAt: "2026-08-01" },
     });
     expect(routerPush).toHaveBeenCalledWith("/event-profiles/created-event");
@@ -63,9 +63,23 @@ describe("EventProfileForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       event: { id: "event-1", name: "", city: "", region: "" },
-      contact: { id: "contact-1", name: "", phone: "", email: "", role: "" },
+      contacts: [{ id: "contact-1", name: "", phone: "", email: "", role: "" }],
       booking: { enabled: false, name: "", nextActionKind: "call", nextActionDueAt: "" },
     });
     expect(routerPush).toHaveBeenCalledWith("/event-profiles/event-1");
+  });
+
+  it("submits every added contact so the server can persist all event relationships", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true, profileId: "event-1" });
+    render(<EventProfileForm contacts={contacts} events={events} onSubmit={onSubmit} />);
+    await user.type(screen.getByLabelText("Contact name"), "Jordan Rivera");
+    await user.click(screen.getByRole("button", { name: "Add another contact" }));
+    await user.type(screen.getByLabelText("Contact 2 name"), "Bailey Stone");
+    await user.click(screen.getByRole("button", { name: "Create event profile" }));
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ contacts: [
+      expect.objectContaining({ name: "Jordan Rivera" }),
+      expect.objectContaining({ name: "Bailey Stone" }),
+    ] }));
   });
 });

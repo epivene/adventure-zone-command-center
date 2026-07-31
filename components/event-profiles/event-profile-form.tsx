@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 export type EventProfileCreationInput = {
   event: { id: string | null; name: string; city: string; region: string };
-  contact: { id: string | null; name: string; phone: string; email: string; role: string };
+  contacts: { id: string | null; name: string; phone: string; email: string; role: string }[];
   booking: { enabled: boolean; name: string; nextActionKind: string; nextActionDueAt: string };
 };
 
@@ -22,6 +22,8 @@ type Props = {
   >;
 };
 
+type ContactDraft = { id: string; name: string; phone: string; email: string; role: string };
+
 export function EventProfileForm({
   events,
   contacts,
@@ -31,7 +33,7 @@ export function EventProfileForm({
 }: Props) {
   const router = useRouter();
   const [eventId, setEventId] = useState("");
-  const [contactId, setContactId] = useState(initialContactId);
+  const [contactDrafts, setContactDrafts] = useState<ContactDraft[]>([{ id: initialContactId, name: "", phone: initialPhone, email: "", role: "" }]);
   const [includeBooking, setIncludeBooking] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -49,13 +51,13 @@ export function EventProfileForm({
           city: String(data.get("city") ?? ""),
           region: String(data.get("region") ?? ""),
         },
-        contact: {
-          id: contactId || null,
-          name: String(data.get("contactName") ?? ""),
-          phone: String(data.get("phone") ?? ""),
-          email: String(data.get("email") ?? ""),
-          role: String(data.get("role") ?? ""),
-        },
+        contacts: contactDrafts.map((draft, index) => ({
+          id: draft.id || null,
+          name: String(data.get(`contactName-${index}`) ?? ""),
+          phone: String(data.get(`phone-${index}`) ?? ""),
+          email: String(data.get(`email-${index}`) ?? ""),
+          role: String(data.get(`role-${index}`) ?? ""),
+        })),
         booking: {
           enabled: includeBooking,
           name: String(data.get("bookingName") ?? ""),
@@ -99,17 +101,17 @@ export function EventProfileForm({
         <legend className="text-xl font-bold">2. Contact</legend>
         <label className="grid gap-1.5 font-medium">
           Add an existing contact
-          <select aria-label="Add an existing contact" onChange={(event) => setContactId(event.currentTarget.value)} value={contactId}>
+          <select aria-label="Add an existing contact" onChange={(event) => { const id = event.currentTarget.value; setContactDrafts((drafts) => drafts.map((draft, index) => index === 0 ? { ...draft, id } : draft)); }} value={contactDrafts[0]?.id ?? ""}>
             <option value="">Create a new contact</option>
             {contacts.map((item) => <option key={item.id} value={item.id}>{item.name}{item.organizationName ? ` — ${item.organizationName}` : ""}</option>)}
           </select>
         </label>
-        {!contactId ? <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-1.5 font-medium sm:col-span-2">Contact name<input name="contactName" required /></label>
-          <label className="grid gap-1.5 font-medium">Phone<input defaultValue={initialPhone} name="phone" /></label>
-          <label className="grid gap-1.5 font-medium">Email<input name="email" type="email" /></label>
-          <label className="grid gap-1.5 font-medium sm:col-span-2">Role (optional)<input name="role" /></label>
-        </div> : null}
+        {contactDrafts.map((draft, index) => <div className="grid gap-4 rounded-lg border border-slate-200 p-4 sm:grid-cols-2" key={index}>
+          {index > 0 ? <label className="grid gap-1.5 font-medium sm:col-span-2">Contact {index + 1} (existing)<select aria-label={`Contact ${index + 1} existing contact`} onChange={(event) => { const id = event.currentTarget.value; setContactDrafts((drafts) => drafts.map((item, itemIndex) => itemIndex === index ? { ...item, id } : item)); }} value={draft.id}><option value="">Create a new contact</option>{contacts.map((item) => <option key={item.id} value={item.id}>{item.name}{item.organizationName ? ` — ${item.organizationName}` : ""}</option>)}</select></label> : null}
+          {!draft.id ? <><label className="grid gap-1.5 font-medium sm:col-span-2">{index === 0 ? "Contact name" : `Contact ${index + 1} name`}<input name={`contactName-${index}`} required /></label><label className="grid gap-1.5 font-medium">Phone<input defaultValue={draft.phone} name={`phone-${index}`} /></label><label className="grid gap-1.5 font-medium">Email<input name={`email-${index}`} type="email" /></label><label className="grid gap-1.5 font-medium sm:col-span-2">Role (optional)<input name={`role-${index}`} /></label></> : null}
+          {index > 0 ? <button className="button-secondary justify-self-start" onClick={() => setContactDrafts((drafts) => drafts.filter((_, itemIndex) => itemIndex !== index))} type="button">Remove contact</button> : null}
+        </div>)}
+        <button className="button-secondary justify-self-start" onClick={() => setContactDrafts((drafts) => [...drafts, { id: "", name: "", phone: "", email: "", role: "" }])} type="button">Add another contact</button>
       </fieldset>
 
       <fieldset className="grid gap-4 border-t border-slate-200 pt-6">
