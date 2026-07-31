@@ -12,6 +12,7 @@ import {
   ACT_MIGRATION_SOURCE_ID_MAX_LENGTH,
 } from "@/features/act-migration/action-limits";
 import {
+  createActMigrationApplyService,
   createActMigrationCaptureService,
   createActMigrationPreviewService,
 } from "@/features/act-migration/runtime";
@@ -27,12 +28,16 @@ import type {
 } from "@/features/act-migration/preview-repository";
 import {
   migrationDecisionValues,
+  migrationIssueCodeValues,
   migrationPreviewStateValues,
   migrationTargetEntityTypeValues,
 } from "@/features/act-migration/migration-types";
+import type { MigrationApplyCounts as QueueApplyCounts } from "@/features/act-migration/apply-repository";
+import type { ActMigrationApplyResult } from "@/features/act-migration/apply-service";
+import type { MigrationApplyManifest } from "@/features/act-migration/apply-types";
 import { ActApiError } from "@/features/act-sync/act-errors";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { getActEnvironment } from "@/lib/env";
+import { getActEnvironment, isActMigrationApplyEnabled } from "@/lib/env";
 
 export type ActMigrationActionError = {
   ok: false;
@@ -68,6 +73,28 @@ export type ActMigrationDecisionActionResult =
     }
   | ActMigrationActionError;
 
+export type ActMigrationBulkDecisionActionResult =
+  | {
+      ok: true;
+      runId: string;
+      changed: number;
+      remaining: number;
+    }
+  | ActMigrationActionError;
+
+export type ActMigrationApplyActionResult =
+  | {
+      ok: true;
+      runId: string;
+      batchId: string;
+      changed: boolean;
+      counts: QueueApplyCounts;
+      retryable: boolean;
+      retryAfter: string | null;
+      errorCode: string | null;
+    }
+  | ActMigrationActionError;
+
 const uuidSchema = z.uuid();
 const previewQuerySchema = z.object({
   targetEntityType: z.enum(migrationTargetEntityTypeValues).optional(),
@@ -84,6 +111,77 @@ const decisionSchema = z.object({
   chosenLocalEntityId: uuidSchema.optional(),
   primarySourceId: boundedText(ACT_MIGRATION_SOURCE_ID_MAX_LENGTH).optional(),
   ignoreReason: boundedText(ACT_MIGRATION_IGNORE_REASON_MAX_LENGTH).optional(),
+}).strict();
+const bulkDecisionSchema = z.object({
+  runId: uuidSchema,
+  target: z.enum(migrationTargetEntityTypeValues),
+  state: z.enum(migrationPreviewStateValues),
+  issue: z.enum(migrationIssueCodeValues).nullable().optional(),
+  decision: z.enum(["approve_proposed", "ignore"]),
+  reason: boundedText(ACT_MIGRATION_IGNORE_REASON_MAX_LENGTH).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.decision === "ignore" && !value.reason) {
+    context.addIssue({
+      code: "custom",
+      path: ["reason"],
+      message: "Bulk ignore requires a reason.",
+    });
+  }
+  if (value.decision === "approve_proposed" && value.reason !== undefined) {
+    context.addIssue({
+      code: "custom",
+      path: ["reason"],
+      message: "Bulk approval does not accept a reason.",
+    });
+  }
+});
+const applyTargetCountsSchema = z.object({
+  runnable: z.number().safe().int().nonnegative(),
+  reconciled: z.number().safe().int().nonnegative(),
+  ignored: z.number().safe().int().nonnegative(),
+  pending: z.number().safe().int().nonnegative(),
+  failed: z.number().safe().int().nonnegative(),
+}).strict();
+const applyManifestSchema = z.object({
+  sourceDigest: boundedText(128),
+  previewProposalDigest: boundedText(128),
+  entries: z.array(z.object({
+    proposalKey: boundedText(ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH),
+    decision: z.enum(migrationDecisionValues),
+    chosenLocalEntityId: uuidSchema.nullable(),
+    primarySourceId: boundedText(ACT_MIGRATION_SOURCE_ID_MAX_LENGTH).nullable(),
+    targetEntityType: z.enum(migrationTargetEntityTypeValues),
+    sourceRecordKeys: z.array(boundedText(ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH)),
+    dependencyProposalKeys: z.array(boundedText(ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH)),
+    operationRank: z.number().safe().int().nonnegative(),
+  }).strict()).max(100_000),
+  counts: z.object({
+    proposalTotal: z.number().safe().int().nonnegative(),
+    runnable: z.number().safe().int().nonnegative(),
+    reconciled: z.number().safe().int().nonnegative(),
+    ignored: z.number().safe().int().nonnegative(),
+    pending: z.number().safe().int().nonnegative(),
+    failed: z.number().safe().int().nonnegative(),
+    byTarget: z.object({
+      organization: applyTargetCountsSchema,
+      contact: applyTargetCountsSchema,
+      organization_contact: applyTargetCountsSchema,
+      booking: applyTargetCountsSchema,
+      booking_contact: applyTargetCountsSchema,
+      calling_list: applyTargetCountsSchema,
+      calling_list_member: applyTargetCountsSchema,
+    }).strict(),
+  }).strict(),
+  digest: boundedText(128),
+}).strict();
+const startApplySchema = z.object({
+  requestKey: uuidSchema,
+  runId: uuidSchema,
+  manifest: applyManifestSchema,
+}).strict();
+const continueApplySchema = z.object({
+  runId: uuidSchema,
+  batchId: uuidSchema,
 }).strict();
 
 function actionError(error: unknown): ActMigrationActionError {
@@ -267,4 +365,105 @@ export async function saveActMigrationDecisionAction(input: {
   } catch (error) {
     return actionError(error);
   }
+}
+
+export async function bulkReviewActMigrationAction(input: {
+  runId: string;
+  target: (typeof migrationTargetEntityTypeValues)[number];
+  state: (typeof migrationPreviewStateValues)[number];
+  issue?: (typeof migrationIssueCodeValues)[number] | null;
+  decision: "approve_proposed" | "ignore";
+  reason?: string;
+}): Promise<ActMigrationBulkDecisionActionResult> {
+  const actor = await requireOwner();
+  const parsed = bulkDecisionSchema.safeParse(input);
+  if (!parsed.success) return actionError(parsed.error);
+  try {
+    const result = await (
+      await createActMigrationPreviewService()
+    ).saveBulkDecision({ ...parsed.data, actor: actor.userId });
+    changedPath(result.changed > 0);
+    return {
+      ok: true,
+      runId: parsed.data.runId,
+      changed: result.changed,
+      remaining: result.remaining,
+    };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+function applyDisabledError(): ActMigrationActionError {
+  return {
+    ok: false,
+    error: "Act! reviewed import is disabled.",
+    retryable: false,
+    retryAfter: null,
+  };
+}
+
+function applySuccess(
+  result: ActMigrationApplyResult,
+): ActMigrationApplyActionResult {
+  return { ok: true, ...result };
+}
+
+export async function startActMigrationApplyAction(input: {
+  requestKey: string;
+  runId: string;
+  manifest: MigrationApplyManifest;
+}): Promise<ActMigrationApplyActionResult> {
+  const actor = await requireOwner();
+  const parsed = startApplySchema.safeParse(input);
+  if (!parsed.success) return actionError(parsed.error);
+  if (!isActMigrationApplyEnabled()) return applyDisabledError();
+  try {
+    const result = await (
+      await createActMigrationApplyService()
+    ).start({
+      ...parsed.data,
+      manifest: parsed.data.manifest as MigrationApplyManifest,
+      requestedBy: actor.userId,
+    });
+    changedPath(result.changed);
+    return applySuccess(result);
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+async function continueApplyAction(
+  input: { runId: string; batchId: string },
+  method: "continue" | "retry",
+): Promise<ActMigrationApplyActionResult> {
+  const parsed = continueApplySchema.safeParse(input);
+  if (!parsed.success) return actionError(parsed.error);
+  if (!isActMigrationApplyEnabled()) return applyDisabledError();
+  try {
+    const service = await createActMigrationApplyService();
+    const result = await service[method](parsed.data);
+    changedPath(result.changed);
+    return applySuccess(result);
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function continueActMigrationApplyAction(input: {
+  runId: string;
+  batchId: string;
+}): Promise<ActMigrationApplyActionResult> {
+  const actor = await requireOwner();
+  void actor;
+  return continueApplyAction(input, "continue");
+}
+
+export async function retryActMigrationApplyAction(input: {
+  runId: string;
+  batchId: string;
+}): Promise<ActMigrationApplyActionResult> {
+  const actor = await requireOwner();
+  void actor;
+  return continueApplyAction(input, "retry");
 }

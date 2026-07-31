@@ -8,10 +8,18 @@ const mocks = vi.hoisted(() => ({
   preview: {
     finalizePreview: vi.fn(),
     saveDecision: vi.fn(),
+    saveBulkDecision: vi.fn(),
   },
+  apply: {
+    start: vi.fn(),
+    continue: vi.fn(),
+    retry: vi.fn(),
+  },
+  createApply: vi.fn(),
   createCapture: vi.fn(),
   createPreview: vi.fn(),
   getActEnvironment: vi.fn(),
+  isActMigrationApplyEnabled: vi.fn(),
   requireOwner: vi.fn(),
   revalidatePath: vi.fn(),
 }));
@@ -21,8 +29,10 @@ vi.mock("@/lib/auth/require-owner", () => ({
 }));
 vi.mock("@/lib/env", () => ({
   getActEnvironment: mocks.getActEnvironment,
+  isActMigrationApplyEnabled: mocks.isActMigrationApplyEnabled,
 }));
 vi.mock("@/features/act-migration/runtime", () => ({
+  createActMigrationApplyService: mocks.createApply,
   createActMigrationCaptureService: mocks.createCapture,
   createActMigrationPreviewService: mocks.createPreview,
 }));
@@ -31,11 +41,15 @@ vi.mock("next/cache", () => ({
 }));
 
 import {
+  bulkReviewActMigrationAction,
   continueActMigrationAction,
+  continueActMigrationApplyAction,
   finalizeActMigrationPreviewAction,
+  retryActMigrationApplyAction,
   resumeActMigrationAction,
   saveActMigrationDecisionAction,
   startActMigrationAction,
+  startActMigrationApplyAction,
 } from "@/app/(private)/settings/act-migration/actions";
 import * as actMigrationActions from "@/app/(private)/settings/act-migration/actions";
 import {
@@ -48,6 +62,42 @@ import { ActApiError } from "@/features/act-sync/act-errors";
 const runId = "11111111-1111-4111-8111-111111111111";
 const requestKey = "22222222-2222-4222-8222-222222222222";
 const candidateId = "33333333-3333-4333-8333-333333333333";
+const applyBatchId = "44444444-4444-4444-8444-444444444444";
+const applyCounts = {
+  pending: 1,
+  leased: 0,
+  blocked: 0,
+  applied: 0,
+  ignored: 0,
+  failed: 0,
+  total: 1,
+};
+const emptyTargetCounts = {
+  runnable: 0,
+  reconciled: 0,
+  ignored: 0,
+  pending: 0,
+  failed: 0,
+};
+const manifest = {
+  sourceDigest: "source",
+  previewProposalDigest: "proposal",
+  entries: [],
+  counts: {
+    proposalTotal: 0,
+    ...emptyTargetCounts,
+    byTarget: {
+      organization: emptyTargetCounts,
+      contact: emptyTargetCounts,
+      organization_contact: emptyTargetCounts,
+      booking: emptyTargetCounts,
+      booking_contact: emptyTargetCounts,
+      calling_list: emptyTargetCounts,
+      calling_list_member: emptyTargetCounts,
+    },
+  },
+  digest: "manifest",
+};
 const progress = {
   runId,
   status: "snapshotting" as const,
@@ -111,6 +161,8 @@ beforeEach(() => {
   });
   mocks.createCapture.mockResolvedValue(mocks.capture);
   mocks.createPreview.mockResolvedValue(mocks.preview);
+  mocks.createApply.mockResolvedValue(mocks.apply);
+  mocks.isActMigrationApplyEnabled.mockReturnValue(true);
 });
 
 describe("Act migration owner actions", () => {
@@ -141,6 +193,37 @@ describe("Act migration owner actions", () => {
         decision: "invalid" as never,
       }),
     ],
+    [
+      "bulk review",
+      () => bulkReviewActMigrationAction({
+        runId: "invalid-run-id",
+        target: "organization",
+        state: "new",
+        decision: "approve_proposed",
+      }),
+    ],
+    [
+      "start apply",
+      () => startActMigrationApplyAction({
+        runId: "invalid-run-id",
+        requestKey: "invalid-request-key",
+        manifest,
+      }),
+    ],
+    [
+      "continue apply",
+      () => continueActMigrationApplyAction({
+        runId: "invalid-run-id",
+        batchId: "invalid-batch-id",
+      }),
+    ],
+    [
+      "retry apply",
+      () => retryActMigrationApplyAction({
+        runId: "invalid-run-id",
+        batchId: "invalid-batch-id",
+      }),
+    ],
   ])("authorizes before parsing or constructing the %s runtime", async (
     _name,
     invoke,
@@ -152,10 +235,15 @@ describe("Act migration owner actions", () => {
     expect(mocks.getActEnvironment).not.toHaveBeenCalled();
     expect(mocks.createCapture).not.toHaveBeenCalled();
     expect(mocks.createPreview).not.toHaveBeenCalled();
+    expect(mocks.createApply).not.toHaveBeenCalled();
     expect(mocks.capture.start).not.toHaveBeenCalled();
     expect(mocks.capture.captureNext).not.toHaveBeenCalled();
     expect(mocks.preview.finalizePreview).not.toHaveBeenCalled();
     expect(mocks.preview.saveDecision).not.toHaveBeenCalled();
+    expect(mocks.preview.saveBulkDecision).not.toHaveBeenCalled();
+    expect(mocks.apply.start).not.toHaveBeenCalled();
+    expect(mocks.apply.continue).not.toHaveBeenCalled();
+    expect(mocks.apply.retry).not.toHaveBeenCalled();
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
@@ -236,8 +324,18 @@ describe("Act migration owner actions", () => {
         chosenLocalEntityId: candidateId,
       }),
     ).resolves.toMatchObject({ ok: false });
+    await expect(startActMigrationApplyAction({
+      runId,
+      requestKey: "not-a-request-key",
+      manifest,
+    })).resolves.toMatchObject({ ok: false });
+    await expect(continueActMigrationApplyAction({
+      runId,
+      batchId: "not-a-batch-id",
+    })).resolves.toMatchObject({ ok: false });
     expect(mocks.createCapture).not.toHaveBeenCalled();
     expect(mocks.createPreview).not.toHaveBeenCalled();
+    expect(mocks.createApply).not.toHaveBeenCalled();
   });
 
   it("rejects out-of-range pages, filters, decisions, IDs, and bounded text", async () => {
@@ -365,6 +463,104 @@ describe("Act migration owner actions", () => {
       chosenLocalEntityId: candidateId,
       decidedBy: "owner-user",
     });
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("bulk reviews only the strict server-side scope with the owner identity", async () => {
+    mocks.preview.saveBulkDecision.mockResolvedValue({ changed: 100, remaining: 12 });
+
+    await expect(bulkReviewActMigrationAction({
+      runId,
+      target: "organization",
+      state: "new",
+      issue: null,
+      decision: "approve_proposed",
+    })).resolves.toEqual({ ok: true, runId, changed: 100, remaining: 12 });
+    expect(mocks.preview.saveBulkDecision).toHaveBeenCalledWith({
+      runId,
+      target: "organization",
+      state: "new",
+      issue: null,
+      decision: "approve_proposed",
+      actor: "owner-user",
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/act-migration");
+  });
+
+  it.each([
+    ["start", () => startActMigrationApplyAction({ requestKey, runId, manifest })],
+    ["continue", () => continueActMigrationApplyAction({ runId, batchId: applyBatchId })],
+    ["retry", () => retryActMigrationApplyAction({ runId, batchId: applyBatchId })],
+  ])("fails closed before constructing the %s apply service", async (_name, invoke) => {
+    mocks.isActMigrationApplyEnabled.mockReturnValue(false);
+
+    await expect(invoke()).resolves.toEqual({
+      ok: false,
+      error: "Act! reviewed import is disabled.",
+      retryable: false,
+      retryAfter: null,
+    });
+    expect(mocks.createApply).not.toHaveBeenCalled();
+    expect(mocks.apply.start).not.toHaveBeenCalled();
+    expect(mocks.apply.continue).not.toHaveBeenCalled();
+    expect(mocks.apply.retry).not.toHaveBeenCalled();
+  });
+
+  it("starts apply with the reusable request key and owner identity", async () => {
+    mocks.apply.start.mockResolvedValue({
+      runId,
+      batchId: applyBatchId,
+      changed: true,
+      counts: applyCounts,
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    });
+
+    await expect(startActMigrationApplyAction({
+      requestKey,
+      runId,
+      manifest,
+    })).resolves.toEqual({
+      ok: true,
+      runId,
+      batchId: applyBatchId,
+      changed: true,
+      counts: applyCounts,
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    });
+    expect(mocks.apply.start).toHaveBeenCalledWith({
+      requestKey,
+      runId,
+      requestedBy: "owner-user",
+      manifest,
+    });
+    expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/act-migration");
+  });
+
+  it.each([
+    ["continue", continueActMigrationApplyAction, "continue"],
+    ["retry", retryActMigrationApplyAction, "retry"],
+  ] as const)("dispatches a bounded %s apply request", async (_name, action, method) => {
+    mocks.apply[method].mockResolvedValue({
+      runId,
+      batchId: applyBatchId,
+      changed: false,
+      counts: applyCounts,
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    });
+
+    await expect(action({ runId, batchId: applyBatchId })).resolves.toMatchObject({
+      ok: true,
+      runId,
+      batchId: applyBatchId,
+      changed: false,
+    });
+    expect(mocks.apply[method]).toHaveBeenCalledWith({ runId, batchId: applyBatchId });
     expect(mocks.revalidatePath).not.toHaveBeenCalled();
   });
 
