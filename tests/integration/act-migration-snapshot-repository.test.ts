@@ -51,6 +51,18 @@ async function waitForDatabaseLock(
   throw new Error("Expected the database session to wait on a lock.");
 }
 
+function postgresTimestamp(value: unknown) {
+  const timestamp = value instanceof Date
+    ? value
+    : typeof value === "string"
+      ? new Date(value)
+      : new Date(Number.NaN);
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error("Expected a valid PostgreSQL timestamp.");
+  }
+  return timestamp;
+}
+
 function staged(
   streamType: StagedSourceItem["streamType"],
   sourceId: string,
@@ -1018,11 +1030,15 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
       expect(reclaimed?.id).toBe(first?.streamType === "company"
         ? first.id
         : second?.id);
-      expect(await sql!.unsafe(`
+      const leaseRows = await sql!.unsafe(`
         SELECT lease_owner, lease_expires_at
         FROM act_migration_checkpoints
         WHERE id = '${reclaimed!.id}'
-      `)).toEqual([{
+      `);
+      expect(leaseRows.map((row) => ({
+        ...row,
+        lease_expires_at: postgresTimestamp(row.lease_expires_at),
+      }))).toEqual([{
         lease_owner: "worker-c",
         lease_expires_at: new Date("2026-07-30T15:10:01.000Z"),
       }]);
@@ -1549,10 +1565,14 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
       now: new Date("2026-07-30T15:00:01.000Z"),
     });
 
-    expect(await sql!.unsafe(`
+    const checkpointRows = await sql!.unsafe(`
       SELECT status, completed_at, lease_owner
       FROM act_migration_checkpoints WHERE id = '${checkpoint!.id}'
-    `)).toEqual([{
+    `);
+    expect(checkpointRows.map((row) => ({
+      ...row,
+      completed_at: postgresTimestamp(row.completed_at),
+    }))).toEqual([{
       status: "complete",
       completed_at: new Date("2026-07-30T15:00:01.000Z"),
       lease_owner: null,
@@ -1579,10 +1599,14 @@ describe("DrizzleActMigrationSnapshotRepository (PostgreSQL)", () => {
         now: new Date("2026-07-30T15:00:01.000Z"),
       });
 
-      expect(await sql!.unsafe(`
+      const failedRows = await sql!.unsafe(`
         SELECT status, error_code, retryable, retry_after, lease_owner
         FROM act_migration_checkpoints WHERE id = '${checkpoint!.id}'
-      `)).toEqual([{
+      `);
+      expect(failedRows.map((row) => ({
+        ...row,
+        retry_after: postgresTimestamp(row.retry_after),
+      }))).toEqual([{
         status: "failed",
         error_code: "permission_denied",
         retryable: false,

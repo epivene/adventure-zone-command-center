@@ -104,15 +104,80 @@ function streamType(sourceKey: string) {
 async function waitForDatabaseLock(
   observer: postgres.Sql,
   backendPid: number,
+  options: {
+    expectedLockType?: "advisory";
+    operationSettled: () => boolean;
+    timeoutMs?: number;
+  },
 ) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
+  const {
+    expectedLockType,
+    operationSettled,
+    timeoutMs = 20_000,
+  } = options;
+  const lockTypeFilter = expectedLockType
+    ? `AND locktype = '${expectedLockType}'`
+    : "";
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (operationSettled()) {
+      throw new Error("Database operation settled before its lock wait was observed.");
+    }
     const [activity] = await observer.unsafe(`
-      SELECT wait_event_type FROM pg_stat_activity WHERE pid = ${backendPid}
+      SELECT
+        wait_event_type,
+        EXISTS (
+          SELECT 1
+          FROM pg_locks
+          WHERE pid = ${backendPid}
+            AND NOT granted
+            ${lockTypeFilter}
+        ) AS waiting_on_expected_lock
+      FROM pg_stat_activity
+      WHERE pid = ${backendPid}
     `);
-    if (activity?.wait_event_type === "Lock") return;
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    if (
+      activity?.wait_event_type === "Lock" &&
+      activity.waiting_on_expected_lock
+    ) {
+      return;
+    }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs > 0) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.min(25, remainingMs))
+      );
+    }
   }
-  throw new Error("Expected the database session to wait on a lock.");
+  throw new Error(
+    expectedLockType
+      ? `Expected the database session to wait on an ${expectedLockType} lock within ${timeoutMs}ms.`
+      : `Expected the database session to wait on a lock within ${timeoutMs}ms.`,
+  );
+}
+
+function postgresTimestamp(value: unknown) {
+  const timestamp = value instanceof Date
+    ? value
+    : typeof value === "string"
+      ? new Date(value)
+      : new Date(Number.NaN);
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new Error("Expected a valid PostgreSQL timestamp.");
+  }
+  return timestamp;
+}
+
+function errorCauseMessages(error: unknown) {
+  const messages: string[] = [];
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    messages.push(current.message);
+    current = (current as Error & { cause?: unknown }).cause;
+  }
+  return messages;
 }
 
 describe("preview decision run lookup", () => {
@@ -347,7 +412,10 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     `);
     const preview = await repository.getPreview(runId, { page: 1, pageSize: 100 });
 
-    expect(run!).toMatchObject({
+    expect({
+      ...run!,
+      preview_completed_at: postgresTimestamp(run!.preview_completed_at),
+    }).toMatchObject({
       status: "previewed",
       source_digest: "source-digest",
       proposal_digest: proposalSnapshotDigest(proposals),
@@ -693,56 +761,133 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
         candidateLocalIds: [localA],
       });
       await store([baseProposal(), lockable]);
+      const barrierExpression =
+        `hashtextextended('${schemaName}:candidate-key-share', 0)`;
       await sql!.unsafe(`
-        CREATE FUNCTION delay_act_proposal_update() RETURNS trigger
+        CREATE FUNCTION act_preview_decision_barrier() RETURNS trigger
         LANGUAGE plpgsql AS $$
         BEGIN
-          PERFORM pg_sleep(0.5);
+          PERFORM pg_advisory_xact_lock(${barrierExpression});
           RETURN NEW;
         END
         $$
       `);
       await sql!.unsafe(`
-        CREATE TRIGGER delay_act_proposal_update
+        CREATE TRIGGER act_preview_decision_barrier
         BEFORE UPDATE ON act_migration_proposals
-        FOR EACH ROW EXECUTE FUNCTION delay_act_proposal_update()
+        FOR EACH ROW EXECUTE FUNCTION act_preview_decision_barrier()
       `);
 
-      const decision = repository.saveDecision({
-        runId,
-        proposalKey: lockable.proposalKey,
-        decision: "link_existing",
-        chosenLocalEntityId: localA,
-        decidedBy: "owner",
+      const barrierClient = postgres(databaseUrl!, {
+        max: 1,
+        connection: { search_path: `${schemaName},public` },
       });
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        const [sleeping] = await sql!.unsafe(`
-          SELECT 1 AS ready FROM pg_stat_activity
-          WHERE wait_event = 'PgSleep'
-            AND query ILIKE '%act_migration_proposals%'
-          LIMIT 1
-        `);
-        if (sleeping) break;
-        if (attempt === 99) {
-          throw new Error("Decision transaction did not reach its delay trigger.");
-        }
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      }
-
-      const deleter = await sql!.reserve();
+      const decisionClient = postgres(databaseUrl!, {
+        max: 1,
+        connection: { search_path: `${schemaName},public` },
+      });
+      const deleterClient = postgres(databaseUrl!, {
+        max: 1,
+        connection: { search_path: `${schemaName},public` },
+      });
+      let barrierHeld = false;
+      let barrierClientEnded = false;
+      let decision: Promise<{ changed: boolean }> | undefined;
+      let decisionSettled = false;
+      let deletion: Promise<unknown> | undefined;
+      let deletionSettled = false;
       try {
-        const pidRows = await deleter<
-          { pid: number }[]
-        >`SELECT pg_backend_pid()::integer AS pid`;
-        const pid = pidRows[0]!.pid;
-        const deletion = Promise.resolve(
-          deleter`DELETE FROM contacts WHERE id = ${localA}`,
+        await Promise.all([
+          decisionClient.unsafe("SET statement_timeout = '30s'"),
+          deleterClient.unsafe("SET statement_timeout = '30s'"),
+        ]);
+        const [{ pid: decisionPid } = { pid: 0 }] =
+          await decisionClient.unsafe<{ pid: number }[]>(
+            "SELECT pg_backend_pid() AS pid",
+          );
+        const [{ pid: deleterPid } = { pid: 0 }] =
+          await deleterClient.unsafe<{ pid: number }[]>(
+            "SELECT pg_backend_pid() AS pid",
+          );
+        if (!decisionPid || !deleterPid) {
+          throw new Error("Could not identify the lock-test sessions.");
+        }
+
+        await barrierClient.unsafe(
+          `SELECT pg_advisory_lock(${barrierExpression})`,
         );
-        await waitForDatabaseLock(sql!, pid);
+        barrierHeld = true;
+        const decisionRepository = new DrizzleActMigrationPreviewRepository(
+          drizzle({ client: decisionClient, schema: crmSchema }),
+        );
+        decision = decisionRepository.saveDecision({
+          runId,
+          proposalKey: lockable.proposalKey,
+          decision: "link_existing",
+          chosenLocalEntityId: localA,
+          decidedBy: "owner",
+        });
+        void decision.then(
+          () => {
+            decisionSettled = true;
+          },
+          () => {
+            decisionSettled = true;
+          },
+        );
+        await waitForDatabaseLock(sql!, decisionPid, {
+          expectedLockType: "advisory",
+          operationSettled: () => decisionSettled,
+        });
+
+        deletion = Promise.resolve(
+          deleterClient`DELETE FROM contacts WHERE id = ${localA}`,
+        );
+        void deletion.then(
+          () => {
+            deletionSettled = true;
+          },
+          () => {
+            deletionSettled = true;
+          },
+        );
+        await waitForDatabaseLock(sql!, deleterPid, {
+          operationSettled: () => deletionSettled,
+        });
+
+        const [{ unlocked } = { unlocked: false }] =
+          await barrierClient.unsafe<{ unlocked: boolean }[]>(
+            `SELECT pg_advisory_unlock(${barrierExpression}) AS unlocked`,
+          );
+        if (!unlocked) {
+          throw new Error("Could not release the decision-test advisory barrier.");
+        }
+        barrierHeld = false;
         await expect(decision).resolves.toEqual({ changed: true });
         await deletion;
       } finally {
-        await deleter.release();
+        if (barrierHeld) {
+          try {
+            await barrierClient.unsafe("SELECT pg_advisory_unlock_all()");
+          } catch {
+            await barrierClient.end({ timeout: 0 });
+            barrierClientEnded = true;
+          }
+          barrierHeld = false;
+        }
+        await Promise.allSettled(
+          [decision, deletion].filter(
+            (operation): operation is Promise<unknown> =>
+              operation !== undefined,
+          ),
+        );
+        await Promise.all([
+          barrierClientEnded
+            ? Promise.resolve()
+            : barrierClient.end({ timeout: 5 }),
+          decisionClient.end({ timeout: 5 }),
+          deleterClient.end({ timeout: 5 }),
+        ]);
       }
       const reloaded = await repository.getPreview(runId, {
         page: 1,
@@ -928,9 +1073,17 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     await repository.saveDecision({ ...input, decidedBy: "another-clerk-user" });
     const preview = await repository.getPreview(runId, { page: 1, pageSize: 100 });
 
-    expect(preview.rows.find(({ proposalKey }) => proposalKey === duplicate.proposalKey)).toMatchObject({
-      decision: "link_existing", chosenLocalEntityId: localA, decidedBy: "clerk-user", decidedAt: saved!.decided_at,
+    const durableDecision = preview.rows.find(
+      ({ proposalKey }) => proposalKey === duplicate.proposalKey,
+    );
+    expect(durableDecision).toMatchObject({
+      decision: "link_existing",
+      chosenLocalEntityId: localA,
+      decidedBy: "clerk-user",
     });
+    expect(postgresTimestamp(durableDecision!.decidedAt)).toEqual(
+      postgresTimestamp(saved!.decided_at),
+    );
     expect(await auditRows()).toEqual(audits);
   });
 
@@ -1046,9 +1199,20 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
       CREATE TRIGGER reject_preview_audit BEFORE INSERT ON audit_entries
       FOR EACH ROW EXECUTE FUNCTION reject_preview_audit();
     `);
-    await expect(repository.saveDecision({
-      runId, proposalKey: reviewable.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user",
-    })).rejects.toThrow("forced audit failure");
+    let auditFailure: unknown;
+    try {
+      await repository.saveDecision({
+        runId, proposalKey: reviewable.proposalKey, decision: "approve_proposed", decidedBy: "clerk-user",
+      });
+    } catch (error) {
+      auditFailure = error;
+    }
+    const auditFailureMessages = errorCauseMessages(auditFailure);
+    expect(auditFailure).toBeInstanceOf(Error);
+    expect(auditFailureMessages[0]).toContain(
+      'Failed query: insert into "audit_entries"',
+    );
+    expect(auditFailureMessages).toContain("forced audit failure");
     expect(await Promise.all([
       sql!.unsafe(`SELECT decision, decision_reason FROM act_migration_proposals WHERE proposal_key = '${reviewable.proposalKey}'`),
       sql!.unsafe(`SELECT review_state FROM act_migration_records WHERE source_key = 'company:audit'`),
@@ -1089,7 +1253,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     });
     await database.insert(crmSchema.organizationContacts).values({
       organizationId: "77777777-7777-4777-8777-777777777777",
-      contactId: "88888888-8888-4888-888888888888",
+      contactId: "88888888-8888-4888-8888-888888888888",
       role: "Sentinel role",
       isPrimary: true,
       active: true,
@@ -1097,7 +1261,7 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     });
     await database.insert(crmSchema.bookingContacts).values({
       bookingId: "99999999-9999-4999-8999-999999999999",
-      contactId: "88888888-8888-4888-888888888888",
+      contactId: "88888888-8888-4888-8888-888888888888",
       role: "Sentinel booking role",
       isPrimary: true,
       source: "local",
