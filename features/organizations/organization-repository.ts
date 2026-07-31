@@ -82,6 +82,14 @@ export type OrganizationListPage = {
   pageCount: number;
 };
 
+/** Shared predicate for reads that only consider the live place-person association. */
+export function activeOrganizationContactCondition(organizationId: string) {
+  return and(
+    eq(organizationContacts.organizationId, organizationId),
+    eq(organizationContacts.active, true),
+  )!;
+}
+
 export interface OrganizationRepository {
   setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
   getOrganizationSummary(

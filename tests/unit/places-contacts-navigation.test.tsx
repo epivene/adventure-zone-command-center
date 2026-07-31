@@ -2,38 +2,18 @@
 
 import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { getOrganizationSummary, listTimeline } = vi.hoisted(() => ({
-  getOrganizationSummary: vi.fn(),
-  listTimeline: vi.fn(),
+const { redirect } = vi.hoisted(() => ({
+  redirect: vi.fn((url: string) => { throw new Error(`redirect:${url}`); }),
 }));
 
-vi.mock("@/db/client", () => ({ db: {} }));
+vi.mock("next/navigation", () => ({
+  notFound: vi.fn(() => { throw new Error("not found"); }),
+  redirect,
+}));
 vi.mock("@/lib/auth/require-owner", () => ({
   requireOwner: vi.fn(async () => ({ userId: "owner-1" })),
-}));
-vi.mock("@/features/organizations/organization-repository", () => ({
-  DrizzleOrganizationRepository: class {
-    getOrganizationSummary = getOrganizationSummary;
-  },
-}));
-vi.mock("@/features/activities/activity-repository", () => ({
-  DrizzleActivityRepository: class {},
-}));
-vi.mock("@/features/activities/activity-service", () => ({
-  ActivityService: class {
-    listTimeline = listTimeline;
-  },
-}));
-vi.mock("@/components/activities/activity-timeline", () => ({
-  ActivityTimeline: () => <div />,
-}));
-vi.mock("@/components/organizations/last-resort-control", () => ({
-  LastResortControl: () => <div />,
-}));
-vi.mock("@/components/organizations/last-resort-warning", () => ({
-  LastResortWarning: () => <div />,
 }));
 
 import OrganizationDetailPage from "@/app/(private)/organizations/[organizationId]/page";
@@ -43,25 +23,6 @@ import { AppShell } from "@/components/navigation/app-shell";
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-});
-
-beforeEach(() => {
-  getOrganizationSummary.mockResolvedValue({
-    id: "place-1",
-    name: "Marias Fair",
-    lastResort: false,
-    lastResortReason: null,
-    lastResortChangedAt: null,
-    contacts: [],
-    contactTotal: 0,
-    contactPage: 1,
-    contactPageCount: 1,
-    bookings: [],
-    bookingTotal: 0,
-    bookingPage: 1,
-    bookingPageCount: 1,
-  });
-  listTimeline.mockResolvedValue([]);
 });
 
 describe("Places and Contacts navigation", () => {
@@ -106,27 +67,10 @@ describe("Places and Contacts navigation", () => {
     );
   });
 
-  it("returns from a place detail to its safe Places list context", async () => {
-    render(await OrganizationDetailPage({
+  it("redirects a legacy place detail URL into its unified event profile", async () => {
+    await expect(OrganizationDetailPage({
       params: Promise.resolve({ organizationId: "11111111-1111-4111-8111-111111111111" }),
-      searchParams: Promise.resolve({ returnTo: "/organizations?q=Marias&page=2" }),
-    }));
-
-    expect(screen.getByRole("link", { name: "← Back to Places" })).toHaveAttribute(
-      "href",
-      "/organizations?q=Marias&page=2",
-    );
-  });
-
-  it("falls back to Places instead of accepting a Contacts return path", async () => {
-    render(await OrganizationDetailPage({
-      params: Promise.resolve({ organizationId: "11111111-1111-4111-8111-111111111111" }),
-      searchParams: Promise.resolve({ returnTo: "/contacts?q=Avery" }),
-    }));
-
-    expect(screen.getByRole("link", { name: "← Back to Places" })).toHaveAttribute(
-      "href",
-      "/organizations",
-    );
+    })).rejects.toThrow("redirect:/event-profiles/11111111-1111-4111-8111-111111111111");
+    expect(redirect).toHaveBeenCalledWith("/event-profiles/11111111-1111-4111-8111-111111111111");
   });
 });
