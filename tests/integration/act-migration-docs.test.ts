@@ -82,10 +82,49 @@ describe("Act migration operations documentation", () => {
     expect(contents).toContain("stored review decisions");
     expect(contents).toContain("never silently fetches or rematches");
     expect(contents).toContain("no Apply or Import action");
+    expect(contents).toMatch(
+      /after a timeout or uncertain result,\s+reload and select or resume the newest stored run/i,
+    );
+    expect(contents).not.toContain("repeat idempotent");
+    expect(contents).toMatch(
+      /minimum\s+necessary PII is visible only in the owner-only review/,
+    );
+    expect(contents).toContain("`displaySnapshot` fields");
+    expect(contents).toMatch(
+      /Free-text review\s+reasons must contain no PII, secrets, or copied source values\./,
+    );
+    expect(contents).toContain("redacted, PII-free evidence");
+    expect(contents).toContain("act_migration_runs");
+    expect(contents).toContain("source_digest");
+    expect(contents).toContain("proposal_digest");
+    expect(contents).toContain(":run_id");
+    expect(contents).toContain(
+      "Slice 2 has no local Calling-list entity table or storage",
+    );
+    expect(contents).toContain("organizations");
+    expect(contents).toContain("organization_contacts");
+    expect(contents).toContain("booking_contacts");
+    expect(contents).toMatch(/delimited\s+`test` token/);
 
-    const commandBlocks = [...contents.matchAll(/```[^\n]*\n([\s\S]*?)```/g)]
+    const commandBlockList = [
+      ...contents.matchAll(/```[^\n]*\n([\s\S]*?)```/g),
+    ]
       .map((match) => match[1])
-      .join("\n");
+      .filter((block): block is string => block !== undefined);
+    const commandBlocks = commandBlockList.join("\n");
     expect(commandBlocks).not.toMatch(/\.xls\b/i);
+
+    const databaseGateBlock = commandBlockList.find((block) =>
+      block.includes("npm run test:crm-db"),
+    );
+    expect(databaseGateBlock).toBeDefined();
+    expect(databaseGateBlock).toContain("[Uri]::TryCreate");
+    expect(databaseGateBlock).toContain("$env:DATABASE_URL");
+    expect(databaseGateBlock).toContain(
+      "(?i)(^|[^a-z0-9])test($|[^a-z0-9])",
+    );
+    expect(databaseGateBlock?.indexOf("[Uri]::TryCreate")).toBeLessThan(
+      databaseGateBlock?.indexOf('$env:CRM_RELEASE_TESTS = "1"') ?? -1,
+    );
   });
 });

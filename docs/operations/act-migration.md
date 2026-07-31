@@ -64,8 +64,10 @@ into logs or support channels.
 1. Open **Settings → Act! migration** as the configured owner.
 2. Confirm the page says **Preview only — no Command Center or Act! records are
    changed** and shows only a masked database suffix.
-3. Select **Start preview snapshot** once. The request key makes an accidental
-   repeat idempotent.
+3. Select **Start preview snapshot** once. After a timeout or uncertain result,
+   reload and select or resume the newest stored run before starting another.
+   Each later Start generates a fresh request key, so do not treat a repeated
+   click as the same request.
 4. Record the run ID and UTC start time in the restricted operations log.
 
 The action reads Companies, Contacts, Opportunities, Groups, and the
@@ -174,14 +176,49 @@ digests.
 For the reviewed run, retain all of the following evidence:
 
 1. the preview-only warning and the absence of an Apply or Import control;
-2. before/after read-only counts and update-time evidence from Places, People,
-   Bookings, Place-Person relationships, Booking-Person relationships, and
-   Calling lists;
-3. the run's staging, proposal, decision, and audit-metadata counts, which are
-   expected to grow without changing CRM entity rows;
+2. before/after read-only counts and maximum update times for Places, People,
+   Bookings, Place-Person relationships, and Booking-Person relationships;
+3. the stored run status, count-only summary, source digest, and proposal
+   digest retrieved by the parameterized query below;
 4. passing mutation-safety integration tests against a disposable test-only
    database;
 5. confirmation that the Act! source was not changed.
+
+Use the approved database console in read-only mode. Bind the reviewed UUID as
+the `:run_id` parameter; do not interpolate a value into the statement:
+
+```sql
+SELECT id, status, summary, source_digest, proposal_digest
+FROM act_migration_runs
+WHERE id = :run_id;
+```
+
+The stored `summary` contains counts and digests only. It is the obtainable
+source for root, relationship, preview-state, edge-case, and checkpoint counts.
+Capture the output without adding source rows or display values.
+
+Before starting the run and again after review, execute this read-only query:
+
+```sql
+SELECT 'organizations' AS table_name, count(*) AS row_count,
+       max(updated_at) AS max_updated_at
+FROM organizations
+UNION ALL
+SELECT 'contacts', count(*), max(updated_at) FROM contacts
+UNION ALL
+SELECT 'bookings', count(*), max(updated_at) FROM bookings
+UNION ALL
+SELECT 'organization_contacts', count(*), max(updated_at)
+FROM organization_contacts
+UNION ALL
+SELECT 'booking_contacts', count(*), max(updated_at)
+FROM booking_contacts
+ORDER BY table_name;
+```
+
+Slice 2 has no local Calling-list entity table or storage. Prove Calling-list
+invariance through the absence of any apply/storage path in Slice 2 and the
+mutation-safety tests; do not request a count from a nonexistent table.
 
 Any CRM entity count or update-time difference stops the gate. Preserve the
 evidence and investigate; do not “correct” the difference with a migration
@@ -194,18 +231,20 @@ evidence:
 
 - commit SHA, deployment identifier, operator, UTC timestamps, run ID, and only
   the masked Act! database suffix;
-- per-stream staged, completed, failed, and checkpoint counts;
-- reconciliation counts, completion status, source digest, and proposal
-  digest;
-- paginated examples of every populated preview state, including first-time
-  fallback and ambiguous matches;
-- Places without People, multi-Place People, Opportunities without a reliable
-  Place or Person, unsupported Groups, and duplicate source IDs;
-- persisted review decisions with safe IDs, actor, and timestamp;
+- the parameterized `act_migration_runs` result containing status, stored
+  count-only summary, source digest, and proposal digest;
+- the before/after five-table row-count and `max(updated_at)` results;
+- the mutation-safety test result, including the no-Calling-list-storage
+  boundary;
 - sanitized retryable and non-retryable failure/resume evidence where
   available;
 - the non-database verification output and the real disposable-PostgreSQL
   release-gate output.
+
+Operational evidence must be redacted, PII-free evidence. Do not capture names,
+contact values, addresses, source snapshots, review-row screenshots, or
+free-text reasons. If a screenshot is required by an external approval process,
+redact all PII before storing it.
 
 An unset `CRM_TEST_DATABASE_URL`, a skipped suite, or a gated suite is not a
 PostgreSQL release-gate pass. Record it as **PostgreSQL gate NOT RUN**. Do not
@@ -227,10 +266,15 @@ changed them.
 ## 12. Credential and PII logging rules
 
 Credentials, authorization headers, tokens, raw database names, raw source
-snapshots, and raw PII must never appear in application logs, browser props,
-screenshots, chat, tickets, error messages, or audit decision payloads. Audit
-decision payloads may contain safe source/proposal IDs, selected safe candidate
-IDs, a review reason, actor ID, and timestamp only.
+snapshots, and raw PII must never appear in application logs, error messages,
+operational evidence, chat, tickets, or audit decision payloads. The minimum
+necessary PII is visible only in the owner-only review through safe
+`displaySnapshot` fields; credentials and raw source snapshots never enter
+rendered props.
+
+Audit decision payloads may contain safe source/proposal IDs, selected safe
+candidate IDs, a review reason, actor ID, and timestamp only. Free-text review
+reasons must contain no PII, secrets, or copied source values.
 
 Use the application's static sanitized error messages and masked database
 suffix. If credentials or raw PII are exposed, stop the workflow, restrict the
@@ -258,15 +302,75 @@ survive. `CRM_RELEASE_TESTS=1` is mandatory so missing database configuration
 fails closed; skipped or gated PostgreSQL suites fail the release.
 
 In a fresh PowerShell session, obtain `CRM_TEST_DATABASE_URL` from the approved
-secret store, validate the database identity as disposable and test-only, then
-run:
+secret store. Its database name must contain a case-insensitive, delimited
+`test` token, such as exact `test`, `crm_test`, or `test-crm`; a substring in a
+word such as `contest` or `testing` is rejected. The preflight below also
+rejects malformed/non-PostgreSQL URLs, missing host/database values, and the
+same normalized host, port, and database identity as `DATABASE_URL`.
 
 ```powershell
-if (-not $env:CRM_TEST_DATABASE_URL) {
-  throw "CRM_TEST_DATABASE_URL is required for the PostgreSQL release gate."
+function ConvertTo-PostgresDatabaseIdentity {
+  param(
+    [string]$Value,
+    [string]$VariableName
+  )
+
+  $uri = $null
+  if (
+    [string]::IsNullOrWhiteSpace($Value) -or
+    $Value.Trim() -ne $Value -or
+    -not [Uri]::TryCreate($Value, [UriKind]::Absolute, [ref]$uri) -or
+    $uri.Scheme -notin @("postgres", "postgresql")
+  ) {
+    throw "$VariableName must be a valid PostgreSQL URL."
+  }
+
+  try {
+    $databaseName = [Uri]::UnescapeDataString(
+      $uri.AbsolutePath.TrimStart([char]"/")
+    )
+  }
+  catch {
+    throw "$VariableName must be a valid PostgreSQL URL."
+  }
+  if (
+    [string]::IsNullOrWhiteSpace($uri.Host) -or
+    [string]::IsNullOrWhiteSpace($databaseName)
+  ) {
+    throw "$VariableName must include a host and database name."
+  }
+
+  $port = if ($uri.Port -lt 0) { 5432 } else { $uri.Port }
+  return [PSCustomObject]@{
+    Database = $databaseName.ToLowerInvariant()
+    Identity = "{0}|{1}|{2}" -f @(
+      $uri.DnsSafeHost.ToLowerInvariant(),
+      $port,
+      $databaseName.ToLowerInvariant()
+    )
+  }
 }
 
 try {
+  $testIdentity = ConvertTo-PostgresDatabaseIdentity `
+    -Value $env:CRM_TEST_DATABASE_URL `
+    -VariableName "CRM_TEST_DATABASE_URL"
+  if (
+    $testIdentity.Database -notmatch
+      "(?i)(^|[^a-z0-9])test($|[^a-z0-9])"
+  ) {
+    throw "CRM_TEST_DATABASE_URL database name must contain a delimited test token."
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($env:DATABASE_URL)) {
+    $applicationIdentity = ConvertTo-PostgresDatabaseIdentity `
+      -Value $env:DATABASE_URL `
+      -VariableName "DATABASE_URL"
+    if ($testIdentity.Identity -eq $applicationIdentity.Identity) {
+      throw "CRM_TEST_DATABASE_URL must not identify the same database as DATABASE_URL."
+    }
+  }
+
   $env:CRM_RELEASE_TESTS = "1"
   npm run test:crm-db
   if ($LASTEXITCODE -ne 0) {
