@@ -6,6 +6,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import {
+  ACT_MIGRATION_IGNORE_REASON_MAX_LENGTH,
+  ACT_MIGRATION_PREVIEW_MAX_PAGE,
+  ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH,
+  ACT_MIGRATION_SOURCE_ID_MAX_LENGTH,
+} from "@/features/act-migration/action-limits";
+import {
   createActMigrationCaptureService,
   createActMigrationPreviewService,
 } from "@/features/act-migration/runtime";
@@ -27,11 +33,6 @@ import {
 import { ActApiError } from "@/features/act-sync/act-errors";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { getActEnvironment } from "@/lib/env";
-
-export const ACT_MIGRATION_PREVIEW_MAX_PAGE = 1_000_000;
-export const ACT_MIGRATION_PROPOSAL_KEY_MAX_LENGTH = 500;
-export const ACT_MIGRATION_SOURCE_ID_MAX_LENGTH = 500;
-export const ACT_MIGRATION_IGNORE_REASON_MAX_LENGTH = 2_000;
 
 export type ActMigrationActionError = {
   ok: false;

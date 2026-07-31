@@ -25,9 +25,6 @@ vi.mock("@/features/act-migration/runtime", () => ({
   createActMigrationPreviewService: mocks.createPreview,
   createActMigrationWorkspaceReader: mocks.createReader,
 }));
-vi.mock("@/app/(private)/settings/act-migration/actions", () => ({
-  ACT_MIGRATION_PREVIEW_MAX_PAGE: 1_000_000,
-}));
 vi.mock("@/components/act-migration/act-migration-review", () => ({
   ActMigrationReview: (props: {
     configured: boolean;

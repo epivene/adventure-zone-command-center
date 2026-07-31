@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { ACT_MIGRATION_PREVIEW_MAX_PAGE } from "@/app/(private)/settings/act-migration/actions";
 import { ActMigrationReview } from "@/components/act-migration/act-migration-review";
+import { ACT_MIGRATION_PREVIEW_MAX_PAGE } from "@/features/act-migration/action-limits";
 import {
   isMigrationTargetEntityType,
   migrationPreviewStateValues,

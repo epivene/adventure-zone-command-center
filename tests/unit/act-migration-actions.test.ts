@@ -37,6 +37,7 @@ import {
   saveActMigrationDecisionAction,
   startActMigrationAction,
 } from "@/app/(private)/settings/act-migration/actions";
+import * as actMigrationActions from "@/app/(private)/settings/act-migration/actions";
 import {
   ActMigrationLeaseConflictError,
   ActMigrationRunConflictError,
@@ -113,6 +114,14 @@ beforeEach(() => {
 });
 
 describe("Act migration owner actions", () => {
+  it("exports only server-action functions at runtime", () => {
+    expect(
+      Object.entries(actMigrationActions)
+        .filter(([, value]) => typeof value !== "function")
+        .map(([name]) => name),
+    ).toEqual([]);
+  });
+
   it.each([
     ["start", () => startActMigrationAction("invalid-request-key")],
     ["continue", () => continueActMigrationAction("invalid-run-id")],
