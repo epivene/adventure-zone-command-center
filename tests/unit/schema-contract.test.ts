@@ -298,6 +298,113 @@ describe("database schema contract", () => {
     );
   });
 
+  it("exports calling lists and durable reviewed-import apply queues", () => {
+    expect(Object.keys(databaseSchema.callingLists)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "name",
+        "kind",
+        "filterVersion",
+        "filterDefinition",
+        "sourceStatus",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.callingListMemberships)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "callingListId",
+        "contactId",
+        "source",
+        "active",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.actMigrationApplyBatches)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "requestKey",
+        "runId",
+        "requestedBy",
+        "status",
+        "manifestDigest",
+        "summary",
+        "lastErrorCode",
+        "startedAt",
+        "completedAt",
+        "createdAt",
+        "updatedAt",
+      ]),
+    );
+    expect(Object.keys(databaseSchema.actMigrationApplyOperations)).toEqual(
+      expect.arrayContaining([
+        "id",
+        "batchId",
+        "runId",
+        "proposalKey",
+        "targetEntityType",
+        "dependencyProposalKeys",
+        "status",
+        "attemptCount",
+        "leaseOwner",
+        "leaseExpiresAt",
+        "appliedEntityId",
+        "errorCode",
+        "retryable",
+        "createdAt",
+        "updatedAt",
+        "completedAt",
+      ]),
+    );
+
+    expect(
+      getTableConfig(databaseSchema.callingLists).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toEqual(expect.arrayContaining([
+      "calling_lists_name_nonblank",
+      "calling_lists_kind_valid",
+      "calling_lists_filter_definition_valid",
+      "calling_lists_source_status_valid",
+    ]));
+    expect(
+      getTableConfig(databaseSchema.callingListMemberships).uniqueConstraints.map(
+        (constraint) => constraint.name,
+      ),
+    ).toContain("calling_list_memberships_list_contact_unique");
+    expect(
+      getTableConfig(databaseSchema.actMigrationApplyOperations).uniqueConstraints.map(
+        (constraint) => constraint.name,
+      ),
+    ).toContain("act_migration_apply_operations_run_proposal_unique");
+    expect(indexNames(databaseSchema.callingLists)).toContain(
+      "calling_lists_dynamic_kind_idx",
+    );
+    expect(indexNames(databaseSchema.callingListMemberships)).toContain(
+      "calling_list_memberships_active_idx",
+    );
+    expect(indexNames(databaseSchema.actMigrationApplyBatches)).toContain(
+      "act_migration_apply_batches_run_id_idx",
+    );
+    expect(indexNames(databaseSchema.actMigrationApplyOperations)).toEqual(
+      expect.arrayContaining([
+        "act_migration_apply_operations_run_batch_idx",
+        "act_migration_apply_operations_runnable_claim_idx",
+      ]),
+    );
+    expect(
+      getTableConfig(databaseSchema.actMigrationApplyOperations).checks.map(
+        (constraint) => constraint.name,
+      ),
+    ).toEqual(expect.arrayContaining([
+      "act_migration_apply_operations_status_valid",
+      "act_migration_apply_operations_attempt_count_nonnegative",
+      "act_migration_apply_operations_lease_valid",
+    ]));
+  });
+
   it("exports the CRM activity and call workspace fields", () => {
     expect(organizations.lastResort).toBeDefined();
     expect(organizations.lastResortReason).toBeDefined();
