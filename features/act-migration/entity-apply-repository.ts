@@ -17,6 +17,27 @@ type DrizzleDatabase = typeof database;
 type Transaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
 type Values = Record<string, unknown>;
 
+function mergedProfileHistory(snapshot: Record<string, unknown>) {
+  const values = Object.fromEntries([
+    ["contactSourceIds", snapshot.mergedContactSourceIds],
+    ["phones", snapshot.mergedPhones],
+    ["notes", snapshot.mergedNotes],
+    ["bookingSourceIds", snapshot.mergedBookingSourceIds],
+    ["groupSourceIds", snapshot.mergedGroupSourceIds],
+  ].flatMap(([key, value]) => {
+    if (typeof value !== "string") return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+        ? [[key, [...new Set(parsed)].toSorted()]]
+        : [];
+    } catch {
+      return [];
+    }
+  }));
+  return Object.keys(values).length ? values : null;
+}
+
 export type MigrationEntityApplyResult = { entityId: string; changed: boolean };
 
 function text(value: unknown): string | null {
@@ -131,6 +152,9 @@ export class MigrationEntityApplyRepository {
         actor: input.actor,
         changedFields: input.changedFields,
         sourceIds: input.sourceIds,
+        mergedProfileHistory: input.entityType === "organization"
+          ? mergedProfileHistory(input.operation.proposal.displaySnapshot)
+          : null,
       },
     });
   }

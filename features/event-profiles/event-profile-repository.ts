@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   actExternalLinks,
+  auditEntries,
   activities,
   bookings,
   callingListMemberships,
@@ -116,6 +117,13 @@ export type EventProfile = {
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
+  migrationHistory?: {
+    contactSourceIds: string[];
+    phones: string[];
+    notes: string[];
+    bookingSourceIds: string[];
+    groupSourceIds: string[];
+  };
 };
 
 export interface EventProfileRepository {
@@ -174,6 +182,9 @@ function stableSourceProvenance(records: EventProfileRecordSet) {
 export function buildEventProfile(
   records: EventProfileRecordSet,
   requestedContactId?: string,
+  migrationHistory: EventProfile["migrationHistory"] = {
+    contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
+  },
 ): EventProfile {
   const contacts = records.contacts.toSorted(contactOrder).map((contact) => ({
     id: contact.id,
@@ -209,6 +220,7 @@ export function buildEventProfile(
     ),
     groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     sourceProvenance: stableSourceProvenance(records),
+    migrationHistory,
   };
 }
 
@@ -277,7 +289,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       ...(bookingIds.length ? [inArray(followUps.bookingId, bookingIds)] : []),
       ...(contactIds.length ? [inArray(followUps.contactId, contactIds)] : []),
     )!;
-    const [profileActivities, profileFollowUps, groupMemberships] = await Promise.all([
+    const [profileActivities, profileFollowUps, groupMemberships, migrationAudits] = await Promise.all([
       this.database.select({
         id: activities.id,
         contactId: activities.contactId,
@@ -313,6 +325,9 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         ))
         .where(and(activeOrganizationContactCondition(profileId), eq(callingListMemberships.active, true)))
         .orderBy(asc(callingLists.name), asc(callingLists.id)),
+      this.database.select({ after: auditEntries.after }).from(auditEntries)
+        .where(and(eq(auditEntries.entityType, "organization"), eq(auditEntries.entityId, profileId), eq(auditEntries.action, "act_migration_applied")))
+        .orderBy(desc(auditEntries.createdAt)),
     ]);
     const groups = [...new Map(groupMemberships.map((group) => [group.id, group])).values()];
     const entityIds = [
@@ -331,6 +346,16 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
     }).from(actExternalLinks).where(inArray(actExternalLinks.entityId, entityIds))
       .orderBy(asc(actExternalLinks.entityType), asc(actExternalLinks.entityId), asc(actExternalLinks.sourceEntityType), asc(actExternalLinks.actRecordId));
 
+    const merged = migrationAudits.flatMap(({ after }) => {
+      const value = after && typeof after === "object" && !Array.isArray(after)
+        ? (after as Record<string, unknown>).mergedProfileHistory
+        : null;
+      return value && typeof value === "object" && !Array.isArray(value) ? [value as Record<string, unknown>] : [];
+    });
+    const history = Object.fromEntries(["contactSourceIds", "phones", "notes", "bookingSourceIds", "groupSourceIds"].map((key) => [
+      key,
+      [...new Set(merged.flatMap((entry) => Array.isArray(entry[key]) ? entry[key].filter((item): item is string => typeof item === "string") : []))].toSorted(),
+    ])) as EventProfile["migrationHistory"];
     return buildEventProfile({
       place,
       contacts: profileContacts,
@@ -339,6 +364,6 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       followUps: profileFollowUps,
       groups,
       externalLinks: externalLinks as EventProfileSourceReference[],
-    }, selectedContactId);
+    }, selectedContactId, history);
   }
 }

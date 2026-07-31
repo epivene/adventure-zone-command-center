@@ -28,6 +28,7 @@ import {
   type BulkReviewDependencyStates,
   type BulkReviewScope,
 } from "@/features/act-migration/bulk-review";
+import { isExactDuplicatePlaceGroup } from "@/features/act-migration/auto-review";
 import {
   proposalSnapshotDigest,
   type MigrationReconciliationReport,
@@ -396,8 +397,11 @@ export class DrizzleActMigrationPreviewRepository
         left.proposalKey.localeCompare(right.proposalKey),
       );
       const automaticApprovals = new Set(input.automaticApprovalProposalKeys ?? []);
-      if ([...automaticApprovals].some((key) => !proposalKeySet.has(key))) {
-        throw new Error("Act migration automatic approval is absent from this preview.");
+      if ([...automaticApprovals].some((key) => {
+        const proposal = input.proposals.find((value) => value.proposalKey === key);
+        return !proposal || !isExactDuplicatePlaceGroup(proposal);
+      })) {
+        throw new Error("Act migration automatic approval is not an exact duplicate-place group.");
       }
       for (let offset = 0; offset < ordered.length; offset += INSERT_CHUNK_SIZE) {
         await transaction

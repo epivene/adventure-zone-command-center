@@ -2,6 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
+  auditEntries,
   activities,
   actExternalLinks,
   bookings,
@@ -169,7 +170,7 @@ describe("buildEventProfile", () => {
       if (table === bookings) return records.bookings;
       if (table === activities) return includesContact() ? [contactOnlyActivity] : [];
       if (table === followUps) return includesContact() ? [contactOnlyFollowUp] : [];
-      if (table === callingListMemberships || table === actExternalLinks) return [];
+      if (table === callingListMemberships || table === actExternalLinks || table === auditEntries) return [];
       throw new Error("Unexpected event profile query");
     };
     const database = {

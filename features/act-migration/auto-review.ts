@@ -11,7 +11,7 @@ export type AutomaticMigrationReview = {
   pendingProposalKeys: readonly string[];
 };
 
-function isExactDuplicatePlaceGroup(proposal: ActMigrationProposal) {
+export function isExactDuplicatePlaceGroup(proposal: ActMigrationProposal) {
   return proposal.targetEntityType === "organization" &&
     proposal.state === "new" &&
     proposal.issueCode === null &&

@@ -458,6 +458,20 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     expect(preview.reviewSummary).toMatchObject({ approved: 1, pending: 0 });
   });
 
+  postgresTest("rejects automatic approval for a possible duplicate", async () => {
+    const ambiguous = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1"],
+      state: "possible_duplicate",
+      candidateLocalIds: [localA],
+      proposedLocalId: localA,
+    });
+
+    await expect(store([ambiguous], {
+      automaticApprovalProposalKeys: [ambiguous.proposalKey],
+    })).rejects.toThrow("not an exact duplicate-place group");
+  });
+
   postgresTest("counts an unlinked matched-unchanged proposal as pending review", async () => {
     const unchanged = proposal({
       proposalKey: "organization:company-1",
