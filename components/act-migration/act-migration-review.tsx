@@ -43,6 +43,8 @@ import type {
   StoredMigrationProposal,
 } from "@/features/act-migration/preview-repository";
 import type { StoredMigrationWorkspace } from "@/features/act-migration/runtime";
+import type { MigrationApplyCounts } from "@/features/act-migration/apply-repository";
+import type { MigrationApplyBatchStatus } from "@/features/act-migration/migration-types";
 import type { SnapshotProgress } from "@/features/act-migration/snapshot-repository";
 
 type StartAction = (
@@ -81,6 +83,19 @@ type BulkDecisionAction = (input: {
   reason?: string;
 }) => Promise<ActMigrationBulkDecisionActionResult>;
 
+type PersistedApplyBatch = {
+  id: string;
+  status: MigrationApplyBatchStatus;
+  counts: MigrationApplyCounts;
+};
+
+type ApplyProgress = {
+  runId: string;
+  batchId: string;
+  status: MigrationApplyBatchStatus;
+  counts: MigrationApplyCounts;
+};
+
 type Props = {
   configured: boolean;
   maskedDatabase: string | null;
@@ -105,6 +120,7 @@ type Props = {
     };
     byTarget: Record<string, Record<string, number>>;
     bulkEligible: number;
+    batch?: PersistedApplyBatch;
   } | null;
   /** @deprecated Pass applyRollout from the page instead. */
   applyEnabled?: boolean;
@@ -493,7 +509,17 @@ export function ActMigrationReview({
   const [applyBusy, setApplyBusy] = useState(false);
   const [applyConfirmationOpen, setApplyConfirmationOpen] = useState(false);
   const [applyResult, setApplyResult] =
-    useState<Extract<ActMigrationApplyActionResult, { ok: true }> | null>(null);
+    useState<ApplyProgress | null>(() => {
+      const batch = reviewedImport?.batch ?? workspace?.apply?.batch;
+      return batch
+        ? {
+            runId: workspace?.progress.runId ?? "",
+            batchId: batch.id,
+            status: batch.status,
+            counts: batch.counts,
+          }
+        : null;
+    });
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkIgnoreReason, setBulkIgnoreReason] = useState("");
   const [, setClock] = useState(() => now());
@@ -747,7 +773,7 @@ export function ActMigrationReview({
       previewDigest: workspace.preview.report.proposalDigest,
       ...workspace.apply,
     } : null);
-    if (!apply || !apply.ready || !runId || applyBusy || apply.summary.approved < 1) return;
+    if (!apply || apply.batch || !apply.ready || !runId || applyBusy || apply.summary.approved < 1) return;
     const requestKey = applyRequestKey.current ?? requestKeyFactory();
     applyRequestKey.current = requestKey;
     setApplyBusy(true);
@@ -764,7 +790,12 @@ export function ActMigrationReview({
         return;
       }
       setApplyConfirmationOpen(false);
-      setApplyResult(result);
+      setApplyResult({
+        runId: result.runId,
+        batchId: result.batchId,
+        status: result.counts.failed > 0 ? "failed" : "applying",
+        counts: result.counts,
+      });
       setStatus("Reviewed import queue started.");
       router.refresh();
     } catch {
@@ -785,7 +816,12 @@ export function ActMigrationReview({
         setStatus(next.error);
         return;
       }
-      setApplyResult(next);
+      setApplyResult({
+        runId: next.runId,
+        batchId: next.batchId,
+        status: next.counts.failed > 0 ? "failed" : "applying",
+        counts: next.counts,
+      });
       setStatus("Reviewed import progress updated.");
       router.refresh();
     } catch {
@@ -840,7 +876,9 @@ export function ActMigrationReview({
       apply.ready &&
       apply.summary.approved > 0 &&
       complete(currentProgress) &&
-      rolloutEnabled,
+      rolloutEnabled &&
+      !apply.batch &&
+      !applyResult,
   );
   const unresolved = apply
     ? apply.summary.pending + apply.summary.blocked
@@ -1034,6 +1072,7 @@ export function ActMigrationReview({
                 ) : null}
                 {applyResult ? (
                   <section aria-label="Reviewed import results" className="mt-4 rounded-lg bg-slate-50 p-4 text-sm">
+                    <p className="font-semibold">Batch {applyResult.batchId} · {applyResult.status}</p>
                     <p className="font-semibold">Succeeded {applyResult.counts.applied} · Skipped {applyResult.counts.ignored} · Blocked {applyResult.counts.blocked} · Failed {applyResult.counts.failed}</p>
                     <p className="mt-1 text-slate-600">{applyResult.counts.pending + applyResult.counts.leased} approved operations remain queued.</p>
                     <div className="mt-3 flex flex-wrap gap-2">

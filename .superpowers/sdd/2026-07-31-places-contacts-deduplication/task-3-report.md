@@ -48,3 +48,29 @@ exit 0
 
 - PostgreSQL integration tests were intentionally not run for this UI/action/env task. No disposable `CRM_TEST_DATABASE_URL` is configured in this worktree, and this change does not alter migrations or queue persistence.
 - Queue result and retry controls are maintained in client session state after starting a batch. A refreshed page still preserves the durable queue and its idempotency guarantees, but a later task could expose persisted batch history if operators need to resume a batch after navigation.
+
+## Fix round 1
+
+- The workspace reader now loads the latest durable apply batch and passes its ID, status, and live operation counts through the page to the reviewed-import client. A remounted workspace shows the persisted batch result with continuation/retry controls rather than a new apply confirmation.
+- The apply start action returns that persisted batch without constructing a second queue, preserving the existing idempotency boundary even if a stale client submits another confirmation.
+- The preview review summary now treats undecided `matched_unchanged` proposals without stable links to their canonical local target as pending. This keeps unresolved reconciliation work visible and prevents an empty queue from implying review completion.
+
+### Regression coverage and verification
+
+```text
+npx vitest run tests/unit/act-migration-review.test.tsx tests/unit/act-migration-actions.test.ts tests/unit/act-env.test.ts --maxWorkers=1
+Test Files  3 passed (3)
+Tests       67 passed (67)
+
+npx vitest run tests/integration/act-migration-preview-repository.test.ts --maxWorkers=1
+Test Files  1 passed (1)
+Tests       4 passed | 16 skipped (20)
+
+npm run typecheck
+exit 0
+
+git diff --check
+exit 0
+```
+
+The PostgreSQL summary regression is present but skipped in this worktree because `CRM_TEST_DATABASE_URL` is not configured.

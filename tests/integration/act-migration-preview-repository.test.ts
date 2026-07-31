@@ -429,6 +429,46 @@ describe("DrizzleActMigrationPreviewRepository (PostgreSQL)", () => {
     expect(proposalSnapshotDigest(preview.rows)).toBe(proposalSnapshotDigest(proposals));
   });
 
+  postgresTest("counts an unlinked matched-unchanged proposal as pending review", async () => {
+    const unchanged = proposal({
+      proposalKey: "organization:company-1",
+      sourceRecordKeys: ["company:company-1"],
+      state: "matched_unchanged",
+      targetEntityType: "organization",
+      proposedLocalId: localA,
+    });
+    await store([unchanged], {
+      report: report([unchanged], {
+        previewCounts: {
+          new: 0,
+          matched_unchanged: 1,
+          change: 0,
+          new_relationship: 0,
+          possible_duplicate: 0,
+          needs_review: 0,
+          ignored: 0,
+          error: 0,
+        },
+      }),
+    });
+
+    expect((await repository.getPreview(runId, { page: 1, pageSize: 50 })).reviewSummary)
+      .toMatchObject({ approved: 0, pending: 1, blocked: 0 });
+
+    await database.insert(crmSchema.actExternalLinks).values({
+      entityType: "organization",
+      sourceEntityType: "company",
+      entityId: localA,
+      actRecordId: "company-1",
+      isPrimary: false,
+      syncMode: "pull_only",
+      migrationRunId: runId,
+    });
+
+    expect((await repository.getPreview(runId, { page: 1, pageSize: 50 })).reviewSummary)
+      .toMatchObject({ approved: 0, pending: 0, blocked: 0 });
+  });
+
   postgresTest(
     "reloads only safe available staged Contact IDs as primary-source choices",
     async () => {

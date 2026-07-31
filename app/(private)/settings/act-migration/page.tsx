@@ -102,6 +102,11 @@ export default async function ActMigrationPage({
         workspace.progress.failedCheckpoints,
         workspace.progress.interruption?.code ?? "",
         workspace.progress.interruption?.retryAfter?.getTime() ?? "",
+        workspace.apply?.batch?.id ?? "",
+        workspace.apply?.batch?.status ?? "",
+        ...(workspace.apply?.batch
+          ? Object.values(workspace.apply.batch.counts)
+          : []),
         ...(workspace.preview?.rows.map((row) =>
           `${row.proposalKey}:${row.decision ?? ""}:${
             row.decidedAt?.getTime() ?? ""
@@ -137,6 +142,7 @@ export default async function ActMigrationPage({
           summary: workspace.apply.summary,
           byTarget: workspace.apply.byTarget,
           bulkEligible: workspace.apply.bulkEligible,
+          batch: workspace.apply.batch,
         } : null}
         workspace={workspace}
       />

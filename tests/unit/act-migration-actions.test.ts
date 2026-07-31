@@ -564,6 +564,44 @@ describe("Act migration owner actions", () => {
     expect(mocks.revalidatePath).toHaveBeenCalledWith("/settings/act-migration");
   });
 
+  it("returns the durable existing batch instead of creating a duplicate apply request", async () => {
+    const existingBatch = {
+      id: applyBatchId,
+      status: "failed",
+      counts: { ...applyCounts, failed: 1, total: 2 },
+    };
+    mocks.createWorkspaceReader.mockResolvedValue({
+      getWorkspace: vi.fn().mockResolvedValue({
+        progress: { ...progress, status: "previewed", completedCheckpoints: 8 },
+        preview: {
+          ...preview,
+          report: { ...preview.report, complete: true, proposalDigest: "reviewed-preview" },
+        },
+        apply: {
+          ready: true,
+          summary: { approved: 1, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 },
+          byTarget: {},
+          bulkEligible: 0,
+          batch: existingBatch,
+        },
+      }),
+    });
+
+    await expect(startActMigrationApplyAction({
+      requestKey,
+      runId,
+      previewDigest: "reviewed-preview",
+      confirmationToken: "apply-approved-changes",
+    })).resolves.toMatchObject({
+      ok: true,
+      runId,
+      batchId: applyBatchId,
+      changed: false,
+      counts: existingBatch.counts,
+    });
+    expect(mocks.createApply).not.toHaveBeenCalled();
+  });
+
   it("rejects a stale reviewed preview before constructing the apply queue", async () => {
     mocks.createWorkspaceReader.mockResolvedValueOnce({
       getWorkspace: vi.fn().mockResolvedValue({

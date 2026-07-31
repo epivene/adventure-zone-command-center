@@ -5,7 +5,10 @@ import {
   type StoredMigrationPreviewPage,
 } from "@/features/act-migration/preview-repository";
 import { ActMigrationPreviewService } from "@/features/act-migration/preview-service";
-import { DrizzleActMigrationApplyRepository } from "@/features/act-migration/apply-repository";
+import {
+  DrizzleActMigrationApplyRepository,
+  type MigrationApplyCounts,
+} from "@/features/act-migration/apply-repository";
 import { ActMigrationApplyService } from "@/features/act-migration/apply-service";
 import { MigrationCallingListApplyRepository } from "@/features/act-migration/calling-list-apply-repository";
 import { MigrationEntityApplyRepository } from "@/features/act-migration/entity-apply-repository";
@@ -15,6 +18,7 @@ import {
   DrizzleActMigrationSnapshotRepository,
   type SnapshotProgress,
 } from "@/features/act-migration/snapshot-repository";
+import type { MigrationApplyBatchStatus } from "@/features/act-migration/migration-types";
 import { ActMigrationSnapshotService } from "@/features/act-migration/snapshot-service";
 import { getActEnvironment } from "@/lib/env";
 
@@ -30,6 +34,11 @@ export type StoredMigrationApplyState = {
   };
   byTarget: Record<string, Record<string, number>>;
   bulkEligible: number;
+  batch?: {
+    id: string;
+    status: MigrationApplyBatchStatus;
+    counts: MigrationApplyCounts;
+  };
 };
 
 export type StoredMigrationWorkspace = {
@@ -73,6 +82,7 @@ export async function createActMigrationWorkspaceReader():
   const database = await migrationDatabase();
   const snapshots = new DrizzleActMigrationSnapshotRepository(database);
   const previews = new DrizzleActMigrationPreviewRepository(database);
+  const applies = new DrizzleActMigrationApplyRepository(database);
   return {
     async getWorkspace(input) {
       let progress: SnapshotProgress | null;
@@ -86,6 +96,10 @@ export async function createActMigrationWorkspaceReader():
       }
       if (!progress) return null;
       const preview = await previews.getPreviewIfStored(progress.runId, input.query);
+      const applyWorkspace = preview
+        ? await applies.getApplyWorkspace(progress.runId)
+        : null;
+      const batch = applyWorkspace?.batches.at(-1);
       const reviewSummary = preview?.reviewSummary ?? {
         approved: 0,
         pending: 0,
@@ -108,6 +122,15 @@ export async function createActMigrationWorkspaceReader():
                 },
                 byTarget: reviewSummary.byTarget,
                 bulkEligible: reviewSummary.bulkEligible,
+                ...(batch
+                  ? {
+                      batch: {
+                        id: batch.id,
+                        status: batch.status,
+                        counts: batch.summary,
+                      },
+                    }
+                  : {}),
               },
             }
           : {}),

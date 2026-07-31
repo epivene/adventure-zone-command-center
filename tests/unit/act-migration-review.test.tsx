@@ -1311,6 +1311,76 @@ describe("Act migration review workspace", () => {
     });
   });
 
+  it("restores a persisted failed batch after remount instead of starting another import", async () => {
+    const startApplyAction = vi.fn();
+    const continueApplyAction = vi.fn(async () => ({
+      ok: true as const,
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+      changed: true,
+      counts: { pending: 0, leased: 0, blocked: 1, applied: 2, ignored: 3, failed: 1, total: 7 },
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    }));
+    const retryApplyAction = vi.fn(async () => ({
+      ok: true as const,
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+      changed: true,
+      counts: { pending: 1, leased: 0, blocked: 1, applied: 2, ignored: 3, failed: 0, total: 7 },
+      retryable: false,
+      retryAfter: null,
+      errorCode: null,
+    }));
+    const user = userEvent.setup();
+    const reviewedWorkspace = {
+      ...workspace(progress({ completedCheckpoints: 8, totalCheckpoints: 8, status: "previewed" }), preview()),
+      apply: {
+        ready: true,
+        summary: { approved: 2, pending: 0, blocked: 0, ignored: 0, applied: 0, failed: 0 },
+        byTarget: {},
+        bulkEligible: 0,
+        batch: {
+          id: "44444444-4444-4444-8444-444444444444",
+          status: "failed",
+          counts: { pending: 1, leased: 0, blocked: 1, applied: 2, ignored: 3, failed: 1, total: 8 },
+        },
+      },
+    } as unknown as StoredMigrationWorkspace;
+    const view = render(<ActMigrationReview {...props({
+      applyEnabled: true,
+      startApplyAction,
+      continueApplyAction,
+      retryApplyAction,
+      workspace: reviewedWorkspace,
+    })} />);
+
+    expect(screen.getByText("Batch 44444444-4444-4444-8444-444444444444 · failed")).toBeVisible();
+    expect(screen.getByText("Succeeded 2 · Skipped 3 · Blocked 1 · Failed 1")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Apply approved changes" })).not.toBeInTheDocument();
+    view.unmount();
+    render(<ActMigrationReview {...props({
+      applyEnabled: true,
+      startApplyAction,
+      continueApplyAction,
+      retryApplyAction,
+      workspace: reviewedWorkspace,
+    })} />);
+
+    await user.click(screen.getByRole("button", { name: "Continue reviewed import" }));
+    await user.click(screen.getByRole("button", { name: "Retry failed operations" }));
+    expect(startApplyAction).not.toHaveBeenCalled();
+    expect(continueApplyAction).toHaveBeenCalledWith({
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+    });
+    expect(retryApplyAction).toHaveBeenCalledWith({
+      runId,
+      batchId: "44444444-4444-4444-8444-444444444444",
+    });
+  });
+
   it("adds Act! migration beside unchanged Act! Sync in desktop and mobile Settings", () => {
     render(<AppShell><p>Settings page</p></AppShell>);
 

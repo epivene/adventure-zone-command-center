@@ -404,6 +404,18 @@ export async function startActMigrationApplyAction(input: {
         retryAfter: null,
       };
     }
+    if (workspace.apply.batch) {
+      return {
+        ok: true,
+        runId: parsed.data.runId,
+        batchId: workspace.apply.batch.id,
+        changed: false,
+        counts: workspace.apply.batch.counts,
+        retryable: workspace.apply.batch.counts.failed > 0,
+        retryAfter: null,
+        errorCode: null,
+      };
+    }
     const result = await (
       await createActMigrationApplyService()
     ).start({
