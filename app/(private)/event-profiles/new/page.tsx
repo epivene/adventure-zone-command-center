@@ -17,7 +17,7 @@ const uuid = z.uuid();
 export const creationSchema = z.object({
   event: z.object({ id: z.string().nullable(), name: z.string(), city: z.string(), region: z.string() }),
   contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string(), primary: z.boolean().optional() })).min(1),
-  booking: z.object({ enabled: z.boolean(), name: z.string(), nextActionKind: z.string(), nextActionDueAt: z.string() }),
+  booking: z.object({ enabled: z.boolean(), name: z.string(), nextActionKind: z.string(), nextActionDueAt: z.string(), travelLegId: z.string().uuid().nullable() }),
 }).superRefine((input, context) => {
   const selectedIds = input.contacts.map((contact) => contact.id).filter((id): id is string => Boolean(id));
   if (new Set(selectedIds).size !== selectedIds.length) context.addIssue({ code: "custom", message: "Choose each existing contact only once." });
@@ -105,7 +105,7 @@ export async function createEventProfileAction(input: EventProfileCreationInput)
 
       if (parsed.data.booking.enabled) {
         if (!eventCity || eventRegion.length !== 2) throw new Error("BOOKING_EVENT_LOCATION_MISSING");
-        const [booking] = await transaction.insert(bookings).values({ organizationId, name: parsed.data.booking.name.trim(), city: eventCity, region: eventRegion, status: "new_lead", probability: "possible", createdAt: now, updatedAt: now }).returning({ id: bookings.id });
+        const [booking] = await transaction.insert(bookings).values({ organizationId, name: parsed.data.booking.name.trim(), city: eventCity, region: eventRegion, travelLegId: parsed.data.booking.travelLegId, status: "new_lead", probability: "possible", createdAt: now, updatedAt: now }).returning({ id: bookings.id });
         if (!booking) throw new Error("BOOKING_CREATE_FAILED");
         await transaction.insert(bookingContacts).values(contactIds.map((contactId) => ({ bookingId: booking.id, contactId, isPrimary: contactId === primaryContactId, source: "local" as const, createdAt: now, updatedAt: now })));
         await transaction.update(bookings).set({ primaryContactId, updatedAt: now }).where(eq(bookings.id, booking.id));
@@ -129,9 +129,10 @@ function firstValue(value: string | string[] | undefined) { return Array.isArray
 export default async function NewEventProfilePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireOwner();
   const { db } = await import("@/db/client");
-  const [events, contactPage, query] = await Promise.all([
+  const [events, contactPage, travelLegs, query] = await Promise.all([
     new DrizzleOrganizationRepository(db).listOrganizations({ search: "", lastResort: "all", travelLegId: null, page: 1, pageSize: 100 }),
     new DrizzleContactRepository(db).listContacts({ search: "", state: "all", page: 1, pageSize: 100 }),
+    new DrizzleOrganizationRepository(db).listTravelLegs(),
     searchParams,
   ]);
   const contactId = firstValue(query.contactId);
@@ -142,5 +143,5 @@ export default async function NewEventProfilePage({ searchParams }: { searchPara
   const phoneContact = phoneMatch.kind === "one" ? phoneMatch.contact : null;
   const contactOptions = [...contactPage.records.map((contact) => ({ id: contact.id, name: `${contact.firstName} ${contact.lastName}`.trim(), organizationName: contact.organizationName })), ...(requestedContact ? [{ id: requestedContact.contact.id, name: `${requestedContact.contact.firstName} ${requestedContact.contact.lastName}`.trim(), organizationName: requestedContact.contact.organizationName }] : []), ...(phoneContact ? [{ id: phoneContact.id, name: `${phoneContact.firstName} ${phoneContact.lastName}`.trim(), organizationName: phoneContact.organizationName }] : [])].filter((contact, index, all) => all.findIndex((candidate) => candidate.id === contact.id) === index);
   const initialSelectedContactId = requestedContact?.contact.id ?? phoneContact?.id ?? contactId ?? "";
-  return <div className="mx-auto grid max-w-3xl gap-6"><header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">New event profile</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Create an event profile</h1><p className="mt-2 text-slate-600">Start with the event, add people to contact, then create a booking when it is ready.</p></header><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><EventProfileForm contacts={contactOptions} events={events.records.map((event) => ({ id: event.id, name: event.name, city: null, region: null }))} initialContactId={initialSelectedContactId} initialPhone={firstValue(query.phone) ?? ""} loadEventProfile={loadEventProfileAction} onSubmit={createEventProfileAction} /></section></div>;
+  return <div className="mx-auto grid max-w-3xl gap-6"><header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">New event profile</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Create an event profile</h1><p className="mt-2 text-slate-600">Start with the event, add people to contact, then create a booking when it is ready.</p></header><section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7"><EventProfileForm contacts={contactOptions} events={events.records.map((event) => ({ id: event.id, name: event.name, city: null, region: null }))} initialContactId={initialSelectedContactId} initialPhone={firstValue(query.phone) ?? ""} loadEventProfile={loadEventProfileAction} onSubmit={createEventProfileAction} travelLegs={travelLegs} /></section></div>;
 }

@@ -15,6 +15,11 @@ export const initialTravelLegs = [
   { name: "Leg 2", color: "#2F73D9", sortOrder: 2 },
   { name: "Leg 3", color: "#7B4DDB", sortOrder: 3 },
   { name: "Leg 4", color: "#15956B", sortOrder: 4 },
+  { name: "Leg 5", color: "#C77700", sortOrder: 5 },
+  { name: "Leg 6", color: "#008B8B", sortOrder: 6 },
+  { name: "Leg 7", color: "#B23A8A", sortOrder: 7 },
+  { name: "Leg 8", color: "#4B6584", sortOrder: 8 },
+  { name: "Leg 9", color: "#6B8E23", sortOrder: 9 },
 ] as const;
 
 export const initialPackageTemplates = [

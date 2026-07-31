@@ -60,7 +60,7 @@ describe("EventProfileForm", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       event: { id: null, name: "Cascade Festival", city: "Helena", region: "MT" },
       contacts: [{ id: null, name: "Jordan Rivera", phone: "406-555-0199", email: "", role: "", primary: true }],
-      booking: { enabled: true, name: "Cascade Festival 2026", nextActionKind: "call", nextActionDueAt: "2026-08-01" },
+      booking: { enabled: true, name: "Cascade Festival 2026", nextActionKind: "call", nextActionDueAt: "2026-08-01", travelLegId: null },
     });
     expect(routerPush).toHaveBeenCalledWith("/event-profiles/created-event");
   });
@@ -77,7 +77,7 @@ describe("EventProfileForm", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       event: { id: "event-1", name: "", city: "", region: "" },
       contacts: [{ id: "contact-1", name: "Avery Example", phone: "", email: "", role: "", primary: true }],
-      booking: { enabled: false, name: "", nextActionKind: "call", nextActionDueAt: "" },
+      booking: { enabled: false, name: "", nextActionKind: "call", nextActionDueAt: "", travelLegId: null },
     });
     expect(routerPush).toHaveBeenCalledWith("/event-profiles/event-1");
   });

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export type EventProfileCreationInput = {
   event: { id: string | null; name: string; city: string; region: string };
   contacts: { id: string | null; name: string; phone: string; email: string; role: string; primary?: boolean }[];
-  booking: { enabled: boolean; name: string; nextActionKind: string; nextActionDueAt: string };
+  booking: { enabled: boolean; name: string; nextActionKind: string; nextActionDueAt: string; travelLegId: string | null };
 };
 
 type EventOption = { id: string; name: string; city: string | null; region: string | null };
@@ -26,6 +26,7 @@ type Props = {
   contacts: ContactOption[];
   eventProfiles?: Record<string, EventProfileSeed>;
   loadEventProfile?: (id: string) => Promise<EventProfileSeed | null>;
+  travelLegs?: { id: string; name: string; color: string }[];
   initialContactId?: string;
   initialPhone?: string;
   onSubmit: (input: EventProfileCreationInput) => Promise<{ ok: true; profileId: string } | { ok: false; error: string }>;
@@ -36,7 +37,7 @@ const blankContact = (id = "", name = "", phone = ""): ContactDraft => ({
 });
 
 export function EventProfileForm({
-  events, contacts, eventProfiles = {}, loadEventProfile, initialContactId = "", initialPhone = "", onSubmit,
+  events, contacts, eventProfiles = {}, loadEventProfile, travelLegs = [], initialContactId = "", initialPhone = "", onSubmit,
 }: Props) {
   const router = useRouter();
   const [eventId, setEventId] = useState("");
@@ -77,7 +78,7 @@ export function EventProfileForm({
       const result = await onSubmit({
         event: { id: eventId || null, name: String(data.get("eventName") ?? ""), city: selectedProfile?.city ?? String(data.get("city") ?? ""), region: selectedProfile?.region ?? String(data.get("region") ?? "") },
         contacts: contactDrafts.map(({ id, name, phone, email, role, primary }) => ({ id: id || null, name, phone, email, role, primary })),
-        booking: { enabled: includeBooking, name: String(data.get("bookingName") ?? ""), nextActionKind: String(data.get("nextActionKind") ?? "call"), nextActionDueAt: String(data.get("nextActionDueAt") ?? "") },
+        booking: { enabled: includeBooking, name: String(data.get("bookingName") ?? ""), nextActionKind: String(data.get("nextActionKind") ?? "call"), nextActionDueAt: String(data.get("nextActionDueAt") ?? ""), travelLegId: String(data.get("travelLegId") ?? "") || null },
       });
       if (!result.ok) { setError(result.error); return; }
       router.push(`/event-profiles/${result.profileId}`);
@@ -104,7 +105,7 @@ export function EventProfileForm({
       </div>)}
       <button className="button-secondary justify-self-start" onClick={() => setContactDrafts((drafts) => [...drafts.map((draft) => ({ ...draft, primary: false })), { ...blankContact(), primary: false }])} type="button">Add another contact</button>
     </fieldset>
-    <fieldset className="grid gap-4 border-t border-slate-200 pt-6"><legend className="text-xl font-bold">3. Booking (optional)</legend><label className="flex items-center gap-2 font-medium"><input checked={includeBooking} onChange={(event) => setIncludeBooking(event.currentTarget.checked)} type="checkbox" />Create a booking for this event</label>{includeBooking ? <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1.5 font-medium sm:col-span-2">Booking name<input name="bookingName" required /></label><label className="grid gap-1.5 font-medium">Next action<select defaultValue="call" name="nextActionKind"><option value="call">Call</option><option value="email">Email</option><option value="prepare_quote">Prepare quote</option></select></label><label className="grid gap-1.5 font-medium">Next follow-up date<input name="nextActionDueAt" required type="date" /></label></div> : null}</fieldset>
+    <fieldset className="grid gap-4 border-t border-slate-200 pt-6"><legend className="text-xl font-bold">3. Booking (optional)</legend><label className="flex items-center gap-2 font-medium"><input checked={includeBooking} onChange={(event) => setIncludeBooking(event.currentTarget.checked)} type="checkbox" />Create a booking for this event</label>{includeBooking ? <div className="grid gap-4 sm:grid-cols-2"><label className="grid gap-1.5 font-medium sm:col-span-2">Booking name<input name="bookingName" required /></label><label className="grid gap-1.5 font-medium">Travel leg<select defaultValue="" name="travelLegId"><option value="">Unassigned</option>{travelLegs.map((leg) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><label className="grid gap-1.5 font-medium">Next action<select defaultValue="call" name="nextActionKind"><option value="call">Call</option><option value="email">Email</option><option value="prepare_quote">Prepare quote</option></select></label><label className="grid gap-1.5 font-medium">Next follow-up date<input name="nextActionDueAt" required type="date" /></label></div> : null}</fieldset>
     <div className="flex justify-end"><button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Creating…" : "Create event profile"}</button></div>
   </form>;
 }
