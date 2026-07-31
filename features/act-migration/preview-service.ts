@@ -10,6 +10,7 @@ import {
 } from "@/features/act-migration/reconciliation";
 import type { ActMigrationSnapshotRepository } from "@/features/act-migration/snapshot-repository";
 import type { MigrationDecision } from "@/features/act-migration/migration-types";
+import type { BulkReviewScope } from "@/features/act-migration/bulk-review";
 
 const DEFAULT_QUERY: MigrationPreviewQuery = { page: 1, pageSize: 50 };
 
@@ -58,5 +59,9 @@ export class ActMigrationPreviewService {
     decidedBy: string;
   }) {
     return this.previews.saveDecision(input);
+  }
+
+  saveBulkDecision(input: BulkReviewScope) {
+    return this.previews.saveBulkDecision(input);
   }
 }

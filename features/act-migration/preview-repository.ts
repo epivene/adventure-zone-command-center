@@ -1,10 +1,11 @@
-import { and, asc, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   actMigrationProposals,
   actMigrationRecords,
   actMigrationRuns,
+  actMigrationApplyOperations,
   auditEntries,
   bookings,
   contacts,
@@ -22,12 +23,20 @@ import {
   type MigrationTargetEntityType,
 } from "@/features/act-migration/migration-types";
 import {
+  bulkReviewEligibility,
+  type BulkReviewDependencyStates,
+  type BulkReviewScope,
+} from "@/features/act-migration/bulk-review";
+import {
   proposalSnapshotDigest,
   type MigrationReconciliationReport,
 } from "@/features/act-migration/reconciliation";
 import { ActMigrationRunNotFoundError } from "@/features/act-migration/snapshot-repository";
 
 type DrizzleDatabase = typeof database;
+type DrizzleTransaction = Parameters<
+  Parameters<DrizzleDatabase["transaction"]>[0]
+>[0];
 type StoredProposalRow = typeof actMigrationProposals.$inferSelect;
 
 const INSERT_CHUNK_SIZE = 200;
@@ -93,6 +102,10 @@ export interface ActMigrationPreviewRepository {
     ignoreReason?: string;
     decidedBy: string;
   }): Promise<{ changed: boolean }>;
+  saveBulkDecision(input: BulkReviewScope): Promise<{
+    changed: number;
+    remaining: number;
+  }>;
 }
 
 function targetOrder(column: typeof actMigrationProposals.targetEntityType) {
@@ -206,6 +219,52 @@ function sameDecision(
     left.decisionReason === right.decisionReason &&
     left.chosenLocalEntityId === right.chosenLocalEntityId &&
     left.primarySourceId === right.primarySourceId;
+}
+
+function scopeIssue(input: BulkReviewScope) {
+  return input.issue ?? null;
+}
+
+async function bulkDependencyStates(
+  transaction: DrizzleTransaction,
+  runId: string,
+  proposals: readonly StoredProposalRow[],
+): Promise<BulkReviewDependencyStates> {
+  const dependencyProposalKeys = [...new Set(proposals.flatMap(
+    ({ dependencyProposalKeys: keys }) => keys,
+  ))];
+  if (dependencyProposalKeys.length === 0) {
+    return { appliedEntityIds: new Set(), frozenParentDecisions: new Map() };
+  }
+  const parents = await transaction
+    .select({
+      proposalKey: actMigrationProposals.proposalKey,
+      decision: actMigrationProposals.decision,
+    })
+    .from(actMigrationProposals)
+    .where(and(
+      eq(actMigrationProposals.runId, runId),
+      inArray(actMigrationProposals.proposalKey, dependencyProposalKeys),
+    ))
+    .for("update");
+  const appliedRecords = await transaction
+    .select({ proposalKey: actMigrationRecords.proposalKey })
+    .from(actMigrationRecords)
+    .where(and(
+      eq(actMigrationRecords.runId, runId),
+      inArray(actMigrationRecords.proposalKey, dependencyProposalKeys),
+      isNotNull(actMigrationRecords.appliedEntityId),
+    ))
+    .for("update");
+  return {
+    appliedEntityIds: new Set(appliedRecords.flatMap(({ proposalKey }) =>
+      proposalKey ? [proposalKey] : []
+    )),
+    frozenParentDecisions: new Map(parents.map(({ proposalKey, decision }) => [
+      proposalKey,
+      decision as MigrationDecision | null,
+    ])),
+  };
 }
 
 export class DrizzleActMigrationPreviewRepository
@@ -555,6 +614,130 @@ export class DrizzleActMigrationPreviewRepository
     return preview;
   }
 
+  saveBulkDecision(input: BulkReviewScope): Promise<{
+    changed: number;
+    remaining: number;
+  }> {
+    return this.database.transaction(async (transaction) => {
+      const [run] = await transaction
+        .select({ id: actMigrationRuns.id, status: actMigrationRuns.status })
+        .from(actMigrationRuns)
+        .where(eq(actMigrationRuns.id, input.runId))
+        .limit(1)
+        .for("update");
+      if (!run) throw new ActMigrationRunNotFoundError();
+      if (run.status !== "previewed") {
+        throw new Error("Act migration preview is not ready for review decisions.");
+      }
+      if (input.decision !== "approve_proposed" && input.decision !== "ignore") {
+        throw new Error("Act migration bulk decision must approve or ignore proposals.");
+      }
+      const decisionReason = input.decision === "ignore"
+        ? input.reason?.trim() || null
+        : null;
+      if (input.decision === "ignore" && !decisionReason) {
+        throw new Error("Act migration bulk ignore decision requires a reason.");
+      }
+      const issue = scopeIssue(input);
+      const scope = and(
+        eq(actMigrationProposals.runId, input.runId),
+        eq(actMigrationProposals.targetEntityType, input.target),
+        eq(actMigrationProposals.state, input.state),
+        eq(actMigrationProposals.reviewState, "pending"),
+        issue === null
+          ? isNull(actMigrationProposals.issueCode)
+          : eq(actMigrationProposals.issueCode, issue),
+      );
+      const locked = await transaction
+        .select()
+        .from(actMigrationProposals)
+        .where(scope)
+        .orderBy(
+          targetOrder(actMigrationProposals.targetEntityType),
+          asc(actMigrationProposals.proposalKey),
+        )
+        .limit(100)
+        .for("update", { skipLocked: true });
+      if (locked.length > 0) {
+        const scheduled = await transaction
+          .select({ proposalKey: actMigrationApplyOperations.proposalKey })
+          .from(actMigrationApplyOperations)
+          .where(and(
+            eq(actMigrationApplyOperations.runId, input.runId),
+            inArray(
+              actMigrationApplyOperations.proposalKey,
+              locked.map(({ proposalKey }) => proposalKey),
+            ),
+          ))
+          .limit(1)
+          .for("key share");
+        if (scheduled.length > 0) {
+          throw new Error("Act migration proposal decision is scheduled and cannot be changed.");
+        }
+      }
+      const dependencies = await bulkDependencyStates(transaction, input.runId, locked);
+      const selected = input.decision === "approve_proposed"
+        ? locked.filter((proposal) => bulkReviewEligibility(
+          structuralProposal(proposal),
+          dependencies,
+        ))
+        : locked;
+      const nextReviewState = input.decision === "ignore" ? "ignored" : "decided";
+      const now = new Date();
+      for (const proposal of selected) {
+        const previousDecision = decisionMetadata(proposal);
+        const nextDecision = {
+          decision: input.decision,
+          decisionReason,
+          chosenLocalEntityId: null,
+          primarySourceId: null,
+        };
+        await transaction
+          .update(actMigrationProposals)
+          .set({ ...nextDecision, decidedBy: input.actor, decidedAt: now, updatedAt: now })
+          .where(eq(actMigrationProposals.id, proposal.id));
+        if (proposal.sourceRecordKeys.length > 0) {
+          await transaction
+            .update(actMigrationRecords)
+            .set({ reviewState: nextReviewState, updatedAt: now })
+            .where(and(
+              eq(actMigrationRecords.runId, input.runId),
+              inArray(actMigrationRecords.sourceKey, proposal.sourceRecordKeys),
+              inArray(actMigrationRecords.reviewState, ["pending", "decided", "ignored"]),
+            ));
+        }
+        await transaction.insert(auditEntries).values({
+          entityType: "act_migration_proposal",
+          entityId: proposal.id,
+          action: "review_decision_changed",
+          before: previousDecision,
+          after: nextDecision,
+        });
+      }
+
+      const pending = await transaction
+        .select()
+        .from(actMigrationProposals)
+        .where(scope)
+        .orderBy(
+          targetOrder(actMigrationProposals.targetEntityType),
+          asc(actMigrationProposals.proposalKey),
+        );
+      const pendingDependencies = await bulkDependencyStates(
+        transaction,
+        input.runId,
+        pending,
+      );
+      const remaining = input.decision === "ignore"
+        ? pending.length
+        : pending.filter((proposal) => bulkReviewEligibility(
+          structuralProposal(proposal),
+          pendingDependencies,
+        )).length;
+      return { changed: selected.length, remaining };
+    });
+  }
+
   saveDecision(input: {
     runId: string;
     proposalKey: string;
@@ -573,6 +756,18 @@ export class DrizzleActMigrationPreviewRepository
         .for("update");
       if (!run) throw new ActMigrationRunNotFoundError();
       if (run.status !== "previewed") {
+        const [scheduled] = await transaction
+          .select({ id: actMigrationApplyOperations.id })
+          .from(actMigrationApplyOperations)
+          .where(and(
+            eq(actMigrationApplyOperations.runId, input.runId),
+            eq(actMigrationApplyOperations.proposalKey, input.proposalKey),
+          ))
+          .limit(1)
+          .for("key share");
+        if (scheduled) {
+          throw new Error("Act migration proposal decision is scheduled and cannot be changed.");
+        }
         throw new Error("Act migration preview is not ready for review decisions.");
       }
       const [proposal] = await transaction
@@ -585,6 +780,18 @@ export class DrizzleActMigrationPreviewRepository
         .limit(1)
         .for("update");
       if (!proposal) throw new Error("Act migration proposal is missing.");
+      const [scheduled] = await transaction
+        .select({ id: actMigrationApplyOperations.id })
+        .from(actMigrationApplyOperations)
+        .where(and(
+          eq(actMigrationApplyOperations.runId, input.runId),
+          eq(actMigrationApplyOperations.proposalKey, input.proposalKey),
+        ))
+        .limit(1)
+        .for("key share");
+      if (scheduled) {
+        throw new Error("Act migration proposal decision is scheduled and cannot be changed.");
+      }
 
       const allowed = allowedDecisionsForProposal({
         state: proposal.state as MigrationPreviewState,
