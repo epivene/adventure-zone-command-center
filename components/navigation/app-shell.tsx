@@ -4,7 +4,8 @@ import type { ReactNode } from "react";
 const navigation = [
   { href: "/today", label: "Today" },
   { href: "/bookings", label: "Bookings" },
-  { href: "/organizations", label: "Places & people" },
+  { href: "/organizations", label: "Places" },
+  { href: "/contacts", label: "Contacts" },
   { href: "/calendar", label: "Calendar" },
   { href: "/routes", label: "Routes" },
 ];

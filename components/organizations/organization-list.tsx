@@ -16,6 +16,11 @@ function listHref(query: OrganizationListQuery) {
   return suffix ? `/organizations?${suffix}` : "/organizations";
 }
 
+function detailHref(organizationId: string, query: OrganizationListQuery) {
+  const params = new URLSearchParams({ returnTo: listHref(query) });
+  return `/organizations/${organizationId}?${params.toString()}`;
+}
+
 export function OrganizationList({
   organizations,
   query,
@@ -33,7 +38,7 @@ export function OrganizationList({
         method="get"
       >
         <label className="grid gap-1 text-sm font-semibold">
-          Search places and people
+          Search places and contacts
           <input
             defaultValue={query.search}
             name="q"
@@ -85,7 +90,7 @@ export function OrganizationList({
                   <div className="flex flex-wrap items-center gap-2">
                     <Link
                       className="text-lg font-bold hover:text-orange-700"
-                      href={`/organizations/${organization.id}`}
+                      href={detailHref(organization.id, query)}
                     >
                       {organization.name}
                     </Link>
@@ -96,7 +101,7 @@ export function OrganizationList({
                     ) : null}
                   </div>
                   <p className="mt-1 text-sm text-slate-600">
-                    {organization.contactCount} people to call · {organization.bookingCount} booking opportunities
+                    {organization.contactCount} contacts to call · {organization.bookingCount} booking opportunities
                   </p>
                   {organization.lastResortReason ? (
                     <p className="mt-2 text-sm text-rose-800">
@@ -104,8 +109,8 @@ export function OrganizationList({
                     </p>
                   ) : null}
                 </div>
-                <Link className="button-secondary text-center" href={`/organizations/${organization.id}`}>
-                  View place and people
+                <Link className="button-secondary text-center" href={detailHref(organization.id, query)}>
+                  View place
                 </Link>
               </div>
             </li>
@@ -120,7 +125,7 @@ export function OrganizationList({
         </div>
       )}
       {organizations.pageCount > 1 ? (
-        <nav aria-label="Organization pages" className="flex items-center justify-between gap-3">
+        <nav aria-label="Places pages" className="flex items-center justify-between gap-3">
           {organizations.page > 1 ? (
             <Link className="button-secondary" href={listHref({ ...query, page: organizations.page - 1 })}>
               Previous
