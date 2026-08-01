@@ -17,14 +17,11 @@ services:
       # by the db library when this key is present).
       - key: RENDER_DATABASE_URL
         sync: false
-      # Clerk backend secret key (starts with sk_live_...).
-      - key: CLERK_SECRET_KEY
+      # Secret used to sign login tokens (any long random string).
+      - key: SESSION_SECRET
         sync: false
-      # Clerk publishable key (starts with pk_live_...).
-      - key: CLERK_PUBLISHABLE_KEY
-        sync: false
-      # Your Clerk user ID (e.g. user_2abc...). All CRM routes require this.
-      - key: OWNER_CLERK_USER_ID
+      # The owner password used to sign in to the app.
+      - key: OWNER_PASSWORD
         sync: false
 
   # ── Vite static frontend ─────────────────────────────────────────────────────
@@ -43,12 +40,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # Clerk publishable key for the browser (starts with pk_live_...).
-      - key: VITE_CLERK_PUBLISHABLE_KEY
-        sync: false
-      # Clerk proxy URL — must point to the API service so cookie-based auth
-      # works across the Render domain.
-      # Format: https://<adventure-zone-api Render URL>/api/__clerk
-      # Set this AFTER the API service is live and you know its URL.
-      - key: VITE_CLERK_PROXY_URL
+      # Base URL of the API service, e.g. https://adventure-zone-api.onrender.com
+      # (no trailing slash). Set this AFTER the API service is live and you know
+      # its URL.
+      - key: VITE_API_BASE_URL
         sync: false

@@ -10,13 +10,17 @@ import activitiesRouter from "./activities";
 import callsRouter from "./calls";
 import eventProfilesRouter from "./event-profiles";
 import settingsRouter from "./settings";
+import authRouter from "./auth";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+// Auth routes are mounted before the owner middleware; login is public and
+// /auth/me enforces auth itself.
+router.use(authRouter);
 
-// All app routes require the owner's Clerk session
+// All other app routes require the owner's bearer token
 router.use(requireOwnerMiddleware);
 router.use(todayRouter);
 router.use(bookingsRouter);

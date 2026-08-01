@@ -1,13 +1,44 @@
-// Module-level token store so action functions can include auth headers
-// without needing React hook context.
-let currentToken: string | null = null;
+// Token store backed by localStorage so the owner session persists across
+// page reloads (~30 days, enforced server-side by the token's expiry).
+const STORAGE_KEY = "az_owner_token";
+
+type AuthChangeListener = (token: string | null) => void;
+const listeners = new Set<AuthChangeListener>();
+
+export function onAuthChange(listener: AuthChangeListener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 export function setAuthToken(token: string | null) {
-  currentToken = token;
+  try {
+    if (token) {
+      localStorage.setItem(STORAGE_KEY, token);
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch {
+    // localStorage unavailable — session just won't persist.
+  }
+  listeners.forEach((listener) => listener(token));
 }
 
 export function getAuthToken(): string | null {
-  return currentToken;
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+// Optional absolute API origin (e.g. the Render API service URL). Empty on
+// Replit, where /api is same-origin behind the shared proxy.
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
+function apiRoot(): string {
+  if (apiBaseUrl) return `${apiBaseUrl}/api`;
+  const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+  return `${base}/api`;
 }
 
 /** Authenticated fetch wrapper. Adds Authorization header when token is present. */
@@ -15,13 +46,20 @@ export async function apiFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string>),
   };
-  // Auth is cookie-based (Clerk session cookie, same-origin) — no token header.
-  return fetch(`${base}/api${path}`, { ...options, headers, credentials: "include" });
+  const token = getAuthToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+  const res = await fetch(`${apiRoot()}${path}`, { ...options, headers });
+  // Expired/invalid token: clear it so the app returns to sign-in.
+  if (res.status === 401 && token && path !== "/auth/login") {
+    setAuthToken(null);
+  }
+  return res;
 }
 
 export async function apiGet<T>(path: string): Promise<T> {

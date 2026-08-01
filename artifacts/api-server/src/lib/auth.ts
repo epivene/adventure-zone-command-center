@@ -1,45 +1,102 @@
 import type { NextFunction, Request, Response } from "express";
-import { getAuth } from "@clerk/express";
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // ~30 days
 
 /**
- * Logs a startup warning if OWNER_CLERK_USER_ID is not configured.
- * The middleware fails closed regardless — all protected requests return 403
- * when the env var is absent — but this surfaces the misconfiguration early.
+ * Logs a startup warning if OWNER_PASSWORD or SESSION_SECRET is not
+ * configured. The middleware fails closed regardless — all protected
+ * requests return 401 when either env var is absent — but this surfaces
+ * the misconfiguration early.
  */
 export function validateOwnerConfig(): void {
-  const ownerId = process.env.OWNER_CLERK_USER_ID?.trim();
-  if (!ownerId) {
+  if (!process.env.OWNER_PASSWORD) {
     // eslint-disable-next-line no-console
     console.warn(
-      "[auth] WARNING: OWNER_CLERK_USER_ID is not set. " +
-      "All protected CRM routes will return 403 until this is configured. " +
-      "Set it to your Clerk user ID (e.g. user_xxx) in the environment secrets.",
+      "[auth] WARNING: OWNER_PASSWORD is not set. " +
+        "Login is disabled and all protected CRM routes will return 401 until it is configured.",
+    );
+  }
+  if (!process.env.SESSION_SECRET) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[auth] WARNING: SESSION_SECRET is not set. " +
+        "Tokens cannot be signed or verified; all protected CRM routes will return 401 until it is configured.",
     );
   }
 }
 
+function timingSafeStringEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, "utf8");
+  const bufB = Buffer.from(b, "utf8");
+  if (bufA.length !== bufB.length) {
+    // Still perform a comparison to keep timing uniform.
+    timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
+
+function sign(payload: string, secret: string): string {
+  return createHmac("sha256", secret).update(payload).digest("base64url");
+}
+
 /**
- * Requires a signed-in Clerk user AND that the user matches the configured
- * OWNER_CLERK_USER_ID. Fails closed: returns 403 for any authenticated user
- * who is not the owner, and also if the env var is not configured at all.
+ * Verifies the owner password (timing-safe). Fails closed when
+ * OWNER_PASSWORD is unset.
+ */
+export function verifyOwnerPassword(password: string): boolean {
+  const expected = process.env.OWNER_PASSWORD;
+  if (!expected) return false;
+  return timingSafeStringEqual(password, expected);
+}
+
+/**
+ * Issues an HMAC-signed bearer token: `owner.<expiresAtMs>.<signature>`.
+ * Returns null when SESSION_SECRET is unset (fail closed).
+ */
+export function issueToken(): { token: string; expiresAt: string } | null {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return null;
+  const expiresAtMs = Date.now() + TOKEN_TTL_MS;
+  const payload = `owner.${expiresAtMs}`;
+  const token = `${payload}.${sign(payload, secret)}`;
+  return { token, expiresAt: new Date(expiresAtMs).toISOString() };
+}
+
+/**
+ * Verifies a bearer token's signature (timing-safe) and expiry.
+ * Fails closed when SESSION_SECRET is unset.
+ */
+export function verifyToken(token: string): boolean {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) return false;
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "owner") return false;
+  const expiresAtMs = Number(parts[1]);
+  if (!Number.isFinite(expiresAtMs)) return false;
+  const payload = `${parts[0]}.${parts[1]}`;
+  if (!timingSafeStringEqual(parts[2] ?? "", sign(payload, secret))) {
+    return false;
+  }
+  return Date.now() < expiresAtMs;
+}
+
+/**
+ * Requires a valid owner bearer token. Fails closed: returns 401 when the
+ * Authorization header is missing/invalid, the token is expired, or the
+ * server is missing SESSION_SECRET.
  */
 export function requireOwnerMiddleware(
   req: Request,
   res: Response,
   next: NextFunction,
 ): void {
-  const auth = getAuth(req);
-  const userId = auth?.userId ?? null;
-  if (!userId) {
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token || !verifyToken(token)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const ownerId = process.env.OWNER_CLERK_USER_ID?.trim();
-  // Fail closed: if env var is absent OR user is not the owner, block.
-  if (!ownerId || userId !== ownerId) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  (req as Request & { userId?: string }).userId = userId;
   next();
 }

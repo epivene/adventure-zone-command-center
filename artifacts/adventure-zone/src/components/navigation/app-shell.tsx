@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import type { ReactNode } from "react";
+import { useAuth } from "@/lib/auth-context";
 
 const navigation = [
   { href: "/today", label: "Today" },
@@ -19,6 +20,19 @@ function CreateEventButton({ className }: { className: string }) {
     >
       New event
     </Link>
+  );
+}
+
+function SignOutButton({ className }: { className: string }) {
+  const { signOut } = useAuth();
+  return (
+    <button
+      type="button"
+      className={`${className} rounded-lg px-3 py-2 text-left font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600`}
+      onClick={signOut}
+    >
+      Sign out
+    </button>
   );
 }
 
@@ -55,6 +69,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </details>
         </nav>
         <CreateEventButton className="mt-auto" />
+        <SignOutButton className="mt-2" />
       </aside>
 
       <main className="min-h-screen px-4 py-6 pb-28 md:ml-64 md:px-8 md:py-8 md:pb-8">
@@ -85,6 +100,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               Packages &amp; resources
             </Link>
+            <SignOutButton className="text-sm" />
           </div>
         </details>
         <CreateEventButton className="flex items-center" />

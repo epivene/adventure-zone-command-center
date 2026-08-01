@@ -1,8 +1,8 @@
-import { ClerkProvider, Show, SignIn, SignUp } from "@clerk/react";
-import { publishableKeyFromHost } from "@clerk/react/internal";
+import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
 
+import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/navigation/app-shell";
 import { OfflineBanner } from "@/components/connectivity/offline-banner";
 
@@ -34,38 +34,6 @@ const queryClient = new QueryClient({
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-// REQUIRED — resolves the key from the current hostname so the same build
-// serves multiple Clerk custom domains.
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-
-// Empty in dev (Clerk hits dev FAPI directly), auto-set in prod.
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
-
-// Clerk passes full paths to routerPush/routerReplace, but wouter's
-// setLocation prepends the base — strip it to avoid doubling.
-function stripBase(path: string): string {
-  return basePath && path.startsWith(basePath)
-    ? path.slice(basePath.length) || "/"
-    : path;
-}
-
-const clerkAppearance = {
-  variables: {
-    colorPrimary: "#ea580c",
-    colorForeground: "#0f172a",
-    colorMutedForeground: "#64748b",
-    colorBackground: "#ffffff",
-    colorInput: "#ffffff",
-    colorInputForeground: "#0f172a",
-    colorNeutral: "#334155",
-    colorDanger: "#dc2626",
-    borderRadius: "0.5rem",
-  },
-};
-
 function AuthScreen({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
@@ -79,17 +47,60 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
 }
 
 function SignInPage() {
-  return (
-    <AuthScreen>
-      <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} />
-    </AuthScreen>
-  );
-}
+  const { isSignedIn, signIn } = useAuth();
+  const [, setLocation] = useLocation();
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-function SignUpPage() {
+  if (isSignedIn) return <Redirect to="/today" />;
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setError(null);
+    const result = await signIn(password);
+    setSubmitting(false);
+    if (result.ok) {
+      setLocation("/today");
+    } else {
+      setError(result.error);
+    }
+  }
+
   return (
     <AuthScreen>
-      <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />
+      <form
+        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+        onSubmit={handleSubmit}
+      >
+        <label className="block text-sm font-semibold text-slate-700" htmlFor="owner-password">
+          Password
+        </label>
+        <input
+          autoFocus
+          autoComplete="current-password"
+          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
+          id="owner-password"
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Enter your password"
+          type="password"
+          value={password}
+        />
+        {error ? (
+          <p className="mt-3 text-sm font-medium text-red-600" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <button
+          className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-60"
+          disabled={submitting || password.length === 0}
+          type="submit"
+        >
+          {submitting ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
     </AuthScreen>
   );
 }
@@ -113,28 +124,25 @@ function Landing() {
   );
 }
 
-function HomeRoute() {
+function LoadingScreen() {
   return (
-    <>
-      <Show when="signed-in">
-        <Redirect to="/today" />
-      </Show>
-      <Show when="signed-out">
-        <Landing />
-      </Show>
-    </>
+    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50">
+      <p className="text-sm font-medium text-slate-500">Loading…</p>
+    </div>
   );
 }
 
+function HomeRoute() {
+  const { isSignedIn } = useAuth();
+  if (isSignedIn === null) return <LoadingScreen />;
+  return isSignedIn ? <Redirect to="/today" /> : <Landing />;
+}
+
 function Protected({ children }: { children: React.ReactNode }) {
-  return (
-    <>
-      <Show when="signed-in">{children}</Show>
-      <Show when="signed-out">
-        <Redirect to="/" />
-      </Show>
-    </>
-  );
+  const { isSignedIn } = useAuth();
+  if (isSignedIn === null) return <LoadingScreen />;
+  if (!isSignedIn) return <Redirect to="/" />;
+  return <>{children}</>;
 }
 
 function SettingsStub() {
@@ -150,8 +158,7 @@ function AppRoutes() {
   return (
     <Switch>
       <Route path="/" component={HomeRoute} />
-      <Route path="/sign-in/*?" component={SignInPage} />
-      <Route path="/sign-up/*?" component={SignUpPage} />
+      <Route path="/sign-in" component={SignInPage} />
       <Route>
         <Protected>
           <AppShell>
@@ -186,30 +193,15 @@ function AppRoutes() {
   );
 }
 
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-  return (
-    <ClerkProvider
-      publishableKey={clerkPubKey}
-      proxyUrl={clerkProxyUrl}
-      appearance={clerkAppearance}
-      signInUrl={`${basePath}/sign-in`}
-      signUpUrl={`${basePath}/sign-up`}
-      routerPush={(to) => setLocation(stripBase(to))}
-      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-    >
-      <QueryClientProvider client={queryClient}>
-        <OfflineBanner />
-        <AppRoutes />
-      </QueryClientProvider>
-    </ClerkProvider>
-  );
-}
-
 function App() {
   return (
     <WouterRouter base={basePath}>
-      <ClerkProviderWithRoutes />
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <OfflineBanner />
+          <AppRoutes />
+        </QueryClientProvider>
+      </AuthProvider>
     </WouterRouter>
   );
 }

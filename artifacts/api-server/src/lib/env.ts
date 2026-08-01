@@ -1,9 +1,5 @@
 import { z } from "zod";
 
-const serverEnvironmentSchema = z.object({
-  OWNER_CLERK_USER_ID: z.string().trim().min(1),
-});
-
 const actEnvironmentSchema = z.object({
   ACT_API_BASE_URL: z.literal("https://apius.act.com/act.web.api"),
   ACT_DATABASE_NAME: z.string().trim().min(1),
@@ -12,12 +8,6 @@ const actEnvironmentSchema = z.object({
 });
 
 export type EnvironmentSource = Record<string, string | undefined>;
-
-export function getServerEnvironment() {
-  return serverEnvironmentSchema.parse({
-    OWNER_CLERK_USER_ID: process.env.OWNER_CLERK_USER_ID,
-  });
-}
 
 export function parseActEnvironment(source: EnvironmentSource):
   | { configured: false }
