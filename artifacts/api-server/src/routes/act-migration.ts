@@ -506,6 +506,25 @@ router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
           }
         : undefined;
 
+    // ── Date range ──────────────────────────────────────────────────────────
+    // Default: last 12 months. The frontend always sends ISO date strings.
+    const now = new Date();
+    const defaultFrom = new Date(now);
+    defaultFrom.setFullYear(defaultFrom.getFullYear() - 1);
+
+    const fromDate: Date = body.fromDate ? new Date(body.fromDate as string) : defaultFrom;
+    const toDate: Date = body.toDate ? new Date(body.toDate as string) : now;
+
+    // Clamp toDate to end-of-day so a "today" date includes today's records.
+    toDate.setHours(23, 59, 59, 999);
+
+    const fromIso = fromDate.toISOString();
+    const toIso   = toDate.toISOString();
+
+    // OData $filter expressions — activities use scheduleDate, notes/history use createDate.
+    const activityFilter = `scheduleDate ge ${fromIso} and scheduleDate le ${toIso}`;
+    const dateFilter     = `createDate ge ${fromIso} and createDate le ${toIso}`;
+
     const [
       { ActApiError },
       { ActClient },
@@ -551,11 +570,12 @@ router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
     type PageRequest = Parameters<typeof sourceClient.listActivities>[0];
     const streams: {
       name: StreamName;
+      filter: string;
       list: (req: PageRequest) => ReturnType<typeof sourceClient.listActivities>;
     }[] = [
-      { name: "activity", list: (r) => sourceClient.listActivities(r) },
-      { name: "note",     list: (r) => sourceClient.listNotes(r) },
-      { name: "history",  list: (r) => sourceClient.listHistory(r) },
+      { name: "activity", filter: activityFilter, list: (r) => sourceClient.listActivities(r) },
+      { name: "note",     filter: dateFilter,     list: (r) => sourceClient.listNotes(r) },
+      { name: "history",  filter: dateFilter,     list: (r) => sourceClient.listHistory(r) },
     ];
 
     const PAGE_SIZE = 100;
@@ -570,7 +590,7 @@ router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
 
       while (fetched < SCAN_CAP_PER_STREAM) {
         const top = Math.min(PAGE_SIZE, SCAN_CAP_PER_STREAM - fetched);
-        const page = await stream.list({ skip, top, queryMode });
+        const page = await stream.list({ skip, top, queryMode, filter: stream.filter });
 
         // Projected-to-plain fallback: the source client returns queryMode "plain"
         // (with nextSkip still at the current skip and items=[]) to signal the
@@ -612,6 +632,8 @@ router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
       routeCount: routeNames.length,
       matched: result.matched,
       unmatched: result.unmatched,
+      fromDate: fromIso,
+      toDate: toIso,
     });
   } catch (err: unknown) {
     req.log?.error({ err }, "Route scan failed");

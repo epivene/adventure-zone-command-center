@@ -161,6 +161,9 @@ export class HttpActMigrationSourceClient
     }
     query.$skip = String(request.skip);
     query.$top = String(request.top);
+    if (request.filter) {
+      query.$filter = request.filter;
+    }
 
     const items = pageItems(
       await this.transport.requestJson({

@@ -338,6 +338,8 @@ export type ActPageRequest = {
   skip: number;
   top: number;
   queryMode: ActQueryMode;
+  /** Optional OData $filter string applied to the request (e.g. for date range scans). */
+  filter?: string;
 };
 
 export type ActPage = {

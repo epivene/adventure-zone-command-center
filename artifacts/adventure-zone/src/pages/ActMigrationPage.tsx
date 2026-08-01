@@ -66,6 +66,8 @@ interface ScanResult {
   routeCount: number;
   matched: RouteMatchGroup[];
   unmatched: ScanItem[];
+  fromDate?: string;
+  toDate?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -410,6 +412,11 @@ function ScanResults({ result }: { result: ScanResult }) {
         <span>
           <strong className="text-slate-800">{result.unmatched.length.toLocaleString()}</strong> unmatched items
         </span>
+        {result.fromDate && result.toDate && (
+          <span className="w-full text-xs text-slate-400">
+            Date range: {formatDate(result.fromDate)} — {formatDate(result.toDate)}
+          </span>
+        )}
       </div>
 
       {result.matched.length === 0 && (
@@ -479,6 +486,16 @@ export default function ActMigrationPage() {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+
+  // Default date range: last 12 months → today
+  const [scanFromDate, setScanFromDate] = useState<string>(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().slice(0, 10);
+  });
+  const [scanToDate, setScanToDate] = useState<string>(() => {
+    return new Date().toISOString().slice(0, 10);
+  });
 
   // ─── Polling ─────────────────────────────────────────────────────────────
 
@@ -567,7 +584,11 @@ export default function ActMigrationPage() {
     setScanResult(null);
     setScanning(true);
     try {
-      const body = creds ?? {};
+      const body = {
+        ...(creds ?? {}),
+        fromDate: scanFromDate || undefined,
+        toDate: scanToDate || undefined,
+      };
       const res = await apiFetch("/migration/act/scan-routes", {
         method: "POST",
         body: JSON.stringify(body),
@@ -658,6 +679,28 @@ export default function ActMigrationPage() {
           Scan Act! activities, notes, and email history for mentions of known routes (organizations).
           Up to 500 items per stream are checked. No data is written.
         </p>
+
+        {/* Date range */}
+        <div className="mb-4 flex flex-wrap gap-4">
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-sm font-medium text-slate-700 mb-1">From date</label>
+            <input
+              type="date"
+              value={scanFromDate}
+              onChange={(e) => setScanFromDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200"
+            />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <label className="block text-sm font-medium text-slate-700 mb-1">To date</label>
+            <input
+              type="date"
+              value={scanToDate}
+              onChange={(e) => setScanToDate(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-200"
+            />
+          </div>
+        </div>
 
         {envConfigured ? (
           <div className="space-y-4">
