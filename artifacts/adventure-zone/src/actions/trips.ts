@@ -1,4 +1,4 @@
-import { apiDelete, apiPatch, apiPost } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -113,4 +113,26 @@ export function addTripResourceAction(tripId: string, resourceId: string) {
 
 export function removeTripResourceAction(tripId: string, resourceId: string) {
   return run(() => apiDelete<ApiResponse>(`/trips/${tripId}/resources/${resourceId}`));
+}
+
+export type GeocodeCandidate = {
+  latitude: number;
+  longitude: number;
+  displayName: string;
+};
+
+export type GeocodeResult =
+  | { ok: true; results: GeocodeCandidate[] }
+  | { ok: false; error: string; code?: string };
+
+export async function geocodeAddressAction(query: string): Promise<GeocodeResult> {
+  try {
+    const response = await apiGet<{ ok: boolean; results?: GeocodeCandidate[]; error?: string; code?: string }>(
+      `/trips/geocode?q=${encodeURIComponent(query)}`,
+    );
+    if (response.ok && response.results) return { ok: true, results: response.results };
+    return { ok: false, error: response.error ?? "No results found.", code: response.code };
+  } catch (error: any) {
+    return { ok: false, error: error?.message ?? "Geocoding unavailable." };
+  }
 }

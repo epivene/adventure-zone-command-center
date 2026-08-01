@@ -11,6 +11,10 @@ import {
   OsrmRoutingProvider,
   RoutingEstimator,
 } from "@/features/trips/routing";
+import {
+  GeocodingUnavailableError,
+  NominatimGeocodingProvider,
+} from "@/features/trips/geocoding";
 
 const router: IRouter = Router();
 
@@ -121,6 +125,29 @@ router.post("/trips", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to create trip");
     res.status(500).json({ ok: false, error: "Could not create trip" });
+  }
+});
+
+// Must be defined BEFORE /:id so "geocode" isn't treated as a trip id.
+const geocoder = new NominatimGeocodingProvider();
+
+router.get("/trips/geocode", async (req, res): Promise<void> => {
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (!q) {
+    res.status(400).json({ ok: false, error: "Query parameter 'q' is required." });
+    return;
+  }
+  try {
+    const results = await geocoder.geocode(q);
+    res.json({ ok: true, results });
+  } catch (err) {
+    if (err instanceof GeocodingUnavailableError) {
+      const status = err.code === "no_results" ? 404 : 502;
+      res.status(status).json({ ok: false, error: err.message, code: err.code });
+      return;
+    }
+    req.log.error({ err }, "Geocoding failed unexpectedly");
+    res.status(500).json({ ok: false, error: "Geocoding unavailable." });
   }
 });
 

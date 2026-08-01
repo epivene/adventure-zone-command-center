@@ -22,12 +22,14 @@ import {
   addTripStopAction,
   applySuggestedOrderAction,
   deleteTripAction,
+  geocodeAddressAction,
   overrideTripSegmentAction,
   refreshTripEstimatesAction,
   removeTripResourceAction,
   removeTripStopAction,
   reorderTripStopsAction,
   updateTripAction,
+  type GeocodeCandidate,
 } from "@/actions/trips";
 import { EventMap } from "@/components/routes/event-map";
 
@@ -208,6 +210,41 @@ export default function TripDetailPage() {
     endLng: "",
   });
   const [overrideDrafts, setOverrideDrafts] = useState<Record<string, { miles: string; minutes: string }>>({});
+
+  type GeoState = { loading: boolean; error: string | null; candidates: GeocodeCandidate[] };
+  const geoInit: GeoState = { loading: false, error: null, candidates: [] };
+  const [startGeo, setStartGeo] = useState<GeoState>(geoInit);
+  const [endGeo, setEndGeo] = useState<GeoState>(geoInit);
+
+  async function findCoordinates(
+    label: string,
+    setGeo: React.Dispatch<React.SetStateAction<GeoState>>,
+  ) {
+    if (!label.trim()) {
+      setGeo({ loading: false, error: "Enter a label first, then click Find.", candidates: [] });
+      return;
+    }
+    setGeo({ loading: true, error: null, candidates: [] });
+    const result = await geocodeAddressAction(label.trim());
+    if (result.ok) {
+      setGeo({ loading: false, error: null, candidates: result.results });
+    } else {
+      setGeo({ loading: false, error: result.error, candidates: [] });
+    }
+  }
+
+  function pickCandidate(
+    candidate: GeocodeCandidate,
+    which: "start" | "end",
+    setGeo: React.Dispatch<React.SetStateAction<GeoState>>,
+  ) {
+    setEndpoints((prev) =>
+      which === "start"
+        ? { ...prev, startLat: String(candidate.latitude), startLng: String(candidate.longitude) }
+        : { ...prev, endLat: String(candidate.latitude), endLng: String(candidate.longitude) },
+    );
+    setGeo(geoInit);
+  }
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const load = useCallback(async () => {
@@ -619,12 +656,15 @@ export default function TripDetailPage() {
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-xl font-bold">Start & end</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Defaults to the leg's base. Coordinates enable road estimates.
+              Defaults to the leg's base. Coordinates enable road estimates — type a label and click
+              <strong> Find</strong> to look them up automatically.
             </p>
             <form
-              className="mt-3 grid gap-3"
+              className="mt-3 grid gap-4"
               onSubmit={(event) => {
                 event.preventDefault();
+                setStartGeo(geoInit);
+                setEndGeo(geoInit);
                 runAction(() =>
                   updateTripAction(tripId, {
                     startLabel: endpoints.startLabel.trim() || trip.startLabel,
@@ -637,62 +677,142 @@ export default function TripDetailPage() {
                 );
               }}
             >
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Start label
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 font-normal"
-                  onChange={(event) => setEndpoints({ ...endpoints, startLabel: event.target.value })}
-                  value={endpoints.startLabel}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  aria-label="Start latitude"
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  onChange={(event) => setEndpoints({ ...endpoints, startLat: event.target.value })}
-                  placeholder="Lat"
-                  step="any"
-                  type="number"
-                  value={endpoints.startLat}
-                />
-                <input
-                  aria-label="Start longitude"
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  onChange={(event) => setEndpoints({ ...endpoints, startLng: event.target.value })}
-                  placeholder="Lng"
-                  step="any"
-                  type="number"
-                  value={endpoints.startLng}
-                />
+              {/* ── Start ── */}
+              <div className="grid gap-2">
+                <div className="flex items-end gap-2">
+                  <label className="grid min-w-0 flex-1 gap-1 text-sm font-semibold text-slate-700">
+                    Start label
+                    <input
+                      className="rounded-lg border border-slate-300 px-3 py-2 font-normal"
+                      onChange={(event) => {
+                        setEndpoints({ ...endpoints, startLabel: event.target.value });
+                        setStartGeo(geoInit);
+                      }}
+                      value={endpoints.startLabel}
+                    />
+                  </label>
+                  <button
+                    className="button-secondary shrink-0 self-end"
+                    disabled={startGeo.loading}
+                    onClick={() => findCoordinates(endpoints.startLabel, setStartGeo)}
+                    type="button"
+                  >
+                    {startGeo.loading ? "Finding…" : "Find"}
+                  </button>
+                </div>
+                {startGeo.error ? (
+                  <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                    {startGeo.error}
+                  </p>
+                ) : null}
+                {startGeo.candidates.length > 0 ? (
+                  <ul className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm shadow-sm">
+                    {startGeo.candidates.map((candidate) => (
+                      <li key={`${candidate.latitude},${candidate.longitude}`}>
+                        <button
+                          className="w-full px-3 py-2 text-left hover:bg-orange-50 focus:bg-orange-50 focus:outline-none"
+                          onClick={() => pickCandidate(candidate, "start", setStartGeo)}
+                          type="button"
+                        >
+                          <span className="block font-medium text-slate-900 truncate">{candidate.displayName}</span>
+                          <span className="block text-xs text-slate-500">
+                            {candidate.latitude.toFixed(5)}, {candidate.longitude.toFixed(5)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    aria-label="Start latitude"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    onChange={(event) => setEndpoints({ ...endpoints, startLat: event.target.value })}
+                    placeholder="Lat"
+                    step="any"
+                    type="number"
+                    value={endpoints.startLat}
+                  />
+                  <input
+                    aria-label="Start longitude"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    onChange={(event) => setEndpoints({ ...endpoints, startLng: event.target.value })}
+                    placeholder="Lng"
+                    step="any"
+                    type="number"
+                    value={endpoints.startLng}
+                  />
+                </div>
               </div>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                End label
-                <input
-                  className="rounded-lg border border-slate-300 px-3 py-2 font-normal"
-                  onChange={(event) => setEndpoints({ ...endpoints, endLabel: event.target.value })}
-                  value={endpoints.endLabel}
-                />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  aria-label="End latitude"
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  onChange={(event) => setEndpoints({ ...endpoints, endLat: event.target.value })}
-                  placeholder="Lat"
-                  step="any"
-                  type="number"
-                  value={endpoints.endLat}
-                />
-                <input
-                  aria-label="End longitude"
-                  className="rounded-lg border border-slate-300 px-3 py-2"
-                  onChange={(event) => setEndpoints({ ...endpoints, endLng: event.target.value })}
-                  placeholder="Lng"
-                  step="any"
-                  type="number"
-                  value={endpoints.endLng}
-                />
+
+              {/* ── End ── */}
+              <div className="grid gap-2">
+                <div className="flex items-end gap-2">
+                  <label className="grid min-w-0 flex-1 gap-1 text-sm font-semibold text-slate-700">
+                    End label
+                    <input
+                      className="rounded-lg border border-slate-300 px-3 py-2 font-normal"
+                      onChange={(event) => {
+                        setEndpoints({ ...endpoints, endLabel: event.target.value });
+                        setEndGeo(geoInit);
+                      }}
+                      value={endpoints.endLabel}
+                    />
+                  </label>
+                  <button
+                    className="button-secondary shrink-0 self-end"
+                    disabled={endGeo.loading}
+                    onClick={() => findCoordinates(endpoints.endLabel, setEndGeo)}
+                    type="button"
+                  >
+                    {endGeo.loading ? "Finding…" : "Find"}
+                  </button>
+                </div>
+                {endGeo.error ? (
+                  <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                    {endGeo.error}
+                  </p>
+                ) : null}
+                {endGeo.candidates.length > 0 ? (
+                  <ul className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm shadow-sm">
+                    {endGeo.candidates.map((candidate) => (
+                      <li key={`${candidate.latitude},${candidate.longitude}`}>
+                        <button
+                          className="w-full px-3 py-2 text-left hover:bg-orange-50 focus:bg-orange-50 focus:outline-none"
+                          onClick={() => pickCandidate(candidate, "end", setEndGeo)}
+                          type="button"
+                        >
+                          <span className="block font-medium text-slate-900 truncate">{candidate.displayName}</span>
+                          <span className="block text-xs text-slate-500">
+                            {candidate.latitude.toFixed(5)}, {candidate.longitude.toFixed(5)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    aria-label="End latitude"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    onChange={(event) => setEndpoints({ ...endpoints, endLat: event.target.value })}
+                    placeholder="Lat"
+                    step="any"
+                    type="number"
+                    value={endpoints.endLat}
+                  />
+                  <input
+                    aria-label="End longitude"
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    onChange={(event) => setEndpoints({ ...endpoints, endLng: event.target.value })}
+                    placeholder="Lng"
+                    step="any"
+                    type="number"
+                    value={endpoints.endLng}
+                  />
+                </div>
               </div>
+
               <button className="button-primary" disabled={busy} type="submit">Save endpoints</button>
             </form>
           </section>
