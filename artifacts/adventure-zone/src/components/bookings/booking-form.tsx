@@ -3,9 +3,11 @@
 import { useLocation } from "wouter";
 import {
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 
 import {
@@ -69,6 +71,125 @@ type EditBookingFormProps = SharedBookingFormProps & {
 };
 
 type BookingFormProps = CreateBookingFormProps | EditBookingFormProps;
+
+type TravelLegSelectProps = {
+  name: string;
+  value: string;
+  travelLegs: TravelLeg[];
+  onChange: (value: string) => void;
+};
+
+function TravelLegSelect({
+  name,
+  value,
+  travelLegs,
+  onChange,
+}: TravelLegSelectProps) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedLeg = travelLegs.find((l) => l.id === value) ?? null;
+
+  // Close when clicking outside
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e: PointerEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  function handleKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (e.key === "Escape") setOpen(false);
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      setOpen((prev) => !prev);
+    }
+  }
+
+  function selectOption(id: string) {
+    onChange(id);
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      {/* Hidden input so FormData picks up the value */}
+      <input type="hidden" name={name} value={value} />
+
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:text-sm"
+        onClick={() => setOpen((prev) => !prev)}
+        onKeyDown={handleKeyDown}
+        type="button"
+      >
+        {selectedLeg ? (
+          <>
+            <span
+              aria-hidden="true"
+              className="inline-block size-3 shrink-0 rounded-full"
+              style={{ backgroundColor: selectedLeg.color }}
+            />
+            <span>{selectedLeg.name}</span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">Unassigned</span>
+        )}
+        <svg
+          aria-hidden="true"
+          className="ml-auto size-4 shrink-0 opacity-50"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          viewBox="0 0 24 24"
+        >
+          <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <ul
+          className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-input bg-background py-1 shadow-md"
+          role="listbox"
+        >
+          <li
+            className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+            onClick={() => selectOption("")}
+            role="option"
+            aria-selected={value === ""}
+          >
+            <span className="inline-block size-3 shrink-0 rounded-full border border-dashed border-muted-foreground opacity-40" />
+            <span className="text-muted-foreground">Unassigned</span>
+          </li>
+          {travelLegs.map((leg) => (
+            <li
+              key={leg.id}
+              className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
+              onClick={() => selectOption(leg.id)}
+              role="option"
+              aria-selected={value === leg.id}
+            >
+              <span
+                aria-hidden="true"
+                className="inline-block size-3 shrink-0 rounded-full"
+                style={{ backgroundColor: leg.color }}
+              />
+              <span>{leg.name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 const defaultValues: BookingFormValues = {
   name: "",
@@ -408,21 +529,19 @@ export function BookingForm(props: BookingFormProps) {
             </label>
           </div>
 
-          <label className="grid gap-1.5 font-medium">
+          <div className="grid gap-1.5 font-medium">
             Travel leg
-            <select
+            <TravelLegSelect
               name="travelLegId"
-              onChange={handleChange}
+              onChange={(id) => {
+                const nextValues = { ...values, travelLegId: id };
+                setValues(nextValues);
+                if (!navigator.onLine) persistDraft(nextValues);
+              }}
+              travelLegs={props.travelLegs ?? []}
               value={values.travelLegId}
-            >
-              <option value="">Unassigned</option>
-              {(props.travelLegs ?? []).map((leg) => (
-                <option key={leg.id} value={leg.id}>
-                  {leg.name}
-                </option>
-              ))}
-            </select>
-          </label>
+            />
+          </div>
 
           <label className="grid gap-1.5 font-medium">
             Notes
