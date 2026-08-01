@@ -1094,6 +1094,7 @@ export const actMigrationApplyOperations = pgTable(
     leaseOwner: text("lease_owner"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     appliedEntityId: uuid("applied_entity_id"),
+    wasCreated: boolean("was_created"),
     errorCode: text("error_code"),
     retryable: boolean("retryable").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

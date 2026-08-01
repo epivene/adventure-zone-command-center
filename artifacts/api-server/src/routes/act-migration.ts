@@ -146,19 +146,43 @@ async function runPipeline(
     });
     const batchId = startResult.batchId;
 
-    // Apply loop: bounded by a hard iteration cap and a consecutive-stall cap.
-    // Retryable operations re-enter pending immediately in the queue, so without
-    // bounds the loop can spin forever. We treat stall exhaustion as a terminal
-    // partial failure so the run always ends.
+    // Apply loop: bounded by a hard iteration cap, a consecutive-stall cap,
+    // and a per-call wall-clock timeout so a hung DB operation can't block
+    // indefinitely. Each call to applyService.continue() races against the
+    // timeout; if it doesn't resolve in time the apply phase is marked failed.
     const MAX_APPLY_ITERATIONS = 500;
     const MAX_STALL_ITERATIONS = 10;
+    const APPLY_TIMEOUT_MS = 10 * 60 * 1_000; // 10 minutes
     let applyDone = false;
     let applyIteration = 0;
     let stallCount = 0;
 
     while (!applyDone && applyIteration < MAX_APPLY_ITERATIONS) {
       applyIteration++;
-      const result = await applyService.continue({ runId, batchId });
+
+      // Race each batch call against the hard timeout so a single hung
+      // transaction (e.g. a lock wait that never resolves) doesn't stall
+      // the pipeline forever.
+      let result: Awaited<ReturnType<typeof applyService.continue>>;
+      try {
+        result = await Promise.race([
+          applyService.continue({ runId, batchId }),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error("APPLY_TIMEOUT")),
+              APPLY_TIMEOUT_MS,
+            ),
+          ),
+        ]);
+      } catch (err: unknown) {
+        const isTimeout = err instanceof Error && err.message === "APPLY_TIMEOUT";
+        state.phase = "failed";
+        state.error = isTimeout
+          ? `Apply timeout: apply phase exceeded ${APPLY_TIMEOUT_MS / 60_000} minutes (APPLY_TIMEOUT)`
+          : `Apply error: ${err instanceof Error ? err.message : String(err)}`;
+        await failRunInDb(runId);
+        return;
+      }
 
       // Fatal/non-retryable apply error from the service itself
       if (result.errorCode && !result.retryable) {

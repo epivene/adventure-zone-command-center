@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -80,7 +80,6 @@ export class CallingListRepository {
   }
 
   async createOrReactivateMembershipIn(transaction: CallingListTransaction, input: { callingListId: string; contactId: string }): Promise<CallingListMutationResult> {
-    await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`calling-list-membership:${input.callingListId}:${input.contactId}`}))`);
     const [list] = await transaction.select({ id: callingLists.id, kind: callingLists.kind }).from(callingLists)
       .where(eq(callingLists.id, input.callingListId)).limit(1).for("update");
     if (!list) throw new Error("Calling list dependency is missing.");
@@ -109,7 +108,6 @@ export class CallingListRepository {
     filterVersion: number | null;
     filterDefinition: CallingListFilterV1 | null;
   }): Promise<CallingListMutationResult> {
-    await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`calling-list-source:group:${input.sourceId}`}))`);
     const [link] = await transaction.select().from(actExternalLinks).where(and(
       eq(actExternalLinks.sourceEntityType, "group"),
       eq(actExternalLinks.actRecordId, input.sourceId),

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -42,7 +42,6 @@ export class MigrationCallingListApplyRepository {
   }
 
   private async lockOperation(transaction: CallingListTransaction, operation: MigrationApplyOperation) {
-    await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`${operation.runId}:${operation.proposalKey}`}))`);
     const records = await transaction.select().from(actMigrationRecords).where(and(
       eq(actMigrationRecords.runId, operation.runId),
       inArray(actMigrationRecords.sourceKey, [...operation.proposal.sourceRecordKeys]),
