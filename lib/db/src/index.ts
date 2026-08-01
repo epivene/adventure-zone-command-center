@@ -4,13 +4,23 @@ import * as schema from "./schema";
 
 const { Pool } = pg;
 
-if (!process.env.DATABASE_URL) {
+const connectionString = process.env.RENDER_DATABASE_URL ?? process.env.DATABASE_URL;
+
+if (!connectionString) {
   throw new Error(
     "DATABASE_URL must be set. Did you forget to provision a database?",
   );
 }
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+// Render's external database URL requires SSL. When RENDER_DATABASE_URL is set
+// and doesn't already include an sslmode param, we enforce SSL.
+const isRender = Boolean(process.env.RENDER_DATABASE_URL);
+const finalConnectionString =
+  isRender && !connectionString.includes("sslmode")
+    ? `${connectionString}?sslmode=require`
+    : connectionString;
+
+export const pool = new Pool({ connectionString: finalConnectionString });
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
