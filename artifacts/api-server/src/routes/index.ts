@@ -10,6 +10,7 @@ import activitiesRouter from "./activities";
 import callsRouter from "./calls";
 import eventProfilesRouter from "./event-profiles";
 import settingsRouter from "./settings";
+import actMigrationRouter from "./act-migration";
 import authRouter from "./auth";
 import { requireOwnerMiddleware } from "../lib/auth";
 
@@ -32,5 +33,6 @@ router.use(activitiesRouter);
 router.use(callsRouter);
 router.use(eventProfilesRouter);
 router.use(settingsRouter);
+router.use(actMigrationRouter);
 
 export default router;

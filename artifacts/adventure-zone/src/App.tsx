@@ -23,6 +23,7 @@ import CallWorkspacePage from "@/pages/CallWorkspacePage";
 import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
+import ActMigrationPage from "@/pages/ActMigrationPage";
 import QuickAddPage from "@/pages/QuickAddPage";
 import NotFound from "@/pages/not-found";
 
@@ -183,6 +184,7 @@ function AppRoutes() {
               <Route path="/event-profiles/:profileId" component={EventProfilePage} />
               <Route path="/quick-add" component={QuickAddPage} />
               <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
+              <Route path="/settings/act-migration" component={ActMigrationPage} />
               <Route path="/settings/{*rest}" component={SettingsStub} />
               <Route component={NotFound} />
             </Switch>
