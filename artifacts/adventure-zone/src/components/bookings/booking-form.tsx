@@ -24,6 +24,10 @@ import {
 } from "@/features/bookings/booking-types";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 import { deleteDraft, loadDraft, saveDraft } from "@/lib/offline/draft-store";
+import { geocodeAddressAction, type GeocodeCandidate } from "@/actions/trips";
+
+type GeoState = { loading: boolean; error: string | null; candidates: GeocodeCandidate[] };
+const geoInit: GeoState = { loading: false, error: null, candidates: [] };
 
 type BookingSubmissionResult =
   | { ok: true }
@@ -238,6 +242,33 @@ export function BookingForm(props: BookingFormProps) {
     useState<BookingFormValues | null>(null);
   const [isLocalDraft, setIsLocalDraft] = useState(false);
   const [draftError, setDraftError] = useState("");
+  const [geo, setGeo] = useState<GeoState>(geoInit);
+
+  async function findCoordinates() {
+    const query = [values.city, values.region].filter(Boolean).join(", ").trim();
+    if (!query) {
+      setGeo({ loading: false, error: "Enter a city first, then click Find.", candidates: [] });
+      return;
+    }
+    setGeo({ loading: true, error: null, candidates: [] });
+    const result = await geocodeAddressAction(query);
+    if (result.ok) {
+      setGeo({ loading: false, error: null, candidates: result.results });
+    } else {
+      setGeo({ loading: false, error: result.error, candidates: [] });
+    }
+  }
+
+  function pickGeoCandidate(candidate: GeocodeCandidate) {
+    const nextValues = {
+      ...values,
+      latitude: String(candidate.latitude),
+      longitude: String(candidate.longitude),
+    };
+    setValues(nextValues);
+    setGeo(geoInit);
+    if (!navigator.onLine) persistDraft(nextValues);
+  }
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -510,33 +541,69 @@ export function BookingForm(props: BookingFormProps) {
 
       {props.variant === "edit" ? (
         <>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <label className="grid gap-1.5 font-medium">
-              Latitude
-              <input
-                inputMode="decimal"
-                name="latitude"
-                onChange={handleChange}
-                type="text"
-                value={values.latitude}
-              />
-              {errors.latitude ? (
-                <span role="alert">{errors.latitude}</span>
-              ) : null}
-            </label>
-            <label className="grid gap-1.5 font-medium">
-              Longitude
-              <input
-                inputMode="decimal"
-                name="longitude"
-                onChange={handleChange}
-                type="text"
-                value={values.longitude}
-              />
-              {errors.longitude ? (
-                <span role="alert">{errors.longitude}</span>
-              ) : null}
-            </label>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">Coordinates</span>
+              <button
+                className="button-secondary text-sm"
+                disabled={geo.loading}
+                onClick={findCoordinates}
+                type="button"
+              >
+                {geo.loading ? "Finding…" : "Find coordinates"}
+              </button>
+            </div>
+            {geo.error ? (
+              <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+                {geo.error}
+              </p>
+            ) : null}
+            {geo.candidates.length > 0 ? (
+              <ul className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm shadow-sm">
+                {geo.candidates.map((candidate) => (
+                  <li key={`${candidate.latitude},${candidate.longitude}`}>
+                    <button
+                      className="w-full px-3 py-2 text-left hover:bg-orange-50 focus:bg-orange-50 focus:outline-none"
+                      onClick={() => pickGeoCandidate(candidate)}
+                      type="button"
+                    >
+                      <span className="block font-medium text-slate-900 truncate">{candidate.displayName}</span>
+                      <span className="block text-xs text-slate-500">
+                        {candidate.latitude.toFixed(5)}, {candidate.longitude.toFixed(5)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="grid gap-5 sm:grid-cols-2">
+              <label className="grid gap-1.5 font-medium">
+                Latitude
+                <input
+                  inputMode="decimal"
+                  name="latitude"
+                  onChange={handleChange}
+                  type="text"
+                  value={values.latitude}
+                />
+                {errors.latitude ? (
+                  <span role="alert">{errors.latitude}</span>
+                ) : null}
+              </label>
+              <label className="grid gap-1.5 font-medium">
+                Longitude
+                <input
+                  inputMode="decimal"
+                  name="longitude"
+                  onChange={handleChange}
+                  type="text"
+                  value={values.longitude}
+                />
+                {errors.longitude ? (
+                  <span role="alert">{errors.longitude}</span>
+                ) : null}
+              </label>
+            </div>
           </div>
 
           <div className="grid gap-1.5 font-medium">
