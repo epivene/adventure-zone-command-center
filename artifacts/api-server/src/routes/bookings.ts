@@ -201,7 +201,11 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
   try {
     const detail = await bookingRepo().getBookingDetail(id);
     if (!detail) { res.status(404).json({ error: "Not found" }); return; }
-    const allTravelLegs = await new DrizzleTravelLegRepository(db).listTravelLegs();
+    // Include archived legs so a booking already assigned to one still renders it;
+    // the picker filters archived legs out of the selectable options client-side.
+    const allTravelLegs = await new DrizzleTravelLegRepository(db).listTravelLegs({
+      includeArchived: true,
+    });
     res.json({ ...detail, allTravelLegs });
   } catch (err) {
     req.log.error({ err }, "Failed to get booking");

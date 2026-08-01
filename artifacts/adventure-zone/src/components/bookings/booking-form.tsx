@@ -89,6 +89,11 @@ function TravelLegSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const selectedLeg = travelLegs.find((l) => l.id === value) ?? null;
+  // Archived legs are not selectable, but an archived leg already attached to
+  // this booking keeps rendering (both as the selection and as an option).
+  const selectableLegs = travelLegs.filter(
+    (leg) => !leg.archivedAt || leg.id === value,
+  );
 
   // Close when clicking outside
   useEffect(() => {
@@ -169,7 +174,7 @@ function TravelLegSelect({
             <span className="inline-block size-3 shrink-0 rounded-full border border-dashed border-muted-foreground opacity-40" />
             <span className="text-muted-foreground">Unassigned</span>
           </li>
-          {travelLegs.map((leg) => (
+          {selectableLegs.map((leg) => (
             <li
               key={leg.id}
               className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-accent"
@@ -183,6 +188,11 @@ function TravelLegSelect({
                 style={{ backgroundColor: leg.color }}
               />
               <span>{leg.name}</span>
+              {leg.archivedAt ? (
+                <span className="text-xs text-muted-foreground">
+                  (archived)
+                </span>
+              ) : null}
             </li>
           ))}
         </ul>

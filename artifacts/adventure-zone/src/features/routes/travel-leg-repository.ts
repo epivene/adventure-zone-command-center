@@ -1,4 +1,4 @@
-import { asc, eq, gt, sql } from "drizzle-orm";
+import { asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { bookings, resources, travelLegs } from "@/db/schema";
@@ -17,6 +17,18 @@ export type TravelLeg = {
   name: string;
   color: string;
   sortOrder: number;
+  archivedAt: Date | null;
+  baseAddress: string | null;
+  defaultVehicleName: string | null;
+  defaultMpg: number | null;
+};
+
+export type LegResource = {
+  legId: string;
+  id: string;
+  code: string;
+  name: string;
+  category: string;
 };
 
 export type MapEventRecord = {
@@ -37,10 +49,22 @@ export type MapEventRecord = {
 
 export interface TravelLegRepository {
   listMapEvents(): Promise<MapEventRecord[]>;
-  listTravelLegs(): Promise<TravelLeg[]>;
+  listTravelLegs(options?: { includeArchived?: boolean }): Promise<TravelLeg[]>;
+  listLegResources(): Promise<LegResource[]>;
 }
 
 type DrizzleDatabase = typeof database;
+
+const travelLegSelection = {
+  id: travelLegs.id,
+  name: travelLegs.name,
+  color: travelLegs.color,
+  sortOrder: travelLegs.sortOrder,
+  archivedAt: travelLegs.archivedAt,
+  baseAddress: travelLegs.baseAddress,
+  defaultVehicleName: travelLegs.defaultVehicleName,
+  defaultMpg: travelLegs.defaultMpg,
+} as const;
 
 export class DrizzleTravelLegRepository implements TravelLegRepository {
   constructor(private readonly database: DrizzleDatabase) {}
@@ -69,16 +93,34 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
     }));
   }
 
-  async listTravelLegs(): Promise<TravelLeg[]> {
-    return this.database
-      .select({
-        id: travelLegs.id,
-        name: travelLegs.name,
-        color: travelLegs.color,
-        sortOrder: travelLegs.sortOrder,
-      })
+  async listTravelLegs(options?: {
+    includeArchived?: boolean;
+  }): Promise<TravelLeg[]> {
+    const query = this.database
+      .select(travelLegSelection)
       .from(travelLegs)
       .orderBy(asc(travelLegs.sortOrder));
+    if (options?.includeArchived) {
+      return query;
+    }
+    return query.where(isNull(travelLegs.archivedAt));
+  }
+
+  async listLegResources(): Promise<LegResource[]> {
+    const records = await this.database
+      .select({
+        legId: resources.normalTravelLegId,
+        id: resources.id,
+        code: resources.code,
+        name: resources.name,
+        category: resources.category,
+      })
+      .from(resources)
+      .where(isNotNull(resources.normalTravelLegId))
+      .orderBy(asc(resources.name), asc(resources.id));
+    return records.filter(
+      (record): record is LegResource => record.legId !== null,
+    );
   }
 
   transaction<T>(
@@ -88,12 +130,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
       operation({
         listForUpdate: async () =>
           transaction
-            .select({
-              id: travelLegs.id,
-              name: travelLegs.name,
-              color: travelLegs.color,
-              sortOrder: travelLegs.sortOrder,
-            })
+            .select(travelLegSelection)
             .from(travelLegs)
             .orderBy(asc(travelLegs.sortOrder))
             .for("update"),
@@ -102,12 +139,16 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
             .update(travelLegs)
             .set({ ...values, updatedAt: new Date() })
             .where(eq(travelLegs.id, id))
-            .returning({
-              id: travelLegs.id,
-              name: travelLegs.name,
-              color: travelLegs.color,
-              sortOrder: travelLegs.sortOrder,
-            });
+            .returning(travelLegSelection);
+          if (!updated) throw new Error("Travel leg is missing.");
+          return updated;
+        },
+        setArchived: async (id, archivedAt) => {
+          const [updated] = await transaction
+            .update(travelLegs)
+            .set({ archivedAt, updatedAt: new Date() })
+            .where(eq(travelLegs.id, id))
+            .returning(travelLegSelection);
           if (!updated) throw new Error("Travel leg is missing.");
           return updated;
         },
@@ -145,21 +186,18 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
           const [inserted] = await transaction
             .insert(travelLegs)
             .values(values)
-            .returning({
-              id: travelLegs.id,
-              name: travelLegs.name,
-              color: travelLegs.color,
-              sortOrder: travelLegs.sortOrder,
-            });
+            .returning(travelLegSelection);
           if (!inserted) throw new Error("Travel leg could not be inserted.");
           return inserted;
         },
         delete: async (id) => {
+          // Find the leg's current sort order before deleting
           const [target] = await transaction
             .select({ sortOrder: travelLegs.sortOrder })
             .from(travelLegs)
             .where(eq(travelLegs.id, id));
 
+          // Null out any bookings and resources referencing this leg before deleting
           await transaction
             .update(bookings)
             .set({ travelLegId: null })
@@ -173,6 +211,8 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
             .delete(travelLegs)
             .where(eq(travelLegs.id, id));
 
+          // Renumber legs that came after the deleted one, processing in
+          // ascending order so we never create a unique-constraint collision
           if (target) {
             const affected = await transaction
               .select({ id: travelLegs.id, sortOrder: travelLegs.sortOrder })
@@ -192,7 +232,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
           recordAuditEntry(transaction, {
             entityType: "travel_leg",
             entityId: change.entityId,
-            action: "update",
+            action: change.action ?? "update",
             before: change.before,
             after: change.after,
           }),

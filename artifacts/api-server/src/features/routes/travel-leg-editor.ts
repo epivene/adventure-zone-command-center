@@ -14,18 +14,29 @@ export type TravelLegDeleteError = {
   code: "LEG_MINIMUM_REACHED" | "LEG_NOT_FOUND";
 };
 
+export type TravelLegArchiveError = {
+  code: "LEG_NOT_FOUND" | "LAST_ACTIVE_LEG";
+};
+
 export type TravelLegAuditChange = {
   entityId: string;
+  action?: "update" | "archive" | "restore";
   before: Record<string, unknown>;
   after: Record<string, unknown>;
 };
 
+export type TravelLegDetailValues = {
+  name: string;
+  color: string;
+  baseAddress: string | null;
+  defaultVehicleName: string | null;
+  defaultMpg: number | null;
+};
+
 export interface TravelLegEditorTransaction {
   listForUpdate(): Promise<TravelLeg[]>;
-  update(
-    id: string,
-    values: { name: string; color: string },
-  ): Promise<TravelLeg>;
+  update(id: string, values: TravelLegDetailValues): Promise<TravelLeg>;
+  setArchived(id: string, archivedAt: Date | null): Promise<TravelLeg>;
   /** Atomically reorder all legs in a single SQL statement to avoid unique-constraint conflicts. */
   reorderLegs(orders: { id: string; sortOrder: number }[]): Promise<void>;
   insert(values: {
@@ -43,6 +54,65 @@ export interface TravelLegEditorRepository {
   ): Promise<T>;
 }
 
+function detailValues(leg: {
+  name: string;
+  color: string;
+  baseAddress: string | null;
+  defaultVehicleName: string | null;
+  defaultMpg: number | null;
+}): TravelLegDetailValues {
+  return {
+    name: leg.name,
+    color: leg.color,
+    baseAddress: leg.baseAddress,
+    defaultVehicleName: leg.defaultVehicleName,
+    defaultMpg: leg.defaultMpg,
+  };
+}
+
+function detailChanged(
+  current: TravelLegDetailValues,
+  next: TravelLegDetailValues,
+): boolean {
+  return (
+    current.name !== next.name ||
+    current.color !== next.color ||
+    current.baseAddress !== next.baseAddress ||
+    current.defaultVehicleName !== next.defaultVehicleName ||
+    current.defaultMpg !== next.defaultMpg
+  );
+}
+
+/**
+ * Ordering invariant: active legs always occupy sort positions 1..A (in the
+ * user-chosen order) and archived legs occupy A+1..N (preserving their
+ * relative order). Configuration applies to active legs only; archive,
+ * restore, and add renormalize the full sequence to keep it contiguous.
+ */
+function normalizedOrders(
+  activeInOrder: { id: string }[],
+  archivedInOrder: { id: string }[],
+): { id: string; sortOrder: number }[] {
+  return [...activeInOrder, ...archivedInOrder].map((leg, index) => ({
+    id: leg.id,
+    sortOrder: index + 1,
+  }));
+}
+
+async function applyOrders(
+  transaction: TravelLegEditorTransaction,
+  current: TravelLeg[],
+  orders: { id: string; sortOrder: number }[],
+): Promise<void> {
+  const currentById = new Map(current.map((l) => [l.id, l]));
+  const changed = orders.some(
+    (order) => currentById.get(order.id)?.sortOrder !== order.sortOrder,
+  );
+  if (changed) {
+    await transaction.reorderLegs(orders);
+  }
+}
+
 export class TravelLegService {
   constructor(private readonly repository: TravelLegEditorRepository) {}
 
@@ -51,50 +121,54 @@ export class TravelLegService {
   ): Promise<Result<TravelLeg[], TravelLegConfigurationError>> {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
+      const active = current.filter((leg) => !leg.archivedAt);
+      const archived = current.filter((leg) => leg.archivedAt);
 
-      // Must match current count and the same set of IDs (any order is allowed)
-      const currentIds = new Set(current.map((l) => l.id));
+      // Configuration covers exactly the active legs — archived legs cannot
+      // be renamed, re-detailed, or reordered until they are restored.
+      const activeIds = new Set(active.map((l) => l.id));
       if (
-        input.legs.length !== current.length ||
-        input.legs.some((leg) => !currentIds.has(leg.id))
+        input.legs.length !== active.length ||
+        input.legs.some((leg) => !activeIds.has(leg.id))
       ) {
         return err({ code: "LEG_CONFIGURATION_CONFLICT" });
       }
 
-      const currentById = new Map(current.map((l) => [l.id, l]));
       const requestedById = new Map(input.legs.map((l) => [l.id, l]));
 
-      // Atomically reorder if any sort position changed — one SQL statement
-      // avoids the unique-constraint conflict that sequential updates would cause.
-      const orderChanged = input.legs.some(
-        (leg) => currentById.get(leg.id)!.sortOrder !== leg.sortOrder,
+      // Atomically renumber: requested active order first, then archived legs
+      // in their existing relative order.
+      const requestedActive = [...input.legs].sort(
+        (a, b) => a.sortOrder - b.sortOrder,
       );
-      if (orderChanged) {
-        await transaction.reorderLegs(
-          input.legs.map((leg) => ({ id: leg.id, sortOrder: leg.sortOrder })),
-        );
-      }
+      const orders = normalizedOrders(requestedActive, archived);
+      await applyOrders(transaction, current, orders);
+      const orderById = new Map(orders.map((o) => [o.id, o.sortOrder]));
 
-      // Update name/color for each leg that changed
+      // Update details for each active leg that changed
       const updated: TravelLeg[] = [];
-      for (const leg of current) {
+      for (const leg of active) {
         const next = requestedById.get(leg.id)!;
-        if (leg.name !== next.name || leg.color !== next.color) {
-          const saved = await transaction.update(leg.id, {
-            name: next.name,
-            color: next.color,
-          });
+        const currentDetail = detailValues(leg);
+        const nextDetail = detailValues(next);
+        const sortOrder = orderById.get(leg.id)!;
+        if (detailChanged(currentDetail, nextDetail)) {
+          const saved = await transaction.update(leg.id, nextDetail);
           await transaction.audit({
             entityId: leg.id,
-            before: { name: leg.name, color: leg.color },
-            after: { name: saved.name, color: saved.color },
+            before: { ...currentDetail },
+            after: { ...detailValues(saved) },
           });
-          updated.push(saved);
+          updated.push({ ...saved, sortOrder });
         } else {
-          // Sort order may have changed; reflect the requested value
-          updated.push({ ...leg, sortOrder: next.sortOrder });
+          // Sort order may have changed; reflect the normalized value
+          updated.push({ ...leg, sortOrder });
         }
       }
+      for (const leg of archived) {
+        updated.push({ ...leg, sortOrder: orderById.get(leg.id)! });
+      }
+      updated.sort((a, b) => a.sortOrder - b.sortOrder);
       return ok(updated);
     });
   }
@@ -105,18 +179,83 @@ export class TravelLegService {
       if (current.length >= 9) {
         return err({ code: "LEG_LIMIT_REACHED" });
       }
-      const nextSortOrder = current.length + 1;
+      const active = current.filter((l) => !l.archivedAt);
+      const archived = current.filter((l) => l.archivedAt);
+      // Insert at the very end (guaranteed free slot), then renormalize so the
+      // new active leg lands at the end of the active block, before archived.
       const leg = await transaction.insert({
-        name: `Leg ${nextSortOrder}`,
+        name: `Leg ${active.length + 1}`,
         color: "#6B7280",
-        sortOrder: nextSortOrder,
+        sortOrder: current.length + 1,
       });
+      const orders = normalizedOrders([...active, leg], archived);
+      await applyOrders(transaction, [...current, leg], orders);
+      const sortOrder = orders.find((o) => o.id === leg.id)!.sortOrder;
       await transaction.audit({
         entityId: leg.id,
         before: {},
-        after: { name: leg.name, color: leg.color, sortOrder: leg.sortOrder },
+        after: { name: leg.name, color: leg.color, sortOrder },
       });
-      return ok(leg);
+      return ok({ ...leg, sortOrder });
+    });
+  }
+
+  archiveLeg(id: string): Promise<Result<TravelLeg, TravelLegArchiveError>> {
+    return this.repository.transaction(async (transaction) => {
+      const current = await transaction.listForUpdate();
+      const target = current.find((l) => l.id === id);
+      if (!target) {
+        return err({ code: "LEG_NOT_FOUND" });
+      }
+      if (target.archivedAt) {
+        return ok(target);
+      }
+      const active = current.filter((l) => !l.archivedAt);
+      if (active.length <= 1) {
+        return err({ code: "LAST_ACTIVE_LEG" });
+      }
+      const saved = await transaction.setArchived(id, new Date());
+      // Move the newly archived leg to the front of the archived block so
+      // active legs stay contiguous at 1..A.
+      const archived = current.filter((l) => l.archivedAt);
+      const orders = normalizedOrders(
+        active.filter((l) => l.id !== id),
+        [saved, ...archived],
+      );
+      await applyOrders(transaction, current, orders);
+      await transaction.audit({
+        entityId: id,
+        action: "archive",
+        before: { archivedAt: null, name: target.name },
+        after: { archivedAt: saved.archivedAt, name: saved.name },
+      });
+      return ok({ ...saved, sortOrder: orders.find((o) => o.id === id)!.sortOrder });
+    });
+  }
+
+  restoreLeg(id: string): Promise<Result<TravelLeg, TravelLegArchiveError>> {
+    return this.repository.transaction(async (transaction) => {
+      const current = await transaction.listForUpdate();
+      const target = current.find((l) => l.id === id);
+      if (!target) {
+        return err({ code: "LEG_NOT_FOUND" });
+      }
+      if (!target.archivedAt) {
+        return ok(target);
+      }
+      const saved = await transaction.setArchived(id, null);
+      // Restored leg joins the end of the active block.
+      const active = current.filter((l) => !l.archivedAt);
+      const archived = current.filter((l) => l.archivedAt && l.id !== id);
+      const orders = normalizedOrders([...active, saved], archived);
+      await applyOrders(transaction, current, orders);
+      await transaction.audit({
+        entityId: id,
+        action: "restore",
+        before: { archivedAt: target.archivedAt, name: target.name },
+        after: { archivedAt: null, name: saved.name },
+      });
+      return ok({ ...saved, sortOrder: orders.find((o) => o.id === id)!.sortOrder });
     });
   }
 

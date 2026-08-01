@@ -40,6 +40,32 @@ export async function addTravelLegAction(): Promise<AddTravelLegResult> {
   }
 }
 
+export type ArchiveTravelLegResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function archiveTravelLegAction(
+  id: string,
+): Promise<ArchiveTravelLegResult> {
+  try {
+    await apiPost<{ ok: boolean }>(`/routes/travel-legs/${id}/archive`, {});
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+}
+
+export async function restoreTravelLegAction(
+  id: string,
+): Promise<ArchiveTravelLegResult> {
+  try {
+    await apiPost<{ ok: boolean }>(`/routes/travel-legs/${id}/restore`, {});
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+}
+
 export async function deleteTravelLegAction(
   id: string,
 ): Promise<DeleteTravelLegResult> {

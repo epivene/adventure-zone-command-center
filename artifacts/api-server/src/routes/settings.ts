@@ -17,14 +17,13 @@ router.get("/settings/packages-resources", async (req, res): Promise<void> => {
     const [packageTemplates, resources, allTravelLegs] = await Promise.all([
       new DrizzlePackageSettingsRepository(db).listPackageTemplates(),
       new DrizzleResourceSettingsRepository(db).listResources(),
-      new DrizzleTravelLegRepository(db).listTravelLegs(),
+      new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
     ]);
     // ResourceInventoryEditor expects ResourceTravelLegOption shape
-    // TravelLeg has no archivedAt field; editor treats null as active
     const travelLegs = allTravelLegs.map((leg) => ({
       id: leg.id,
       name: leg.name,
-      archivedAt: null as Date | null,
+      archivedAt: leg.archivedAt,
     }));
     res.json({ packageTemplates, resources, travelLegs });
   } catch (err) {

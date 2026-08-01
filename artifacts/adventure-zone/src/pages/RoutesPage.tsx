@@ -6,6 +6,8 @@ import {
   updateTravelLegsAction,
   addTravelLegAction,
   deleteTravelLegAction,
+  archiveTravelLegAction,
+  restoreTravelLegAction,
 } from "@/actions/routes";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
@@ -24,6 +26,7 @@ export default function RoutesPage() {
             endsAt: e.endsAt ? new Date(e.endsAt) : null,
           })),
           travelLegs: d.travelLegs ?? [],
+          legResources: d.legResources ?? [],
         });
         setLoading(false);
       })
@@ -51,6 +54,22 @@ export default function RoutesPage() {
     await loadData();
   }
 
+  async function handleArchive(id: string) {
+    const result = await archiveTravelLegAction(id);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    await loadData();
+  }
+
+  async function handleRestore(id: string) {
+    const result = await restoreTravelLegAction(id);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    await loadData();
+  }
+
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
       <header>
@@ -72,11 +91,16 @@ export default function RoutesPage() {
       ) : data ? (
         <>
           <TravelLegEditor
-            key={data.travelLegs.map((l: any) => l.id).join(",")}
+            key={data.travelLegs
+              .map((l: any) => `${l.id}:${l.archivedAt ? "a" : ""}`)
+              .join(",")}
             legs={data.travelLegs}
+            legResources={data.legResources}
             onSubmit={updateTravelLegsAction}
             onAdd={handleAdd}
             onDelete={handleDelete}
+            onArchive={handleArchive}
+            onRestore={handleRestore}
           />
           <section aria-labelledby="event-map-title" className="grid gap-4">
             <div>

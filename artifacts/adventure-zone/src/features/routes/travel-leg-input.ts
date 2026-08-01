@@ -16,6 +16,36 @@ export const travelLegConfigurationSchema = z
             .regex(/^#[0-9a-fA-F]{6}$/, "Choose a six-digit color")
             .transform((value) => value.toUpperCase()),
           sortOrder: z.number().int().min(1).max(9),
+          baseAddress: z
+            .string()
+            .trim()
+            .max(300, "Base address is too long")
+            .optional()
+            .default("")
+            .transform((value) => (value === "" ? null : value)),
+          defaultVehicleName: z
+            .string()
+            .trim()
+            .max(100, "Default vehicle name is too long")
+            .optional()
+            .default("")
+            .transform((value) => (value === "" ? null : value)),
+          defaultMpg: z.preprocess(
+            (value) => {
+              if (value === "" || value === null || value === undefined) {
+                return null;
+              }
+              if (typeof value === "string") {
+                return Number(value);
+              }
+              return value;
+            },
+            z
+              .number("Default MPG must be a number")
+              .positive("Default MPG must be greater than zero")
+              .max(1000, "Default MPG is too large")
+              .nullable(),
+          ),
         }),
       )
       .min(1, "At least one travel leg is required")

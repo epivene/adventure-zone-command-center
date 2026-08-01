@@ -182,6 +182,10 @@ export const travelLegs = pgTable(
     //   ALTER TABLE travel_legs DROP CONSTRAINT travel_legs_sort_order_unique;
     //   ALTER TABLE travel_legs ADD CONSTRAINT travel_legs_sort_order_unique UNIQUE (sort_order) DEFERRABLE INITIALLY IMMEDIATE;
     sortOrder: integer("sort_order").notNull().unique(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    baseAddress: text("base_address"),
+    defaultVehicleName: text("default_vehicle_name"),
+    defaultMpg: doublePrecision("default_mpg"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -193,6 +197,10 @@ export const travelLegs = pgTable(
     check(
       "travel_legs_sort_order_between_1_and_9",
       sql`${table.sortOrder} between 1 and 9`,
+    ),
+    check(
+      "travel_legs_default_mpg_positive",
+      sql`${table.defaultMpg} is null or ${table.defaultMpg} > 0`,
     ),
   ],
 );
