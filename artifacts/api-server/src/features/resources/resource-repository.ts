@@ -9,6 +9,8 @@ import {
   resourcePackageTags,
   resources,
   travelLegs,
+  tripResourceAssignments,
+  trips,
 } from "@/db/schema";
 import {
   recordAuditEntry,
@@ -265,7 +267,45 @@ class DrizzleResourceTransaction implements ResourceTransaction {
           notInArray(bookings.status, [...terminalBookingStatusValues]),
         ),
       );
-    return rows
+    // Trip assignments reserve the resource for the trip's date window, so
+    // configuring a booking against a resource already committed to an
+    // overlapping trip surfaces the same overlap/transfer warnings.
+    const tripRows = await this.database
+      .select({
+        assignment: tripResourceAssignments,
+        trip: trips,
+        resource: resources,
+      })
+      .from(tripResourceAssignments)
+      .innerJoin(trips, eq(trips.id, tripResourceAssignments.tripId))
+      .innerJoin(
+        resources,
+        eq(resources.id, tripResourceAssignments.resourceId),
+      )
+      .where(inArray(tripResourceAssignments.resourceId, [...resourceIds]));
+    const tripReservations: ResourceReservation[] = tripRows.map(
+      ({ assignment, trip, resource }) => ({
+        assignmentId: `trip:${assignment.id}`,
+        bookingId: trip.id,
+        bookingName: `Trip: ${trip.name}`,
+        resourceId: resource.id,
+        resourceCode: resource.code,
+        resourceName: resource.name,
+        resourceStatus: resource.status,
+        countsAsAttraction: false,
+        movable: resource.movable,
+        setupMinutes: 0,
+        teardownMinutes: 0,
+        minimumTransferMinutes: resource.minimumTransferMinutes,
+        startsAt: trip.startDate,
+        endsAt: trip.endDate,
+        location:
+          trip.startLatitude === null || trip.startLongitude === null
+            ? null
+            : { latitude: trip.startLatitude, longitude: trip.startLongitude },
+      }),
+    );
+    const bookingReservations = rows
       .filter(({ booking }) => !terminalBookingStatuses.has(booking.status))
       .map(({ assignment, booking, resource }) => ({
         assignmentId: assignment.id,
@@ -290,6 +330,7 @@ class DrizzleResourceTransaction implements ResourceTransaction {
                 longitude: booking.longitude,
               },
       }));
+    return [...bookingReservations, ...tripReservations];
   }
 
   async listOverrides(

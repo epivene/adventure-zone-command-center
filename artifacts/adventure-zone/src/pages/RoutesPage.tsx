@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
 import { TravelLegEditor } from "@/components/routes/travel-leg-editor";
+import { TripsSection } from "@/components/routes/trips-section";
 import {
   updateTravelLegsAction,
   addTravelLegAction,
@@ -102,6 +103,7 @@ export default function RoutesPage() {
             onArchive={handleArchive}
             onRestore={handleRestore}
           />
+          <TripsSection travelLegs={data.travelLegs} />
           <section aria-labelledby="event-map-title" className="grid gap-4">
             <div>
               <h2 className="text-2xl font-bold" id="event-map-title">

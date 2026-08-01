@@ -10,6 +10,8 @@ import {
   resourceConflictOverrides,
   resources,
   travelLegs,
+  tripResourceAssignments,
+  trips,
 } from "@/db/schema";
 import {
   summarizeBookingResources,
@@ -26,6 +28,7 @@ import type {
   ResourceWarning,
 } from "@/features/resources/resource-types";
 import type { TransferTimeLookup } from "@/features/resources/resource-conflicts";
+import { createTripTransferTimeLookup } from "@/features/trips/transfer-time-lookup";
 
 export type BookingOperationsSummary = {
   packageNames: string[];
@@ -286,6 +289,45 @@ implements BookingOperationsSummaryRepository {
             inArray(bookingResourceAssignments.resourceId, resourceIds),
             notInArray(bookings.status, [...terminalBookingStatuses]),
           ));
+    // Trip assignments also reserve the resource for the trip's window, so
+    // overlap/transfer checks account for planned trips too.
+    const tripReservationRows = resourceIds.length === 0
+      ? []
+      : await this.database
+          .select({
+            assignment: tripResourceAssignments,
+            trip: trips,
+            resource: resources,
+          })
+          .from(tripResourceAssignments)
+          .innerJoin(trips, eq(tripResourceAssignments.tripId, trips.id))
+          .innerJoin(
+            resources,
+            eq(tripResourceAssignments.resourceId, resources.id),
+          )
+          .where(inArray(tripResourceAssignments.resourceId, resourceIds));
+    const tripReservations: ResourceReservation[] = tripReservationRows.map(
+      ({ assignment, trip, resource }) => ({
+        assignmentId: `trip:${assignment.id}`,
+        bookingId: trip.id,
+        bookingName: `Trip: ${trip.name}`,
+        resourceId: resource.id,
+        resourceCode: resource.code,
+        resourceName: resource.name,
+        resourceStatus: resource.status,
+        countsAsAttraction: false,
+        movable: resource.movable,
+        setupMinutes: 0,
+        teardownMinutes: 0,
+        minimumTransferMinutes: resource.minimumTransferMinutes,
+        startsAt: trip.startDate,
+        endsAt: trip.endDate,
+        location:
+          trip.startLatitude === null || trip.startLongitude === null
+            ? null
+            : { latitude: trip.startLatitude, longitude: trip.startLongitude },
+      }),
+    );
     const reservations: ResourceReservation[] = reservationRows.map(
       ({ assignment, booking, resource }) => ({
         assignmentId: assignment.id,
@@ -350,7 +392,7 @@ implements BookingOperationsSummaryRepository {
           minimumTransferMinutes: resource.minimumTransferMinutes,
           status: resource.status,
         })),
-        reservations: reservations.filter((reservation) =>
+        reservations: [...reservations, ...tripReservations].filter((reservation) =>
           resourceIds.includes(reservation.resourceId) &&
           bookingAssignments.some(
             ({ resource }) => resource.id === reservation.resourceId,
@@ -373,6 +415,6 @@ export function createBookingOperationsSummaryProvider(
 ): CachedBookingOperationsSummaryProvider {
   return new CachedBookingOperationsSummaryProvider(
     new DrizzleBookingOperationsSummaryRepository(db),
-    unavailableTransferTimeLookup,
+    createTripTransferTimeLookup(db),
   );
 }

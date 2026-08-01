@@ -1290,3 +1290,168 @@ export const actSyncOperations = pgTable(
     ),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Trips, route planning & fuel estimates
+// ---------------------------------------------------------------------------
+
+export const tripEstimateSourceValues = ["live", "cached", "manual"] as const;
+export type TripEstimateSource = (typeof tripEstimateSourceValues)[number];
+
+export const trips = pgTable(
+  "trips",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    travelLegId: uuid("travel_leg_id")
+      .notNull()
+      .references(() => travelLegs.id),
+    name: text("name").notNull(),
+    startDate: timestamp("start_date", { withTimezone: true }).notNull(),
+    endDate: timestamp("end_date", { withTimezone: true }).notNull(),
+    startLabel: text("start_label").notNull(),
+    startLatitude: doublePrecision("start_latitude"),
+    startLongitude: doublePrecision("start_longitude"),
+    endLabel: text("end_label").notNull(),
+    endLatitude: doublePrecision("end_latitude"),
+    endLongitude: doublePrecision("end_longitude"),
+    vehicleName: text("vehicle_name"),
+    mpg: doublePrecision("mpg"),
+    fuelPricePerGallon: doublePrecision("fuel_price_per_gallon"),
+    routeConfirmedAt: timestamp("route_confirmed_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check("trips_name_nonblank", sql`nullif(trim(${table.name}), '') is not null`),
+    check("trips_date_range_valid", sql`${table.endDate} >= ${table.startDate}`),
+    check("trips_mpg_positive", sql`${table.mpg} is null or ${table.mpg} > 0`),
+    check(
+      "trips_fuel_price_nonnegative",
+      sql`${table.fuelPricePerGallon} is null or ${table.fuelPricePerGallon} >= 0`,
+    ),
+    index("trips_travel_leg_idx").on(table.travelLegId),
+    index("trips_date_range_idx").on(table.startDate, table.endDate),
+  ],
+);
+
+export const tripStops = pgTable(
+  "trip_stops",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("trip_stops_trip_booking_unique").on(table.tripId, table.bookingId),
+    index("trip_stops_trip_idx").on(table.tripId),
+    check("trip_stops_sort_order_positive", sql`${table.sortOrder} >= 1`),
+  ],
+);
+
+export const tripSegments = pgTable(
+  "trip_segments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    sequence: integer("sequence").notNull(),
+    fromKey: text("from_key").notNull(),
+    toKey: text("to_key").notNull(),
+    fromLabel: text("from_label").notNull(),
+    toLabel: text("to_label").notNull(),
+    miles: doublePrecision("miles"),
+    minutes: doublePrecision("minutes"),
+    source: text("source").$type<TripEstimateSource>(),
+    estimatedAt: timestamp("estimated_at", { withTimezone: true }),
+    overrideMiles: doublePrecision("override_miles"),
+    overrideMinutes: doublePrecision("override_minutes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("trip_segments_trip_sequence_unique").on(table.tripId, table.sequence),
+    index("trip_segments_trip_idx").on(table.tripId),
+    check(
+      "trip_segments_source_valid",
+      sql`${table.source} is null or ${table.source} in (${sqlTextValues(tripEstimateSourceValues)})`,
+    ),
+    check(
+      "trip_segments_miles_nonnegative",
+      sql`${table.miles} is null or ${table.miles} >= 0`,
+    ),
+    check(
+      "trip_segments_minutes_nonnegative",
+      sql`${table.minutes} is null or ${table.minutes} >= 0`,
+    ),
+    check(
+      "trip_segments_override_miles_nonnegative",
+      sql`${table.overrideMiles} is null or ${table.overrideMiles} >= 0`,
+    ),
+    check(
+      "trip_segments_override_minutes_nonnegative",
+      sql`${table.overrideMinutes} is null or ${table.overrideMinutes} >= 0`,
+    ),
+  ],
+);
+
+export const tripResourceAssignments = pgTable(
+  "trip_resource_assignments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    resourceId: uuid("resource_id")
+      .notNull()
+      .references(() => resources.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("trip_resource_assignments_trip_resource_unique").on(
+      table.tripId,
+      table.resourceId,
+    ),
+    index("trip_resource_assignments_resource_idx").on(table.resourceId),
+  ],
+);
+
+export const routingCacheEntries = pgTable(
+  "routing_cache_entries",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    cacheKey: text("cache_key").notNull(),
+    miles: doublePrecision("miles").notNull(),
+    minutes: doublePrecision("minutes").notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("routing_cache_entries_cache_key_unique").on(table.cacheKey),
+    check("routing_cache_entries_miles_nonnegative", sql`${table.miles} >= 0`),
+    check(
+      "routing_cache_entries_minutes_nonnegative",
+      sql`${table.minutes} >= 0`,
+    ),
+  ],
+);

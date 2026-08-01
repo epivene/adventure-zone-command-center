@@ -19,6 +19,7 @@ import ContactNewPage from "@/pages/ContactNewPage";
 import OrganizationsPage from "@/pages/OrganizationsPage";
 import CalendarPage from "@/pages/CalendarPage";
 import RoutesPage from "@/pages/RoutesPage";
+import TripDetailPage from "@/pages/TripDetailPage";
 import CallWorkspacePage from "@/pages/CallWorkspacePage";
 import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
@@ -183,6 +184,7 @@ function AppRoutes() {
               <Route path="/organizations" component={OrganizationsPage} />
               <Route path="/calendar" component={CalendarPage} />
               <Route path="/routes" component={RoutesPage} />
+              <Route path="/trips/:tripId" component={TripDetailPage} />
               <Route path="/calls/new" component={CallWorkspacePage} />
               <Route path="/event-profiles/new" component={EventProfileNewPage} />
               <Route path="/event-profiles/:profileId" component={EventProfilePage} />

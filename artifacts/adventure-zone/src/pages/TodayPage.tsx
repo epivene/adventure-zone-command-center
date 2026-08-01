@@ -111,6 +111,30 @@ export default function TodayPage() {
         <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />
       </div>
 
+      {(dashboard.todayTrips ?? []).length ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-xl font-bold">Today's trips</h2>
+          <p className="mt-1 text-sm text-slate-600">Routes on the road today.</p>
+          <ul className="mt-4 grid gap-2">
+            {dashboard.todayTrips.map((trip: any) => (
+              <li className="flex flex-wrap items-center gap-2" key={trip.id}>
+                {trip.legColor ? (
+                  <span aria-hidden className="size-3 rounded-full" style={{ backgroundColor: trip.legColor }} />
+                ) : null}
+                <Link className="font-semibold text-slate-950 hover:text-orange-700" href={`/trips/${trip.id}`}>
+                  {trip.name}
+                </Link>
+                <span className="text-sm text-slate-600">
+                  {trip.legName ? `${trip.legName} · ` : ""}
+                  {trip.stopCount} {trip.stopCount === 1 ? "stop" : "stops"}
+                  {trip.vehicleName ? ` · ${trip.vehicleName}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-bold">Needs Follow-up Plan</h2>

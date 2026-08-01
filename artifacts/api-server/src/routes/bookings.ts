@@ -14,7 +14,7 @@ import { DrizzlePackageRepository } from "@/features/packages/package-repository
 import { PackageService } from "@/features/packages/package-service";
 import { DrizzleResourceRepository } from "@/features/resources/resource-repository";
 import { ResourceService } from "@/features/resources/resource-service";
-import { unavailableTransferTimeLookup } from "@/features/bookings/booking-operations-summary";
+import { createTripTransferTimeLookup } from "@/features/trips/transfer-time-lookup";
 
 const router: IRouter = Router();
 
@@ -160,7 +160,7 @@ router.post("/bookings/configure-resources", async (req, res): Promise<void> => 
   try {
     const result = await new ResourceService(
       new DrizzleResourceRepository(db),
-      unavailableTransferTimeLookup,
+      createTripTransferTimeLookup(db),
     ).configureBookingAssignments({ ...parsed.data, actorId });
     if (!result.ok) {
       res.status(400).json({ ok: false, error: resourceErrorMessages[result.error.code] ?? "Could not save assignments." });
@@ -183,7 +183,7 @@ router.post("/bookings/acknowledge-conflict", async (req, res): Promise<void> =>
   try {
     const result = await new ResourceService(
       new DrizzleResourceRepository(db),
-      unavailableTransferTimeLookup,
+      createTripTransferTimeLookup(db),
     ).acknowledgeConflict({ ...parsed.data, actorId });
     if (!result.ok) {
       res.status(400).json({ ok: false, error: resourceErrorMessages[result.error.code] ?? "Could not save override." });
