@@ -616,6 +616,8 @@ export const activities = pgTable("activities", {
   kind: activityKindEnum("kind").notNull(),
   body: text("body").notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  /** Act! source record key (e.g. "act_note:{id}") — set only on imported items; used for idempotent re-import. */
+  actRecordId: text("act_record_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -623,6 +625,9 @@ export const activities = pgTable("activities", {
     "activities_parent_required",
     sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null`,
   ),
+  uniqueIndex("activities_act_record_id_unique")
+    .on(table.actRecordId)
+    .where(sql`${table.actRecordId} is not null`),
   index("activities_organization_occurred_at_idx").on(
     table.organizationId,
     table.occurredAt.desc(),

@@ -7,6 +7,8 @@ import {
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
+import { ActivityService } from "@/features/activities/activity-service";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 
 const router: IRouter = Router();
 function orgRepo() { return new DrizzleOrganizationRepository(db); }
@@ -49,7 +51,10 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
   try {
     const organization = await orgRepo().getOrganizationSummary(id);
     if (!organization) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ organization });
+    const timeline = await new ActivityService(
+      new DrizzleActivityRepository(db),
+    ).listTimeline({ organizationId: id });
+    res.json({ organization, timeline });
   } catch (err) {
     req.log.error({ err }, "Failed to get organization");
     res.status(500).json({ error: "Failed to get organization" });

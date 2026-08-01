@@ -1,3 +1,6 @@
+import { eq } from "drizzle-orm";
+
+import { actMigrationRuns } from "@/db/schema";
 import { DrizzleLocalCandidateRepository } from "@/features/act-migration/local-candidate-repository";
 import {
   DrizzleActMigrationPreviewRepository,
@@ -45,6 +48,8 @@ export type StoredMigrationWorkspace = {
   progress: SnapshotProgress;
   preview: StoredMigrationPreviewPage | null;
   apply?: StoredMigrationApplyState;
+  /** Raw JSONB summary persisted on the run row (e.g. activityImport result). */
+  runSummary?: Record<string, unknown> | null;
 };
 
 export interface ActMigrationWorkspaceReader {
@@ -95,6 +100,15 @@ export async function createActMigrationWorkspaceReader():
         throw error;
       }
       if (!progress) return null;
+
+      // Fetch the run's JSONB summary for durability (e.g. persisted activityImport result).
+      const [runRow] = await database
+        .select({ summary: actMigrationRuns.summary })
+        .from(actMigrationRuns)
+        .where(eq(actMigrationRuns.id, progress.runId))
+        .limit(1);
+      const runSummary = runRow?.summary ?? null;
+
       const preview = await previews.getPreviewIfStored(progress.runId, input.query);
       const applyWorkspace = preview
         ? await applies.getApplyWorkspace(progress.runId)
@@ -111,6 +125,7 @@ export async function createActMigrationWorkspaceReader():
       return {
         progress,
         preview,
+        runSummary,
         ...(preview
           ? {
               apply: {

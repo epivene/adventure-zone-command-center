@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 import { contactFormInputSchema, contactListQuerySchema } from "@/features/contacts/contact-input";
+import { ActivityService } from "@/features/activities/activity-service";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 
 const router: IRouter = Router();
 function contactRepo() { return new DrizzleContactRepository(db); }
@@ -41,7 +43,10 @@ router.get("/contacts/:id", async (req, res): Promise<void> => {
   try {
     const detail = await contactRepo().getContactDetail(id);
     if (!detail) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(detail);
+    const timeline = await new ActivityService(
+      new DrizzleActivityRepository(db),
+    ).listTimeline({ contactId: id });
+    res.json({ ...detail, timeline });
   } catch (err) {
     req.log.error({ err }, "Failed to get contact");
     res.status(500).json({ error: "Failed to get contact" });

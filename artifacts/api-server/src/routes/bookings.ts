@@ -5,6 +5,8 @@ import { DrizzleBookingRepository } from "@/features/bookings/booking-repository
 import { BookingService } from "@/features/bookings/booking-service";
 import { bookingInputSchema, bookingEditInputSchema } from "@/features/bookings/booking-input";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
+import { ActivityService } from "@/features/activities/activity-service";
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import {
   addSpecialRequestInputSchema,
   configureBookingPackagesInputSchema,
@@ -201,12 +203,14 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
   try {
     const detail = await bookingRepo().getBookingDetail(id);
     if (!detail) { res.status(404).json({ error: "Not found" }); return; }
+    const activitySvc = new ActivityService(new DrizzleActivityRepository(db));
     // Include archived legs so a booking already assigned to one still renders it;
     // the picker filters archived legs out of the selectable options client-side.
-    const allTravelLegs = await new DrizzleTravelLegRepository(db).listTravelLegs({
-      includeArchived: true,
-    });
-    res.json({ ...detail, allTravelLegs });
+    const [allTravelLegs, timeline] = await Promise.all([
+      new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
+      activitySvc.listTimeline({ bookingId: id }),
+    ]);
+    res.json({ ...detail, allTravelLegs, timeline });
   } catch (err) {
     req.log.error({ err }, "Failed to get booking");
     res.status(500).json({ error: "Failed to get booking" });

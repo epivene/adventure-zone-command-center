@@ -13,6 +13,22 @@ interface StreamProgress {
   errorCode: string | null;
 }
 
+interface ActivityImportStreamResult {
+  inserted: number;
+  /** Already existed — conflict suppressed by idempotency key. */
+  skipped: number;
+  /** No resolvable local parent (entity not yet imported). */
+  unlinked: number;
+  errors: number;
+}
+
+interface ActivityImportResult {
+  note: ActivityImportStreamResult;
+  history: ActivityImportStreamResult;
+  activity: ActivityImportStreamResult;
+  errorMessage?: string;
+}
+
 interface RunStatus {
   runId: string;
   status: string;
@@ -35,6 +51,7 @@ interface RunStatus {
     counts: Record<string, number>;
     byTarget: Record<string, Record<string, number>>;
   } | null;
+  activityImport: ActivityImportResult | null;
 }
 
 interface StatusResponse {
@@ -149,7 +166,17 @@ function StreamRow({ stream }: { stream: StreamProgress }) {
   );
 }
 
-function RunProgress({ run }: { run: RunStatus }) {
+function RunProgress({
+  run,
+  onReimportHistory,
+  reimportingHistory,
+  reimportError,
+}: {
+  run: RunStatus;
+  onReimportHistory?: () => void;
+  reimportingHistory?: boolean;
+  reimportError?: string | null;
+}) {
   const isComplete = run.phase === "applied";
   const isFailed = run.phase === "failed";
 
@@ -226,17 +253,90 @@ function RunProgress({ run }: { run: RunStatus }) {
         </div>
       )}
 
+      {/* Activity import (notes / email history) */}
+      {run.activityImport && (
+        <div>
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Activity history (notes &amp; emails)
+            </p>
+            {onReimportHistory && run.phase === "applied" && (
+              <button
+                onClick={onReimportHistory}
+                disabled={reimportingHistory}
+                className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:opacity-50 transition"
+                title="Re-run history import to link any remaining unresolved entries"
+              >
+                {reimportingHistory ? "Importing…" : "Re-run history import"}
+              </button>
+            )}
+          </div>
+          {reimportError && (
+            <div className="mb-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+              ✗ {reimportError}
+            </div>
+          )}
+          {run.activityImport.errorMessage && (
+            <div className="mb-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              ⚠ {run.activityImport.errorMessage}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-700">
+            {(["note", "history", "activity"] as const).map((stream) => {
+              const s = run.activityImport![stream];
+              const label = stream === "note" ? "Notes" : stream === "history" ? "Email/History" : "Activities";
+              const total = s.inserted + s.skipped + s.unlinked + s.errors;
+              if (total === 0) return null;
+              return (
+                <span key={stream} className="flex flex-wrap items-center gap-1">
+                  <span className="text-slate-500 font-medium">{label}:</span>
+                  <strong className="text-green-700">{s.inserted.toLocaleString()} added</strong>
+                  {s.skipped > 0 && (
+                    <span className="text-slate-400">· {s.skipped} already imported</span>
+                  )}
+                  {s.unlinked > 0 && (
+                    <span className="text-amber-600" title="Contact or booking not found — will link on a re-run once those records are imported">
+                      · {s.unlinked} not yet linked
+                    </span>
+                  )}
+                  {s.errors > 0 && (
+                    <span className="text-red-500">· {s.errors} errors</span>
+                  )}
+                </span>
+              );
+            })}
+            {(["note", "history", "activity"] as const).every(
+              (s) => (run.activityImport![s].inserted + run.activityImport![s].skipped + run.activityImport![s].unlinked + run.activityImport![s].errors) === 0
+            ) && (
+              <span className="text-slate-400 italic">No history entries found in Act!</span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Final summary */}
       {isComplete && (
-        <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800">
-          <p className="font-semibold">Import finished successfully.</p>
-          <p className="mt-1">
-            {run.snapshot.stagedRecords.toLocaleString()} records imported. New places, contacts,
-            bookings, and calling lists are now available in the app.
-          </p>
+        <div className={`rounded-lg px-4 py-3 text-sm border ${run.activityImport?.errorMessage ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-green-50 border-green-200 text-green-800"}`}>
+          {run.activityImport?.errorMessage ? (
+            <>
+              <p className="font-semibold">Import complete — history partially loaded</p>
+              <p className="mt-1">
+                {run.snapshot.stagedRecords.toLocaleString()} records imported. Activity history
+                import encountered an error (see above); all other data is available.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-semibold">Import finished successfully.</p>
+              <p className="mt-1">
+                {run.snapshot.stagedRecords.toLocaleString()} records imported. New places, contacts,
+                bookings, and calling lists are now available in the app.
+              </p>
+            </>
+          )}
           <Link
             href="/profiles"
-            className="mt-3 inline-flex items-center rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700"
+            className={`mt-3 inline-flex items-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 ${run.activityImport?.errorMessage ? "bg-amber-700 hover:bg-amber-800 focus-visible:outline-amber-700" : "bg-green-700 hover:bg-green-800 focus-visible:outline-green-700"}`}
           >
             View Profiles →
           </Link>
@@ -488,6 +588,8 @@ export default function ActMigrationPage() {
   const [starting, setStarting] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [reimportingHistory, setReimportingHistory] = useState(false);
+  const [reimportError, setReimportError] = useState<string | null>(null);
 
   // ─── Scan state ────────────────────────────────────────────────────────────
   const [scanning, setScanning] = useState(false);
@@ -584,6 +686,27 @@ export default function ActMigrationPage() {
     }
   }
 
+  // ─── Re-run history import ────────────────────────────────────────────────
+
+  async function handleReimportHistory() {
+    setReimportError(null);
+    setReimportingHistory(true);
+    try {
+      const res = await apiFetch("/migration/act/import-history", { method: "POST" });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (!data.ok) {
+        setReimportError(data.error ?? "History import failed");
+        return;
+      }
+      // Refresh status to pick up updated counts
+      await fetchStatus(runId ?? undefined);
+    } catch (err) {
+      setReimportError(err instanceof Error ? err.message : "History import failed");
+    } finally {
+      setReimportingHistory(false);
+    }
+  }
+
   // ─── Run scan ─────────────────────────────────────────────────────────────
 
   async function handleScan(creds: Credentials | null) {
@@ -639,7 +762,14 @@ export default function ActMigrationPage() {
       )}
 
       {/* Show the running/completed run */}
-      {run && <RunProgress run={run} />}
+      {run && (
+        <RunProgress
+          run={run}
+          onReimportHistory={handleReimportHistory}
+          reimportingHistory={reimportingHistory}
+          reimportError={reimportError}
+        />
+      )}
 
       {/* Show form to start a new run */}
       {!isRunning && (

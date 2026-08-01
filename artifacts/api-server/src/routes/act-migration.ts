@@ -31,6 +31,12 @@ interface PipelineRun {
   phase: PipelinePhase;
   error?: string;
   startedAt: Date;
+  activityImport?: {
+    note: { inserted: number; skipped: number; unlinked: number; errors: number };
+    history: { inserted: number; skipped: number; unlinked: number; errors: number };
+    activity: { inserted: number; skipped: number; unlinked: number; errors: number };
+    errorMessage?: string;
+  };
 }
 
 const activeRuns = new Map<string, PipelineRun>();
@@ -80,8 +86,11 @@ async function buildCaptureService(credentialOverride?: {
 
   const { db } = await import("@/db/client");
   const snapshots = new DrizzleActMigrationSnapshotRepository(db);
-  const client = new HttpActMigrationSourceClient(new ActClient(config));
-  return new ActMigrationSnapshotService(client, snapshots);
+  const sourceClient = new HttpActMigrationSourceClient(new ActClient(config));
+  return {
+    snapshotService: new ActMigrationSnapshotService(sourceClient, snapshots),
+    sourceClient,
+  };
 }
 
 // ─── Background pipeline ─────────────────────────────────────────────────────
@@ -90,6 +99,7 @@ async function runPipeline(
   runId: string,
   state: PipelineRun,
   snapshotService: ActMigrationSnapshotService,
+  sourceClient: import("@/features/act-migration/source-client").ActMigrationSourceClient,
 ) {
   try {
     // Phase 1: snapshot — loop until snapshot_complete or non-retryable failure
@@ -228,6 +238,60 @@ async function runPipeline(
     const hasFailed = (finalBatch?.summary.failed ?? 0) > 0;
 
     state.phase = hasFailed ? "partially_applied" : "applied";
+
+    // Phase 4: import Act! notes, history, and activities into the activity timeline.
+    //
+    // Gated on a fully-successful apply: `act_external_links` entries are only
+    // created for entities that successfully applied.  Running the import on a
+    // partially-applied run would silently count notes for un-applied entities
+    // as "unlinked" and they would never be retried.  When the run is re-started
+    // and fully applied those notes will be picked up then (idempotency key
+    // prevents re-insertion of any notes that did land in a prior run).
+    if (state.phase === "applied") {
+      let activityImportOutcome: PipelineRun["activityImport"];
+      try {
+        const { ActMigrationActivityImportService } = await import(
+          "@/features/act-migration/activity-import-service"
+        );
+        const { db: importDb } = await import("@/db/client");
+        const activityImporter = new ActMigrationActivityImportService(
+          sourceClient,
+          importDb,
+        );
+        // Pass an incremental callback so each stream's result is persisted as
+        // soon as it finishes. This makes the import resumable: if the process
+        // is killed mid-run the completed streams' counts survive in the DB.
+        const partial: PipelineRun["activityImport"] = {
+          note: { inserted: 0, skipped: 0, unlinked: 0, errors: 0 },
+          history: { inserted: 0, skipped: 0, unlinked: 0, errors: 0 },
+          activity: { inserted: 0, skipped: 0, unlinked: 0, errors: 0 },
+        };
+        const result = await activityImporter.importAll(
+          async (streamType, streamResult) => {
+            partial![streamType] = streamResult;
+            state.activityImport = { ...partial };
+            await persistActivityImportSummary(runId, { ...partial });
+          },
+        );
+        activityImportOutcome = result;
+      } catch (importErr: unknown) {
+        activityImportOutcome = {
+          note: { inserted: 0, skipped: 0, unlinked: 0, errors: 0 },
+          history: { inserted: 0, skipped: 0, unlinked: 0, errors: 0 },
+          activity: { inserted: 0, skipped: 0, unlinked: 0, errors: 0 },
+          errorMessage:
+            importErr instanceof Error
+              ? importErr.message
+              : "Activity import failed",
+        };
+      }
+
+      // Attach to in-memory state so the current run's status response is accurate.
+      state.activityImport = activityImportOutcome;
+
+      // Persist to the run's summary JSONB so the result survives server restarts.
+      await persistActivityImportSummary(runId, activityImportOutcome);
+    }
   } catch (err: unknown) {
     state.phase = "failed";
     state.error =
@@ -240,6 +304,35 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Persist the activity import result into the run's summary JSONB column so
+ * the counts and any error are visible after a server restart.
+ */
+async function persistActivityImportSummary(
+  runId: string,
+  outcome: PipelineRun["activityImport"],
+): Promise<void> {
+  try {
+    const [{ db }, { actMigrationRuns }, { eq }, { sql }] = await Promise.all([
+      import("@/db/client"),
+      import("@/db/schema"),
+      import("drizzle-orm"),
+      import("drizzle-orm"),
+    ]);
+    // Merge activityImport into any existing JSONB (reconciliation report etc.)
+    // using Postgres || operator so pre-existing keys are preserved.
+    const patch = JSON.stringify({ activityImport: outcome ?? null });
+    await db
+      .update(actMigrationRuns)
+      .set({
+        summary: sql`COALESCE(${actMigrationRuns.summary}, '{}'::jsonb) || ${patch}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where(eq(actMigrationRuns.id, runId));
+  } catch {
+    // Best-effort — never let a DB error mask the pipeline outcome
+  }
+}
 /**
  * Best-effort: persist "failed" status to the DB so that phase reads derive
  * the correct state from DB alone and survive server restarts.
@@ -294,7 +387,7 @@ async function markStaleBatchFailed(batchId: string, runId: string): Promise<voi
 
 /** GET /api/migration/act/config — returns whether env vars are configured */
 router.get("/migration/act/config", (_req, res) => {
-  const env = parseActEnvironment(process.env);
+      const env = parseActEnvironment(process.env);
   res.json({ envConfigured: env.configured });
 });
 
@@ -312,8 +405,7 @@ router.post("/migration/act/start", async (req, res): Promise<void> => {
           }
         : undefined;
 
-    const snapshotService = await buildCaptureService(credentialOverride);
-
+    const { snapshotService, sourceClient } = await buildCaptureService(credentialOverride);
     const requestKey = `ui-${Date.now()}-${randomUUID()}`;
     const databaseName =
       credentialOverride?.databaseName ??
@@ -337,14 +429,14 @@ router.post("/migration/act/start", async (req, res): Promise<void> => {
     activeRuns.set(runId, state);
 
     // Fire-and-forget background pipeline
-    runPipeline(runId, state, snapshotService).catch((err) => {
+    runPipeline(runId, state, snapshotService, sourceClient).catch((err) => {
       state.phase = "failed";
       state.error = err instanceof Error ? err.message : String(err);
     });
 
     res.json({ ok: true, runId });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Failed to start migration";
+    const msg = err instanceof Error ? err.message : "Scan failed";
     req.log?.error({ err }, "Migration start failed");
     if (
       err instanceof Error &&
@@ -376,13 +468,9 @@ router.get(
         return;
       }
 
-      const pipelineState = latestRunId
-        ? activeRuns.get(latestRunId)
-        : undefined;
+      const pipelineState = latestRunId ? activeRuns.get(latestRunId) : undefined;
 
-      // Fire-and-forget stale-batch cleanup: if the batch looks active but
-      // there is no in-memory pipeline the server restarted mid-apply.
-      // Persisting "failed" means the next read gets the right phase from DB.
+      // Fire-and-forget stale-batch cleanup
       if (!pipelineState && workspace.apply?.batch) {
         const derivedPhase = derivePhaseFromBatchStatus(workspace.apply.batch.status);
         if (derivedPhase === "applying") {
@@ -496,6 +584,13 @@ function formatRunStatus(
         }
       : null;
 
+  // Activity import result: prefer live in-memory state for the active run;
+  // fall back to the persisted DB summary so the field survives server restarts.
+  const activityImport: PipelineRun["activityImport"] =
+    pipelineState?.activityImport ??
+    (workspace.runSummary?.activityImport as PipelineRun["activityImport"] | undefined) ??
+    undefined;
+
   return {
     runId: progress.runId,
     status: progress.status,
@@ -520,6 +615,7 @@ function formatRunStatus(
         }
       : null,
     apply: applySummary,
+    activityImport: activityImport ?? null,
   };
 }
 
@@ -631,12 +727,7 @@ router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
     };
 
     if (credentialOverride) {
-      const env = parseActEnvironment({
-        ACT_API_BASE_URL: credentialOverride.baseUrl,
-        ACT_DATABASE_NAME: credentialOverride.databaseName,
-        ACT_USERNAME: credentialOverride.username,
-        ACT_PASSWORD: credentialOverride.password,
-      });
+      const env = parseActEnvironment(process.env);
       if (!env.configured) throw new ActApiError("not_configured", false);
       config = env.config;
     } else {
@@ -733,5 +824,86 @@ router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
     res.status(500).json({ ok: false, error: msg });
   }
 });
+
+/**
+ * POST /api/migration/act/import-history
+ *
+ * Re-runs just the activity-import phase (notes, history, activities) for the
+ * most recently completed migration run, without repeating the full entity
+ * migration.  Requires the latest run to be in the "applied" state; returns
+ * 409 otherwise.
+ *
+ * Use this to recover "not yet linked" history entries after:
+ * - A partially-applied run that is now fully applied on a second attempt
+ * - Manual investigation / review that resolved previously unlinked contacts
+ *
+ * Because every imported row carries a unique actRecordId, re-running is safe:
+ * duplicate entries are suppressed by the partial unique index.
+ */
+router.post(
+  "/migration/act/import-history",
+  async (req, res): Promise<void> => {
+    try {
+      // ── Resolve the latest run and verify it is fully applied ──────────────
+      const reader = await createActMigrationWorkspaceReader();
+      const env = parseActEnvironment(process.env);
+      if (!env.configured) {
+        res.status(400).json({ ok: false, error: "Act! credentials not configured" });
+        return;
+      }
+
+      const workspace = await reader.getWorkspace({
+        runId: latestRunId ?? undefined,
+        query: { page: 1, pageSize: 1 },
+      });
+      if (!workspace) {
+        res.status(404).json({ ok: false, error: "No migration run found" });
+        return;
+      }
+
+      const runId = workspace.progress.runId;
+
+      // Derive the phase the same way the status endpoint does
+      const pipelineState = latestRunId ? activeRuns.get(latestRunId) : undefined;
+      const formatted = formatRunStatus(workspace, pipelineState);
+      if (formatted.phase !== "applied") {
+        res.status(409).json({
+          ok: false,
+          error: `History import requires a fully-applied run (current phase: ${formatted.phase})`,
+        });
+        return;
+      }
+
+      // ── Build source client and run importer ───────────────────────────────
+      const [
+        { ActClient },
+        { HttpActMigrationSourceClient },
+        { ActMigrationActivityImportService },
+        { db: importDb },
+      ] = await Promise.all([
+        import("@/features/act-sync/act-client"),
+        import("@/features/act-migration/source-client"),
+        import("@/features/act-migration/activity-import-service"),
+        import("@/db/client"),
+      ]);
+
+      const sourceClient = new HttpActMigrationSourceClient(
+        new ActClient(env.config),
+      );
+      const importer = new ActMigrationActivityImportService(sourceClient, importDb);
+      const result = await importer.importAll();
+
+      // ── Persist and surface in status responses ────────────────────────────
+      await persistActivityImportSummary(runId, result);
+      if (pipelineState) pipelineState.activityImport = result;
+
+      res.json({ ok: true, result });
+    } catch (err: unknown) {
+      req.log?.error({ err }, "History import failed");
+      const msg = err instanceof Error ? err.message : "History import failed";
+      res.status(500).json({ ok: false, error: msg });
+    }
+  },
+);
 
 export default router;
