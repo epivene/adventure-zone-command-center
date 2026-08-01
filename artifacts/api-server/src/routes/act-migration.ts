@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
-import { parseActEnvironment, isActMigrationApplyEnabled } from "@/lib/env";
+import { parseActEnvironment } from "@/lib/env";
 import {
   createActMigrationPreviewService,
   createActMigrationApplyService,
@@ -131,11 +131,7 @@ async function runPipeline(
     const previewService = await createActMigrationPreviewService();
     await previewService.finalizePreview(runId);
 
-    // Phase 3: apply — only if the apply rollout flag is enabled
-    if (!isActMigrationApplyEnabled()) {
-      state.phase = "apply_gated";
-      return;
-    }
+    // Phase 3: apply — always run (single-owner import tool, no gate needed)
     state.phase = "applying";
     const applyService = await createActMigrationApplyService();
     const batchKey = `auto-${runId}`;

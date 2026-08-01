@@ -165,7 +165,9 @@ export function buildMigrationApplyManifest(
       dispositions.set(proposal.proposalKey, "ignored");
       continue;
     }
-    if (isUnconfirmedStaticGroup(proposal)) {
+    // Calling lists auto-approved by autoReviewMigrationProposals are treated
+    // as implicitly confirmed static groups — skip the throw for those.
+    if (isUnconfirmedStaticGroup(proposal) && !automaticApprovals.has(proposal.proposalKey)) {
       throw new Error(
         "Act migration Group proposals require an individual static Group confirmation.",
       );
@@ -219,7 +221,8 @@ export function buildMigrationApplyManifest(
       canonicalTargetLocalEntityId:
         proposal.chosenLocalEntityId ?? proposal.proposedLocalId,
       canonicalSourceIds: [...(proposal.duplicateSourceIds ?? [])].toSorted(),
-      decision: proposal.decision ?? "approve_proposed",
+      decision: proposal.decision ??
+        (proposal.targetEntityType === "calling_list" ? "confirm_static_group" : "approve_proposed"),
       chosenLocalEntityId: proposal.chosenLocalEntityId,
       primarySourceId: proposal.primarySourceId,
       targetEntityType: proposal.targetEntityType,
