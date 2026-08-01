@@ -6,7 +6,6 @@ services:
     region: oregon
     plan: free
     buildCommand: >-
-      npm install -g pnpm@10 &&
       pnpm install --frozen-lockfile &&
       pnpm --filter @workspace/api-server run build
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
@@ -34,7 +33,6 @@ services:
     runtime: static
     region: oregon
     buildCommand: >-
-      npm install -g pnpm@10 &&
       pnpm install --frozen-lockfile &&
       pnpm --filter @workspace/adventure-zone run build
     staticPublishPath: artifacts/adventure-zone/dist/public
