@@ -460,4 +460,149 @@ function derivePhaseFromSnapshotStatus(status: string, hasApplyWorkspace: boolea
   }
 }
 
+// ─── Route scan ──────────────────────────────────────────────────────────────
+
+const SCAN_CAP_PER_STREAM = 500;
+
+/**
+ * POST /api/migration/act/scan-routes
+ * Read-only scan: fetches activities, notes, and history from Act! and
+ * matches them against known organization names in the local DB.
+ * No data is written to the database.
+ */
+router.post("/migration/act/scan-routes", async (req, res): Promise<void> => {
+  try {
+    const body = req.body ?? {};
+    const credentialOverride =
+      body.baseUrl && body.databaseName && body.username && body.password
+        ? {
+            baseUrl: body.baseUrl as string,
+            databaseName: body.databaseName as string,
+            username: body.username as string,
+            password: body.password as string,
+          }
+        : undefined;
+
+    const [
+      { ActApiError },
+      { ActClient },
+      { HttpActMigrationSourceClient },
+      { parseRawItem },
+      { matchItemsToRoutes },
+    ] = await Promise.all([
+      import("@/features/act-sync/act-errors"),
+      import("@/features/act-sync/act-client"),
+      import("@/features/act-migration/source-client"),
+      import("@/features/act-migration/act-activity-parser"),
+      import("@/features/act-migration/act-route-matcher"),
+    ]);
+
+    let config: {
+      baseUrl: "https://apius.act.com/act.web.api";
+      databaseName: string;
+      username: string;
+      password: string;
+    };
+
+    if (credentialOverride) {
+      const env = parseActEnvironment({
+        ACT_API_BASE_URL: credentialOverride.baseUrl,
+        ACT_DATABASE_NAME: credentialOverride.databaseName,
+        ACT_USERNAME: credentialOverride.username,
+        ACT_PASSWORD: credentialOverride.password,
+      });
+      if (!env.configured) throw new ActApiError("not_configured", false);
+      config = env.config;
+    } else {
+      const env = parseActEnvironment(process.env);
+      if (!env.configured) throw new ActApiError("not_configured", false);
+      config = env.config;
+    }
+
+    const sourceClient = new HttpActMigrationSourceClient(
+      new ActClient(config),
+    );
+
+    // Page through all three streams up to SCAN_CAP_PER_STREAM items each
+    type StreamName = "activity" | "note" | "history";
+    type PageRequest = Parameters<typeof sourceClient.listActivities>[0];
+    const streams: {
+      name: StreamName;
+      list: (req: PageRequest) => ReturnType<typeof sourceClient.listActivities>;
+    }[] = [
+      { name: "activity", list: (r) => sourceClient.listActivities(r) },
+      { name: "note",     list: (r) => sourceClient.listNotes(r) },
+      { name: "history",  list: (r) => sourceClient.listHistory(r) },
+    ];
+
+    const PAGE_SIZE = 100;
+    const allParsed = [];
+
+    for (const stream of streams) {
+      let skip = 0;
+      let fetched = 0;
+      // Start in projected mode; the source client may return queryMode: "plain"
+      // as a one-time signal that the endpoint requires unprojected queries.
+      let queryMode: "projected" | "plain" = "projected";
+
+      while (fetched < SCAN_CAP_PER_STREAM) {
+        const top = Math.min(PAGE_SIZE, SCAN_CAP_PER_STREAM - fetched);
+        const page = await stream.list({ skip, top, queryMode });
+
+        // Projected-to-plain fallback: the source client returns queryMode "plain"
+        // (with nextSkip still at the current skip and items=[]) to signal the
+        // caller must retry in plain/unprojected mode. Switch and loop again.
+        if (page.queryMode !== queryMode) {
+          queryMode = page.queryMode as "projected" | "plain";
+          // nextSkip is preserved (still 0); skip stays the same
+          continue;
+        }
+
+        for (const raw of page.items) {
+          const parsed = parseRawItem(stream.name, raw);
+          if (parsed) allParsed.push(parsed);
+        }
+        fetched += page.items.length;
+
+        // nextSkip is null when there are no more pages
+        if (page.nextSkip === null) break;
+        skip = page.nextSkip;
+      }
+    }
+
+    // Load organization names from the local DB
+    const { db } = await import("@/db/client");
+    const { organizations } = await import("@/db/schema");
+    const orgRows = await db
+      .select({ id: organizations.id, name: organizations.name })
+      .from(organizations);
+    const routeNames = orgRows
+      .map((r) => r.name)
+      .filter((name) => name && name.trim().length > 0);
+
+    // Match items to routes
+    const result = matchItemsToRoutes(allParsed, routeNames);
+
+    res.json({
+      ok: true,
+      totalScanned: allParsed.length,
+      routeCount: routeNames.length,
+      matched: result.matched,
+      unmatched: result.unmatched,
+    });
+  } catch (err: unknown) {
+    req.log?.error({ err }, "Route scan failed");
+    if (
+      err instanceof Error &&
+      "code" in err &&
+      (err as { code: string }).code === "not_configured"
+    ) {
+      res.status(400).json({ ok: false, error: "Act! credentials not configured" });
+      return;
+    }
+    const msg = err instanceof Error ? err.message : "Scan failed";
+    res.status(500).json({ ok: false, error: msg });
+  }
+});
+
 export default router;

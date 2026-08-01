@@ -25,6 +25,18 @@ const sourceQueries = {
   group: {
     select: "id,name,description,edited",
   },
+  activity: {
+    select: "id,activityType,subject,scheduleDate,duration,details,edited",
+    expand: "contacts($select=id,fullName);companies($select=id,name)",
+  },
+  note: {
+    select: "id,subject,body,createDate,edited",
+    expand: "contact($select=id,fullName);company($select=id,name)",
+  },
+  history: {
+    select: "id,subject,details,createDate,edited",
+    expand: "contact($select=id,fullName);company($select=id,name)",
+  },
 } as const;
 
 type SourceEntity = keyof typeof sourceQueries;
@@ -50,6 +62,9 @@ export interface ActMigrationSourceClient {
     groupId: string,
     request: ActPageRequest,
   ): Promise<ActPage>;
+  listActivities(request: ActPageRequest): Promise<ActPage>;
+  listNotes(request: ActPageRequest): Promise<ActPage>;
+  listHistory(request: ActPageRequest): Promise<ActPage>;
 }
 
 function pageItems(value: unknown) {
@@ -118,6 +133,18 @@ export class HttpActMigrationSourceClient
       "contact",
       request,
     );
+  }
+
+  listActivities(request: ActPageRequest) {
+    return this.list("/api/activities", "activity", request);
+  }
+
+  listNotes(request: ActPageRequest) {
+    return this.list("/api/notes", "note", request);
+  }
+
+  listHistory(request: ActPageRequest) {
+    return this.list("/api/history", "history", request);
   }
 
   private async list(

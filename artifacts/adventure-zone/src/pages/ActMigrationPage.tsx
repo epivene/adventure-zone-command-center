@@ -41,6 +41,33 @@ interface StatusResponse {
   run: RunStatus | null;
 }
 
+// ─── Scan types ───────────────────────────────────────────────────────────────
+
+interface ScanItem {
+  streamType: "activity" | "note" | "history";
+  actId: string;
+  date: string | null;
+  subject: string | null;
+  body: string | null;
+  contactName: string | null;
+  companyName: string | null;
+  matchedRoutes: string[];
+}
+
+interface RouteMatchGroup {
+  routeName: string;
+  items: ScanItem[];
+}
+
+interface ScanResult {
+  ok: boolean;
+  error?: string;
+  totalScanned: number;
+  routeCount: number;
+  matched: RouteMatchGroup[];
+  unmatched: ScanItem[];
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function streamLabel(type: string) {
@@ -59,6 +86,26 @@ function phaseLabel(phase: string) {
     case "applied":           return "Import complete";
     case "failed":            return "Import failed";
     default:                  return "Running…";
+  }
+}
+
+function actTypeLabel(streamType: string) {
+  switch (streamType) {
+    case "activity": return "Activity";
+    case "note":     return "Note";
+    case "history":  return "Email/History";
+    default:         return streamType;
+  }
+}
+
+function formatDate(date: string | null) {
+  if (!date) return "—";
+  try {
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric", month: "short", day: "numeric",
+    });
+  } catch {
+    return date;
   }
 }
 
@@ -203,10 +250,12 @@ function CredentialsForm({
   onSubmit,
   loading,
   error,
+  submitLabel,
 }: {
   onSubmit: (creds: Credentials | null) => void;
   loading: boolean;
   error: string | null;
+  submitLabel?: string;
 }) {
   const [baseUrl, setBaseUrl] = useState("https://apius.act.com/act.web.api");
   const [databaseName, setDatabaseName] = useState("");
@@ -275,9 +324,144 @@ function CredentialsForm({
         disabled={loading}
         className="w-full rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-50"
       >
-        {loading ? "Starting…" : "Run import"}
+        {loading ? "Running…" : (submitLabel ?? "Run import")}
       </button>
     </form>
+  );
+}
+
+// ─── Scan results ─────────────────────────────────────────────────────────────
+
+function ScanItemRow({ item }: { item: ScanItem }) {
+  return (
+    <tr className="border-b border-slate-100 last:border-0">
+      <td className="py-2 pr-3 text-xs text-slate-500 whitespace-nowrap">
+        {actTypeLabel(item.streamType)}
+      </td>
+      <td className="py-2 pr-3 text-xs text-slate-500 whitespace-nowrap">
+        {formatDate(item.date)}
+      </td>
+      <td className="py-2 pr-3 text-sm text-slate-700 max-w-xs">
+        {item.subject ?? <span className="italic text-slate-400">—</span>}
+      </td>
+      <td className="py-2 text-xs text-slate-500">
+        {item.contactName ?? item.companyName ?? <span className="italic text-slate-400">—</span>}
+      </td>
+    </tr>
+  );
+}
+
+function RouteGroup({ group }: { group: RouteMatchGroup }) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setCollapsed((c) => !c)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50"
+      >
+        <span className="font-semibold text-slate-800 text-sm">{group.routeName}</span>
+        <span className="ml-3 flex items-center gap-2">
+          <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700">
+            {group.items.length} {group.items.length === 1 ? "match" : "matches"}
+          </span>
+          <span className="text-slate-400 text-xs">{collapsed ? "▶" : "▼"}</span>
+        </span>
+      </button>
+      {!collapsed && (
+        <div className="border-t border-slate-100 px-4 pb-3 overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-slate-200">
+                <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Type</th>
+                <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
+                <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</th>
+                <th className="py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Contact / Company</th>
+              </tr>
+            </thead>
+            <tbody>
+              {group.items.map((item) => (
+                <ScanItemRow key={`${item.streamType}-${item.actId}`} item={item} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScanResults({ result }: { result: ScanResult }) {
+  const [unmatchedOpen, setUnmatchedOpen] = useState(false);
+
+  return (
+    <div className="mt-4 space-y-4">
+      {/* Summary */}
+      <div className="flex flex-wrap gap-4 text-sm text-slate-600">
+        <span>
+          <strong className="text-slate-800">{result.totalScanned.toLocaleString()}</strong> Act! items scanned
+        </span>
+        <span>
+          <strong className="text-slate-800">{result.routeCount.toLocaleString()}</strong> routes checked
+        </span>
+        <span>
+          <strong className="text-orange-700">{result.matched.length}</strong> routes with matches
+        </span>
+        <span>
+          <strong className="text-slate-800">{result.unmatched.length.toLocaleString()}</strong> unmatched items
+        </span>
+      </div>
+
+      {result.matched.length === 0 && (
+        <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-600">
+          No Act! records matched any route names. Try broadening route names or check that Act! data is populated.
+        </div>
+      )}
+
+      {/* Matched groups */}
+      {result.matched.length > 0 && (
+        <div className="space-y-2">
+          {result.matched.map((group) => (
+            <RouteGroup key={group.routeName} group={group} />
+          ))}
+        </div>
+      )}
+
+      {/* Unmatched collapsible */}
+      {result.unmatched.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setUnmatchedOpen((o) => !o)}
+            className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-slate-50"
+          >
+            <span className="text-sm font-medium text-slate-600">
+              Unmatched items ({result.unmatched.length.toLocaleString()})
+            </span>
+            <span className="text-slate-400 text-xs">{unmatchedOpen ? "▼" : "▶"}</span>
+          </button>
+          {unmatchedOpen && (
+            <div className="border-t border-slate-100 px-4 pb-3 overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-slate-200">
+                    <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Type</th>
+                    <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
+                    <th className="py-2 pr-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Subject</th>
+                    <th className="py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Contact / Company</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.unmatched.map((item) => (
+                    <ScanItemRow key={`${item.streamType}-${item.actId}`} item={item} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -290,6 +474,11 @@ export default function ActMigrationPage() {
   const [starting, setStarting] = useState(false);
   const [runId, setRunId] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─── Scan state ────────────────────────────────────────────────────────────
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
 
   // ─── Polling ─────────────────────────────────────────────────────────────
 
@@ -371,6 +560,31 @@ export default function ActMigrationPage() {
     }
   }
 
+  // ─── Run scan ─────────────────────────────────────────────────────────────
+
+  async function handleScan(creds: Credentials | null) {
+    setScanError(null);
+    setScanResult(null);
+    setScanning(true);
+    try {
+      const body = creds ?? {};
+      const res = await apiFetch("/migration/act/scan-routes", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as ScanResult;
+      if (!data.ok) {
+        setScanError(data.error ?? "Scan failed");
+        return;
+      }
+      setScanResult(data);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   const run = statusData?.run ?? null;
@@ -431,10 +645,54 @@ export default function ActMigrationPage() {
               onSubmit={handleStart}
               loading={starting}
               error={startError}
+              submitLabel={run ? "Run import again" : "Run import"}
             />
           )}
         </div>
       )}
+
+      {/* ─── Calendar & Route Scan ─────────────────────────────────────── */}
+      <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-1 text-base font-semibold text-slate-800">Calendar &amp; Route Scan</h2>
+        <p className="mb-4 text-sm text-slate-600">
+          Scan Act! activities, notes, and email history for mentions of known routes (organizations).
+          Up to 500 items per stream are checked. No data is written.
+        </p>
+
+        {envConfigured ? (
+          <div className="space-y-4">
+            {scanError && (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                {scanError}
+              </div>
+            )}
+            <button
+              type="button"
+              disabled={scanning}
+              onClick={() => handleScan(null)}
+              className="w-full rounded-lg bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50"
+            >
+              {scanning ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Scanning Act! data…
+                </span>
+              ) : (
+                scanResult ? "Scan again" : "Scan Act! Data"
+              )}
+            </button>
+          </div>
+        ) : (
+          <CredentialsForm
+            onSubmit={handleScan}
+            loading={scanning}
+            error={scanError}
+            submitLabel={scanning ? "Scanning…" : "Scan Act! Data"}
+          />
+        )}
+
+        {scanResult && <ScanResults result={scanResult} />}
+      </div>
     </div>
   );
 }
