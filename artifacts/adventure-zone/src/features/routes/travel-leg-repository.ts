@@ -1,7 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, gt } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { bookings, travelLegs } from "@/db/schema";
+import { bookings, resources, travelLegs } from "@/db/schema";
 import type {
   BookingStatus,
   Probability,
@@ -110,6 +110,53 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
             });
           if (!updated) throw new Error("Travel leg is missing.");
           return updated;
+        },
+        insert: async (values) => {
+          const [inserted] = await transaction
+            .insert(travelLegs)
+            .values(values)
+            .returning({
+              id: travelLegs.id,
+              name: travelLegs.name,
+              color: travelLegs.color,
+              sortOrder: travelLegs.sortOrder,
+            });
+          if (!inserted) throw new Error("Travel leg could not be inserted.");
+          return inserted;
+        },
+        delete: async (id) => {
+          const [target] = await transaction
+            .select({ sortOrder: travelLegs.sortOrder })
+            .from(travelLegs)
+            .where(eq(travelLegs.id, id));
+
+          await transaction
+            .update(bookings)
+            .set({ travelLegId: null })
+            .where(eq(bookings.travelLegId, id));
+          await transaction
+            .update(resources)
+            .set({ normalTravelLegId: null })
+            .where(eq(resources.normalTravelLegId, id));
+
+          await transaction
+            .delete(travelLegs)
+            .where(eq(travelLegs.id, id));
+
+          if (target) {
+            const affected = await transaction
+              .select({ id: travelLegs.id, sortOrder: travelLegs.sortOrder })
+              .from(travelLegs)
+              .where(gt(travelLegs.sortOrder, target.sortOrder))
+              .orderBy(asc(travelLegs.sortOrder));
+
+            for (const leg of affected) {
+              await transaction
+                .update(travelLegs)
+                .set({ sortOrder: leg.sortOrder - 1, updatedAt: new Date() })
+                .where(eq(travelLegs.id, leg.id));
+            }
+          }
         },
         audit: (change: TravelLegAuditChange) =>
           recordAuditEntry(transaction, {

@@ -2,15 +2,20 @@ import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
 import { TravelLegEditor } from "@/components/routes/travel-leg-editor";
-import { updateTravelLegsAction } from "@/actions/routes";
+import {
+  updateTravelLegsAction,
+  addTravelLegAction,
+  deleteTravelLegAction,
+} from "@/actions/routes";
+import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
 export default function RoutesPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    apiGet<any>("/routes")
+  function loadData() {
+    return apiGet<any>("/routes")
       .then((d) => {
         setData({
           events: (d.events ?? []).map((e: any) => ({
@@ -23,7 +28,28 @@ export default function RoutesPage() {
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
+  }
+
+  useEffect(() => {
+    loadData();
   }, []);
+
+  async function handleAdd() {
+    const result = await addTravelLegAction();
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    // Reload to get fresh leg list
+    await loadData();
+  }
+
+  async function handleDelete(id: string) {
+    const result = await deleteTravelLegAction(id);
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    await loadData();
+  }
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -45,7 +71,13 @@ export default function RoutesPage() {
         </div>
       ) : data ? (
         <>
-          <TravelLegEditor legs={data.travelLegs} onSubmit={updateTravelLegsAction} />
+          <TravelLegEditor
+            key={data.travelLegs.map((l: any) => l.id).join(",")}
+            legs={data.travelLegs}
+            onSubmit={updateTravelLegsAction}
+            onAdd={handleAdd}
+            onDelete={handleDelete}
+          />
           <section aria-labelledby="event-map-title" className="grid gap-4">
             <div>
               <h2 className="text-2xl font-bold" id="event-map-title">
