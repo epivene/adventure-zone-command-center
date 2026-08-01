@@ -27,7 +27,7 @@ export default function EventProfileNewPage() {
     ]).then(([legs, orgs, contactPage]) => {
       setTravelLegs(legs ?? []);
       setEvents(
-        (orgs?.records ?? orgs?.organizations ?? []).map((event: any) => ({
+        (orgs?.organizations?.records ?? orgs?.records ?? orgs?.organizations ?? []).map((event: any) => ({
           id: event.id,
           name: event.name,
           city: null,
