@@ -260,6 +260,36 @@ async function failRunInDb(runId: string): Promise<void> {
   }
 }
 
+/**
+ * Best-effort: mark a stale apply batch as failed in the DB.
+ * Called when we detect an "applying" batch with no in-memory pipeline — the
+ * server restarted and the batch was left mid-flight. Persisting "failed" here
+ * means subsequent reads derive the correct terminal phase from the DB alone.
+ */
+async function markStaleBatchFailed(batchId: string, runId: string): Promise<void> {
+  try {
+    const [{ db }, { actMigrationApplyBatches, actMigrationRuns }, { eq }] =
+      await Promise.all([
+        import("@/db/client"),
+        import("@/db/schema"),
+        import("drizzle-orm"),
+      ]);
+    const now = new Date();
+    await Promise.all([
+      db
+        .update(actMigrationApplyBatches)
+        .set({ status: "failed", updatedAt: now })
+        .where(eq(actMigrationApplyBatches.id, batchId)),
+      db
+        .update(actMigrationRuns)
+        .set({ status: "failed", updatedAt: now })
+        .where(eq(actMigrationRuns.id, runId)),
+    ]);
+  } catch {
+    // Best-effort — display phase is already overridden in formatRunStatus
+  }
+}
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 
 /** GET /api/migration/act/config — returns whether env vars are configured */
@@ -349,6 +379,17 @@ router.get(
       const pipelineState = latestRunId
         ? activeRuns.get(latestRunId)
         : undefined;
+
+      // Fire-and-forget stale-batch cleanup: if the batch looks active but
+      // there is no in-memory pipeline the server restarted mid-apply.
+      // Persisting "failed" means the next read gets the right phase from DB.
+      if (!pipelineState && workspace.apply?.batch) {
+        const derivedPhase = derivePhaseFromBatchStatus(workspace.apply.batch.status);
+        if (derivedPhase === "applying") {
+          markStaleBatchFailed(workspace.apply.batch.id, workspace.progress.runId).catch(() => {});
+        }
+      }
+
       res.json({
         envConfigured,
         run: formatRunStatus(workspace, pipelineState),
@@ -380,6 +421,15 @@ router.get(
       }
 
       const pipelineState = activeRuns.get(runId);
+
+      // Fire-and-forget stale-batch cleanup (same logic as /status/latest)
+      if (!pipelineState && workspace.apply?.batch) {
+        const derivedPhase = derivePhaseFromBatchStatus(workspace.apply.batch.status);
+        if (derivedPhase === "applying") {
+          markStaleBatchFailed(workspace.apply.batch.id, workspace.progress.runId).catch(() => {});
+        }
+      }
+
       res.json({
         envConfigured,
         run: formatRunStatus(workspace, pipelineState),
@@ -414,10 +464,20 @@ function formatRunStatus(
   //      whether apply actually ran (and how it ended)
   //   3. Snapshot run status from DB — fallback when no batch exists
   let phase: PipelinePhase;
+  let staleBatchDetected = false;
   if (pipelineState) {
     phase = pipelineState.phase;
   } else if (apply?.batch) {
-    phase = derivePhaseFromBatchStatus(apply.batch.status);
+    const derivedPhase = derivePhaseFromBatchStatus(apply.batch.status);
+    if (derivedPhase === "applying") {
+      // No in-memory pipeline but batch looks active — the server restarted
+      // while apply was running. Mark as failed so the UI shows the re-run
+      // button instead of spinning forever.
+      phase = "failed";
+      staleBatchDetected = true;
+    } else {
+      phase = derivedPhase;
+    }
   } else {
     phase = derivePhaseFromSnapshotStatus(progress.status, !!apply);
   }
@@ -440,7 +500,11 @@ function formatRunStatus(
     runId: progress.runId,
     status: progress.status,
     phase,
-    pipelineError: pipelineState?.phase === "failed" ? pipelineState.error : null,
+    pipelineError: pipelineState?.phase === "failed"
+      ? pipelineState.error
+      : staleBatchDetected
+        ? "Apply was interrupted (server restarted mid-run). Click 'Run import again' to resume."
+        : null,
     snapshot: {
       completedCheckpoints: progress.completedCheckpoints,
       totalCheckpoints: progress.totalCheckpoints,
