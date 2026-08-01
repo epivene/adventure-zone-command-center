@@ -1,0 +1,56 @@
+services:
+  # ── Express API ──────────────────────────────────────────────────────────────
+  - type: web
+    name: adventure-zone-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: >-
+      npm install -g pnpm@10 &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @workspace/api-server run build
+    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+    healthCheckPath: /api/healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render PostgreSQL external connection string (with SSL added automatically
+      # by the db library when this key is present).
+      - key: RENDER_DATABASE_URL
+        sync: false
+      # Clerk backend secret key (starts with sk_live_...).
+      - key: CLERK_SECRET_KEY
+        sync: false
+      # Clerk publishable key (starts with pk_live_...).
+      - key: CLERK_PUBLISHABLE_KEY
+        sync: false
+      # Your Clerk user ID (e.g. user_2abc...). All CRM routes require this.
+      - key: OWNER_CLERK_USER_ID
+        sync: false
+
+  # ── Vite static frontend ─────────────────────────────────────────────────────
+  - type: web
+    name: adventure-zone-web
+    runtime: static
+    region: oregon
+    buildCommand: >-
+      npm install -g pnpm@10 &&
+      pnpm install --frozen-lockfile &&
+      pnpm --filter @workspace/adventure-zone run build
+    staticPublishPath: artifacts/adventure-zone/dist/public
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Clerk publishable key for the browser (starts with pk_live_...).
+      - key: VITE_CLERK_PUBLISHABLE_KEY
+        sync: false
+      # Clerk proxy URL — must point to the API service so cookie-based auth
+      # works across the Render domain.
+      # Format: https://<adventure-zone-api Render URL>/api/__clerk
+      # Set this AFTER the API service is live and you know its URL.
+      - key: VITE_CLERK_PROXY_URL
+        sync: false
