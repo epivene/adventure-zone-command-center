@@ -1,56 +1,19 @@
 {
-  "name": "stage-1",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
   "scripts": {
-    "test": "vitest run",
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "typecheck": "tsc --noEmit",
-    "test:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
-    "test:crm-db": "vitest run tests/integration/daily-crm-migration.test.ts tests/integration/organization-repository-postgres.test.ts tests/integration/activity-service.test.ts tests/integration/call-service.test.ts tests/integration/contact-repository.test.ts tests/integration/today-priority-postgres.test.ts tests/integration/package-resource-migration.test.ts tests/integration/package-repository.test.ts tests/integration/package-resource-settings-repository.test.ts tests/integration/package-service.test.ts tests/integration/resource-repository.test.ts tests/integration/resource-service.test.ts tests/integration/booking-operations-summary.test.ts tests/integration/place-person-relationship-migration.test.ts tests/integration/relationship-repository.test.ts tests/integration/booking-relationship-repository.test.ts tests/integration/relationship-reconciliation.test.ts tests/integration/act-migration-local-candidate-repository.test.ts tests/integration/act-migration-staging-migration.test.ts tests/integration/act-migration-snapshot-repository.test.ts tests/integration/act-migration-preview-repository.test.ts tests/integration/act-reviewed-import-migration.test.ts tests/integration/act-migration-apply-repository.test.ts tests/integration/act-migration-entity-apply.test.ts tests/integration/act-migration-relationship-apply.test.ts tests/integration/act-migration-calling-list-apply.test.ts --maxWorkers=1 --testTimeout=120000 --hookTimeout=120000",
-    "test:release": "node --import tsx scripts/run-release-tests.ts",
-    "db:preflight": "bash scripts/preflight-stage-one-migration.sh",
-    "db:seed": "node --import tsx db/seed.ts"
+    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "build": "pnpm run typecheck && pnpm -r --if-present run build",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
+  "private": true,
   "dependencies": {
-    "@clerk/nextjs": "^7.6.1",
-    "drizzle-orm": "^0.45.2",
-    "maplibre-gl": "^6.0.0",
-    "next": "^16.2.11",
-    "postgres": "^3.4.9",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "zod": "^4.4.3"
+    "@replit/connectors-sdk": "^0.4.1"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.0",
-    "@tailwindcss/postcss": "^4.3.3",
-    "@testing-library/jest-dom": "^7.0.0",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^26.1.1",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "drizzle-kit": "^0.31.10",
-    "eslint": "^9.39.5",
-    "eslint-config-next": "^16.2.11",
-    "jsdom": "^29.1.1",
-    "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.1",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3"
   }
 }
