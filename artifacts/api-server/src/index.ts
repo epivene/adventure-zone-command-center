@@ -1,5 +1,9 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { validateOwnerConfig } from "./lib/auth";
+
+// Fail fast if required owner config is absent — this is a single-owner CRM.
+validateOwnerConfig();
 
 const rawPort = process.env["PORT"];
 

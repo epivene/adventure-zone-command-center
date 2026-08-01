@@ -1,0 +1,395 @@
+import {
+  approvedContactWrite,
+  approvedBookingWrite,
+  completeCallInputSchema,
+  validateApprovedContactPatch,
+  validateApprovedBookingPatch,
+} from "@/features/calls/call-input";
+import type { BookingStatus } from "@/features/bookings/booking-types";
+import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
+import {
+  dispositionBookingStatus,
+  persistedCallDisposition,
+  publicCallDisposition,
+  type CallContext,
+  type CallError,
+  type CompletedCall,
+  type CompleteCallInput,
+} from "@/features/calls/call-types";
+import type { CallRepository } from "@/features/calls/call-repository";
+import { isFutureBusinessDate } from "@/lib/business-date";
+import { err, ok, type Result } from "@/lib/result";
+
+export type { CallRepository, CallTransaction } from "@/features/calls/call-repository";
+
+type CallServiceOptions = { now?: () => Date };
+
+function activityAudit(
+  input: CompleteCallInput,
+  activityId: string,
+  organizationId: string | null,
+  contactId: string | null,
+  bookingId: string | null,
+) {
+  return {
+    entityType: "activity",
+    entityId: activityId,
+    action: "create",
+    before: null,
+    after: {
+      organizationId,
+      contactId,
+      bookingId,
+      kind: "call",
+      body: input.note,
+      occurredAt: input.endedAt.toISOString(),
+    },
+  };
+}
+
+function canonicalOrganizationId(context: CallContext) {
+  return (
+    context.followUp?.organizationId ??
+    context.booking?.organizationId ??
+    context.contact?.organizationId ??
+    context.organization?.id ??
+    null
+  );
+}
+
+function validateCanonicalContext(
+  value: CompleteCallInput,
+  context: CallContext,
+): Result<{
+  organizationId: string | null;
+  contactId: string | null;
+  bookingId: string | null;
+}, CallError> {
+  const followUp = context.followUp;
+  const booking = context.booking;
+  const contact = context.contact;
+
+  if (
+    followUp &&
+    value.bookingId !== null &&
+    value.bookingId !== followUp.bookingId
+  ) {
+    return err({ code: "FOLLOW_UP_BOOKING_MISMATCH" });
+  }
+  if (followUp && value.contactId !== null) {
+    if (
+      followUp.contactId !== null &&
+      value.contactId !== followUp.contactId
+    ) {
+      return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
+    }
+    if (followUp.contactId === null) {
+      if (followUp.bookingId === null) {
+        return err({ code: "FOLLOW_UP_CONTACT_MISMATCH" });
+      }
+    }
+  }
+  if (
+    booking &&
+    contact &&
+    context.contactHasBookingRelationship === false
+  ) {
+    return err({ code: "CONTACT_BOOKING_MISMATCH" });
+  }
+
+  const organizationId =
+    value.organizationId ?? canonicalOrganizationId(context);
+  if (
+    contact &&
+    organizationId &&
+    context.contactHasActiveOrganizationRelationship === false
+  ) {
+    return err({ code: "CONTACT_ORGANIZATION_MISMATCH" });
+  }
+  if (
+    booking?.organizationId &&
+    booking.organizationId !== organizationId
+  ) {
+    return err({ code: "BOOKING_ORGANIZATION_MISMATCH" });
+  }
+  if (
+    followUp?.organizationId &&
+    followUp.organizationId !== organizationId
+  ) {
+    return err({ code: "FOLLOW_UP_ORGANIZATION_MISMATCH" });
+  }
+  if (
+    context.organization &&
+    organizationId &&
+    context.organization.id !== organizationId
+  ) {
+    return err({ code: "ORGANIZATION_NOT_FOUND" });
+  }
+
+  return ok({
+    organizationId,
+    contactId: contact?.id ?? null,
+    bookingId: booking?.id ?? null,
+  });
+}
+
+export class CallService {
+  private readonly now: () => Date;
+
+  constructor(private readonly repository: CallRepository, options: CallServiceOptions = {}) {
+    this.now = options.now ?? (() => new Date());
+  }
+
+  async complete(input: CompleteCallInput): Promise<Result<CompletedCall, CallError>> {
+    const parsed = completeCallInputSchema.safeParse(input);
+    if (!parsed.success) {
+      return err({
+        code: "INVALID_CALL_INPUT",
+        message: parsed.error.issues[0]?.message ?? "Review the call details.",
+      });
+    }
+    const value = parsed.data as CompleteCallInput;
+    const completedAt = this.now();
+
+    return this.repository.transaction(async (transaction) => {
+      const replay = await transaction.lockRequest(value.requestKey);
+      if (replay) {
+        const disposition = publicCallDisposition[replay.disposition];
+        return ok({
+          activityId: replay.noteActivityId,
+          callSessionId: replay.id,
+          nextFollowUpId: replay.nextFollowUpId,
+          disposition,
+          resultingBookingStatus: replay.resultingBookingStatus,
+        });
+      }
+      const context = await transaction.lockContext(value);
+      if (value.organizationId && !context.organization) {
+        return err({ code: "ORGANIZATION_NOT_FOUND" });
+      }
+      if (value.disposition === "move_to_last_resort" && !context.organization) {
+        return err({ code: "LAST_RESORT_REQUIRES_ORGANIZATION" });
+      }
+      if (value.contactId && !context.contact) return err({ code: "CONTACT_NOT_FOUND" });
+      if ((value.bookingId || value.approvedBookingUpdates || value.resultingBookingStatus) && !context.booking) {
+        return err({ code: "BOOKING_NOT_FOUND" });
+      }
+      if (value.followUpId && !context.followUp) return err({ code: "FOLLOW_UP_NOT_FOUND" });
+      const canonical = validateCanonicalContext(value, context);
+      if (!canonical.ok) return canonical;
+      const { organizationId, contactId, bookingId } = canonical.value;
+      if (organizationId && !context.organization) {
+        return err({ code: "ORGANIZATION_NOT_FOUND" });
+      }
+      if (context.followUp && (context.followUp.completedAt || context.followUp.nextFollowUpId)) {
+        return err({ code: "ALREADY_COMPLETED" });
+      }
+
+      const mappedStatus = dispositionBookingStatus[value.disposition];
+      if (
+        mappedStatus && (
+          (value.resultingBookingStatus && value.resultingBookingStatus !== mappedStatus) ||
+          (value.approvedBookingUpdates?.status && value.approvedBookingUpdates.status !== mappedStatus)
+        )
+      ) return err({ code: "RESULTING_STATUS_MISMATCH" });
+      const requestedBookingStatus = mappedStatus
+        ?? value.resultingBookingStatus
+        ?? value.approvedBookingUpdates?.status;
+      const resultingBookingStatus: BookingStatus | null = context.booking
+        ? requestedBookingStatus ?? context.booking.status
+        : null;
+      const authoritativeStatus = mappedStatus
+        ?? value.resultingBookingStatus
+        ?? value.approvedBookingUpdates?.status
+        ?? null;
+      const bookingStatus = context.booking
+        ? resultingBookingStatus ?? context.booking.status
+        : null;
+      const hasFutureNextAction = Boolean(
+        value.nextAction &&
+        isFutureBusinessDate(value.nextAction.dueAt, completedAt),
+      );
+      const terminalDisposition =
+        value.disposition === "declined" ||
+        value.disposition === "move_to_last_resort";
+      if (
+        (value.nextAction && !hasFutureNextAction) ||
+        (context.booking && needsFollowUpPlan(
+          { status: bookingStatus! },
+          hasFutureNextAction
+            ? { ...value.nextAction!, completedAt: null }
+            : null,
+          completedAt,
+        )) ||
+        (!context.booking && !terminalDisposition && !hasFutureNextAction)
+      ) {
+        return err({ code: "NEXT_ACTION_REQUIRED" });
+      }
+      if (value.approvedContactUpdates && !context.contact) return err({ code: "CONTACT_NOT_FOUND" });
+      const bookingPatch = context.booking && (
+        mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates
+      )
+        ? validateApprovedBookingPatch(
+          context.booking as Record<string, unknown>,
+          value.approvedBookingUpdates ?? {},
+          resultingBookingStatus!,
+        )
+        : null;
+      if (bookingPatch && !bookingPatch.success) {
+        return err({
+          code: "INVALID_CALL_INPUT",
+          message: bookingPatch.error.issues[0]?.message ?? "Review the booking updates.",
+        });
+      }
+      const contactPatch = context.contact && value.approvedContactUpdates
+        ? validateApprovedContactPatch(
+          context.contact as Record<string, unknown>,
+          context.organization?.name ?? null,
+          value.approvedContactUpdates,
+        )
+        : null;
+      if (contactPatch && !contactPatch.success) {
+        return err({
+          code: "INVALID_CALL_INPUT",
+          message: contactPatch.error.issues[0]?.message ?? "Review the contact updates.",
+        });
+      }
+
+      const activity = await transaction.createActivity({
+        organizationId,
+        contactId,
+        bookingId,
+        body: value.note,
+        occurredAt: value.endedAt,
+      });
+      let nextFollowUpId: string | null = null;
+      if (context.followUp) {
+        await transaction.completeFollowUp(context.followUp.id, {
+          outcome: value.disposition,
+          completedAt,
+        });
+      }
+      if (value.nextAction) {
+        const next = await transaction.createFollowUp({
+          organizationId,
+          contactId,
+          bookingId: context.booking?.id ?? null,
+          ...value.nextAction,
+        });
+        nextFollowUpId = next.id;
+        if (context.followUp) await transaction.linkNextFollowUp(context.followUp.id, next.id);
+        await transaction.createAuditEntry({
+          entityType: "follow_up",
+          entityId: next.id,
+          action: "create",
+          before: null,
+          after: {
+            organizationId,
+            contactId,
+            bookingId: context.booking?.id ?? null,
+            ...value.nextAction,
+          },
+        });
+      }
+
+      const session = await transaction.createCallSession({
+        requestKey: value.requestKey,
+        organizationId,
+        contactId,
+        bookingId,
+        followUpId: value.followUpId,
+        nextFollowUpId,
+        disposition: persistedCallDisposition[value.disposition],
+        resultingBookingStatus: requestedBookingStatus ?? null,
+        noteActivityId: activity.id,
+        startedAt: value.startedAt,
+        endedAt: value.endedAt,
+      });
+
+      if (context.booking && (
+        mappedStatus || value.resultingBookingStatus || value.approvedBookingUpdates
+      )) {
+        const updated = await transaction.updateBooking(
+          context.booking.id,
+          approvedBookingWrite(
+            bookingPatch!.data,
+            value.approvedBookingUpdates ?? {},
+            authoritativeStatus,
+          ),
+        );
+        await transaction.createAuditEntry({
+          entityType: "booking",
+          entityId: context.booking.id,
+          action: "update",
+          before: context.booking as Record<string, unknown>,
+          after: updated as Record<string, unknown>,
+        });
+      }
+      if (value.approvedContactUpdates && context.contact) {
+        const updated = await transaction.updateContact({
+          contact: context.contact,
+          organizationName: context.organization?.name ?? null,
+          updates: approvedContactWrite(
+            contactPatch!.data,
+            value.approvedContactUpdates,
+          ),
+          now: completedAt,
+        });
+        await transaction.createAuditEntry({
+          entityType: "contact",
+          entityId: context.contact.id,
+          action: "update",
+          before: context.contact as Record<string, unknown>,
+          after: updated,
+        });
+      }
+      if (value.disposition === "move_to_last_resort") {
+        await transaction.setLastResort(context.organization!.id, value.lastResortReason!, completedAt);
+        await transaction.createAuditEntry({
+          entityType: "organization",
+          entityId: context.organization!.id,
+          action: "last_resort_enabled",
+          before: context.organization as unknown as Record<string, unknown>,
+          after: { ...context.organization, lastResort: true, lastResortReason: value.lastResortReason },
+        });
+      }
+      if (context.followUp) {
+        await transaction.createAuditEntry({
+          entityType: "follow_up",
+          entityId: context.followUp.id,
+          action: "completed",
+          before: {
+            completedAt: context.followUp.completedAt,
+            outcome: context.followUp.outcome,
+            nextFollowUpId: context.followUp.nextFollowUpId,
+          },
+          after: { completedAt: completedAt.toISOString(), outcome: value.disposition, nextFollowUpId },
+        });
+      }
+      await transaction.createAuditEntry(
+        activityAudit(
+          value,
+          activity.id,
+          organizationId,
+          contactId,
+          bookingId,
+        ),
+      );
+      await transaction.createAuditEntry({
+        entityType: "call_session",
+        entityId: session.id,
+        action: "create",
+        before: null,
+        after: { disposition: value.disposition, noteActivityId: activity.id },
+      });
+
+      return ok({
+        activityId: activity.id,
+        callSessionId: session.id,
+        nextFollowUpId,
+        disposition: value.disposition,
+        resultingBookingStatus: requestedBookingStatus ?? null,
+      });
+    });
+  }
+}

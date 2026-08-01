@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Adventure Zone Command Center"
+description = "A CRM and operations platform for adventure businesses — manage bookings, contacts, organizations, route planning, call logs, and activity timelines in one place. Designed for field teams that need to track clients, schedule experiences, and coordinate logistics."
+version = "1.0.0"
+id = "artifacts/adventure-zone"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20078
+
+[services.development]
+run = "pnpm --filter @workspace/adventure-zone run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/adventure-zone", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/adventure-zone/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20078"
+BASE_PATH = "/"

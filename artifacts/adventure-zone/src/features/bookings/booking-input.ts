@@ -1,0 +1,140 @@
+import { z } from "zod";
+
+import {
+  bookingStatusValues,
+  probabilityValues,
+} from "@/features/bookings/booking-types";
+import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
+import { parseBusinessDateInput } from "@/lib/business-date";
+
+const optionalBusinessDateSchema = z
+  .union([z.literal(""), z.null(), z.string(), z.date()])
+  .transform((value, context) => {
+    if (value === "" || value === null) return null;
+    const parsed = parseBusinessDateInput(value);
+    if (parsed) return parsed;
+    context.addIssue({
+      code: "custom",
+      message: "Choose a valid calendar date",
+    });
+    return z.NEVER;
+  });
+
+const coreBookingInputShape = {
+  name: z.string().trim().min(1, "Event name is required"),
+  city: z.string().trim().min(1, "City is required"),
+  region: z.string().trim().min(2, "State is required"),
+  probability: z.enum(probabilityValues),
+};
+
+const nullableTrimmedString = z
+  .union([z.string(), z.null()])
+  .transform((value) => value?.trim() || null);
+
+function nullableCoordinate(
+  label: string,
+  minimum: number,
+  maximum: number,
+) {
+  return z
+    .union([z.string(), z.number(), z.null()])
+    .transform((value, context) => {
+      if (
+        value === null ||
+        (typeof value === "string" && value.trim() === "")
+      ) {
+        return null;
+      }
+      const coordinate =
+        typeof value === "number" ? value : Number(value.trim());
+      if (
+        !Number.isFinite(coordinate) ||
+        coordinate < minimum ||
+        coordinate > maximum
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: `${label} must be between ${minimum} and ${maximum}`,
+        });
+        return z.NEVER;
+      }
+      return coordinate;
+    });
+}
+
+export const bookingEditInputSchema = z
+  .object({
+    ...coreBookingInputShape,
+    venueName: nullableTrimmedString,
+    address1: nullableTrimmedString,
+    postalCode: nullableTrimmedString,
+    latitude: nullableCoordinate("Latitude", -90, 90),
+    longitude: nullableCoordinate("Longitude", -180, 180),
+    startsAt: optionalBusinessDateSchema,
+    endsAt: optionalBusinessDateSchema,
+    status: z.enum(bookingStatusValues),
+    travelLegId: z
+      .union([z.literal(""), z.null(), z.uuid()])
+      .transform((value) => value || null),
+    notes: nullableTrimmedString,
+  })
+  .superRefine((input, context) => {
+    if ((input.latitude === null) !== (input.longitude === null)) {
+      context.addIssue({
+        code: "custom",
+        message: "Enter both latitude and longitude, or clear both",
+        path: [input.latitude === null ? "latitude" : "longitude"],
+      });
+    }
+    if (
+      input.startsAt &&
+      input.endsAt &&
+      input.endsAt.getTime() < input.startsAt.getTime()
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "End date cannot be before the start date",
+        path: ["endsAt"],
+      });
+    }
+  })
+  .transform((input) => ({
+    ...input,
+    region: input.region.toUpperCase(),
+  }));
+
+export const bookingInputSchema = z
+  .object({
+    ...coreBookingInputShape,
+    status: z.enum(bookingStatusValues),
+    nextActionKind: z.string(),
+    nextActionDueAt: optionalBusinessDateSchema,
+  })
+  .superRefine((input, context) => {
+    if (!isActiveStatus(input.status)) return;
+
+    if (!input.nextActionKind.trim()) {
+      context.addIssue({
+        code: "custom",
+        message: "Choose the next action",
+        path: ["nextActionKind"],
+      });
+    }
+
+    if (!input.nextActionDueAt) {
+      context.addIssue({
+        code: "custom",
+        message: "Choose the next follow-up date",
+        path: ["nextActionDueAt"],
+      });
+    }
+  })
+  .transform((input) => ({
+    ...input,
+    region: input.region.toUpperCase(),
+    nextActionKind: input.nextActionKind.trim(),
+    nextActionDueAt: input.nextActionDueAt,
+  }));
+
+export type BookingFormInput = z.output<typeof bookingInputSchema>;
+export type BookingEditInput = z.output<typeof bookingEditInputSchema>;

@@ -1,0 +1,88 @@
+import { z } from "zod";
+
+const canonicalUuid = z.uuid().transform((value) => value.toLowerCase());
+const actorId = z.string().trim().min(1, "An actor is required.");
+const stableCode = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(1, "A stable resource code is required.")
+  .max(100, "The stable resource code is too long.")
+  .regex(
+    /^[a-z0-9]+(?:_[a-z0-9]+)*$/,
+    "Use lowercase letters, numbers, and underscores for the stable code.",
+  );
+const trimmedLabel = z
+  .string()
+  .trim()
+  .min(1, "This field is required.")
+  .max(100, "This field is too long.");
+
+export const configureBookingResourcesInputSchema = z
+  .object({
+    bookingId: canonicalUuid,
+    resourceIds: z.array(canonicalUuid),
+    actorId,
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (new Set(input.resourceIds).size !== input.resourceIds.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Choose each resource only once.",
+      });
+    }
+  });
+
+export const acknowledgeResourceConflictInputSchema = z
+  .object({
+    bookingId: canonicalUuid,
+    conflictKey: z.string().trim().min(1, "Choose a current conflict."),
+    reason: z.string().trim().min(1, "Add a reason for the override."),
+    actorId,
+  })
+  .strict();
+
+export const resourceInputSchema = z
+  .object({
+    id: canonicalUuid.nullable(),
+    code: stableCode,
+    name: trimmedLabel,
+    category: trimmedLabel,
+    countsAsAttraction: z.boolean(),
+    packageTemplateIds: z.array(canonicalUuid),
+    normalTravelLegId: canonicalUuid.nullable(),
+    movable: z.boolean(),
+    setupMinutes: z.number().int().nonnegative(),
+    teardownMinutes: z.number().int().nonnegative(),
+    minimumTransferMinutes: z.number().int().nonnegative(),
+    status: z.enum([
+      "available",
+      "unavailable",
+      "maintenance",
+      "archived",
+    ]),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (
+      new Set(input.packageTemplateIds).size !==
+      input.packageTemplateIds.length
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Choose each package tag only once.",
+        path: ["packageTemplateIds"],
+      });
+    }
+  });
+
+export type ConfigureBookingResourcesInput = z.output<
+  typeof configureBookingResourcesInputSchema
+>;
+
+export type AcknowledgeResourceConflictInput = z.output<
+  typeof acknowledgeResourceConflictInputSchema
+>;
+
+export type ResourceInput = z.output<typeof resourceInputSchema>;

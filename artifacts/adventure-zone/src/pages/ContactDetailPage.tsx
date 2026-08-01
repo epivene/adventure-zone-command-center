@@ -1,0 +1,106 @@
+import { useEffect, useState } from "react";
+import { Link, useParams } from "wouter";
+import { apiGet } from "@/lib/auth-token";
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
+import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
+import {
+  createActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+} from "@/actions/activities";
+import type { ReactNode } from "react";
+
+function DetailSection({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-lg font-bold">{title}</h2>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function DetailList({ items }: { items: { label: string; value: ReactNode }[] }) {
+  return (
+    <dl className="grid gap-4 sm:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label}>
+          <dt className="text-sm font-semibold text-slate-500">{item.label}</dt>
+          <dd className="mt-0.5 text-slate-900">
+            {item.value == null || item.value === "" ? "Not set" : item.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+export default function ContactDetailPage() {
+  const { contactId } = useParams<{ contactId: string }>();
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!contactId) return;
+    apiGet<any>(`/contacts/${contactId}`)
+      .then((d) => { setData(d); setLoading(false); })
+      .catch((e) => { setError(e.message); setLoading(false); });
+  }, [contactId]);
+
+  if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading contact…</p></div>;
+  if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
+
+  const { contact, relatedBookings, timeline } = data;
+  const fullName = `${contact.firstName} ${contact.lastName}`.trim();
+
+  return (
+    <div className="mx-auto grid max-w-7xl gap-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">{fullName}</h1>
+            <SyncStateBadge state={contact.syncState ?? "unlinked"} />
+          </div>
+          {contact.jobTitle && <p className="mt-1 text-slate-600">{contact.jobTitle}</p>}
+        </div>
+        <Link className="button-primary text-center" href={`/contacts/${contactId}/edit`}>
+          Edit contact
+        </Link>
+      </header>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <DetailSection title="Details">
+          <DetailList
+            items={[
+              { label: "Email", value: contact.email ? <a className="link" href={`mailto:${contact.email}`}>{contact.email}</a> : null },
+              { label: "Phone", value: contact.phone ? <a className="link" href={`tel:${contact.phone}`}>{contact.phone}</a> : null },
+              { label: "Location", value: [contact.city, contact.region].filter(Boolean).join(", ") },
+            ]}
+          />
+        </DetailSection>
+
+        <DetailSection title="Bookings">
+          {relatedBookings?.length ? (
+            <ul className="grid gap-2">
+              {relatedBookings.map((b: any) => (
+                <li key={b.id}>
+                  <Link className="link" href={`/bookings/${b.id}`}>{b.name}</Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-slate-500">No bookings</p>
+          )}
+        </DetailSection>
+      </div>
+
+      <ActivityTimeline
+        activities={timeline ?? []}
+        parent={{ contactId: contactId! }}
+        createActivity={createActivityAction}
+        editActivity={editActivityAction}
+        loadRevisions={listActivityRevisionsAction}
+      />
+    </div>
+  );
+}
