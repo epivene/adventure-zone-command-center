@@ -37,7 +37,7 @@ export default function OrganizationsPage() {
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">
           Relationships
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Places</h1>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
         <p className="mt-2 max-w-2xl text-slate-600">
           Find a fair, city, venue, or company and the contacts you can call there.
         </p>

@@ -13,12 +13,12 @@ function listHref(query: OrganizationListQuery) {
   if (query.page > 1) params.set("page", String(query.page));
   if (query.pageSize !== 50) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString();
-  return suffix ? `/organizations?${suffix}` : "/organizations";
+  return suffix ? `/profiles?${suffix}` : "/profiles";
 }
 
 function detailHref(organizationId: string, query: OrganizationListQuery) {
   const params = new URLSearchParams({ returnTo: listHref(query) });
-  return `/organizations/${organizationId}?${params.toString()}`;
+  return `/profiles/${organizationId}?${params.toString()}`;
 }
 
 export function OrganizationList({
@@ -33,12 +33,12 @@ export function OrganizationList({
   return (
     <div className="grid gap-5">
       <form
-        action="/organizations"
+        action="/profiles"
         className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_12rem_14rem_auto]"
         method="get"
       >
         <label className="grid gap-1 text-sm font-semibold">
-          Search places and contacts
+          Search profiles and contacts
           <input
             defaultValue={query.search}
             name="q"
@@ -49,7 +49,7 @@ export function OrganizationList({
         <label className="grid gap-1 text-sm font-semibold">
           Place status
           <select defaultValue={query.lastResort} name="lastResort">
-            <option value="all">All places</option>
+            <option value="all">All profiles</option>
             <option value="only">Last Resort only</option>
           </select>
         </label>
@@ -68,14 +68,14 @@ export function OrganizationList({
           <button className="button-primary" type="submit">
             Search
           </button>
-          <Link className="button-secondary" href="/organizations">
+          <Link className="button-secondary" href="/profiles">
             Reset
           </Link>
         </div>
       </form>
 
       <p aria-live="polite" className="text-sm text-slate-600">
-        Showing {organizations.records.length} of {organizations.total} places
+        Showing {organizations.records.length} of {organizations.total} profiles
       </p>
 
       {organizations.records.length ? (
@@ -100,8 +100,14 @@ export function OrganizationList({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-sm text-slate-600">
-                    {organization.contactCount} contacts to call · {organization.bookingCount} booking opportunities
+                  <p className="mt-1 text-sm text-slate-500">
+                    {[organization.city, organization.region].filter(Boolean).join(", ")}
+                    {organization.primaryContactName ? (
+                      <span className="ml-2 font-medium text-slate-700">· {organization.primaryContactName}</span>
+                    ) : null}
+                  </p>
+                  <p className="mt-0.5 text-sm text-slate-600">
+                    {organization.contactCount} contacts · {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
                   </p>
                   {organization.lastResortReason ? (
                     <p className="mt-2 text-sm text-rose-800">
@@ -110,7 +116,7 @@ export function OrganizationList({
                   ) : null}
                 </div>
                 <Link className="button-secondary text-center" href={detailHref(organization.id, query)}>
-                  View place
+                  View profile
                 </Link>
               </div>
             </li>
@@ -118,14 +124,14 @@ export function OrganizationList({
         </ul>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="font-semibold">No places match these filters.</p>
+          <p className="font-semibold">No profiles match these filters.</p>
           <Link className="button-secondary mt-3 inline-flex" href={listHref({ search: "", lastResort: "all", travelLegId: null, page: 1, pageSize: 50 })}>
             Reset filters
           </Link>
         </div>
       )}
       {organizations.pageCount > 1 ? (
-        <nav aria-label="Places pages" className="flex items-center justify-between gap-3">
+        <nav aria-label="Profiles pages" className="flex items-center justify-between gap-3">
           {organizations.page > 1 ? (
             <Link className="button-secondary" href={listHref({ ...query, page: organizations.page - 1 })}>
               Previous

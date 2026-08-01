@@ -173,6 +173,10 @@ function AppRoutes() {
               <Route path="/contacts/:contactId/edit" component={ContactEditPage} />
               <Route path="/contacts/:contactId" component={ContactDetailPage} />
               <Route path="/contacts" component={ContactsPage} />
+              <Route path="/profiles/:profileId">
+                {(params) => <Redirect to={`/event-profiles/${params.profileId}`} />}
+              </Route>
+              <Route path="/profiles" component={OrganizationsPage} />
               <Route path="/organizations/:organizationId">
                 {(params) => <Redirect to={`/event-profiles/${params.organizationId}`} />}
               </Route>

@@ -72,6 +72,9 @@ export type OrganizationListRecord = Omit<
 > & {
   contactCount: number;
   bookingCount: number;
+  city: string | null;
+  region: string | null;
+  primaryContactName: string | null;
 };
 
 export type OrganizationListPage = {
@@ -301,7 +304,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     }
 
     const organizationIds = organizationRecords.map((organization) => organization.id);
-    const [contactCounts, bookingCounts] = await Promise.all([
+    const [contactCounts, bookingCounts, primaryContacts] = await Promise.all([
       this.database
         .select({
           organizationId: organizationContacts.organizationId,
@@ -321,6 +324,19 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .from(bookings)
         .where(inArray(bookings.organizationId, organizationIds))
         .groupBy(bookings.organizationId),
+      this.database
+        .select({
+          organizationId: organizationContacts.organizationId,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        })
+        .from(organizationContacts)
+        .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
+        .where(and(
+          inArray(organizationContacts.organizationId, organizationIds),
+          eq(organizationContacts.active, true),
+          eq(organizationContacts.isPrimary, true),
+        )),
     ]);
     const contactCountByOrganization = new Map(
       contactCounts.map((record) => [record.organizationId, record.value]),
@@ -330,16 +346,25 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .filter((record) => record.organizationId !== null)
         .map((record) => [record.organizationId!, record.value]),
     );
+    const primaryContactByOrganization = new Map(
+      primaryContacts.map((record) => [
+        record.organizationId,
+        `${record.firstName} ${record.lastName}`.trim(),
+      ]),
+    );
 
     return {
       records: organizationRecords.map((organization) => ({
         id: organization.id,
         name: organization.name,
+        city: organization.city,
+        region: organization.region,
         lastResort: organization.lastResort,
         lastResortReason: organization.lastResortReason,
         lastResortChangedAt: organization.lastResortChangedAt,
         contactCount: contactCountByOrganization.get(organization.id) ?? 0,
         bookingCount: bookingCountByOrganization.get(organization.id) ?? 0,
+        primaryContactName: primaryContactByOrganization.get(organization.id) ?? null,
       })),
       total,
       page,

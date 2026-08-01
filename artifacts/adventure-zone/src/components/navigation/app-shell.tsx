@@ -5,8 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 const navigation = [
   { href: "/today", label: "Today" },
   { href: "/bookings", label: "Bookings" },
-  { href: "/organizations", label: "Places" },
-  { href: "/contacts", label: "Contacts" },
+  { href: "/profiles", label: "Profiles" },
   { href: "/calendar", label: "Calendar" },
   { href: "/routes", label: "Routes" },
 ];
@@ -54,6 +53,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               {item.label}
             </Link>
           ))}
+          <Link
+            className="mt-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+            href="/contacts"
+          >
+            All contacts
+          </Link>
           <details className="group mt-2">
             <summary className="cursor-pointer rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
               Settings
@@ -100,6 +105,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             Settings
           </summary>
           <div className="absolute bottom-14 right-0 grid min-w-40 rounded-md border border-slate-200 bg-white p-1 text-sm font-semibold text-slate-700 shadow-lg">
+            <Link
+              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+              href="/contacts"
+            >
+              All contacts
+            </Link>
             <Link
               className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
               href="/settings/packages-resources"

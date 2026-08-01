@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "wouter";
 import { apiFetch } from "@/lib/auth-token";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -233,6 +234,12 @@ function RunProgress({ run }: { run: RunStatus }) {
             {run.snapshot.stagedRecords.toLocaleString()} records imported. New places, contacts,
             bookings, and calling lists are now available in the app.
           </p>
+          <Link
+            href="/profiles"
+            className="mt-3 inline-flex items-center rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-green-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700"
+          >
+            View Profiles →
+          </Link>
         </div>
       )}
     </div>
