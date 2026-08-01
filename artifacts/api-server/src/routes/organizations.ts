@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
 import {
@@ -9,6 +10,11 @@ import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-reposit
 
 const router: IRouter = Router();
 function orgRepo() { return new DrizzleOrganizationRepository(db); }
+
+const mergeInputSchema = z.object({
+  primaryId: z.string().uuid(),
+  duplicateIds: z.array(z.string().uuid()).min(1),
+});
 
 router.get("/organizations", async (req, res): Promise<void> => {
   const query = organizationListQuerySchema.parse({
@@ -27,6 +33,17 @@ router.get("/organizations", async (req, res): Promise<void> => {
   }
 });
 
+// Static sub-routes must come before /:id so Express doesn't match them as params
+router.get("/organizations/duplicates", async (req, res): Promise<void> => {
+  try {
+    const groups = await orgRepo().findDuplicates();
+    res.json({ groups });
+  } catch (err) {
+    req.log.error({ err }, "Failed to find duplicate organizations");
+    res.status(500).json({ error: "Failed to find duplicate organizations" });
+  }
+});
+
 router.get("/organizations/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
@@ -36,6 +53,26 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to get organization");
     res.status(500).json({ error: "Failed to get organization" });
+  }
+});
+
+router.post("/organizations/merge", async (req, res): Promise<void> => {
+  const parsed = mergeInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  const { primaryId, duplicateIds } = parsed.data;
+  if (duplicateIds.includes(primaryId)) {
+    res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" });
+    return;
+  }
+  try {
+    await orgRepo().mergeOrganizations(primaryId, duplicateIds);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to merge organizations");
+    res.status(500).json({ ok: false, error: "Failed to merge organizations" });
   }
 });
 

@@ -12,8 +12,13 @@ import {
 
 import type { db as database } from "@/db/client";
 import {
+  actExternalLinks,
+  actMigrationRecords,
+  activities,
   bookings,
+  callSessions,
   contacts,
+  followUps,
   organizationContacts,
   organizations,
   travelLegs,
@@ -93,12 +98,21 @@ export function activeOrganizationContactCondition(organizationId: string) {
   )!;
 }
 
+export type DuplicateOrganizationGroup = {
+  normalizedName: string;
+  city: string;
+  region: string;
+  organizations: OrganizationListRecord[];
+};
+
 export interface OrganizationRepository {
   setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
   getOrganizationSummary(
     organizationId: string,
     query?: OrganizationSummaryQuery,
   ): Promise<OrganizationSummary | null>;
+  findDuplicates(): Promise<DuplicateOrganizationGroup[]>;
+  mergeOrganizations(primaryId: string, duplicateIds: string[]): Promise<void>;
 }
 
 type DrizzleDatabase = typeof database;
@@ -378,5 +392,210 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .select({ id: travelLegs.id, name: travelLegs.name, color: travelLegs.color })
       .from(travelLegs)
       .orderBy(asc(travelLegs.sortOrder));
+  }
+
+  async findDuplicates(): Promise<DuplicateOrganizationGroup[]> {
+    // Find groups of organizations sharing the same normalized name + city + region
+    const groupRows = await this.database.execute<{
+      normalized_name: string;
+      normalized_city: string;
+      normalized_region: string;
+      ids: string[];
+    }>(sql`
+      SELECT
+        lower(trim(name)) AS normalized_name,
+        lower(trim(coalesce(city, ''))) AS normalized_city,
+        lower(trim(coalesce(region, ''))) AS normalized_region,
+        array_agg(id ORDER BY created_at ASC) AS ids
+      FROM organizations
+      GROUP BY 1, 2, 3
+      HAVING count(*) > 1
+      ORDER BY lower(trim(name)), lower(trim(coalesce(city, '')))
+    `);
+
+    if (!groupRows.rows.length) return [];
+
+    // Collect all IDs across all groups
+    const allIds = groupRows.rows.flatMap((row) => row.ids);
+    if (!allIds.length) return [];
+
+    const orgRecords = await this.database
+      .select()
+      .from(organizations)
+      .where(inArray(organizations.id, allIds))
+      .orderBy(asc(organizations.name), asc(organizations.id));
+
+    const organizationIds = orgRecords.map((o) => o.id);
+
+    const [contactCounts, bookingCounts, primaryContacts] = await Promise.all([
+      this.database
+        .select({ organizationId: organizationContacts.organizationId, value: count() })
+        .from(organizationContacts)
+        .where(and(
+          inArray(organizationContacts.organizationId, organizationIds),
+          eq(organizationContacts.active, true),
+        ))
+        .groupBy(organizationContacts.organizationId),
+      this.database
+        .select({ organizationId: bookings.organizationId, value: count() })
+        .from(bookings)
+        .where(inArray(bookings.organizationId, organizationIds))
+        .groupBy(bookings.organizationId),
+      this.database
+        .select({
+          organizationId: organizationContacts.organizationId,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        })
+        .from(organizationContacts)
+        .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
+        .where(and(
+          inArray(organizationContacts.organizationId, organizationIds),
+          eq(organizationContacts.active, true),
+          eq(organizationContacts.isPrimary, true),
+        )),
+    ]);
+
+    const contactCountByOrg = new Map(contactCounts.map((r) => [r.organizationId, r.value]));
+    const bookingCountByOrg = new Map(
+      bookingCounts.filter((r) => r.organizationId !== null).map((r) => [r.organizationId!, r.value]),
+    );
+    const primaryContactByOrg = new Map(
+      primaryContacts.map((r) => [r.organizationId, `${r.firstName} ${r.lastName}`.trim()]),
+    );
+
+    const orgById = new Map(orgRecords.map((o) => [o.id, o]));
+
+    return groupRows.rows.map((row) => {
+      const orgs: OrganizationListRecord[] = row.ids
+        .map((id) => {
+          const o = orgById.get(id);
+          if (!o) return null;
+          return {
+            id: o.id,
+            name: o.name,
+            city: o.city,
+            region: o.region,
+            lastResort: o.lastResort,
+            lastResortReason: o.lastResortReason,
+            lastResortChangedAt: o.lastResortChangedAt,
+            contactCount: contactCountByOrg.get(o.id) ?? 0,
+            bookingCount: bookingCountByOrg.get(o.id) ?? 0,
+            primaryContactName: primaryContactByOrg.get(o.id) ?? null,
+          } satisfies OrganizationListRecord;
+        })
+        .filter(Boolean) as OrganizationListRecord[];
+
+      return {
+        normalizedName: row.normalized_name,
+        city: row.normalized_city,
+        region: row.normalized_region,
+        organizations: orgs,
+      };
+    });
+  }
+
+  async mergeOrganizations(primaryId: string, duplicateIds: string[]): Promise<void> {
+    if (!duplicateIds.length) return;
+
+    await this.database.transaction(async (tx) => {
+      const now = new Date();
+
+      for (const dupId of duplicateIds) {
+        // Step 1: Create organization_contacts entries on the primary for every
+        // contact currently belonging to the duplicate. This MUST happen before
+        // updating contacts.organization_id because the schema enforces a
+        // composite FK: contacts(organization_id, id) →
+        // organization_contacts(organization_id, contact_id). Without a matching
+        // row on the primary side the FK check would fail when we re-parent
+        // contacts in step 2.
+        //
+        // Force isPrimary=false on incoming rows so we never violate the
+        // one-active-primary-per-org partial unique index. The primary's
+        // existing primary designation is left untouched.
+        await tx.execute(sql`
+          INSERT INTO organization_contacts
+            (id, organization_id, contact_id, role, is_primary, active, source, created_at, updated_at)
+          SELECT
+            gen_random_uuid(),
+            ${primaryId},
+            contact_id,
+            role,
+            false,
+            active,
+            source,
+            created_at,
+            ${now}
+          FROM organization_contacts
+          WHERE organization_id = ${dupId}
+          ON CONFLICT (organization_id, contact_id) DO NOTHING
+        `);
+
+        // Step 2: Re-parent contacts — now safe because every contact that had
+        // organization_id = dupId has a matching organization_contacts row for
+        // primaryId (inserted above or already present).
+        await tx.update(contacts)
+          .set({ organizationId: primaryId, updatedAt: now })
+          .where(eq(contacts.organizationId, dupId));
+
+        // Step 3: Remove the now-redundant organization_contacts rows for the
+        // duplicate. Contacts no longer point to dupId, so no FK is violated.
+        await tx.delete(organizationContacts)
+          .where(eq(organizationContacts.organizationId, dupId));
+
+        // Step 4: Re-parent bookings
+        await tx.update(bookings)
+          .set({ organizationId: primaryId, updatedAt: now })
+          .where(eq(bookings.organizationId, dupId));
+
+        // Step 5: Re-parent follow_ups
+        await tx.update(followUps)
+          .set({ organizationId: primaryId })
+          .where(eq(followUps.organizationId, dupId));
+
+        // Step 6: Re-parent activities
+        await tx.update(activities)
+          .set({ organizationId: primaryId, updatedAt: now })
+          .where(eq(activities.organizationId, dupId));
+
+        // Step 7: Re-parent call_sessions
+        await tx.update(callSessions)
+          .set({ organizationId: primaryId })
+          .where(eq(callSessions.organizationId, dupId));
+
+        // Step 8: Re-parent act_external_links.
+        // Clear isPrimary first to avoid the one-primary-per-local-source
+        // partial unique index conflict before changing entityId.
+        await tx.update(actExternalLinks)
+          .set({ isPrimary: false })
+          .where(and(
+            eq(actExternalLinks.entityId, dupId),
+            eq(actExternalLinks.entityType, "organization"),
+          ));
+        await tx.update(actExternalLinks)
+          .set({ entityId: primaryId, updatedAt: now })
+          .where(and(
+            eq(actExternalLinks.entityId, dupId),
+            eq(actExternalLinks.entityType, "organization"),
+          ));
+
+        // Step 9: Re-parent act_migration_records matched/applied entity pointers
+        await tx.update(actMigrationRecords)
+          .set({ matchedEntityId: primaryId, updatedAt: now })
+          .where(and(
+            eq(actMigrationRecords.matchedEntityId, dupId),
+            eq(actMigrationRecords.matchedEntityType, "organization"),
+          ));
+        await tx.update(actMigrationRecords)
+          .set({ appliedEntityId: primaryId, updatedAt: now })
+          .where(and(
+            eq(actMigrationRecords.appliedEntityId, dupId),
+            eq(actMigrationRecords.matchedEntityType, "organization"),
+          ));
+
+        // Step 10: Delete the now-empty duplicate
+        await tx.delete(organizations).where(eq(organizations.id, dupId));
+      }
+    });
   }
 }
