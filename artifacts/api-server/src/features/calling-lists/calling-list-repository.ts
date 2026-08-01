@@ -14,7 +14,7 @@ import {
 type DrizzleDatabase = typeof database;
 export type CallingListTransaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
 
-export type CallingListMutationResult = { entityId: string; changed: boolean };
+export type CallingListMutationResult = { entityId: string; changed: boolean; wasCreated: boolean };
 
 export type StaticCallingListInput = {
   name: string;
@@ -93,15 +93,15 @@ export class CallingListRepository {
       const [created] = await transaction.insert(callingListMemberships).values({
         callingListId: input.callingListId, contactId: input.contactId, source: "act_migration", active: true,
       }).returning();
-      return { entityId: created!.id, changed: true };
+      return { entityId: created!.id, changed: true, wasCreated: true };
     }
-    if (membership.source === "manual") return { entityId: membership.id, changed: false };
+    if (membership.source === "manual") return { entityId: membership.id, changed: false, wasCreated: false };
     if (!membership.active) {
       const [reactivated] = await transaction.update(callingListMemberships).set({ active: true, updatedAt: new Date() })
         .where(eq(callingListMemberships.id, membership.id)).returning();
-      return { entityId: reactivated!.id, changed: true };
+      return { entityId: reactivated!.id, changed: true, wasCreated: false };
     }
-    return { entityId: membership.id, changed: false };
+    return { entityId: membership.id, changed: false, wasCreated: false };
   }
 
   private async createOrVerifyListIn(transaction: CallingListTransaction, input: StaticCallingListInput & {
@@ -137,6 +137,6 @@ export class CallingListRepository {
       });
       changed = true;
     }
-    return { entityId: list.id, changed };
+    return { entityId: list.id, changed, wasCreated: !listId };
   }
 }

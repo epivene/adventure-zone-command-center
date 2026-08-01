@@ -58,6 +58,8 @@ export type MigrationApplyOperation = {
 
 export type MigrationApplyCounts = Record<MigrationApplyOperationStatus, number> & {
   total: number;
+  created: number;
+  updated: number;
 };
 
 export type MigrationApplyBatch = {
@@ -97,6 +99,7 @@ export interface ActMigrationApplyRepository {
     operationId: string;
     leaseOwner: string;
     entityId: string;
+    wasCreated: boolean;
     now: Date;
   }): Promise<void>;
   failOperation(input: {
@@ -153,6 +156,8 @@ function emptyCounts(): MigrationApplyCounts {
     ignored: 0,
     failed: 0,
     total: 0,
+    created: 0,
+    updated: 0,
   };
 }
 
@@ -161,6 +166,10 @@ function countOperations(operations: readonly StoredOperation[]): MigrationApply
   for (const operation of operations) {
     counts[operation.status as MigrationApplyOperationStatus] += 1;
     counts.total += 1;
+    if (operation.status === "applied") {
+      if (operation.wasCreated === true) counts.created += 1;
+      else if (operation.wasCreated === false) counts.updated += 1;
+    }
   }
   return counts;
 }
@@ -485,11 +494,11 @@ export class DrizzleActMigrationApplyRepository
     });
   }
 
-  async completeOperation(input: { operationId: string; leaseOwner: string; entityId: string; now: Date }) {
+  async completeOperation(input: { operationId: string; leaseOwner: string; entityId: string; wasCreated: boolean; now: Date }) {
     await this.database.transaction(async (transaction) => {
       const [operation] = await transaction.update(actMigrationApplyOperations).set({
         status: "applied", leaseOwner: null, leaseExpiresAt: null, appliedEntityId: input.entityId,
-        errorCode: null, retryable: false, completedAt: input.now, updatedAt: input.now,
+        wasCreated: input.wasCreated, errorCode: null, retryable: false, completedAt: input.now, updatedAt: input.now,
       }).where(and(
         eq(actMigrationApplyOperations.id, input.operationId),
         eq(actMigrationApplyOperations.status, "leased"),

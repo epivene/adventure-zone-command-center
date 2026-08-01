@@ -13,6 +13,7 @@ import type { MigrationTargetEntityType } from "@/features/act-migration/migrati
 export type ActMigrationApplyTargetResult = {
   entityId: string;
   changed: boolean;
+  wasCreated: boolean;
 };
 
 export interface ActMigrationApplyTarget {
@@ -160,6 +161,7 @@ export class ActMigrationApplyService {
           operationId: operation.id,
           leaseOwner,
           entityId: applied.entityId,
+          wasCreated: applied.wasCreated,
           now: new Date(),
         });
       } catch {

@@ -38,7 +38,7 @@ function mergedProfileHistory(snapshot: Record<string, unknown>) {
   return Object.keys(values).length ? values : null;
 }
 
-export type MigrationEntityApplyResult = { entityId: string; changed: boolean };
+export type MigrationEntityApplyResult = { entityId: string; changed: boolean; wasCreated: boolean };
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -215,6 +215,7 @@ export class MigrationEntityApplyRepository {
     let entity: typeof organizations.$inferSelect;
     let mappedChanged = false;
     let mappedFields: string[] = [];
+    let wasCreated = false;
     if (existingId) {
       const [current] = await transaction.select().from(organizations).where(eq(organizations.id, existingId)).limit(1).for("update");
       if (!current) throw new Error("Act migration Organization target is missing.");
@@ -227,16 +228,35 @@ export class MigrationEntityApplyRepository {
         mappedFields = Object.keys(changed);
       }
     } else {
-      entity = (await transaction.insert(organizations).values(values).returning())[0]!;
-      mappedChanged = true;
-      mappedFields = Object.keys(values);
+      // Upsert safety: detect entities linked in a prior run that the matcher missed
+      const sourceIds = records.filter((r) => r.streamType === "company" && r.sourceId !== null).map((r) => r.sourceId!);
+      const priorLink = sourceIds.length === 0 ? null
+        : (await transaction.select().from(actExternalLinks).where(and(
+            eq(actExternalLinks.sourceEntityType, "company"),
+            inArray(actExternalLinks.actRecordId, sourceIds),
+            eq(actExternalLinks.entityType, "organization"),
+          )).limit(1).for("update"))[0] ?? null;
+      if (priorLink) {
+        const [current] = await transaction.select().from(organizations).where(eq(organizations.id, priorLink.entityId)).limit(1).for("update");
+        if (!current) throw new Error("Act migration Organization target is missing.");
+        const changed = changedFields(current, values);
+        if (Object.keys(changed).length) entity = (await transaction.update(organizations).set({ ...changed, updatedAt: new Date() }).where(eq(organizations.id, current.id)).returning())[0]!;
+        else entity = current;
+        mappedChanged = Object.keys(changed).length > 0;
+        mappedFields = Object.keys(changed);
+      } else {
+        entity = (await transaction.insert(organizations).values(values).returning())[0]!;
+        mappedChanged = true;
+        mappedFields = Object.keys(values);
+        wasCreated = true;
+      }
     }
     const links = await this.ensureLinks(transaction, { entityType: "organization", entityId: entity.id, runId: operation.runId, records, primarySourceId: null });
     const primaryChanged = links.primaryId !== null && entity.actRecordId !== links.primaryId;
     if (primaryChanged) entity = (await transaction.update(organizations).set({ actRecordId: links.primaryId, updatedAt: new Date() }).where(eq(organizations.id, entity.id)).returning())[0]!;
     const changed = mappedChanged || links.changed || primaryChanged;
     if (changed) await this.audit(transaction, { entityType: "organization", entityId: entity.id, operation, actor: await this.actor(transaction, operation), changedFields: [...mappedFields, ...(links.changed ? ["externalLinks"] : []), ...(primaryChanged ? ["actRecordId"] : [])].filter((value, index, all) => all.indexOf(value) === index), sourceIds: records.flatMap((record) => record.sourceId ? [record.sourceId] : []) });
-    return { entityId: entity.id, changed };
+    return { entityId: entity.id, changed, wasCreated };
   }
 
   private async applyContactIn(transaction: Transaction, operation: MigrationApplyOperation): Promise<MigrationEntityApplyResult> {
@@ -248,6 +268,7 @@ export class MigrationEntityApplyRepository {
     let entity: typeof contacts.$inferSelect;
     let mappedChanged = false;
     let mappedFields: string[] = [];
+    let wasCreated = false;
     if (existingId) {
       const [current] = await transaction.select().from(contacts).where(eq(contacts.id, existingId)).limit(1).for("update");
       if (!current) throw new Error("Act migration Contact target is missing.");
@@ -260,15 +281,34 @@ export class MigrationEntityApplyRepository {
         mappedFields = Object.keys(changed);
       }
     } else {
-      entity = (await transaction.insert(contacts).values(values).returning())[0]!;
-      mappedChanged = true;
-      mappedFields = Object.keys(values);
+      // Upsert safety: detect entities linked in a prior run that the matcher missed
+      const sourceIds = records.filter((r) => r.streamType === "contact" && r.sourceId !== null).map((r) => r.sourceId!);
+      const priorLink = sourceIds.length === 0 ? null
+        : (await transaction.select().from(actExternalLinks).where(and(
+            eq(actExternalLinks.sourceEntityType, "contact"),
+            inArray(actExternalLinks.actRecordId, sourceIds),
+            eq(actExternalLinks.entityType, "contact"),
+          )).limit(1).for("update"))[0] ?? null;
+      if (priorLink) {
+        const [current] = await transaction.select().from(contacts).where(eq(contacts.id, priorLink.entityId)).limit(1).for("update");
+        if (!current) throw new Error("Act migration Contact target is missing.");
+        const changed = changedFields(current, values);
+        if (Object.keys(changed).length) entity = (await transaction.update(contacts).set({ ...changed, updatedAt: new Date() }).where(eq(contacts.id, current.id)).returning())[0]!;
+        else entity = current;
+        mappedChanged = Object.keys(changed).length > 0;
+        mappedFields = Object.keys(changed);
+      } else {
+        entity = (await transaction.insert(contacts).values(values).returning())[0]!;
+        mappedChanged = true;
+        mappedFields = Object.keys(values);
+        wasCreated = true;
+      }
     }
     const links = await this.ensureLinks(transaction, { entityType: "contact", entityId: entity.id, runId: operation.runId, records, primarySourceId: operation.proposal.primarySourceId });
     const primaryChanged = links.primaryId !== null && entity.actRecordId !== links.primaryId;
     if (primaryChanged) entity = (await transaction.update(contacts).set({ actRecordId: links.primaryId, updatedAt: new Date() }).where(eq(contacts.id, entity.id)).returning())[0]!;
     const changed = mappedChanged || links.changed || primaryChanged;
     if (changed) await this.audit(transaction, { entityType: "contact", entityId: entity.id, operation, actor: await this.actor(transaction, operation), changedFields: [...mappedFields, ...(links.changed ? ["externalLinks"] : []), ...(primaryChanged ? ["actRecordId"] : [])].filter((value, index, all) => all.indexOf(value) === index), sourceIds: records.flatMap((record) => record.sourceId ? [record.sourceId] : []) });
-    return { entityId: entity.id, changed };
+    return { entityId: entity.id, changed, wasCreated };
   }
 }

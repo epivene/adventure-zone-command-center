@@ -1099,6 +1099,7 @@ export const actMigrationApplyOperations = pgTable(
     appliedEntityId: uuid("applied_entity_id"),
     errorCode: text("error_code"),
     retryable: boolean("retryable").default(true).notNull(),
+    wasCreated: boolean("was_created"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

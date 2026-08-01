@@ -19,7 +19,7 @@ type DrizzleDatabase = typeof database;
 type Transaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
 type Values = Record<string, unknown>;
 
-export type MigrationRelationshipApplyResult = { entityId: string; changed: boolean };
+export type MigrationRelationshipApplyResult = { entityId: string; changed: boolean; wasCreated: boolean };
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -176,7 +176,7 @@ export class MigrationRelationshipApplyRepository {
       before: before ? { active: before.active, isPrimary: before.isPrimary, role: before.role } : null,
       after: { organizationId, contactId, active: relationship.active, isPrimary: relationship.isPrimary, role: relationship.role, actor: await this.actor(transaction, operation) },
     });
-    return { entityId: relationship.id, changed };
+    return { entityId: relationship.id, changed, wasCreated: !before };
   }
 
   private async applyBookingIn(transaction: Transaction, operation: MigrationApplyOperation): Promise<MigrationRelationshipApplyResult> {
@@ -235,7 +235,7 @@ export class MigrationRelationshipApplyRepository {
       before: before ? { organizationId: before.organizationId, name: before.name, startsAt: before.startsAt, endsAt: before.endsAt } : null,
       after: { organizationId, name: booking.name, startsAt: booking.startsAt, endsAt: booking.endsAt, actor: await this.actor(transaction, operation) },
     });
-    return { entityId: booking.id, changed };
+    return { entityId: booking.id, changed, wasCreated: before === null };
   }
 
   private async applyBookingContactIn(transaction: Transaction, operation: MigrationApplyOperation): Promise<MigrationRelationshipApplyResult> {
@@ -285,6 +285,6 @@ export class MigrationRelationshipApplyRepository {
       before: before ? { isPrimary: before.isPrimary, role: before.role } : null,
       after: { bookingId, contactId, isPrimary: relationship.isPrimary, role: relationship.role, actor: await this.actor(transaction, operation) },
     });
-    return { entityId: relationship.id, changed };
+    return { entityId: relationship.id, changed, wasCreated: !before };
   }
 }

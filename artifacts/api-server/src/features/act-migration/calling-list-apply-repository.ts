@@ -19,7 +19,7 @@ import {
 type DrizzleDatabase = typeof database;
 type Values = Record<string, unknown>;
 
-export type MigrationCallingListApplyResult = { entityId: string; changed: boolean };
+export type MigrationCallingListApplyResult = { entityId: string; changed: boolean; wasCreated: boolean };
 
 function text(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
@@ -93,7 +93,7 @@ export class MigrationCallingListApplyRepository {
       entityType: "calling_list", entityId: result.entityId, action: "act_migration_applied", before: null,
       after: { sourceIds: [group.sourceId!], state: "static" },
     });
-    return result;
+    return { entityId: result.entityId, changed: result.changed, wasCreated: result.wasCreated };
   }
 
   private async applyMembershipIn(transaction: CallingListTransaction, operation: MigrationApplyOperation): Promise<MigrationCallingListApplyResult> {
@@ -122,7 +122,7 @@ export class MigrationCallingListApplyRepository {
       entityType: "calling_list_membership", entityId: result.entityId, action: "act_migration_applied", before: null,
       after: { sourceIds: [edge.sourceId!, edge.targetSourceId!], state: "active" },
     });
-    return result;
+    return { entityId: result.entityId, changed: result.changed, wasCreated: result.wasCreated };
   }
 
   private async stableContactId(transaction: CallingListTransaction, sourceId: string) {

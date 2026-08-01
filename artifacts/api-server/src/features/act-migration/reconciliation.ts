@@ -153,6 +153,8 @@ export function reconcileMigrationApply(input: {
           ignored: 0,
           failed: 0,
           total: 0,
+          created: 0,
+          updated: 0,
         },
         batches: [],
       }),

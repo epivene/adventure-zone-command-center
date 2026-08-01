@@ -58,6 +58,8 @@ export type MigrationApplyOperation = {
 
 export type MigrationApplyCounts = Record<MigrationApplyOperationStatus, number> & {
   total: number;
+  created: number;
+  updated: number;
 };
 
 export type MigrationApplyBatch = {
@@ -153,6 +155,8 @@ function emptyCounts(): MigrationApplyCounts {
     ignored: 0,
     failed: 0,
     total: 0,
+    created: 0,
+    updated: 0,
   };
 }
 
@@ -161,6 +165,10 @@ function countOperations(operations: readonly StoredOperation[]): MigrationApply
   for (const operation of operations) {
     counts[operation.status as MigrationApplyOperationStatus] += 1;
     counts.total += 1;
+    if (operation.status === "applied") {
+      if (operation.wasCreated === true) counts.created += 1;
+      else if (operation.wasCreated === false) counts.updated += 1;
+    }
   }
   return counts;
 }

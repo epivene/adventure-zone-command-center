@@ -1079,7 +1079,7 @@ export function ActMigrationReview({
                 {applyResult ? (
                   <section aria-label="Reviewed import results" className="mt-4 rounded-lg bg-slate-50 p-4 text-sm">
                     <p className="font-semibold">Batch {applyResult.batchId} · {applyResult.status}</p>
-                    <p className="font-semibold">Succeeded {applyResult.counts.applied} · Skipped {applyResult.counts.ignored} · Blocked {applyResult.counts.blocked} · Failed {applyResult.counts.failed}</p>
+                    <p className="font-semibold">Succeeded {applyResult.counts.applied} · Created {applyResult.counts.created ?? 0} · Updated {applyResult.counts.updated ?? 0} · Skipped {applyResult.counts.ignored} · Blocked {applyResult.counts.blocked} · Failed {applyResult.counts.failed}</p>
                     <p className="mt-1 text-slate-600">{applyResult.counts.pending + applyResult.counts.leased} approved operations remain queued.</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {applyResult.counts.pending + applyResult.counts.leased > 0 ? <button className="button-secondary" disabled={applyBusy} onClick={() => advanceApply(continueApplyAction)} type="button">Continue reviewed import</button> : null}
