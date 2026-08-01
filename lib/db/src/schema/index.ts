@@ -719,7 +719,7 @@ export const actMigrationRuns = pgTable(
   "act_migration_runs",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    requestKey: uuid("request_key").notNull(),
+    requestKey: text("request_key").notNull(),
     sourceDatabaseKey: text("source_database_key").notNull(),
     requestedBy: text("requested_by").notNull(),
     status: text("status").default("snapshotting").notNull(),
