@@ -31,7 +31,7 @@ import {
   updateTripAction,
   type GeocodeCandidate,
 } from "@/actions/trips";
-import { EventMap } from "@/components/routes/event-map";
+import { TripRouteMap } from "@/components/routes/trip-route-map";
 
 type TripStop = {
   id: string;
@@ -343,22 +343,15 @@ export default function TripDetailPage() {
     setBusy(false);
   }
 
-  const stopEvents = useMemo(() => {
+  const routeStops = useMemo(() => {
     if (!data) return [];
-    return data.stops
-      .filter((stop) => stop.latitude !== null && stop.longitude !== null)
-      .map((stop) => ({
-        id: stop.bookingId,
-        name: `${stop.sortOrder}. ${stop.bookingName}`,
-        city: stop.city,
-        region: stop.region,
-        latitude: stop.latitude,
-        longitude: stop.longitude,
-        startsAt: stop.startsAt ? new Date(stop.startsAt) : null,
-        endsAt: null,
-        status: stop.status,
-        travelLegId: data.trip.travelLegId,
-      }));
+    return data.stops.map((stop) => ({
+      id: stop.id,
+      name: stop.bookingName,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+      sortOrder: stop.sortOrder,
+    }));
   }, [data]);
 
   if (error && !data) {
@@ -590,14 +583,27 @@ export default function TripDetailPage() {
             )}
           </section>
 
-          {stopEvents.length > 0 ? (
-            <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-xl font-bold">Trip map</h2>
-              <div className="mt-3">
-                <EventMap events={stopEvents as any} travelLegs={[]} />
-              </div>
-            </section>
-          ) : null}
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-xl font-bold">Trip map</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Route line follows stops in current order. Stops without coordinates are omitted.
+            </p>
+            <div className="mt-3">
+              <TripRouteMap
+                end={{
+                  label: trip.endLabel,
+                  latitude: trip.endLatitude,
+                  longitude: trip.endLongitude,
+                }}
+                start={{
+                  label: trip.startLabel,
+                  latitude: trip.startLatitude,
+                  longitude: trip.startLongitude,
+                }}
+                stops={routeStops}
+              />
+            </div>
+          </section>
         </div>
 
         <div className="grid content-start gap-6">
