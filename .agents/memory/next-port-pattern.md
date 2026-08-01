@@ -4,17 +4,19 @@ description: Durable lessons from porting a Vercel/Next.js CRM into the pnpm mon
 ---
 
 ## Zod v4 on a v3 catalog
-Ported code uses the zod v4 API while the workspace catalog pins 3.25.x (which ships v4 under the `zod/v4` subpath). **Why:** bumping the catalog risks other packages. **How to apply:** alias `zod` → `zod/v4` in each artifact's bundler config AND add a tsconfig `paths` entry pointing at `node_modules/zod/v4/index.d.ts` so types match runtime.
+Ported code uses the zod v4 API while the workspace catalog pins 3.25.x (which ships v4 under `zod/v4`). **Why:** bumping the catalog risks other packages. **How to apply:** alias `zod` → `zod/v4` in each artifact's bundler config AND add a tsconfig `paths` entry pointing at `node_modules/zod/v4/index.d.ts` so TS types match runtime.
 
-## Shared-schema typing across artifacts
-- Composite TS packages (lib/db) serve types from `dist/*.d.ts` — if feature code reports "no exported member" for tables that clearly exist, rebuild the lib's declarations (`tsc -b lib/db --force`) before assuming code is wrong.
-- Frontend copies of server repositories can typecheck against the real schema without pulling in pg: re-export the schema from the shared package and expose `db` as `null as unknown as typeof realDb` via a type-only import.
+## Shared schema typing without a runtime DB import
+Frontend copies of server repositories typecheck against real Drizzle types by: (a) re-exporting `@workspace/db/schema` from `src/db/schema.ts`, (b) exposing `db` as `null as unknown as typeof realDb` via a type-only import in `src/db/client.ts`. No pg driver loads in the browser.
 
-## Managed Clerk is cookie-based
-Server: `clerkMiddleware` + proxy; owner check enforced only when OWNER_CLERK_USER_ID is set. Frontend: `publishableKeyFromHost`, fetches with `credentials: "include"`. **Why:** the original app used external Clerk Bearer tokens — do not reintroduce token getters for web.
+## Managed Clerk is cookie-based; owner restriction is fail-closed
+Server uses `clerkMiddleware` + proxy; `requireOwnerMiddleware` compares every authenticated request to `OWNER_CLERK_USER_ID` and returns 403 if the env var is absent OR the user doesn't match — fails closed unconditionally. **Why:** single-owner CRM; any authenticated non-owner must be blocked. `OWNER_CLERK_USER_ID` is set in the shared environment as a non-secret env var (it's a user identifier, not a credential).
+
+## Vite config: default PORT/BASE_PATH so production build is self-contained
+Throw at dev-server startup was replaced with `?? '5000'` / `?? '/'` defaults so `pnpm run build` succeeds without env injection.
 
 ## Port sharp edges
-- Verify repository/service method names against actual exports; optimistic `?.()` calls silently no-op.
-- Ported components keep original prop contracts; pages must adapt API JSON (coerce ISO strings to Date) before passing down.
-- Vite artifact configs should default `BASE_PATH`/`PORT` instead of throwing, so `pnpm run build` is self-contained for production.
-- Next `router.refresh()` after-save has no wouter equivalent; a no-op is usually fine because pages re-fetch on navigation.
+- Verify repository/service method names against actual exports before using them; optimistic `?.()` calls silently no-op.
+- Ported components keep their original prop contracts; pages must coerce ISO date strings to `Date` objects before passing down.
+- Next `router.refresh()` after-save → no-op comment in wouter (pages re-fetch on navigation; `window.location.reload()` only if the original relied on a full server roundtrip).
+- The platform path router handles `/api/*` → Express in production via `paths=["/api"]` in the api-server artifact.toml — no extra proxy config needed in the web artifact.
