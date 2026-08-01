@@ -771,12 +771,17 @@ export default function ActMigrationPage() {
         />
       )}
 
-      {/* Show form to start a new run */}
-      {!isRunning && (
+      {/* Show form to start a new run — always visible so a stuck run never locks the UI */}
+      {(
         <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-4 text-base font-semibold text-slate-800">
-            {run ? "Run another import" : "Start import"}
+            {isRunning ? "Start a fresh import" : run ? "Run another import" : "Start import"}
           </h2>
+          {isRunning && (
+            <p className="mb-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              An import is currently in progress above. Starting a new one will supersede it.
+            </p>
+          )}
 
           {envConfigured ? (
             <div className="space-y-4">
