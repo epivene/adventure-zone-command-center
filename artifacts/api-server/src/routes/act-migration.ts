@@ -107,6 +107,7 @@ async function runPipeline(
           // Non-retryable — give up
           state.phase = "failed";
           state.error = `Snapshot failed: ${interruption?.code ?? "unknown"}`;
+          await failRunInDb(runId);
           return;
         }
         // Retryable — sleep until the indicated retry time, then loop again
@@ -163,6 +164,7 @@ async function runPipeline(
       if (result.errorCode && !result.retryable) {
         state.phase = "failed";
         state.error = `Apply failed: ${result.errorCode}`;
+        await failRunInDb(runId);
         return;
       }
 
@@ -210,11 +212,32 @@ async function runPipeline(
     state.phase = "failed";
     state.error =
       err instanceof Error ? err.message : "Unknown pipeline error";
+    await failRunInDb(runId);
   }
 }
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Best-effort: persist "failed" status to the DB so that phase reads derive
+ * the correct state from DB alone and survive server restarts.
+ */
+async function failRunInDb(runId: string): Promise<void> {
+  try {
+    const [{ db }, { actMigrationRuns }, { eq }] = await Promise.all([
+      import("@/db/client"),
+      import("@/db/schema"),
+      import("drizzle-orm"),
+    ]);
+    await db
+      .update(actMigrationRuns)
+      .set({ status: "failed", updatedAt: new Date() })
+      .where(eq(actMigrationRuns.id, runId));
+  } catch {
+    // Best-effort — never let a DB error mask the original pipeline failure
+  }
 }
 
 // ─── Routes ──────────────────────────────────────────────────────────────────
