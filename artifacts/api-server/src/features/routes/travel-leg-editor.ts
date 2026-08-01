@@ -26,6 +26,8 @@ export interface TravelLegEditorTransaction {
     id: string,
     values: { name: string; color: string },
   ): Promise<TravelLeg>;
+  /** Atomically reorder all legs in a single SQL statement to avoid unique-constraint conflicts. */
+  reorderLegs(orders: { id: string; sortOrder: number }[]): Promise<void>;
   insert(values: {
     name: string;
     color: string;
@@ -49,41 +51,49 @@ export class TravelLegService {
   ): Promise<Result<TravelLeg[], TravelLegConfigurationError>> {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
-      const requested = [...input.legs].sort(
-        (left, right) => left.sortOrder - right.sortOrder,
-      );
 
-      // Must match current count and same IDs in same sort positions
+      // Must match current count and the same set of IDs (any order is allowed)
       const currentIds = new Set(current.map((l) => l.id));
       if (
-        requested.length !== current.length ||
-        requested.some((leg) => !currentIds.has(leg.id)) ||
-        current.some(
-          (leg, index) =>
-            requested[index]?.id !== leg.id ||
-            requested[index]?.sortOrder !== leg.sortOrder,
-        )
+        input.legs.length !== current.length ||
+        input.legs.some((leg) => !currentIds.has(leg.id))
       ) {
         return err({ code: "LEG_CONFIGURATION_CONFLICT" });
       }
 
+      const currentById = new Map(current.map((l) => [l.id, l]));
+      const requestedById = new Map(input.legs.map((l) => [l.id, l]));
+
+      // Atomically reorder if any sort position changed — one SQL statement
+      // avoids the unique-constraint conflict that sequential updates would cause.
+      const orderChanged = input.legs.some(
+        (leg) => currentById.get(leg.id)!.sortOrder !== leg.sortOrder,
+      );
+      if (orderChanged) {
+        await transaction.reorderLegs(
+          input.legs.map((leg) => ({ id: leg.id, sortOrder: leg.sortOrder })),
+        );
+      }
+
+      // Update name/color for each leg that changed
       const updated: TravelLeg[] = [];
-      for (const [index, leg] of current.entries()) {
-        const next = requested[index]!;
-        if (leg.name === next.name && leg.color === next.color) {
-          updated.push(leg);
-          continue;
+      for (const leg of current) {
+        const next = requestedById.get(leg.id)!;
+        if (leg.name !== next.name || leg.color !== next.color) {
+          const saved = await transaction.update(leg.id, {
+            name: next.name,
+            color: next.color,
+          });
+          await transaction.audit({
+            entityId: leg.id,
+            before: { name: leg.name, color: leg.color },
+            after: { name: saved.name, color: saved.color },
+          });
+          updated.push(saved);
+        } else {
+          // Sort order may have changed; reflect the requested value
+          updated.push({ ...leg, sortOrder: next.sortOrder });
         }
-        const saved = await transaction.update(leg.id, {
-          name: next.name,
-          color: next.color,
-        });
-        await transaction.audit({
-          entityId: leg.id,
-          before: { name: leg.name, color: leg.color },
-          after: { name: saved.name, color: saved.color },
-        });
-        updated.push(saved);
       }
       return ok(updated);
     });

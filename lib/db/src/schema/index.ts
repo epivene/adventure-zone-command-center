@@ -175,6 +175,12 @@ export const travelLegs = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     name: text("name").notNull(),
     color: text("color").notNull(),
+    // NOTE: The generated unique constraint (travel_legs_sort_order_unique) was
+    // manually altered to DEFERRABLE INITIALLY IMMEDIATE via ALTER TABLE so that
+    // drag-reorder can defer the check to commit time. If drizzle-kit push ever
+    // recreates this constraint, re-run:
+    //   ALTER TABLE travel_legs DROP CONSTRAINT travel_legs_sort_order_unique;
+    //   ALTER TABLE travel_legs ADD CONSTRAINT travel_legs_sort_order_unique UNIQUE (sort_order) DEFERRABLE INITIALLY IMMEDIATE;
     sortOrder: integer("sort_order").notNull().unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()

@@ -1,4 +1,4 @@
-import { asc, eq, gt } from "drizzle-orm";
+import { asc, eq, gt, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { bookings, resources, travelLegs } from "@/db/schema";
@@ -110,6 +110,36 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
             });
           if (!updated) throw new Error("Travel leg is missing.");
           return updated;
+        },
+        reorderLegs: async (orders) => {
+          if (orders.length === 0) return;
+          // Temporarily drop the unique constraint so the CASE UPDATE can move
+          // rows through intermediate positions without hitting a per-row
+          // collision (e.g. swapping 1↔2 or any cyclic reorder).  DDL is fully
+          // transactional in PostgreSQL: if this transaction rolls back the
+          // constraint is restored automatically.  The constraint is recreated
+          // DEFERRABLE INITIALLY IMMEDIATE to match the state set by migration
+          // 001_sort_order_deferrable, and to keep future SET-CONSTRAINTS-based
+          // callers working without another schema change.
+          await transaction.execute(
+            sql`ALTER TABLE travel_legs DROP CONSTRAINT travel_legs_sort_order_unique`,
+          );
+          const whenClauses = sql.join(
+            orders.map(({ id, sortOrder }) =>
+              sql`when ${id}::uuid then ${sortOrder}::integer`,
+            ),
+            sql` `,
+          );
+          const idList = sql.join(
+            orders.map(({ id }) => sql`${id}::uuid`),
+            sql`, `,
+          );
+          await transaction.execute(
+            sql`update travel_legs set sort_order = case id ${whenClauses} end, updated_at = now() where id in (${idList})`,
+          );
+          await transaction.execute(
+            sql`ALTER TABLE travel_legs ADD CONSTRAINT travel_legs_sort_order_unique UNIQUE (sort_order) DEFERRABLE INITIALLY IMMEDIATE`,
+          );
         },
         insert: async (values) => {
           const [inserted] = await transaction
