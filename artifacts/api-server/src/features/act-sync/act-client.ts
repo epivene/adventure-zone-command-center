@@ -1,5 +1,9 @@
 import { ActApiError } from "@/features/act-sync/act-errors";
 import type {
+  ActReadRequest,
+  ActReadTransport,
+} from "@/features/act-replacement/act-read-transport";
+import type {
   ActConfig,
   ActContactInput,
   ActRateLimit,
@@ -56,7 +60,8 @@ function remoteContact(value: unknown): RemoteActContact {
     lastName,
     organizationName: optionalString(record.company),
     jobTitle: optionalString(record.jobTitle),
-    email: optionalString(record.emailAddress)?.toLocaleLowerCase("en-US") ?? null,
+    email:
+      optionalString(record.emailAddress)?.toLocaleLowerCase("en-US") ?? null,
     phone: optionalString(record.businessPhone),
     address1: optionalString(address.line1),
     address2: optionalString(address.line2),
@@ -89,15 +94,47 @@ function payload(input: ActContactInput) {
 function extractToken(value: unknown) {
   if (typeof value === "string" && value.trim()) return value.trim();
   const record = asRecord(value);
-  return requiredString(record.token ?? record.access_token ?? record.bearerToken);
+  return requiredString(
+    record.token ?? record.access_token ?? record.bearerToken,
+  );
 }
 
-export class ActClient implements ActTransport {
+function tokenExpiresAt(token: string): number | null {
+  const payload = token.split(".")[1];
+  if (!payload) return null;
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    return typeof decoded.exp === "number" && Number.isFinite(decoded.exp)
+      ? decoded.exp * 1_000
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isTimeoutError(error: unknown) {
+  return (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "AbortError")
+  );
+}
+
+function isODataGet(url: string, init: RequestInit) {
+  if (init.method !== "GET") return false;
+  return [...new URL(url).searchParams.keys()].some((name) =>
+    name.startsWith("$"),
+  );
+}
+
+export class ActClient implements ActTransport, ActReadTransport {
   private readonly fetcher: Fetcher;
   private readonly pageSize: number;
   private readonly timeoutMs: number;
   private readonly maxResponseBytes: number;
   private token: string | null = null;
+  private tokenExpiry: number | null = null;
   private lastRateLimit: ActRateLimit = {
     limit: null,
     remaining: null,
@@ -122,8 +159,46 @@ export class ActClient implements ActTransport {
   }
 
   async testConnection() {
-    await this.getToken(true);
+    await this.authorize();
     return { ok: true as const };
+  }
+
+  hasValidAuthorization(now: Date) {
+    return (
+      this.token !== null &&
+      Number.isFinite(now.getTime()) &&
+      (this.tokenExpiry === null || this.tokenExpiry > now.getTime())
+    );
+  }
+
+  async authorize(): Promise<void> {
+    await this.getToken(true);
+  }
+
+  async getJsonAuthorized(input: ActReadRequest): Promise<unknown> {
+    if (!this.hasValidAuthorization(new Date())) {
+      throw new ActAuthorizationRequiredError();
+    }
+    try {
+      return await this.authenticatedJson(
+        {
+          path: input.path,
+          method: "GET",
+          ...(input.query ? { query: input.query } : {}),
+        },
+        this.token!,
+      );
+    } catch (error) {
+      if (
+        error instanceof ActApiError &&
+        error.code === "authentication_failed"
+      ) {
+        this.token = null;
+        this.tokenExpiry = null;
+        throw new ActAuthorizationRequiredError();
+      }
+      throw error;
+    }
   }
 
   async listContacts() {
@@ -141,11 +216,21 @@ export class ActClient implements ActTransport {
       }
       query.$skip = String(skip);
       query.$top = String(this.pageSize);
-      const value = await this.requestJson({
-        path: "/api/contacts",
-        method: "GET",
-        query,
-      });
+      let value: unknown;
+      try {
+        value = await this.getJson({ path: "/api/contacts", query });
+      } catch (error) {
+        if (
+          error instanceof ActApiError &&
+          error.code === "query_rejected" &&
+          skip === 0 &&
+          !compatibilityQuery
+        ) {
+          compatibilityQuery = true;
+          continue;
+        }
+        throw error;
+      }
       const page = Array.isArray(value)
         ? value
         : Array.isArray(asRecord(value).value)
@@ -211,23 +296,29 @@ export class ActClient implements ActTransport {
     return this.authenticatedJson(input);
   }
 
+  getJson(input: ActReadRequest) {
+    return this.requestJson({
+      path: input.path,
+      method: "GET",
+      ...(input.query ? { query: input.query } : {}),
+    });
+  }
+
   private async getToken(force = false) {
-    if (this.token && !force) return this.token;
+    if (!force && this.hasValidAuthorization(new Date())) return this.token!;
     const credentials = Buffer.from(
       `${this.config.username}:${this.config.password}`,
       "utf8",
     ).toString("base64");
-    const value = await this.fetchJson(
-      `${this.config.baseUrl}/authorize`,
-      {
-        method: "GET",
-        headers: {
-          Authorization: `Basic ${credentials}`,
-          "Act-Database-Name": this.config.databaseName,
-        },
+    const value = await this.fetchJson(`${this.config.baseUrl}/authorize`, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Act-Database-Name": this.config.databaseName,
       },
-    );
+    });
     this.token = extractToken(value);
+    this.tokenExpiry = tokenExpiresAt(this.token);
     return this.token;
   }
 
@@ -247,9 +338,7 @@ export class ActClient implements ActTransport {
     }
     return this.fetchJson(url.toString(), {
       method: input.method,
-      ...(input.body === undefined
-        ? {}
-        : { body: JSON.stringify(input.body) }),
+      ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${token}`,
@@ -268,6 +357,9 @@ export class ActClient implements ActTransport {
       });
     } catch (error) {
       if (error instanceof ActApiError) throw error;
+      if (isTimeoutError(error)) {
+        throw new ActApiError("timeout", true);
+      }
       throw new ActApiError("unavailable", true);
     }
 
@@ -286,12 +378,19 @@ export class ActClient implements ActTransport {
         );
       }
       if (response.status === 403) {
+        throw new ActApiError("permission_denied", false, null, "not_applied");
+      }
+      if (response.status === 400) {
         throw new ActApiError(
-          "permission_denied",
+          isODataGet(url, init) ? "query_rejected" : "invalid_response",
           false,
-          null,
-          "not_applied",
         );
+      }
+      if (response.status === 404) {
+        throw new ActApiError("not_found", false);
+      }
+      if (response.status === 405) {
+        throw new ActApiError("endpoint_unsupported", false);
       }
       if (response.status === 429) {
         throw new ActApiError(
@@ -301,7 +400,10 @@ export class ActClient implements ActTransport {
           "not_applied",
         );
       }
-      throw new ActApiError("unavailable", response.status >= 500);
+      throw new ActApiError(
+        response.status >= 500 ? "unavailable" : "invalid_response",
+        response.status >= 500,
+      );
     }
     if (response.status === 204) return null;
 
@@ -309,7 +411,15 @@ export class ActClient implements ActTransport {
     if (declaredLength > this.maxResponseBytes) {
       throw new ActApiError("invalid_response", false);
     }
-    const text = await response.text();
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (error) {
+      throw new ActApiError(
+        isTimeoutError(error) ? "timeout" : "unavailable",
+        true,
+      );
+    }
     if (Buffer.byteLength(text, "utf8") > this.maxResponseBytes) {
       throw new ActApiError("invalid_response", false);
     }
@@ -319,5 +429,14 @@ export class ActClient implements ActTransport {
     } catch {
       return text.trim();
     }
+  }
+}
+
+export class ActAuthorizationRequiredError extends Error {
+  readonly code = "ACT_AUTHORIZATION_REQUIRED";
+
+  constructor() {
+    super("Act! authorization must be refreshed before this request.");
+    this.name = "ActAuthorizationRequiredError";
   }
 }
