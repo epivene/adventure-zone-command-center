@@ -3,7 +3,8 @@ import type {
   ActPage,
   ActPageRequest,
 } from "@/features/act-migration/migration-types";
-import type { ActTransport } from "@/features/act-sync/act-types";
+import type { ActReadTransport } from "@/features/act-replacement/act-read-transport";
+import type { ActRootStreamType } from "@/features/act-replacement/import-types";
 
 const sourceQueries = {
   company: {
@@ -13,14 +14,12 @@ const sourceQueries = {
   contact: {
     select:
       "id,firstName,lastName,fullName,company,jobTitle,emailAddress,businessPhone,edited",
-    expand:
-      "businessAddress($select=line1,line2,city,state,postalCode)",
+    expand: "businessAddress($select=line1,line2,city,state,postalCode)",
   },
   opportunity: {
     select:
       "id,name,status,estimatedCloseDate,actualCloseDate,total,probability,edited",
-    expand:
-      "stage($expand=process($select=name,id);$select=name,id)",
+    expand: "stage($expand=process($select=name,id);$select=name,id)",
   },
   group: {
     select: "id,name,description,edited",
@@ -43,6 +42,24 @@ const sourceQueries = {
 } as const;
 
 type SourceEntity = keyof typeof sourceQueries;
+
+export type RootSourceKind = ActRootStreamType;
+
+const rootPaths: Record<RootSourceKind, `/api/${string}`> = {
+  company: "/api/companies",
+  contact: "/api/contacts",
+  opportunity: "/api/opportunities",
+  group: "/api/groups",
+  activity: "/api/activities",
+  note: "/api/notes",
+  history: "/api/history",
+};
+
+const relatedPathSegments = {
+  contact: "contacts",
+  company: "companies",
+  opportunity: "opportunities",
+} as const;
 
 export interface ActMigrationSourceClient {
   listCompanies(request: ActPageRequest): Promise<ActPage>;
@@ -70,12 +87,41 @@ export interface ActMigrationSourceClient {
   listHistory(request: ActPageRequest): Promise<ActPage>;
   // Per-record relationship endpoints — used as fallback when plain-mode
   // responses omit inline expansions.
-  listContactsForNote(noteId: string, request: ActPageRequest): Promise<ActPage>;
-  listCompaniesForNote(noteId: string, request: ActPageRequest): Promise<ActPage>;
-  listContactsForHistory(historyId: string, request: ActPageRequest): Promise<ActPage>;
-  listCompaniesForHistory(historyId: string, request: ActPageRequest): Promise<ActPage>;
-  listContactsForActivity(activityId: string, request: ActPageRequest): Promise<ActPage>;
-  listCompaniesForActivity(activityId: string, request: ActPageRequest): Promise<ActPage>;
+  listContactsForNote(
+    noteId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
+  listCompaniesForNote(
+    noteId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
+  listContactsForHistory(
+    historyId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
+  listCompaniesForHistory(
+    historyId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
+  listContactsForActivity(
+    activityId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
+  listCompaniesForActivity(
+    activityId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
+}
+
+export interface ActReplacementSourceClient extends ActMigrationSourceClient {
+  listRoot(kind: RootSourceKind, request: ActPageRequest): Promise<ActPage>;
+  getDetail(kind: RootSourceKind, id: string): Promise<Record<string, unknown>>;
+  listRelated(input: {
+    parentKind: "activity" | "note" | "history";
+    parentId: string;
+    targetKind: "contact" | "company" | "opportunity";
+    request: ActPageRequest;
+  }): Promise<ActPage>;
 }
 
 function pageItems(value: unknown) {
@@ -87,10 +133,58 @@ function pageItems(value: unknown) {
   throw new ActApiError("invalid_response", false);
 }
 
-export class HttpActMigrationSourceClient
-  implements ActMigrationSourceClient
-{
-  constructor(private readonly transport: ActTransport) {}
+function detailItem(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as Record<string, unknown>;
+    const isDetailWrapper =
+      !("id" in record) &&
+      "value" in record &&
+      Object.keys(record).every(
+        (key) =>
+          key === "value" ||
+          key.startsWith("@odata.") ||
+          key.startsWith("odata."),
+      );
+    if (isDetailWrapper) {
+      const wrapped = record.value;
+      if (wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)) {
+        return wrapped as Record<string, unknown>;
+      }
+      throw new ActApiError("invalid_response", false);
+    }
+    return record;
+  }
+  throw new ActApiError("invalid_response", false);
+}
+
+export class HttpActMigrationSourceClient implements ActReplacementSourceClient {
+  constructor(private readonly transport: ActReadTransport) {}
+
+  listRoot(kind: RootSourceKind, request: ActPageRequest) {
+    return this.list(rootPaths[kind], kind, request);
+  }
+
+  async getDetail(kind: RootSourceKind, id: string) {
+    const response = await this.transport.getJson({
+      path: `${rootPaths[kind]}/${encodeURIComponent(id)}`,
+    });
+    return detailItem(response);
+  }
+
+  listRelated(input: {
+    parentKind: "activity" | "note" | "history";
+    parentId: string;
+    targetKind: "contact" | "company" | "opportunity";
+    request: ActPageRequest;
+  }) {
+    const parentPath = rootPaths[input.parentKind];
+    const targetPath = relatedPathSegments[input.targetKind];
+    return this.list(
+      `${parentPath}/${encodeURIComponent(input.parentId)}/${targetPath}`,
+      input.targetKind,
+      input.request,
+    );
+  }
 
   listCompanies(request: ActPageRequest) {
     return this.list("/api/companies", "company", request);
@@ -116,10 +210,7 @@ export class HttpActMigrationSourceClient
     );
   }
 
-  listCompaniesForOpportunity(
-    opportunityId: string,
-    request: ActPageRequest,
-  ) {
+  listCompaniesForOpportunity(opportunityId: string, request: ActPageRequest) {
     return this.list(
       `/api/opportunities/${encodeURIComponent(opportunityId)}/companies`,
       "company",
@@ -127,10 +218,7 @@ export class HttpActMigrationSourceClient
     );
   }
 
-  listContactsForOpportunity(
-    opportunityId: string,
-    request: ActPageRequest,
-  ) {
+  listContactsForOpportunity(opportunityId: string, request: ActPageRequest) {
     return this.list(
       `/api/opportunities/${encodeURIComponent(opportunityId)}/contacts`,
       "contact",
@@ -159,27 +247,51 @@ export class HttpActMigrationSourceClient
   }
 
   listContactsForNote(noteId: string, request: ActPageRequest) {
-    return this.list(`/api/notes/${encodeURIComponent(noteId)}/contacts`, "contact", request);
+    return this.list(
+      `/api/notes/${encodeURIComponent(noteId)}/contacts`,
+      "contact",
+      request,
+    );
   }
 
   listCompaniesForNote(noteId: string, request: ActPageRequest) {
-    return this.list(`/api/notes/${encodeURIComponent(noteId)}/companies`, "company", request);
+    return this.list(
+      `/api/notes/${encodeURIComponent(noteId)}/companies`,
+      "company",
+      request,
+    );
   }
 
   listContactsForHistory(historyId: string, request: ActPageRequest) {
-    return this.list(`/api/history/${encodeURIComponent(historyId)}/contacts`, "contact", request);
+    return this.list(
+      `/api/history/${encodeURIComponent(historyId)}/contacts`,
+      "contact",
+      request,
+    );
   }
 
   listCompaniesForHistory(historyId: string, request: ActPageRequest) {
-    return this.list(`/api/history/${encodeURIComponent(historyId)}/companies`, "company", request);
+    return this.list(
+      `/api/history/${encodeURIComponent(historyId)}/companies`,
+      "company",
+      request,
+    );
   }
 
   listContactsForActivity(activityId: string, request: ActPageRequest) {
-    return this.list(`/api/activities/${encodeURIComponent(activityId)}/contacts`, "contact", request);
+    return this.list(
+      `/api/activities/${encodeURIComponent(activityId)}/contacts`,
+      "contact",
+      request,
+    );
   }
 
   listCompaniesForActivity(activityId: string, request: ActPageRequest) {
-    return this.list(`/api/activities/${encodeURIComponent(activityId)}/companies`, "company", request);
+    return this.list(
+      `/api/activities/${encodeURIComponent(activityId)}/companies`,
+      "company",
+      request,
+    );
   }
 
   private async list(
@@ -192,34 +304,28 @@ export class HttpActMigrationSourceClient
       const projection = sourceQueries[entity];
       query.$select = projection.select;
       if ("expand" in projection) query.$expand = projection.expand;
+      query.$orderby = "id";
+      if (request.filter) query.$filter = request.filter;
     }
-    // Always include a stable sort key so offset-based pagination is deterministic
-    // in both projected and plain mode. Without this, concurrent source changes or
-    // Act!'s internal ordering can cause records to shift between pages, resulting
-    // in skipped or duplicate items.
-    query.$orderby = "id";
     query.$skip = String(request.skip);
     query.$top = String(request.top);
-    if (request.filter) {
-      query.$filter = request.filter;
-    }
 
     // In projected mode we try the richer $select/$expand form first. The Act!
     // API signals "projections not supported" in two distinct ways:
     //  (a) Returns an empty page on the very first request — existing behaviour.
-    //  (b) Throws an HTTP error (4xx/5xx) because the endpoint does not support
-    //      $select or $expand at all.
+    //  (b) Rejects the OData query options with query_rejected.
     // Both cases are treated identically: return the plain-fallback sentinel so
     // the caller retries the same page position in un-projected plain mode.
     let rawResponse: unknown;
     try {
-      rawResponse = await this.transport.requestJson({
-        path,
-        method: "GET",
-        query,
-      });
+      rawResponse = await this.transport.getJson({ path, query });
     } catch (err) {
-      if (request.queryMode === "projected" && request.skip === 0) {
+      if (
+        err instanceof ActApiError &&
+        err.code === "query_rejected" &&
+        request.queryMode === "projected" &&
+        request.skip === 0
+      ) {
         // Projection rejected by the endpoint — fall back to plain mode.
         return { items: [], nextSkip: request.skip, queryMode: "plain" };
       }
