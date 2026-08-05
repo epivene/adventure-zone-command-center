@@ -1,187 +1,356 @@
-/**
- * Unit tests for HttpActMigrationSourceClient.
- *
- * Covers:
- * - Stable $orderby applied in both projected and plain mode
- * - Projected→plain fallback via empty first page
- * - Projected→plain fallback via HTTP error (endpoint rejects $select/$expand)
- * - Normal pagination: items returned with correct nextSkip
- * - Plain-mode requests: correct nextSkip, no second fallback loop
- */
+import { describe, expect, it } from "vitest";
 
-import { describe, expect, it, vi } from "vitest";
 import { HttpActMigrationSourceClient } from "@/features/act-migration/source-client";
+import type { ActReadTransport } from "@/features/act-replacement/act-read-transport";
 import { ActApiError } from "@/features/act-sync/act-errors";
-import type { ActTransport } from "@/features/act-sync/act-types";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+type ReadRequest = Parameters<ActReadTransport["getJson"]>[0];
 
-function makeTransport(
-  handler: (input: { path: string; query: Record<string, string> }) => unknown,
-): ActTransport {
-  return {
-    requestJson: vi.fn().mockImplementation(handler),
-  } as unknown as ActTransport;
+function recordingReadTransport(
+  response: unknown | ((request: ReadRequest) => unknown),
+) {
+  const requests: ReadRequest[] = [];
+  const transport: ActReadTransport = {
+    async getJson(request) {
+      requests.push(request);
+      return typeof response === "function" ? response(request) : response;
+    },
+    rateLimit: { limit: null, remaining: null, reset: null },
+  };
+  return { transport, requests };
 }
 
-/** Return an OData-wrapped page. */
-function odataPage(items: unknown[]) {
-  return { value: items };
-}
+const projected = { skip: 0, top: 100, queryMode: "projected" } as const;
+const plain = { skip: 0, top: 100, queryMode: "plain" } as const;
 
-const PROJECTED: { skip: number; top: number; queryMode: "projected" } = {
-  skip: 0, top: 10, queryMode: "projected",
-};
-const PLAIN: { skip: number; top: number; queryMode: "plain" } = {
-  skip: 0, top: 10, queryMode: "plain",
-};
+describe("HttpActMigrationSourceClient queries", () => {
+  it("sends projection, expansion, ordering, and pagination in projected mode", async () => {
+    const { transport, requests } = recordingReadTransport([
+      { id: "contact-1" },
+    ]);
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+    await new HttpActMigrationSourceClient(transport).listContacts(projected);
 
-describe("HttpActMigrationSourceClient", () => {
-  describe("$orderby stability", () => {
-    it("includes $orderby=id in projected mode", async () => {
-      const transport = makeTransport(() => odataPage([{ id: "1" }]));
-      const client = new HttpActMigrationSourceClient(transport);
+    expect(requests).toEqual([
+      {
+        path: "/api/contacts",
+        query: {
+          $select:
+            "id,firstName,lastName,fullName,company,jobTitle,emailAddress,businessPhone,edited",
+          $expand: "businessAddress($select=line1,line2,city,state,postalCode)",
+          $orderby: "id",
+          $skip: "0",
+          $top: "100",
+        },
+      },
+    ]);
+  });
 
-      await client.listNotes(PROJECTED);
+  it("sends no advanced options in plain mode", async () => {
+    const { transport, requests } = recordingReadTransport([
+      { id: "contact-1" },
+    ]);
 
-      const { query } = vi.mocked(transport.requestJson).mock.calls[0]![0]!;
-      expect(query?.["$orderby"]).toBe("id");
+    await new HttpActMigrationSourceClient(transport).listContacts({
+      ...plain,
+      filter: "edited gt 2026-08-01T00:00:00Z",
     });
 
-    it("includes $orderby=id in plain mode", async () => {
-      const transport = makeTransport(() => odataPage([{ id: "1" }]));
-      const client = new HttpActMigrationSourceClient(transport);
+    expect(requests).toEqual([
+      {
+        path: "/api/contacts",
+        query: { $skip: "0", $top: "100" },
+      },
+    ]);
+  });
+});
 
-      await client.listNotes(PLAIN);
+describe("HttpActMigrationSourceClient response shapes", () => {
+  it.each([
+    {
+      name: "a wrapped response",
+      response: { value: [{ id: "wrapped" }] },
+      id: "wrapped",
+    },
+    {
+      name: "a top-level response",
+      response: [{ id: "top-level" }],
+      id: "top-level",
+    },
+  ])("reads $name", async ({ response, id }) => {
+    const { transport } = recordingReadTransport(response);
 
-      const { query } = vi.mocked(transport.requestJson).mock.calls[0]![0]!;
-      expect(query?.["$orderby"]).toBe("id");
-    });
-
-    it("does not include $select/$expand in plain mode", async () => {
-      const transport = makeTransport(() => odataPage([]));
-      const client = new HttpActMigrationSourceClient(transport);
-
-      await client.listNotes(PLAIN);
-
-      const { query } = vi.mocked(transport.requestJson).mock.calls[0]![0]!;
-      expect(query?.["$select"]).toBeUndefined();
-      expect(query?.["$expand"]).toBeUndefined();
-    });
-
-    it("includes $select and $expand in projected mode", async () => {
-      const transport = makeTransport(() => odataPage([{ id: "1" }]));
-      const client = new HttpActMigrationSourceClient(transport);
-
-      await client.listNotes(PROJECTED);
-
-      const { query } = vi.mocked(transport.requestJson).mock.calls[0]![0]!;
-      expect(query?.["$select"]).toBeDefined();
-      expect(query?.["$expand"]).toBeDefined();
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes(plain),
+    ).resolves.toEqual({
+      items: [{ id }],
+      nextSkip: 1,
+      queryMode: "plain",
     });
   });
 
-  describe("projected→plain fallback via empty first page", () => {
-    it("returns queryMode='plain' with nextSkip=0 when projected first page is empty", async () => {
-      const transport = makeTransport(() => odataPage([]));
-      const client = new HttpActMigrationSourceClient(transport);
+  it("rejects an unsupported response shape safely", async () => {
+    const { transport } = recordingReadTransport({ items: [{ id: "wrong" }] });
 
-      const page = await client.listNotes(PROJECTED);
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes(plain),
+    ).rejects.toMatchObject({ code: "invalid_response" });
+  });
+});
 
-      expect(page.queryMode).toBe("plain");
-      expect(page.nextSkip).toBe(0);
-      expect(page.items).toHaveLength(0);
+describe("HttpActMigrationSourceClient replacement stream coverage", () => {
+  it.each([
+    ["company", "/api/companies"],
+    ["contact", "/api/contacts"],
+    ["opportunity", "/api/opportunities"],
+    ["group", "/api/groups"],
+    ["activity", "/api/activities"],
+    ["note", "/api/notes"],
+    ["history", "/api/history"],
+  ] as const)("reads the complete %s root stream", async (kind, path) => {
+    const { transport, requests } = recordingReadTransport([{ id: kind }]);
+    const client = new HttpActMigrationSourceClient(transport);
+
+    await expect(client.listRoot(kind, plain)).resolves.toMatchObject({
+      items: [{ id: kind }],
+      queryMode: "plain",
     });
 
-    it("does NOT trigger fallback on non-first empty pages (skip > 0)", async () => {
-      const transport = makeTransport(() => odataPage([]));
-      const client = new HttpActMigrationSourceClient(transport);
-
-      const page = await client.listNotes({ skip: 100, top: 10, queryMode: "projected" });
-
-      // Not a fallback — just end of stream
-      expect(page.queryMode).toBe("projected");
-      expect(page.nextSkip).toBeNull();
-    });
+    expect(requests).toEqual([{ path, query: { $skip: "0", $top: "100" } }]);
   });
 
-  describe("projected→plain fallback via HTTP error", () => {
-    it("returns queryMode='plain' when projected request throws an ActApiError", async () => {
-      let callCount = 0;
-      const transport = makeTransport(() => {
-        callCount++;
-        throw new ActApiError("unavailable", false);
+  it.each([
+    ["company", "/api/companies"],
+    ["contact", "/api/contacts"],
+    ["opportunity", "/api/opportunities"],
+    ["group", "/api/groups"],
+    ["activity", "/api/activities"],
+    ["note", "/api/notes"],
+    ["history", "/api/history"],
+  ] as const)(
+    "reads the %s detail path with an escaped ID",
+    async (kind, root) => {
+      const { transport, requests } = recordingReadTransport({
+        value: { id: "detail-1", customField: "kept" },
       });
       const client = new HttpActMigrationSourceClient(transport);
 
-      const page = await client.listNotes(PROJECTED);
-
-      expect(callCount).toBe(1);
-      expect(page.queryMode).toBe("plain");
-      expect(page.nextSkip).toBe(0);
-      expect(page.items).toHaveLength(0);
-    });
-
-    it("re-throws errors from non-first projected pages (partial import failure is explicit)", async () => {
-      const transport = makeTransport(() => {
-        throw new ActApiError("unavailable", false);
+      await expect(client.getDetail(kind, "id/with ?#")).resolves.toEqual({
+        id: "detail-1",
+        customField: "kept",
       });
-      const client = new HttpActMigrationSourceClient(transport);
+      expect(requests).toEqual([{ path: `${root}/id%2Fwith%20%3F%23` }]);
+    },
+  );
 
-      await expect(
-        client.listNotes({ skip: 100, top: 10, queryMode: "projected" }),
-      ).rejects.toThrow(ActApiError);
-    });
+  it("does not confuse a top-level detail value field with a wrapper", async () => {
+    const detail = { id: "contact-1", value: "custom field", retained: true };
+    const { transport } = recordingReadTransport(detail);
 
-    it("re-throws errors from plain-mode requests (no double-fallback)", async () => {
-      const transport = makeTransport(() => {
-        throw new ActApiError("unavailable", false);
-      });
-      const client = new HttpActMigrationSourceClient(transport);
-
-      await expect(client.listNotes(PLAIN)).rejects.toThrow(ActApiError);
-    });
+    await expect(
+      new HttpActMigrationSourceClient(transport).getDetail(
+        "contact",
+        "contact-1",
+      ),
+    ).resolves.toEqual(detail);
   });
 
-  describe("pagination", () => {
-    it("computes nextSkip as skip + items.length when page is non-empty", async () => {
-      const items = [{ id: "a" }, { id: "b" }, { id: "c" }];
-      const transport = makeTransport(() => odataPage(items));
+  it("preserves an ID-less top-level detail with an object value and sibling fields", async () => {
+    const detail = {
+      value: { nestedCustomField: true },
+      siblingCustomField: "retained",
+    };
+    const { transport } = recordingReadTransport(detail);
+
+    await expect(
+      new HttpActMigrationSourceClient(transport).getDetail(
+        "contact",
+        "requested-contact",
+      ),
+    ).resolves.toEqual(detail);
+  });
+
+  it.each([
+    [
+      "company_contact",
+      "contact",
+      "company",
+      "/api/contacts/parent%2F1/companies",
+    ],
+    [
+      "opportunity_company",
+      "opportunity",
+      "company",
+      "/api/opportunities/parent%2F1/companies",
+    ],
+    [
+      "opportunity_contact",
+      "opportunity",
+      "contact",
+      "/api/opportunities/parent%2F1/contacts",
+    ],
+    ["group_contact", "group", "contact", "/api/groups/parent%2F1/contacts"],
+    [
+      "activity_contact",
+      "activity",
+      "contact",
+      "/api/activities/parent%2F1/contacts",
+    ],
+    [
+      "activity_company",
+      "activity",
+      "company",
+      "/api/activities/parent%2F1/companies",
+    ],
+    [
+      "activity_opportunity",
+      "activity",
+      "opportunity",
+      "/api/activities/parent%2F1/opportunities",
+    ],
+    ["note_contact", "note", "contact", "/api/notes/parent%2F1/contacts"],
+    ["note_company", "note", "company", "/api/notes/parent%2F1/companies"],
+    [
+      "note_opportunity",
+      "note",
+      "opportunity",
+      "/api/notes/parent%2F1/opportunities",
+    ],
+    [
+      "history_contact",
+      "history",
+      "contact",
+      "/api/history/parent%2F1/contacts",
+    ],
+    [
+      "history_company",
+      "history",
+      "company",
+      "/api/history/parent%2F1/companies",
+    ],
+    [
+      "history_opportunity",
+      "history",
+      "opportunity",
+      "/api/history/parent%2F1/opportunities",
+    ],
+  ] as const)(
+    "reads the %s relationship stream",
+    async (_streamType, parentKind, targetKind, path) => {
+      const { transport, requests } = recordingReadTransport({
+        value: [{ id: "related-1" }],
+      });
       const client = new HttpActMigrationSourceClient(transport);
 
-      const page = await client.listNotes({ skip: 20, top: 10, queryMode: "projected" });
+      if (
+        parentKind === "activity" ||
+        parentKind === "note" ||
+        parentKind === "history"
+      ) {
+        await client.listRelated({
+          parentKind,
+          parentId: "parent/1",
+          targetKind,
+          request: plain,
+        });
+      } else if (parentKind === "contact") {
+        await client.listCompaniesForContact("parent/1", plain);
+      } else if (parentKind === "opportunity" && targetKind === "company") {
+        await client.listCompaniesForOpportunity("parent/1", plain);
+      } else if (parentKind === "opportunity") {
+        await client.listContactsForOpportunity("parent/1", plain);
+      } else {
+        await client.listContactsForGroup("parent/1", plain);
+      }
 
-      expect(page.nextSkip).toBe(23); // 20 + 3
-      expect(page.items).toHaveLength(3);
+      expect(requests).toEqual([{ path, query: { $skip: "0", $top: "100" } }]);
+    },
+  );
+
+  it("does not impose the retired 500-row or date cap", async () => {
+    const rows = Array.from({ length: 200 }, (_, index) => ({
+      id: `history-${index}`,
+    }));
+    const { transport, requests } = recordingReadTransport(rows);
+
+    await expect(
+      new HttpActMigrationSourceClient(transport).listRoot("history", {
+        skip: 500,
+        top: 200,
+        queryMode: "plain",
+      }),
+    ).resolves.toMatchObject({ nextSkip: 700, queryMode: "plain" });
+
+    expect(requests).toEqual([
+      {
+        path: "/api/history",
+        query: { $skip: "500", $top: "200" },
+      },
+    ]);
+  });
+});
+
+describe("HttpActMigrationSourceClient projected fallback", () => {
+  it("requests plain mode after an empty first projected page", async () => {
+    const { transport } = recordingReadTransport({ value: [] });
+
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes(projected),
+    ).resolves.toEqual({ items: [], nextSkip: 0, queryMode: "plain" });
+  });
+
+  it("requests plain mode after query_rejected on the first projected page", async () => {
+    const { transport } = recordingReadTransport(() => {
+      throw new ActApiError("query_rejected", false);
     });
 
-    it("returns nextSkip=null when page is empty (end of stream, plain mode)", async () => {
-      const transport = makeTransport(() => odataPage([]));
-      const client = new HttpActMigrationSourceClient(transport);
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes(projected),
+    ).resolves.toEqual({ items: [], nextSkip: 0, queryMode: "plain" });
+  });
 
-      const page = await client.listNotes({ skip: 50, top: 10, queryMode: "plain" });
-
-      expect(page.nextSkip).toBeNull();
+  it.each([
+    "authentication_failed",
+    "permission_denied",
+    "not_found",
+    "endpoint_unsupported",
+    "rate_limited",
+    "timeout",
+    "unavailable",
+    "invalid_response",
+  ] as const)("does not fall back after %s", async (code) => {
+    const expected = new ActApiError(code, false);
+    const { transport } = recordingReadTransport(() => {
+      throw expected;
     });
 
-    it("returns items from an array-valued OData response", async () => {
-      const transport = makeTransport(() => odataPage([{ id: "x" }]));
-      const client = new HttpActMigrationSourceClient(transport);
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes(projected),
+    ).rejects.toBe(expected);
+  });
 
-      const page = await client.listNotes(PLAIN);
-
-      expect(page.items).toEqual([{ id: "x" }]);
+  it("does not fall back after query_rejected beyond the first projected page", async () => {
+    const expected = new ActApiError("query_rejected", false);
+    const { transport } = recordingReadTransport(() => {
+      throw expected;
     });
 
-    it("returns items from a top-level array response (non-OData)", async () => {
-      const transport = makeTransport(() => [{ id: "y" }]);
-      const client = new HttpActMigrationSourceClient(transport);
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes({
+        ...projected,
+        skip: 100,
+      }),
+    ).rejects.toBe(expected);
+  });
 
-      const page = await client.listNotes(PLAIN);
+  it("does not fall back from an empty later projected page", async () => {
+    const { transport } = recordingReadTransport([]);
 
-      expect(page.items).toEqual([{ id: "y" }]);
-    });
+    await expect(
+      new HttpActMigrationSourceClient(transport).listNotes({
+        ...projected,
+        skip: 100,
+      }),
+    ).resolves.toEqual({ items: [], nextSkip: null, queryMode: "projected" });
   });
 });
