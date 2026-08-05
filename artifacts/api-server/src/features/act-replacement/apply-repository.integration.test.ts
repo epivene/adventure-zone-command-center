@@ -1,0 +1,3 @@
+import { describe, expect, it } from "vitest";
+import { InMemoryApplyRepository } from "./apply-repository";
+describe("apply repository durability contract", () => { it("replays batches by run and request key", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); const a = await repo.createBatch({ batchId: "b", runId: "r", requestKey: "k", manifestDigest: "d", operationIds: [], state: "queued" }); const b = await repo.createBatch({ batchId: "different", runId: "r", requestKey: "k", manifestDigest: "d", operationIds: [], state: "queued" }); expect(b).toEqual(a); }); });
