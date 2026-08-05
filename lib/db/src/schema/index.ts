@@ -46,6 +46,88 @@ const actMigrationStreamTypeValues = [...actSourceEntityTypeValues, ...actRelati
 const actMigrationRunStatusValues = ["snapshotting","snapshot_complete","matching","previewed","applying","partially_applied","applied","failed"] as const;
 const actMigrationCheckpointStatusValues = ["pending","fetching","complete","failed"] as const;
 const actQueryModeValues = ["projected","plain"] as const;
+export const actReplacementStreamTypeValues = [
+  "company",
+  "contact",
+  "opportunity",
+  "group",
+  "company_contact",
+  "opportunity_company",
+  "opportunity_contact",
+  "group_contact",
+  "activity",
+  "note",
+  "history",
+  "activity_contact",
+  "activity_company",
+  "activity_opportunity",
+  "note_contact",
+  "note_company",
+  "note_opportunity",
+  "history_contact",
+  "history_company",
+  "history_opportunity",
+] as const;
+export const actReplacementRunPhaseValues = [
+  "extracting",
+  "extract_complete",
+  "organizing",
+  "ready_to_apply",
+  "applying",
+  "complete",
+  "complete_with_issues",
+  "failed",
+  "superseded",
+] as const;
+export const actReplacementCheckpointKindValues = [
+  "list",
+  "plain_list_fallback",
+  "detail",
+  "relationship",
+] as const;
+export const actReplacementCheckpointRequirednessValues = [
+  "required",
+  "optional_capability",
+] as const;
+export const actReplacementCheckpointStateValues = [
+  "pending",
+  "leased",
+  "retry_wait",
+  "complete",
+  "unsupported",
+  "failed",
+] as const;
+export const actArchiveCompletenessValues = [
+  "discovered",
+  "complete",
+  "partial",
+  "failed",
+] as const;
+export const actSnapshotScopeValues = [
+  "list_projected",
+  "list_plain",
+  "detail",
+  "relationship",
+] as const;
+export const actRequestAuditStateValues = [
+  "started",
+  "succeeded",
+  "failed",
+] as const;
+export const actSafeErrorCodeValues = [
+  "not_configured",
+  "authentication_failed",
+  "permission_denied",
+  "query_rejected",
+  "not_found",
+  "endpoint_unsupported",
+  "rate_limited",
+  "timeout",
+  "unavailable",
+  "invalid_response",
+  "pagination_stalled",
+] as const;
+export type ActSafeErrorCode = (typeof actSafeErrorCodeValues)[number];
 const migrationPreviewStateValues = ["new","matched_unchanged","change","new_relationship","possible_duplicate","needs_review","ignored","error"] as const;
 const migrationDecisionValues = ["approve_proposed","link_existing","keep_separate","confirm_static_group","ignore"] as const;
 const migrationApplyBatchStatusValues = ["pending","applying","partially_applied","applied","failed"] as const;
@@ -614,17 +696,27 @@ export const activities = pgTable("activities", {
   contactId: uuid("contact_id").references(() => contacts.id),
   bookingId: uuid("booking_id").references(() => bookings.id),
   kind: activityKindEnum("kind").notNull(),
+  subject: text("subject"),
+  status: text("status"),
   body: text("body").notNull(),
-  occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }),
+  timelineSortAt: timestamp("timeline_sort_at", { withTimezone: true }).notNull(),
+  dateIsImportFallback: boolean("date_is_import_fallback").default(false).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
   /** Act! source record key (e.g. "act_note:{id}") — set only on imported items; used for idempotent re-import. */
   actRecordId: text("act_record_id"),
+  sourceRecordId: uuid("source_record_id").references(() => actSourceRecords.id, { onDelete: "restrict" }),
+  sourceVersionId: uuid("source_version_id").references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
+  sourceType: text("source_type"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   check(
     "activities_parent_required",
-    sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null`,
+    sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null or ${table.sourceRecordId} is not null`,
   ),
+  check("activities_occurred_at_required_for_local", sql`${table.occurredAt} is not null or ${table.sourceRecordId} is not null`),
+  check("activities_source_type_valid", sql`${table.sourceType} is null or ${table.sourceType} in ('note', 'history', 'activity')`),
   uniqueIndex("activities_act_record_id_unique")
     .on(table.actRecordId)
     .where(sql`${table.actRecordId} is not null`),
@@ -831,6 +923,588 @@ export const actMigrationCheckpoints = pgTable(
     ),
   ],
 );
+
+export const actReplacementRuns = pgTable(
+  "act_replacement_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestKey: text("request_key").notNull(),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    requestedBy: text("requested_by").notNull(),
+    pageSize: integer("page_size").notNull(),
+    previewOnly: boolean("preview_only").default(true).notNull(),
+    phase: text("phase").default("extracting").notNull(),
+    summary: jsonb("summary").$type<Record<string, unknown>>(),
+    lastErrorCode: text("last_error_code"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    extractCompletedAt: timestamp("extract_completed_at", {
+      withTimezone: true,
+    }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_replacement_runs_database_request_unique").on(
+      table.sourceDatabaseKey,
+      table.requestKey,
+    ),
+    uniqueIndex("act_replacement_runs_id_database_unique").on(
+      table.id,
+      table.sourceDatabaseKey,
+    ),
+    uniqueIndex("act_replacement_runs_one_active_per_database")
+      .on(table.sourceDatabaseKey)
+      .where(
+        sql`${table.phase} in ('extracting', 'extract_complete', 'organizing', 'ready_to_apply', 'applying')`,
+      ),
+    check(
+      "act_replacement_runs_request_key_nonblank",
+      sql`btrim(${table.requestKey}) <> ''`,
+    ),
+    check(
+      "act_replacement_runs_source_database_key_nonblank",
+      sql`btrim(${table.sourceDatabaseKey}) <> ''`,
+    ),
+    check(
+      "act_replacement_runs_requested_by_nonblank",
+      sql`btrim(${table.requestedBy}) <> ''`,
+    ),
+    check(
+      "act_replacement_runs_page_size_valid",
+      sql`${table.pageSize} in (25, 50, 100, 200)`,
+    ),
+    check(
+      "act_replacement_runs_phase_valid",
+      sql`${table.phase} in (${sqlTextValues(actReplacementRunPhaseValues)})`,
+    ),
+  ],
+);
+
+function actSourceRecordVersionIdColumn(): AnyPgColumn {
+  return actSourceRecordVersions.id;
+}
+
+function actSourceRecordVersionSourceIdColumn(): AnyPgColumn {
+  return actSourceRecordVersions.sourceRecordId;
+}
+
+function actSourceRecordVersionFingerprintColumn(): AnyPgColumn {
+  return actSourceRecordVersions.fingerprint;
+}
+
+export const actSourceRecords = pgTable(
+  "act_source_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    streamType: text("stream_type").notNull(),
+    sourceKey: text("source_key").notNull(),
+    actRecordId: text("act_record_id"),
+    firstSeenRunId: uuid("first_seen_run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    lastSeenRunId: uuid("last_seen_run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    latestVersionId: uuid("latest_version_id").references(
+      (): AnyPgColumn => actSourceRecordVersions.id,
+    ),
+    latestFingerprint: text("latest_fingerprint"),
+    relationshipEvidence: jsonb("relationship_evidence")
+      .$type<Record<string, unknown>>()
+      .default(sql`'{}'::jsonb`)
+      .notNull(),
+    archiveCompleteness: text("archive_completeness")
+      .default("discovered")
+      .notNull(),
+    normalizationStatus: text("normalization_status")
+      .default("pending")
+      .notNull(),
+    linkingStatus: text("linking_status").default("pending").notNull(),
+    errorCode: text("error_code"),
+    unsupportedReason: text("unsupported_reason"),
+    firstSeenAt: timestamp("first_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_source_records_database_stream_source_key_unique").on(
+      table.sourceDatabaseKey,
+      table.streamType,
+      table.sourceKey,
+    ),
+    uniqueIndex("act_source_records_database_stream_act_id_unique")
+      .on(table.sourceDatabaseKey, table.streamType, table.actRecordId)
+      .where(sql`${table.actRecordId} is not null`),
+    uniqueIndex("act_source_records_id_database_unique").on(
+      table.id,
+      table.sourceDatabaseKey,
+    ),
+    uniqueIndex("act_source_records_id_database_stream_unique").on(
+      table.id,
+      table.sourceDatabaseKey,
+      table.streamType,
+    ),
+    foreignKey({
+      columns: [table.firstSeenRunId, table.sourceDatabaseKey],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
+      name: "act_source_records_first_seen_run_database_fk",
+    }),
+    foreignKey({
+      columns: [table.lastSeenRunId, table.sourceDatabaseKey],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
+      name: "act_source_records_last_seen_run_database_fk",
+    }),
+    foreignKey({
+      columns: [table.latestVersionId, table.id, table.latestFingerprint],
+      foreignColumns: [
+        actSourceRecordVersionIdColumn(),
+        actSourceRecordVersionSourceIdColumn(),
+        actSourceRecordVersionFingerprintColumn(),
+      ],
+      name: "act_source_records_latest_version_owner_fk",
+    }),
+    check(
+      "act_source_records_source_database_key_nonblank",
+      sql`btrim(${table.sourceDatabaseKey}) <> ''`,
+    ),
+    check(
+      "act_source_records_stream_type_valid",
+      sql`${table.streamType} in (${sqlTextValues(actReplacementStreamTypeValues)})`,
+    ),
+    check(
+      "act_source_records_source_key_nonblank",
+      sql`btrim(${table.sourceKey}) <> ''`,
+    ),
+    check(
+      "act_source_records_act_record_id_nonblank",
+      sql`${table.actRecordId} is null or btrim(${table.actRecordId}) <> ''`,
+    ),
+    check(
+      "act_source_records_latest_fingerprint_nonblank",
+      sql`${table.latestFingerprint} is null or btrim(${table.latestFingerprint}) <> ''`,
+    ),
+    check(
+      "act_source_records_latest_version_pair_valid",
+      sql`(${table.latestVersionId} is null) = (${table.latestFingerprint} is null)`,
+    ),
+    check(
+      "act_source_records_relationship_evidence_object",
+      sql`jsonb_typeof(${table.relationshipEvidence}) = 'object'`,
+    ),
+    check(
+      "act_source_records_archive_completeness_valid",
+      sql`${table.archiveCompleteness} in (${sqlTextValues(actArchiveCompletenessValues)})`,
+    ),
+  ],
+);
+
+export const actSourceRecordVersions = pgTable(
+  "act_source_record_versions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceRecordId: uuid("source_record_id")
+      .notNull()
+      .references(() => actSourceRecords.id),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    rawSnapshot: jsonb("raw_snapshot")
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    snapshotScope: text("snapshot_scope").notNull(),
+    sourceCreatedAt: timestamp("source_created_at", { withTimezone: true }),
+    sourceEditedAt: timestamp("source_edited_at", { withTimezone: true }),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    observedRunId: uuid("observed_run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_source_record_versions_record_fingerprint_unique").on(
+      table.sourceRecordId,
+      table.fingerprint,
+    ),
+    uniqueIndex("act_source_record_versions_id_source_unique").on(
+      table.id,
+      table.sourceRecordId,
+    ),
+    uniqueIndex("act_source_record_versions_id_source_fingerprint_unique").on(
+      table.id,
+      table.sourceRecordId,
+      table.fingerprint,
+    ),
+    foreignKey({
+      columns: [table.sourceRecordId, table.sourceDatabaseKey],
+      foreignColumns: [actSourceRecords.id, actSourceRecords.sourceDatabaseKey],
+      name: "act_source_record_versions_source_database_fk",
+    }),
+    foreignKey({
+      columns: [table.observedRunId, table.sourceDatabaseKey],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
+      name: "act_source_record_versions_observed_run_database_fk",
+    }),
+    index("act_source_record_versions_observed_run_idx").on(
+      table.observedRunId,
+    ),
+    check(
+      "act_source_record_versions_fingerprint_nonblank",
+      sql`btrim(${table.fingerprint}) <> ''`,
+    ),
+    check(
+      "act_source_record_versions_raw_snapshot_object",
+      sql`jsonb_typeof(${table.rawSnapshot}) = 'object'`,
+    ),
+    check(
+      "act_source_record_versions_snapshot_scope_valid",
+      sql`${table.snapshotScope} in (${sqlTextValues(actSnapshotScopeValues)})`,
+    ),
+  ],
+);
+
+export const actReplacementCheckpoints = pgTable(
+  "act_replacement_checkpoints",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    streamType: text("stream_type").notNull(),
+    checkpointKind: text("checkpoint_kind").notNull(),
+    partitionKey: text("partition_key").notNull(),
+    requiredness: text("requiredness").notNull(),
+    parentSourceRecordId: uuid("parent_source_record_id").references(
+      () => actSourceRecords.id,
+    ),
+    parentActRecordId: text("parent_act_record_id"),
+    sourceRecordId: uuid("source_record_id").references(
+      () => actSourceRecords.id,
+    ),
+    nextSkip: integer("next_skip").default(0).notNull(),
+    pageSize: integer("page_size").notNull(),
+    queryMode: text("query_mode").default("projected").notNull(),
+    deriveDetails: boolean("derive_details").default(true).notNull(),
+    state: text("state").default("pending").notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    retryAfter: timestamp("retry_after", { withTimezone: true }),
+    retryable: boolean("retryable").default(true).notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    responseRows: integer("response_rows").default(0).notNull(),
+    observedIdentities: integer("observed_identities").default(0).notNull(),
+    archivedIdentities: integer("archived_identities").default(0).notNull(),
+    completeIdentities: integer("complete_identities").default(0).notNull(),
+    partialIdentities: integer("partial_identities").default(0).notNull(),
+    failedIdentities: integer("failed_identities").default(0).notNull(),
+    snapshotVersionsInserted: integer("snapshot_versions_inserted")
+      .default(0)
+      .notNull(),
+    errorCode: text("error_code"),
+    lastSucceededAt: timestamp("last_succeeded_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_replacement_checkpoints_run_stream_partition_unique").on(
+      table.runId,
+      table.streamType,
+      table.partitionKey,
+    ),
+    uniqueIndex("act_replacement_checkpoints_context_unique").on(
+      table.id,
+      table.runId,
+      table.sourceDatabaseKey,
+      table.streamType,
+    ),
+    uniqueIndex("act_replacement_checkpoints_request_context_unique").on(
+      table.id,
+      table.runId,
+      table.streamType,
+    ),
+    foreignKey({
+      columns: [table.runId, table.sourceDatabaseKey],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
+      name: "act_replacement_checkpoints_run_database_fk",
+    }),
+    foreignKey({
+      columns: [table.parentSourceRecordId, table.sourceDatabaseKey],
+      foreignColumns: [actSourceRecords.id, actSourceRecords.sourceDatabaseKey],
+      name: "act_replacement_checkpoints_parent_source_database_fk",
+    }),
+    foreignKey({
+      columns: [table.sourceRecordId, table.sourceDatabaseKey, table.streamType],
+      foreignColumns: [
+        actSourceRecords.id,
+        actSourceRecords.sourceDatabaseKey,
+        actSourceRecords.streamType,
+      ],
+      name: "act_replacement_checkpoints_source_database_stream_fk",
+    }),
+    index("act_replacement_checkpoints_claim_idx").on(
+      table.state,
+      table.retryAfter,
+      table.leaseExpiresAt,
+    ),
+    check(
+      "act_replacement_checkpoints_stream_type_valid",
+      sql`${table.streamType} in (${sqlTextValues(actReplacementStreamTypeValues)})`,
+    ),
+    check(
+      "act_replacement_checkpoints_kind_valid",
+      sql`${table.checkpointKind} in (${sqlTextValues(actReplacementCheckpointKindValues)})`,
+    ),
+    check(
+      "act_replacement_checkpoints_requiredness_valid",
+      sql`${table.requiredness} in (${sqlTextValues(actReplacementCheckpointRequirednessValues)})`,
+    ),
+    check(
+      "act_replacement_checkpoints_partition_key_nonblank",
+      sql`btrim(${table.partitionKey}) <> ''`,
+    ),
+    check(
+      "act_replacement_checkpoints_query_mode_valid",
+      sql`${table.queryMode} in (${sqlTextValues(actQueryModeValues)})`,
+    ),
+    check(
+      "act_replacement_checkpoints_state_valid",
+      sql`${table.state} in (${sqlTextValues(actReplacementCheckpointStateValues)})`,
+    ),
+    check(
+      "act_replacement_checkpoints_next_skip_nonnegative",
+      sql`${table.nextSkip} >= 0`,
+    ),
+    check(
+      "act_replacement_checkpoints_page_size_positive",
+      sql`${table.pageSize} > 0`,
+    ),
+    check(
+      "act_replacement_checkpoints_attempt_count_nonnegative",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "act_replacement_checkpoints_counters_nonnegative",
+      sql`${table.responseRows} >= 0 and ${table.observedIdentities} >= 0 and ${table.archivedIdentities} >= 0 and ${table.completeIdentities} >= 0 and ${table.partialIdentities} >= 0 and ${table.failedIdentities} >= 0 and ${table.snapshotVersionsInserted} >= 0`,
+    ),
+  ],
+);
+
+export const actReplacementPageReceipts = pgTable(
+  "act_replacement_page_receipts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    checkpointId: uuid("checkpoint_id")
+      .notNull()
+      .references(() => actReplacementCheckpoints.id),
+    streamType: text("stream_type").notNull(),
+    pageSkip: integer("page_skip").notNull(),
+    nextSkip: integer("next_skip"),
+    queryMode: text("query_mode").notNull(),
+    pageFingerprint: text("page_fingerprint").notNull(),
+    responseRows: integer("response_rows").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_replacement_page_receipts_checkpoint_cursor_unique").on(
+      table.checkpointId,
+      table.pageSkip,
+    ),
+    foreignKey({
+      columns: [table.checkpointId, table.runId, table.streamType],
+      foreignColumns: [
+        actReplacementCheckpoints.id,
+        actReplacementCheckpoints.runId,
+        actReplacementCheckpoints.streamType,
+      ],
+      name: "act_replacement_page_receipts_checkpoint_context_fk",
+    }),
+    check(
+      "act_replacement_page_receipts_page_skip_nonnegative",
+      sql`${table.pageSkip} >= 0`,
+    ),
+    check(
+      "act_replacement_page_receipts_next_skip_nonnegative",
+      sql`${table.nextSkip} is null or ${table.nextSkip} >= 0`,
+    ),
+    check(
+      "act_replacement_page_receipts_query_mode_valid",
+      sql`${table.queryMode} in (${sqlTextValues(actQueryModeValues)})`,
+    ),
+    check(
+      "act_replacement_page_receipts_fingerprint_nonblank",
+      sql`btrim(${table.pageFingerprint}) <> ''`,
+    ),
+    check(
+      "act_replacement_page_receipts_response_rows_nonnegative",
+      sql`${table.responseRows} >= 0`,
+    ),
+  ],
+);
+
+export const actReplacementObservations = pgTable(
+  "act_replacement_observations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    sourceRecordId: uuid("source_record_id")
+      .notNull()
+      .references(() => actSourceRecords.id),
+    versionId: uuid("version_id")
+      .notNull()
+      .references(() => actSourceRecordVersions.id),
+    snapshotScope: text("snapshot_scope").notNull(),
+    observedAt: timestamp("observed_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("act_replacement_observations_run_source_unique").on(
+      table.runId,
+      table.sourceRecordId,
+    ),
+    foreignKey({
+      columns: [table.runId, table.sourceDatabaseKey],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
+      name: "act_replacement_observations_run_database_fk",
+    }),
+    foreignKey({
+      columns: [table.sourceRecordId, table.sourceDatabaseKey],
+      foreignColumns: [actSourceRecords.id, actSourceRecords.sourceDatabaseKey],
+      name: "act_replacement_observations_source_database_fk",
+    }),
+    foreignKey({
+      columns: [table.versionId, table.sourceRecordId],
+      foreignColumns: [actSourceRecordVersions.id, actSourceRecordVersions.sourceRecordId],
+      name: "act_replacement_observations_version_source_fk",
+    }),
+    check(
+      "act_replacement_observations_snapshot_scope_valid",
+      sql`${table.snapshotScope} in (${sqlTextValues(actSnapshotScopeValues)})`,
+    ),
+  ],
+);
+
+export const actReplacementRequestAudits = pgTable(
+  "act_replacement_request_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id),
+    checkpointId: uuid("checkpoint_id")
+      .notNull()
+      .references(() => actReplacementCheckpoints.id),
+    streamType: text("stream_type").notNull(),
+    method: text("method").default("GET").notNull(),
+    pathTemplate: text("path_template").notNull(),
+    state: text("state").default("started").notNull(),
+    httpStatus: integer("http_status"),
+    safeErrorCode: text("safe_error_code").$type<ActSafeErrorCode>(),
+    durationMs: integer("duration_ms"),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.checkpointId, table.runId, table.streamType],
+      foreignColumns: [
+        actReplacementCheckpoints.id,
+        actReplacementCheckpoints.runId,
+        actReplacementCheckpoints.streamType,
+      ],
+      name: "act_replacement_request_audits_checkpoint_context_fk",
+    }),
+    check(
+      "act_replacement_request_audits_method_get_only",
+      sql`${table.method} = 'GET'`,
+    ),
+    check(
+      "act_replacement_request_audits_stream_type_valid",
+      sql`${table.streamType} in (${sqlTextValues(actReplacementStreamTypeValues)})`,
+    ),
+    check(
+      "act_replacement_request_audits_path_template_safe",
+      sql`${table.pathTemplate} = '/authorize' or ${table.pathTemplate} ~ '^/api/[A-Za-z0-9_{}:-]+(/[A-Za-z0-9_{}:-]+)*$'`,
+    ),
+    check(
+      "act_replacement_request_audits_state_valid",
+      sql`${table.state} in (${sqlTextValues(actRequestAuditStateValues)})`,
+    ),
+    check(
+      "act_replacement_request_audits_http_status_valid",
+      sql`${table.httpStatus} is null or ${table.httpStatus} between 100 and 599`,
+    ),
+    check(
+      "act_replacement_request_audits_duration_nonnegative",
+      sql`${table.durationMs} is null or ${table.durationMs} >= 0`,
+    ),
+    check(
+      "act_replacement_request_audits_safe_error_code_valid",
+      sql`${table.safeErrorCode} is null or ${table.safeErrorCode} in (${sqlTextValues(actSafeErrorCodeValues)})`,
+    ),
+  ],
+);
+
+export type ActReplacementRun = typeof actReplacementRuns.$inferSelect;
+export type NewActReplacementRun = typeof actReplacementRuns.$inferInsert;
+export type ActReplacementCheckpoint =
+  typeof actReplacementCheckpoints.$inferSelect;
+export type NewActReplacementCheckpoint =
+  typeof actReplacementCheckpoints.$inferInsert;
+export type ActReplacementPageReceipt =
+  typeof actReplacementPageReceipts.$inferSelect;
+export type NewActReplacementPageReceipt =
+  typeof actReplacementPageReceipts.$inferInsert;
+export type ActSourceRecord = typeof actSourceRecords.$inferSelect;
+export type NewActSourceRecord = typeof actSourceRecords.$inferInsert;
+export type ActSourceRecordVersion =
+  typeof actSourceRecordVersions.$inferSelect;
+export type NewActSourceRecordVersion =
+  typeof actSourceRecordVersions.$inferInsert;
+export type ActReplacementObservation =
+  typeof actReplacementObservations.$inferSelect;
+export type NewActReplacementObservation =
+  typeof actReplacementObservations.$inferInsert;
+export type ActReplacementRequestAudit =
+  typeof actReplacementRequestAudits.$inferSelect;
+export type NewActReplacementRequestAudit =
+  typeof actReplacementRequestAudits.$inferInsert;
 
 export const actMigrationRecords = pgTable(
   "act_migration_records",
@@ -1041,7 +1715,7 @@ export const callingListMemberships = pgTable(
     ),
     check(
       "calling_list_memberships_source_valid",
-      sql`${table.source} in ('act_migration', 'manual')`,
+      sql`${table.source} in ('act_migration', 'act_import', 'manual')`,
     ),
     index("calling_list_memberships_active_idx")
       .on(table.callingListId, table.contactId)
@@ -1174,6 +1848,8 @@ export const actExternalLinks = pgTable(
     sourceEntityType: text("source_entity_type").notNull(),
     entityId: uuid("entity_id").notNull(),
     actRecordId: text("act_record_id").notNull(),
+    sourceDatabaseKey: text("source_database_key"),
+    sourceRecordId: uuid("source_record_id").references(() => actSourceRecords.id, { onDelete: "restrict" }),
     isPrimary: boolean("is_primary").default(false).notNull(),
     syncMode: text("sync_mode").default("pull_only").notNull(),
     importRunId: uuid("import_run_id").references(() => actImportRuns.id),
@@ -1188,10 +1864,15 @@ export const actExternalLinks = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("act_external_links_source_external_id_unique").on(
-      table.sourceEntityType,
-      table.actRecordId,
-    ),
+    uniqueIndex("act_external_links_legacy_source_external_id_unique")
+      .on(table.sourceEntityType, table.actRecordId)
+      .where(sql`${table.sourceDatabaseKey} is null`),
+    uniqueIndex("act_external_links_database_source_record_unique")
+      .on(table.sourceRecordId)
+      .where(sql`${table.sourceRecordId} is not null`),
+    uniqueIndex("act_external_links_database_source_act_id_unique")
+      .on(table.sourceDatabaseKey, table.sourceEntityType, table.actRecordId)
+      .where(sql`${table.sourceDatabaseKey} is not null`),
     uniqueIndex("act_external_links_one_primary_per_local_source")
       .on(table.entityType, table.entityId, table.sourceEntityType)
       .where(sql`${table.isPrimary} = true`),
@@ -1207,8 +1888,68 @@ export const actExternalLinks = pgTable(
       "act_external_links_contact_primary_sync_valid",
       sql`(${table.entityType} = 'contact' and ${table.sourceEntityType} = 'contact' and ((${table.isPrimary} = true and ${table.syncMode} = 'two_way') or (${table.isPrimary} = false and ${table.syncMode} = 'pull_only'))) or (${table.entityType} <> 'contact' and ${table.syncMode} = 'pull_only')`,
     ),
+    check("act_external_links_source_database_key_nonblank", sql`${table.sourceDatabaseKey} is null or btrim(${table.sourceDatabaseKey}) <> ''`),
   ],
 );
+
+export const actReplacementOutcomes = pgTable("act_replacement_outcomes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }),
+  sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id),
+  sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
+  state: text("state").notNull().default("pending"),
+  normalized: jsonb("normalized").$type<Record<string, unknown>>(),
+  mappingWarnings: jsonb("mapping_warnings").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  unsupportedFieldPaths: jsonb("unsupported_field_paths").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  candidates: jsonb("candidates").$type<Record<string, unknown>[]>(),
+  issues: jsonb("issues").$type<Record<string, unknown>[]>(),
+  match: jsonb("match").$type<Record<string, unknown>>(),
+  targetEntityType: text("target_entity_type"),
+  targetEntityId: uuid("target_entity_id"),
+  leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  retryAfter: timestamp("retry_after", { withTimezone: true }), retryable: boolean("retryable").default(true).notNull(), organizedAt: timestamp("organized_at", { withTimezone: true }), attemptCount: integer("attempt_count").default(0).notNull(),
+  lastErrorCode: text("last_error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("act_replacement_outcomes_run_source_unique").on(table.runId, table.sourceRecordId), check("act_replacement_outcomes_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`),
+  check("act_replacement_outcomes_state_valid", sql`${table.state} in ('pending','leased','ready','already_present','awaiting_review','unassigned','unsupported','applied','failed')`),
+]);
+
+export const actSourceAssignments = pgTable("act_source_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id, { onDelete: "restrict" }),
+  targetEntityType: text("target_entity_type").notNull(), targetEntityId: uuid("target_entity_id").notNull(),
+  role: text("role").notNull().default("primary"), isPrimary: boolean("is_primary").default(false).notNull(),
+  manualAuthority: boolean("manual_authority").notNull(), assignedBy: text("assigned_by").notNull(), supersededAt: timestamp("superseded_at", { withTimezone: true }), supersededBy: text("superseded_by"),
+  sourceVersionId: uuid("source_version_id").references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [unique("act_source_assignments_source_target_unique").on(table.sourceRecordId, table.targetEntityType, table.targetEntityId), check("act_source_assignments_target_type_valid", sql`${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`), check("act_source_assignments_manual_actor_valid", sql`${table.manualAuthority} = true and ${table.assignedBy} is not null and btrim(${table.assignedBy}) <> ''`), check("act_source_assignments_supersession_actor_valid", sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`)]);
+
+export const actReplacementReviewDecisions = pgTable("act_replacement_review_decisions", {
+  id: uuid("id").defaultRandom().primaryKey(), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id, { onDelete: "restrict" }),
+  sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id, { onDelete: "restrict" }), scope: text("scope").notNull(), decision: text("decision").notNull(),
+  requestKey: text("request_key").notNull(), fieldName: text("field_name"), targetEntityType: text("target_entity_type"), targetEntityId: uuid("target_entity_id"),
+  active: boolean("active").default(true).notNull(), supersededAt: timestamp("superseded_at", { withTimezone: true }), supersededBy: uuid("superseded_by"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("act_replacement_review_decisions_active_unique").on(table.sourceRecordId, table.scope, sql`coalesce(${table.fieldName}, '')`).where(sql`${table.active} = true`), check("act_replacement_review_decisions_scope_valid", sql`${table.scope} in ('duplicate_identity','field_conflict','unsupported_record')`), check("act_replacement_review_decisions_field_scope_requires_name", sql`${table.scope} = 'field_conflict' and ${table.fieldName} is not null and btrim(${table.fieldName}) <> '' or ${table.scope} <> 'field_conflict' and ${table.fieldName} is null`), check("act_replacement_review_decisions_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`), check("act_replacement_review_decisions_supersession_requires_actor", sql`${table.supersededAt} is null or ${table.supersededBy} is not null`), check("act_replacement_review_decisions_decision_valid", sql`${table.decision} in ('link_existing','keep_separate','keep_local','use_source','ignore_source')`)]);
+
+export const actReplacementApplyOperations = pgTable("act_replacement_apply_operations", {
+  id: uuid("id").defaultRandom().primaryKey(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id), sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
+  operationKey: text("operation_key").notNull(), targetType: text("target_type").notNull(), action: text("action").notNull(), payload: jsonb("payload").$type<Record<string, unknown>>().notNull(), dependencyOperationKeys: jsonb("dependency_operation_keys").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), requiredForSourceOutcome: boolean("required_for_source_outcome").default(false).notNull(), safeByDefault: boolean("safe_by_default").default(false).notNull(),
+  batchId: uuid("batch_id"), status: text("status").default("pending").notNull(), approvedBy: text("approved_by"), approvedAt: timestamp("approved_at", { withTimezone: true }), leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), retryable: boolean("retryable").default(true).notNull(), retryAfter: timestamp("retry_after", { withTimezone: true }), executedAt: timestamp("executed_at", { withTimezone: true }), attemptCount: integer("attempt_count").default(0).notNull(), lastErrorCode: text("last_error_code"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [unique("act_replacement_apply_operations_run_key_unique").on(table.runId, table.operationKey), check("act_replacement_apply_operations_status_valid", sql`${table.status} in ('pending','leased','applied','already_present','blocked','failed')`), check("act_replacement_apply_operations_approval_requires_actor", sql`${table.approvedAt} is null or ${table.approvedBy} is not null`), check("act_replacement_apply_operations_lease_consistency", sql`${table.status} = 'leased' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null or ${table.status} <> 'leased'`), check("act_replacement_apply_operations_action_valid", sql`${table.action} in ('create','link_existing','fill_missing','overwrite_reviewed','create_relationship','record_provenance')`), check("act_replacement_apply_operations_target_valid", sql`${table.targetType} in ('organization','contact','booking','calling_list','activity','organization_contact','booking_contact','calling_list_member','activity_association')`)]);
+
+export const actReplacementApplyBatches = pgTable("act_replacement_apply_batches", {
+  id: uuid("id").defaultRandom().primaryKey(), requestKey: text("request_key").notNull(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), manifestDigest: text("manifest_digest").notNull(), selectedOperationIds: jsonb("selected_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), dependencyClosedOperationIds: jsonb("dependency_closed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), selectedCount: integer("selected_count").default(0).notNull(), dependencyCount: integer("dependency_count").default(0).notNull(), rejectedCount: integer("rejected_count").default(0).notNull(), state: text("state").default("queued").notNull(), startedAt: timestamp("started_at", { withTimezone: true }), completedAt: timestamp("completed_at", { withTimezone: true }), replayFingerprint: text("replay_fingerprint"), leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), attemptCount: integer("attempt_count").default(0).notNull(), lastErrorCode: text("last_error_code"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("act_replacement_apply_batches_one_active_per_run").on(table.runId).where(sql`${table.state} in ('queued','applying')`), unique("act_replacement_apply_batches_request_key_unique").on(table.requestKey), check("act_replacement_apply_batches_state_valid", sql`${table.state} in ('queued','applying','complete','complete_with_issues')`), check("act_replacement_apply_batches_lease_consistency", sql`(${table.state} = 'applying' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null) or ${table.state} <> 'applying'`)]);
+
+export const actImportedFieldOrigins = pgTable("act_imported_field_origins", {
+  id: uuid("id").defaultRandom().primaryKey(), entityType: text("entity_type").notNull(), entityId: uuid("entity_id").notNull(), fieldName: text("field_name").notNull(), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id), sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id), operationId: uuid("operation_id").notNull().references(() => actReplacementApplyOperations.id), sourceValueFingerprint: text("source_value_fingerprint").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [unique("act_imported_field_origins_entity_field_unique").on(table.entityType, table.entityId, table.fieldName), check("act_imported_field_origins_entity_type_valid", sql`${table.entityType} in ('organization','contact','booking','calling_list','activity')`), check("act_imported_field_origins_field_name_nonblank", sql`btrim(${table.fieldName}) <> ''`)]);
+
+export const activityAssociations = pgTable("activity_associations", {
+  id: uuid("id").defaultRandom().primaryKey(), activityId: uuid("activity_id").notNull().references(() => activities.id, { onDelete: "cascade" }), organizationId: uuid("organization_id").references(() => organizations.id), contactId: uuid("contact_id").references(() => contacts.id), bookingId: uuid("booking_id").references(() => bookings.id), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [check("activity_associations_exactly_one_target", sql`num_nonnulls(${table.organizationId}, ${table.contactId}, ${table.bookingId}) = 1`), uniqueIndex("activity_associations_activity_organization_unique").on(table.activityId, table.organizationId).where(sql`${table.organizationId} is not null`), uniqueIndex("activity_associations_activity_contact_unique").on(table.activityId, table.contactId).where(sql`${table.contactId} is not null`), uniqueIndex("activity_associations_activity_booking_unique").on(table.activityId, table.bookingId).where(sql`${table.bookingId} is not null`)]);
 
 export const actContactSyncStates = pgTable(
   "act_contact_sync_states",
