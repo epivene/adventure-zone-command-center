@@ -1,5 +1,4 @@
 import { Router, type IRouter } from "express";
-import { randomUUID } from "node:crypto";
 import { parseActEnvironment } from "@/lib/env";
 import {
   createActMigrationPreviewService,
@@ -392,62 +391,8 @@ router.get("/migration/act/config", (_req, res) => {
 });
 
 /** POST /api/migration/act/start — starts a new migration run */
-router.post("/migration/act/start", async (req, res): Promise<void> => {
-  try {
-    const body = req.body ?? {};
-    const credentialOverride =
-      body.baseUrl && body.databaseName && body.username && body.password
-        ? {
-            baseUrl: body.baseUrl as string,
-            databaseName: body.databaseName as string,
-            username: body.username as string,
-            password: body.password as string,
-          }
-        : undefined;
-
-    const { snapshotService, sourceClient } = await buildCaptureService(credentialOverride);
-    const requestKey = `ui-${Date.now()}-${randomUUID()}`;
-    const databaseName =
-      credentialOverride?.databaseName ??
-      process.env.ACT_DATABASE_NAME ??
-      "unknown";
-
-    const { progress } = await snapshotService.start({
-      requestKey,
-      sourceDatabaseKey: databaseName,
-      requestedBy: "migration-api",
-    });
-
-    const runId = progress.runId;
-    latestRunId = runId;
-
-    const state: PipelineRun = {
-      runId,
-      phase: "snapshotting",
-      startedAt: new Date(),
-    };
-    activeRuns.set(runId, state);
-
-    // Fire-and-forget background pipeline
-    runPipeline(runId, state, snapshotService, sourceClient).catch((err) => {
-      state.phase = "failed";
-      state.error = err instanceof Error ? err.message : String(err);
-    });
-
-    res.json({ ok: true, runId });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Scan failed";
-    req.log?.error({ err }, "Migration start failed");
-    if (
-      err instanceof Error &&
-      "code" in err &&
-      (err as { code: string }).code === "not_configured"
-    ) {
-      res.status(400).json({ ok: false, error: "Act! credentials not configured" });
-      return;
-    }
-    res.status(500).json({ ok: false, error: msg });
-  }
+router.post("/migration/act/start", (_req, res) => {
+  res.status(410).json({ code: "replacement_import_required" });
 });
 
 /** GET /api/migration/act/status/latest — status for the most recent run */
