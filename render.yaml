@@ -8,7 +8,7 @@ services:
     buildCommand: >-
       pnpm install --frozen-lockfile &&
       pnpm --filter @workspace/api-server run build
-    startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
+    startCommand: pnpm --filter @workspace/db run-migrations && node --enable-source-maps artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/healthz
     envVars:
       - key: NODE_ENV
@@ -23,6 +23,17 @@ services:
       # The owner password used to sign in to the app.
       - key: OWNER_PASSWORD
         sync: false
+      # Act! settings are server-only. Never expose these through Vite.
+      - key: ACT_API_BASE_URL
+        value: https://apius.act.com/act.web.api
+      - key: ACT_DATABASE_NAME
+        sync: false
+      - key: ACT_USERNAME
+        sync: false
+      - key: ACT_PASSWORD
+        sync: false
+      - key: ACT_MIGRATION_APPLY_ENABLED
+        value: "false"
 
   # ── Vite static frontend ─────────────────────────────────────────────────────
   - type: web
