@@ -1,6 +1,11 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { validateOwnerConfig } from "./lib/auth";
+import {
+  createActExtractionRuntime,
+  createActServerShutdown,
+  type ActExtractionRuntime,
+} from "./features/act-replacement/runtime";
 
 // Fail fast if required owner config is absent — this is a single-owner CRM.
 validateOwnerConfig();
@@ -19,11 +24,49 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+let extractionRuntime: ActExtractionRuntime | null = null;
+let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
+let shutdownRequested = false;
 
+const server = app.listen(port, async () => {
   logger.info({ port }, "Server listening");
+
+  try {
+    extractionRuntimePromise = createActExtractionRuntime();
+    const runtime = await extractionRuntimePromise;
+    extractionRuntime = runtime;
+    if (!shutdownRequested) runtime.start();
+  } catch {
+    logger.error("Act extraction worker could not be started");
+  }
+});
+
+server.on("error", (err) => {
+  logger.error({ err }, "Error listening on port");
+  process.exitCode = 1;
+});
+
+const shutdown = createActServerShutdown({
+  async closeRuntime() {
+    const runtime =
+      extractionRuntime ?? (await extractionRuntimePromise?.catch(() => null));
+    await runtime?.close();
+  },
+  closeServer() {
+    return new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+  },
+  async closePool() {
+    const { pool } = await import("./db/client");
+    await pool.end();
+  },
+  onError(stage) {
+    logger.error({ stage }, "Server shutdown phase failed");
+  },
+});
+
+process.once("SIGTERM", () => {
+  shutdownRequested = true;
+  void shutdown();
 });
