@@ -11,6 +11,7 @@ import {
   createActReplacementRouter,
   type ActReplacementAuditRecord,
   type ActReplacementControlStore,
+  type ActReplacementRouteDependencies,
 } from "./act-replacement";
 
 vi.mock("@/features/act-migration/runtime", () => ({
@@ -30,11 +31,23 @@ vi.mock("@/lib/env", async (importOriginal) => {
 const DATABASE_KEY = "server-act-database";
 const RUN_ID = "10000000-0000-4000-8000-000000000001";
 const SECOND_RUN_ID = "10000000-0000-4000-8000-000000000002";
+const MANIFEST_DIGEST = "a".repeat(64);
 
 function status(
   runId = RUN_ID,
   pageSize: 25 | 50 | 100 | 200 = 50,
-): ActReplacementStatus {
+): ActReplacementStatus & {
+  safeOperationCount: number;
+  reviewRequiredCount: number;
+  appliedOperationCount: number;
+  alreadyPresentOperationCount: number;
+  blockedOperationCount: number;
+  failedOperationCount: number;
+  manifestDigest: string | null;
+  nextApplyCursor: number;
+  canOrganize: boolean;
+  canApplySafe: boolean;
+} {
   return {
     runId,
     phase: "extracting",
@@ -90,6 +103,16 @@ function status(
     },
     canResume: true,
     canStartOver: true,
+    safeOperationCount: 0,
+    reviewRequiredCount: 0,
+    appliedOperationCount: 0,
+    alreadyPresentOperationCount: 0,
+    blockedOperationCount: 0,
+    failedOperationCount: 0,
+    manifestDigest: null,
+    nextApplyCursor: 0,
+    canOrganize: false,
+    canApplySafe: false,
   };
 }
 
@@ -204,6 +227,7 @@ function addRun(store: MemoryControlStore, input: Partial<StoredRun> = {}) {
 function testApp(
   store: MemoryControlStore,
   configured = true,
+  review?: NonNullable<ActReplacementRouteDependencies["review"]>,
 ): ReturnType<typeof express> {
   const app = express();
   app.use(express.json());
@@ -217,9 +241,41 @@ function testApp(
           ? { configured: true, databaseName: DATABASE_KEY }
           : { configured: false },
       now: () => new Date("2026-08-01T12:03:00.000Z"),
+      ...(review ? { review } : {}),
     }),
   );
   return app;
+}
+
+function workflowReview(overrides: Record<string, unknown> = {}) {
+  return {
+    reader: {
+      getManifest: vi.fn().mockResolvedValue(null),
+      listSources: vi.fn().mockResolvedValue([]),
+    },
+    commands: {
+      organize: vi.fn(),
+      approveSafeDefaults: vi.fn(),
+    },
+    applyCoordinator: {
+      applyNext: vi.fn(),
+    },
+    workflow: {
+      summarize: vi.fn().mockResolvedValue({
+        safeOperationCount: 3,
+        reviewRequiredCount: 2,
+        appliedOperationCount: 4,
+        alreadyPresentOperationCount: 2,
+        blockedOperationCount: 1,
+        failedOperationCount: 0,
+        manifestDigest: MANIFEST_DIGEST,
+        nextApplyCursor: 4,
+        canOrganize: false,
+        canApplySafe: true,
+      }),
+    },
+    ...overrides,
+  } as unknown as NonNullable<ActReplacementRouteDependencies["review"]>;
 }
 
 function ownerToken() {
@@ -547,6 +603,375 @@ describe("resume and supersede", () => {
       expect(response.body).toEqual({ code: "run_not_found" });
     },
   );
+});
+
+describe("owner import workflow", () => {
+  it("organizes only an owned extract-complete run with an exact empty body", async () => {
+    const store = new MemoryControlStore();
+    const runStatus = status();
+    runStatus.phase = "extract_complete";
+    addRun(store, { status: runStatus });
+    const organize = vi.fn().mockResolvedValue({
+      status: "ready_to_apply",
+      manifest: {
+        digest: MANIFEST_DIGEST,
+        diagnostics: [],
+        outcomes: [],
+        operations: [],
+      },
+    });
+    const review = workflowReview({
+      commands: { organize, approveSafeDefaults: vi.fn() },
+    });
+    const app = testApp(store, true, review);
+    const authorization = `Bearer ${ownerToken()}`;
+
+    const invalid = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/organize`)
+      .set("Authorization", authorization)
+      .send({ runId: RUN_ID });
+    const response = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/organize`)
+      .set("Authorization", authorization)
+      .send({});
+
+    expect(invalid.status).toBe(400);
+    expect(invalid.body).toEqual({ code: "invalid_request" });
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({
+      status: "ready_to_apply",
+      manifest: {
+        digest: MANIFEST_DIGEST,
+        diagnostics: [],
+        outcomes: [],
+        operations: [],
+      },
+    });
+    expect(organize).toHaveBeenCalledOnce();
+    expect(organize).toHaveBeenCalledWith(RUN_ID);
+  });
+
+  it("looks up ownership before organizing a run", async () => {
+    const store = new MemoryControlStore();
+    addRun(store, { sourceDatabaseKey: "other-database" });
+    const organize = vi.fn();
+    const review = workflowReview({
+      commands: { organize, approveSafeDefaults: vi.fn() },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/organize`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({});
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ code: "run_not_found" });
+    expect(organize).not.toHaveBeenCalled();
+  });
+
+  it("returns workflow status derived by the durable review store", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const review = workflowReview();
+
+    const response = await request(testApp(store, true, review))
+      .get(`/api/migration/act-replacement/runs/${RUN_ID}`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.run).toMatchObject({
+      safeOperationCount: 3,
+      reviewRequiredCount: 2,
+      appliedOperationCount: 4,
+      alreadyPresentOperationCount: 2,
+      blockedOperationCount: 1,
+      failedOperationCount: 0,
+      manifestDigest: MANIFEST_DIGEST,
+      nextApplyCursor: 4,
+      canOrganize: false,
+      canApplySafe: true,
+      applyEnabled: false,
+    });
+  });
+
+  it("returns only safe issue codes and display values from review summaries", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({
+          digest: MANIFEST_DIGEST,
+          diagnostics: [],
+          operations: [],
+          outcomes: [
+            {
+              sourceRecordId: "source-one",
+              sourceVersionId: "version-one",
+              state: "awaiting_review",
+              issues: [
+                { code: "ambiguous_match", reason: "private rationale" },
+              ],
+              candidates: [{ privateCandidateId: "candidate-secret" }],
+              match: { localId: "private-local-id" },
+              mappingWarnings: ["private warning"],
+              unsupportedFieldPaths: ["private.path"],
+              operationKeys: [],
+            },
+          ],
+        }),
+        listSources: vi.fn().mockResolvedValue([
+          {
+            sourceRecordId: "source-one",
+            sourceVersionId: "version-one",
+            streamType: "contact",
+            display: {
+              name: "Safe name",
+              email: "safe@example.com",
+              password: "credential",
+              apiKey: "credential-api-key",
+              credential: "credential-value",
+              privateKey: "credential-private-key",
+              customScalar: "private custom value",
+              nested: { secret: "credential" },
+            },
+          },
+        ]),
+      },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .get(
+        `/api/migration/act-replacement/runs/${RUN_ID}/issues?issue=ambiguous_match`,
+      )
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      page: 1,
+      pageSize: 200,
+      total: 1,
+      manifestDigest: MANIFEST_DIGEST,
+      rows: [
+        {
+          sourceRecordId: "source-one",
+          sourceVersionId: "version-one",
+          state: "awaiting_review",
+          issueCodes: ["ambiguous_match"],
+          operationKeys: [],
+          streamType: "contact",
+          display: { name: "Safe name", email: "safe@example.com" },
+        },
+      ],
+    });
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /password|credential|private|apiKey|candidate|warning|customScalar/i,
+    );
+  });
+
+  it("strictly validates and owner-scopes safe-default approval", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const approveSafeDefaults = vi.fn().mockResolvedValue({
+      selectedOperationIds: ["organization:one"],
+      approvedOperationIds: ["organization:one"],
+      dependencyOperationIds: [],
+      rejectedOperationIds: [],
+      selectedCount: 1,
+      dependencyCount: 0,
+      rejectedCount: 0,
+      manifestDigest: MANIFEST_DIGEST,
+    });
+    const review = workflowReview({
+      commands: { organize: vi.fn(), approveSafeDefaults },
+    });
+    const app = testApp(store, true, review);
+    const authorization = `Bearer ${ownerToken()}`;
+
+    const invalid = await request(app)
+      .post(
+        `/api/migration/act-replacement/runs/${RUN_ID}/approvals/safe-defaults`,
+      )
+      .set("Authorization", authorization)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "safe-one",
+        operationIds: ["unsafe-client-selection"],
+      });
+    const response = await request(app)
+      .post(
+        `/api/migration/act-replacement/runs/${RUN_ID}/approvals/safe-defaults`,
+      )
+      .set("Authorization", authorization)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "safe-one",
+      });
+
+    expect(invalid.status).toBe(400);
+    expect(approveSafeDefaults).toHaveBeenCalledOnce();
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      approvedOperationIds: ["organization:one"],
+      manifestDigest: MANIFEST_DIGEST,
+    });
+  });
+
+  it("rejects apply batches larger than 25 before any write", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const applyNext = vi.fn();
+    const review = workflowReview({ applyCoordinator: { applyNext } });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-next`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        approvalRequestKey: "apply-one",
+        batchSize: 26,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: "invalid_apply_batch_size" });
+    expect(applyNext).not.toHaveBeenCalled();
+  });
+
+  it("keeps next-batch writes locked when the server apply flag is disabled", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const applyNext = vi.fn();
+    const review = workflowReview({ applyCoordinator: { applyNext } });
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-next`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        approvalRequestKey: "apply-one",
+        batchSize: 25,
+      });
+
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({
+      code: "act_apply_disabled",
+      previewOnly: true,
+    });
+    expect(applyNext).not.toHaveBeenCalled();
+  });
+
+  it("fails closed on the retired unbounded bulk apply endpoint", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const apply = vi.fn();
+    const review = workflowReview({
+      commands: {
+        organize: vi.fn(),
+        approveSafeDefaults: vi.fn(),
+        apply,
+      },
+    });
+    process.env.ACT_MIGRATION_APPLY_ENABLED = "true";
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        approvedOperationIds: Array.from(
+          { length: 26 },
+          (_, index) => `operation:${index}`,
+        ),
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "legacy-bulk",
+      });
+
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+    expect(response.status).toBe(410);
+    expect(response.body).toEqual({ code: "apply_next_required" });
+    expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("applies the next owned batch only when the server flag is enabled", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const applyNext = vi.fn().mockResolvedValue({
+      batch: {
+        batchId: "batch-one",
+        runId: RUN_ID,
+        manifestDigest: MANIFEST_DIGEST,
+        state: "complete",
+        operationCount: 1,
+        completedCount: 1,
+        alreadyPresentCount: 0,
+        blockedCount: 0,
+        failedCount: 0,
+      },
+      nextCursor: 1,
+      hasMore: false,
+      requiresReview: false,
+    });
+    const review = workflowReview({ applyCoordinator: { applyNext } });
+    process.env.ACT_MIGRATION_APPLY_ENABLED = "true";
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-next`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        approvalRequestKey: "apply-one",
+        batchSize: 25,
+      });
+
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      batch: {
+        batchId: "batch-one",
+        runId: RUN_ID,
+        manifestDigest: MANIFEST_DIGEST,
+        state: "complete",
+        operationCount: 1,
+        completedCount: 1,
+        alreadyPresentCount: 0,
+        blockedCount: 0,
+        failedCount: 0,
+      },
+      nextCursor: 1,
+      hasMore: false,
+      requiresReview: false,
+    });
+    expect(applyNext).toHaveBeenCalledWith({
+      runId: RUN_ID,
+      expectedManifestDigest: MANIFEST_DIGEST,
+      approvalRequestKey: "apply-one",
+      requestedBy: "owner",
+      batchSize: 25,
+    });
+  });
+
+  it("rejects client-supplied operation IDs and cursors before coordinator access", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const applyNext = vi.fn();
+    const review = workflowReview({ applyCoordinator: { applyNext } });
+    process.env.ACT_MIGRATION_APPLY_ENABLED = "true";
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-next`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        approvalRequestKey: "safe-approval",
+        expectedManifestDigest: MANIFEST_DIGEST,
+        batchSize: 25,
+        approvedOperationIds: ["attacker:selected"],
+        cursor: 500,
+      });
+
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: "invalid_request" });
+    expect(applyNext).not.toHaveBeenCalled();
+  });
 });
 
 describe("legacy Act migration start", () => {
