@@ -1,2 +1,2 @@
-// Re-export all schema tables and types from @workspace/db for use by copied feature repositories
-export * from "@workspace/db";
+// Schema consumers must not initialize the database connection as an import side effect.
+export * from "@workspace/db/schema";
