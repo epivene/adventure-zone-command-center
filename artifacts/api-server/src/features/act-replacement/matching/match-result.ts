@@ -5,8 +5,18 @@ export type MatchResult =
 
 export type ExternalLink = {
   localId: string;
+  entityType?: string | null;
+  sourceEntityType?: string | null;
+  actRecordId?: string | null;
   sourceDatabaseKey?: string | null;
   sourceRecordId?: string | null;
+};
+export type ExternalLinkIdentity = {
+  sourceRecordId: string;
+  sourceDatabaseKey?: string | null;
+  sourceEntityType?: string | null;
+  sourceActRecordId?: string | null;
+  targetEntityType: string;
 };
 
 export type ManualAssignment = { localId: string; active?: boolean };
@@ -27,26 +37,18 @@ export function resultFromCandidates(
 }
 
 export function externalLinkCandidates(
-  sourceRecordId: string,
+  identity: ExternalLinkIdentity,
   links: readonly ExternalLink[] | undefined,
-  sourceDatabaseKey?: string | null,
 ): string[] {
   return uniqueSorted((links ?? []).filter((link) =>
     link.localId.trim() &&
-    link.sourceRecordId === sourceRecordId &&
-    sourceDatabaseKey != null &&
-    link.sourceDatabaseKey === sourceDatabaseKey,
+    identity.sourceDatabaseKey != null &&
+    link.sourceDatabaseKey === identity.sourceDatabaseKey &&
+    identity.sourceEntityType != null &&
+    link.sourceEntityType === identity.sourceEntityType &&
+    link.entityType === identity.targetEntityType &&
+    identity.sourceActRecordId != null &&
+    link.actRecordId === identity.sourceActRecordId &&
+    (link.sourceRecordId == null || link.sourceRecordId === identity.sourceRecordId),
   ).map((link) => link.localId));
-}
-
-/** Links lacking the current source identity are retained as review candidates, never auto-claimed. */
-export function externalLinkReviewCandidates(
-  sourceRecordId: string,
-  links: readonly ExternalLink[] | undefined,
-  sourceDatabaseKey?: string | null,
-): string[] {
-  return uniqueSorted((links ?? []).filter((link) => {
-    if (!link.localId.trim()) return false;
-    return link.sourceRecordId !== sourceRecordId || sourceDatabaseKey == null || link.sourceDatabaseKey !== sourceDatabaseKey;
-  }).map((link) => link.localId));
 }
