@@ -329,6 +329,7 @@ class DrizzleCallTransaction implements CallTransaction {
       kind: "call",
       body: input.body,
       occurredAt: input.occurredAt,
+      timelineSortAt: input.occurredAt,
       createdAt: now,
       updatedAt: now,
     }).returning({ id: activities.id });
