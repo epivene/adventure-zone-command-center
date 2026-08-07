@@ -1,24 +1,157 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ActMigrationPage from "./ActMigrationPage";
 
-vi.mock("@/features/act-replacement/act-replacement-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/features/act-replacement/act-replacement-client")>()),
-  getLatestRun: vi.fn().mockResolvedValue({ run: null }),
-  startRun: vi.fn().mockResolvedValue({ created: true, run: { runId: "run-1", phase: "extracting", previewOnly: true, pageSize: 100, streams: [], allStreams: { responseRows: 0, observedIdentities: 0, archivedIdentities: 0, completeIdentities: 0, partialIdentities: 0, failedIdentities: 0, snapshotVersionsInserted: 0, unsupportedCapabilities: 0 }, canResume: true, canStartOver: true } }), getRun: vi.fn(), resumeRun: vi.fn(), supersedeRun: vi.fn(),
+const client = vi.hoisted(() => ({
+  getLatestRun: vi.fn(),
+  getRun: vi.fn(),
+  startRun: vi.fn(),
+  resumeRun: vi.fn(),
+  supersedeRun: vi.fn(),
+  organizeRun: vi.fn(),
+  getReview: vi.fn(),
+  approveSafeDefaults: vi.fn(),
+  applyNext: vi.fn(),
 }));
+
+vi.mock(
+  "@/features/act-replacement/act-replacement-client",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/features/act-replacement/act-replacement-client")
+    >()),
+    ...client,
+  }),
+);
+
+const digest = "a".repeat(64);
+const counters = {
+  responseRows: 0,
+  observedIdentities: 0,
+  archivedIdentities: 0,
+  completeIdentities: 0,
+  partialIdentities: 0,
+  failedIdentities: 0,
+  snapshotVersionsInserted: 0,
+  unsupportedCapabilities: 0,
+};
+
+function readyRun(overrides: Record<string, unknown> = {}) {
+  return {
+    runId: "00000000-0000-4000-8000-000000000001",
+    phase: "ready_to_apply",
+    previewOnly: true,
+    pageSize: 100,
+    streams: [],
+    allStreams: counters,
+    canResume: false,
+    canStartOver: true,
+    safeOperationCount: 42,
+    reviewRequiredCount: 3,
+    appliedOperationCount: 0,
+    alreadyPresentOperationCount: 0,
+    blockedOperationCount: 0,
+    failedOperationCount: 0,
+    manifestDigest: digest,
+    nextApplyCursor: 0,
+    canOrganize: false,
+    canApplySafe: true,
+    ...overrides,
+  };
+}
+
+function reviewPage() {
+  return { page: 1, pageSize: 25, total: 0, manifestDigest: digest, rows: [] };
+}
+
+function approvalWithOperationIds(count: number) {
+  const approvedOperationIds = Array.from(
+    { length: count },
+    (_, index) => `operation:${index}`,
+  );
+  return {
+    selectedOperationIds: approvedOperationIds,
+    approvedOperationIds,
+    dependencyOperationIds: [],
+    rejectedOperationIds: [],
+    selectedCount: count,
+    dependencyCount: 0,
+    rejectedCount: 0,
+    manifestDigest: digest,
+  };
+}
+
+function batchResult(
+  nextCursor: number,
+  hasMore: boolean,
+  overrides: Record<string, number> = {},
+) {
+  const operationCount = nextCursor % 25 || 25;
+  return {
+    batch: {
+      batchId: `batch-${nextCursor}`,
+      runId: readyRun().runId,
+      manifestDigest: digest,
+      state: "complete",
+      operationCount,
+      completedCount: operationCount,
+      alreadyPresentCount: 0,
+      blockedCount: 0,
+      failedCount: 0,
+      ...overrides,
+    },
+    nextCursor,
+    hasMore,
+    requiresReview:
+      Number(overrides.blockedCount ?? 0) > 0 ||
+      Number(overrides.failedCount ?? 0) > 0,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  client.getLatestRun.mockResolvedValue({ run: null });
+  client.getRun.mockResolvedValue({ run: readyRun({ phase: "complete" }) });
+  client.startRun.mockResolvedValue({
+    created: true,
+    run: readyRun({
+      phase: "extracting",
+      manifestDigest: null,
+      safeOperationCount: 0,
+      reviewRequiredCount: 0,
+      canApplySafe: false,
+    }),
+  });
+  client.getReview.mockResolvedValue(reviewPage());
+});
+
 afterEach(cleanup);
 
 describe("ActMigrationPage", () => {
-  it("offers one import flow without legacy credentials or apply controls", async () => {
+  it("offers one import flow without legacy credentials or unsafe controls", async () => {
     render(<ActMigrationPage />);
-    expect(await screen.findByRole("button", { name: /import everything from act/i })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", {
+        name: /import everything from act/i,
+      }),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/calendar.*route scan/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/apply/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/password|username|database/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/password|username|database/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /overwrite|delete/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("limits advanced batch sizes and defaults to 100", async () => {
+  it("limits advanced fetch sizes and defaults to 100", async () => {
     render(<ActMigrationPage />);
     expect(await screen.findByLabelText(/batch size/i)).toHaveValue("100");
     expect(screen.getByRole("option", { name: "25" })).toBeInTheDocument();
@@ -26,11 +159,230 @@ describe("ActMigrationPage", () => {
     expect(screen.getByRole("option", { name: "200" })).toBeInTheDocument();
   });
 
-  it("starts polling after starting a run from an empty page", async () => {
-    const timer = vi.spyOn(globalThis, "setInterval");
+  it("offers automatic import only for safe records", async () => {
+    client.getLatestRun.mockResolvedValue({ run: readyRun() });
+
     render(<ActMigrationPage />);
-    fireEvent.click(await screen.findByRole("button", { name: /import everything from act/i }));
-    await waitFor(() => expect(timer).toHaveBeenCalled());
-    timer.mockRestore();
+
+    expect(
+      await screen.findByText("42 safe operations ready"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("3 records need your review")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import safe records" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: /overwrite|delete/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("organizes an extracted run and refreshes its durable status", async () => {
+    const extracted = readyRun({
+      phase: "extract_complete",
+      manifestDigest: null,
+      safeOperationCount: 0,
+      reviewRequiredCount: 0,
+      canOrganize: true,
+      canApplySafe: false,
+    });
+    client.getLatestRun.mockResolvedValue({ run: extracted });
+    client.organizeRun.mockResolvedValue({
+      status: "ready_to_apply",
+      manifest: { digest },
+    });
+    client.getRun.mockResolvedValue({ run: readyRun() });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Organize fetched records" }),
+    );
+
+    await waitFor(() =>
+      expect(client.organizeRun).toHaveBeenCalledWith(extracted.runId),
+    );
+    expect(client.getRun).toHaveBeenCalledWith(extracted.runId);
+    expect(
+      await screen.findByText("42 safe operations ready"),
+    ).toBeInTheDocument();
+  });
+
+  it("continues 25-operation batches until complete with one base request key", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ safeOperationCount: 52, reviewRequiredCount: 0 }),
+    });
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(52));
+    client.applyNext
+      .mockResolvedValueOnce(batchResult(25, true))
+      .mockResolvedValueOnce(batchResult(50, true))
+      .mockResolvedValueOnce(
+        batchResult(52, false, { operationCount: 2, completedCount: 2 }),
+      );
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import safe records" }),
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Existing non-empty fields will not be replaced",
+    );
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Imported records are not automatically removed",
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(3));
+    const calls = client.applyNext.mock.calls;
+    expect(calls.every(([, body]) => body.batchSize === 25)).toBe(true);
+    expect(new Set(calls.map(([, body]) => body.approvalRequestKey)).size).toBe(
+      1,
+    );
+    expect(
+      calls.every(
+        ([, body]) =>
+          !("approvedOperationIds" in body) && !("cursor" in body),
+      ),
+    ).toBe(true);
+  });
+
+  it("resumes a partially applied import from durable workflow status after reload", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({
+        phase: "applying",
+        safeOperationCount: 27,
+        nextApplyCursor: 25,
+      }),
+    });
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(52));
+    client.applyNext.mockResolvedValue(batchResult(50, false));
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resume safe import" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
+    expect(client.applyNext.mock.calls[0][1]).toMatchObject({
+      batchSize: 25,
+      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}`,
+    });
+    expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty("cursor");
+    expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty(
+      "approvedOperationIds",
+    );
+  });
+
+  it("restores the durable already-present total in the finish summary after reload", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({
+        phase: "complete",
+        safeOperationCount: 0,
+        appliedOperationCount: 18,
+        alreadyPresentOperationCount: 7,
+        canApplySafe: false,
+      }),
+    });
+
+    render(<ActMigrationPage />);
+
+    const summary = await screen.findByRole("region", {
+      name: "Import summary",
+    });
+    expect(within(summary).getByText("7")).toBeInTheDocument();
+    expect(within(summary).getByText("Already present")).toBeInTheDocument();
+  });
+
+  it("stops after a blocked batch, refreshes durable status, and offers review", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ safeOperationCount: 30 }),
+    });
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(30));
+    client.applyNext.mockResolvedValue(
+      batchResult(25, true, { completedCount: 24, blockedCount: 1 }),
+    );
+    client.getRun.mockResolvedValue({
+      run: readyRun({
+        phase: "complete_with_issues",
+        safeOperationCount: 5,
+        blockedOperationCount: 1,
+      }),
+    });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import safe records" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Review issues before retrying",
+      }),
+    ).toBeInTheDocument();
+    expect(client.applyNext).toHaveBeenCalledOnce();
+    expect(client.getRun).toHaveBeenCalledWith(readyRun().runId);
+  });
+
+  it("restores durable apply failures after reload and offers an explicit retry", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({
+        phase: "complete_with_issues",
+        safeOperationCount: 5,
+        failedOperationCount: 1,
+        canApplySafe: true,
+      }),
+    });
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(30));
+    client.applyNext.mockResolvedValue(batchResult(30, false));
+
+    render(<ActMigrationPage />);
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Review issues before retrying",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, retry failed import" }),
+    );
+
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
+    expect(client.applyNext.mock.calls[0][1]).toMatchObject({
+      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}`,
+      retryFailed: true,
+    });
+  });
+
+  it("shows the server safety lock and does not retry act_apply_disabled", async () => {
+    client.getLatestRun.mockResolvedValue({ run: readyRun() });
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(42));
+    client.applyNext.mockRejectedValue(
+      Object.assign(new Error("act_apply_disabled"), {
+        code: "act_apply_disabled",
+      }),
+    );
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import safe records" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Live import is still safely locked on the server",
+    );
+    expect(client.applyNext).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: /retry safe import/i }),
+    ).not.toBeInTheDocument();
   });
 });
