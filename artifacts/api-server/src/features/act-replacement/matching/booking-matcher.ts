@@ -1,6 +1,6 @@
 import { normalizeMatchingText } from "@/features/act-migration/matching-normalization";
 import type { Opportunity } from "../normalizers/opportunity-normalizer";
-import { externalLinkCandidates, externalLinkReviewCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
+import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
 
 export type BookingMatchSource = Opportunity & {
   sourceRecordId: string;
@@ -12,8 +12,16 @@ export type LocalBookingCandidate = {
   id: string;
   name: string;
   organizationId: string | null;
+  venueName?: string | null;
+  address1?: string | null;
+  city?: string | null;
+  region?: string | null;
+  postalCode?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
+  localStatus?: string | null;
+  localProbability?: string | null;
+  notes?: string | null;
 };
 
 function day(value: string | null | undefined): string | null {
@@ -26,16 +34,14 @@ export function matchBooking(
   source: BookingMatchSource,
   locals: readonly LocalBookingCandidate[],
   organizationMatch: MatchResult,
-  context: { sourceDatabaseKey?: string | null } = {},
+  context: { sourceDatabaseKey?: string | null; sourceEntityType?: string | null; sourceActRecordId?: string | null } = {},
 ): MatchResult {
   if (source.manualAssignment?.active !== false && source.manualAssignment?.localId) {
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
-  const linked = externalLinkCandidates(source.sourceRecordId, source.externalLinks, context.sourceDatabaseKey);
+  const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "booking", ...context }, source.externalLinks);
   if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
   if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
-  const reviewLinks = externalLinkReviewCandidates(source.sourceRecordId, source.externalLinks, context.sourceDatabaseKey);
-  if (reviewLinks.length) return { kind: "ambiguous", candidateIds: reviewLinks, reason: "external_link_requires_review" };
   if (organizationMatch.kind !== "exact") return { kind: "none", reason: "organization_match_not_exact" };
   const sourceName = normalizeMatchingText(source.name);
   const sourceDay = day(source.startsAt);

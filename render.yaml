@@ -32,6 +32,8 @@ services:
         sync: false
       - key: ACT_PASSWORD
         sync: false
+      # Locked by default; the one-time rollout uses a short, operator-controlled
+      # true window and must restore false before the final API restart/report.
       - key: ACT_MIGRATION_APPLY_ENABLED
         value: "false"
 

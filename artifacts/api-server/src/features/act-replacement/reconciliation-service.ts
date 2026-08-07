@@ -87,7 +87,23 @@ export function reconcileActReplacement(input: ReconciliationInput): Reconciliat
     const row: ReconciliationStreamReport = { streamType, counts, ...checkpointTotals, archivedIdentities: archived, organizedCount: stream.outcomes.length, issues: streamIssues.sort(issueSort) };
     reports.push(row); issues.push(...row.issues);
   }
-  const all = reports.reduce((acc, row) => { for (const key of Object.keys(acc) as Array<keyof typeof acc>) acc[key] += row[key] as number; return acc; }, { ...emptyCounts(), responseRows: 0, observedIdentities: 0, archivedIdentities: 0, completeIdentities: 0, partialIdentities: 0, failedIdentities: 0, versionsInserted: 0, organizedCount: 0 });
+  const all = reports.reduce((acc, row) => ({
+    linkedApplied: acc.linkedApplied + row.counts.linkedApplied,
+    alreadyPresent: acc.alreadyPresent + row.counts.alreadyPresent,
+    awaitingReview: acc.awaitingReview + row.counts.awaitingReview,
+    unassigned: acc.unassigned + row.counts.unassigned,
+    unsupported: acc.unsupported + row.counts.unsupported,
+    failed: acc.failed + row.counts.failed,
+    ready: acc.ready + row.counts.ready,
+    responseRows: acc.responseRows + row.responseRows,
+    observedIdentities: acc.observedIdentities + row.observedIdentities,
+    archivedIdentities: acc.archivedIdentities + row.archivedIdentities,
+    completeIdentities: acc.completeIdentities + row.completeIdentities,
+    partialIdentities: acc.partialIdentities + row.partialIdentities,
+    failedIdentities: acc.failedIdentities + row.failedIdentities,
+    versionsInserted: acc.versionsInserted + row.versionsInserted,
+    organizedCount: acc.organizedCount + row.organizedCount,
+  }), { ...emptyCounts(), responseRows: 0, observedIdentities: 0, archivedIdentities: 0, completeIdentities: 0, partialIdentities: 0, failedIdentities: 0, versionsInserted: 0, organizedCount: 0 });
   const reviewCount = all.awaitingReview + all.unassigned + all.unsupported + all.failed;
   const blocking = issues.length > 0 || all.ready > 0;
   const complete = !blocking && reviewCount === 0;

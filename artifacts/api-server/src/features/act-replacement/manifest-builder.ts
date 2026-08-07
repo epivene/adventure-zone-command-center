@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ActApplyAction, ActApplyTargetType, ActReplacementStreamType } from "./import-types";
 import type { MatchResult } from "./matching/match-result";
+import { isMateriallyPopulated, isNormalizedMetadataField, writablePhysicalColumn } from "./writable-target-fields";
 
 export type ManifestNormalized = Record<string, unknown> & { kind: string };
 export type ManifestRelationships = { organizationSourceIds?: readonly string[]; contactSourceIds?: readonly string[]; bookingSourceIds?: readonly string[]; };
@@ -9,13 +10,14 @@ export type ManifestSourceInput = {
   normalized: ManifestNormalized | null; match?: MatchResult; warnings?: readonly string[]; unsupportedFieldPaths?: readonly string[];
   relationships?: ManifestRelationships; provenance?: readonly string[];
   localFields?: Readonly<Record<string, unknown>>;
+  reviewIssues?: readonly { code: string; reason?: string }[];
 };
 export type ManifestOperation = {
   operationKey: string; sourceRecordId: string; sourceVersionId: string; targetType: ActApplyTargetType; action: ActApplyAction;
   payload: Record<string, unknown>; dependencyOperationKeys: string[]; requiredForSourceOutcome: boolean; safeByDefault: boolean;
 };
 export type ManifestOutcome = { sourceRecordId: string; sourceVersionId: string; state: "ready" | "already_present" | "awaiting_review" | "unassigned" | "unsupported"; issues: Array<{ code: string; reason?: string }>; candidates: Record<string, unknown>[]; match: Record<string, unknown> | null; mappingWarnings: string[]; unsupportedFieldPaths: string[]; operationKeys: string[] };
-export type ManifestDiagnostic = { code: "unsupported_field" | "ambiguous_match" | "unassigned" | "unsupported_record" | "relationship_unresolved" | "field_conflict"; sourceRecordId: string; path?: string };
+export type ManifestDiagnostic = { code: "unsupported_field" | "ambiguous_match" | "unassigned" | "unsupported_record" | "relationship_unresolved" | "field_conflict" | "archive_incomplete"; sourceRecordId: string; path?: string };
 export type ActOrganizeManifest = { operations: ManifestOperation[]; outcomes: ManifestOutcome[]; diagnostics: ManifestDiagnostic[]; digest: string };
 
 const targetForKind: Record<string, ActApplyTargetType> = { organization: "organization", contact: "contact", booking: "booking", calling_list: "calling_list", timeline: "activity" };
@@ -35,14 +37,29 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
   const sourceKeys = new Set(sources.map((source) => source.sourceRecordId));
   for (const source of sources) {
     const warnings = sorted(source.warnings); const unsupported = sorted(source.unsupportedFieldPaths);
-    for (const path of unsupported) diagnostics.push({ code: "unsupported_field", sourceRecordId: source.sourceRecordId, path });
-    const issues: Array<{ code: string; reason?: string }> = [];
+    const reviewIssues = [...(source.reviewIssues ?? [])].sort((a, b) => a.code.localeCompare(b.code) || (a.reason ?? "").localeCompare(b.reason ?? ""));
+    const issues: Array<{ code: string; reason?: string }> = [...reviewIssues];
+    for (const path of unsupported) { diagnostics.push({ code: "unsupported_field", sourceRecordId: source.sourceRecordId, path }); issues.push({ code: "unsupported_field", reason: path }); }
+    for (const issue of reviewIssues) diagnostics.push({ code: issue.code === "archive_incomplete" ? "archive_incomplete" : "relationship_unresolved", sourceRecordId: source.sourceRecordId });
     if (!source.normalized) { issues.push({ code: "unsupported_record", reason: "normalization_failed" }); diagnostics.push({ code: "unsupported_record", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unsupported", issues, candidates: [], match: null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const candidates = source.match?.kind === "ambiguous" ? source.match.candidateIds.map((candidateId) => ({ candidateId })) : [];
-    if (source.match?.kind === "ambiguous") { issues.push({ code: "ambiguous_match", reason: source.match.reason }); diagnostics.push({ code: "ambiguous_match", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "awaiting_review", issues, candidates, match: source.match as unknown as Record<string, unknown>, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
+    if (source.match?.kind === "ambiguous") { issues.push({ code: "ambiguous_match", reason: source.match.reason }); diagnostics.push({ code: "ambiguous_match", sourceRecordId: source.sourceRecordId }); }
+    if (issues.length) { outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "awaiting_review", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const hasRelationshipInput = Boolean(source.relationships?.organizationSourceIds?.length || source.relationships?.contactSourceIds?.length || source.relationships?.bookingSourceIds?.length);
     if (source.match?.kind === "none" && source.normalized.kind === "timeline" && !hasRelationshipInput) { issues.push({ code: "unassigned", reason: "no_resolved_parent" }); diagnostics.push({ code: "unassigned", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unassigned", issues, candidates: [], match: source.match as unknown as Record<string, unknown>, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const targetType = targetForKind[source.normalized.kind]; if (!targetType) { issues.push({ code: "unsupported_record", reason: "unknown_normalized_kind" }); diagnostics.push({ code: "unsupported_record", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unsupported", issues, candidates: [], match: null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
+    const unsupportedNormalizedFields = Object.entries(source.normalized)
+      .filter(([fieldName, value]) => isMateriallyPopulated(value) && !writablePhysicalColumn(targetType, fieldName) && !isNormalizedMetadataField(targetType, fieldName, source.normalized!))
+      .map(([fieldName]) => fieldName)
+      .sort();
+    if (unsupportedNormalizedFields.length) {
+      for (const fieldName of unsupportedNormalizedFields) {
+        issues.push({ code: "unsupported_field", reason: fieldName });
+        diagnostics.push({ code: "unsupported_field", sourceRecordId: source.sourceRecordId, path: fieldName });
+      }
+      outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "awaiting_review", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] });
+      continue;
+    }
     const sourceOps: ManifestOperation[] = []; const rootAction: ActApplyAction = source.match?.kind === "exact" ? "link_existing" : "create";
     const rawParentIds = source.normalized.kind === "timeline" ? [...sorted(source.relationships?.organizationSourceIds), ...sorted(source.relationships?.contactSourceIds), ...sorted(source.relationships?.bookingSourceIds)] : [];
     const parentIds = rawParentIds.filter((id) => {
@@ -53,7 +70,7 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     sourceOps.push(baseOperation(source, targetType, rootAction, { normalized: source.normalized, ...(source.match?.kind === "exact" ? { localId: source.match.localId } : {}) }, parentOps, true, rootAction === "create"));
     if (source.normalized.kind !== "timeline") {
       if (rootAction === "link_existing" && source.localFields) {
-        const values = Object.entries(source.normalized).filter(([key, value]) => key !== "kind" && value !== null && value !== "");
+        const values = Object.entries(source.normalized).filter(([key, value]) => Boolean(writablePhysicalColumn(targetType, key)) && isMateriallyPopulated(value));
         for (const [fieldName, value] of values) {
           const localValue = source.localFields[fieldName];
           if (localValue !== null && localValue !== undefined && localValue !== "" && localValue !== value) { issues.push({ code: "field_conflict", reason: fieldName }); diagnostics.push({ code: "field_conflict", sourceRecordId: source.sourceRecordId, path: fieldName }); continue; }

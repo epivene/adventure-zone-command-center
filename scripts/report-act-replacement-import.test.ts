@@ -1,76 +1,100 @@
 import { describe, expect, it } from "vitest";
 import {
-  ACT_DISPLAY_AGGREGATES,
-  ACT_REPORT_STREAMS,
   ReportValidationError,
   reportActReplacementImport,
   type ActReplacementReportInput,
 } from "./report-act-replacement-import";
+import { REQUIRED_ROOTS } from "./verify-act-replacement-preview";
 
 function fixture(): ActReplacementReportInput {
-  const streams = ACT_REPORT_STREAMS.map((streamType) => ({
+  const streams = REQUIRED_ROOTS.map((streamType) => ({
     streamType,
-    counts: { linkedApplied: 1, alreadyPresent: 0, awaitingReview: 0, unassigned: 0, unsupported: 0, failed: 0, ready: 0 },
-    archivedIdentities: 1,
+    state: "complete",
+    completedCheckpoints: 1,
+    totalCheckpoints: 1,
+    error: null,
+    responseRows: 1,
     observedIdentities: 1,
-    organizedCount: 1,
-    issues: [],
+    archivedIdentities: 1,
+    completeIdentities: 1,
+    partialIdentities: 0,
+    failedIdentities: 0,
+    snapshotVersionsInserted: 1,
   }));
   return {
     status: {
       runId: "run-1",
       phase: "complete",
       previewOnly: true,
-      allStreams: { observedIdentities: 20, archivedIdentities: 20 },
-    },
-    review: { total: 0, rows: [], manifestDigest: "digest-1" },
-    reconciliation: {
-      runId: "run-1",
-      sourceDatabaseKey: "db-redacted",
-      phase: "complete",
-      complete: true,
-      finalizable: true,
+      applyEnabled: false,
+      durableAdapters: { reviewReader: true, commandService: true, applyRepository: true },
       streams,
-      allStreams: { linkedApplied: 20, alreadyPresent: 0, awaitingReview: 0, unassigned: 0, unsupported: 0, failed: 0, ready: 0, observedIdentities: 20, archivedIdentities: 20, organizedCount: 20 },
-      rollups: ACT_DISPLAY_AGGREGATES.map((name) => ({ name, count: 0, informational: true as const })),
-      issues: [],
-      digest: "report-digest",
+      allStreams: {
+        responseRows: 7,
+        observedIdentities: 7,
+        archivedIdentities: 7,
+        completeIdentities: 7,
+        partialIdentities: 0,
+        failedIdentities: 0,
+        snapshotVersionsInserted: 7,
+        unsupportedCapabilities: 0,
+      },
+      requiredStreams: [...REQUIRED_ROOTS],
+      leaseSummary: { active: 0, expired: 0 },
+      operations: [
+        {
+          operationKey: "organization:company-1",
+          sourceVersionId: "version-1",
+          targetType: "organization",
+          status: "applied",
+          requiredForSourceOutcome: true,
+        },
+      ],
+      safeOperationCount: 0,
+      reviewRequiredCount: 2,
+      appliedOperationCount: 18,
+      alreadyPresentOperationCount: 1,
+      blockedOperationCount: 0,
+      failedOperationCount: 0,
+      manifestDigest: "digest-1",
+      applyBatches: [{ state: "complete" }, { state: "complete" }],
     },
   };
 }
 
 describe("Act replacement import report", () => {
-  it("emits twenty stream rows, seven display aggregates, and an all-stream row without source values", () => {
+  it("emits exactly the allow-listed metadata columns and one aggregate row", () => {
     const result = reportActReplacementImport(fixture());
     const rows = result.csv.trim().split("\n");
-    expect(rows).toHaveLength(1 + 20 + 7 + 1);
-    expect(rows.some((row) => row.includes("company_contact"))).toBe(true);
-    expect(rows.some((row) => row.includes("all-stream"))).toBe(true);
-    expect(rows.some((row) => row.includes("organizations"))).toBe(true);
-    expect(result.csv).not.toMatch(/raw|password|secret|token|authorization|body/i);
+    expect(rows).toEqual([
+      "run_id,phase,manifest_digest,safe_operations,review_required,applied,already_present,blocked,failed,remaining,apply_batch_count,last_batch_state",
+      "run-1,complete,digest-1,0,2,18,1,0,0,2,2,complete",
+    ]);
+    expect(result.csv).not.toMatch(
+      /raw|source_database|display|request|password|secret|token|authorization|cookie|body/i,
+    );
   });
 
-  it("rejects equation mismatches and ready sources marked complete", () => {
+  it("fails closed when required reconciliation evidence is missing", () => {
     const input = fixture();
-    input.reconciliation!.streams[0].counts.ready = 1;
-    input.reconciliation!.streams[0].archivedIdentities = 1;
-    input.reconciliation!.streams[0].counts.linkedApplied = 1;
-    input.reconciliation!.complete = true;
-    expect(() => reportActReplacementImport(input)).toThrow(ReportValidationError);
-    expect(() => reportActReplacementImport(input)).toThrow(/identity equation|ready/i);
+    input.status.requiredStreams = undefined;
+    input.status.leaseSummary = undefined;
+    input.status.operations = undefined;
+    expect(() => reportActReplacementImport(input)).toThrow(
+      ReportValidationError,
+    );
+    expect(() => reportActReplacementImport(input)).toThrow(
+      /required stream inventory|lease evidence|operation evidence/i,
+    );
   });
 
-  it("rejects a report that omits relationship streams", () => {
+  it("rejects unfinished batches and blocked or failed operations", () => {
     const input = fixture();
-    input.reconciliation!.streams = input.reconciliation!.streams.filter((row) => row.streamType !== "group_contact");
-    expect(() => reportActReplacementImport(input)).toThrow(/missing relationship stream group_contact/);
-  });
-
-  it("never trusts review display or raw values for the CSV", () => {
-    const input = fixture();
-    input.review = { total: 1, manifestDigest: "digest-1", rows: [{ state: "applied", display: { name: "secret-name" }, raw: { password: "do-not-print" } }] };
-    const result = reportActReplacementImport(input);
-    expect(result.csv).not.toContain("secret-name");
-    expect(result.csv).not.toContain("do-not-print");
+    input.status.applyBatches = [{ state: "applying" }];
+    input.status.blockedOperationCount = 1;
+    input.status.failedOperationCount = 1;
+    expect(() => reportActReplacementImport(input)).toThrow(
+      /batch|blocked|failed/i,
+    );
   });
 });

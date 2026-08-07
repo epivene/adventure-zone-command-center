@@ -95,6 +95,34 @@ describe("Act relationship resolver", () => {
     expect(result.conflicts).toEqual([expect.objectContaining({ code: "source_relationship_conflict" })]);
   });
 
+  it("attributes relationship-record identity conflicts to the affected root", () => {
+    const result = resolveActSourceGraph({
+      records: [
+        { sourceRecordId: "ct", streamType: "contact", actRecordId: "P" },
+        { sourceRecordId: "a", streamType: "company", actRecordId: "A" },
+        { sourceRecordId: "b", streamType: "company", actRecordId: "B" },
+      ],
+      relationships: [
+        edge({
+          sourceRecordId: "relationship-row",
+          parentStream: "company",
+          childStream: "contact",
+          parentSourceRecordId: "a",
+          parentActRecordId: "B",
+          childSourceRecordId: "ct",
+          childActRecordId: "P",
+        }),
+      ],
+    });
+
+    expect(result.conflicts).toEqual([
+      expect.objectContaining({
+        code: "source_relationship_conflict",
+        sourceRecordId: "ct",
+      }),
+    ]);
+  });
+
   it("resolves activity associations across company, contact, and opportunity parents", () => {
     const result = resolveActSourceGraph({
       records: [

@@ -296,9 +296,9 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         bookingId: activities.bookingId,
         kind: activities.kind,
         body: activities.body,
-        occurredAt: activities.occurredAt,
+        occurredAt: activities.timelineSortAt,
       }).from(activities).where(profileCondition)
-        .orderBy(desc(activities.occurredAt), desc(activities.id)),
+        .orderBy(desc(activities.timelineSortAt), desc(activities.id)),
       this.database.select({
         id: followUps.id,
         contactId: followUps.contactId,

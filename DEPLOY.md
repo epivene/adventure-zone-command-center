@@ -2,10 +2,10 @@
 
 This project deploys as two Render services sharing a single PostgreSQL database:
 
-| Service | Type | Purpose |
-|---------|------|---------|
+| Service              | Type                  | Purpose                   |
+| -------------------- | --------------------- | ------------------------- |
 | `adventure-zone-api` | Web service (Node.js) | Express API + Clerk proxy |
-| `adventure-zone-web` | Static site | Vite-built React frontend |
+| `adventure-zone-web` | Static site           | Vite-built React frontend |
 
 ---
 
@@ -31,24 +31,24 @@ This project deploys as two Render services sharing a single PostgreSQL database
 
 ### API service (`adventure-zone-api`)
 
-| Variable | Value |
-|----------|-------|
-| `RENDER_DATABASE_URL` | Your Render PostgreSQL **External Database URL** (found in the database's Info tab) |
-| `CLERK_SECRET_KEY` | Clerk production secret key (`sk_live_...`) |
-| `CLERK_PUBLISHABLE_KEY` | Clerk production publishable key (`pk_live_...`) |
-| `OWNER_CLERK_USER_ID` | Your Clerk user ID (`user_2abc...`) |
-| `ACT_API_BASE_URL` | `https://apius.act.com/act.web.api` (server-only) |
-| `ACT_DATABASE_NAME` | Act! database name (server-only secret) |
-| `ACT_USERNAME` | Act! read-only username (server-only secret) |
-| `ACT_PASSWORD` | Act! password (server-only secret) |
-| `ACT_MIGRATION_APPLY_ENABLED` | `false`; Phase 1 is preview/read-only |
+| Variable                      | Value                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------- |
+| `RENDER_DATABASE_URL`         | Your Render PostgreSQL **External Database URL** (found in the database's Info tab) |
+| `CLERK_SECRET_KEY`            | Clerk production secret key (`sk_live_...`)                                         |
+| `CLERK_PUBLISHABLE_KEY`       | Clerk production publishable key (`pk_live_...`)                                    |
+| `OWNER_CLERK_USER_ID`         | Your Clerk user ID (`user_2abc...`)                                                 |
+| `ACT_API_BASE_URL`            | `https://apius.act.com/act.web.api` (server-only)                                   |
+| `ACT_DATABASE_NAME`           | Act! database name (server-only secret)                                             |
+| `ACT_USERNAME`                | Act! read-only username (server-only secret)                                        |
+| `ACT_PASSWORD`                | Act! password (server-only secret)                                                  |
+| `ACT_MIGRATION_APPLY_ENABLED` | `false`; Phase 1 is preview/read-only                                               |
 
 ### Frontend static site (`adventure-zone-web`) — build-time vars
 
-| Variable | Value |
-|----------|-------|
-| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk production publishable key (`pk_live_...`) |
-| `VITE_CLERK_PROXY_URL` | `https://<adventure-zone-api URL>/api/__clerk` (fill in after Step 3) |
+| Variable                     | Value                                                                 |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk production publishable key (`pk_live_...`)                      |
+| `VITE_CLERK_PROXY_URL`       | `https://<adventure-zone-api URL>/api/__clerk` (fill in after Step 3) |
 
 > **Note:** `VITE_CLERK_PROXY_URL` can only be set after the API service is live.  
 > Leave it blank for now and come back in Step 3.
@@ -89,6 +89,7 @@ audit records:
 ```bash
 ACT_PREVIEW_BASE_URL=https://adventure-zone-api.onrender.com/api \
 ACT_PREVIEW_OWNER_TOKEN='owner bearer token' \
+ACT_VERIFY_MODE=pre_apply \
 pnpm verify:act-preview
 ```
 
@@ -102,57 +103,74 @@ been restarted once and the run is visibly resumed from durable checkpoints.
 gate. Without it, run the focused tests and report the integration gate as
 skipped; never treat a local no-database run as production evidence.
 
-## Phase 2 organize/review preview handoff
+## One-time Act! import enable window
 
-Phase 2 is still a one-way, preview-only import. Keep this Render API setting
-exactly as shown until Phase 3 has delivered and verified the durable SQL/CAS
-adapters:
+The checked-in and normal deployed state is locked:
 
 ```text
 ACT_MIGRATION_APPLY_ENABLED=false
 ```
 
-The production preview must have all of the following evidence before it is
-handed off:
+Use this exact rollout order. Do not leave the enable window open between
+operator sessions.
 
-1. Migration `007_act_replacement_organize_apply.sql` is deployed and the API
-   has been restarted once.
-2. The owner can open the run status, review, manifest, source-detail, and
-   request-audit URLs. A non-owner must receive the normal not-found response;
-   do not use a browser or API token belonging to another user for this check.
-3. The run summary is `previewOnly: true`, has no apply batches, and the
-   durable `ReviewReader`, `CommandService`, and `ApplyRepository` adapters are
-   explicitly reported as unavailable until their SQL/CAS implementations are
-   installed. In-memory/reference adapters are test-only and are not production
-   evidence.
-4. The persisted reconciliation report contains all twenty streams, including
-   relationship streams, and its per-stream and all-stream equations pass. A
-   `ready` source, unfinished checkpoint, active batch, missing version/outcome,
-   or reconciliation issue fails the handoff.
-
-After starting or organizing the run, produce a metadata-only CSV from the
-owner API. It intentionally ignores review display/raw values and prints only
-counts, safe status fields, and the manifest/reconciliation digest:
+1. Deploy migrations and the API with `ACT_MIGRATION_APPLY_ENABLED=false`.
+   Confirm the Render setting still reads `false` after the deployment.
+2. Start or resume extraction and wait for every required stream to reconcile.
+3. Organize the archived run. Record only the run ID, terminal phase, manifest
+   digest, and aggregate safe/review counts.
+4. Run `pnpm verify:act-preview` in `pre_apply` mode. Stop if any required or
+   advertised optional stream is unreconciled, organization is nonterminal, any
+   active or expired lease remains, durable review/apply adapter evidence is
+   absent, or a required relationship is neither dependency-closed and safe to
+   apply nor explicitly held for review. Pending dependency-closed operations
+   are expected at this readiness gate.
+5. Temporarily set `ACT_MIGRATION_APPLY_ENABLED=true` for the API service. This
+   is the beginning of the one-time enable window.
+6. Import the approved safe-default closure in batches of exactly 25 (the final
+   batch may be smaller). Stop on the first blocked or failed batch; do not skip
+   ahead or raise the batch size.
+7. Set `ACT_MIGRATION_APPLY_ENABLED=false` immediately, before verification,
+   handoff, or report generation, and confirm the saved Render value.
+8. Restart the API service with apply still disabled. The restart is mandatory;
+   it proves the disabled setting and durable replay state survive a new process.
+9. Run the post-apply verifier and require final stream/operation reconciliation,
+   zero partial/failed identities in every advertised stream, zero active or
+   expired leases, terminal required operations, and terminal batch states:
 
 ```bash
 ACT_PREVIEW_BASE_URL=https://adventure-zone-api.onrender.com/api \
 ACT_PREVIEW_RUN_ID='<run id>' \
 ACT_PREVIEW_OWNER_TOKEN='<owner bearer token>' \
-pnpm report:act-import > act-replacement-preview.csv
+ACT_VERIFY_MODE=post_apply \
+pnpm verify:act-preview
 ```
 
-The command fails closed when the authoritative reconciliation projection is
-missing, a relationship row is missing, counts do not reconcile, or any apply
-gate is open. Do not paste source records, request bodies, cookies, passwords,
-or raw archive JSON into the report or a ticket. Record the run ID, manifest
-digest, reconciliation digest, CSV checksum, and the fact that no production
-apply batch exists. This is a handoff artifact, not proof that the replacement
-import is complete; Phase 3 must implement and verify review/apply controls
-before `ACT_MIGRATION_APPLY_ENABLED` can ever be changed.
+10. Generate the metadata-only report. Keep
+   `ACT_MIGRATION_APPLY_ENABLED=false` throughout report generation:
 
-Rollback for this preview is only `ACT_MIGRATION_APPLY_ENABLED=false`; it stops
-future apply claims and does not delete archived or imported rows. Any data
-reversal requires a separate audited plan.
+```bash
+ACT_PREVIEW_BASE_URL=https://adventure-zone-api.onrender.com/api \
+ACT_PREVIEW_RUN_ID='<run id>' \
+ACT_PREVIEW_OWNER_TOKEN='<owner bearer token>' \
+pnpm report:act-import > act-replacement-import.csv
+```
+
+The CSV contains only:
+
+```text
+run_id,phase,manifest_digest,safe_operations,review_required,applied,already_present,blocked,failed,remaining,apply_batch_count,last_batch_state
+```
+
+The command fails closed when required gate evidence or counts are missing, a
+lease or batch is active, an operation is unresolved, or blocked/failed work
+remains. Never paste source records, review display fields, request bodies,
+credentials, cookies, authorization values, or raw archive JSON into the report
+or a ticket.
+
+Setting `ACT_MIGRATION_APPLY_ENABLED=false` stops new apply claims; it does not
+delete archived or imported rows. Any data reversal requires a separate audited
+plan.
 
 ---
 

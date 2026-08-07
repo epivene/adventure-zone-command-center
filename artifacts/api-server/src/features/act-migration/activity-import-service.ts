@@ -305,6 +305,7 @@ export class ActMigrationActivityImportService {
         kind: "act_history",
         body,
         occurredAt,
+        timelineSortAt: occurredAt,
         actRecordId,
       })
       .onConflictDoNothing()

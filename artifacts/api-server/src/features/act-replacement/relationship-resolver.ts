@@ -153,14 +153,14 @@ export function resolveActSourceGraph(input: RelationshipResolutionInput): Relat
     const directChild = clean(relation.childSourceRecordId) && bySource.has(clean(relation.childSourceRecordId)!) ? clean(relation.childSourceRecordId) : null;
     const actChildCandidates = clean(relation.childActRecordId) ? (byAct.get(`${relation.childStream}:${clean(relation.childActRecordId)}`) ?? []) : [];
     if (directParent && actParentCandidates.length === 1 && directParent !== actParentCandidates[0]) {
-      conflicts.push({ code: "source_relationship_conflict", sourceRecordId: clean(relation.sourceRecordId) ?? directChild ?? directParent, parentStream: relation.parentStream, childStream: relation.childStream, evidenceKind: relation.evidenceKind, context: { reason: "parent_identity_disagrees" } });
+      conflicts.push({ code: "source_relationship_conflict", sourceRecordId: directChild ?? directParent ?? clean(relation.sourceRecordId) ?? "unknown", parentStream: relation.parentStream, childStream: relation.childStream, evidenceKind: relation.evidenceKind, context: { reason: "parent_identity_disagrees" } });
     }
     if (directChild && actChildCandidates.length === 1 && directChild !== actChildCandidates[0]) {
-      conflicts.push({ code: "source_relationship_conflict", sourceRecordId: clean(relation.sourceRecordId) ?? directChild, parentStream: relation.parentStream, childStream: relation.childStream, evidenceKind: relation.evidenceKind, context: { reason: "child_identity_disagrees" } });
+      conflicts.push({ code: "source_relationship_conflict", sourceRecordId: directChild ?? directParent ?? clean(relation.sourceRecordId) ?? "unknown", parentStream: relation.parentStream, childStream: relation.childStream, evidenceKind: relation.evidenceKind, context: { reason: "child_identity_disagrees" } });
     }
     const parent = resolve(relation.parentSourceRecordId, relation.parentActRecordId, relation.parentStream);
     const child = resolve(relation.childSourceRecordId, relation.childActRecordId, relation.childStream);
-    const diagnosticSource = clean(relation.sourceRecordId) ?? child ?? parent ?? "unknown";
+    const diagnosticSource = child ?? parent ?? clean(relation.sourceRecordId) ?? "unknown";
     if (!parent || !child) {
       unresolved.push({ code: "unresolved_exact_relationship", sourceRecordId: diagnosticSource, parentStream: relation.parentStream, childStream: relation.childStream, evidenceKind: relation.evidenceKind, context: { reason: "identity_not_found" } });
       continue;
@@ -189,7 +189,10 @@ export function resolveActSourceGraph(input: RelationshipResolutionInput): Relat
   }
 
   const linked = (child: string, parentStream: string): Set<string> => {
-    const exact = sourceEdges.get(`${child}:${parentStream}`) ?? new Set<string>();
+    const exact = new Set([
+      ...(sourceEdges.get(`${child}:${parentStream}`) ?? []),
+      ...(parentEdges.get(`${child}:${parentStream}`) ?? []),
+    ]);
     const manualTargets = manual.get(`${child}:${parentStream === "company" ? "organization" : parentStream}`) ?? new Set<string>();
     if (manualTargets.size) {
       for (const target of exact) if (!manualTargets.has(target)) conflicts.push({ code: "manual_assignment_source_conflict", sourceRecordId: child, parentStream, context: { manualTarget: [...manualTargets].sort().join(","), sourceTarget: target } });
@@ -237,27 +240,33 @@ export function resolveActSourceGraph(input: RelationshipResolutionInput): Relat
       // Relationship records are represented as opportunity -> company/contact.
       const manualCompanies = manual.get(`${id}:organization`);
       const manualContacts = manual.get(`${id}:contact`);
-      if (manualCompanies?.size) reportManualSourceConflict(id, "company", parentEdges.get(`${id}:company`) ?? new Set(), manualCompanies);
-      if (manualContacts?.size) reportManualSourceConflict(id, "contact", parentEdges.get(`${id}:contact`) ?? new Set(), manualContacts);
-      for (const company of manualCompanies?.size ? manualCompanies : (parentEdges.get(`${id}:company`) ?? [])) add(companiesByOpportunity, id, company);
-      for (const contact of manualContacts?.size ? manualContacts : (parentEdges.get(`${id}:contact`) ?? [])) add(contactsByOpportunity, id, contact);
+      const sourceCompanies = linked(id, "company");
+      const sourceContacts = linked(id, "contact");
+      if (manualCompanies?.size) reportManualSourceConflict(id, "company", sourceCompanies, manualCompanies);
+      if (manualContacts?.size) reportManualSourceConflict(id, "contact", sourceContacts, manualContacts);
+      for (const company of manualCompanies?.size ? manualCompanies : sourceCompanies) add(companiesByOpportunity, id, company);
+      for (const contact of manualContacts?.size ? manualContacts : sourceContacts) add(contactsByOpportunity, id, contact);
     }
     if (record.streamType === "group") {
       const manualContacts = manual.get(`${id}:contact`);
-      if (manualContacts?.size) reportManualSourceConflict(id, "contact", parentEdges.get(`${id}:contact`) ?? new Set(), manualContacts);
-      for (const contact of manualContacts?.size ? manualContacts : (parentEdges.get(`${id}:contact`) ?? [])) add(contactsByGroup, id, contact);
+      const sourceContacts = linked(id, "contact");
+      if (manualContacts?.size) reportManualSourceConflict(id, "contact", sourceContacts, manualContacts);
+      for (const contact of manualContacts?.size ? manualContacts : sourceContacts) add(contactsByGroup, id, contact);
     }
     if (["activity", "note", "history"].includes(record.streamType)) {
       const parents = { companyIds: new Set<string>(), contactIds: new Set<string>(), opportunityIds: new Set<string>() };
       const manualCompanies = manual.get(`${id}:organization`);
       const manualContacts = manual.get(`${id}:contact`);
       const manualOpportunities = manual.get(`${id}:booking`);
-      if (manualCompanies?.size) reportManualSourceConflict(id, "company", parentEdges.get(`${id}:company`) ?? new Set(), manualCompanies);
-      if (manualContacts?.size) reportManualSourceConflict(id, "contact", parentEdges.get(`${id}:contact`) ?? new Set(), manualContacts);
-      if (manualOpportunities?.size) reportManualSourceConflict(id, "opportunity", parentEdges.get(`${id}:opportunity`) ?? new Set(), manualOpportunities);
-      for (const company of manualCompanies?.size ? manualCompanies : (parentEdges.get(`${id}:company`) ?? [])) parents.companyIds.add(company);
-      for (const contact of manualContacts?.size ? manualContacts : (parentEdges.get(`${id}:contact`) ?? [])) parents.contactIds.add(contact);
-      for (const opportunity of manualOpportunities?.size ? manualOpportunities : (parentEdges.get(`${id}:opportunity`) ?? [])) parents.opportunityIds.add(opportunity);
+      const sourceCompanies = linked(id, "company");
+      const sourceContacts = linked(id, "contact");
+      const sourceOpportunities = linked(id, "opportunity");
+      if (manualCompanies?.size) reportManualSourceConflict(id, "company", sourceCompanies, manualCompanies);
+      if (manualContacts?.size) reportManualSourceConflict(id, "contact", sourceContacts, manualContacts);
+      if (manualOpportunities?.size) reportManualSourceConflict(id, "opportunity", sourceOpportunities, manualOpportunities);
+      for (const company of manualCompanies?.size ? manualCompanies : sourceCompanies) parents.companyIds.add(company);
+      for (const contact of manualContacts?.size ? manualContacts : sourceContacts) parents.contactIds.add(contact);
+      for (const opportunity of manualOpportunities?.size ? manualOpportunities : sourceOpportunities) parents.opportunityIds.add(opportunity);
       if (parents.companyIds.size || parents.contactIds.size || parents.opportunityIds.size) timeline.set(id, parents);
     }
   }
