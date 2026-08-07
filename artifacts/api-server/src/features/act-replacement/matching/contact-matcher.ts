@@ -1,5 +1,5 @@
 import { isSharedMailboxEmail, normalizeMatchingEmail, normalizeMatchingText } from "@/features/act-migration/matching-normalization";
-import { externalLinkCandidates, externalLinkReviewCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
+import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
 
 export type ContactMatchSource = {
   sourceRecordId: string;
@@ -24,7 +24,9 @@ export type LocalContactCandidate = {
   lastName: string;
   email?: string | null;
   phone?: string | null;
+  jobTitle?: string | null;
   address1?: string | null;
+  address2?: string | null;
   city?: string | null;
   region?: string | null;
   postalCode?: string | null;
@@ -42,17 +44,14 @@ function fullName(value: { firstName: string; lastName: string }): string | null
 export function matchContact(
   source: ContactMatchSource,
   locals: readonly LocalContactCandidate[],
-  context: { sourceDatabaseKey?: string | null } = {},
+  context: { sourceDatabaseKey?: string | null; sourceEntityType?: string | null; sourceActRecordId?: string | null } = {},
 ): MatchResult {
   if (source.manualAssignment?.active !== false && source.manualAssignment?.localId) {
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
-  const linked = externalLinkCandidates(source.sourceRecordId, source.externalLinks, context.sourceDatabaseKey);
+  const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "contact", ...context }, source.externalLinks);
   if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
   if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
-  const reviewLinks = externalLinkReviewCandidates(source.sourceRecordId, source.externalLinks, context.sourceDatabaseKey);
-  if (reviewLinks.length) return { kind: "ambiguous", candidateIds: reviewLinks, reason: "external_link_requires_review" };
-
   const safeEmail = source.emailIdentityMatchSafe && !isSharedMailboxEmail(source.email)
     ? normalizeMatchingEmail(source.email)
     : null;
