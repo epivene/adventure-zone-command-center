@@ -35,40 +35,71 @@ export const actRootStreamTypes = [
 export type ActRootStreamType = (typeof actRootStreamTypes)[number];
 
 export const actReplacementOutcomeStates = [
-  "pending", "leased", "ready", "already_present", "awaiting_review",
-  "unassigned", "unsupported", "applied", "failed",
+  "pending",
+  "leased",
+  "ready",
+  "already_present",
+  "awaiting_review",
+  "unassigned",
+  "unsupported",
+  "applied",
+  "failed",
 ] as const;
-export type ActReplacementOutcomeState = (typeof actReplacementOutcomeStates)[number];
+export type ActReplacementOutcomeState =
+  (typeof actReplacementOutcomeStates)[number];
 
 export const actLocalEntityTypes = [
-  "organization", "contact", "booking", "calling_list", "activity",
+  "organization",
+  "contact",
+  "booking",
+  "calling_list",
+  "activity",
 ] as const;
 export type ActLocalEntityType = (typeof actLocalEntityTypes)[number];
 
 export const actApplyTargetTypes = [
   ...actLocalEntityTypes,
-  "organization_contact", "booking_contact", "calling_list_member", "activity_association",
+  "organization_contact",
+  "booking_contact",
+  "calling_list_member",
+  "activity_association",
 ] as const;
 export type ActApplyTargetType = (typeof actApplyTargetTypes)[number];
 
 export const actApplyActions = [
-  "create", "link_existing", "fill_missing", "overwrite_reviewed",
-  "create_relationship", "record_provenance",
+  "create",
+  "link_existing",
+  "fill_missing",
+  "overwrite_reviewed",
+  "create_relationship",
+  "record_provenance",
 ] as const;
 export type ActApplyAction = (typeof actApplyActions)[number];
 
 export const actOperationExecutionStates = [
-  "pending", "leased", "applied", "already_present", "blocked", "failed",
+  "pending",
+  "leased",
+  "applied",
+  "already_present",
+  "blocked",
+  "failed",
 ] as const;
-export type ActOperationExecutionState = (typeof actOperationExecutionStates)[number];
+export type ActOperationExecutionState =
+  (typeof actOperationExecutionStates)[number];
 
 export const actReviewDecisionScopes = [
-  "duplicate_identity", "field_conflict", "unsupported_record",
+  "duplicate_identity",
+  "field_conflict",
+  "unsupported_record",
 ] as const;
 export type ActReviewDecisionScope = (typeof actReviewDecisionScopes)[number];
 
 export const actReviewDecisions = [
-  "link_existing", "keep_separate", "keep_local", "use_source", "ignore_source",
+  "link_existing",
+  "keep_separate",
+  "keep_local",
+  "use_source",
+  "ignore_source",
 ] as const;
 export type ActReviewDecision = (typeof actReviewDecisions)[number];
 
@@ -200,6 +231,39 @@ export type ActExtractionCounters = {
   snapshotVersionsInserted: number;
 };
 
+export type ImportWorkflow = {
+  safeOperationCount: number;
+  reviewRequiredCount: number;
+  appliedOperationCount: number;
+  alreadyPresentOperationCount: number;
+  blockedOperationCount: number;
+  failedOperationCount: number;
+  manifestDigest: string | null;
+  nextApplyCursor: number;
+  canOrganize: boolean;
+  canApplySafe: boolean;
+  requiredStreams: string[];
+  leaseSummary: { active: number; expired: number };
+  operations: Array<{
+    operationKey: string;
+    sourceVersionId: string | null;
+    targetType: string;
+    status:
+      | "pending"
+      | "leased"
+      | "applied"
+      | "already_present"
+      | "blocked"
+      | "failed";
+    requiredForSourceOutcome: boolean;
+    heldForReview: boolean;
+    dependencyOperationKeys: string[];
+    safeByDefault: boolean;
+  }>;
+  applyBatches: Array<{ state: string }>;
+  durableAdapters: { reviewReader: boolean; commandService: boolean; applyRepository: boolean };
+};
+
 export type ActReplacementStatus = {
   runId: string;
   phase: ActReplacementRunPhase;
@@ -224,3 +288,6 @@ export type ActReplacementStatus = {
   canResume: boolean;
   canStartOver: boolean;
 };
+
+export type ActReplacementWorkflowStatus = ActReplacementStatus &
+  ImportWorkflow;
