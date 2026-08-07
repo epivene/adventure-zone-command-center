@@ -392,7 +392,7 @@ class LazyReviewRuntime {
         });
         const applyService: ActApplyService = new ApplyService(
           applyRepository,
-          process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
+          true,
         );
         const store: ReviewCommandStore = new DrizzleActReviewCommandStore(
           db,

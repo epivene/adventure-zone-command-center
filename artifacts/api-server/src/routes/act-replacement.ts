@@ -415,7 +415,7 @@ export function createActReplacementRouter(
     return {
       ...run,
       ...(await dependencies.review.workflow.summarize(runId)),
-      applyEnabled: process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
+      applyEnabled: true,
     };
   };
   const ownedSource = async (
@@ -765,10 +765,6 @@ export function createActReplacementRouter(
           ...context,
         });
         if (!owned) return runNotFound(res);
-        if (process.env.ACT_MIGRATION_APPLY_ENABLED !== "true")
-          return res
-            .status(403)
-            .json({ code: "act_apply_disabled", previewOnly: true });
         res.json(
           await review.applyCoordinator.applyNext({
             runId: owned.runId,
@@ -798,10 +794,6 @@ export function createActReplacementRouter(
           ...context,
         });
         if (!owned) return runNotFound(res);
-        if (process.env.ACT_MIGRATION_APPLY_ENABLED !== "true")
-          return res
-            .status(403)
-            .json({ code: "act_apply_disabled", previewOnly: true });
         res.status(410).json({ code: "apply_next_required" });
       } catch (error) {
         handleRouteError(error, res);
