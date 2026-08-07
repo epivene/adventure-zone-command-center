@@ -56,18 +56,60 @@ const localOrganization = (overrides: Partial<LocalOrganizationCandidate> = {}):
 
 describe("conservative Act replacement matchers", () => {
   it("prefers one exact external link and sorts ambiguous link candidates", () => {
-    const source = contact({ externalLinks: [{ localId: "contact-9", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" }] });
-    expect(matchContact(source, [localContact()], { sourceDatabaseKey: "db-1" })).toEqual({
+    const source = contact({ externalLinks: [{ localId: "contact-9", entityType: "contact", sourceEntityType: "contact", actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" }] });
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
+    expect(matchContact(source, [localContact()], context)).toEqual({
       kind: "exact", localId: "contact-9", reason: "exact_external_link",
     });
     const ambiguous = contact({ externalLinks: [
-      { localId: "contact-z", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" },
-      { localId: "contact-a", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" },
+      { localId: "contact-z", entityType: "contact", sourceEntityType: "contact", actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" },
+      { localId: "contact-a", entityType: "contact", sourceEntityType: "contact", actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" },
     ] });
-    expect(matchContact(ambiguous, [], { sourceDatabaseKey: "db-1" })).toEqual({
+    expect(matchContact(ambiguous, [], context)).toEqual({
       kind: "ambiguous", candidateIds: ["contact-a", "contact-z"], reason: "multiple_exact_external_links",
     });
-    expect(matchContact(contact({ externalLinks: [{ localId: "contact-9", sourceDatabaseKey: "db-1" }] }), [], { sourceDatabaseKey: "db-1" })).toEqual({ kind: "ambiguous", candidateIds: ["contact-9"], reason: "external_link_requires_review" });
+    expect(matchContact(contact({ externalLinks: [{ localId: "contact-9", sourceDatabaseKey: "db-1" }] }), [], context)).toEqual({ kind: "none", reason: "no_unique_contact_identity" });
+  });
+
+  it("ignores external links from another source identity or target entity", () => {
+    const externalLinks = [
+      { localId: "wrong-db", sourceRecordId: "source-contact", sourceDatabaseKey: "db-2", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+      { localId: "wrong-source-type", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1", sourceEntityType: "company", actRecordId: "ACT-1", entityType: "contact" },
+      { localId: "wrong-act-id", sourceRecordId: "other-source", sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-2", entityType: "contact" },
+      { localId: "wrong-act-same-source", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-2", entityType: "contact" },
+      { localId: "wrong-source-same-act", sourceRecordId: "other-source", sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+      { localId: "wrong-target", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "organization" },
+    ];
+
+    expect(matchContact(contact({ externalLinks }), [], {
+      sourceDatabaseKey: "db-1",
+      sourceEntityType: "contact",
+      sourceActRecordId: "ACT-1",
+    })).toEqual({ kind: "none", reason: "no_unique_contact_identity" });
+  });
+
+  it("accepts legacy links without a source UUID only for the complete Act identity", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
+    const exact = contact({ externalLinks: [
+      { localId: "legacy-contact", sourceRecordId: null, sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+      { localId: "wrong-target", sourceRecordId: null, sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "organization" },
+      { localId: "wrong-db", sourceRecordId: null, sourceDatabaseKey: "db-2", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+    ] });
+    expect(matchContact(exact, [], context)).toEqual({
+      kind: "exact", localId: "legacy-contact", reason: "exact_external_link",
+    });
+
+    const ambiguous = contact({ externalLinks: [
+      { localId: "legacy-z", sourceRecordId: null, sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+      { localId: "legacy-a", sourceRecordId: null, sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+    ] });
+    expect(matchContact(ambiguous, [], context)).toEqual({
+      kind: "ambiguous", candidateIds: ["legacy-a", "legacy-z"], reason: "multiple_exact_external_links",
+    });
+
+    expect(matchContact(contact({ externalLinks: [
+      { localId: "different-current-source", sourceRecordId: "another-source", sourceDatabaseKey: "db-1", sourceEntityType: "contact", actRecordId: "ACT-1", entityType: "contact" },
+    ] }), [], context)).toEqual({ kind: "none", reason: "no_unique_contact_identity" });
   });
 
   it("matches contacts by unique non-shared email, then unique phone", () => {
