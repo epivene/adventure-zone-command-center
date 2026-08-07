@@ -1,5 +1,5 @@
 import { normalizeMatchingText, normalizeWebsiteHost } from "@/features/act-migration/matching-normalization";
-import { externalLinkCandidates, externalLinkReviewCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
+import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
 
 export type OrganizationMatchSource = {
   sourceRecordId: string;
@@ -21,7 +21,9 @@ export type LocalOrganizationCandidate = {
   name: string;
   phone?: string | null;
   website?: string | null;
+  industry?: string | null;
   address1?: string | null;
+  address2?: string | null;
   city?: string | null;
   region?: string | null;
   postalCode?: string | null;
@@ -47,17 +49,14 @@ function normalized(source: OrganizationMatchSource | LocalOrganizationCandidate
 export function matchOrganization(
   source: OrganizationMatchSource,
   locals: readonly LocalOrganizationCandidate[],
-  context: { sourceDatabaseKey?: string | null } = {},
+  context: { sourceDatabaseKey?: string | null; sourceEntityType?: string | null; sourceActRecordId?: string | null } = {},
 ): MatchResult {
   if (source.manualAssignment?.active !== false && source.manualAssignment?.localId) {
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
-  const linked = externalLinkCandidates(source.sourceRecordId, source.externalLinks, context.sourceDatabaseKey);
+  const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "organization", ...context }, source.externalLinks);
   if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
   if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
-  const reviewLinks = externalLinkReviewCandidates(source.sourceRecordId, source.externalLinks, context.sourceDatabaseKey);
-  if (reviewLinks.length) return { kind: "ambiguous", candidateIds: reviewLinks, reason: "external_link_requires_review" };
-
   const expected = normalized(source);
   const eligible: string[] = [];
   const nameOnly: string[] = [];
