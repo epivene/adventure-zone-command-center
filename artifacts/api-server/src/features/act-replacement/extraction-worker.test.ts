@@ -118,10 +118,14 @@ function fixture(
       }
     );
   };
-  const source: ActExtractionSourceClient = {
+  const source = {
     listRoot: get as ActExtractionSourceClient["listRoot"],
     getDetail: get as ActExtractionSourceClient["getDetail"],
     listRelationship: get as ActExtractionSourceClient["listRelationship"],
+    listContactNotes: (contactId: string, request: unknown) =>
+      get({ contactId, request }),
+  } as ActExtractionSourceClient & {
+    listContactNotes(contactId: string, request: unknown): Promise<unknown>;
   };
 
   const archiveCalls: unknown[] = [];
@@ -364,6 +368,11 @@ describe("ActExtractionWorker", () => {
       },
       source: {
         listRoot: async () => pending,
+        listContactNotes: async () => ({
+          items: [],
+          nextSkip: null,
+          queryMode: "plain",
+        }),
         getDetail: async () => ({ id: "unused" }),
         listRelationship: async () => ({
           items: [],
@@ -511,6 +520,60 @@ describe("ActExtractionWorker", () => {
       JSON.stringify({ begins: test.begins, finishes: test.finishes }),
     ).not.toContain("secret-parent");
     expect(test.checkpointEvents[0]?.name).toBe("markUnsupported");
+  });
+
+  it("archives contact-scoped notes with their exact contact relationship", async () => {
+    const test = fixture({
+      claimed: checkpoint({
+        streamType: "note",
+        checkpointKind: "relationship",
+        partitionKey: "contact-notes:contact%2F1",
+        parentActRecordId: "contact/1",
+        requiredness: "required",
+        queryMode: "plain",
+        deriveDetails: false,
+      }),
+      sourceResult: {
+        items: [
+          {
+            id: "note-1",
+            subject: "Waiver",
+            body: "Remember the waiver",
+          },
+        ],
+        nextSkip: null,
+        queryMode: "plain",
+      },
+    });
+
+    await test.worker.runOne({ workerId: "worker-a", now: startedAt });
+
+    expect(test.begins[0]?.pathTemplate).toBe("/api/contacts/{id}/note");
+    expect(test.sourceCalls).toEqual([
+      {
+        contactId: "contact/1",
+        request: { skip: 0, top: 100, queryMode: "plain" },
+      },
+    ]);
+    expect(test.archiveCalls).toEqual([
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            streamType: "note",
+            sourceKey: "note-1",
+            archiveCompleteness: "complete",
+            relationshipEvidence: {
+              source: "endpoint",
+              parentKind: "note",
+              parentActRecordId: "note-1",
+              targetKind: "contact",
+              targetActRecordId: "contact/1",
+            },
+          }),
+        ],
+        derivedCheckpoints: [],
+      }),
+    ]);
   });
 
   it("fails the run through the checkpoint repository on authentication failure", async () => {

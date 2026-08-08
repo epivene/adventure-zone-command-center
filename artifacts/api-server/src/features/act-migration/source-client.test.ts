@@ -63,6 +63,31 @@ describe("HttpActMigrationSourceClient queries", () => {
       },
     ]);
   });
+
+  it("reads notes from the documented contact-scoped endpoint", async () => {
+    const { transport, requests } = recordingReadTransport([
+      { id: "note-1", body: "Remember the waiver" },
+    ]);
+    const client = new HttpActMigrationSourceClient(transport) as unknown as {
+      listNotesForContact(
+        contactId: string,
+        request: typeof plain,
+      ): Promise<unknown>;
+    };
+
+    await expect(
+      client.listNotesForContact("contact/1", plain),
+    ).resolves.toMatchObject({
+      items: [{ id: "note-1", body: "Remember the waiver" }],
+      queryMode: "plain",
+    });
+    expect(requests).toEqual([
+      {
+        path: "/api/contacts/contact%2F1/note",
+        query: { $skip: "0", $top: "100" },
+      },
+    ]);
+  });
 });
 
 describe("HttpActMigrationSourceClient response shapes", () => {
