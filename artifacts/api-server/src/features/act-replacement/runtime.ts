@@ -100,7 +100,9 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     { DrizzleActSourceArchiveRepository },
     { DrizzleActRequestAuditRepository },
     { ActExtractionWorker },
-    { ActExtractionWorkerLoop, systemWorkerLoopScheduler },
+    { ActExtractionWorkerLoop, ActOrganizerWorkerLoop, systemWorkerLoopScheduler },
+    { ProductionActOrganizer, ProductionActOrganizerRecoveryWorker },
+    { DrizzleProductionOrganizerStore },
   ] = await Promise.all([
     import("@/db/client"),
     import("@/features/act-sync/act-client"),
@@ -109,6 +111,8 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     import("./request-audit-repository"),
     import("./extraction-worker"),
     import("./worker-loop"),
+    import("./production-organizer"),
+    import("./review-sql-adapter"),
   ]);
 
   const clientAdapter = createActExtractionClientAdapter(
@@ -123,12 +127,34 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     authorization: clientAdapter.authorization,
     clock,
   });
-  return new ActExtractionWorkerLoop({
+  const extractionLoop = new ActExtractionWorkerLoop({
     worker,
     workerId: `act-extraction-${process.pid}-${randomUUID()}`,
     clock,
     scheduler: systemWorkerLoopScheduler,
   });
+  const organizerStore = new DrizzleProductionOrganizerStore(db, {
+    sourceDatabaseKey: environment.config.databaseName,
+  });
+  const organizer = new ProductionActOrganizer(organizerStore);
+  const organizerLoop = new ActOrganizerWorkerLoop({
+    worker: new ProductionActOrganizerRecoveryWorker({
+      findRecoverableRunId: (now) => organizerStore.findRecoverableRunId(now),
+      organize: (runId) => organizer.organize(runId),
+    }),
+    workerId: `act-organizer-${process.pid}-${randomUUID()}`,
+    clock,
+    scheduler: systemWorkerLoopScheduler,
+  });
+  return {
+    start() {
+      extractionLoop.start();
+      organizerLoop.start();
+    },
+    async close() {
+      await Promise.all([organizerLoop.close(), extractionLoop.close()]);
+    },
+  };
 }
 
 type SourceClient = HttpActMigrationSourceClient;
