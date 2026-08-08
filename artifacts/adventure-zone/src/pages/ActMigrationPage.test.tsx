@@ -186,24 +186,13 @@ describe("ActMigrationPage", () => {
   it("rebuilds an unapplied review manifest without refetching Act", async () => {
     const rebuildable = readyRun({ canOrganize: true });
     client.getLatestRun.mockResolvedValue({ run: rebuildable });
-    client.organizeRun.mockResolvedValue({
-      status: "ready_to_apply",
-      manifest: { digest },
-    });
-    client.getRun.mockResolvedValue({
-      run: readyRun({ safeOperationCount: 100, reviewRequiredCount: 2 }),
-    });
+    client.organizeRun.mockResolvedValue({ status: "ready_to_apply", manifest: { digest } });
+    client.getRun.mockResolvedValue({ run: readyRun({ safeOperationCount: 100, reviewRequiredCount: 2 }) });
 
     render(<ActMigrationPage />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Rebuild review from archive",
-      }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Rebuild review from archive" }));
 
-    await waitFor(() =>
-      expect(client.organizeRun).toHaveBeenCalledWith(rebuildable.runId),
-    );
+    await waitFor(() => expect(client.organizeRun).toHaveBeenCalledWith(rebuildable.runId));
     expect(client.startRun).not.toHaveBeenCalled();
     expect(client.resumeRun).not.toHaveBeenCalled();
   });
@@ -370,7 +359,8 @@ describe("ActMigrationPage", () => {
     );
     expect(
       calls.every(
-        ([, body]) => !("approvedOperationIds" in body) && !("cursor" in body),
+        ([, body]) =>
+          !("approvedOperationIds" in body) && !("cursor" in body),
       ),
     ).toBe(true);
   });
@@ -477,9 +467,7 @@ describe("ActMigrationPage", () => {
         name: "Review issues before retrying",
       }),
     ).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Retry failed import" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed import" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Yes, retry failed import" }),
     );
