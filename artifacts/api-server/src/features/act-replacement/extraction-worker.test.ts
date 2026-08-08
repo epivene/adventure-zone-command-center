@@ -548,7 +548,7 @@ describe("ActExtractionWorker", () => {
 
     await test.worker.runOne({ workerId: "worker-a", now: startedAt });
 
-    expect(test.begins[0]?.pathTemplate).toBe("/api/contacts/{id}/note");
+    expect(test.begins[0]?.pathTemplate).toBe("/api/contacts/{id}/notes");
     expect(test.sourceCalls).toEqual([
       {
         contactId: "contact/1",
