@@ -38,6 +38,7 @@ describe("ImportReview", () => {
         }}
         onSearch={() => {}}
         onPageChange={() => {}}
+        onImportAsNew={() => {}}
         onImport={() => {}}
       />,
     );
@@ -68,6 +69,7 @@ describe("ImportReview", () => {
         }}
         onSearch={onSearch}
         onPageChange={onPageChange}
+        onImportAsNew={() => {}}
         onImport={() => {}}
       />,
     );
@@ -83,5 +85,32 @@ describe("ImportReview", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Next review page" }));
     expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it("offers a durable import-as-new decision for ambiguous matches", () => {
+    const onImportAsNew = vi.fn();
+    const row = {
+      sourceRecordId: "source-1",
+      sourceVersionId: "version-1",
+      state: "awaiting_review",
+      issueCodes: ["ambiguous_match"],
+      operationKeys: [],
+      streamType: "company",
+      display: { name: "Adventure Zone" },
+    };
+    render(
+      <ImportReview
+        safeOperationCount={0}
+        reviewRequiredCount={1}
+        review={{ page: 1, pageSize: 25, total: 1, manifestDigest: "a".repeat(64), rows: [row] }}
+        onSearch={() => {}}
+        onPageChange={() => {}}
+        onImportAsNew={onImportAsNew}
+        onImport={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Import as new record" }));
+    expect(onImportAsNew).toHaveBeenCalledWith(row);
   });
 });
