@@ -39,6 +39,7 @@ const activeRunPhases = [
 ] as const;
 const openCheckpointStates = ["pending", "leased", "retry_wait"] as const;
 const terminalCheckpointStates = ["complete", "unsupported", "failed"] as const;
+export const manualResumeCheckpointStates = ["leased", "retry_wait"] as const;
 const loggedFinalizationBlockers = new Set<string>();
 
 function logFinalizationBlocker(
@@ -222,10 +223,9 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
             and(
               eq(actReplacementCheckpoints.runId, input.runId),
               or(
-                eq(actReplacementCheckpoints.state, "retry_wait"),
-                and(
-                  eq(actReplacementCheckpoints.state, "leased"),
-                  lte(actReplacementCheckpoints.leaseExpiresAt, input.now),
+                inArray(
+                  actReplacementCheckpoints.state,
+                  manualResumeCheckpointStates,
                 ),
                 recoverableContactNotes,
               ),
