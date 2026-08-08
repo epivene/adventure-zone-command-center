@@ -68,6 +68,7 @@ export interface ActReplacementCheckpointRepository {
     leaseOwner: string;
     now: Date;
   }): Promise<void>;
+  resumeRun(input: { runId: string; now: Date }): Promise<void>;
   markDetailCapabilityUnavailable(input: {
     runId: string;
     checkpointId: string;
@@ -178,6 +179,34 @@ function claimedCheckpointValue(
 
 export class DrizzleActReplacementCheckpointRepository implements ActReplacementCheckpointRepository {
   constructor(private readonly database: DrizzleDatabase) {}
+
+  async resumeRun(input: { runId: string; now: Date }): Promise<void> {
+    return this.protect(async () => {
+      await this.database.transaction(async (transaction) => {
+        await transaction
+          .update(actReplacementCheckpoints)
+          .set({
+            state: "pending",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            retryAfter: null,
+            updatedAt: input.now,
+          })
+          .where(
+            and(
+              eq(actReplacementCheckpoints.runId, input.runId),
+              or(
+                eq(actReplacementCheckpoints.state, "retry_wait"),
+                and(
+                  eq(actReplacementCheckpoints.state, "leased"),
+                  lte(actReplacementCheckpoints.leaseExpiresAt, input.now),
+                ),
+              ),
+            ),
+          );
+      });
+    });
+  }
 
   async createRun(
     input: StartActReplacementRun,
