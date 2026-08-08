@@ -611,17 +611,9 @@ describe("owner import workflow", () => {
     const runStatus = status();
     runStatus.phase = "extract_complete";
     addRun(store, { status: runStatus });
-    const organize = vi.fn().mockResolvedValue({
-      status: "ready_to_apply",
-      manifest: {
-        digest: MANIFEST_DIGEST,
-        diagnostics: [],
-        outcomes: [],
-        operations: [],
-      },
-    });
+    const startOrganize = vi.fn().mockResolvedValue({ status: "organizing" });
     const review = workflowReview({
-      commands: { organize, approveSafeDefaults: vi.fn() },
+      commands: { startOrganize, approveSafeDefaults: vi.fn() },
     });
     const app = testApp(store, true, review);
     const authorization = `Bearer ${ownerToken()}`;
@@ -638,25 +630,17 @@ describe("owner import workflow", () => {
     expect(invalid.status).toBe(400);
     expect(invalid.body).toEqual({ code: "invalid_request" });
     expect(response.status).toBe(202);
-    expect(response.body).toEqual({
-      status: "ready_to_apply",
-      manifest: {
-        digest: MANIFEST_DIGEST,
-        diagnostics: [],
-        outcomes: [],
-        operations: [],
-      },
-    });
-    expect(organize).toHaveBeenCalledOnce();
-    expect(organize).toHaveBeenCalledWith(RUN_ID);
+    expect(response.body).toEqual({ status: "organizing" });
+    expect(startOrganize).toHaveBeenCalledOnce();
+    expect(startOrganize).toHaveBeenCalledWith(RUN_ID);
   });
 
   it("looks up ownership before organizing a run", async () => {
     const store = new MemoryControlStore();
     addRun(store, { sourceDatabaseKey: "other-database" });
-    const organize = vi.fn();
+    const startOrganize = vi.fn();
     const review = workflowReview({
-      commands: { organize, approveSafeDefaults: vi.fn() },
+      commands: { startOrganize, approveSafeDefaults: vi.fn() },
     });
 
     const response = await request(testApp(store, true, review))
@@ -666,7 +650,7 @@ describe("owner import workflow", () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ code: "run_not_found" });
-    expect(organize).not.toHaveBeenCalled();
+    expect(startOrganize).not.toHaveBeenCalled();
   });
 
   it("returns workflow status derived by the durable review store", async () => {
