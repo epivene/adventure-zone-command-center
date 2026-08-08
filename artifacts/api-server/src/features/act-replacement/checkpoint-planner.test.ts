@@ -79,12 +79,16 @@ describe("checkpoint planner", () => {
 
       expect(
         result
-          .filter(({ checkpointKind }) => checkpointKind === "relationship")
+          .filter(
+            ({ checkpointKind, streamType }) =>
+              checkpointKind === "relationship" && streamType !== "note",
+          )
           .map(({ streamType }) => streamType),
       ).toEqual(relationshipStreams);
       expect(
         result.filter(
-          ({ checkpointKind }) => checkpointKind === "relationship",
+          ({ checkpointKind, streamType }) =>
+            checkpointKind === "relationship" && streamType !== "note",
         ),
       ).toEqual(
         relationshipStreams.map((streamType) => ({
@@ -103,6 +107,38 @@ describe("checkpoint planner", () => {
       );
     },
   );
+
+  it("derives required plain note extraction for every contact identity", () => {
+    const items = parseRootSourceRecords({
+      streamType: "contact",
+      records: [{ id: "contact/1" }, { id: "contact/1", duplicate: true }],
+      queryMode: "projected",
+    });
+
+    const result = planRootDerivedCheckpoints({
+      rootStream: "contact",
+      items,
+      pageSize: 75,
+      queryMode: "projected",
+      deriveDetails: true,
+    });
+
+    expect(result.filter(({ streamType }) => streamType === "note")).toEqual([
+      {
+        streamType: "note",
+        checkpointKind: "relationship",
+        partitionKey: "contact-notes:contact%2F1",
+        requiredness: "required",
+        parentSourceRecordId: null,
+        parentActRecordId: "contact/1",
+        sourceRecordId: null,
+        nextSkip: 0,
+        pageSize: 75,
+        queryMode: "plain",
+        deriveDetails: false,
+      },
+    ]);
+  });
 
   it.each(["activity", "note", "history"] as const)(
     "derives only absent %s relationship endpoint checkpoints",
@@ -150,7 +186,10 @@ describe("checkpoint planner", () => {
         queryMode: "projected",
         deriveDetails: true,
       })
-        .filter(({ checkpointKind }) => checkpointKind === "relationship")
+        .filter(
+          ({ checkpointKind, streamType }) =>
+            checkpointKind === "relationship" && streamType !== "note",
+        )
         .map(({ streamType }) => streamType),
     ).toEqual(["company_contact"]);
   });
@@ -176,7 +215,10 @@ describe("checkpoint planner", () => {
         queryMode: "projected",
         deriveDetails: true,
       })
-        .filter(({ checkpointKind }) => checkpointKind === "relationship")
+        .filter(
+          ({ checkpointKind, streamType }) =>
+            checkpointKind === "relationship" && streamType !== "note",
+        )
         .map(({ streamType }) => streamType),
     ).toEqual(["company_contact"]);
   });
