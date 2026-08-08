@@ -39,6 +39,7 @@ export class ActExtractionWorkerLoop {
   start(): void {
     if (this.started || this.stopped) return;
     this.started = true;
+    logger.info("Act extraction worker started");
     this.schedule(0);
   }
 
@@ -96,7 +97,7 @@ export class ActExtractionWorkerLoop {
 
 export type OrganizerLoopWorker = { runOne(input: { workerId: string; now: Date }): Promise<{ kind: "idle" | "progress" }>; };
 
-/** Generic durable organizer scheduler; durable claims make restart-safe. */
+/** Generic durable organizer scheduler; durable claims make restarts safe. */
 export class ActOrganizerWorkerLoop {
   private started = false; private stopped = false; private pending: unknown = null; private active: Promise<void> | null = null;
   constructor(private readonly dependencies: { worker: OrganizerLoopWorker; workerId: string; clock: Clock; scheduler: WorkerLoopScheduler }) {}
