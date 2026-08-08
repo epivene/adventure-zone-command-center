@@ -107,17 +107,20 @@ type ArchivePageReplayMetadata = {
 export function replayedCheckpointTransition(
   receipt: Pick<
     ArchivePageReplayMetadata,
-    "nextSkip" | "queryMode"
+    "nextSkip" | "queryMode" | "responseRows"
   > & { pageSkip: number },
 ): {
   nextSkip: number;
   queryMode: ActQueryMode;
   state: "pending" | "complete";
 } {
+  const terminal = receipt.nextSkip === null || receipt.responseRows === 0;
   return {
-    nextSkip: receipt.nextSkip ?? receipt.pageSkip,
+    nextSkip: terminal
+      ? receipt.pageSkip
+      : (receipt.nextSkip ?? receipt.pageSkip),
     queryMode: receipt.queryMode as ActQueryMode,
-    state: receipt.nextSkip === null ? "complete" : "pending",
+    state: terminal ? "complete" : "pending",
   };
 }
 
@@ -303,13 +306,16 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           conflicts();
         }
 
+        const terminal = input.nextSkip === null || input.items.length === 0;
+        const committedNextSkip = terminal ? null : input.nextSkip;
+
         stage = "insert_receipt";
         await transaction.insert(actReplacementPageReceipts).values({
           runId: input.runId,
           checkpointId: input.checkpointId,
           streamType: checkpoint.streamType,
           pageSkip: input.expectedSkip,
-          nextSkip: input.nextSkip,
+          nextSkip: committedNextSkip,
           queryMode: input.queryMode,
           pageFingerprint: input.pageFingerprint,
           responseRows: input.items.length,
@@ -678,13 +684,12 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           failedIdentities: completenessDeltas.failed,
           snapshotVersionsInserted,
         };
-        const terminal = input.nextSkip === null;
 
         stage = "complete_checkpoint";
         await transaction
           .update(actReplacementCheckpoints)
           .set({
-            nextSkip: input.nextSkip ?? input.expectedSkip,
+            nextSkip: committedNextSkip ?? input.expectedSkip,
             queryMode: input.queryMode,
             state: terminal ? "complete" : "pending",
             leaseOwner: null,
