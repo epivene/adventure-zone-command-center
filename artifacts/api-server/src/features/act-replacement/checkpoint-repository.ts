@@ -221,19 +221,21 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
 
         if (created) {
           await transaction.insert(actReplacementCheckpoints).values(
-            actRootStreamTypes.map((streamType) => ({
-              runId: created.id,
-              sourceDatabaseKey: input.sourceDatabaseKey,
-              streamType,
-              checkpointKind: "list",
-              partitionKey: `root:${streamType}`,
-              requiredness: "required",
-              nextSkip: 0,
-              pageSize: input.pageSize,
-              queryMode: "projected",
-              deriveDetails: true,
-              state: "pending",
-            })),
+            actRootStreamTypes
+              .filter((streamType) => streamType !== "note")
+              .map((streamType) => ({
+                runId: created.id,
+                sourceDatabaseKey: input.sourceDatabaseKey,
+                streamType,
+                checkpointKind: "list",
+                partitionKey: `root:${streamType}`,
+                requiredness: "required",
+                nextSkip: 0,
+                pageSize: input.pageSize,
+                queryMode: "projected",
+                deriveDetails: true,
+                state: "pending",
+              })),
           );
           return { runId: created.id, created: true };
         }
