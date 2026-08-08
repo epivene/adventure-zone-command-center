@@ -187,7 +187,7 @@ function isActPage(value: unknown): value is ActPage {
 function pathTemplate(checkpoint: WorkerCheckpoint): string {
   if (checkpoint.checkpointKind === "relationship") {
     if (checkpoint.streamType === "note") {
-      return "/api/contacts/{id}/note";
+      return "/api/contacts/{id}/notes";
     }
     const relationship = relationships[checkpoint.streamType];
     if (!relationship) throw new ActApiError("invalid_response", false);

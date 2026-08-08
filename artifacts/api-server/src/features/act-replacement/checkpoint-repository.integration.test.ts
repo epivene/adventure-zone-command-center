@@ -518,6 +518,88 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     });
   });
 
+  it("resumes notes that failed on the retired singular contact-note route", async () => {
+    const input = startInput();
+    const { runId } = await repository.createRun(input);
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const noteCheckpointId = await seedCheckpoint({
+      runId,
+      databaseKey: input.sourceDatabaseKey,
+      streamType: "note",
+      kind: "relationship",
+      partitionKey: "contact-notes:contact-1",
+      state: "failed",
+      queryMode: "plain",
+      deriveDetails: false,
+    });
+    const unrelatedCheckpointId = await seedCheckpoint({
+      runId,
+      databaseKey: input.sourceDatabaseKey,
+      streamType: "contact",
+      kind: "detail",
+      partitionKey: "detail:contact-1",
+      state: "failed",
+    });
+    await pool.query(
+      `UPDATE act_replacement_checkpoints
+       SET error_code = 'not_found', retryable = false, completed_at = $2
+       WHERE id IN ($1, $3)`,
+      [noteCheckpointId, now, unrelatedCheckpointId],
+    );
+    await pool.query(
+      `UPDATE act_replacement_runs
+       SET phase = 'failed', last_error_code = 'not_found', completed_at = $2
+       WHERE id = $1`,
+      [runId, now],
+    );
+
+    await expect(repository.summarize(runId)).resolves.toMatchObject({
+      phase: "failed",
+      canResume: true,
+    });
+
+    await repository.resumeRun({ runId, now });
+
+    await expect(
+      pool.query<{ id: string; state: string; error_code: string | null }>(
+        `SELECT id, state, error_code
+         FROM act_replacement_checkpoints
+         WHERE id IN ($1, $2)
+         ORDER BY id`,
+        [noteCheckpointId, unrelatedCheckpointId],
+      ),
+    ).resolves.toMatchObject({
+      rows: expect.arrayContaining([
+        { id: noteCheckpointId, state: "pending", error_code: null },
+        {
+          id: unrelatedCheckpointId,
+          state: "failed",
+          error_code: "not_found",
+        },
+      ]),
+    });
+    await expect(
+      pool.query<{
+        phase: string;
+        last_error_code: string | null;
+        completed_at: Date | null;
+      }>(
+        `SELECT phase, last_error_code, completed_at
+         FROM act_replacement_runs
+         WHERE id = $1`,
+        [runId],
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        {
+          phase: "extracting",
+          last_error_code: null,
+          completed_at: null,
+        },
+      ],
+    });
+  });
+
   it("terminalizes every open checkpoint on permission denial", async () => {
     const input = startInput();
     const { runId } = await repository.createRun(input);

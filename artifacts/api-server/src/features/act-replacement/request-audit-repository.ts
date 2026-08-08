@@ -50,7 +50,7 @@ const safePathTemplates = new Set([
   "/api/contacts",
   "/api/contacts/{id}",
   "/api/contacts/{id}/companies",
-  "/api/contacts/{id}/note",
+  "/api/contacts/{id}/notes",
   "/api/opportunities",
   "/api/opportunities/{id}",
   "/api/opportunities/{id}/companies",
