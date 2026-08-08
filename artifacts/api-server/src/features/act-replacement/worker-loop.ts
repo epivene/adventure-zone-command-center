@@ -2,6 +2,7 @@ import type {
   ActExtractionStepResult,
   ActExtractionWorker,
 } from "./extraction-worker";
+import { logger } from "@/lib/logger";
 
 export interface WorkerLoopScheduler {
   schedule(task: () => void, delayMs: number): unknown;
@@ -76,9 +77,18 @@ export class ActExtractionWorkerLoop {
         workerId: this.dependencies.workerId,
         now: this.dependencies.clock.now(),
       });
-    } catch {
+    } catch (err) {
       // A failed process-local step owns no durable run state. The next tick
       // will claim whatever durable work is eligible after the idle delay.
+      logger.error(
+        {
+          errorCode:
+            err && typeof err === "object" && "code" in err
+              ? String((err as { code?: unknown }).code)
+              : "unknown",
+        },
+        "Act extraction worker step failed outside durable error handling",
+      );
     }
     if (!this.stopped) this.schedule(result.kind === "idle" ? 2_000 : 0);
   }
@@ -86,7 +96,7 @@ export class ActExtractionWorkerLoop {
 
 export type OrganizerLoopWorker = { runOne(input: { workerId: string; now: Date }): Promise<{ kind: "idle" | "progress" }>; };
 
-/** Generic durable organizer scheduler; durable claims make restarts safe. */
+/** Generic durable organizer scheduler; durable claims make restart-safe. */
 export class ActOrganizerWorkerLoop {
   private started = false; private stopped = false; private pending: unknown = null; private active: Promise<void> | null = null;
   constructor(private readonly dependencies: { worker: OrganizerLoopWorker; workerId: string; clock: Clock; scheduler: WorkerLoopScheduler }) {}
