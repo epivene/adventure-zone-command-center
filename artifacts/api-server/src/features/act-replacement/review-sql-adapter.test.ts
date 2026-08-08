@@ -26,6 +26,28 @@ describe("durable review adapter projections", () => {
     ]));
   });
 
+  it("reclaims a ready run only when no apply work has started", async () => {
+    let whereClause: unknown;
+    const database = {
+      update: () => ({
+        set: () => ({
+          where: (condition: unknown) => {
+            whereClause = condition;
+            return { returning: async () => [] };
+          },
+        }),
+      }),
+    } as never;
+
+    await new DrizzleProductionOrganizerStore(database, { sourceDatabaseKey: "act-db" }).claim("run-ready");
+    const rendered = new PgDialect().sqlToQuery(sql`${whereClause as never}`);
+
+    expect(rendered.sql).toContain("act_replacement_apply_batches");
+    expect(rendered.sql).toContain("act_replacement_apply_operations");
+    expect(rendered.sql.match(/not exists/g)).toHaveLength(2);
+    expect(rendered.params).toEqual(expect.arrayContaining(["ready_to_apply", "pending"]));
+  });
+
   it("supersedes a production decision with a non-UUID owner identity", async () => {
     let supersededBy: unknown;
     const source = {
