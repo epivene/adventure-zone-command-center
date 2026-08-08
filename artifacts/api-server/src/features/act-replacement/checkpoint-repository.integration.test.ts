@@ -600,6 +600,45 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     });
   });
 
+  it("requeues a leased checkpoint even when its recorded expiry is in the future", async () => {
+    const input = startInput();
+    const { runId } = await repository.createRun(input);
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const checkpointId = await seedCheckpoint({
+      runId,
+      databaseKey: input.sourceDatabaseKey,
+      streamType: "company_contact",
+      kind: "relationship",
+      partitionKey: "company-contact:company-1",
+      state: "leased",
+      leaseOwner: "stranded-worker",
+      leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+
+    await repository.resumeRun({ runId, now });
+
+    await expect(
+      pool.query<{
+        state: string;
+        lease_owner: string | null;
+        lease_expires_at: Date | null;
+      }>(
+        `SELECT state, lease_owner, lease_expires_at
+         FROM act_replacement_checkpoints
+         WHERE id = $1`,
+        [checkpointId],
+      ),
+    ).resolves.toEqual({
+      rows: [
+        {
+          state: "pending",
+          lease_owner: null,
+          lease_expires_at: null,
+        },
+      ],
+    });
+  });
+
   it("terminalizes every open checkpoint on permission denial", async () => {
     const input = startInput();
     const { runId } = await repository.createRun(input);
