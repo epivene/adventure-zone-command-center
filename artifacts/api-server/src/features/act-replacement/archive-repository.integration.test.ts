@@ -10,6 +10,7 @@ import * as schema from "@workspace/db/schema";
 import {
   ActArchiveConflictError,
   archivePageAction,
+  archiveReceiptAction,
   derivedCheckpointsAllowedByCapabilities,
   DrizzleActSourceArchiveRepository,
   type ArchiveSourceItem,
@@ -58,6 +59,26 @@ describe("Act derived checkpoint capability filtering", () => {
       new ActArchiveConflictError(),
     );
     expect(archivePageAction("extracting", false)).toBe("write");
+  });
+
+  it("accepts a replay when only volatile Act page metadata changed", () => {
+    expect(
+      archiveReceiptAction("extracting", {
+        runId: "run-1",
+        streamType: "company_contact",
+        nextSkip: 100,
+        queryMode: "projected",
+        pageFingerprint: "first-response",
+        responseRows: 100,
+      }, {
+        runId: "run-1",
+        streamType: "company_contact",
+        nextSkip: null,
+        queryMode: "plain",
+        pageFingerprint: "reordered-replay",
+        responseRows: 99,
+      }),
+    ).toBe("replay");
   });
 });
 
@@ -205,7 +226,7 @@ describeWithPostgres("Act source archive repository on PostgreSQL", () => {
     };
   }
 
-  it("archives a page, all seven counter deltas, and derived work in one commit", async () => {
+  it("archives a page and treats a changed Act replay as the same committed page", async () => {
     const context = await seedLeasedCheckpoint({ databaseKey: "archive-page" });
     const items = [
       sourceItem({ sourceKey: "complete", actRecordId: "contact-complete" }),
@@ -326,11 +347,11 @@ describeWithPostgres("Act source archive repository on PostgreSQL", () => {
     await expect(
       repository.archiveCheckpointPage({
         ...context,
-        items,
+        items: [items[0]!],
         derivedCheckpoints: [],
-        nextSkip: 3,
-        queryMode: "plain",
-        pageFingerprint: "page-one",
+        nextSkip: null,
+        queryMode: "projected",
+        pageFingerprint: "page-one-reordered-replay",
         now,
       }),
     ).resolves.toEqual({
