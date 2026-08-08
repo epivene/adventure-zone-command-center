@@ -639,6 +639,41 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     });
   });
 
+  it("locks the run before waiting to recover a checkpoint", async () => {
+    const input = startInput();
+    const { runId } = await repository.createRun(input);
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const checkpointId = await seedCheckpoint({
+      runId,
+      databaseKey: input.sourceDatabaseKey,
+      streamType: "company_contact",
+      kind: "relationship",
+      partitionKey: "company-contact:lock-order",
+      state: "leased",
+      leaseOwner: "stranded-worker",
+      leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+    });
+    const blocker = await pool.connect();
+    await blocker.query("BEGIN");
+    await blocker.query(
+      "SELECT id FROM act_replacement_checkpoints WHERE id = $1 FOR UPDATE",
+      [checkpointId],
+    );
+
+    const resuming = repository.resumeRun({ runId, now });
+    try {
+      await waitForRowLock(
+        "SELECT id FROM act_replacement_runs WHERE id = $1",
+        [runId],
+      );
+    } finally {
+      await blocker.query("ROLLBACK");
+      blocker.release();
+    }
+
+    await expect(resuming).resolves.toBeUndefined();
+  });
+
   it("terminalizes every open checkpoint on permission denial", async () => {
     const input = startInput();
     const { runId } = await repository.createRun(input);
