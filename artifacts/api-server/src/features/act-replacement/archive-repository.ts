@@ -95,8 +95,28 @@ export function archivePageAction(
   return "write";
 }
 
-function sameNullableNumber(left: number | null, right: number | null) {
-  return left === right;
+type ArchivePageReplayMetadata = {
+  runId: string;
+  streamType: string;
+  nextSkip: number | null;
+  queryMode: string;
+  pageFingerprint: string;
+  responseRows: number;
+};
+
+export function archiveReceiptAction(
+  runPhase: string,
+  receipt: ArchivePageReplayMetadata,
+  replay: ArchivePageReplayMetadata,
+): "replay" {
+  if (
+    receipt.runId !== replay.runId ||
+    receipt.streamType !== replay.streamType
+  ) {
+    conflicts();
+  }
+  archivePageAction(runPhase, true);
+  return "replay";
 }
 
 function safeDatabaseErrorMetadata(error: unknown) {
@@ -221,17 +241,14 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           )
           .limit(1);
         if (receipt) {
-          if (
-            receipt.runId !== input.runId ||
-            receipt.streamType !== checkpoint.streamType ||
-            !sameNullableNumber(receipt.nextSkip, input.nextSkip) ||
-            receipt.queryMode !== input.queryMode ||
-            receipt.pageFingerprint !== input.pageFingerprint ||
-            receipt.responseRows !== input.items.length
-          ) {
-            conflicts();
-          }
-          archivePageAction(run.phase, true);
+          archiveReceiptAction(run.phase, receipt, {
+            runId: input.runId,
+            streamType: checkpoint.streamType,
+            nextSkip: input.nextSkip,
+            queryMode: input.queryMode,
+            pageFingerprint: input.pageFingerprint,
+            responseRows: input.items.length,
+          });
           return zeroCounters();
         }
 
