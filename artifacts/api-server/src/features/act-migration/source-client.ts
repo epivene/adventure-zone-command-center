@@ -84,6 +84,10 @@ export interface ActMigrationSourceClient {
   ): Promise<ActPage>;
   listActivities(request: ActPageRequest): Promise<ActPage>;
   listNotes(request: ActPageRequest): Promise<ActPage>;
+  listNotesForContact(
+    contactId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
   listHistory(request: ActPageRequest): Promise<ActPage>;
   // Per-record relationship endpoints — used as fallback when plain-mode
   // responses omit inline expansions.
@@ -240,6 +244,14 @@ export class HttpActMigrationSourceClient implements ActReplacementSourceClient 
 
   listNotes(request: ActPageRequest) {
     return this.list("/api/notes", "note", request);
+  }
+
+  listNotesForContact(contactId: string, request: ActPageRequest) {
+    return this.list(
+      `/api/contacts/${encodeURIComponent(contactId)}/note`,
+      "note",
+      request,
+    );
   }
 
   listHistory(request: ActPageRequest) {
