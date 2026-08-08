@@ -28,6 +28,15 @@ function input(): ImportWorkflowProjectionInput {
 }
 
 describe("durable production workflow projection", () => {
+  it("allows an unapplied organized archive to rebuild its review manifest", () => {
+    const state = input();
+
+    expect(projectImportWorkflow(state).canOrganize).toBe(true);
+
+    state.operations[0]!.status = "applied";
+    expect(projectImportWorkflow(state).canOrganize).toBe(false);
+  });
+
   it("counts already-present operations only from verified terminal batches", () => {
     const state = input();
     state.operations = [
