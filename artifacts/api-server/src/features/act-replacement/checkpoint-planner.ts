@@ -193,6 +193,25 @@ function relationshipCheckpoint(input: {
   };
 }
 
+function contactNotesCheckpoint(input: {
+  contactActRecordId: string;
+  pageSize: number;
+}): DerivedCheckpointSpec {
+  return {
+    streamType: "note",
+    checkpointKind: "relationship",
+    partitionKey: `contact-notes:${encodeURIComponent(input.contactActRecordId)}`,
+    requiredness: "required",
+    parentSourceRecordId: null,
+    parentActRecordId: input.contactActRecordId,
+    sourceRecordId: null,
+    nextSkip: 0,
+    pageSize: input.pageSize,
+    queryMode: "plain",
+    deriveDetails: false,
+  };
+}
+
 export function planRootDerivedCheckpoints(input: {
   rootStream: ActRootStreamType;
   items: readonly ArchiveSourceItem[];
@@ -203,6 +222,7 @@ export function planRootDerivedCheckpoints(input: {
   const result: DerivedCheckpointSpec[] = [];
   const detailIds = new Set<string>();
   const relationshipKeys = new Set<string>();
+  const contactNoteIds = new Set<string>();
   const targets = relationshipTargets[input.rootStream] ?? [];
 
   for (const item of input.items) {
@@ -218,6 +238,15 @@ export function planRootDerivedCheckpoints(input: {
         detailCheckpoint({
           streamType: input.rootStream,
           actRecordId,
+          pageSize: input.pageSize,
+        }),
+      );
+    }
+    if (input.rootStream === "contact" && !contactNoteIds.has(actRecordId)) {
+      contactNoteIds.add(actRecordId);
+      result.push(
+        contactNotesCheckpoint({
+          contactActRecordId: actRecordId,
           pageSize: input.pageSize,
         }),
       );
