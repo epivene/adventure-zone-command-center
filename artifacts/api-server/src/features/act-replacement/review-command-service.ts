@@ -10,6 +10,7 @@ export type SaveDecisionInput = Omit<Decision, "id" | "active"> & { requestKey: 
 export type ReviewCommandStore = {
   getManifest(runId: string): Promise<ActOrganizeManifest | null>;
   organize(runId: string): Promise<{ status: "ready_to_apply" | "complete_with_issues"; manifest: ActOrganizeManifest }>;
+  startOrganize(runId: string): Promise<{ status: "organizing" }>;
   getSource(sourceRecordId: string): Promise<{ sourceVersionId: string } | null>;
   listAssignments(sourceRecordId: string): Promise<Assignment[]>;
   saveAssignment(input: SaveAssignmentInput): Promise<Assignment>;
@@ -41,6 +42,7 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
   seed(runId: string, manifest: ActOrganizeManifest, sourceVersions: Record<string, string> = {}) { this.manifests.set(runId, manifest); for (const [id, version] of Object.entries(sourceVersions)) this.sources.set(id, { sourceVersionId: version }); }
   async getManifest(runId: string) { return this.manifests.get(runId) ?? null; }
   async organize(runId: string) { const manifest = this.manifests.get(runId); if (!manifest) fail("organize_unavailable", 409); return { status: "ready_to_apply" as const, manifest }; }
+  async startOrganize(runId: string) { await this.organize(runId); return { status: "organizing" as const }; }
   async getSource(id: string) { return this.sources.get(id) ?? null; }
   async listAssignments(id: string) { return (this.assignments.get(id) ?? []).filter((row) => row.active); }
   async saveAssignment(input: SaveAssignmentInput) { const rows = this.assignments.get(input.sourceRecordId) ?? []; const prior = rows.find((row) => row.targetEntityType === input.targetEntityType && row.targetEntityId === input.targetEntityId && row.active); if (prior) return prior; const row: Assignment = { ...input, id: `${input.sourceRecordId}:${rows.length + 1}`, active: true }; rows.push(row); this.assignments.set(input.sourceRecordId, rows); return row; }
@@ -68,6 +70,7 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
 export class ReviewCommandService {
   constructor(private readonly store: ReviewCommandStore) {}
   organize(runId: string) { return this.store.organize(runId); }
+  startOrganize(runId: string) { return this.store.startOrganize(runId); }
   async assign(input: { runId: string; sourceRecordId: string; targetEntityType: string; targetEntityId: string; sourceVersionId: string; expectedSourceVersionId: string; assignedBy: string; requestKey: string; role?: string; isPrimary?: boolean }) {
     if (!assignmentTypes.has(input.targetEntityType) || !clean(input.targetEntityId) || !clean(input.assignedBy) || !clean(input.requestKey)) fail("invalid_assignment");
     const source = await this.store.getSource(input.sourceRecordId); if (!source) fail("source_not_found", 404);

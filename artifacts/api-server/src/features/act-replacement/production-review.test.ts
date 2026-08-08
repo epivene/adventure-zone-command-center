@@ -28,6 +28,18 @@ function input(): ImportWorkflowProjectionInput {
 }
 
 describe("durable production workflow projection", () => {
+  it("allows a crashed organizer to be retried after its durable lease expires", () => {
+    const state = input();
+    state.phase = "organizing";
+    state.organizerLeaseExpiresAt = new Date("2026-08-08T20:00:00.000Z");
+    state.now = new Date("2026-08-08T20:00:01.000Z");
+
+    expect(projectImportWorkflow(state).canOrganize).toBe(true);
+
+    state.organizerLeaseExpiresAt = new Date("2026-08-08T20:10:00.000Z");
+    expect(projectImportWorkflow(state).canOrganize).toBe(false);
+  });
+
   it("allows an unapplied organized archive to rebuild its review manifest", () => {
     const state = input();
 
@@ -283,10 +295,31 @@ describe("durable production workflow projection", () => {
 
   it("projects required checkpoint inventory and deterministic batch order", () => {
     const state = input();
-    state.requiredStreams = ["contact", "company", "company_contact", "contact"];
+    state.requiredStreams = [
+      "contact",
+      "company",
+      "company_contact",
+      "contact",
+    ];
     state.batches = [
-      { requestKey: "later", startCursor: 25, manifestDigest: CURRENT_DIGEST, operationIds: [], state: "complete", createdAt: new Date("2026-08-07T12:01:00Z"), id: "b" },
-      { requestKey: "first", startCursor: 0, manifestDigest: CURRENT_DIGEST, operationIds: [], state: "complete_with_issues", createdAt: new Date("2026-08-07T12:00:00Z"), id: "a" },
+      {
+        requestKey: "later",
+        startCursor: 25,
+        manifestDigest: CURRENT_DIGEST,
+        operationIds: [],
+        state: "complete",
+        createdAt: new Date("2026-08-07T12:01:00Z"),
+        id: "b",
+      },
+      {
+        requestKey: "first",
+        startCursor: 0,
+        manifestDigest: CURRENT_DIGEST,
+        operationIds: [],
+        state: "complete_with_issues",
+        createdAt: new Date("2026-08-07T12:00:00Z"),
+        id: "a",
+      },
     ];
 
     expect(projectImportWorkflow(state)).toMatchObject({

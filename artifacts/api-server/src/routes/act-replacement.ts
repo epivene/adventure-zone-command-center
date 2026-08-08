@@ -602,11 +602,8 @@ export function createActReplacementRouter(
           ...context,
         });
         if (!owned) return runNotFound(res);
-        const result = await review.commands.organize(owned.runId);
-        res.status(202).json({
-          status: result.status,
-          manifest: safeManifestProjection(result.manifest),
-        });
+        const result = await review.commands.startOrganize(owned.runId);
+        res.status(202).json(result);
       } catch (error) {
         handleRouteError(error, res);
       }
