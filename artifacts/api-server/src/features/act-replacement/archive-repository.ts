@@ -99,6 +99,47 @@ function sameNullableNumber(left: number | null, right: number | null) {
   return left === right;
 }
 
+function safeDatabaseErrorMetadata(error: unknown) {
+  let current = error;
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (!current || typeof current !== "object") break;
+    const metadata = current as {
+      name?: unknown;
+      code?: unknown;
+      constraint?: unknown;
+      table?: unknown;
+      column?: unknown;
+      cause?: unknown;
+    };
+    if (
+      typeof metadata.code === "string" ||
+      typeof metadata.constraint === "string" ||
+      typeof metadata.table === "string" ||
+      typeof metadata.column === "string"
+    ) {
+      return {
+        errorName:
+          typeof metadata.name === "string" ? metadata.name : "unknown",
+        pgCode:
+          typeof metadata.code === "string" ? metadata.code : "unknown",
+        constraint:
+          typeof metadata.constraint === "string" ? metadata.constraint : null,
+        table: typeof metadata.table === "string" ? metadata.table : null,
+        column: typeof metadata.column === "string" ? metadata.column : null,
+      };
+    }
+    current = metadata.cause;
+  }
+  return {
+    errorName:
+      error instanceof Error && error.name ? error.name : "unknown",
+    pgCode: "unknown",
+    constraint: null,
+    table: null,
+    column: null,
+  };
+}
+
 type TerminalCompleteness = Exclude<ActArchiveCompleteness, "discovered">;
 
 function terminalCompleteness(
@@ -229,11 +270,13 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
 
         stage = "archive_items";
         for (const item of input.items) {
+          stage = "sanitize_item";
           const sanitizedRaw = sanitizeSourceContent(item.raw);
           const sanitizedEvidence = sanitizeSourceContent(
             item.relationshipEvidence,
           );
           const fingerprint = fingerprintSourceContent(item.raw);
+          stage = "find_identity";
           let [identity] = await transaction
             .select({
               id: actSourceRecords.id,
@@ -260,6 +303,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
               : item.archiveCompleteness;
 
           if (!identity) {
+            stage = "insert_identity";
             const [insertedIdentity] = await transaction
               .insert(actSourceRecords)
               .values({
@@ -291,6 +335,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           }
 
           if (!identity) {
+            stage = "reload_identity";
             [identity] = await transaction
               .select({
                 id: actSourceRecords.id,
@@ -320,6 +365,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
             throw new Error("Act archive identity was not stored.");
 
           if (previousCompleteness !== undefined) {
+            stage = "update_identity";
             await transaction
               .update(actSourceRecords)
               .set({
@@ -333,6 +379,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
               .where(eq(actSourceRecords.id, identity.id));
           }
 
+          stage = "insert_version";
           const [insertedVersion] = await transaction
             .insert(actSourceRecordVersions)
             .values({
@@ -356,6 +403,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
             .returning({ id: actSourceRecordVersions.id });
           if (insertedVersion) snapshotVersionsInserted += 1;
 
+          stage = "load_version";
           const version =
             insertedVersion ??
             (
@@ -372,6 +420,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
             )[0];
           if (!version) throw new Error("Act archive version was not stored.");
 
+          stage = "update_latest_version";
           await transaction
             .update(actSourceRecords)
             .set({
@@ -381,6 +430,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
             })
             .where(eq(actSourceRecords.id, identity.id));
 
+          stage = "insert_observation";
           const [insertedObservation] = await transaction
             .insert(actReplacementObservations)
             .values({
@@ -403,6 +453,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
             const nextTerminal = terminalCompleteness(nextCompleteness);
             if (nextTerminal) completenessDeltas[nextTerminal] += 1;
           } else {
+            stage = "update_observation";
             await transaction
               .update(actReplacementObservations)
               .set({
@@ -601,27 +652,11 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
         return counters;
       });
     } catch (error) {
-      const metadata =
-        error && typeof error === "object"
-          ? (error as {
-              code?: unknown;
-              constraint?: unknown;
-              table?: unknown;
-              column?: unknown;
-            })
-          : {};
+      const metadata = safeDatabaseErrorMetadata(error);
       logger.error(
         {
           stage,
-          pgCode:
-            typeof metadata.code === "string" ? metadata.code : "unknown",
-          constraint:
-            typeof metadata.constraint === "string"
-              ? metadata.constraint
-              : null,
-          table: typeof metadata.table === "string" ? metadata.table : null,
-          column:
-            typeof metadata.column === "string" ? metadata.column : null,
+          ...metadata,
         },
         "Act archive transaction failed",
       );
