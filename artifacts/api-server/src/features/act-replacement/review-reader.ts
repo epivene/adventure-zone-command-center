@@ -63,7 +63,11 @@ export async function readReview(reader: ReviewReader, input: { runId: string; p
   const search = input.search?.trim().toLowerCase();
   const rows = manifest.outcomes.filter((outcome) => {
     const source = sourceById.get(outcome.sourceRecordId);
-    if (input.state && outcome.state !== input.state) return false;
+    if (
+      input.state === "needs_review" &&
+      !["awaiting_review", "unassigned", "unsupported"].includes(outcome.state)
+    ) return false;
+    if (input.state && input.state !== "needs_review" && outcome.state !== input.state) return false;
     if (input.issue && !outcome.issues.some((item) => item.code === input.issue)) return false;
     if (!search) return true;
     return `${outcome.sourceRecordId} ${source?.streamType ?? ""} ${JSON.stringify(source?.display ?? {})}`.toLowerCase().includes(search);
