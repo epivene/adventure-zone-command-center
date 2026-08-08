@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, like, lte, or, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -183,13 +183,23 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
   async resumeRun(input: { runId: string; now: Date }): Promise<void> {
     return this.protect(async () => {
       await this.database.transaction(async (transaction) => {
-        await transaction
+        const recoverableContactNotes = and(
+          eq(actReplacementCheckpoints.state, "failed"),
+          eq(actReplacementCheckpoints.streamType, "note"),
+          eq(actReplacementCheckpoints.checkpointKind, "relationship"),
+          like(actReplacementCheckpoints.partitionKey, "contact-notes:%"),
+          eq(actReplacementCheckpoints.errorCode, "not_found"),
+        );
+        const recovered = await transaction
           .update(actReplacementCheckpoints)
           .set({
             state: "pending",
             leaseOwner: null,
             leaseExpiresAt: null,
             retryAfter: null,
+            retryable: true,
+            errorCode: null,
+            completedAt: null,
             updatedAt: input.now,
           })
           .where(
@@ -201,9 +211,22 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
                   eq(actReplacementCheckpoints.state, "leased"),
                   lte(actReplacementCheckpoints.leaseExpiresAt, input.now),
                 ),
+                recoverableContactNotes,
               ),
             ),
-          );
+          )
+          .returning({ id: actReplacementCheckpoints.id });
+        if (recovered.length > 0) {
+          await transaction
+            .update(actReplacementRuns)
+            .set({
+              phase: "extracting",
+              lastErrorCode: null,
+              completedAt: null,
+              updatedAt: input.now,
+            })
+            .where(eq(actReplacementRuns.id, input.runId));
+        }
       });
     });
   }
@@ -742,6 +765,20 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
               `${streamType}:${checkpointKind}:${safeErrorCode(errorCode) ?? "invalid_response"}`,
           ),
       ).size;
+      const hasRecoverableContactNoteFailure = checkpoints.some(
+        ({
+          state,
+          streamType,
+          checkpointKind,
+          partitionKey,
+          errorCode,
+        }) =>
+          state === "failed" &&
+          streamType === "note" &&
+          checkpointKind === "relationship" &&
+          partitionKey.startsWith("contact-notes:") &&
+          errorCode === "not_found",
+      );
       return {
         runId: run.id,
         phase: run.phase as ActReplacementStatus["phase"],
@@ -753,12 +790,13 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
           unsupportedCapabilities,
         },
         canResume:
-          run.phase === "extracting" &&
-          checkpoints.some(({ state }) =>
-            openCheckpointStates.includes(
-              state as (typeof openCheckpointStates)[number],
-            ),
-          ),
+          (run.phase === "extracting" &&
+            checkpoints.some(({ state }) =>
+              openCheckpointStates.includes(
+                state as (typeof openCheckpointStates)[number],
+              ),
+            )) ||
+          (run.phase === "failed" && hasRecoverableContactNoteFailure),
         canStartOver:
           run.phase === "failed" ||
           activeRunPhases.includes(
