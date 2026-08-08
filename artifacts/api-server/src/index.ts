@@ -36,8 +36,18 @@ const server = app.listen(port, async () => {
     const runtime = await extractionRuntimePromise;
     extractionRuntime = runtime;
     if (!shutdownRequested) runtime.start();
-  } catch {
-    logger.error("Act extraction worker could not be started");
+  } catch (err) {
+    // Keep the API alive, but include the safe error class in Render logs so a
+    // failed worker startup cannot masquerade as an empty Act import.
+    logger.error(
+      {
+        errorCode:
+          err && typeof err === "object" && "code" in err
+            ? String((err as { code?: unknown }).code)
+            : "unknown",
+      },
+      "Act extraction worker could not be started",
+    );
   }
 });
 
