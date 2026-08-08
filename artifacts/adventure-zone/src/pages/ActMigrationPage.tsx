@@ -6,6 +6,7 @@ import {
   ACT_PAGE_SIZES,
   applyNext,
   approveSafeDefaults,
+  decideReviewRecord,
   getLatestRun,
   getReview,
   getRun,
@@ -16,6 +17,7 @@ import {
   type ActPageSize,
   type ActReplacementWorkflowStatus,
   type ReviewPage,
+  type ReviewRow,
 } from "@/features/act-replacement/act-replacement-client";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
@@ -96,7 +98,9 @@ export default function ActMigrationPage() {
   const [review, setReview] = useState<ReviewPage | null>(null);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewSearch, setReviewSearch] = useState("");
+  const [reviewRevision, setReviewRevision] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [resolvingSourceRecordId, setResolvingSourceRecordId] = useState<string | null>(null);
   const [busy, setBusy] = useState<
     "fetch" | "organize" | "apply" | "review" | null
   >(null);
@@ -147,6 +151,7 @@ export default function ActMigrationPage() {
       page: reviewPage,
       pageSize: 25,
       search: reviewSearch,
+      state: "needs_review",
     })
       .then((result) => {
         if (current) setReview(result);
@@ -161,7 +166,7 @@ export default function ActMigrationPage() {
     return () => {
       current = false;
     };
-  }, [run?.manifestDigest, run?.runId, reviewPage, reviewSearch]);
+  }, [run?.manifestDigest, run?.runId, reviewPage, reviewRevision, reviewSearch]);
 
   const refreshRun = async (runId: string) => {
     const result = await getRun(runId);
@@ -272,6 +277,30 @@ export default function ActMigrationPage() {
     }
   };
 
+  const importAmbiguousAsNew = async (row: ReviewRow) => {
+    if (!run?.canOrganize || resolvingSourceRecordId || busy !== null) return;
+    setResolvingSourceRecordId(row.sourceRecordId);
+    setBusy("review");
+    setError(null);
+    try {
+      // The decision endpoint saves the version-bound decision and atomically
+      // rebuilds the manifest from the existing archive.
+      await decideReviewRecord(run.runId, row.sourceRecordId, {
+        sourceVersionId: row.sourceVersionId,
+        scope: "duplicate_identity",
+        decision: "keep_separate",
+      });
+      await refreshRun(run.runId);
+      setReviewPage(1);
+      setReviewRevision((current) => current + 1);
+    } catch (caught) {
+      setError(errorCode(caught) ?? "Could not save the review decision");
+    } finally {
+      setResolvingSourceRecordId(null);
+      setBusy(null);
+    }
+  };
+
   const reviewIssues = async () => {
     if (!run) return;
     setBusy("review");
@@ -355,7 +384,9 @@ export default function ActMigrationPage() {
             Organize
           </p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">
-            Prepare the archived records for review
+            {run.phase === "extract_complete"
+              ? "Prepare the archived records for review"
+              : "Rebuild the review from the saved archive"}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
             This builds a durable review manifest without changing any profile.
@@ -366,7 +397,11 @@ export default function ActMigrationPage() {
             onClick={() => void organize()}
             className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
           >
-            {busy === "organize" ? "Organizing…" : "Organize fetched records"}
+            {busy === "organize"
+              ? "Organizing…"
+              : run.phase === "extract_complete"
+                ? "Organize fetched records"
+                : "Rebuild review from archive"}
           </button>
         </section>
       )}
@@ -377,6 +412,7 @@ export default function ActMigrationPage() {
           reviewRequiredCount={run.reviewRequiredCount}
           review={review}
           loading={reviewLoading}
+          canResolveAmbiguous={run.canOrganize}
           canImport={
             run.canApplySafe && busy === null && !applyLocked && !requiresAttention
           }
@@ -390,6 +426,8 @@ export default function ActMigrationPage() {
             setReviewSearch(search);
           }}
           onPageChange={setReviewPage}
+          onImportAsNew={(row) => void importAmbiguousAsNew(row)}
+          resolvingSourceRecordId={resolvingSourceRecordId}
           onImport={() => {
             setRetryingFailed(false);
             setShowConfirmation(true);

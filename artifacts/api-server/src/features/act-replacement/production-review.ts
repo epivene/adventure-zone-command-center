@@ -215,7 +215,11 @@ export function projectImportWorkflow(
     ).length,
     manifestDigest,
     nextApplyCursor,
-    canOrganize: input.phase === "extract_complete",
+    canOrganize:
+      input.phase === "extract_complete" ||
+      (input.phase === "ready_to_apply" &&
+        input.batches.length === 0 &&
+        input.operations.every((operation) => operation.status === "pending")),
     canApplySafe:
       manifestDigest !== null &&
       safeOperationCount > 0 &&
@@ -392,7 +396,7 @@ class LazyReviewRuntime {
         });
         const applyService: ActApplyService = new ApplyService(
           applyRepository,
-          true,
+          process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
         );
         const store: ReviewCommandStore = new DrizzleActReviewCommandStore(
           db,

@@ -17,6 +17,7 @@ const client = vi.hoisted(() => ({
   supersedeRun: vi.fn(),
   organizeRun: vi.fn(),
   getReview: vi.fn(),
+  decideReviewRecord: vi.fn(),
   approveSafeDefaults: vi.fn(),
   applyNext: vi.fn(),
 }));
@@ -174,6 +175,124 @@ describe("ActMigrationPage", () => {
     expect(
       screen.queryByRole("button", { name: /overwrite|delete/i }),
     ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(client.getReview).toHaveBeenCalledWith(
+        readyRun().runId,
+        expect.objectContaining({ state: "needs_review" }),
+      ),
+    );
+  });
+
+  it("rebuilds an unapplied review manifest without refetching Act", async () => {
+    const rebuildable = readyRun({ canOrganize: true });
+    client.getLatestRun.mockResolvedValue({ run: rebuildable });
+    client.organizeRun.mockResolvedValue({ status: "ready_to_apply", manifest: { digest } });
+    client.getRun.mockResolvedValue({ run: readyRun({ safeOperationCount: 100, reviewRequiredCount: 2 }) });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Rebuild review from archive" }));
+
+    await waitFor(() => expect(client.organizeRun).toHaveBeenCalledWith(rebuildable.runId));
+    expect(client.startRun).not.toHaveBeenCalled();
+    expect(client.resumeRun).not.toHaveBeenCalled();
+  });
+
+  it("saves an import-as-new decision and reloads the rebuilt review queue", async () => {
+    const run = readyRun({
+      canOrganize: true,
+      safeOperationCount: 0,
+      reviewRequiredCount: 1,
+    });
+    const rebuiltRun = readyRun({
+      canOrganize: true,
+      safeOperationCount: 1,
+      reviewRequiredCount: 0,
+      manifestDigest: "b".repeat(64),
+    });
+    const ambiguousRow = {
+      sourceRecordId: "source-1",
+      sourceVersionId: "version-1",
+      state: "awaiting_review",
+      issueCodes: ["ambiguous_match"],
+      operationKeys: [],
+      streamType: "company",
+      display: { name: "Adventure Zone" },
+    };
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run: rebuiltRun });
+    client.decideReviewRecord.mockResolvedValue({
+      decision: { id: "decision-1" },
+    });
+    client.getReview
+      .mockResolvedValueOnce({
+        page: 1,
+        pageSize: 25,
+        total: 1,
+        manifestDigest: digest,
+        rows: [ambiguousRow],
+      })
+      .mockResolvedValueOnce({
+        page: 1,
+        pageSize: 25,
+        total: 0,
+        manifestDigest: rebuiltRun.manifestDigest,
+        rows: [],
+      });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import as new record" }),
+    );
+
+    await waitFor(() =>
+      expect(client.decideReviewRecord).toHaveBeenCalledWith(
+        run.runId,
+        ambiguousRow.sourceRecordId,
+        {
+          sourceVersionId: ambiguousRow.sourceVersionId,
+          scope: "duplicate_identity",
+          decision: "keep_separate",
+        },
+      ),
+    );
+    await waitFor(() => expect(client.getReview).toHaveBeenCalledTimes(2));
+    expect(client.getReview).toHaveBeenLastCalledWith(
+      run.runId,
+      expect.objectContaining({ page: 1, state: "needs_review" }),
+    );
+    expect(
+      await screen.findByText("No review records match this view."),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer ambiguity decisions after import activity locks rebuilding", async () => {
+    const run = readyRun({ canOrganize: false, reviewRequiredCount: 1 });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getReview.mockResolvedValue({
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      manifestDigest: digest,
+      rows: [
+        {
+          sourceRecordId: "source-1",
+          sourceVersionId: "version-1",
+          state: "awaiting_review",
+          issueCodes: ["ambiguous_match"],
+          operationKeys: [],
+          streamType: "company",
+          display: { name: "Adventure Zone" },
+        },
+      ],
+    });
+
+    render(<ActMigrationPage />);
+
+    expect(await screen.findByText("Adventure Zone")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Import as new record" }),
+    ).not.toBeInTheDocument();
+    expect(client.decideReviewRecord).not.toHaveBeenCalled();
   });
 
   it("organizes an extracted run and refreshes its durable status", async () => {

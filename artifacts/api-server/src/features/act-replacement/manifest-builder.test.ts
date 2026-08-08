@@ -36,14 +36,25 @@ describe("buildActOrganizeManifest", () => {
     expect(first.operations.find((row) => row.sourceRecordId === "s-2")).toBeUndefined();
   });
 
-  it("keeps diagnostics safe and digest canonical", () => {
+  it("imports supported fields while retaining archived-only field diagnostics", () => {
     const result = buildActOrganizeManifest({ runId: "run", sources: [source({ warnings: ["bad field", "bad field"], unsupportedFieldPaths: ["secret.value"] })] });
     expect(result.diagnostics).toEqual([{ code: "unsupported_field", sourceRecordId: "s-1", path: "secret.value" }]);
     expect(result.outcomes[0]).toMatchObject({
-      state: "awaiting_review",
+      state: "ready",
       issues: [{ code: "unsupported_field", reason: "secret.value" }],
     });
-    expect(result.operations).toEqual([]);
+    expect(result.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "s-1",
+      targetType: "organization",
+      action: "create",
+      safeByDefault: true,
+    }));
+    expect(result.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "s-1",
+      targetType: "organization",
+      action: "record_provenance",
+      payload: expect.objectContaining({ unsupportedFieldPaths: ["secret.value"] }),
+    }));
     expect(result.digest).toBe(createHash("sha256").update(JSON.stringify({ operations: result.operations, outcomes: result.outcomes })).digest("hex"));
   });
 
