@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -136,6 +137,68 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ActMigrationPage", () => {
+  it("clears a transient polling error after the next successful refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const organizingRun = readyRun({
+        phase: "organizing",
+        manifestDigest: null,
+        canApplySafe: false,
+      });
+      client.getLatestRun.mockResolvedValue({ run: organizingRun });
+      client.getRun
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce({ run: readyRun() });
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+      expect(screen.getByText("Failed to fetch")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+      expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not overlap slow status polls", async () => {
+    vi.useFakeTimers();
+    try {
+      const organizingRun = readyRun({
+        phase: "organizing",
+        manifestDigest: null,
+        canApplySafe: false,
+      });
+      let finishPoll!: (value: { run: ReturnType<typeof readyRun> }) => void;
+      const slowPoll = new Promise<{ run: ReturnType<typeof readyRun> }>((resolve) => {
+        finishPoll = resolve;
+      });
+      client.getLatestRun.mockResolvedValue({ run: organizingRun });
+      client.getRun.mockReturnValue(slowPoll);
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      await act(async () => {
+        vi.advanceTimersByTime(6_000);
+        await Promise.resolve();
+      });
+
+      expect(client.getRun).toHaveBeenCalledTimes(1);
+      finishPoll({ run: readyRun() });
+      await act(async () => Promise.resolve());
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("offers one import flow without legacy credentials or unsafe controls", async () => {
     render(<ActMigrationPage />);
     expect(
@@ -186,13 +249,24 @@ describe("ActMigrationPage", () => {
   it("rebuilds an unapplied review manifest without refetching Act", async () => {
     const rebuildable = readyRun({ canOrganize: true });
     client.getLatestRun.mockResolvedValue({ run: rebuildable });
-    client.organizeRun.mockResolvedValue({ status: "ready_to_apply", manifest: { digest } });
-    client.getRun.mockResolvedValue({ run: readyRun({ safeOperationCount: 100, reviewRequiredCount: 2 }) });
+    client.organizeRun.mockResolvedValue({
+      status: "ready_to_apply",
+      manifest: { digest },
+    });
+    client.getRun.mockResolvedValue({
+      run: readyRun({ safeOperationCount: 100, reviewRequiredCount: 2 }),
+    });
 
     render(<ActMigrationPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Rebuild review from archive" }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Rebuild review from archive",
+      }),
+    );
 
-    await waitFor(() => expect(client.organizeRun).toHaveBeenCalledWith(rebuildable.runId));
+    await waitFor(() =>
+      expect(client.organizeRun).toHaveBeenCalledWith(rebuildable.runId),
+    );
     expect(client.startRun).not.toHaveBeenCalled();
     expect(client.resumeRun).not.toHaveBeenCalled();
   });
@@ -359,8 +433,7 @@ describe("ActMigrationPage", () => {
     );
     expect(
       calls.every(
-        ([, body]) =>
-          !("approvedOperationIds" in body) && !("cursor" in body),
+        ([, body]) => !("approvedOperationIds" in body) && !("cursor" in body),
       ),
     ).toBe(true);
   });
@@ -467,7 +540,9 @@ describe("ActMigrationPage", () => {
         name: "Review issues before retrying",
       }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Retry failed import" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry failed import" }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Yes, retry failed import" }),
     );
