@@ -248,7 +248,7 @@ export class HttpActMigrationSourceClient implements ActReplacementSourceClient 
 
   listNotesForContact(contactId: string, request: ActPageRequest) {
     return this.list(
-      `/api/contacts/${encodeURIComponent(contactId)}/note`,
+      `/api/contacts/${encodeURIComponent(contactId)}/notes`,
       "note",
       request,
     );
