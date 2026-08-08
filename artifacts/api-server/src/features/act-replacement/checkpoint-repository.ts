@@ -40,6 +40,10 @@ const activeRunPhases = [
 const openCheckpointStates = ["pending", "leased", "retry_wait"] as const;
 const terminalCheckpointStates = ["complete", "unsupported", "failed"] as const;
 export const manualResumeCheckpointStates = ["leased", "retry_wait"] as const;
+export type ActResumeDiagnostics = {
+  recoveredCheckpointCount: number;
+  states: Record<string, number>;
+};
 const loggedFinalizationBlockers = new Set<string>();
 
 function logFinalizationBlocker(
@@ -85,7 +89,10 @@ export interface ActReplacementCheckpointRepository {
     leaseOwner: string;
     now: Date;
   }): Promise<void>;
-  resumeRun(input: { runId: string; now: Date }): Promise<void>;
+  resumeRun(input: {
+    runId: string;
+    now: Date;
+  }): Promise<ActResumeDiagnostics>;
   markDetailCapabilityUnavailable(input: {
     runId: string;
     checkpointId: string;
@@ -197,9 +204,12 @@ function claimedCheckpointValue(
 export class DrizzleActReplacementCheckpointRepository implements ActReplacementCheckpointRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  async resumeRun(input: { runId: string; now: Date }): Promise<void> {
-    return this.protect(async () => {
-      await this.database.transaction(async (transaction) => {
+  async resumeRun(input: {
+    runId: string;
+    now: Date;
+  }): Promise<ActResumeDiagnostics> {
+    const diagnostics = await this.protect(async () => {
+      return this.database.transaction(async (transaction) => {
         await transaction
           .select({ id: actReplacementRuns.id })
           .from(actReplacementRuns)
@@ -237,7 +247,10 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
               ),
             ),
           )
-          .returning({ id: actReplacementCheckpoints.id });
+          .returning({
+            streamType: actReplacementCheckpoints.streamType,
+            checkpointKind: actReplacementCheckpoints.checkpointKind,
+          });
         if (recovered.length > 0) {
           await transaction
             .update(actReplacementRuns)
@@ -249,8 +262,21 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
             })
             .where(eq(actReplacementRuns.id, input.runId));
         }
+        return {
+          recoveredCheckpointCount: recovered.length,
+          states: recovered.reduce<Record<string, number>>((counts, row) => {
+            const key = `${row.streamType}:${row.checkpointKind}`;
+            counts[key] = (counts[key] ?? 0) + 1;
+            return counts;
+          }, {}),
+        };
       });
     });
+    logger.info(
+      { runId: input.runId, ...diagnostics },
+      "Act extraction checkpoints recovered for resume",
+    );
+    return diagnostics;
   }
 
   async createRun(

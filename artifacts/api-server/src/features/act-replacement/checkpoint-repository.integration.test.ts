@@ -615,7 +615,10 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
       leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
     });
 
-    await repository.resumeRun({ runId, now });
+    await expect(repository.resumeRun({ runId, now })).resolves.toEqual({
+      recoveredCheckpointCount: 1,
+      states: { "company_contact:relationship": 1 },
+    });
 
     await expect(
       pool.query<{
@@ -671,7 +674,10 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
       blocker.release();
     }
 
-    await expect(resuming).resolves.toBeUndefined();
+    await expect(resuming).resolves.toEqual({
+      recoveredCheckpointCount: 1,
+      states: { "company_contact:relationship": 1 },
+    });
   });
 
   it("terminalizes every open checkpoint on permission denial", async () => {

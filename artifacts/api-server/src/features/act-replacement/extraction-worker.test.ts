@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ActApiError } from "@/features/act-sync/act-errors";
 import { ActAuthorizationRequiredError } from "@/features/act-sync/act-client";
@@ -15,6 +15,7 @@ import type {
   FinishActRequestAudit,
 } from "./request-audit-repository";
 import type { ClaimedCheckpoint } from "./import-types";
+import { logger } from "@/lib/logger";
 
 const startedAt = new Date("2026-08-04T12:00:00.000Z");
 const completedAt = new Date("2026-08-04T12:00:00.025Z");
@@ -179,6 +180,53 @@ function fixture(
 }
 
 describe("ActExtractionWorker", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("logs a relationship checkpoint claim and successful archival", async () => {
+    const info = vi.spyOn(logger, "info").mockImplementation(() => logger);
+    const test = fixture({
+      claimed: checkpoint({
+        streamType: "company_contact",
+        checkpointKind: "relationship",
+        partitionKey: "company-contact:company-1",
+        parentActRecordId: "company-1",
+      }),
+      sourceResult: {
+        items: [],
+        nextSkip: null,
+        queryMode: "plain",
+      },
+    });
+
+    await test.worker.runOne({ workerId: "worker-a", now: startedAt });
+
+    expect(info).toHaveBeenNthCalledWith(
+      1,
+      {
+        runId: "run-1",
+        checkpointId: "checkpoint-1",
+        streamType: "company_contact",
+        checkpointKind: "relationship",
+        attemptCount: 1,
+      },
+      "Act extraction relationship checkpoint claimed",
+    );
+    expect(info).toHaveBeenNthCalledWith(
+      2,
+      {
+        runId: "run-1",
+        checkpointId: "checkpoint-1",
+        streamType: "company_contact",
+        checkpointKind: "relationship",
+        responseRows: 0,
+        archivedIdentities: 0,
+      },
+      "Act extraction relationship checkpoint archived",
+    );
+  });
+
   it("claims and archives one projected page after one metadata-only audited GET", async () => {
     const test = fixture();
 
