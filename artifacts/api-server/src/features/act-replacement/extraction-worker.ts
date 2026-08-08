@@ -234,6 +234,17 @@ export class ActExtractionWorker {
         },
         "Act extraction root checkpoint claimed",
       );
+    } else if (checkpoint.checkpointKind === "relationship") {
+      logger.info(
+        {
+          runId: checkpoint.runId,
+          checkpointId: checkpoint.id,
+          streamType: checkpoint.streamType,
+          checkpointKind: checkpoint.checkpointKind,
+          attemptCount: checkpoint.attemptCount,
+        },
+        "Act extraction relationship checkpoint claimed",
+      );
     }
 
     if (!this.dependencies.authorization.isReady(input.now)) {
@@ -322,7 +333,7 @@ export class ActExtractionWorker {
     }
 
     try {
-      await this.dependencies.archive.archiveCheckpointPage({
+      const counters = await this.dependencies.archive.archiveCheckpointPage({
         runId: checkpoint.runId,
         checkpointId: checkpoint.id,
         leaseOwner: checkpoint.leaseOwner,
@@ -334,6 +345,19 @@ export class ActExtractionWorker {
         pageFingerprint,
         now: completedAt,
       });
+      if (checkpoint.checkpointKind === "relationship") {
+        logger.info(
+          {
+            runId: checkpoint.runId,
+            checkpointId: checkpoint.id,
+            streamType: checkpoint.streamType,
+            checkpointKind: checkpoint.checkpointKind,
+            responseRows: counters.responseRows,
+            archivedIdentities: counters.archivedIdentities,
+          },
+          "Act extraction relationship checkpoint archived",
+        );
+      }
     } catch (error) {
       logger.error(
         {
