@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   ActOrganizeManifest,
   ManifestSourceInput,
 } from "./manifest-builder";
 import {
   ProductionActOrganizer,
+  ProductionActOrganizerRecoveryWorker,
   type OrganizerRun,
   type ProductionOrganizerStore,
 } from "./production-organizer";
@@ -43,6 +44,7 @@ const noteSource: ManifestSourceInput = {
 
 class InMemoryProductionOrganizerStore implements ProductionOrganizerStore {
   readonly persistedOperationKeys: string[] = [];
+  readonly renewedTokens: string[] = [];
   private manifest: ActOrganizeManifest | null = null;
   private readonly run: OrganizerRun;
 
@@ -65,6 +67,11 @@ class InMemoryProductionOrganizerStore implements ProductionOrganizerStore {
     return this.sources;
   }
 
+  async renew(_runId: string, claimToken: string) {
+    this.renewedTokens.push(claimToken);
+    return true;
+  }
+
   async persistManifest(_runId: string, claimToken: string, manifest: ActOrganizeManifest) {
     expect(claimToken).toBe("claim-one");
     this.manifest = manifest;
@@ -83,6 +90,98 @@ class InMemoryProductionOrganizerStore implements ProductionOrganizerStore {
 }
 
 describe("ProductionActOrganizer", () => {
+  it("acknowledges a claimed run before slow source loading finishes", async () => {
+    let finishLoading!: (sources: readonly ManifestSourceInput[]) => void;
+    const loading = new Promise<readonly ManifestSourceInput[]>((resolve) => {
+      finishLoading = resolve;
+    });
+    let completed = false;
+    const store: ProductionOrganizerStore = {
+      async claim(runId) {
+        return { runId, phase: "organizing", claimToken: "background-token" };
+      },
+      async loadSources() { return loading; },
+      async renew() { return true; },
+      async persistManifest() {},
+      async complete() { completed = true; },
+      async release() {},
+    };
+
+    const started = await new ProductionActOrganizer(store).start("run-background");
+
+    expect(started.status).toBe("organizing");
+    expect(completed).toBe(false);
+    finishLoading([companySource]);
+    await started.finished;
+    expect(completed).toBe(true);
+  });
+
+  it("renews the durable lease immediately before manifest persistence", async () => {
+    const events: string[] = [];
+    const store: ProductionOrganizerStore = {
+      async claim(runId) { return { runId, phase: "organizing", claimToken: "renew-token" }; },
+      async loadSources() { events.push("load"); return [companySource]; },
+      async renew(_runId, claimToken) { events.push(`renew:${claimToken}`); return true; },
+      async persistManifest() { events.push("persist"); },
+      async complete() { events.push("complete"); },
+      async release() {},
+    };
+
+    await new ProductionActOrganizer(store).organize("run-renew");
+
+    expect(events).toEqual(["load", "renew:renew-token", "persist", "complete"]);
+  });
+
+  it("uses the final renewal as authority after a transient heartbeat error", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishLoading!: (sources: readonly ManifestSourceInput[]) => void;
+      const loading = new Promise<readonly ManifestSourceInput[]>((resolve) => {
+        finishLoading = resolve;
+      });
+      let renewCalls = 0;
+      let released = false;
+      const store: ProductionOrganizerStore = {
+        async claim(runId) {
+          return { runId, phase: "organizing", claimToken: "heartbeat-token" };
+        },
+        async loadSources() { return loading; },
+        async renew() {
+          renewCalls += 1;
+          if (renewCalls === 1) throw new Error("temporary_database_error");
+          return true;
+        },
+        async persistManifest() {},
+        async complete() {},
+        async release() { released = true; },
+      };
+
+      const organizing = new ProductionActOrganizer(store).organize("run-heartbeat");
+      await vi.advanceTimersByTimeAsync(60_000);
+      finishLoading([companySource]);
+
+      await expect(organizing).resolves.toMatchObject({ status: "ready_to_apply" });
+      expect(renewCalls).toBe(2);
+      expect(released).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("automatically resumes expired durable organizing work", async () => {
+    const organize = async (runId: string) => {
+      expect(runId).toBe("run-expired");
+      return { status: "ready_to_apply" as const, manifest: { digest: "d", diagnostics: [], outcomes: [], operations: [] } };
+    };
+    const worker = new ProductionActOrganizerRecoveryWorker({
+      findRecoverableRunId: async () => "run-expired",
+      organize,
+    });
+
+    await expect(worker.runOne({ workerId: "recovery", now: new Date() }))
+      .resolves.toEqual({ kind: "progress" });
+  });
+
   it("builds one deterministic manifest from complete archived sources", async () => {
     const store = new InMemoryProductionOrganizerStore({
       runId: "run-1",
@@ -148,6 +247,7 @@ describe("ProductionActOrganizer", () => {
         return { runId, phase: "organizing", claimToken: "exclusive-token" };
       },
       async loadSources() { return [companySource]; },
+      async renew() { return true; },
       async persistManifest(_runId, claimToken) { expect(claimToken).toBe("exclusive-token"); },
       async complete(_runId, claimToken) { completedToken = claimToken; active = false; },
       async release() { active = false; },
