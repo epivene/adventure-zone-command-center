@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
-import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyOperations, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, bookings, contacts, organizations } from "@workspace/db/schema";
+import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyBatches, actReplacementApplyOperations, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, bookings, contacts, organizations } from "@workspace/db/schema";
 import { DrizzleActSourceAssignmentRepository } from "./assignment-repository";
 import type { ActApplyService } from "./apply-service";
 import type { ApprovalClosure, ApprovalRepository } from "./approval-service";
@@ -367,7 +367,12 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
         eq(actReplacementRuns.id, runId),
         eq(actReplacementRuns.sourceDatabaseKey, this.scope.sourceDatabaseKey),
         or(
-          and(inArray(actReplacementRuns.phase, ["extract_complete", "ready_to_apply", "complete_with_issues"]), isNull(actReplacementRuns.organizerToken)),
+          and(inArray(actReplacementRuns.phase, ["extract_complete", "complete_with_issues"]), isNull(actReplacementRuns.organizerToken)),
+          and(
+            eq(actReplacementRuns.phase, "ready_to_apply"),
+            sql`not exists (select 1 from ${actReplacementApplyBatches} where ${actReplacementApplyBatches.runId} = ${actReplacementRuns.id})`,
+            sql`not exists (select 1 from ${actReplacementApplyOperations} where ${actReplacementApplyOperations.runId} = ${actReplacementRuns.id} and ${actReplacementApplyOperations.status} <> ${"pending"})`,
+          ),
           and(
             eq(actReplacementRuns.phase, "complete"),
             isNull(actReplacementRuns.organizerToken),
