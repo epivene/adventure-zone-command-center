@@ -211,17 +211,17 @@ export function ImportReview({
                   )}
                   {canResolveAmbiguous &&
                     row.issueCodes.includes("ambiguous_match") && (
-                      <button
-                        type="button"
-                        disabled={loading || resolvingSourceRecordId !== null}
-                        onClick={() => onImportAsNew(row)}
-                        className="mt-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-900 disabled:opacity-50"
-                      >
-                        {resolvingSourceRecordId === row.sourceRecordId
-                          ? "Saving decision…"
-                          : "Import as new record"}
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      disabled={loading || resolvingSourceRecordId !== null}
+                      onClick={() => onImportAsNew(row)}
+                      className="mt-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-900 disabled:opacity-50"
+                    >
+                      {resolvingSourceRecordId === row.sourceRecordId
+                        ? "Saving decision…"
+                        : "Import as new record"}
+                    </button>
+                  )}
                 </li>
               );
             })}
