@@ -88,6 +88,22 @@ describe("Act derived checkpoint capability filtering", () => {
         pageSkip: 0,
         nextSkip: null,
         queryMode: "projected",
+        responseRows: 1,
+      }),
+    ).toEqual({
+      nextSkip: 0,
+      queryMode: "projected",
+      state: "complete",
+    });
+  });
+
+  it("finishes a checkpoint from a stranded zero-row receipt", () => {
+    expect(
+      replayedCheckpointTransition({
+        pageSkip: 0,
+        nextSkip: 0,
+        queryMode: "projected",
+        responseRows: 0,
       }),
     ).toEqual({
       nextSkip: 0,
@@ -459,6 +475,42 @@ describeWithPostgres("Act source archive repository on PostgreSQL", () => {
           response_rows: 1,
           observed_identities: 1,
           archived_identities: 1,
+        },
+      ],
+    });
+  });
+
+  it("completes and normalizes an empty page with a non-advancing cursor", async () => {
+    const context = await seedLeasedCheckpoint({
+      databaseKey: "archive-empty-cursor",
+      streamType: "group_contact",
+    });
+
+    await repository.archiveCheckpointPage({
+      ...context,
+      items: [],
+      derivedCheckpoints: [],
+      nextSkip: context.expectedSkip,
+      queryMode: "projected",
+      pageFingerprint: "empty-response",
+      now: new Date("2026-08-01T12:00:00.000Z"),
+    });
+
+    await expect(
+      pool.query(
+        `SELECT c.state, c.next_skip, c.lease_owner, r.next_skip receipt_next_skip
+         FROM act_replacement_checkpoints c
+         JOIN act_replacement_page_receipts r ON r.checkpoint_id = c.id
+         WHERE c.id = $1`,
+        [context.checkpointId],
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        {
+          state: "complete",
+          next_skip: context.expectedSkip,
+          lease_owner: null,
+          receipt_next_skip: null,
         },
       ],
     });
