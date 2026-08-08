@@ -98,8 +98,11 @@ export default function ActMigrationPage() {
   const [review, setReview] = useState<ReviewPage | null>(null);
   const [reviewPage, setReviewPage] = useState(1);
   const [reviewSearch, setReviewSearch] = useState("");
+  const [reviewRevision, setReviewRevision] = useState(0);
   const [reviewLoading, setReviewLoading] = useState(false);
-  const [resolvingSourceRecordId, setResolvingSourceRecordId] = useState<string | null>(null);
+  const [resolvingSourceRecordId, setResolvingSourceRecordId] = useState<
+    string | null
+  >(null);
   const [busy, setBusy] = useState<
     "fetch" | "organize" | "apply" | "review" | null
   >(null);
@@ -165,7 +168,13 @@ export default function ActMigrationPage() {
     return () => {
       current = false;
     };
-  }, [run?.manifestDigest, run?.runId, reviewPage, reviewSearch]);
+  }, [
+    run?.manifestDigest,
+    run?.runId,
+    reviewPage,
+    reviewRevision,
+    reviewSearch,
+  ]);
 
   const refreshRun = async (runId: string) => {
     const result = await getRun(runId);
@@ -277,10 +286,13 @@ export default function ActMigrationPage() {
   };
 
   const importAmbiguousAsNew = async (row: ReviewRow) => {
-    if (!run || resolvingSourceRecordId) return;
+    if (!run?.canOrganize || resolvingSourceRecordId || busy !== null) return;
     setResolvingSourceRecordId(row.sourceRecordId);
+    setBusy("review");
     setError(null);
     try {
+      // The decision endpoint saves the version-bound decision and atomically
+      // rebuilds the manifest from the existing archive.
       await decideReviewRecord(run.runId, row.sourceRecordId, {
         sourceVersionId: row.sourceVersionId,
         scope: "duplicate_identity",
@@ -288,10 +300,12 @@ export default function ActMigrationPage() {
       });
       await refreshRun(run.runId);
       setReviewPage(1);
+      setReviewRevision((current) => current + 1);
     } catch (caught) {
       setError(errorCode(caught) ?? "Could not save the review decision");
     } finally {
       setResolvingSourceRecordId(null);
+      setBusy(null);
     }
   };
 
@@ -339,7 +353,7 @@ export default function ActMigrationPage() {
   );
   const durableNeedsAttention = Boolean(
     run?.phase === "complete_with_issues" &&
-      (run.blockedOperationCount > 0 || run.failedOperationCount > 0),
+    (run.blockedOperationCount > 0 || run.failedOperationCount > 0),
   );
   const requiresAttention = needsAttention || durableNeedsAttention;
 
@@ -406,8 +420,12 @@ export default function ActMigrationPage() {
           reviewRequiredCount={run.reviewRequiredCount}
           review={review}
           loading={reviewLoading}
+          canResolveAmbiguous={run.canOrganize}
           canImport={
-            run.canApplySafe && busy === null && !applyLocked && !requiresAttention
+            run.canApplySafe &&
+            busy === null &&
+            !applyLocked &&
+            !requiresAttention
           }
           importLabel={
             run.phase === "applying" || run.nextApplyCursor > 0
