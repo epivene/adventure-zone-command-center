@@ -161,7 +161,12 @@ export type ReviewDecision = {
   sourceRecordId: string;
   sourceVersionId: string;
   scope: "duplicate_identity" | "field_conflict" | "unsupported_record";
-  decision: "link_existing" | "keep_separate" | "keep_local" | "use_source" | "ignore_source";
+  decision:
+    | "link_existing"
+    | "keep_separate"
+    | "keep_local"
+    | "use_source"
+    | "ignore_source";
   active: boolean;
 };
 
