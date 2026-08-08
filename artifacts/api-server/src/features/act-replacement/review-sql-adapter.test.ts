@@ -1,10 +1,19 @@
 import { sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
-import { approvalClosureFromDurableRow, DrizzleActReviewCommandStore, DrizzleProductionOrganizerStore, manifestFromRows, manifestSourcesFromArchiveRows, projectActReviewDisplay } from "./review-sql-adapter";
+import { approvalClosureFromDurableRow, DrizzleActReviewCommandStore, DrizzleProductionOrganizerStore, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, projectActReviewDisplay } from "./review-sql-adapter";
 import { ProductionActOrganizer, type ProductionOrganizerStore } from "./production-organizer";
 
 describe("durable review adapter projections", () => {
+  it("bounds manifest writes so large imports do not issue one query per record", () => {
+    expect(manifestWriteBatches(Array.from({ length: 501 }, (_, index) => index)))
+      .toEqual([
+        Array.from({ length: 250 }, (_, index) => index),
+        Array.from({ length: 250 }, (_, index) => index + 250),
+        [500],
+      ]);
+  });
+
   it("claims a completed run only through an explicit review-required outcome predicate", async () => {
     let whereClause: unknown;
     const database = {
@@ -48,6 +57,25 @@ describe("durable review adapter projections", () => {
     expect(rendered.params).toEqual(expect.arrayContaining(["ready_to_apply", "pending"]));
     const readyParameter = `$${rendered.params.indexOf("ready_to_apply") + 1}`;
     expect(rendered.sql).toContain(`"act_replacement_runs"."phase" = ${readyParameter} and not exists`);
+  });
+
+  it("discovers only expired organizing runs for automatic recovery", async () => {
+    let whereClause: unknown;
+    const chain = {
+      from: () => chain,
+      where: (condition: unknown) => { whereClause = condition; return chain; },
+      limit: async () => [],
+    };
+    const database = { select: () => chain } as never;
+    const now = new Date("2026-08-08T20:00:00.000Z");
+
+    await new DrizzleProductionOrganizerStore(database, { sourceDatabaseKey: "act-db" })
+      .findRecoverableRunId(now);
+
+    const rendered = new PgDialect().sqlToQuery(sql`${whereClause as never}`);
+    expect(rendered.params).toEqual(
+      expect.arrayContaining(["act-db", "organizing", now.toISOString()]),
+    );
   });
 
   it("supersedes a production decision with a non-UUID owner identity", async () => {
@@ -465,6 +493,7 @@ describe("durable review adapter projections", () => {
           ],
         });
       },
+      async renew() { return true; },
       async persistManifest() {
         persisted = true;
       },
@@ -509,6 +538,7 @@ describe("durable review adapter projections", () => {
     const result = await new ProductionActOrganizer({
       async claim(runId) { return { runId, phase: "organizing", claimToken: "claim" }; },
       async loadSources() { return sources; },
+      async renew() { return true; },
       async persistManifest() {},
       async complete() {},
       async release() {},
@@ -558,6 +588,7 @@ describe("durable review adapter projections", () => {
     const manifest = await new ProductionActOrganizer({
       async claim(runId) { return { runId, phase: "organizing", claimToken: "claim" }; },
       async loadSources() { return sources; },
+      async renew() { return true; },
       async persistManifest() {},
       async complete() {},
       async release() {},
