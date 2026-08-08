@@ -25,6 +25,7 @@ import {
   parseRootSourceRecords,
 } from "./source-record-parser";
 import { fingerprintSourceContent } from "./source-fingerprint";
+import { logger } from "@/lib/logger";
 
 type WorkerCheckpoint = Omit<ClaimedCheckpoint, "checkpointKind"> & {
   checkpointKind: ActCheckpointKind;
@@ -533,6 +534,15 @@ export class ActExtractionWorker {
       input.error instanceof ActApiError
         ? input.error
         : new ActApiError("invalid_response", false);
+    logger.warn(
+      {
+        streamType: input.checkpoint.streamType,
+        checkpointKind: input.checkpoint.checkpointKind,
+        errorCode: error.code,
+        retryable: error.retryable,
+      },
+      "Act extraction request failed",
+    );
     const completedAt = this.dependencies.clock.now();
     try {
       await this.dependencies.audits.finish({
