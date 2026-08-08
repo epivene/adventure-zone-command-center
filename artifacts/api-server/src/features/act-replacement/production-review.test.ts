@@ -283,31 +283,10 @@ describe("durable production workflow projection", () => {
 
   it("projects required checkpoint inventory and deterministic batch order", () => {
     const state = input();
-    state.requiredStreams = [
-      "contact",
-      "company",
-      "company_contact",
-      "contact",
-    ];
+    state.requiredStreams = ["contact", "company", "company_contact", "contact"];
     state.batches = [
-      {
-        requestKey: "later",
-        startCursor: 25,
-        manifestDigest: CURRENT_DIGEST,
-        operationIds: [],
-        state: "complete",
-        createdAt: new Date("2026-08-07T12:01:00Z"),
-        id: "b",
-      },
-      {
-        requestKey: "first",
-        startCursor: 0,
-        manifestDigest: CURRENT_DIGEST,
-        operationIds: [],
-        state: "complete_with_issues",
-        createdAt: new Date("2026-08-07T12:00:00Z"),
-        id: "a",
-      },
+      { requestKey: "later", startCursor: 25, manifestDigest: CURRENT_DIGEST, operationIds: [], state: "complete", createdAt: new Date("2026-08-07T12:01:00Z"), id: "b" },
+      { requestKey: "first", startCursor: 0, manifestDigest: CURRENT_DIGEST, operationIds: [], state: "complete_with_issues", createdAt: new Date("2026-08-07T12:00:00Z"), id: "a" },
     ];
 
     expect(projectImportWorkflow(state)).toMatchObject({
