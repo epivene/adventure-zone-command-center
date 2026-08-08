@@ -13,6 +13,7 @@ import {
   archiveReceiptAction,
   derivedCheckpointsAllowedByCapabilities,
   DrizzleActSourceArchiveRepository,
+  replayedCheckpointTransition,
   type ArchiveSourceItem,
 } from "./archive-repository";
 import type { DerivedCheckpointSpec } from "./import-types";
@@ -79,6 +80,20 @@ describe("Act derived checkpoint capability filtering", () => {
         responseRows: 99,
       }),
     ).toBe("replay");
+  });
+
+  it("finishes a checkpoint from the stored terminal page receipt", () => {
+    expect(
+      replayedCheckpointTransition({
+        pageSkip: 0,
+        nextSkip: null,
+        queryMode: "projected",
+      }),
+    ).toEqual({
+      nextSkip: 0,
+      queryMode: "projected",
+      state: "complete",
+    });
   });
 });
 
@@ -384,6 +399,68 @@ describeWithPostgres("Act source archive repository on PostgreSQL", () => {
       versions: "3",
       observations: "3",
       children: "1",
+    });
+  });
+
+  it("completes a re-leased checkpoint from its existing terminal receipt", async () => {
+    const context = await seedLeasedCheckpoint({
+      databaseKey: "archive-stranded-replay",
+      streamType: "company_contact",
+      leaseOwner: "first-worker",
+    });
+    const firstPage = {
+      ...context,
+      items: [
+        sourceItem({
+          streamType: "company_contact",
+          sourceKey: "company-contact-1",
+          actRecordId: null,
+        }),
+      ],
+      derivedCheckpoints: [],
+      nextSkip: null,
+      queryMode: "projected" as const,
+      pageFingerprint: "first-response",
+      now: new Date("2026-08-01T12:00:00.000Z"),
+    };
+    await repository.archiveCheckpointPage(firstPage);
+    await pool.query(
+      `UPDATE act_replacement_checkpoints
+       SET state = 'leased', lease_owner = 'replay-worker',
+           lease_expires_at = now() + interval '5 minutes', completed_at = NULL
+       WHERE id = $1`,
+      [context.checkpointId],
+    );
+
+    await repository.archiveCheckpointPage({
+      ...firstPage,
+      leaseOwner: "replay-worker",
+      nextSkip: 100,
+      queryMode: "plain",
+      pageFingerprint: "volatile-replay-response",
+      now: new Date("2026-08-01T13:00:00.000Z"),
+    });
+
+    await expect(
+      pool.query(
+        `SELECT state, next_skip, query_mode, lease_owner, lease_expires_at,
+                response_rows, observed_identities, archived_identities
+         FROM act_replacement_checkpoints WHERE id = $1`,
+        [context.checkpointId],
+      ),
+    ).resolves.toMatchObject({
+      rows: [
+        {
+          state: "complete",
+          next_skip: 0,
+          query_mode: "projected",
+          lease_owner: null,
+          lease_expires_at: null,
+          response_rows: 1,
+          observed_identities: 1,
+          archived_identities: 1,
+        },
+      ],
     });
   });
 
