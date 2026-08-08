@@ -200,6 +200,12 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
   async resumeRun(input: { runId: string; now: Date }): Promise<void> {
     return this.protect(async () => {
       await this.database.transaction(async (transaction) => {
+        await transaction
+          .select({ id: actReplacementRuns.id })
+          .from(actReplacementRuns)
+          .where(eq(actReplacementRuns.id, input.runId))
+          .limit(1)
+          .for("update");
         const recoverableContactNotes = and(
           eq(actReplacementCheckpoints.state, "failed"),
           eq(actReplacementCheckpoints.streamType, "note"),
