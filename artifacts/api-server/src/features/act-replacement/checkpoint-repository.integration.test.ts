@@ -196,7 +196,7 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     throw new Error("Timed out waiting for the PostgreSQL row lock.");
   }
 
-  it("replays a request key and creates exactly seven deterministic required roots", async () => {
+  it("creates six global roots and leaves notes to contact-scoped checkpoints", async () => {
     const input = startInput();
     const first = await repository.createRun(input);
     const replay = await repository.createRun(input);
@@ -219,23 +219,17 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
       [first.runId],
     );
     expect(checkpoints.rows).toEqual(
-      [
-        "activity",
-        "company",
-        "contact",
-        "group",
-        "history",
-        "note",
-        "opportunity",
-      ].map((stream) => ({
-        stream_type: stream,
-        checkpoint_kind: "list",
-        partition_key: `root:${stream}`,
-        requiredness: "required",
-        source_database_key: input.sourceDatabaseKey,
-        page_size: 100,
-        derive_details: true,
-      })),
+      ["activity", "company", "contact", "group", "history", "opportunity"].map(
+        (stream) => ({
+          stream_type: stream,
+          checkpoint_kind: "list",
+          partition_key: `root:${stream}`,
+          requiredness: "required",
+          source_database_key: input.sourceDatabaseKey,
+          page_size: 100,
+          derive_details: true,
+        }),
+      ),
     );
   });
 
