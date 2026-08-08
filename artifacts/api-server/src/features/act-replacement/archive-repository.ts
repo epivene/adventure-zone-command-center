@@ -23,6 +23,7 @@ import {
   sanitizeSourceContent,
   SourceFingerprintError,
 } from "./source-fingerprint";
+import { logger } from "@/lib/logger";
 
 type DrizzleDatabase = typeof database;
 
@@ -125,8 +126,10 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
   async archiveCheckpointPage(
     input: Parameters<ActSourceArchiveRepository["archiveCheckpointPage"]>[0],
   ): Promise<ActExtractionCounters> {
+    let stage = "open_transaction";
     try {
       return await this.database.transaction(async (transaction) => {
+        stage = "lock_run";
         const [run] = await transaction
           .select({
             id: actReplacementRuns.id,
@@ -139,6 +142,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           .for("update");
         if (!run) conflicts();
 
+        stage = "lock_checkpoint";
         const [checkpoint] = await transaction
           .select()
           .from(actReplacementCheckpoints)
@@ -164,6 +168,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           conflicts();
         }
 
+        stage = "load_receipt";
         const [receipt] = await transaction
           .select()
           .from(actReplacementPageReceipts)
@@ -201,6 +206,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           conflicts();
         }
 
+        stage = "insert_receipt";
         await transaction.insert(actReplacementPageReceipts).values({
           runId: input.runId,
           checkpointId: input.checkpointId,
@@ -221,6 +227,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
         };
         let snapshotVersionsInserted = 0;
 
+        stage = "archive_items";
         for (const item of input.items) {
           const sanitizedRaw = sanitizeSourceContent(item.raw);
           const sanitizedEvidence = sanitizeSourceContent(
@@ -522,6 +529,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           unavailableDetailRoots,
         );
 
+        stage = "insert_derived_checkpoints";
         if (derivedCheckpoints.length > 0) {
           await transaction
             .insert(actReplacementCheckpoints)
@@ -565,6 +573,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
         };
         const terminal = input.nextSkip === null;
 
+        stage = "complete_checkpoint";
         await transaction
           .update(actReplacementCheckpoints)
           .set({
@@ -592,6 +601,30 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
         return counters;
       });
     } catch (error) {
+      const metadata =
+        error && typeof error === "object"
+          ? (error as {
+              code?: unknown;
+              constraint?: unknown;
+              table?: unknown;
+              column?: unknown;
+            })
+          : {};
+      logger.error(
+        {
+          stage,
+          pgCode:
+            typeof metadata.code === "string" ? metadata.code : "unknown",
+          constraint:
+            typeof metadata.constraint === "string"
+              ? metadata.constraint
+              : null,
+          table: typeof metadata.table === "string" ? metadata.table : null,
+          column:
+            typeof metadata.column === "string" ? metadata.column : null,
+        },
+        "Act archive transaction failed",
+      );
       if (
         error instanceof ActArchiveConflictError ||
         error instanceof SourceFingerprintError ||
