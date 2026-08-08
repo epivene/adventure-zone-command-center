@@ -104,6 +104,23 @@ type ArchivePageReplayMetadata = {
   responseRows: number;
 };
 
+export function replayedCheckpointTransition(
+  receipt: Pick<
+    ArchivePageReplayMetadata,
+    "nextSkip" | "queryMode"
+  > & { pageSkip: number },
+): {
+  nextSkip: number;
+  queryMode: ActQueryMode;
+  state: "pending" | "complete";
+} {
+  return {
+    nextSkip: receipt.nextSkip ?? receipt.pageSkip,
+    queryMode: receipt.queryMode as ActQueryMode,
+    state: receipt.nextSkip === null ? "complete" : "pending",
+  };
+}
+
 export function archiveReceiptAction(
   runPhase: string,
   receipt: ArchivePageReplayMetadata,
@@ -249,6 +266,28 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
             pageFingerprint: input.pageFingerprint,
             responseRows: input.items.length,
           });
+          if (
+            run.phase === "extracting" &&
+            checkpoint.state === "leased" &&
+            checkpoint.leaseOwner === input.leaseOwner &&
+            checkpoint.nextSkip === input.expectedSkip
+          ) {
+            const transition = replayedCheckpointTransition(receipt);
+            await transaction
+              .update(actReplacementCheckpoints)
+              .set({
+                ...transition,
+                leaseOwner: null,
+                leaseExpiresAt: null,
+                retryAfter: null,
+                retryable: true,
+                errorCode: null,
+                completedAt:
+                  transition.state === "complete" ? input.now : null,
+                updatedAt: input.now,
+              })
+              .where(eq(actReplacementCheckpoints.id, input.checkpointId));
+          }
           return zeroCounters();
         }
 
