@@ -30,6 +30,7 @@ type WorkflowReader = {
 
 export type ImportWorkflowProjectionInput = {
   phase: string;
+  organizerLeaseExpiresAt?: Date | null;
   summary: Record<string, unknown> | null | undefined;
   outcomes: readonly { sourceRecordId: string; state: string }[];
   operations: readonly {
@@ -146,21 +147,51 @@ export function projectImportWorkflow(
   );
   let nextApplyCursor = 0;
   if (manifestDigest) {
-    const cursorFor = (batch: ImportWorkflowProjectionInput["batches"][number]) => batch.startCursor ?? Number(/:(\d+)$/.exec(batch.requestKey)?.[1] ?? Number.NaN);
+    const cursorFor = (
+      batch: ImportWorkflowProjectionInput["batches"][number],
+    ) =>
+      batch.startCursor ??
+      Number(/:(\d+)$/.exec(batch.requestKey)?.[1] ?? Number.NaN);
     const successful = [...input.batches]
-      .filter((batch) => batch.manifestDigest === manifestDigest && batch.state === "complete" && Number.isInteger(cursorFor(batch)) && Array.isArray(batch.operationIds))
-      .sort((a, b) => cursorFor(a) - cursorFor(b) || a.requestKey.localeCompare(b.requestKey));
+      .filter(
+        (batch) =>
+          batch.manifestDigest === manifestDigest &&
+          batch.state === "complete" &&
+          Number.isInteger(cursorFor(batch)) &&
+          Array.isArray(batch.operationIds),
+      )
+      .sort(
+        (a, b) =>
+          cursorFor(a) - cursorFor(b) ||
+          a.requestKey.localeCompare(b.requestKey),
+      );
     for (;;) {
-      const batch = successful.find((candidate) => cursorFor(candidate) === nextApplyCursor);
-      if (!batch || !Array.isArray(batch.operationIds) || batch.operationIds.length === 0) break;
-      for (const operationKey of batch.operationIds) if (typeof operationKey === "string") terminalOperationKeys.add(operationKey);
+      const batch = successful.find(
+        (candidate) => cursorFor(candidate) === nextApplyCursor,
+      );
+      if (
+        !batch ||
+        !Array.isArray(batch.operationIds) ||
+        batch.operationIds.length === 0
+      )
+        break;
+      for (const operationKey of batch.operationIds)
+        if (typeof operationKey === "string")
+          terminalOperationKeys.add(operationKey);
       nextApplyCursor += batch.operationIds.length;
     }
   }
 
   const now = input.now ?? new Date();
+  const organizerLeaseExpired =
+    input.phase === "organizing" &&
+    (!input.organizerLeaseExpiresAt ||
+      input.organizerLeaseExpiresAt.getTime() <= now.getTime());
   const leases = [
     ...(input.leases ?? []),
+    ...(input.phase === "organizing" && input.organizerLeaseExpiresAt
+      ? [{ state: "organizing", leaseExpiresAt: input.organizerLeaseExpiresAt }]
+      : []),
     ...input.operations
       .filter((operation) => operation.status === "leased")
       .map((operation) => ({
@@ -217,6 +248,7 @@ export function projectImportWorkflow(
     nextApplyCursor,
     canOrganize:
       input.phase === "extract_complete" ||
+      organizerLeaseExpired ||
       (input.phase === "ready_to_apply" &&
         input.batches.length === 0 &&
         input.operations.every((operation) => operation.status === "pending")),
@@ -258,7 +290,11 @@ export function projectImportWorkflow(
           (a.id ?? a.requestKey).localeCompare(b.id ?? b.requestKey),
       )
       .map((batch) => ({ state: batch.state })),
-    durableAdapters: { reviewReader: true, commandService: true, applyRepository: true },
+    durableAdapters: {
+      reviewReader: true,
+      commandService: true,
+      applyRepository: true,
+    },
   };
 }
 
@@ -273,6 +309,7 @@ class DrizzleWorkflowReader implements WorkflowReader {
       .select({
         phase: actReplacementRuns.phase,
         summary: actReplacementRuns.summary,
+        organizerLeaseExpiresAt: actReplacementRuns.organizerLeaseExpiresAt,
       })
       .from(actReplacementRuns)
       .where(
@@ -352,6 +389,7 @@ class DrizzleWorkflowReader implements WorkflowReader {
     return projectImportWorkflow({
       phase: run.phase,
       summary: run.summary,
+      organizerLeaseExpiresAt: run.organizerLeaseExpiresAt,
       outcomes,
       operations,
       batches,
@@ -406,7 +444,10 @@ class LazyReviewRuntime {
         return {
           reader,
           commands: new ReviewCommandService(store),
-          applyCoordinator: new ActApplyCoordinator(applyService, applyRepository),
+          applyCoordinator: new ActApplyCoordinator(
+            applyService,
+            applyRepository,
+          ),
           workflow: new DrizzleWorkflowReader(db, scope),
         };
       });
