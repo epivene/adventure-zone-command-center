@@ -83,7 +83,7 @@ describe("HttpActMigrationSourceClient queries", () => {
     });
     expect(requests).toEqual([
       {
-        path: "/api/contacts/contact%2F1/note",
+        path: "/api/contacts/contact%2F1/notes",
         query: { $skip: "0", $top: "100" },
       },
     ]);
