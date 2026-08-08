@@ -156,6 +156,15 @@ export type ApplyNextResponse = {
   requiresReview: boolean;
 };
 
+export type ReviewDecision = {
+  id: string;
+  sourceRecordId: string;
+  sourceVersionId: string;
+  scope: "duplicate_identity" | "field_conflict" | "unsupported_record";
+  decision: "link_existing" | "keep_separate" | "keep_local" | "use_source" | "ignore_source";
+  active: boolean;
+};
+
 export class ActReplacementApiError extends Error {
   constructor(
     readonly code: string,
@@ -249,6 +258,30 @@ export const approveSafeDefaults = (
     {
       method: "POST",
       body: JSON.stringify({ expectedManifestDigest, requestKey }),
+    },
+  );
+export const decideReviewRecord = (
+  runId: string,
+  sourceRecordId: string,
+  body: {
+    sourceVersionId: string;
+    scope: ReviewDecision["scope"];
+    decision: ReviewDecision["decision"];
+    fieldName?: string | null;
+    targetEntityType?: string | null;
+    targetEntityId?: string | null;
+    requestKey?: string;
+  },
+) =>
+  request<ReviewDecision>(
+    `/migration/act-replacement/source-records/${encodeURIComponent(sourceRecordId)}/decisions`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        runId,
+        ...body,
+        requestKey: body.requestKey ?? crypto.randomUUID(),
+      }),
     },
   );
 export const applyNext = (runId: string, body: ApplyNextRequest) =>
