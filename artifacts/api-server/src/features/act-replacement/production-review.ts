@@ -146,37 +146,14 @@ export function projectImportWorkflow(
   );
   let nextApplyCursor = 0;
   if (manifestDigest) {
-    const cursorFor = (
-      batch: ImportWorkflowProjectionInput["batches"][number],
-    ) =>
-      batch.startCursor ??
-      Number(/:(\d+)$/.exec(batch.requestKey)?.[1] ?? Number.NaN);
+    const cursorFor = (batch: ImportWorkflowProjectionInput["batches"][number]) => batch.startCursor ?? Number(/:(\d+)$/.exec(batch.requestKey)?.[1] ?? Number.NaN);
     const successful = [...input.batches]
-      .filter(
-        (batch) =>
-          batch.manifestDigest === manifestDigest &&
-          batch.state === "complete" &&
-          Number.isInteger(cursorFor(batch)) &&
-          Array.isArray(batch.operationIds),
-      )
-      .sort(
-        (a, b) =>
-          cursorFor(a) - cursorFor(b) ||
-          a.requestKey.localeCompare(b.requestKey),
-      );
+      .filter((batch) => batch.manifestDigest === manifestDigest && batch.state === "complete" && Number.isInteger(cursorFor(batch)) && Array.isArray(batch.operationIds))
+      .sort((a, b) => cursorFor(a) - cursorFor(b) || a.requestKey.localeCompare(b.requestKey));
     for (;;) {
-      const batch = successful.find(
-        (candidate) => cursorFor(candidate) === nextApplyCursor,
-      );
-      if (
-        !batch ||
-        !Array.isArray(batch.operationIds) ||
-        batch.operationIds.length === 0
-      )
-        break;
-      for (const operationKey of batch.operationIds)
-        if (typeof operationKey === "string")
-          terminalOperationKeys.add(operationKey);
+      const batch = successful.find((candidate) => cursorFor(candidate) === nextApplyCursor);
+      if (!batch || !Array.isArray(batch.operationIds) || batch.operationIds.length === 0) break;
+      for (const operationKey of batch.operationIds) if (typeof operationKey === "string") terminalOperationKeys.add(operationKey);
       nextApplyCursor += batch.operationIds.length;
     }
   }
@@ -281,11 +258,7 @@ export function projectImportWorkflow(
           (a.id ?? a.requestKey).localeCompare(b.id ?? b.requestKey),
       )
       .map((batch) => ({ state: batch.state })),
-    durableAdapters: {
-      reviewReader: true,
-      commandService: true,
-      applyRepository: true,
-    },
+    durableAdapters: { reviewReader: true, commandService: true, applyRepository: true },
   };
 }
 
@@ -433,10 +406,7 @@ class LazyReviewRuntime {
         return {
           reader,
           commands: new ReviewCommandService(store),
-          applyCoordinator: new ActApplyCoordinator(
-            applyService,
-            applyRepository,
-          ),
+          applyCoordinator: new ActApplyCoordinator(applyService, applyRepository),
           workflow: new DrizzleWorkflowReader(db, scope),
         };
       });
