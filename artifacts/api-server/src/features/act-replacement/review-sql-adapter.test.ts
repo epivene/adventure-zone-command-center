@@ -46,6 +46,8 @@ describe("durable review adapter projections", () => {
     expect(rendered.sql).toContain("act_replacement_apply_operations");
     expect(rendered.sql.match(/not exists/g)).toHaveLength(2);
     expect(rendered.params).toEqual(expect.arrayContaining(["ready_to_apply", "pending"]));
+    const readyParameter = `$${rendered.params.indexOf("ready_to_apply") + 1}`;
+    expect(rendered.sql).toContain(`"act_replacement_runs"."phase" = ${readyParameter} and not exists`);
   });
 
   it("supersedes a production decision with a non-UUID owner identity", async () => {
