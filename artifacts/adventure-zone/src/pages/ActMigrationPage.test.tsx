@@ -17,6 +17,7 @@ const client = vi.hoisted(() => ({
   supersedeRun: vi.fn(),
   organizeRun: vi.fn(),
   getReview: vi.fn(),
+  decideReviewRecord: vi.fn(),
   approveSafeDefaults: vi.fn(),
   applyNext: vi.fn(),
 }));
@@ -174,6 +175,26 @@ describe("ActMigrationPage", () => {
     expect(
       screen.queryByRole("button", { name: /overwrite|delete/i }),
     ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(client.getReview).toHaveBeenCalledWith(
+        readyRun().runId,
+        expect.objectContaining({ state: "needs_review" }),
+      ),
+    );
+  });
+
+  it("rebuilds an unapplied review manifest without refetching Act", async () => {
+    const rebuildable = readyRun({ canOrganize: true });
+    client.getLatestRun.mockResolvedValue({ run: rebuildable });
+    client.organizeRun.mockResolvedValue({ status: "ready_to_apply", manifest: { digest } });
+    client.getRun.mockResolvedValue({ run: readyRun({ safeOperationCount: 100, reviewRequiredCount: 2 }) });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Rebuild review from archive" }));
+
+    await waitFor(() => expect(client.organizeRun).toHaveBeenCalledWith(rebuildable.runId));
+    expect(client.startRun).not.toHaveBeenCalled();
+    expect(client.resumeRun).not.toHaveBeenCalled();
   });
 
   it("organizes an extracted run and refreshes its durable status", async () => {
