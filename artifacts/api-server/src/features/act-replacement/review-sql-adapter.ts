@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, gt, inArray, isNull, lt, notInArray, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
+import { logger } from "@/lib/logger";
 import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyBatches, actReplacementApplyOperations, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, bookings, contacts, organizations } from "@workspace/db/schema";
 import { DrizzleActSourceAssignmentRepository } from "./assignment-repository";
 import type { ActApplyService } from "./apply-service";
@@ -29,6 +30,17 @@ type SourceDatabaseScope = { sourceDatabaseKey: string };
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 const array = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 const object = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
+const manifestWriteBatchSize = 250;
+// Manifest construction is synchronous, so its timer heartbeat cannot run
+// while the event loop is CPU-bound. Keep enough fenced lease headroom for a
+// large archive; normal database work still renews every minute.
+const organizerLeaseMs = 30 * 60_000;
+export function manifestWriteBatches<T>(rows: readonly T[]): T[][] {
+  const batches: T[][] = [];
+  for (let index = 0; index < rows.length; index += manifestWriteBatchSize)
+    batches.push(rows.slice(index, index + manifestWriteBatchSize));
+  return batches;
+}
 const operationRank: Record<string, number> = {
   organization: 10,
   contact: 20,
@@ -362,7 +374,7 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
     const claimToken = randomUUID();
     const [run] = await this.database
       .update(actReplacementRuns)
-      .set({ phase: "organizing", organizerToken: claimToken, organizerLeaseExpiresAt: new Date(now.getTime() + 10 * 60_000), lastErrorCode: null, updatedAt: now })
+      .set({ phase: "organizing", organizerToken: claimToken, organizerLeaseExpiresAt: new Date(now.getTime() + organizerLeaseMs), lastErrorCode: null, updatedAt: now })
       .where(and(
         eq(actReplacementRuns.id, runId),
         eq(actReplacementRuns.sourceDatabaseKey, this.scope.sourceDatabaseKey),
@@ -378,11 +390,51 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
             isNull(actReplacementRuns.organizerToken),
             sql`exists (select 1 from ${actReplacementOutcomes} review_outcomes where review_outcomes.run_id = ${actReplacementRuns.id} and review_outcomes.state in (${sql.join(["awaiting_review", "unassigned", "unsupported"].map((state) => sql`${state}`), sql`, `)}))`,
           ),
-          and(eq(actReplacementRuns.phase, "organizing"), lt(actReplacementRuns.organizerLeaseExpiresAt, now)),
+          and(
+            eq(actReplacementRuns.phase, "organizing"),
+            or(
+              isNull(actReplacementRuns.organizerLeaseExpiresAt),
+              lte(actReplacementRuns.organizerLeaseExpiresAt, now),
+            ),
+          ),
         ),
       ))
       .returning({ runId: actReplacementRuns.id });
     return run ? { runId: run.runId, phase: "organizing", claimToken } : null;
+  }
+
+  async findRecoverableRunId(now: Date): Promise<string | null> {
+    const [run] = await this.database
+      .select({ runId: actReplacementRuns.id })
+      .from(actReplacementRuns)
+      .where(and(
+        eq(actReplacementRuns.sourceDatabaseKey, this.scope.sourceDatabaseKey),
+        eq(actReplacementRuns.phase, "organizing"),
+        or(
+          isNull(actReplacementRuns.organizerLeaseExpiresAt),
+          lte(actReplacementRuns.organizerLeaseExpiresAt, now),
+        ),
+      ))
+      .limit(1);
+    return run?.runId ?? null;
+  }
+
+  async renew(runId: string, claimToken: string): Promise<boolean> {
+    const now = new Date();
+    const renewed = await this.database
+      .update(actReplacementRuns)
+      .set({
+        organizerLeaseExpiresAt: new Date(now.getTime() + organizerLeaseMs),
+        updatedAt: now,
+      })
+      .where(and(
+        eq(actReplacementRuns.id, runId),
+        eq(actReplacementRuns.sourceDatabaseKey, this.scope.sourceDatabaseKey),
+        eq(actReplacementRuns.phase, "organizing"),
+        eq(actReplacementRuns.organizerToken, claimToken),
+      ))
+      .returning({ id: actReplacementRuns.id });
+    return renewed.length > 0;
   }
 
   async loadSources(runId: string): Promise<readonly ManifestSourceInput[]> {
@@ -454,10 +506,11 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
     await this.database.transaction(async (transaction) => {
       const [claim] = await transaction.select({ id: actReplacementRuns.id }).from(actReplacementRuns).where(and(eq(actReplacementRuns.id, runId), eq(actReplacementRuns.sourceDatabaseKey, this.scope.sourceDatabaseKey), eq(actReplacementRuns.phase, "organizing"), eq(actReplacementRuns.organizerToken, claimToken), gt(actReplacementRuns.organizerLeaseExpiresAt, new Date()))).limit(1).for("update");
       if (!claim) throw Object.assign(new Error("organizer_claim_lost"), { code: "organizer_claim_lost", status: 409 });
-      for (const outcome of manifest.outcomes) {
+      const organizedAt = new Date();
+      for (const outcomes of manifestWriteBatches(manifest.outcomes)) {
         await transaction
           .insert(actReplacementOutcomes)
-          .values({
+          .values(outcomes.map((outcome) => ({
             runId,
             sourceRecordId: outcome.sourceRecordId,
             sourceVersionId: outcome.sourceVersionId,
@@ -467,49 +520,49 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
             candidates: outcome.candidates,
             issues: outcome.issues,
             match: outcome.match,
-            organizedAt: new Date(),
-          })
+            organizedAt,
+          })))
           .onConflictDoUpdate({
             target: [actReplacementOutcomes.runId, actReplacementOutcomes.sourceRecordId],
             set: {
-              sourceVersionId: outcome.sourceVersionId,
-              state: outcome.state,
-              mappingWarnings: outcome.mappingWarnings,
-              unsupportedFieldPaths: outcome.unsupportedFieldPaths,
-              candidates: outcome.candidates,
-              issues: outcome.issues,
-              match: outcome.match,
+              sourceVersionId: sql`excluded.source_version_id`,
+              state: sql`excluded.state`,
+              mappingWarnings: sql`excluded.mapping_warnings`,
+              unsupportedFieldPaths: sql`excluded.unsupported_field_paths`,
+              candidates: sql`excluded.candidates`,
+              issues: sql`excluded.issues`,
+              match: sql`excluded.match`,
               leaseOwner: null,
               leaseExpiresAt: null,
               retryAfter: null,
               lastErrorCode: null,
-              organizedAt: new Date(),
-              updatedAt: new Date(),
+              organizedAt,
+              updatedAt: organizedAt,
             },
           });
       }
-      for (const operation of manifest.operations) {
+      for (const operations of manifestWriteBatches(manifest.operations)) {
         await transaction
           .insert(actReplacementApplyOperations)
-          .values({ runId, ...operation })
+          .values(operations.map((operation) => ({ runId, ...operation })))
           .onConflictDoUpdate({
             target: [actReplacementApplyOperations.runId, actReplacementApplyOperations.operationKey],
             set: {
-              sourceRecordId: operation.sourceRecordId,
-              sourceVersionId: operation.sourceVersionId,
-              targetType: operation.targetType,
-              action: operation.action,
-              payload: operation.payload,
-              dependencyOperationKeys: operation.dependencyOperationKeys,
-              requiredForSourceOutcome: operation.requiredForSourceOutcome,
-              safeByDefault: operation.safeByDefault,
+              sourceRecordId: sql`excluded.source_record_id`,
+              sourceVersionId: sql`excluded.source_version_id`,
+              targetType: sql`excluded.target_type`,
+              action: sql`excluded.action`,
+              payload: sql`excluded.payload`,
+              dependencyOperationKeys: sql`excluded.dependency_operation_keys`,
+              requiredForSourceOutcome: sql`excluded.required_for_source_outcome`,
+              safeByDefault: sql`excluded.safe_by_default`,
               status: sql`case when ${actReplacementApplyOperations.status} in ('applied','already_present') then ${actReplacementApplyOperations.status} else 'pending' end`,
               batchId: sql`case when ${actReplacementApplyOperations.status} in ('applied','already_present') then ${actReplacementApplyOperations.batchId} else null end`,
               leaseOwner: null,
               leaseExpiresAt: null,
               retryAfter: null,
               lastErrorCode: null,
-              updatedAt: new Date(),
+              updatedAt: organizedAt,
             },
           });
       }
@@ -691,6 +744,26 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
   }
   async organize(runId: string) {
     return this.organizer.organize(runId);
+  }
+  async startOrganize(runId: string) {
+    const started = await this.organizer.start(runId);
+    void started.finished.then(
+      (result) => logger.info(
+        { runId, status: result.status, outcomeCount: result.manifest.outcomes.length, operationCount: result.manifest.operations.length },
+        "Act organization completed",
+      ),
+      (error) => logger.error(
+        {
+          runId,
+          errorCode:
+            error && typeof error === "object" && "code" in error
+              ? String((error as { code?: unknown }).code)
+              : "organize_failed",
+        },
+        "Act organization failed",
+      ),
+    );
+    return { status: started.status };
   }
   private async assertSource(sourceRecordId: string) {
     const source = await super.getSource(sourceRecordId);
