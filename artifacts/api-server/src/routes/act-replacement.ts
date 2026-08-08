@@ -6,6 +6,7 @@ import {
   ActCheckpointConflictError,
   ActReplacementRunNotFoundError,
   DrizzleActReplacementCheckpointRepository,
+  type ActResumeDiagnostics,
 } from "@/features/act-replacement/checkpoint-repository";
 import type {
   ActReplacementStatus,
@@ -102,7 +103,10 @@ export interface ActReplacementControlStore {
     requestedBy: string;
   }): Promise<{ runId: string } | null>;
   summarize(runId: string): Promise<ActReplacementStatus>;
-  resumeRun?(input: { runId: string; now: Date }): Promise<void>;
+  resumeRun?(input: {
+    runId: string;
+    now: Date;
+  }): Promise<ActResumeDiagnostics>;
   supersedeRun(input: {
     runId: string;
     requestedBy: string;
