@@ -75,6 +75,8 @@ export function createActExtractionClientAdapter(
     },
     source: {
       listRoot: (kind, request) => source.listRoot(kind, request),
+      listContactNotes: (contactId, request) =>
+        source.listNotesForContact(contactId, request),
       getDetail: (kind, id) => source.getDetail(kind, id),
       listRelationship: (input) =>
         listRelationship(
