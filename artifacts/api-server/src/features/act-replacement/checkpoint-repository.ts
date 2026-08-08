@@ -686,16 +686,28 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
 
   async summarize(runId: string): Promise<ActReplacementStatus> {
     return this.protect(async () => {
-      await this.database.transaction(async (transaction) => {
-        const [run] = await transaction
-          .select()
-          .from(actReplacementRuns)
-          .where(eq(actReplacementRuns.id, runId))
-          .limit(1)
-          .for("update");
-        if (!run) throw new ActReplacementRunNotFoundError();
-        await this.maybeFinalize(transaction, run);
-      });
+      const [openCheckpoint] = await this.database
+        .select({ id: actReplacementCheckpoints.id })
+        .from(actReplacementCheckpoints)
+        .where(
+          and(
+            eq(actReplacementCheckpoints.runId, runId),
+            inArray(actReplacementCheckpoints.state, [...openCheckpointStates]),
+          ),
+        )
+        .limit(1);
+      if (!openCheckpoint) {
+        await this.database.transaction(async (transaction) => {
+          const [run] = await transaction
+            .select()
+            .from(actReplacementRuns)
+            .where(eq(actReplacementRuns.id, runId))
+            .limit(1)
+            .for("update");
+          if (!run) throw new ActReplacementRunNotFoundError();
+          await this.maybeFinalize(transaction, run);
+        });
+      }
 
       const [run] = await this.database
         .select()
