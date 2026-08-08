@@ -67,16 +67,18 @@ function cloneSanitized(value: unknown, ancestors: Set<object>): unknown {
     if (Array.isArray(value)) {
       return value.map((item) => cloneSanitized(item, ancestors));
     }
-    const sanitized: Record<string, unknown> = Object.create(null) as Record<
-      string,
-      unknown
-    >;
+    const sanitized: Record<string, unknown> = {};
     for (const key of Object.keys(value)) {
       if (isSensitiveSourceKey(key)) continue;
-      sanitized[key] = cloneSanitized(
-        (value as Record<string, unknown>)[key],
-        ancestors,
-      );
+      Object.defineProperty(sanitized, key, {
+        value: cloneSanitized(
+          (value as Record<string, unknown>)[key],
+          ancestors,
+        ),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
     return sanitized;
   } finally {

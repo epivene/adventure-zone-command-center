@@ -83,6 +83,12 @@ describe("Act source fingerprinting", () => {
 
     const sanitized = sanitizeSourceContent(source);
 
+    expect(Object.getPrototypeOf(sanitized)).toBe(Object.prototype);
+    expect(
+      Object.getPrototypeOf(
+        (sanitized as { __proto__: Record<string, unknown> }).__proto__,
+      ),
+    ).toBe(Object.prototype);
     expect(Object.prototype.hasOwnProperty.call(sanitized, "__proto__")).toBe(
       true,
     );
