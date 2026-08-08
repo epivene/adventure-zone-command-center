@@ -102,6 +102,7 @@ export interface ActReplacementControlStore {
     requestedBy: string;
   }): Promise<{ runId: string } | null>;
   summarize(runId: string): Promise<ActReplacementStatus>;
+  resumeRun?(input: { runId: string; now: Date }): Promise<void>;
   supersedeRun(input: {
     runId: string;
     requestedBy: string;
@@ -142,6 +143,10 @@ class DatabaseActReplacementControlStore implements ActReplacementControlStore {
 
   async createRun(input: StartActReplacementRun) {
     return (await this.checkpoints()).createRun(input);
+  }
+
+  async resumeRun(input: { runId: string; now: Date }) {
+    return (await this.checkpoints()).resumeRun(input);
   }
 
   async findOwnedRun(input: OwnedRunLookup) {
@@ -415,7 +420,7 @@ export function createActReplacementRouter(
     return {
       ...run,
       ...(await dependencies.review.workflow.summarize(runId)),
-      applyEnabled: true,
+      applyEnabled: process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
     };
   };
   const ownedSource = async (
@@ -561,6 +566,10 @@ export function createActReplacementRouter(
           res.status(409).json({ code: "run_not_resumable" });
           return;
         }
+        await dependencies.store.resumeRun?.({
+          runId: owned.runId,
+          now: dependencies.now(),
+        });
         res.json({ run });
       } catch (error) {
         handleRouteError(error, res);
@@ -765,6 +774,10 @@ export function createActReplacementRouter(
           ...context,
         });
         if (!owned) return runNotFound(res);
+        if (process.env.ACT_MIGRATION_APPLY_ENABLED !== "true")
+          return res
+            .status(403)
+            .json({ code: "act_apply_disabled", previewOnly: true });
         res.json(
           await review.applyCoordinator.applyNext({
             runId: owned.runId,
@@ -794,6 +807,10 @@ export function createActReplacementRouter(
           ...context,
         });
         if (!owned) return runNotFound(res);
+        if (process.env.ACT_MIGRATION_APPLY_ENABLED !== "true")
+          return res
+            .status(403)
+            .json({ code: "act_apply_disabled", previewOnly: true });
         res.status(410).json({ code: "apply_next_required" });
       } catch (error) {
         handleRouteError(error, res);
