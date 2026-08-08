@@ -119,6 +119,10 @@ const relationships: Partial<
 
 export interface ActExtractionSourceClient {
   listRoot(kind: ActRootStreamType, request: ActPageRequest): Promise<ActPage>;
+  listContactNotes(
+    contactId: string,
+    request: ActPageRequest,
+  ): Promise<ActPage>;
   getDetail(
     kind: ActRootStreamType,
     id: string,
@@ -176,6 +180,9 @@ function isActPage(value: unknown): value is ActPage {
 
 function pathTemplate(checkpoint: WorkerCheckpoint): string {
   if (checkpoint.checkpointKind === "relationship") {
+    if (checkpoint.streamType === "note") {
+      return "/api/contacts/{id}/note";
+    }
     const relationship = relationships[checkpoint.streamType];
     if (!relationship) throw new ActApiError("invalid_response", false);
     return relationship.pathTemplate;
@@ -399,6 +406,19 @@ export class ActExtractionWorker {
     checkpoint: WorkerCheckpoint,
   ): Promise<ActPage | Record<string, unknown>> {
     if (checkpoint.checkpointKind === "relationship") {
+      if (checkpoint.streamType === "note") {
+        if (!checkpoint.parentActRecordId) {
+          throw new ActApiError("invalid_response", false);
+        }
+        return this.dependencies.source.listContactNotes(
+          checkpoint.parentActRecordId,
+          {
+            skip: checkpoint.nextSkip,
+            top: checkpoint.pageSize,
+            queryMode: checkpoint.queryMode,
+          },
+        );
+      }
       const relationship = relationships[checkpoint.streamType];
       if (!relationship || !checkpoint.parentActRecordId) {
         throw new ActApiError("invalid_response", false);
@@ -458,6 +478,31 @@ export class ActExtractionWorker {
     queryMode: WorkerCheckpoint["queryMode"];
   } {
     if (checkpoint.checkpointKind === "relationship") {
+      if (checkpoint.streamType === "note") {
+        if (!checkpoint.parentActRecordId || !isActPage(fetched)) {
+          throw new ActApiError("invalid_response", false);
+        }
+        const items = parseRootSourceRecords({
+          streamType: "note",
+          records: fetched.items,
+          queryMode: fetched.queryMode,
+        }).map((item) => ({
+          ...item,
+          relationshipEvidence: {
+            source: "endpoint",
+            parentKind: "note",
+            parentActRecordId: item.actRecordId,
+            targetKind: "contact",
+            targetActRecordId: checkpoint.parentActRecordId,
+          },
+        }));
+        return {
+          items,
+          derivedCheckpoints: [],
+          nextSkip: fetched.nextSkip,
+          queryMode: fetched.queryMode,
+        };
+      }
       const relationship = relationships[checkpoint.streamType];
       if (
         !relationship ||
