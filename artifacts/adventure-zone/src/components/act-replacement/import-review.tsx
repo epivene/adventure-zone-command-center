@@ -59,7 +59,9 @@ export function ImportReview({
   importLabel = "Import safe records",
   onSearch,
   onPageChange,
+  onImportAsNew,
   onImport,
+  resolvingSourceRecordId = null,
 }: {
   safeOperationCount: number;
   reviewRequiredCount: number;
@@ -69,7 +71,9 @@ export function ImportReview({
   importLabel?: string;
   onSearch: (search: string) => void;
   onPageChange: (page: number) => void;
+  onImportAsNew: (row: ReviewPage["rows"][number]) => void;
   onImport: () => void;
+  resolvingSourceRecordId?: string | null;
 }) {
   const [search, setSearch] = useState("");
   const issueCounts = new Map<string, number>();
@@ -202,6 +206,18 @@ export function ImportReview({
                     <p className="mt-3 text-sm text-slate-500">
                       No display details are available for this archived record.
                     </p>
+                  )}
+                  {row.issueCodes.includes("ambiguous_match") && (
+                    <button
+                      type="button"
+                      disabled={loading || resolvingSourceRecordId !== null}
+                      onClick={() => onImportAsNew(row)}
+                      className="mt-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-900 disabled:opacity-50"
+                    >
+                      {resolvingSourceRecordId === row.sourceRecordId
+                        ? "Saving decision…"
+                        : "Import as new record"}
+                    </button>
                   )}
                 </li>
               );
