@@ -56,6 +56,7 @@ export function ImportReview({
   review,
   loading = false,
   canImport = true,
+  canResolveAmbiguous = false,
   importLabel = "Import safe records",
   onSearch,
   onPageChange,
@@ -68,6 +69,7 @@ export function ImportReview({
   review: ReviewPage | null;
   loading?: boolean;
   canImport?: boolean;
+  canResolveAmbiguous?: boolean;
   importLabel?: string;
   onSearch: (search: string) => void;
   onPageChange: (page: number) => void;
@@ -207,18 +209,19 @@ export function ImportReview({
                       No display details are available for this archived record.
                     </p>
                   )}
-                  {row.issueCodes.includes("ambiguous_match") && (
-                    <button
-                      type="button"
-                      disabled={loading || resolvingSourceRecordId !== null}
-                      onClick={() => onImportAsNew(row)}
-                      className="mt-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-900 disabled:opacity-50"
-                    >
-                      {resolvingSourceRecordId === row.sourceRecordId
-                        ? "Saving decision…"
-                        : "Import as new record"}
-                    </button>
-                  )}
+                  {canResolveAmbiguous &&
+                    row.issueCodes.includes("ambiguous_match") && (
+                      <button
+                        type="button"
+                        disabled={loading || resolvingSourceRecordId !== null}
+                        onClick={() => onImportAsNew(row)}
+                        className="mt-4 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-900 disabled:opacity-50"
+                      >
+                        {resolvingSourceRecordId === row.sourceRecordId
+                          ? "Saving decision…"
+                          : "Import as new record"}
+                      </button>
+                    )}
                 </li>
               );
             })}
