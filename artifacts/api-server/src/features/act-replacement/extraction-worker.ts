@@ -165,6 +165,12 @@ function durationMs(startedAt: Date, completedAt: Date) {
   return Math.max(0, completedAt.getTime() - startedAt.getTime());
 }
 
+function safeProcessErrorCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code)
+    : "unknown";
+}
+
 function isActPage(value: unknown): value is ActPage {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
@@ -218,6 +224,18 @@ export class ActExtractionWorker {
     if (!claimed) return { kind: "idle" };
     const checkpoint = claimed as WorkerCheckpoint;
 
+    if (checkpoint.checkpointKind === "list") {
+      logger.info(
+        {
+          runId: checkpoint.runId,
+          checkpointId: checkpoint.id,
+          streamType: checkpoint.streamType,
+          checkpointKind: checkpoint.checkpointKind,
+        },
+        "Act extraction root checkpoint claimed",
+      );
+    }
+
     if (!this.dependencies.authorization.isReady(input.now)) {
       return this.runAuthorizationStep(checkpoint, input.now);
     }
@@ -232,7 +250,17 @@ export class ActExtractionWorker {
         pathTemplate: pathTemplate(checkpoint),
         startedAt: input.now,
       }));
-    } catch {
+    } catch (error) {
+      logger.error(
+        {
+          runId: checkpoint.runId,
+          checkpointId: checkpoint.id,
+          streamType: checkpoint.streamType,
+          checkpointKind: checkpoint.checkpointKind,
+          errorCode: safeProcessErrorCode(error),
+        },
+        "Act extraction audit could not be started",
+      );
       return progress(checkpoint);
     }
 
@@ -306,7 +334,17 @@ export class ActExtractionWorker {
         pageFingerprint,
         now: completedAt,
       });
-    } catch {
+    } catch (error) {
+      logger.error(
+        {
+          runId: checkpoint.runId,
+          checkpointId: checkpoint.id,
+          streamType: checkpoint.streamType,
+          checkpointKind: checkpoint.checkpointKind,
+          errorCode: safeProcessErrorCode(error),
+        },
+        "Act extraction page could not be archived",
+      );
       // The lease and archive transaction are the restart boundary. A storage
       // failure leaves the leased checkpoint recoverable.
     }
