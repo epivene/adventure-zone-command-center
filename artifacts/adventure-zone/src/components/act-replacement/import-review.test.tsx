@@ -103,13 +103,7 @@ describe("ImportReview", () => {
         safeOperationCount={0}
         reviewRequiredCount={1}
         canResolveAmbiguous
-        review={{
-          page: 1,
-          pageSize: 25,
-          total: 1,
-          manifestDigest: "a".repeat(64),
-          rows: [row],
-        }}
+        review={{ page: 1, pageSize: 25, total: 1, manifestDigest: "a".repeat(64), rows: [row] }}
         onSearch={() => {}}
         onPageChange={() => {}}
         onImportAsNew={onImportAsNew}
@@ -117,9 +111,7 @@ describe("ImportReview", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Import as new record" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Import as new record" }));
     expect(onImportAsNew).toHaveBeenCalledWith(row);
   });
 });
