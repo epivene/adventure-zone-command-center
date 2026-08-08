@@ -23,6 +23,7 @@ import {
   type StartActReplacementRun,
 } from "./import-types";
 import { calculateRetryAt } from "./retry-policy";
+import { logger } from "@/lib/logger";
 
 type DrizzleDatabase = typeof database;
 type DrizzleTransaction = Parameters<
@@ -38,6 +39,21 @@ const activeRunPhases = [
 ] as const;
 const openCheckpointStates = ["pending", "leased", "retry_wait"] as const;
 const terminalCheckpointStates = ["complete", "unsupported", "failed"] as const;
+const loggedFinalizationBlockers = new Set<string>();
+
+function logFinalizationBlocker(
+  runId: string,
+  blocker: "open_checkpoints" | "reconciliation_mismatch",
+  details: Record<string, unknown>,
+) {
+  const key = `${runId}:${blocker}`;
+  if (loggedFinalizationBlockers.has(key)) return;
+  loggedFinalizationBlockers.add(key);
+  logger.warn(
+    { runId, blocker, ...details },
+    "Act extraction finalization blocked",
+  );
+}
 
 const zeroCounters = (): ActExtractionCounters => ({
   responseRows: 0,
@@ -960,15 +976,26 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
         ),
       )
       .for("update");
-    if (
-      checkpoints.length === 0 ||
-      checkpoints.some(
-        ({ state }) =>
-          !terminalCheckpointStates.includes(
-            state as (typeof terminalCheckpointStates)[number],
-          ),
-      )
-    ) {
+    const openCheckpoints = checkpoints.filter(
+      ({ state }) =>
+        !terminalCheckpointStates.includes(
+          state as (typeof terminalCheckpointStates)[number],
+        ),
+    );
+    if (checkpoints.length === 0 || openCheckpoints.length > 0) {
+      const states = openCheckpoints.reduce<Record<string, number>>(
+        (counts, checkpoint) => {
+          const key = `${checkpoint.streamType}:${checkpoint.checkpointKind}:${checkpoint.state}`;
+          counts[key] = (counts[key] ?? 0) + 1;
+          return counts;
+        },
+        {},
+      );
+      logFinalizationBlocker(run.id, "open_checkpoints", {
+        checkpointCount: checkpoints.length,
+        openCheckpointCount: openCheckpoints.length,
+        states,
+      });
       return;
     }
 
@@ -1034,7 +1061,7 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
       ...checkpoints.map(({ streamType }) => streamType),
       ...observationRows.map(({ streamType }) => streamType),
     ]);
-    const equationsHold = [...streamTypes].every((streamType) => {
+    const reconciliation = [...streamTypes].map((streamType) => {
       const counters = this.sumCounters(
         checkpoints.filter((row) => row.streamType === streamType),
       );
@@ -1044,7 +1071,7 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
       const versioned = observations.filter(
         ({ versionId }) => versionId !== null,
       ).length;
-      return (
+      const matches =
         observations.length === versioned &&
         counters.observedIdentities === observations.length &&
         counters.archivedIdentities === versioned &&
@@ -1052,10 +1079,26 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
         counters.observedIdentities ===
           counters.completeIdentities +
             counters.partialIdentities +
-            counters.failedIdentities
-      );
+            counters.failedIdentities;
+      return {
+        streamType,
+        matches,
+        observations: observations.length,
+        versioned,
+        observedIdentities: counters.observedIdentities,
+        archivedIdentities: counters.archivedIdentities,
+        completeIdentities: counters.completeIdentities,
+        partialIdentities: counters.partialIdentities,
+        failedIdentities: counters.failedIdentities,
+      };
     });
-    if (!equationsHold) return;
+    const equationsHold = reconciliation.every(({ matches }) => matches);
+    if (!equationsHold) {
+      logFinalizationBlocker(run.id, "reconciliation_mismatch", {
+        streams: reconciliation.filter(({ matches }) => !matches),
+      });
+      return;
+    }
 
     await transaction
       .update(actReplacementRuns)
