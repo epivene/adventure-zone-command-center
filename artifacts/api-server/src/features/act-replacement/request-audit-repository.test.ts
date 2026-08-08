@@ -18,6 +18,7 @@ describe("Act request audit metadata", () => {
     "/authorize",
     "/api/companies",
     "/api/contacts/{id}",
+    "/api/contacts/{id}/note",
     "/api/opportunities/{id}/companies",
     "/api/activities/{id}/opportunities",
     "/api/notes/{id}/contacts",
