@@ -31,7 +31,19 @@ vi.mock("@/lib/env", async (importOriginal) => {
 const DATABASE_KEY = "server-act-database";
 const RUN_ID = "10000000-0000-4000-8000-000000000001";
 const SECOND_RUN_ID = "10000000-0000-4000-8000-000000000002";
+const SOURCE_RECORD_ID = "20000000-0000-4000-8000-000000000001";
+const SOURCE_VERSION_ID = "30000000-0000-4000-8000-000000000001";
+const TARGET_ENTITY_ID = "40000000-0000-4000-8000-000000000001";
 const MANIFEST_DIGEST = "a".repeat(64);
+const REVIEW_TOKEN = {
+  sourceRecordId: SOURCE_RECORD_ID,
+  sourceVersionId: SOURCE_VERSION_ID,
+  fieldName: "phone",
+  sourceValueFingerprint: "b".repeat(64),
+  targetEntityType: "contact",
+  targetEntityId: TARGET_ENTITY_ID,
+  localValueFingerprint: "c".repeat(64),
+};
 
 function status(
   runId = RUN_ID,
@@ -46,6 +58,7 @@ function status(
   manifestDigest: string | null;
   nextApplyCursor: number;
   canOrganize: boolean;
+  canReview: boolean;
   canApplySafe: boolean;
 } {
   return {
@@ -112,6 +125,7 @@ function status(
     manifestDigest: null,
     nextApplyCursor: 0,
     canOrganize: false,
+    canReview: false,
     canApplySafe: false,
   };
 }
@@ -271,6 +285,7 @@ function workflowReview(overrides: Record<string, unknown> = {}) {
         manifestDigest: MANIFEST_DIGEST,
         nextApplyCursor: 4,
         canOrganize: false,
+        canReview: true,
         canApplySafe: true,
       }),
     },
@@ -673,6 +688,7 @@ describe("owner import workflow", () => {
       manifestDigest: MANIFEST_DIGEST,
       nextApplyCursor: 4,
       canOrganize: false,
+      canReview: true,
       canApplySafe: true,
       applyEnabled: false,
     });
@@ -693,7 +709,10 @@ describe("owner import workflow", () => {
               sourceVersionId: "version-one",
               state: "awaiting_review",
               issues: [
-                { code: "ambiguous_match", reason: "private rationale" },
+                {
+                  code: "ambiguous_match",
+                  reason: "name_only_match_requires_review",
+                },
               ],
               candidates: [{ privateCandidateId: "candidate-secret" }],
               match: { localId: "private-local-id" },
@@ -735,12 +754,26 @@ describe("owner import workflow", () => {
       pageSize: 200,
       total: 1,
       manifestDigest: MANIFEST_DIGEST,
+      summary: {
+        decisionRequired: 1,
+        issueCounts: { ambiguous_match: 1 },
+        diagnosticCounts: {},
+      },
       rows: [
         {
           sourceRecordId: "source-one",
           sourceVersionId: "version-one",
           state: "awaiting_review",
           issueCodes: ["ambiguous_match"],
+          issues: [
+            {
+              code: "ambiguous_match",
+              reason: "name_only_match_requires_review",
+            },
+          ],
+          conflicts: [],
+          candidates: [],
+          canImportStandalone: false,
           operationKeys: [],
           streamType: "contact",
           display: { name: "Safe name", email: "safe@example.com" },
@@ -748,8 +781,401 @@ describe("owner import workflow", () => {
       ],
     });
     expect(JSON.stringify(response.body)).not.toMatch(
-      /password|credential|private|apiKey|candidate|warning|customScalar/i,
+      /password|credential|private|apiKey|privateCandidateId|warning|customScalar/i,
     );
+  });
+
+  it("returns bounded review summaries and sanitized actionable projections", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({
+          digest: MANIFEST_DIGEST,
+          diagnostics: [],
+          operations: [],
+          outcomes: [],
+        }),
+        listSources: vi.fn().mockResolvedValue([]),
+        readReviewPage: vi.fn().mockResolvedValue({
+          page: 1,
+          pageSize: 25,
+          total: 3,
+          manifestDigest: MANIFEST_DIGEST,
+          summary: {
+            decisionRequired: 3,
+            issueCounts: { field_conflict: 3 },
+            diagnosticCounts: { unsupported_field: 1 },
+          },
+          rows: [
+            {
+              sourceRecordId: "source-one",
+              sourceVersionId: "version-one",
+              state: "awaiting_review",
+              issues: [{ code: "field_conflict", reason: "phone" }],
+              conflicts: [
+                {
+                  fieldName: "phone",
+                  localValue: "555-0100",
+                  sourceValue: "555-0101",
+                  target: {
+                    id: "contact-one",
+                    entityType: "contact",
+                    label: "Safe candidate",
+                    detail: null,
+                  },
+                  reviewToken: REVIEW_TOKEN,
+                },
+              ],
+              candidates: [
+                {
+                  id: "contact-one",
+                  entityType: "contact",
+                  label: "Safe candidate",
+                  detail: null,
+                  privatePayload: "never expose",
+                },
+              ],
+              canImportStandalone: false,
+              operationKeys: [],
+              streamType: "contact",
+              display: { name: "Safe name", password: "never expose" },
+            },
+          ],
+        }),
+      },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .get(
+        `/api/migration/act-replacement/runs/${RUN_ID}/review?issue=field_conflict&page=1&pageSize=25`,
+      )
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      summary: {
+        decisionRequired: 3,
+        issueCounts: { field_conflict: 3 },
+        diagnosticCounts: { unsupported_field: 1 },
+      },
+      rows: [
+        {
+          sourceRecordId: "source-one",
+          issues: [{ code: "field_conflict", reason: "phone" }],
+          conflicts: [
+            {
+              fieldName: "phone",
+              localValue: "555-0100",
+              sourceValue: "555-0101",
+              target: {
+                id: "contact-one",
+                entityType: "contact",
+                label: "Safe candidate",
+                detail: null,
+              },
+              reviewToken: REVIEW_TOKEN,
+            },
+          ],
+          candidates: [
+            {
+              id: "contact-one",
+              entityType: "contact",
+              label: "Safe candidate",
+              detail: null,
+            },
+          ],
+          canImportStandalone: false,
+          display: { name: "Safe name" },
+        },
+      ],
+    });
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /password|privatePayload|never expose/i,
+    );
+  });
+
+  it.each([
+    [
+      `/api/migration/act-replacement/runs/${RUN_ID}/review?issue=not_an_issue`,
+    ],
+    [
+      `/api/migration/act-replacement/runs/${RUN_ID}/review?issue=field_conflict&issue=unsupported_record`,
+    ],
+    [
+      `/api/migration/act-replacement/runs/${RUN_ID}/review?state=not_a_state`,
+    ],
+    [
+      `/api/migration/act-replacement/runs/${RUN_ID}/review?state=ready&state=ignored`,
+    ],
+    [
+      `/api/migration/act-replacement/runs/${RUN_ID}/issues?issue=not_an_issue`,
+    ],
+    [
+      `/api/migration/act-replacement/runs/${RUN_ID}/issues?issue=field_conflict&issue=unsupported_record`,
+    ],
+  ])("rejects malformed review filters without reading %s", async (path) => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const readReviewPage = vi.fn();
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn(),
+        listSources: vi.fn(),
+        readReviewPage,
+      },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .get(path)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: "invalid_request" });
+    expect(readReviewPage).not.toHaveBeenCalled();
+  });
+
+  it("bulk-decides only owned selections with strict bounded bodies and an authenticated actor", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const bulkDecide = vi.fn().mockResolvedValue({
+      decisions: [{ id: "decision-one", sourceRecordId: "source-one" }],
+      manifestDigest: "b".repeat(64),
+      reviewedOperationIds: ["contact:source-one"],
+    });
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({
+          outcomes: [{ sourceRecordId: "source-one" }],
+        }),
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: { bulkDecide },
+    });
+    const app = testApp(store, true, review);
+    const authorization = `Bearer ${ownerToken()}`;
+    const body = {
+      expectedManifestDigest: MANIFEST_DIGEST,
+      requestKey: "bulk-one",
+      scope: "field_conflict",
+      decision: "keep_local",
+      fieldName: "phone",
+      selections: [
+        { sourceRecordId: "source-one", sourceVersionId: "version-one" },
+      ],
+    };
+
+    const invalid = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", authorization)
+      .send({ ...body, selections: [] });
+    const oversized = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", authorization)
+      .send({
+        ...body,
+        selections: Array.from({ length: 201 }, (_, index) => ({
+          sourceRecordId: `source-${index}`,
+          sourceVersionId: `version-${index}`,
+        })),
+      });
+    const actorInjected = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", authorization)
+      .send({ ...body, requestedBy: "attacker-controlled" });
+    const invalidCombination = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", authorization)
+      .send({
+        ...body,
+        scope: "relationship",
+        decision: "keep_local",
+        fieldName: null,
+      });
+    const response = await request(app)
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", authorization)
+      .send(body);
+
+    expect(invalid.status).toBe(400);
+    expect(invalid.body).toEqual({ code: "invalid_request" });
+    expect(oversized.status).toBe(400);
+    expect(oversized.body).toEqual({ code: "invalid_request" });
+    expect(actorInjected.status).toBe(400);
+    expect(actorInjected.body).toEqual({ code: "invalid_request" });
+    expect(invalidCombination.status).toBe(400);
+    expect(invalidCombination.body).toEqual({ code: "invalid_request" });
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({
+      decisions: [{ id: "decision-one", sourceRecordId: "source-one" }],
+      manifestDigest: "b".repeat(64),
+      reviewedOperationIds: ["contact:source-one"],
+    });
+    expect(bulkDecide).toHaveBeenCalledOnce();
+    expect(bulkDecide).toHaveBeenCalledWith({ ...body, runId: RUN_ID, requestedBy: "owner" });
+  });
+
+  it("checks bulk run ownership once without loading a manifest per selection", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const ownership = vi.spyOn(store, "findOwnedRun");
+    const getManifest = vi.fn().mockResolvedValue({ outcomes: [] });
+    const bulkDecide = vi.fn().mockResolvedValue({
+      decisions: [],
+      manifestDigest: "b".repeat(64),
+      reviewedOperationIds: [],
+    });
+    const review = workflowReview({
+      reader: { getManifest, listSources: vi.fn().mockResolvedValue([]) },
+      commands: { bulkDecide },
+    });
+    const selections = Array.from({ length: 200 }, (_, index) => ({
+      sourceRecordId: `source-${index}`,
+      sourceVersionId: `version-${index}`,
+    }));
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "bounded-bulk",
+        scope: "unsupported_record",
+        decision: "ignore_source",
+        fieldName: null,
+        selections,
+      });
+
+    expect(response.status).toBe(201);
+    expect(ownership).toHaveBeenCalledTimes(1);
+    expect(getManifest).not.toHaveBeenCalled();
+    expect(bulkDecide).toHaveBeenCalledOnce();
+  });
+
+  it("hides foreign bulk decisions and preserves stale-manifest conflicts", async () => {
+    const store = new MemoryControlStore();
+    addRun(store, { sourceDatabaseKey: "other-database" });
+    const bulkDecide = vi.fn();
+    const review = workflowReview({ commands: { bulkDecide } });
+    const body = {
+      expectedManifestDigest: MANIFEST_DIGEST,
+      requestKey: "bulk-one",
+      scope: "unsupported_record",
+      decision: "ignore_source",
+      fieldName: null,
+      selections: [
+        { sourceRecordId: "source-one", sourceVersionId: "version-one" },
+      ],
+    };
+
+    const foreign = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(foreign.status).toBe(404);
+    expect(foreign.body).toEqual({ code: "run_not_found" });
+    expect(bulkDecide).not.toHaveBeenCalled();
+
+    const ownedStore = new MemoryControlStore();
+    addRun(ownedStore);
+    const staleReview = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({
+          outcomes: [{ sourceRecordId: "source-one" }],
+        }),
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: {
+        bulkDecide: vi.fn().mockRejectedValue({
+          status: 409,
+          code: "manifest_digest_mismatch",
+        }),
+      },
+    });
+    const stale = await request(testApp(ownedStore, true, staleReview))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(stale.status).toBe(409);
+    expect(stale.body).toEqual({ code: "manifest_digest_mismatch" });
+  });
+
+  it("returns the atomic command's not-found result for mixed bulk selections", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const bulkDecide = vi.fn().mockRejectedValue({
+      status: 404,
+      code: "run_not_found",
+    });
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({
+          outcomes: [{ sourceRecordId: "source-one" }],
+        }),
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: { bulkDecide },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "mixed-owned-and-foreign",
+        scope: "unsupported_record",
+        decision: "ignore_source",
+        fieldName: null,
+        selections: [
+          { sourceRecordId: "source-one", sourceVersionId: "version-one" },
+          {
+            sourceRecordId: "foreign-source",
+            sourceVersionId: "foreign-version",
+          },
+        ],
+      });
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ code: "run_not_found" });
+    expect(bulkDecide).toHaveBeenCalledOnce();
+  });
+
+  it("approves ready operations for an owned run using the authenticated owner", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const approveReady = vi.fn().mockResolvedValue({
+      selectedOperationIds: ["contact:source-one"],
+      approvedOperationIds: ["contact:source-one"],
+      dependencyOperationIds: [],
+      rejectedOperationIds: [],
+      selectedCount: 1,
+      dependencyCount: 0,
+      rejectedCount: 0,
+      manifestDigest: MANIFEST_DIGEST,
+    });
+    const review = workflowReview({ commands: { approveReady } });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/approvals/ready`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "ready-approval",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      approvedOperationIds: ["contact:source-one"],
+      manifestDigest: MANIFEST_DIGEST,
+    });
+    expect(approveReady).toHaveBeenCalledWith({
+      runId: RUN_ID,
+      expectedManifestDigest: MANIFEST_DIGEST,
+      requestKey: "ready-approval",
+      requestedBy: "owner",
+    });
   });
 
   it("strictly validates and owner-scopes safe-default approval", async () => {
@@ -798,6 +1224,159 @@ describe("owner import workflow", () => {
       approvedOperationIds: ["organization:one"],
       manifestDigest: MANIFEST_DIGEST,
     });
+  });
+
+  it("injects the durable decision actor from the authenticated owner", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const decide = vi.fn().mockResolvedValue({ id: "decision-1" });
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({
+          outcomes: [{ sourceRecordId: SOURCE_RECORD_ID }],
+        }),
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: { decide },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/source-records/${SOURCE_RECORD_ID}/decisions`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        runId: RUN_ID,
+        sourceVersionId: SOURCE_VERSION_ID,
+        scope: "field_conflict",
+        decision: "keep_local",
+        fieldName: "phone",
+        requestKey: "decision-request",
+      });
+
+    expect(response.status).toBe(201);
+    expect(decide).toHaveBeenCalledWith(expect.objectContaining({
+      decidedBy: "owner",
+      sourceRecordId: SOURCE_RECORD_ID,
+      sourceVersionId: SOURCE_VERSION_ID,
+    }));
+  });
+
+  it("strictly rejects malformed UUIDs and unknown individual decision fields", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const decide = vi.fn().mockResolvedValue({ id: "decision-1" });
+    const getManifest = vi.fn().mockResolvedValue({
+      outcomes: [
+        { sourceRecordId: "not-a-uuid" },
+        { sourceRecordId: SOURCE_RECORD_ID },
+      ],
+    });
+    const app = testApp(store, true, workflowReview({
+      reader: { getManifest, listSources: vi.fn().mockResolvedValue([]) },
+      commands: { decide },
+    }));
+    const body = {
+      runId: RUN_ID,
+      sourceVersionId: SOURCE_VERSION_ID,
+      scope: "field_conflict",
+      decision: "keep_local",
+      fieldName: "phone",
+      requestKey: "strict-decision",
+    };
+
+    const malformedPath = await request(app)
+      .post("/api/migration/act-replacement/source-records/not-a-uuid/decisions")
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+    const unknownField = await request(app)
+      .post(`/api/migration/act-replacement/source-records/${SOURCE_RECORD_ID}/decisions`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ ...body, decidedBy: "attacker-controlled" });
+
+    expect(malformedPath.status).toBe(400);
+    expect(unknownField.status).toBe(400);
+    expect(decide).not.toHaveBeenCalled();
+  });
+
+  it("requires a reviewed conflict token and never accepts an individual overwrite target from the client", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const decide = vi.fn().mockResolvedValue({ id: "decision-1" });
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({ outcomes: [{ sourceRecordId: SOURCE_RECORD_ID }] }),
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: { decide },
+    });
+    const app = testApp(store, true, review);
+    const body = {
+      runId: RUN_ID,
+      sourceVersionId: SOURCE_VERSION_ID,
+      scope: "field_conflict",
+      decision: "use_source",
+      fieldName: "phone",
+      requestKey: "individual-overwrite",
+    };
+
+    const missingToken = await request(app)
+      .post(`/api/migration/act-replacement/source-records/${SOURCE_RECORD_ID}/decisions`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+    const injectedTarget = await request(app)
+      .post(`/api/migration/act-replacement/source-records/${SOURCE_RECORD_ID}/decisions`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        ...body,
+        reviewToken: REVIEW_TOKEN,
+        targetEntityType: "organization",
+        targetEntityId: "attacker-selected-target",
+      });
+    const accepted = await request(app)
+      .post(`/api/migration/act-replacement/source-records/${SOURCE_RECORD_ID}/decisions`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ ...body, reviewToken: REVIEW_TOKEN });
+
+    expect(missingToken.status).toBe(400);
+    expect(injectedTarget.status).toBe(400);
+    expect(accepted.status).toBe(201);
+    expect(decide).toHaveBeenCalledOnce();
+    expect(decide).toHaveBeenCalledWith(expect.objectContaining({
+      sourceRecordId: SOURCE_RECORD_ID,
+      reviewToken: REVIEW_TOKEN,
+      decidedBy: "owner",
+    }));
+    expect(decide.mock.calls[0]?.[0]).not.toMatchObject({
+      targetEntityType: "organization",
+      targetEntityId: "attacker-selected-target",
+    });
+  });
+
+  it("rejects bulk use-source selections that omit their reviewed conflict token", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const bulkDecide = vi.fn();
+    const review = workflowReview({
+      reader: {
+        getManifest: vi.fn().mockResolvedValue({ outcomes: [{ sourceRecordId: "source-one" }] }),
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: { bulkDecide },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "bulk-overwrite",
+        scope: "field_conflict",
+        decision: "use_source",
+        fieldName: "phone",
+        selections: [{ sourceRecordId: "source-one", sourceVersionId: "version-one" }],
+      });
+
+    expect(response.status).toBe(400);
+    expect(bulkDecide).not.toHaveBeenCalled();
   });
 
   it("rejects apply batches larger than 25 before any write", async () => {
