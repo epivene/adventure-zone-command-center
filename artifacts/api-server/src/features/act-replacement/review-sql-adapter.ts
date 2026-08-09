@@ -21,7 +21,7 @@ import type { ExternalLink } from "./matching/match-result";
 import { decisionSupersessionRequestFingerprint, decisionWithReviewedProof, individualDecisionRequestFingerprint, prepareBulkReviewDecisions, reviewedOperationIds, validateIndividualDecisionAgainstCurrentState, type Assignment, type BulkReviewDecisionResult, type BulkReviewRequestLookup, type ConflictReviewState, type Decision, type ReviewCommandStore, type SaveAssignmentInput, type SaveDecisionInput, type SaveDecisionsAndRebuildInput, type SaveDecisionsAndRebuildResult } from "./review-command-service";
 import { assignmentTargetEntityTypes, assignmentTargetLikePattern, isAssignmentTargetEntityType, projectReviewRow, type AssignmentTargetEntityType, type ReviewCandidate, type ReviewIssueCode, type ReviewPage, type ReviewReadInput, type ReviewReader, type ReviewSourceRecord, type ReviewTargetProjection } from "./review-reader";
 import { projectActReviewDisplay } from "./review-display";
-import { ProductionActOrganizer, type OrganizerRun, type ProductionOrganizerStore } from "./production-organizer";
+import { organizerErrorCode, ProductionActOrganizer, type OrganizerRun, type ProductionOrganizerStore } from "./production-organizer";
 import { fingerprintSourceContent } from "./source-fingerprint";
 
 export { projectActReviewDisplay } from "./review-display";
@@ -54,15 +54,17 @@ export function staleNonterminalOperationPredicate(runId: string, operationKeys:
 type OperationSemantics = Pick<ManifestOperation, "sourceRecordId" | "sourceVersionId" | "targetType" | "action" | "payload" | "dependencyOperationKeys" | "requiredForSourceOutcome" | "safeByDefault">;
 
 export function operationSemanticsMatch(left: OperationSemantics, right: OperationSemantics): boolean {
-  return left.sourceRecordId === right.sourceRecordId
+  const effectMatches = left.sourceRecordId === right.sourceRecordId
     && left.sourceVersionId === right.sourceVersionId
     && left.targetType === right.targetType
     && left.action === right.action
     && left.requiredForSourceOutcome === right.requiredForSourceOutcome
     && left.safeByDefault === right.safeByDefault
-    && fingerprintSourceContent(left.payload) === fingerprintSourceContent(right.payload)
-    && fingerprintSourceContent({ dependencyOperationKeys: [...left.dependencyOperationKeys].sort() })
-      === fingerprintSourceContent({ dependencyOperationKeys: [...right.dependencyOperationKeys].sort() });
+    && fingerprintSourceContent(left.payload) === fingerprintSourceContent(right.payload);
+  if (!effectMatches) return false;
+  if (left.action === "create" || left.action === "link_existing") return true;
+  return fingerprintSourceContent({ dependencyOperationKeys: [...left.dependencyOperationKeys].sort() })
+    === fingerprintSourceContent({ dependencyOperationKeys: [...right.dependencyOperationKeys].sort() });
 }
 export function lockBulkSourceRowsQuery(scope: SourceDatabaseScope, sourceRecordIds: readonly string[]): SQL {
   const sourceIds = [...new Set(sourceRecordIds)].sort();
@@ -1221,10 +1223,8 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
       (error) => logger.error(
         {
           runId,
-          errorCode:
-            error && typeof error === "object" && "code" in error
-              ? String((error as { code?: unknown }).code)
-              : "organize_failed",
+          errorCode: organizerErrorCode(error),
+          err: error,
         },
         "Act organization failed",
       ),
