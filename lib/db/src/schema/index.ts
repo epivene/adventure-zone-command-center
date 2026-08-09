@@ -1918,7 +1918,7 @@ export const actReplacementOutcomes = pgTable("act_replacement_outcomes", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   unique("act_replacement_outcomes_run_source_unique").on(table.runId, table.sourceRecordId), check("act_replacement_outcomes_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`),
-  check("act_replacement_outcomes_state_valid", sql`${table.state} in ('pending','leased','ready','already_present','awaiting_review','unassigned','unsupported','applied','failed')`),
+  check("act_replacement_outcomes_state_valid", sql`${table.state} in ('pending','leased','ready','already_present','awaiting_review','unassigned','unsupported','ignored','applied','failed')`),
 ]);
 
 export const actSourceAssignments = pgTable("act_source_assignments", {
@@ -1934,9 +1934,31 @@ export const actSourceAssignments = pgTable("act_source_assignments", {
 export const actReplacementReviewDecisions = pgTable("act_replacement_review_decisions", {
   id: uuid("id").defaultRandom().primaryKey(), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id, { onDelete: "restrict" }),
   sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id, { onDelete: "restrict" }), scope: text("scope").notNull(), decision: text("decision").notNull(),
-  requestKey: text("request_key").notNull(), fieldName: text("field_name"), targetEntityType: text("target_entity_type"), targetEntityId: uuid("target_entity_id"),
-  active: boolean("active").default(true).notNull(), supersededAt: timestamp("superseded_at", { withTimezone: true }), supersededBy: text("superseded_by"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [uniqueIndex("act_replacement_review_decisions_active_unique").on(table.sourceRecordId, table.scope, sql`coalesce(${table.fieldName}, '')`).where(sql`${table.active} = true`), check("act_replacement_review_decisions_scope_valid", sql`${table.scope} in ('duplicate_identity','field_conflict','unsupported_record')`), check("act_replacement_review_decisions_field_scope_requires_name", sql`${table.scope} = 'field_conflict' and ${table.fieldName} is not null and btrim(${table.fieldName}) <> '' or ${table.scope} <> 'field_conflict' and ${table.fieldName} is null`), check("act_replacement_review_decisions_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`), check("act_replacement_review_decisions_supersession_requires_actor", sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`), check("act_replacement_review_decisions_decision_valid", sql`${table.decision} in ('link_existing','keep_separate','keep_local','use_source','ignore_source')`)]);
+  requestKey: text("request_key").notNull(), requestFingerprint: text("request_fingerprint").notNull(), fieldName: text("field_name"), relationshipSlot: text("relationship_slot"), targetEntityType: text("target_entity_type"), targetEntityId: uuid("target_entity_id"),
+  reviewedSourceValue: jsonb("reviewed_source_value").$type<unknown>(), reviewedSourceValueFingerprint: text("reviewed_source_value_fingerprint"),
+  reviewedLocalValue: jsonb("reviewed_local_value").$type<unknown>(), reviewedLocalValueFingerprint: text("reviewed_local_value_fingerprint"),
+  active: boolean("active").default(true).notNull(), supersededAt: timestamp("superseded_at", { withTimezone: true }), supersededBy: text("superseded_by"), decidedBy: text("decided_by").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("act_replacement_review_decisions_active_unique").on(table.sourceRecordId, table.scope, sql`coalesce(${table.relationshipSlot}, ${table.fieldName}, '')`).where(sql`${table.active} = true`), check("act_replacement_review_decisions_scope_valid", sql`${table.scope} in ('duplicate_identity','field_conflict','relationship','unsupported_record')`), check("act_replacement_review_decisions_field_scope_requires_name", sql`${table.scope} = 'field_conflict' and ${table.fieldName} is not null and btrim(${table.fieldName}) <> '' or ${table.scope} <> 'field_conflict' and ${table.fieldName} is null`), check("act_replacement_review_decisions_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`), check("act_replacement_review_decisions_supersession_requires_actor", sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`), check("act_replacement_review_decisions_actor_valid", sql`btrim(${table.decidedBy}) <> ''`), check("act_replacement_review_decisions_request_fingerprint_valid", sql`btrim(${table.requestFingerprint}) <> ''`), check("act_replacement_review_decisions_decision_valid", sql`${table.decision} in ('link_existing','keep_separate','keep_local','use_source','assign_parent','keep_unlinked','ignore_source')`), check("act_replacement_review_decisions_scope_decision_valid", sql`(${table.scope} = 'duplicate_identity' and ${table.decision} in ('link_existing','keep_separate')) or (${table.scope} = 'field_conflict' and ${table.decision} in ('keep_local','use_source')) or (${table.scope} = 'relationship' and ${table.decision} in ('assign_parent','keep_unlinked','ignore_source')) or (${table.scope} = 'unsupported_record' and ${table.decision} = 'ignore_source') or (${table.active} = false and ${table.supersededAt} is not null and ${table.supersededBy} = 'migration:018_invalid_scope_decision')`), check("act_replacement_review_decisions_relationship_parent_valid", sql`${table.decision} <> 'assign_parent' or (${table.scope} = 'relationship' and ${table.relationshipSlot} is not null and btrim(${table.relationshipSlot}) <> '' and ${table.targetEntityType} is not null and ${table.targetEntityId} is not null)`)]);
+
+export const actReplacementBulkReviewRequests = pgTable("act_replacement_bulk_review_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }),
+  requestKey: text("request_key").notNull(),
+  requestFingerprint: text("request_fingerprint").notNull(),
+  requestedBy: text("requested_by").notNull(),
+  manifestDigest: text("manifest_digest").notNull(),
+  decisionIds: jsonb("decision_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  reviewedOperationIds: jsonb("reviewed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("act_replacement_bulk_review_requests_run_key_unique").on(table.runId, table.requestKey),
+  check("act_replacement_bulk_review_requests_key_nonblank", sql`btrim(${table.requestKey}) <> ''`),
+  check("act_replacement_bulk_review_requests_fingerprint_nonblank", sql`btrim(${table.requestFingerprint}) <> ''`),
+  check("act_replacement_bulk_review_requests_actor_nonblank", sql`btrim(${table.requestedBy}) <> ''`),
+  check("act_replacement_bulk_review_requests_digest_nonblank", sql`btrim(${table.manifestDigest}) <> ''`),
+  check("act_replacement_bulk_review_requests_decision_ids_array", sql`jsonb_typeof(${table.decisionIds}) = 'array'`),
+  check("act_replacement_bulk_review_requests_operation_ids_array", sql`jsonb_typeof(${table.reviewedOperationIds}) = 'array'`),
+]);
 
 export const actReplacementApplyOperations = pgTable("act_replacement_apply_operations", {
   id: uuid("id").defaultRandom().primaryKey(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id), sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
