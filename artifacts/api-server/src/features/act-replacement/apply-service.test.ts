@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryApplyRepository } from "./apply-repository";
 import { ActApplyService } from "./apply-service";
+import { localValueFingerprint } from "./local-edit-policy";
 import type { ManifestOperation } from "./manifest-builder";
 const op = (key: string, action: ManifestOperation["action"], payload: Record<string, unknown> = {}, dependencies: string[] = []): ManifestOperation => ({ operationKey: key, sourceRecordId: key, sourceVersionId: `v-${key}`, targetType: "organization", action, payload, dependencyOperationKeys: dependencies, requiredForSourceOutcome: true, safeByDefault: true });
 const seedTarget = (repo: InMemoryApplyRepository, entityType: string, values: Record<string, unknown>, sourceRecordId = "seed") => {
@@ -9,6 +10,165 @@ const seedTarget = (repo: InMemoryApplyRepository, entityType: string, values: R
   return target;
 };
 describe("Act apply", () => { it("creates idempotently and records a durable batch replay", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); repo.seedManifest("r", "d"); repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]); const service = new ActApplyService(repo, true); const first = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k" }); expect(first).toMatchObject({ state: "complete", completedCount: 1 }); expect(await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k" })).toEqual(first); }); it("blocks a fill over a local nonblank value", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); repo.seedManifest("r", "d"); const created = seedTarget(repo, "organization", { name: "A", phone: "local" }); const operation = op("f", "fill_missing", { entityId: created.id, fieldName: "phone", value: "source" }); repo.seedOperations([operation]); const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["f"], expectedManifestDigest: "d", requestKey: "k" }); expect(result.blockedCount).toBe(1); }); });
+
+it("applies a proof-bearing reviewed overwrite selected by explicit approval", async () => {
+  const repo = new InMemoryApplyRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  const target = seedTarget(repo, "organization", { name: "A", phone: "555-LOCAL" }, "a");
+  repo.seedOperations([{
+    ...op("organization:a:field:phone", "overwrite_reviewed", {
+      entityId: target.id,
+      fieldName: "phone",
+      value: "555-ACT",
+      proof: { localValue: "555-LOCAL", sourceValue: "555-ACT" },
+      decision: { id: "decision-a", sourceVersionId: "v-a", scope: "field_conflict", decision: "use_source", fieldName: "phone", targetEntityType: "organization", targetEntityId: target.id },
+    }),
+    sourceRecordId: "a",
+    sourceVersionId: "v-a",
+    safeByDefault: false,
+  }]);
+
+  const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "explicit-overwrite" });
+
+  expect(result).toMatchObject({ state: "complete", completedCount: 1 });
+  expect(target.values.phone).toBe("555-ACT");
+});
+
+it("rejects a reviewed overwrite when the local value changes before the repository CAS", async () => {
+  class ConcurrentReviewedEditRepository extends InMemoryApplyRepository {
+    async applyReviewedOverwrite(): Promise<never> {
+      const target = this.targets.get("organization:organization-1");
+      if (target) target.values.phone = "concurrent-local-edit";
+      throw Object.assign(new Error("local_edit_detected"), { code: "local_edit_detected" });
+    }
+  }
+
+  const repo = new ConcurrentReviewedEditRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  const target = seedTarget(repo, "organization", { name: "A", phone: "555-LOCAL" }, "a");
+  repo.seedOperations([{
+    ...op("organization:a:field:phone", "overwrite_reviewed", {
+      entityId: target.id,
+      fieldName: "phone",
+      value: "555-ACT",
+      proof: { localValue: "555-LOCAL", sourceValue: "555-ACT" },
+      decision: { id: "decision-a", sourceVersionId: "v-a", scope: "field_conflict", decision: "use_source", fieldName: "phone", targetEntityType: "organization", targetEntityId: target.id },
+    }),
+    sourceRecordId: "a",
+    sourceVersionId: "v-a",
+    safeByDefault: false,
+  }]);
+
+  const result = await new ActApplyService(repo, true).apply({
+    runId: "r",
+    approvedOperationIds: ["organization:a:field:phone"],
+    expectedManifestDigest: "d",
+    requestKey: "concurrent-reviewed-edit",
+  });
+
+  expect(result).toMatchObject({ state: "complete_with_issues", completedCount: 0, failedCount: 1 });
+  expect(target.values.phone).toBe("concurrent-local-edit");
+  expect(repo.origins).toHaveLength(0);
+  expect(repo.operations.get("organization:a:field:phone")).toMatchObject({
+    status: "failed",
+    lastErrorCode: "local_edit_detected",
+  });
+});
+
+it("retries after a crash at the reviewed-overwrite commit boundary without reapplying", async () => {
+  class CrashAfterReviewedCommitRepository extends InMemoryApplyRepository {
+    applyCalls = 0;
+    private crashAfterFirstCommit = true;
+
+    override async applyReviewedOverwrite(...args: Parameters<InMemoryApplyRepository["applyReviewedOverwrite"]>) {
+      this.applyCalls += 1;
+      await super.applyReviewedOverwrite(...args);
+      if (this.crashAfterFirstCommit) {
+        this.crashAfterFirstCommit = false;
+        throw Object.assign(new Error("apply_attempt_lost"), { code: "apply_attempt_lost" });
+      }
+    }
+  }
+
+  const repo = new CrashAfterReviewedCommitRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  const target = seedTarget(repo, "organization", { name: "A", phone: "555-LOCAL" }, "a");
+  const operationKey = "organization:a:field:phone";
+  repo.seedOperations([{
+    ...op(operationKey, "overwrite_reviewed", {
+      entityId: target.id,
+      fieldName: "phone",
+      value: "555-ACT",
+      proof: { localValue: "555-LOCAL", sourceValue: "555-ACT" },
+      decision: { id: "decision-a", sourceVersionId: "v-a", scope: "field_conflict", decision: "use_source", fieldName: "phone", targetEntityType: "organization", targetEntityId: target.id },
+    }),
+    sourceRecordId: "a",
+    sourceVersionId: "v-a",
+    safeByDefault: false,
+  }]);
+  const service = new ActApplyService(repo, true);
+  const input = { runId: "r", approvedOperationIds: [operationKey], expectedManifestDigest: "d", requestKey: "reviewed-crash" };
+
+  await expect(service.apply(input)).rejects.toMatchObject({ code: "apply_attempt_lost" });
+  expect(target.values.phone).toBe("555-ACT");
+  expect(repo.origins).toHaveLength(1);
+  expect(repo.operations.get(operationKey)?.status).toBe("applied");
+
+  const interruptedBatch = repo.batches.get("r:reviewed-crash")!;
+  interruptedBatch.leaseExpiresAt = Date.now() - 1;
+  const retry = await service.apply(input);
+
+  expect(retry.state).toBe("complete");
+  expect(repo.applyCalls).toBe(1);
+  expect(repo.origins).toHaveLength(1);
+  expect(target.values.phone).toBe("555-ACT");
+});
+
+it("rejects a reviewed overwrite when decision proof is absent", async () => {
+  const repo = new InMemoryApplyRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  const target = seedTarget(repo, "organization", { name: "A", phone: "555-LOCAL" }, "a");
+  repo.seedOperations([{
+    ...op("organization:a:field:phone", "overwrite_reviewed", {
+      entityId: target.id,
+      fieldName: "phone",
+      value: "555-ACT",
+      decision: { id: "decision-a", sourceVersionId: "v-a", scope: "field_conflict", decision: "use_source", fieldName: "phone", targetEntityType: "organization", targetEntityId: target.id },
+    }),
+    sourceRecordId: "a",
+    sourceVersionId: "v-a",
+    safeByDefault: false,
+  }]);
+
+  await expect(new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "missing-proof" })).rejects.toMatchObject({ code: "review_proof_required" });
+  expect(target.values.phone).toBe("555-LOCAL");
+});
+
+it("rejects a cross-target reviewed overwrite before writing the operation target", async () => {
+  const repo = new InMemoryApplyRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  const targetA = seedTarget(repo, "organization", { name: "A", phone: "555-LOCAL" }, "a");
+  const targetB = seedTarget(repo, "organization", { name: "B", phone: "555-LOCAL" }, "b");
+  repo.seedOperations([{
+    ...op("organization:a:field:phone", "overwrite_reviewed", {
+      entityId: targetA.id,
+      fieldName: "phone",
+      value: "555-ACT",
+      proof: { entityType: "organization", entityId: targetB.id, fieldName: "phone", sourceVersionId: "v-a", expectedLocalValueFingerprint: localValueFingerprint("555-LOCAL"), decisionId: "decision-b", decision: "use_source", sourceValue: "555-ACT" },
+      decision: { id: "decision-b", sourceVersionId: "v-a", scope: "field_conflict", decision: "use_source", fieldName: "phone", targetEntityType: "organization", targetEntityId: targetB.id },
+    }),
+    sourceRecordId: "a",
+    sourceVersionId: "v-a",
+    safeByDefault: false,
+  }]);
+
+  const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "cross-target-overwrite" });
+
+  expect(result).toMatchObject({ state: "complete_with_issues", failedCount: 1 });
+  expect(repo.operations.get("organization:a:field:phone")).toMatchObject({ status: "failed", lastErrorCode: "overwrite_target_invalid" });
+  expect(targetA.values.phone).toBe("555-LOCAL");
+  expect(targetB.values.phone).toBe("555-LOCAL");
+});
 
 it("claims a queued approval row and replays the terminal batch without executing twice", async () => {
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
