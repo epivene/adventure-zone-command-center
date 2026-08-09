@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./migrations": "./src/migrations.ts",
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
