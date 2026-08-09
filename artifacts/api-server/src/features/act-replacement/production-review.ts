@@ -226,6 +226,10 @@ export function projectImportWorkflow(
       )
       .map((outcome) => outcome.sourceRecordId),
   );
+  const canRebuildUnapplied =
+    input.phase === "ready_to_apply" &&
+    input.batches.length === 0 &&
+    input.operations.every((operation) => operation.status === "pending");
 
   return {
     safeOperationCount,
@@ -249,9 +253,12 @@ export function projectImportWorkflow(
     canOrganize:
       input.phase === "extract_complete" ||
       organizerLeaseExpired ||
-      (input.phase === "ready_to_apply" &&
-        input.batches.length === 0 &&
-        input.operations.every((operation) => operation.status === "pending")),
+      canRebuildUnapplied,
+    canReview:
+      reviewRequiredCount > 0 &&
+      (canRebuildUnapplied ||
+        input.phase === "complete" ||
+        input.phase === "complete_with_issues"),
     canApplySafe:
       manifestDigest !== null &&
       safeOperationCount > 0 &&
@@ -472,7 +479,26 @@ class LazyReviewRuntime {
         this.runtime(scope()).then(
           (runtime) => runtime.reader.getSource?.(sourceRecordId) ?? null,
         ),
+      readReviewPage: (input) =>
+        this.runtime(scope()).then((runtime) => {
+          if (!runtime.reader.readReviewPage)
+            throw new Error("bounded_review_reader_unavailable");
+          return runtime.reader.readReviewPage(input);
+        }),
+      listAssignmentTargets: (query) =>
+        this.runtime(scope()).then(
+          (runtime) => runtime.reader.listAssignmentTargets?.(query) ?? [],
+        ),
     };
+  }
+
+  assignmentTargets(scopeProvider: ScopeProvider) {
+    const scope = () =>
+      typeof scopeProvider === "function" ? scopeProvider() : scopeProvider;
+    return (query: { search?: string; entityType?: string; entityTypes?: string[] }) =>
+      this.runtime(scope()).then(
+        (runtime) => runtime.reader.listAssignmentTargets?.(query) ?? [],
+      );
   }
 
   commands(scopeProvider: ScopeProvider): ReviewCommandService {
@@ -531,6 +557,7 @@ const lazy = new LazyReviewRuntime();
 export function createProductionReview(scope: ScopeProvider) {
   return {
     reader: lazy.reader(scope),
+    assignmentTargets: lazy.assignmentTargets(scope),
     commands: lazy.commands(scope),
     applyCoordinator: lazy.applyCoordinator(scope),
     workflow: lazy.workflow(scope),
