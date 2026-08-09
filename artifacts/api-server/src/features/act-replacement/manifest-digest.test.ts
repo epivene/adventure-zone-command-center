@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildActOrganizeManifest } from "./manifest-builder";
 import { digestManifestRows } from "./manifest-digest";
+import { manifestFromRows } from "./review-sql-adapter";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -50,5 +52,40 @@ describe("digestManifestRows", () => {
 
     expect(digestManifestRows(operations, outcomes)).toMatch(/^[a-f0-9]{64}$/);
     expect(stringify).toHaveBeenCalledTimes(operations.length + outcomes.length);
+  });
+
+  it("keeps both production digest call sites on bounded serialization", () => {
+    const originalStringify = JSON.stringify.bind(JSON);
+    vi.spyOn(JSON, "stringify").mockImplementation((value: unknown) => {
+      if (
+        value &&
+        typeof value === "object" &&
+        "operations" in value &&
+        "outcomes" in value
+      ) {
+        throw new Error("whole_manifest_serialization");
+      }
+      return originalStringify(value);
+    });
+    const organized = buildActOrganizeManifest({
+      runId: "run-1",
+      sources: [
+        {
+          sourceRecordId: "source-1",
+          sourceVersionId: "version-1",
+          streamType: "company",
+          normalized: { kind: "organization", name: "Adventure Zone" },
+          match: { kind: "none", reason: "no_candidate" },
+        },
+      ],
+    });
+
+    expect(organized.digest).toMatch(/^[a-f0-9]{64}$/);
+    expect(
+      manifestFromRows({
+        operations: organized.operations,
+        outcomes: organized.outcomes,
+      }).digest,
+    ).toBe(organized.digest);
   });
 });
