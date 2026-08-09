@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { logger } from "@/lib/logger";
@@ -7,6 +7,7 @@ import { DrizzleActSourceAssignmentRepository } from "./assignment-repository";
 import type { ActApplyService } from "./apply-service";
 import type { ApprovalClosure, ApprovalRepository } from "./approval-service";
 import type { ActOrganizeManifest, ManifestDiagnostic, ManifestNormalized, ManifestOperation, ManifestSourceInput } from "./manifest-builder";
+import { digestManifestRows } from "./manifest-digest";
 import { normalizeCompany } from "./normalizers/company-normalizer";
 import { normalizeContact } from "./normalizers/contact-normalizer";
 import { normalizeGroup } from "./normalizers/group-normalizer";
@@ -111,7 +112,7 @@ export function manifestFromRows(input: { operations: Array<Record<string, unkno
   diagnostics.sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId) || (a.path ?? "").localeCompare(b.path ?? ""));
   const digest = durableDigest && /^[a-f0-9]{64}$/.test(durableDigest)
     ? durableDigest
-    : createHash("sha256").update(JSON.stringify({ operations, outcomes })).digest("hex");
+    : digestManifestRows(operations, outcomes);
   return { operations, outcomes, diagnostics, digest };
 }
 
