@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import type { ActApplyAction, ActApplyTargetType, ActReplacementStreamType } from "./import-types";
+import { digestManifestRows } from "./manifest-digest";
 import type { MatchResult } from "./matching/match-result";
 import { isMateriallyPopulated, isNormalizedMetadataField, writablePhysicalColumn } from "./writable-target-fields";
 
@@ -107,6 +107,6 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
   const order = (operation: ManifestOperation) => operation.operationKey.startsWith("provenance:") ? rank.provenance : rank[operation.targetType] ?? 999;
   operations.sort((a, b) => order(a) - order(b) || a.operationKey.localeCompare(b.operationKey));
   outcomes.sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId)); diagnostics.sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId) || (a.path ?? "").localeCompare(b.path ?? ""));
-  const digest = createHash("sha256").update(JSON.stringify({ operations, outcomes })).digest("hex");
+  const digest = digestManifestRows(operations, outcomes);
   return { operations, outcomes, diagnostics, digest };
 }
