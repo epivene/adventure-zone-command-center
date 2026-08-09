@@ -74,6 +74,7 @@ export type ActReplacementWorkflowStatus = ActReplacementStatus & {
   manifestDigest: string | null;
   nextApplyCursor: number;
   canOrganize: boolean;
+  canReview: boolean;
   canApplySafe: boolean;
 };
 
@@ -104,11 +105,73 @@ export type OrganizeResponse = {
 };
 
 export type ReviewDisplayValue = string | number | boolean | null;
+export type ReviewIssueCode =
+  | "ambiguous_match"
+  | "field_conflict"
+  | "relationship_unresolved"
+  | "unassigned"
+  | "unsupported_record"
+  | "unsupported_field";
+export type ReviewState =
+  | "ready"
+  | "already_present"
+  | "awaiting_review"
+  | "unassigned"
+  | "unsupported"
+  | "ignored";
+export type ReviewStateFilter = ReviewState | "needs_review";
+export type ReviewIssue = {
+  code: ReviewIssueCode;
+  reason?: string;
+};
+export type ConflictReviewToken = {
+  sourceRecordId: string;
+  sourceVersionId: string;
+  fieldName: string;
+  sourceValueFingerprint: string;
+  targetEntityType: string;
+  targetEntityId: string;
+  localValueFingerprint: string;
+};
+export type ReviewConflict = {
+  fieldName: string;
+  localValue: ReviewDisplayValue;
+  sourceValue: ReviewDisplayValue;
+  target?: {
+    id: string;
+    entityType: string;
+    label: string;
+    detail: string | null;
+  };
+  reviewToken?: ConflictReviewToken;
+};
+export type ReviewCandidate = {
+  id: string;
+  entityType: string;
+  label: string;
+  detail: string | null;
+};
+export type ReviewSummary = {
+  decisionRequired: number;
+  issueCounts: Partial<Record<ReviewIssueCode, number>>;
+  diagnosticCounts: Partial<Record<ReviewIssueCode, number>>;
+};
 export type ReviewRow = {
   sourceRecordId: string;
   sourceVersionId: string;
-  state: string;
-  issueCodes: string[];
+  state: ReviewState;
+  issueCodes: ReviewIssueCode[];
+  issues: ReviewIssue[];
+  conflicts: ReviewConflict[];
+  candidates: ReviewCandidate[];
+  relationshipIssues?: Array<{
+    relationshipSlot: string;
+    issueCode: "relationship_unresolved" | "unassigned";
+    reason: string;
+    expectedParentTypes: AssignmentTarget["entityType"][];
+    canImportStandalone: boolean;
+  }>;
+  canImportStandalone: boolean;
   operationKeys: string[];
   streamType?: string;
   display: Record<string, ReviewDisplayValue>;
@@ -118,6 +181,7 @@ export type ReviewPage = {
   pageSize: ActPageSize;
   total: number;
   manifestDigest: string | null;
+  summary: ReviewSummary;
   rows: ReviewRow[];
 };
 
@@ -159,14 +223,80 @@ export type ReviewDecision = {
   id: string;
   sourceRecordId: string;
   sourceVersionId: string;
-  scope: "duplicate_identity" | "field_conflict" | "unsupported_record";
+  scope:
+    | "duplicate_identity"
+    | "field_conflict"
+    | "relationship"
+    | "unsupported_record";
   decision:
     | "link_existing"
     | "keep_separate"
     | "keep_local"
     | "use_source"
+    | "assign_parent"
+    | "keep_unlinked"
     | "ignore_source";
+  fieldName: string | null;
+  relationshipSlot: string | null;
+  targetEntityType: string | null;
+  targetEntityId: string | null;
   active: boolean;
+};
+
+export type AssignmentTarget = {
+  id: string;
+  entityType:
+    | "organization"
+    | "contact"
+    | "booking"
+    | "calling_list"
+    | "activity";
+  label: string;
+  detail: string | null;
+};
+export type ReviewAssignment = {
+  id: string;
+  sourceRecordId: string;
+  sourceVersionId: string;
+  targetEntityType: AssignmentTarget["entityType"];
+  targetEntityId: string;
+  role: string;
+  isPrimary: boolean;
+  active: boolean;
+};
+
+export type BulkReviewSelection = {
+  sourceRecordId: string;
+  sourceVersionId: string;
+  reviewToken?: ConflictReviewToken;
+};
+type BulkReviewDecisionCommon = {
+  expectedManifestDigest: string;
+  requestKey: string;
+  selections: BulkReviewSelection[];
+};
+export type BulkReviewDecisionRequest = BulkReviewDecisionCommon &
+  (
+    | {
+        scope: "field_conflict";
+        decision: "keep_local" | "use_source";
+        fieldName: string;
+      }
+    | {
+        scope: "relationship";
+        decision: "keep_unlinked" | "ignore_source";
+        fieldName: null;
+      }
+    | {
+        scope: "unsupported_record";
+        decision: "ignore_source";
+        fieldName: null;
+      }
+  );
+export type BulkReviewDecisionResponse = {
+  decisions: ReviewDecision[];
+  manifestDigest: string;
+  reviewedOperationIds: string[];
 };
 
 export class ActReplacementApiError extends Error {
@@ -201,6 +331,10 @@ export const getLatestRun = () =>
 export const getRun = (runId: string) =>
   request<WorkflowResponse>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}`,
+  );
+export const getManifest = (runId: string) =>
+  request<{ manifest: ImportManifest }>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/manifest`,
   );
 export const startRun = (
   pageSize: ActPageSize,
@@ -237,8 +371,8 @@ export const getReview = (
     page?: number;
     pageSize?: ActPageSize;
     search?: string;
-    state?: string;
-    issue?: string;
+    state?: ReviewStateFilter;
+    issue?: ReviewIssueCode;
   } = {},
 ) => {
   const params = new URLSearchParams({
@@ -250,6 +384,19 @@ export const getReview = (
   if (query.issue) params.set("issue", query.issue);
   return request<ReviewPage>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/review?${params.toString()}`,
+  );
+};
+export const getAssignmentTargets = (query: {
+  search?: string;
+  entityType?: string;
+  entityTypes?: AssignmentTarget["entityType"][];
+}) => {
+  const params = new URLSearchParams();
+  if (query.search?.trim()) params.set("search", query.search.trim());
+  if (query.entityType) params.set("entityType", query.entityType);
+  if (query.entityTypes?.length) params.set("entityTypes", query.entityTypes.join(","));
+  return request<{ targets: AssignmentTarget[] }>(
+    `/migration/act-replacement/assignment-targets?${params.toString()}`,
   );
 };
 export const approveSafeDefaults = (
@@ -264,6 +411,15 @@ export const approveSafeDefaults = (
       body: JSON.stringify({ expectedManifestDigest, requestKey }),
     },
   );
+export const approveReadyOperations = (
+  runId: string,
+  expectedManifestDigest: string,
+  requestKey: string = crypto.randomUUID(),
+) =>
+  request<ApprovalClosure>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/approvals/ready`,
+    { method: "POST", body: JSON.stringify({ expectedManifestDigest, requestKey }) },
+  );
 export const decideReviewRecord = (
   runId: string,
   sourceRecordId: string,
@@ -272,8 +428,10 @@ export const decideReviewRecord = (
     scope: ReviewDecision["scope"];
     decision: ReviewDecision["decision"];
     fieldName?: string | null;
+    relationshipSlot?: string | null;
     targetEntityType?: string | null;
     targetEntityId?: string | null;
+    reviewToken?: ConflictReviewToken;
     requestKey?: string;
   },
 ) =>
@@ -288,6 +446,41 @@ export const decideReviewRecord = (
       }),
     },
   );
+export const bulkDecideReviewRecords = (
+  runId: string,
+  body: BulkReviewDecisionRequest,
+) =>
+  request<BulkReviewDecisionResponse>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/decisions/bulk`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+export const assignReviewParent = (
+  runId: string,
+  row: ReviewRow,
+  target: AssignmentTarget,
+  issue: NonNullable<ReviewRow["relationshipIssues"]>[number],
+) => {
+  const currentIssue = row.relationshipIssues?.find((candidate) => candidate.relationshipSlot === issue.relationshipSlot);
+  if (!currentIssue?.expectedParentTypes.includes(target.entityType)) {
+    return Promise.reject(new ActReplacementApiError("invalid_relationship_parent", 409));
+  }
+  return request<ReviewDecision>(
+    `/migration/act-replacement/source-records/${encodeURIComponent(row.sourceRecordId)}/decisions`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        runId,
+        sourceVersionId: row.sourceVersionId,
+        scope: "relationship",
+        decision: "assign_parent",
+        relationshipSlot: currentIssue.relationshipSlot,
+        targetEntityType: target.entityType,
+        targetEntityId: target.id,
+        requestKey: crypto.randomUUID(),
+      }),
+    },
+  );
+};
 export const applyNext = (runId: string, body: ApplyNextRequest) =>
   request<ApplyNextResponse>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/apply-next`,
