@@ -28,14 +28,13 @@ function codedError(code: string, status: number) {
   return Object.assign(new Error(code), { code, status });
 }
 
-function safeOrganizerError(error: unknown) {
-  if (
-    error &&
-    typeof error === "object" &&
-    "code" in error &&
-    typeof error.code === "string"
-  ) {
-    return error.code;
+export function organizerErrorCode(error: unknown) {
+  const visited = new Set<object>();
+  let current = error;
+  while (current && typeof current === "object" && !visited.has(current)) {
+    visited.add(current);
+    if ("code" in current && typeof current.code === "string") return current.code;
+    current = "cause" in current ? current.cause : undefined;
   }
   return "organize_failed";
 }
@@ -97,7 +96,7 @@ export class ProductionActOrganizer {
       return { status, manifest };
     } catch (error) {
       stopHeartbeat();
-      await this.store.release(run.runId, run.claimToken, safeOrganizerError(error));
+      await this.store.release(run.runId, run.claimToken, organizerErrorCode(error));
       throw error;
     } finally {
       stopHeartbeat();
