@@ -168,6 +168,28 @@ describe("ProductionActOrganizer", () => {
     }
   });
 
+  it("preserves a nested persistence error code when releasing a failed organizer claim", async () => {
+    let releasedCode: string | null = null;
+    const store: ProductionOrganizerStore = {
+      async claim(runId) { return { runId, phase: "organizing", claimToken: "nested-error-token" }; },
+      async loadSources() { return [companySource]; },
+      async renew() { return true; },
+      async persistManifest() {
+        throw Object.assign(new Error("transaction_failed"), {
+          cause: Object.assign(new Error("terminal_operation_key_collision"), {
+            code: "terminal_operation_key_collision",
+          }),
+        });
+      },
+      async complete() {},
+      async release(_runId, _claimToken, code) { releasedCode = code; },
+    };
+
+    await expect(new ProductionActOrganizer(store).organize("run-nested-error"))
+      .rejects.toThrow("transaction_failed");
+    expect(releasedCode).toBe("terminal_operation_key_collision");
+  });
+
   it("automatically resumes expired durable organizing work", async () => {
     const organize = async (runId: string) => {
       expect(runId).toBe("run-expired");
