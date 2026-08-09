@@ -9,6 +9,7 @@ export function verifyOverwrite(input: { local: LocalFieldState; proof: Overwrit
   const { local, proof, decision } = input;
   if (!decision || decision.id !== proof.decisionId || decision.scope !== "field_conflict" || decision.decision !== proof.decision || decision.sourceVersionId !== input.expectedSourceVersionId) return { ok: false, code: "overwrite_decision_invalid" };
   if (decision.fieldName !== proof.fieldName || decision.targetEntityType !== proof.entityType || decision.targetEntityId !== proof.entityId) return { ok: false, code: "overwrite_target_invalid" };
+  if (local.entityType !== proof.entityType || local.entityId !== proof.entityId || local.fieldName !== proof.fieldName) return { ok: false, code: "overwrite_target_invalid" };
   if (proof.sourceVersionId !== input.expectedSourceVersionId) return { ok: false, code: "source_version_stale" };
   if (localValueFingerprint(local.value) !== proof.expectedLocalValueFingerprint) return { ok: false, code: "local_edit_detected" };
   return { ok: true };
