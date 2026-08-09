@@ -42,10 +42,18 @@ export type AssignSourceParentInput = {
 
 export type SupersedeSourceAssignmentInput = {
   assignmentId: string;
+  sourceRecordId: string;
   supersededBy: string;
   expectedSourceVersionId?: string | null;
   requestKey?: string;
 };
+
+export function assignmentIdentityPredicate(assignmentId: string, sourceRecordId: string) {
+  return and(
+    eq(actSourceAssignments.id, assignmentId),
+    eq(actSourceAssignments.sourceRecordId, sourceRecordId),
+  );
+}
 
 function validateCommon(input: { sourceRecordId: string; assignedBy?: string; supersededBy?: string }) {
   if (!input.sourceRecordId.trim() || (input.assignedBy !== undefined && !input.assignedBy.trim()) || (input.supersededBy !== undefined && !input.supersededBy.trim())) throw new AssignmentValidationError();
@@ -97,7 +105,7 @@ export class DrizzleActSourceAssignmentRepository {
   }
 
   async supersede(input: SupersedeSourceAssignmentInput): Promise<AssignmentRow> {
-    if (!input.assignmentId.trim() || !input.supersededBy.trim()) throw new AssignmentValidationError();
+    if (!input.assignmentId.trim() || !input.sourceRecordId.trim() || !input.supersededBy.trim()) throw new AssignmentValidationError();
     if (input.requestKey) {
       const prior = this.supersessionResults.get(input.requestKey);
       if (prior) return prior;
@@ -106,15 +114,13 @@ export class DrizzleActSourceAssignmentRepository {
       const result = await this.database.transaction(async (transaction) => {
         // Lock in the same source → assignment order as assign(), avoiding a
         // deadlock when an owner supersedes while organization work is running.
-        const [identity] = await transaction.select({ sourceRecordId: actSourceAssignments.sourceRecordId }).from(actSourceAssignments).where(eq(actSourceAssignments.id, input.assignmentId)).limit(1);
-        if (!identity) throw new AssignmentValidationError();
-        const [source] = await transaction.select({ latestVersionId: actSourceRecords.latestVersionId }).from(actSourceRecords).where(eq(actSourceRecords.id, identity.sourceRecordId)).limit(1).for("update");
+        const [source] = await transaction.select({ latestVersionId: actSourceRecords.latestVersionId }).from(actSourceRecords).where(eq(actSourceRecords.id, input.sourceRecordId)).limit(1).for("update");
         if (!source) throw new AssignmentValidationError();
         if (input.expectedSourceVersionId !== undefined && input.expectedSourceVersionId !== source.latestVersionId) throw new AssignmentVersionConflictError();
-        const [existing] = await transaction.select().from(actSourceAssignments).where(eq(actSourceAssignments.id, input.assignmentId)).limit(1).for("update");
+        const [existing] = await transaction.select().from(actSourceAssignments).where(assignmentIdentityPredicate(input.assignmentId, input.sourceRecordId)).limit(1).for("update");
         if (!existing) throw new AssignmentValidationError();
         if (existing.supersededAt !== null) return existing;
-        const [updated] = await transaction.update(actSourceAssignments).set({ supersededAt: new Date(), supersededBy: input.supersededBy.trim(), updatedAt: new Date() }).where(eq(actSourceAssignments.id, existing.id)).returning();
+        const [updated] = await transaction.update(actSourceAssignments).set({ supersededAt: new Date(), supersededBy: input.supersededBy.trim(), updatedAt: new Date() }).where(assignmentIdentityPredicate(existing.id, input.sourceRecordId)).returning();
         if (!updated) throw new AssignmentRepositoryError();
         return updated;
       });
