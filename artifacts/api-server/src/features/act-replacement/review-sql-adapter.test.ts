@@ -230,6 +230,17 @@ describe("durable review adapter projections", () => {
     expect(operationSemanticsMatch(operation, { ...operation, dependencyOperationKeys: ["identity-2"] })).toBe(false);
   });
 
+  it("accepts dependency-only changes when rebuilding a terminal identity root", () => {
+    const previousIdentity = {
+      sourceRecordId: "source-1", sourceVersionId: "version-1", targetType: "activity" as const,
+      action: "create" as const, payload: { normalized: { kind: "timeline", regarding: "Called venue" } },
+      dependencyOperationKeys: ["organization:parent-1"], requiredForSourceOutcome: true, safeByDefault: true,
+    };
+    const rebuiltIdentity = { ...previousIdentity, dependencyOperationKeys: [] };
+
+    expect(operationSemanticsMatch(previousIdentity, rebuiltIdentity)).toBe(true);
+  });
+
   it("claims a completed run only through an explicit review-required outcome predicate", async () => {
     let whereClause: unknown;
     const database = {
