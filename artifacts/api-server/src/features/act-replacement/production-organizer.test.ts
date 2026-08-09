@@ -199,8 +199,8 @@ describe("ProductionActOrganizer", () => {
       "organization:company-1",
       "contact:contact-1",
       "activity:note-1",
-      "organization_contact:contact-1:company-1",
-      "activity_association:note-1:contact-1",
+      expect.stringMatching(/^organization_contact:contact-1:company-1:revision:/),
+      expect.stringMatching(/^activity_association:note-1:contact-1:revision:/),
     ]);
     expect(new Set(store.persistedOperationKeys).size).toBe(
       store.persistedOperationKeys.length,
