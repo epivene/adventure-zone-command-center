@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { actReplacementStreamTypes, type ActReplacementOutcomeState, type ActReplacementRunPhase, type ActReplacementStreamType } from "./import-types";
 
-export type ActOutcomeCounts = { linkedApplied: number; alreadyPresent: number; awaitingReview: number; unassigned: number; unsupported: number; failed: number; ready: number };
+export type ActOutcomeCounts = { linkedApplied: number; alreadyPresent: number; awaitingReview: number; unassigned: number; unsupported: number; ignored: number; failed: number; ready: number };
 export type ReconciliationIssue = { code: string; streamType?: string; sourceRecordId?: string; operationId?: string; detail?: string };
 export type ReconciliationObservation = { sourceRecordId: string; versionId: string };
 export type ReconciliationOutcome = { sourceRecordId: string; state: ActReplacementOutcomeState };
@@ -13,14 +13,14 @@ export type ReconciliationInput = { runId: string; sourceDatabaseKey: string; ph
 export type ReconciliationStreamReport = { streamType: string; counts: ActOutcomeCounts; responseRows: number; observedIdentities: number; archivedIdentities: number; completeIdentities: number; partialIdentities: number; failedIdentities: number; versionsInserted: number; organizedCount: number; issues: ReconciliationIssue[] };
 export type ReconciliationReport = { runId: string; sourceDatabaseKey: string; phase: "complete" | "complete_with_issues"; complete: boolean; finalizable: boolean; streams: ReconciliationStreamReport[]; allStreams: ActOutcomeCounts & { responseRows: number; observedIdentities: number; archivedIdentities: number; completeIdentities: number; partialIdentities: number; failedIdentities: number; versionsInserted: number; organizedCount: number }; rollups: Array<{ name: string; count: number; informational: true }>; issues: ReconciliationIssue[]; digest: string };
 
-const emptyCounts = (): ActOutcomeCounts => ({ linkedApplied: 0, alreadyPresent: 0, awaitingReview: 0, unassigned: 0, unsupported: 0, failed: 0, ready: 0 });
+const emptyCounts = (): ActOutcomeCounts => ({ linkedApplied: 0, alreadyPresent: 0, awaitingReview: 0, unassigned: 0, unsupported: 0, ignored: 0, failed: 0, ready: 0 });
 const terminalCheckpoint = (state: string) => ["complete", "unsupported", "failed"].includes(state);
 const terminalOperation = (state: ReconciliationOperation["status"]) => ["applied", "already_present", "blocked", "failed"].includes(state);
 const outcomeBucket = (state: ActReplacementOutcomeState): keyof ActOutcomeCounts | null => {
   if (state === "applied") return "linkedApplied";
   if (state === "already_present") return "alreadyPresent";
   if (state === "awaiting_review") return "awaitingReview";
-  if (["unassigned", "unsupported", "failed", "ready"].includes(state)) return state as keyof ActOutcomeCounts;
+  if (["unassigned", "unsupported", "ignored", "failed", "ready"].includes(state)) return state as keyof ActOutcomeCounts;
   return null;
 };
 
@@ -83,7 +83,7 @@ export function reconcileActReplacement(input: ReconciliationInput): Reconciliat
     const archived = stream.observations.length;
     if (checkpointTotals.observedIdentities && checkpointTotals.observedIdentities !== archived) streamIssues.push({ code: "observed_identity_count_mismatch", streamType, detail: `${checkpointTotals.observedIdentities}:${archived}` });
     if (checkpointTotals.archivedIdentities && checkpointTotals.archivedIdentities !== archived) streamIssues.push({ code: "archived_identity_count_mismatch", streamType, detail: `${checkpointTotals.archivedIdentities}:${archived}` });
-    if (counts.linkedApplied + counts.alreadyPresent + counts.awaitingReview + counts.unassigned + counts.unsupported + counts.failed + counts.ready !== archived) streamIssues.push({ code: "identity_equation_mismatch", streamType, detail: `${archived}` });
+    if (counts.linkedApplied + counts.alreadyPresent + counts.awaitingReview + counts.unassigned + counts.unsupported + counts.ignored + counts.failed + counts.ready !== archived) streamIssues.push({ code: "identity_equation_mismatch", streamType, detail: `${archived}` });
     const row: ReconciliationStreamReport = { streamType, counts, ...checkpointTotals, archivedIdentities: archived, organizedCount: stream.outcomes.length, issues: streamIssues.sort(issueSort) };
     reports.push(row); issues.push(...row.issues);
   }
@@ -93,6 +93,7 @@ export function reconcileActReplacement(input: ReconciliationInput): Reconciliat
     awaitingReview: acc.awaitingReview + row.counts.awaitingReview,
     unassigned: acc.unassigned + row.counts.unassigned,
     unsupported: acc.unsupported + row.counts.unsupported,
+    ignored: acc.ignored + row.counts.ignored,
     failed: acc.failed + row.counts.failed,
     ready: acc.ready + row.counts.ready,
     responseRows: acc.responseRows + row.responseRows,

@@ -10,7 +10,77 @@ const source = (overrides: Partial<ManifestSourceInput> = {}): ManifestSourceInp
   ...overrides,
 });
 
+const unsupportedSource: ManifestSourceInput = {
+  sourceRecordId: "unsupported-company",
+  sourceVersionId: "unsupported-version",
+  streamType: "company",
+  normalized: null,
+  match: { kind: "none", reason: "normalization_failed" },
+  warnings: [],
+  unsupportedFieldPaths: [],
+  provenance: [],
+};
+
+const reviewDecision = {
+  decisionId: "decision-1",
+  sourceVersionId: "v-1",
+  scope: "field_conflict" as const,
+  decision: "keep_local" as const,
+  fieldName: "phone",
+  targetEntityType: "organization",
+  targetEntityId: "organization-1",
+  decidedBy: "owner",
+  createdAt: "2026-08-08T00:00:00.000Z",
+};
+
 describe("buildActOrganizeManifest", () => {
+  it("gives changed exact identity targets distinct operation keys", () => {
+    const build = (localId: string) => buildActOrganizeManifest({ runId: "run", sources: [source({
+      match: { kind: "exact", localId, reason: "manual_assignment" },
+    })] }).operations.find((operation) => operation.action === "link_existing")?.operationKey;
+
+    expect(build("organization-1")).not.toBe(build("organization-2"));
+  });
+
+  it("keeps parent source lookup growth near-linear", () => {
+    const lookupCount = (size: number) => {
+      let lookups = 0;
+      const trackedSource = (value: ManifestSourceInput) => {
+        const sourceRecordId = value.sourceRecordId;
+        Object.defineProperty(value, "sourceRecordId", {
+          enumerable: true,
+          get() {
+            lookups += 1;
+            return sourceRecordId;
+          },
+        });
+        return value;
+      };
+      const parentId = "zz-parent";
+      const sources: ManifestSourceInput[] = [trackedSource(source({
+        sourceRecordId: parentId,
+        sourceVersionId: "parent-version",
+        normalized: { kind: "organization", name: "Parent" },
+      }))];
+      for (let index = 0; index < size; index += 1) {
+        sources.push(trackedSource(source({
+          sourceRecordId: `timeline-${String(index).padStart(4, "0")}`,
+          sourceVersionId: `timeline-version-${index}`,
+          streamType: "activity",
+          normalized: { kind: "timeline", body: `Activity ${index}` },
+          relationships: { organizationSourceIds: [parentId] },
+        })));
+      }
+
+      buildActOrganizeManifest({ runId: "run", sources });
+      return lookups;
+    };
+
+    const small = lookupCount(80);
+    const large = lookupCount(160);
+    expect(large / small).toBeLessThan(3);
+  });
+
   it("orders parent creation before relationships and provenance", () => {
     const result = buildActOrganizeManifest({ runId: "run", sources: [
       source({ sourceRecordId: "contact", sourceVersionId: "cv", streamType: "contact", normalized: { kind: "contact", firstName: "A", lastName: "B", email: null, phone: null } }),
@@ -20,7 +90,7 @@ describe("buildActOrganizeManifest", () => {
     expect(result.operations.map((operation) => operation.targetType)).toEqual([
       "organization", "contact", "activity", "activity_association", "activity_association", "activity", "organization", "contact",
     ]);
-    expect(result.operations[2]?.dependencyOperationKeys).toEqual(["contact:contact", "organization:company"]);
+    expect(result.operations[2]?.dependencyOperationKeys).toEqual([]);
     expect(result.operations.filter((operation) => operation.targetType === "activity_association").map((operation) => operation.dependencyOperationKeys)).toEqual([
       ["activity:activity", "organization:company"], ["activity:activity", "contact:contact"],
     ]);
@@ -96,19 +166,242 @@ describe("buildActOrganizeManifest", () => {
     expect(result.outcomes[0]).toMatchObject({ state: "ready", issues: [] });
   });
 
-  it("holds a materially populated unsupported normalized source field for review", () => {
-    const result = buildActOrganizeManifest({ runId: "run", sources: [source({
-      normalized: { kind: "organization", name: "Acme", phone: null, website: null, legacyOwnerCode: "OWNER-7" },
+  it("keeps unsupported fields as diagnostics without blocking supported operations", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run",
+      sources: [{
+        sourceRecordId: "company-1",
+        sourceVersionId: "version-1",
+        streamType: "company",
+        normalized: { kind: "organization", name: "County Fair", phone: "555-0100", customLegacyCode: "A-17" },
+        match: { kind: "none", reason: "no_match" },
+        warnings: [],
+        unsupportedFieldPaths: ["Custom Fields.Legacy Code"],
+        provenance: [],
+      }],
+    });
+
+    expect(manifest.outcomes[0]).toMatchObject({ state: "ready" });
+    expect(manifest.outcomes[0].issues).toEqual(expect.arrayContaining([
+      { code: "unsupported_field", reason: "customLegacyCode" },
+    ]));
+    expect(manifest.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ targetType: "organization", action: "create" }),
+    ]));
+    expect(manifest.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "record_provenance",
+        payload: expect.objectContaining({ unsupportedNormalizedFields: ["customLegacyCode"] }),
+      }),
+    ]));
+    expect(manifest.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "unsupported_field", sourceRecordId: "company-1" }),
+    ]));
+  });
+
+  it("does not invent an operation for an unsupported whole record", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [unsupportedSource] });
+    expect(manifest.outcomes[0]).toMatchObject({ state: "unsupported", operationKeys: [] });
+    expect(manifest.operations).toEqual([]);
+  });
+
+  it("resolves a field conflict by keeping the local value", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
+      localFields: { phone: "555-LOCAL" },
+      normalized: { kind: "organization", name: "Acme", phone: "555-ACT", website: null },
       match: { kind: "exact", localId: "organization-1", reason: "exact_external_link" },
-      localFields: { name: "Acme" },
+      reviewDecisions: [reviewDecision],
     })] });
 
-    expect(result.outcomes[0]).toMatchObject({
-      state: "awaiting_review",
-      issues: [{ code: "unsupported_field", reason: "legacyOwnerCode" }],
+    expect(manifest.outcomes[0]?.issues).not.toContainEqual(expect.objectContaining({ code: "field_conflict" }));
+    expect(manifest.operations).not.toContainEqual(expect.objectContaining({ action: "overwrite_reviewed" }));
+  });
+
+  it("materializes an explicit Act overwrite with immutable proof", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
+      localFields: { phone: "555-CHANGED-AFTER-REVIEW" },
+      normalized: { kind: "organization", name: "Acme", phone: "555-CHANGED-ACT", website: null },
+      match: { kind: "exact", localId: "organization-1", reason: "exact_external_link" },
+      reviewDecisions: [{
+        ...reviewDecision,
+        decisionId: "decision-2",
+        decision: "use_source",
+        reviewedSourceValue: "555-ACT",
+        reviewedSourceValueFingerprint: createHash("sha256").update('{"value":"555-ACT"}').digest("hex"),
+        reviewedLocalValue: "555-LOCAL",
+        reviewedLocalValueFingerprint: createHash("sha256").update('{"value":"555-LOCAL"}').digest("hex"),
+      }],
+    })] });
+
+    expect(manifest.operations).toContainEqual(expect.objectContaining({
+      action: "overwrite_reviewed",
+      safeByDefault: false,
+      payload: expect.objectContaining({
+        entityId: "organization-1",
+        fieldName: "phone",
+        value: "555-ACT",
+        decision: expect.objectContaining({ id: "decision-2", sourceVersionId: "v-1" }),
+        proof: expect.objectContaining({
+          entityType: "organization",
+          entityId: "organization-1",
+          fieldName: "phone",
+          sourceVersionId: "v-1",
+          expectedLocalValueFingerprint: createHash("sha256").update('{"value":"555-LOCAL"}').digest("hex"),
+          decisionId: "decision-2",
+          decision: "use_source",
+          localValue: "555-LOCAL",
+          sourceValue: "555-ACT",
+        }),
+      }),
+    }));
+  });
+
+  it("keeps exact identity links safe while reviewed overwrites stay proof-gated", () => {
+    const manifest = buildActOrganizeManifest({
+      runId: "run",
+      sources: [source({
+        localFields: { phone: "555-LOCAL" },
+        normalized: { kind: "organization", name: "Acme", phone: "555-ACT", website: null },
+        match: { kind: "exact", localId: "organization-1", reason: "exact_external_link" },
+        reviewDecisions: [{
+          ...reviewDecision,
+          decisionId: "decision-safe-link",
+          decision: "use_source",
+          reviewedSourceValue: "555-ACT",
+          reviewedSourceValueFingerprint: createHash("sha256").update('{"value":"555-ACT"}').digest("hex"),
+          reviewedLocalValue: "555-LOCAL",
+          reviewedLocalValueFingerprint: createHash("sha256").update('{"value":"555-LOCAL"}').digest("hex"),
+        }],
+      })],
     });
-    expect(result.diagnostics).toContainEqual({ code: "unsupported_field", sourceRecordId: "s-1", path: "legacyOwnerCode" });
-    expect(result.operations).toEqual([]);
+
+    expect(manifest.operations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        operationKey: "organization:s-1:identity:organization-1",
+        action: "link_existing",
+        safeByDefault: true,
+      }),
+      expect.objectContaining({
+        operationKey: "organization:s-1:field:phone:decision:decision-safe-link",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:s-1:identity:organization-1"],
+        safeByDefault: false,
+      }),
+    ]));
+  });
+
+  it("keeps an explicitly ignored unsupported record archived and resolved", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [{
+      ...unsupportedSource,
+      reviewDecisions: [{ ...reviewDecision, decisionId: "decision-3", sourceVersionId: "unsupported-version", scope: "unsupported_record", decision: "ignore_source", fieldName: null }],
+    }] });
+
+    expect(manifest.outcomes[0]).toMatchObject({ state: "ignored", operationKeys: [] });
+  });
+
+  it("imports a valid standalone timeline only after an explicit relationship decision", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
+      sourceRecordId: "timeline-1",
+      streamType: "activity",
+      normalized: { kind: "timeline", category: "note", sourceType: "activity", body: "Standalone", subject: null, sourceOccurredAt: null, timelineSortAt: "2026-08-08T00:00:00.000Z", dateIsImportFallback: true, endsAt: null, status: null },
+      reviewDecisions: [{ ...reviewDecision, decisionId: "decision-4", scope: "relationship", decision: "keep_unlinked", fieldName: null }],
+    })] });
+
+    expect(manifest.outcomes[0]).toMatchObject({ state: "ready" });
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ targetType: "activity", action: "create" }));
+    expect(manifest.operations).not.toContainEqual(expect.objectContaining({ action: "create_relationship" }));
+  });
+
+  it("does not discard a known timeline parent for a keep-unlinked decision", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [
+      source({ sourceRecordId: "company-1", normalized: { kind: "organization", name: "Acme", phone: null, website: null } }),
+      source({
+        sourceRecordId: "timeline-1",
+        streamType: "activity",
+        normalized: { kind: "timeline", category: "note", sourceType: "activity", body: "Known parent", subject: null, sourceOccurredAt: null, timelineSortAt: "2026-08-08T00:00:00.000Z", dateIsImportFallback: true, endsAt: null, status: null },
+        relationships: { organizationSourceIds: ["company-1"] },
+        reviewDecisions: [{ ...reviewDecision, decisionId: "decision-known-parent", scope: "relationship", decision: "keep_unlinked", fieldName: null }],
+      }),
+    ] });
+
+    expect(manifest.outcomes.find((outcome) => outcome.sourceRecordId === "timeline-1")).toMatchObject({ state: "ready" });
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship", payload: { parentSourceRecordId: "company-1", parentType: "organization" } }));
+  });
+
+  it("keeps valid timeline parents when only one unresolved relationship is kept unlinked", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [
+      source({ sourceRecordId: "company-1", normalized: { kind: "organization", name: "Acme", phone: null, website: null } }),
+      source({
+        sourceRecordId: "timeline-1",
+        streamType: "activity",
+        normalized: { kind: "timeline", category: "note", sourceType: "activity", body: "Mixed parents", subject: null, sourceOccurredAt: null, timelineSortAt: "2026-08-08T00:00:00.000Z", dateIsImportFallback: true, endsAt: null, status: null },
+        relationships: { organizationSourceIds: ["company-1"] },
+        reviewIssues: [{ code: "relationship_unresolved", reason: "missing_contact", relationshipSlot: "missing-contact", expectedParentTypes: ["contact"], canImportStandalone: true }],
+        reviewDecisions: [{ ...reviewDecision, decisionId: "decision-missing-contact", sourceVersionId: "v-1", scope: "relationship", decision: "keep_unlinked", fieldName: null, relationshipSlot: "missing-contact", targetEntityType: null, targetEntityId: null }],
+      }),
+    ] });
+
+    expect(manifest.outcomes.find((outcome) => outcome.sourceRecordId === "timeline-1")).toMatchObject({ state: "ready" });
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship", payload: { parentSourceRecordId: "company-1", parentType: "organization" } }));
+  });
+
+  it("does not ignore a supported record from an unsupported-record decision", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
+      reviewDecisions: [{ ...reviewDecision, decisionId: "decision-supported", scope: "unsupported_record", decision: "ignore_source", fieldName: null }],
+    })] });
+
+    expect(manifest.outcomes[0]).toMatchObject({ state: "ready" });
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ targetType: "organization", action: "create" }));
+  });
+
+  it("does not ignore a timeline relationship decision when a known parent is available", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [
+      source({ sourceRecordId: "company-1", normalized: { kind: "organization", name: "Acme", phone: null, website: null } }),
+      source({
+        sourceRecordId: "timeline-1",
+        streamType: "activity",
+        normalized: { kind: "timeline", category: "note", sourceType: "activity", body: "Known parent", subject: null, sourceOccurredAt: null, timelineSortAt: "2026-08-08T00:00:00.000Z", dateIsImportFallback: true, endsAt: null, status: null },
+        relationships: { organizationSourceIds: ["company-1"] },
+        reviewDecisions: [{ ...reviewDecision, decisionId: "decision-relationship-supported", scope: "relationship", decision: "ignore_source", fieldName: null }],
+      }),
+    ] });
+
+    expect(manifest.outcomes.find((outcome) => outcome.sourceRecordId === "timeline-1")).toMatchObject({ state: "ready" });
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship" }));
+  });
+
+  it("does not replay a decision from a stale source version", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
+      localFields: { phone: "555-LOCAL" },
+      normalized: { kind: "organization", name: "Acme", phone: "555-ACT", website: null },
+      match: { kind: "exact", localId: "organization-1", reason: "exact_external_link" },
+      reviewDecisions: [{ ...reviewDecision, sourceVersionId: "stale-version" }],
+    })] });
+
+    expect(manifest.outcomes[0]?.issues).toContainEqual({ code: "field_conflict", reason: "phone" });
+    expect(manifest.operations).not.toContainEqual(expect.objectContaining({ action: "overwrite_reviewed" }));
+  });
+
+  it("gives generated relationship blockers stable actionable slot metadata", () => {
+    const input = source({
+      sourceRecordId: "contact-with-missing-company",
+      sourceVersionId: "contact-version",
+      streamType: "contact",
+      normalized: { kind: "contact", firstName: "Ada", lastName: "Lovelace", email: null, phone: null },
+      relationships: { organizationSourceIds: ["missing-company-source"] },
+    });
+
+    const first = buildActOrganizeManifest({ runId: "run", sources: [input] });
+    const second = buildActOrganizeManifest({ runId: "run", sources: [input] });
+    const issue = first.outcomes[0]?.issues.find((candidate) => candidate.code === "relationship_unresolved");
+
+    expect(issue).toMatchObject({
+      reason: "parent_source_not_found_or_ambiguous",
+      relationshipSlot: expect.any(String),
+      expectedParentTypes: ["organization"],
+      canImportStandalone: true,
+    });
+    expect(issue?.relationshipSlot).not.toBe("");
+    expect(second.outcomes[0]?.issues).toContainEqual(issue);
   });
 
   it("treats calendar capability as metadata for activity, note, and history timelines", () => {
@@ -141,9 +434,9 @@ describe("buildActOrganizeManifest", () => {
       expect(result.operations).toContainEqual(expect.objectContaining({ sourceRecordId: streamType, targetType: "activity", action: "create" }));
     }
     expect(result.outcomes.find((outcome) => outcome.sourceRecordId === "history-unsupported")).toMatchObject({
-      state: "awaiting_review",
+      state: "ready",
       issues: [{ code: "unsupported_field", reason: "retentionCode" }],
     });
-    expect(result.operations.some((operation) => operation.sourceRecordId === "history-unsupported")).toBe(false);
+    expect(result.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "history-unsupported", targetType: "activity", action: "create" }));
   });
 });

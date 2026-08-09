@@ -42,6 +42,7 @@ export const actReplacementOutcomeStates = [
   "awaiting_review",
   "unassigned",
   "unsupported",
+  "ignored",
   "applied",
   "failed",
 ] as const;
@@ -90,6 +91,7 @@ export type ActOperationExecutionState =
 export const actReviewDecisionScopes = [
   "duplicate_identity",
   "field_conflict",
+  "relationship",
   "unsupported_record",
 ] as const;
 export type ActReviewDecisionScope = (typeof actReviewDecisionScopes)[number];
@@ -99,6 +101,8 @@ export const actReviewDecisions = [
   "keep_separate",
   "keep_local",
   "use_source",
+  "assign_parent",
+  "keep_unlinked",
   "ignore_source",
 ] as const;
 export type ActReviewDecision = (typeof actReviewDecisions)[number];
@@ -241,6 +245,7 @@ export type ImportWorkflow = {
   manifestDigest: string | null;
   nextApplyCursor: number;
   canOrganize: boolean;
+  canReview: boolean;
   canApplySafe: boolean;
   requiredStreams: string[];
   leaseSummary: { active: number; expired: number };

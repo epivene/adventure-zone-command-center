@@ -1,9 +1,33 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ActApprovalService,
+  InMemoryApprovalRepository,
+} from "./approval-service";
+import { ActApplyCoordinator } from "./apply-coordinator";
+import { InMemoryApplyRepository } from "./apply-repository";
+import { ActApplyService } from "./apply-service";
+import {
+  createProductionReview,
   projectImportWorkflow,
   type ImportWorkflowProjectionInput,
 } from "./production-review";
+import { ProductionActOrganizer } from "./production-organizer";
+import {
+  InMemoryReviewCommandStore,
+  ReviewCommandService,
+} from "./review-command-service";
+import type {
+  ActOrganizeManifest,
+  ManifestOperation,
+  ManifestOutcome,
+} from "./manifest-builder";
+import { fingerprintSourceContent } from "./source-fingerprint";
+import {
+  manifestFromRows,
+  manifestSourcesFromArchiveRows,
+  type ArchivedOrganizerSourceRow,
+} from "./review-sql-adapter";
 
 const CURRENT_DIGEST = "a".repeat(64);
 const STALE_DIGEST = "b".repeat(64);
@@ -28,6 +52,524 @@ function input(): ImportWorkflowProjectionInput {
 }
 
 describe("durable production workflow projection", () => {
+  it("approves only safe or proof-reviewed operations from a mixed archived migration", async () => {
+    const runId = "mixed-safety-run";
+    const fetchedAt = new Date("2026-08-08T12:00:00.000Z");
+    const archived = (
+      sourceRecordId: string,
+      rawSnapshot: Record<string, unknown>,
+      streamType = "company",
+    ): ArchivedOrganizerSourceRow => ({
+      sourceRecordId,
+      sourceVersionId: `${sourceRecordId}-version`,
+      latestSourceVersionId: `${sourceRecordId}-version`,
+      streamType,
+      actRecordId: `${sourceRecordId}-act`,
+      archiveCompleteness: "complete",
+      rawSnapshot,
+      fetchedAt,
+      relationshipEvidence: {},
+    });
+    const rows: ArchivedOrganizerSourceRow[] = [
+      archived("create-with-unsupported", {
+        Name: "Archive Safe",
+        Phone: "555-0100",
+        LegacyCode: "A-17",
+      }),
+      archived("exact-empty", {
+        Name: "Fill Me",
+        Phone: "555-0200",
+        Website: "https://fill.example",
+      }),
+      archived("keep-local", {
+        Name: "Keep Local",
+        Phone: "555-ACT-KEEP",
+        Website: "https://keep.example",
+      }),
+      archived("use-act", {
+        Name: "Use Act",
+        Phone: "555-ACT-USE",
+        Website: "https://use.example",
+      }),
+      archived("ambiguous-kept-separate", { Name: "Ambiguous Company" }),
+      archived(
+        "unresolved-relationship",
+        { FirstName: "Lost", LastName: "Relationship" },
+        "contact",
+      ),
+      archived("ignored-unsupported", { Phone: "555-0700" }),
+      {
+        ...archived("missing-parent-link", {}, "company_contact"),
+        actRecordId: null,
+        relationshipEvidence: {
+          source: "endpoint",
+          parentKind: "contact",
+          parentActRecordId: "unresolved-relationship-act",
+          targetKind: "company",
+          targetActRecordId: "missing-company-act",
+        },
+      },
+    ];
+    const decisions = [
+      {
+        id: "decision-keep-local",
+        sourceRecordId: "keep-local",
+        sourceVersionId: "keep-local-version",
+        scope: "field_conflict" as const,
+        decision: "keep_local" as const,
+        fieldName: "phone",
+        targetEntityType: "organization",
+        targetEntityId: "local-keep",
+        decidedBy: "owner",
+        createdAt: fetchedAt,
+        active: true,
+      },
+      {
+        id: "decision-use-act",
+        sourceRecordId: "use-act",
+        sourceVersionId: "use-act-version",
+        scope: "field_conflict" as const,
+        decision: "use_source" as const,
+        fieldName: "phone",
+        targetEntityType: "organization",
+        targetEntityId: "local-use",
+        reviewedSourceValue: "555-ACT-USE",
+        reviewedSourceValueFingerprint: fingerprintSourceContent({ value: "555-ACT-USE" }),
+        reviewedLocalValue: "555-LOCAL-USE",
+        reviewedLocalValueFingerprint: fingerprintSourceContent({ value: "555-LOCAL-USE" }),
+        decidedBy: "owner",
+        createdAt: fetchedAt,
+        active: true,
+      },
+      {
+        id: "decision-keep-separate",
+        sourceRecordId: "ambiguous-kept-separate",
+        sourceVersionId: "ambiguous-kept-separate-version",
+        scope: "duplicate_identity" as const,
+        decision: "keep_separate" as const,
+        fieldName: null,
+        targetEntityType: null,
+        targetEntityId: null,
+        decidedBy: "owner",
+        createdAt: fetchedAt,
+        active: true,
+      },
+      {
+        id: "decision-ignore-unsupported",
+        sourceRecordId: "ignored-unsupported",
+        sourceVersionId: "ignored-unsupported-version",
+        scope: "unsupported_record" as const,
+        decision: "ignore_source" as const,
+        fieldName: null,
+        targetEntityType: null,
+        targetEntityId: null,
+        decidedBy: "owner",
+        createdAt: fetchedAt,
+        active: true,
+      },
+    ];
+    const sources = manifestSourcesFromArchiveRows({
+      rows,
+      decisions,
+      sourceDatabaseKey: "act-db",
+      localCandidates: {
+        organizations: [
+          {
+            id: "local-fill",
+            name: "Fill Me",
+            phone: null,
+            website: "https://fill.example",
+          },
+          {
+            id: "local-keep",
+            name: "Keep Local",
+            phone: "555-LOCAL-KEEP",
+            website: "https://keep.example",
+          },
+          {
+            id: "local-use",
+            name: "Use Act",
+            phone: "555-LOCAL-USE",
+            website: "https://use.example",
+          },
+          { id: "ambiguous-a", name: "Ambiguous Company" },
+          { id: "ambiguous-b", name: "Ambiguous Company" },
+        ],
+      },
+    });
+    let persistedRows: Parameters<typeof manifestFromRows>[0] | null = null;
+    const organized = await new ProductionActOrganizer({
+      async claim(claimedRunId) {
+        return {
+          runId: claimedRunId,
+          phase: "extract_complete",
+          claimToken: "mixed-safety-claim",
+        };
+      },
+      async loadSources() {
+        return sources;
+      },
+      async renew() {
+        return true;
+      },
+      async persistManifest(_persistedRunId, _claimToken, manifest) {
+        persistedRows = JSON.parse(
+          JSON.stringify({
+            operations: manifest.operations,
+            outcomes: manifest.outcomes,
+          }),
+        ) as Parameters<typeof manifestFromRows>[0];
+      },
+      async complete() {},
+      async release() {},
+    }).organize(runId);
+
+    expect(persistedRows).not.toBeNull();
+    const manifest = manifestFromRows(persistedRows!);
+    expect(manifest.digest).toBe(organized.manifest.digest);
+    expect(manifest.outcomes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceRecordId: "create-with-unsupported",
+          state: "ready",
+          issues: expect.arrayContaining([
+            expect.objectContaining({ code: "unsupported_field" }),
+          ]),
+        }),
+        expect.objectContaining({
+          sourceRecordId: "exact-empty",
+          state: "ready",
+        }),
+        expect.objectContaining({
+          sourceRecordId: "keep-local",
+          state: "ready",
+        }),
+        expect.objectContaining({ sourceRecordId: "use-act", state: "ready" }),
+        expect.objectContaining({
+          sourceRecordId: "ambiguous-kept-separate",
+          state: "ready",
+        }),
+        expect.objectContaining({
+          sourceRecordId: "unresolved-relationship",
+          state: "awaiting_review",
+          issues: expect.arrayContaining([
+            expect.objectContaining({ code: "relationship_unresolved" }),
+          ]),
+          operationKeys: [],
+        }),
+        expect.objectContaining({
+          sourceRecordId: "ignored-unsupported",
+          state: "ignored",
+          operationKeys: [],
+        }),
+      ]),
+    );
+
+    const operations = manifest.operations;
+    const operationKeyFor = (sourceRecordId: string, action: string) => operations.find((operation) => operation.sourceRecordId === sourceRecordId && operation.action === action)!.operationKey;
+    const fillPhoneKey = operationKeyFor("exact-empty", "fill_missing");
+    const provenanceAmbiguousKey = operationKeyFor("ambiguous-kept-separate", "record_provenance");
+    const provenanceCreateKey = operationKeyFor("create-with-unsupported", "record_provenance");
+    const provenanceFillKey = operationKeyFor("exact-empty", "record_provenance");
+    const provenanceKeepKey = operationKeyFor("keep-local", "record_provenance");
+    const provenanceUseKey = operationKeyFor("use-act", "record_provenance");
+    expect(operations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "organization:create-with-unsupported",
+          action: "create",
+        }),
+        expect.objectContaining({
+          operationKey: fillPhoneKey,
+          action: "fill_missing",
+        }),
+        expect.objectContaining({
+          operationKey: "organization:ambiguous-kept-separate",
+          action: "create",
+        }),
+      ]),
+    );
+    expect(
+      operations.some(
+        (operation) =>
+          operation.sourceRecordId === "keep-local" &&
+          operation.action === "overwrite_reviewed",
+      ),
+    ).toBe(false);
+    expect(
+      operations.some((operation) =>
+        ["unresolved-relationship", "ignored-unsupported"].includes(
+          operation.sourceRecordId,
+        ),
+      ),
+    ).toBe(false);
+
+    const reviewedOverwrites = operations.filter(
+      (operation) => operation.action === "overwrite_reviewed",
+    );
+    expect(reviewedOverwrites).toEqual([
+      expect.objectContaining({
+        operationKey: "organization:use-act:field:phone:decision:decision-use-act",
+        safeByDefault: false,
+        payload: expect.objectContaining({
+          decision: expect.objectContaining({
+            id: "decision-use-act",
+            decision: "use_source",
+            sourceVersionId: "use-act-version",
+            targetEntityId: "local-use",
+          }),
+          proof: expect.objectContaining({
+            localValue: "555-LOCAL-USE",
+            sourceValue: "555-ACT-USE",
+            expectedLocalValueFingerprint: fingerprintSourceContent({ value: "555-LOCAL-USE" }),
+          }),
+        }),
+      }),
+    ]);
+
+    const approvals = new InMemoryApprovalRepository();
+    approvals.seed(runId, manifest);
+    const approvalService = new ActApprovalService(approvals);
+    const safe = await approvalService.approveSafeDefaults({
+      runId,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "safe-defaults",
+      requestedBy: "owner",
+    });
+    const expectedSafeSelectedOperationIds = [
+      "organization:ambiguous-kept-separate",
+      "organization:create-with-unsupported",
+      fillPhoneKey,
+      "organization:exact-empty:identity:local-fill",
+      "organization:keep-local:identity:local-keep",
+      "organization:use-act:identity:local-use",
+      provenanceAmbiguousKey,
+      provenanceCreateKey,
+      provenanceFillKey,
+      provenanceKeepKey,
+    ];
+    const expectedSafeApprovedOperationIds = [
+      "organization:ambiguous-kept-separate",
+      "organization:create-with-unsupported",
+      "organization:exact-empty:identity:local-fill",
+      fillPhoneKey,
+      "organization:keep-local:identity:local-keep",
+      "organization:use-act:identity:local-use",
+      provenanceAmbiguousKey,
+      provenanceCreateKey,
+      provenanceFillKey,
+      provenanceKeepKey,
+    ];
+    expect(safe).toEqual({
+      selectedOperationIds: expectedSafeSelectedOperationIds,
+      approvedOperationIds: expectedSafeApprovedOperationIds,
+      dependencyOperationIds: ["organization:exact-empty:identity:local-fill"],
+      rejectedOperationIds: [
+        "organization:use-act:field:phone:decision:decision-use-act",
+        provenanceUseKey,
+      ],
+      selectedCount: 10,
+      dependencyCount: 1,
+      rejectedCount: 2,
+      manifestDigest: manifest.digest,
+    });
+
+    const ready = await approvalService.approveReady({
+      runId,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "approve-ready",
+      requestedBy: "owner",
+    });
+    const expectedReadyOperationIds = [
+      "organization:ambiguous-kept-separate",
+      "organization:create-with-unsupported",
+      "organization:exact-empty:identity:local-fill",
+      fillPhoneKey,
+      "organization:keep-local:identity:local-keep",
+      "organization:use-act:identity:local-use",
+      "organization:use-act:field:phone:decision:decision-use-act",
+      provenanceAmbiguousKey,
+      provenanceCreateKey,
+      provenanceFillKey,
+      provenanceKeepKey,
+    ];
+    const expectedReadySelectedOperationIds = [
+      "organization:ambiguous-kept-separate",
+      "organization:create-with-unsupported",
+      fillPhoneKey,
+      "organization:exact-empty:identity:local-fill",
+      "organization:keep-local:identity:local-keep",
+      "organization:use-act:field:phone:decision:decision-use-act",
+      "organization:use-act:identity:local-use",
+      provenanceAmbiguousKey,
+      provenanceCreateKey,
+      provenanceFillKey,
+      provenanceKeepKey,
+    ];
+    expect(ready).toEqual({
+      selectedOperationIds: expectedReadySelectedOperationIds,
+      approvedOperationIds: expectedReadyOperationIds,
+      dependencyOperationIds: ["organization:exact-empty:identity:local-fill", "organization:use-act:identity:local-use"],
+      rejectedOperationIds: [provenanceUseKey],
+      selectedCount: 11,
+      dependencyCount: 2,
+      rejectedCount: 1,
+      manifestDigest: manifest.digest,
+    });
+
+    const explicit = await approvalService.approve({
+      runId,
+      operationIds: ["organization:use-act:field:phone:decision:decision-use-act"],
+      includeDependencies: true,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "explicit-reviewed-overwrite",
+      requestedBy: "owner",
+    });
+    expect(explicit).toEqual({
+      selectedOperationIds: ["organization:use-act:field:phone:decision:decision-use-act"],
+      approvedOperationIds: [
+        "organization:use-act:identity:local-use",
+        "organization:use-act:field:phone:decision:decision-use-act",
+      ],
+      dependencyOperationIds: ["organization:use-act:identity:local-use"],
+      rejectedOperationIds: [],
+      selectedCount: 1,
+      dependencyCount: 1,
+      rejectedCount: 0,
+      manifestDigest: manifest.digest,
+    });
+
+    class ConcurrentEditApplyRepository extends InMemoryApplyRepository {
+      override async findTargetBySource(
+        entityType: string,
+        sourceRecordId: string,
+      ) {
+        const target = await super.findTargetBySource(
+          entityType,
+          sourceRecordId,
+        );
+        if (!target || sourceRecordId !== "exact-empty") return target;
+        const staleSnapshot = {
+          ...target,
+          values: { ...target.values },
+          sourceIds: target.sourceIds ? new Set(target.sourceIds) : undefined,
+        };
+        target.values.phone = "concurrent-local-edit";
+        return staleSnapshot;
+      }
+    }
+
+    const applyRepository = new ConcurrentEditApplyRepository({
+      unsafeForTests: true,
+    });
+    applyRepository.seedManifest(runId, manifest.digest);
+    applyRepository.seedOperations(manifest.operations);
+    const seedOrganization = (
+      id: string,
+      sourceRecordId: string,
+      values: Record<string, unknown>,
+    ) => {
+      const target = {
+        id,
+        entityType: "organization",
+        values: { ...values },
+        sourceIds: new Set([sourceRecordId]),
+      };
+      applyRepository.targets.set(`organization:${id}`, target);
+      return target;
+    };
+    const fillTarget = seedOrganization("local-fill", "exact-empty", {
+      name: "Fill Me",
+      phone: null,
+      website: "https://fill.example",
+    });
+    const keepTarget = seedOrganization("local-keep", "keep-local", {
+      name: "Keep Local",
+      phone: "555-LOCAL-KEEP",
+      website: "https://keep.example",
+    });
+    const overwriteTarget = seedOrganization("local-use", "use-act", {
+      name: "Use Act",
+      phone: "555-LOCAL-USE",
+      website: "https://use.example",
+    });
+    const applyService = new ActApplyService(applyRepository, true);
+    const safeApply = await applyService.apply({
+      runId,
+      approvedOperationIds: safe.approvedOperationIds,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "apply-safe-defaults",
+      requestedBy: "owner",
+    });
+    expect(safeApply).toEqual({
+      batchId: `${runId}:apply-safe-defaults`,
+      runId,
+      manifestDigest: manifest.digest,
+      state: "complete_with_issues",
+      operationCount: 10,
+      completedCount: 5,
+      alreadyPresentCount: 3,
+      blockedCount: 2,
+      failedCount: 0,
+    });
+    expect(fillTarget.values).toEqual({
+      name: "Fill Me",
+      phone: "concurrent-local-edit",
+      website: "https://fill.example",
+    });
+    expect(keepTarget.values).toEqual({
+      name: "Keep Local",
+      phone: "555-LOCAL-KEEP",
+      website: "https://keep.example",
+    });
+    expect(overwriteTarget.values).toEqual({
+      name: "Use Act",
+      phone: "555-LOCAL-USE",
+      website: "https://use.example",
+    });
+    expect(applyRepository.operations.get(fillPhoneKey)).toMatchObject({
+      status: "blocked",
+      lastErrorCode: "local_value_nonempty",
+    });
+
+    overwriteTarget.values.phone = "concurrent-reviewed-edit";
+    const explicitApply = await applyService.apply({
+      runId,
+      approvedOperationIds: explicit.approvedOperationIds,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "apply-reviewed-overwrite",
+      requestedBy: "owner",
+    });
+    expect(explicitApply).toEqual({
+      batchId: `${runId}:apply-reviewed-overwrite`,
+      runId,
+      manifestDigest: manifest.digest,
+      state: "complete_with_issues",
+      operationCount: 2,
+      completedCount: 0,
+      alreadyPresentCount: 1,
+      blockedCount: 0,
+      failedCount: 1,
+    });
+    expect(overwriteTarget.values.phone).toBe("concurrent-reviewed-edit");
+    expect(
+      applyRepository.operations.get("organization:use-act:field:phone:decision:decision-use-act"),
+    ).toMatchObject({
+      status: "failed",
+      lastErrorCode: "local_edit_detected",
+    });
+  });
+
+  it("lazily exposes bounded review pages and assignment target search", () => {
+    const review = createProductionReview({
+      sourceDatabaseKey: "act-db",
+      requestedBy: "owner",
+    });
+
+    expect(review.reader.readReviewPage).toBeTypeOf("function");
+    expect(review.assignmentTargets).toBeTypeOf("function");
+  });
+
   it("allows a crashed organizer to be retried after its durable lease expires", () => {
     const state = input();
     state.phase = "organizing";
@@ -47,6 +589,194 @@ describe("durable production workflow projection", () => {
 
     state.operations[0]!.status = "applied";
     expect(projectImportWorkflow(state).canOrganize).toBe(false);
+  });
+
+  it("keeps remaining review work actionable after applying one safe subset and applies the rebuilt subset", async () => {
+    const runId = "two-subset-run";
+    const firstDigest = "c".repeat(64);
+    const secondDigest = "d".repeat(64);
+    const safeOperation: ManifestOperation = {
+      operationKey: "organization:safe",
+      sourceRecordId: "safe",
+      sourceVersionId: "safe-version",
+      targetType: "organization",
+      action: "create",
+      payload: { normalized: { kind: "organization", name: "Safe first" } },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const remainingOutcome: ManifestOutcome = {
+      sourceRecordId: "remaining",
+      sourceVersionId: "remaining-version",
+      state: "awaiting_review",
+      issues: [{ code: "ambiguous_match" }],
+      candidates: [],
+      match: null,
+      mappingWarnings: [],
+      unsupportedFieldPaths: [],
+      operationKeys: [],
+    };
+    const firstManifest: ActOrganizeManifest = {
+      digest: firstDigest,
+      diagnostics: [],
+      outcomes: [
+        {
+          sourceRecordId: "safe",
+          sourceVersionId: "safe-version",
+          state: "ready",
+          issues: [],
+          candidates: [],
+          match: null,
+          mappingWarnings: [],
+          unsupportedFieldPaths: [],
+          operationKeys: [safeOperation.operationKey],
+        },
+        remainingOutcome,
+      ],
+      operations: [safeOperation],
+    };
+    const reviewedOperation: ManifestOperation = {
+      operationKey: "organization:remaining",
+      sourceRecordId: "remaining",
+      sourceVersionId: "remaining-version",
+      targetType: "organization",
+      action: "create",
+      payload: {
+        normalized: { kind: "organization", name: "Reviewed second" },
+      },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const secondManifest: ActOrganizeManifest = {
+      digest: secondDigest,
+      diagnostics: [],
+      outcomes: [
+        firstManifest.outcomes[0]!,
+        {
+          ...remainingOutcome,
+          state: "ready",
+          issues: [],
+          operationKeys: [reviewedOperation.operationKey],
+        },
+      ],
+      operations: [safeOperation, reviewedOperation],
+    };
+    const approvals = new InMemoryApprovalRepository();
+    const applyRepository = new InMemoryApplyRepository({
+      unsafeForTests: true,
+    });
+    const applyService = new ActApplyService(applyRepository, true);
+    const coordinator = new ActApplyCoordinator(applyService, applyRepository);
+
+    approvals.seed(runId, firstManifest);
+    applyRepository.seedManifest(runId, firstDigest);
+    applyRepository.seedOperations(firstManifest.operations);
+    const firstApproval = await new ActApprovalService(
+      approvals,
+    ).approveSafeDefaults({
+      runId,
+      expectedManifestDigest: firstDigest,
+      requestKey: "approve-first",
+      requestedBy: "owner",
+    });
+    applyRepository.seedApproval(
+      runId,
+      "approve-first",
+      firstApproval.approvedOperationIds,
+      firstDigest,
+    );
+    await coordinator.applyNext({
+      runId,
+      approvalRequestKey: "approve-first",
+      expectedManifestDigest: firstDigest,
+      requestedBy: "owner",
+      batchSize: 25,
+    });
+
+    const completedWorkflow = projectImportWorkflow({
+      phase: applyRepository.runPhases.get(runId)!,
+      summary: { manifestDigest: firstDigest },
+      outcomes: firstManifest.outcomes,
+      operations: [...applyRepository.operations.values()],
+      batches: [...applyRepository.batches.values()].map((batch) => ({
+        ...batch,
+        leaseExpiresAt:
+          batch.leaseExpiresAt === undefined
+            ? undefined
+            : new Date(batch.leaseExpiresAt),
+      })),
+    });
+    expect(completedWorkflow).toMatchObject({
+      canOrganize: false,
+      canReview: true,
+      reviewRequiredCount: 1,
+      appliedOperationCount: 1,
+    });
+
+    const commandStore = new InMemoryReviewCommandStore(
+      approvals,
+      applyService,
+    );
+    commandStore.seed(
+      runId,
+      firstManifest,
+      {
+        remaining: {
+          sourceVersionId: "remaining-version",
+          streamType: "company",
+        },
+      },
+      "owner",
+    );
+    commandStore.rebuildAfterReviewChange = async () => {
+      commandStore.manifests.set(runId, secondManifest);
+      approvals.seed(runId, secondManifest);
+      applyRepository.seedManifest(runId, secondDigest);
+      applyRepository.seedOperations([reviewedOperation]);
+      return { status: "ready_to_apply" };
+    };
+    await new ReviewCommandService(commandStore).decide({
+      runId,
+      sourceRecordId: "remaining",
+      sourceVersionId: "remaining-version",
+      scope: "duplicate_identity",
+      decision: "keep_separate",
+      requestKey: "review-remaining",
+      decidedBy: "owner",
+    });
+
+    const secondApproval = await new ActApprovalService(
+      approvals,
+    ).approveReady({
+      runId,
+      expectedManifestDigest: secondDigest,
+      requestKey: "approve-second",
+      requestedBy: "owner",
+    });
+    applyRepository.seedApproval(
+      runId,
+      "approve-second",
+      secondApproval.approvedOperationIds,
+      secondDigest,
+    );
+    const secondApply = await coordinator.applyNext({
+      runId,
+      approvalRequestKey: "approve-second",
+      expectedManifestDigest: secondDigest,
+      requestedBy: "owner",
+      batchSize: 25,
+    });
+
+    expect(secondApply).toMatchObject({
+      hasMore: false,
+      requiresReview: false,
+      batch: { completedCount: 1, alreadyPresentCount: 1 },
+    });
+    expect(applyRepository.runPhases.get(runId)).toBe("complete");
+    expect(applyRepository.operations.get(reviewedOperation.operationKey))
+      .toMatchObject({ status: "applied" });
   });
 
   it("counts already-present operations only from verified terminal batches", () => {
@@ -269,6 +999,8 @@ describe("durable production workflow projection", () => {
     ];
 
     expect(projectImportWorkflow(state)).toMatchObject({
+      canOrganize: false,
+      canReview: true,
       requiredStreams: [
         "company",
         "contact",

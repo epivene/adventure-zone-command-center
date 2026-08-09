@@ -162,7 +162,17 @@ export function resolveActSourceGraph(input: RelationshipResolutionInput): Relat
     const child = resolve(relation.childSourceRecordId, relation.childActRecordId, relation.childStream);
     const diagnosticSource = child ?? parent ?? clean(relation.sourceRecordId) ?? "unknown";
     if (!parent || !child) {
-      unresolved.push({ code: "unresolved_exact_relationship", sourceRecordId: diagnosticSource, parentStream: relation.parentStream, childStream: relation.childStream, evidenceKind: relation.evidenceKind, context: { reason: "identity_not_found" } });
+      unresolved.push({
+        code: "unresolved_exact_relationship",
+        sourceRecordId: diagnosticSource,
+        parentStream: relation.parentStream,
+        childStream: relation.childStream,
+        evidenceKind: relation.evidenceKind,
+        context: {
+          reason: "identity_not_found",
+          relationshipSlot: clean(relation.relationshipSlot) ?? clean(relation.sourceRecordId) ?? `${relation.parentStream}:${relation.childStream}:${relation.evidenceKind}`,
+        },
+      });
       continue;
     }
     if (relation.relationshipSlot) {

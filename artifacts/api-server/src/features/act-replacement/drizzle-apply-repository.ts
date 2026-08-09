@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import type { ManifestOperation } from "./manifest-builder";
-import type { ApplyAttempt, ApplyBatchClaim, ApplyBatchRecord, ApplyRepository, ApplyTarget, FillMissingResult, StoredOperation } from "./apply-repository";
+import type { ApplyAttempt, ApplyBatchClaim, ApplyBatchRecord, ApplyOrigin, ApplyRepository, ApplyTarget, FillMissingResult, ReviewedOverwriteInput, StoredOperation } from "./apply-repository";
+import { localValueFingerprint } from "./local-edit-policy";
 import { writableFieldAcceptsBlank, writablePhysicalColumn, writableTargetFieldColumns } from "./writable-target-fields";
 
 type DrizzleDatabase = typeof database;
@@ -175,6 +176,30 @@ export class DrizzleApplyRepository implements ApplyRepository {
     if (!table || !column) throw Object.assign(new Error("unsupported_target_field"), { code: "unsupported_target_field" });
     await this.withAttempt(attempt, async (executor) => { await executor.execute(sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${value}, updated_at = now() where id = ${target.id}`); });
   }
+  async applyReviewedOverwrite(input: ReviewedOverwriteInput, attempt: ApplyAttempt) {
+    const table = entityTables[input.target.entityType];
+    const column = writablePhysicalColumn(input.target.entityType, input.field);
+    if (!table || !column) throw Object.assign(new Error("unsupported_target_field"), { code: "unsupported_target_field" });
+    if (localValueFingerprint(input.expectedLocalValue) !== input.expectedLocalValueFingerprint) throw Object.assign(new Error("local_edit_detected"), { code: "local_edit_detected" });
+    await this.withAttempt(attempt, async (executor) => {
+      const applied = await this.query(sql`with overwritten as (
+        update ${sql.raw(table)} set ${sql.raw(column)} = ${input.value}, updated_at = now()
+        where id = ${input.target.id} and ${sql.raw(column)} is not distinct from ${input.expectedLocalValue}
+        returning id
+      ), origin as (
+        insert into act_imported_field_origins (entity_type, entity_id, field_name, source_record_id, source_version_id, operation_id, source_value_fingerprint)
+        select ${input.origin.entityType}, ${input.origin.entityId}, ${input.origin.fieldName}, ${input.origin.sourceRecordId}, ${input.origin.sourceVersionId}, ${input.origin.operationId}, ${input.origin.sourceValueFingerprint}
+        from overwritten
+        on conflict (entity_type, entity_id, field_name) do update set source_record_id = excluded.source_record_id, source_version_id = excluded.source_version_id, operation_id = excluded.operation_id, source_value_fingerprint = excluded.source_value_fingerprint, updated_at = now()
+        returning operation_id
+      ), completed as (
+        update act_replacement_apply_operations set status = 'applied', attempt_count = ${input.operation.attemptCount}, last_error_code = null, lease_owner = null, lease_expires_at = null, updated_at = now(), executed_at = now()
+        where id = ${input.operation.id} and status = 'leased' and exists (select 1 from origin)
+        returning id as "operationId"
+      ) select "operationId" from completed`, executor);
+      if (applied.length !== 1) throw Object.assign(new Error("local_edit_detected"), { code: "local_edit_detected", status: 409 });
+    });
+  }
   async fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt): Promise<FillMissingResult> {
     const table = entityTables[target.entityType];
     const column = writablePhysicalColumn(target.entityType, field);
@@ -188,16 +213,24 @@ export class DrizzleApplyRepository implements ApplyRepository {
       return Boolean(current[0]?.sameValue) ? "already_present" : "local_value_nonempty";
     });
   }
-  async recordOrigin(input: { entityType: string; entityId: string; fieldName: string; sourceRecordId: string; sourceVersionId: string; operationId: string; sourceValueFingerprint: string }, attempt: ApplyAttempt) {
+  async recordOrigin(input: ApplyOrigin, attempt: ApplyAttempt) {
     await this.withAttempt(attempt, async (executor) => { await executor.execute(sql`insert into act_imported_field_origins (entity_type, entity_id, field_name, source_record_id, source_version_id, operation_id, source_value_fingerprint) values (${input.entityType}, ${input.entityId}, ${input.fieldName}, ${input.sourceRecordId}, ${input.sourceVersionId}, ${input.operationId}, ${input.sourceValueFingerprint}) on conflict (entity_type, entity_id, field_name) do update set source_record_id = excluded.source_record_id, source_version_id = excluded.source_version_id, operation_id = excluded.operation_id, source_value_fingerprint = excluded.source_value_fingerprint, updated_at = now()`); });
   }
   async createRelationship(operation: StoredOperation, attempt: ApplyAttempt): Promise<"applied" | "already_present"> {
     return this.withAttempt(attempt, async (executor) => {
-      const parent = operation.payload.parentSourceRecordId; if (typeof parent !== "string") throw new Error("relationship_parent_missing");
-      const child = await this.findTargetBySourceWith(executor, operation.targetType === "organization_contact" ? "contact" : operation.targetType === "booking_contact" ? "contact" : operation.targetType === "calling_list_member" ? "calling_list" : "activity", operation.sourceRecordId);
-      const parentTarget = await this.findParent(parent, executor); if (!child || !parentTarget) throw new Error("relationship_target_missing");
+      const childType = operation.targetType === "organization_contact" ? "contact" : operation.targetType === "booking_contact" ? "booking" : operation.targetType === "calling_list_member" ? "calling_list" : "activity";
+      const child = await this.findTargetBySourceWith(executor, childType, operation.sourceRecordId);
+      const parentEntityId = asString(operation.payload.parentEntityId);
+      const parentType = asString(operation.payload.parentType);
+      const parentSourceRecordId = asString(operation.payload.parentSourceRecordId);
+      const parentTarget = parentEntityId
+        ? await this.getTargetWith(executor, parentType, parentEntityId)
+        : parentSourceRecordId
+          ? await this.findParent(parentSourceRecordId, executor)
+          : null;
+      if (!child || !parentTarget) throw new Error(parentEntityId || parentSourceRecordId ? "relationship_target_missing" : "relationship_parent_missing");
       if (operation.targetType === "organization_contact") return this.link("organization_contacts", "organization_id", parentTarget.id, "contact_id", child.id, executor);
-      if (operation.targetType === "booking_contact") return this.link("booking_contacts", "booking_id", parentTarget.id, "contact_id", child.id, executor);
+      if (operation.targetType === "booking_contact") return this.link("booking_contacts", "booking_id", child.id, "contact_id", parentTarget.id, executor);
       if (operation.targetType === "calling_list_member") return this.link("calling_list_memberships", "calling_list_id", child.id, "contact_id", parentTarget.id, executor);
       if (operation.targetType === "activity_association") return this.link("activity_associations", "activity_id", child.id, `${asString(operation.payload.parentType) === "organization" ? "organization_id" : asString(operation.payload.parentType) === "contact" ? "contact_id" : "booking_id"}`, parentTarget.id, executor);
       throw new Error("unsupported_relationship");

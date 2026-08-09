@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { DrizzleApplyRepository, createDrizzleApplyRepository } from "./drizzle-apply-repository";
+import { localValueFingerprint } from "./local-edit-policy";
+import type { ReviewedOverwriteInput } from "./apply-repository";
 
 const attempt = { batchId: "batch-1", attemptToken: "11111111-1111-1111-1111-111111111111" };
 const storedOperation = {
@@ -9,6 +11,15 @@ const storedOperation = {
   requiredForSourceOutcome: true, safeByDefault: true, status: "leased" as const, attemptCount: 1,
   outcomeState: "ready", latestSourceVersionId: "version-1",
 };
+const reviewedOverwriteInput = (): ReviewedOverwriteInput => ({
+  target: { id: "target-1", entityType: "organization", values: { phone: "555-LOCAL" } },
+  field: "phone",
+  value: "555-ACT",
+  expectedLocalValue: "555-LOCAL",
+  expectedLocalValueFingerprint: localValueFingerprint("555-LOCAL"),
+  origin: { entityType: "organization", entityId: "target-1", fieldName: "phone", sourceRecordId: "source-1", sourceVersionId: "version-1", operationId: storedOperation.id, sourceValueFingerprint: "source-fingerprint" },
+  operation: { ...storedOperation, action: "overwrite_reviewed", status: "applied" },
+});
 type TestQuery = Parameters<PgDialect["sqlToQuery"]>[0];
 const withSuccessfulFences = (database: { execute: (query: TestQuery) => Promise<unknown> }) => {
   const dialect = new PgDialect();
@@ -81,6 +92,59 @@ describe("DrizzleApplyRepository", () => {
     expect(statements[0]).toContain("attempt_token");
     expect(statements[0]).toContain("lease_expires_at > now()");
     expect(statements.some((statement) => statement.includes("act_replacement_apply_operations"))).toBe(false);
+  });
+
+  it("atomically CASes the reviewed value, origin, and terminal operation behind the apply-attempt fence", async () => {
+    const dialect = new PgDialect();
+    const statements: string[] = [];
+    let transactions = 0;
+    const execute = async (query: TestQuery) => {
+      const rendered = dialect.sqlToQuery(query).sql;
+      statements.push(rendered);
+      if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
+      if (rendered.startsWith("with overwritten as")) return { rows: [{ operationId: storedOperation.id }] };
+      throw new Error(`Unexpected SQL: ${rendered}`);
+    };
+    const database = {
+      execute,
+      transaction: async <T>(callback: (tx: { execute: typeof execute }) => Promise<T>) => {
+        transactions += 1;
+        return callback({ execute });
+      },
+    } as never;
+    await new DrizzleApplyRepository(database).applyReviewedOverwrite(reviewedOverwriteInput(), attempt);
+
+    expect(transactions).toBe(1);
+    expect(statements).toHaveLength(2);
+    expect(statements[0]).toContain("attempt_token");
+    expect(statements[0]).toContain("lease_expires_at > now()");
+    expect(statements[1]).toContain("update organizations");
+    expect(statements[1]).toContain("phone is not distinct from");
+    expect(statements[1]).toContain("insert into act_imported_field_origins");
+    expect(statements[1]).toContain("from overwritten");
+    expect(statements[1]).toContain("update act_replacement_apply_operations");
+    expect(statements[1]).toContain("exists (select 1 from origin)");
+    expect(statements[1]).toContain("status = 'applied'");
+  });
+
+  it("returns local_edit_detected when the reviewed CAS updates zero rows without writing audit state", async () => {
+    const dialect = new PgDialect();
+    const statements: string[] = [];
+    const execute = async (query: TestQuery) => {
+      const rendered = dialect.sqlToQuery(query).sql;
+      statements.push(rendered);
+      if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
+      if (rendered.startsWith("with overwritten as")) return { rows: [] };
+      throw new Error(`Unexpected SQL: ${rendered}`);
+    };
+    const database = {
+      execute,
+      transaction: async <T>(callback: (tx: { execute: typeof execute }) => Promise<T>) => callback({ execute }),
+    } as never;
+    await expect(new DrizzleApplyRepository(database).applyReviewedOverwrite(reviewedOverwriteInput(), attempt))
+      .rejects.toMatchObject({ code: "local_edit_detected" });
+
+    expect(statements).toHaveLength(2);
   });
 
   it.each([
@@ -423,6 +487,39 @@ describe("DrizzleApplyRepository", () => {
     expect(atomic).toContain("insert into calling_lists");
     expect(atomic).toContain("insert into act_external_links");
     expect(statements.filter((statement) => statement.startsWith("insert into calling_lists"))).toHaveLength(0);
+  });
+
+  it("applies a reviewed relationship directly to the selected local parent id", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const dialect = new PgDialect();
+    const database = {
+      execute: async (query: TestQuery) => {
+        const rendered = dialect.sqlToQuery(query);
+        statements.push({ sql: rendered.sql, params: rendered.params });
+        if (rendered.sql.startsWith("select * from activities where source_record_id")) return { rows: [{ id: "activity-local" }] };
+        if (rendered.sql.startsWith("select * from organizations where id")) return { rows: [{ id: "organization-local" }] };
+        if (rendered.sql.startsWith("insert into activity_associations")) return { rows: [{ inserted: 1 }] };
+        throw new Error(`Unexpected SQL: ${rendered.sql}`);
+      },
+    } as never;
+    const operation = {
+      ...storedOperation,
+      targetType: "activity_association" as const,
+      action: "create_relationship" as const,
+      sourceRecordId: "activity-source",
+      payload: {
+        parentEntityId: "organization-local",
+        parentType: "organization",
+        relationshipSlot: "timeline-parent",
+      },
+    };
+
+    await expect(new DrizzleApplyRepository(withSuccessfulFences(database) as never)
+      .createRelationship(operation, attempt)).resolves.toBe("applied");
+
+    expect(statements.some((statement) => statement.sql.includes("from act_source_records"))).toBe(false);
+    const link = statements.find((statement) => statement.sql.startsWith("insert into activity_associations"));
+    expect(link?.params).toEqual(expect.arrayContaining(["activity-local", "organization-local"]));
   });
 
   it("resolves a legacy Act-ID calling-list link before create and cannot duplicate it", async () => {

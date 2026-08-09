@@ -1,3 +1,4 @@
+import { fingerprintSourceContent } from "./source-fingerprint";
 import type { ManifestOperation, ManifestOutcome } from "./manifest-builder";
 
 export type ApprovalClosure = { selectedOperationIds: string[]; approvedOperationIds: string[]; dependencyOperationIds: string[]; rejectedOperationIds: string[]; selectedCount: number; dependencyCount: number; rejectedCount: number; manifestDigest: string };
@@ -5,6 +6,28 @@ export type ApprovalManifest = { digest: string; operations: ManifestOperation[]
 export type ApprovalRepository = { getManifest(runId: string): Promise<ApprovalManifest | null>; getRequest(runId: string, requestKey: string): Promise<ApprovalClosure | null>; saveRequest(runId: string, requestKey: string, closure: ApprovalClosure): Promise<ApprovalClosure> };
 
 function fail(code: string, status = 400): never { throw Object.assign(new Error(code), { code, status }); }
+const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+function hasReviewedOverwriteProof(operation: ManifestOperation): boolean {
+  const proof = operation.payload.proof;
+  const decision = operation.payload.decision;
+  const targetEntityId = operation.payload.entityId;
+  return operation.action === "overwrite_reviewed"
+    && isRecord(proof)
+    && "localValue" in proof
+    && "sourceValue" in proof
+    && fingerprintSourceContent({ value: proof.sourceValue }) === fingerprintSourceContent({ value: operation.payload.value })
+    && isRecord(decision)
+    && typeof decision.id === "string"
+    && decision.id.trim() !== ""
+    && decision.scope === "field_conflict"
+    && decision.decision === "use_source"
+    && decision.sourceVersionId === operation.sourceVersionId
+    && decision.fieldName === operation.payload.fieldName
+    && decision.targetEntityType === operation.targetType
+    && typeof targetEntityId === "string"
+    && targetEntityId.trim() !== ""
+    && decision.targetEntityId === targetEntityId;
+}
 function closure(operations: ManifestOperation[], selected: string[], safeOnly: boolean, eligibleSourceIds?: ReadonlySet<string>): ApprovalClosure {
   const byKey = new Map(operations.map((operation) => [operation.operationKey, operation]));
   const selectedIds = [...new Set(selected)].sort();
@@ -15,6 +38,7 @@ function closure(operations: ManifestOperation[], selected: string[], safeOnly: 
     if (all.has(key)) return;
     if (eligibleSourceIds && !eligibleSourceIds.has(operation.sourceRecordId)) fail("ineligible_source_dependency");
     if (safeOnly && operation.action === "overwrite_reviewed") fail("unsafe_overwrite");
+    if (isDependency && operation.action === "overwrite_reviewed") fail("unsafe_dependency");
     if (operation.safeByDefault === false && (safeOnly || isDependency)) fail("unsafe_dependency");
     const next = new Set(trail); next.add(key);
     for (const dependency of [...(operation.dependencyOperationKeys ?? [])].sort()) visit(dependency, next, true);
@@ -39,6 +63,10 @@ export class ActApprovalService {
     const prior = await this.repository.getRequest(input.runId, input.requestKey); if (prior) { if (prior.manifestDigest !== input.expectedManifestDigest) fail("request_replay_mismatch", 409); return prior; }
     const manifest = await this.repository.getManifest(input.runId); if (!manifest) fail("manifest_not_found");
     if (manifest.digest !== input.expectedManifestDigest) fail("manifest_digest_mismatch");
+    for (const operationId of input.operationIds) {
+      const operation = manifest.operations.find((candidate) => candidate.operationKey === operationId);
+      if (operation?.action === "overwrite_reviewed" && !hasReviewedOverwriteProof(operation)) fail("review_proof_required");
+    }
     const result = closure(manifest.operations, input.operationIds, false); result.manifestDigest = manifest.digest;
     return this.repository.saveRequest(input.runId, input.requestKey, result);
   }
@@ -49,6 +77,18 @@ export class ActApprovalService {
     const eligibleSourceIds = new Set(manifest.outcomes.filter((outcome) => outcome.state === "ready").map((outcome) => outcome.sourceRecordId));
     const safeRoots = manifest.operations.filter((operation) => eligibleSourceIds.has(operation.sourceRecordId) && operation.safeByDefault && operation.action !== "overwrite_reviewed").map((operation) => operation.operationKey).sort(); const accepted: string[] = [];
     for (const root of safeRoots) { try { closure(manifest.operations, [root], true, eligibleSourceIds); accepted.push(root); } catch (error) { if (!(error instanceof Error) || !["unsafe_dependency", "unsafe_overwrite", "dependency_cycle", "operation_not_found", "ineligible_source_dependency"].includes((error as Error & { code?: string }).code ?? "")) throw error; } }
+    const result = closure(manifest.operations, accepted, false, eligibleSourceIds); result.manifestDigest = manifest.digest;
+    result.rejectedOperationIds = manifest.operations.map((operation) => operation.operationKey).filter((key) => !result.approvedOperationIds.includes(key)).sort();
+    result.rejectedCount = result.rejectedOperationIds.length;
+    return this.repository.saveRequest(input.runId, input.requestKey, result);
+  }
+  async approveReady(input: { runId: string; expectedManifestDigest: string; requestKey: string; requestedBy: string }): Promise<ApprovalClosure> {
+    const prior = await this.repository.getRequest(input.runId, input.requestKey); if (prior) { if (prior.manifestDigest !== input.expectedManifestDigest) fail("request_replay_mismatch", 409); return prior; }
+    const manifest = await this.repository.getManifest(input.runId); if (!manifest) fail("manifest_not_found");
+    if (manifest.digest !== input.expectedManifestDigest) fail("manifest_digest_mismatch");
+    const eligibleSourceIds = new Set(manifest.outcomes.filter((outcome) => outcome.state === "ready").map((outcome) => outcome.sourceRecordId));
+    const eligibleRoots = manifest.operations.filter((operation) => eligibleSourceIds.has(operation.sourceRecordId) && (operation.action === "overwrite_reviewed" ? hasReviewedOverwriteProof(operation) : operation.safeByDefault)).map((operation) => operation.operationKey).sort(); const accepted: string[] = [];
+    for (const root of eligibleRoots) { try { closure(manifest.operations, [root], false, eligibleSourceIds); accepted.push(root); } catch (error) { if (!(error instanceof Error) || !["unsafe_dependency", "dependency_cycle", "operation_not_found", "ineligible_source_dependency"].includes((error as Error & { code?: string }).code ?? "")) throw error; } }
     const result = closure(manifest.operations, accepted, false, eligibleSourceIds); result.manifestDigest = manifest.digest;
     result.rejectedOperationIds = manifest.operations.map((operation) => operation.operationKey).filter((key) => !result.approvedOperationIds.includes(key)).sort();
     result.rejectedCount = result.rejectedOperationIds.length;

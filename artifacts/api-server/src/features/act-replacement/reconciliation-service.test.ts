@@ -46,6 +46,17 @@ describe("Act replacement reconciliation", () => {
     expect(reconcileActReplacement(input).issues.some((issue) => issue.code === "run_phase_not_final")).toBe(true);
   });
 
+  it("counts ignored records as terminal informational outcomes", () => {
+    const input = base();
+    input.streams[0].outcomes = [{ sourceRecordId: "a", state: "ignored" }];
+
+    const report = reconcileActReplacement(input);
+
+    expect(report.complete).toBe(true);
+    expect(report.streams[0]?.counts.ignored).toBe(1);
+    expect(report.allStreams.ignored).toBe(1);
+  });
+
   it("does not overwrite duplicate outcomes", () => {
     const input = base();
     input.streams[0].outcomes = [...input.streams[0].outcomes, { sourceRecordId: "a", state: "failed" }];

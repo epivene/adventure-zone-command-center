@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { fingerprintSourceContent } from "./source-fingerprint";
-import { verifyOverwrite } from "./local-edit-policy";
+import { localValueFingerprint, verifyOverwrite } from "./local-edit-policy";
 import type { ActApplyAction } from "./import-types";
 import type { ApplyRepository, ApplyAttempt, ApplyBatchRecord, StoredOperation } from "./apply-repository";
 
@@ -23,7 +23,13 @@ export class ActApplyService {
     const currentDigest = await this.repository.getManifestDigest(input.runId); if (!currentDigest || currentDigest !== input.expectedManifestDigest) fail("manifest_digest_mismatch");
     const operations = await this.repository.getOperations(input.runId, input.approvedOperationIds); if (operations.length !== new Set(input.approvedOperationIds).size) fail("operation_not_found");
     if (operations.some((operation) => operation.sourceVersionId.trim() === "")) fail("source_version_missing");
-    if (operations.some((operation) => !operation.safeByDefault || operation.action === "overwrite_reviewed")) fail("operation_not_safe");
+    for (const operation of operations) {
+      if (operation.action === "overwrite_reviewed") {
+        if (!operation.payload.proof || !operation.payload.decision) fail("review_proof_required");
+        continue;
+      }
+      if (!operation.safeByDefault) fail("operation_not_safe");
+    }
     if (operations.some((operation) => operation.status !== "applied" && operation.status !== "already_present" && operation.outcomeState !== "ready" && !(input.retryFailed && operation.outcomeState === "failed"))) fail("outcome_not_ready");
     if (operations.some((operation) => operation.latestSourceVersionId !== operation.sourceVersionId)) fail("source_version_changed");
     const keys = new Set(operations.map((operation) => operation.operationKey));
@@ -77,7 +83,42 @@ export class ActApplyService {
             else batch.completed += 1;
           }
         }
-        else if (action === "overwrite_reviewed") { const proof = payload.proof as Parameters<typeof verifyOverwrite>[0]["proof"]; const decision = payload.decision as Parameters<typeof verifyOverwrite>[0]["decision"]; if (!proof || fingerprintSourceContent({ value: proof.sourceValue }) !== fingerprintSourceContent({ value: payload.value })) fail("source_value_changed"); const checked = verifyOverwrite({ local: { entityType: operation.targetType, entityId: target.id, fieldName: field, value: current }, proof, expectedSourceVersionId: operation.sourceVersionId, decision }); if (!checked.ok) fail(checked.code); await this.repository.writeTarget(target, field, payload.value, attempt); await this.repository.recordOrigin({ entityType: operation.targetType, entityId: target.id, fieldName: field, sourceRecordId: operation.sourceRecordId, sourceVersionId: operation.sourceVersionId, operationId: operation.id, sourceValueFingerprint: fingerprintSourceContent({ value: payload.value }) }, attempt); operation.status = "applied"; batch.completed += 1; }
+        else if (action === "overwrite_reviewed") {
+          const rawProof = payload.proof as Partial<Parameters<typeof verifyOverwrite>[0]["proof"]> & { localValue?: unknown } | undefined;
+          const decision = payload.decision as Parameters<typeof verifyOverwrite>[0]["decision"];
+          const proofPayload = rawProof ?? fail("review_proof_required");
+          const durableDecision = decision ?? fail("review_proof_required");
+          const operationTargetId = typeof payload.entityId === "string" && payload.entityId.trim() !== "" ? payload.entityId : fail("overwrite_target_invalid");
+          if (target.id !== operationTargetId || durableDecision.targetEntityType !== operation.targetType || durableDecision.targetEntityId !== operationTargetId) fail("overwrite_target_invalid");
+          if ((proofPayload.entityType !== undefined && proofPayload.entityType !== operation.targetType) || (proofPayload.entityId !== undefined && proofPayload.entityId !== target.id) || (proofPayload.fieldName !== undefined && proofPayload.fieldName !== field) || (proofPayload.sourceVersionId !== undefined && proofPayload.sourceVersionId !== operation.sourceVersionId)) fail("overwrite_target_invalid");
+          if ((proofPayload.decisionId !== undefined && proofPayload.decisionId !== durableDecision.id) || (proofPayload.decision !== undefined && proofPayload.decision !== durableDecision.decision)) fail("overwrite_decision_invalid");
+          if (fingerprintSourceContent({ value: proofPayload.sourceValue }) !== fingerprintSourceContent({ value: payload.value })) fail("source_value_changed");
+          const proof = {
+            entityType: operation.targetType,
+            entityId: target.id,
+            fieldName: field,
+            sourceVersionId: operation.sourceVersionId,
+            expectedLocalValueFingerprint: proofPayload.expectedLocalValueFingerprint ?? localValueFingerprint(proofPayload.localValue),
+            decisionId: durableDecision.id,
+            decision: durableDecision.decision,
+            sourceValue: proofPayload.sourceValue,
+          } as Parameters<typeof verifyOverwrite>[0]["proof"];
+          const checked = verifyOverwrite({ local: { entityType: operation.targetType, entityId: target.id, fieldName: field, value: current }, proof, expectedSourceVersionId: operation.sourceVersionId, decision: durableDecision });
+          if (!checked.ok) fail(checked.code);
+          operation.status = "applied";
+          operation.lastErrorCode = undefined;
+          await this.repository.applyReviewedOverwrite({
+            target,
+            field,
+            value: payload.value,
+            expectedLocalValue: current,
+            expectedLocalValueFingerprint: proof.expectedLocalValueFingerprint,
+            origin: { entityType: operation.targetType, entityId: target.id, fieldName: field, sourceRecordId: operation.sourceRecordId, sourceVersionId: operation.sourceVersionId, operationId: operation.id, sourceValueFingerprint: fingerprintSourceContent({ value: payload.value }) },
+            operation,
+          }, attempt);
+          batch.completed += 1;
+          return;
+        }
       } else if (action === "create_relationship") { const result = await this.repository.createRelationship(operation, attempt); operation.status = result; if (result === "already_present") batch.alreadyPresent += 1; else batch.completed += 1; }
       else if (action === "record_provenance") { await this.repository.recordProvenance(operation, attempt); operation.status = "applied"; batch.completed += 1; }
       else { operation.status = "applied"; batch.completed += 1; }
