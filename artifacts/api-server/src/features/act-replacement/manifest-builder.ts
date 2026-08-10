@@ -1,6 +1,7 @@
 import type { ActApplyAction, ActApplyTargetType, ActReplacementStreamType } from "./import-types";
 import { digestManifestRows } from "./manifest-digest";
 import type { MatchResult } from "./matching/match-result";
+import type { ContextClueEvidence } from "./matching/context-clue-resolver";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { isMateriallyPopulated, isNormalizedMetadataField, writablePhysicalColumn } from "./writable-target-fields";
 
@@ -37,6 +38,94 @@ const rank: Record<string, number> = { organization: 10, contact: 20, calling_li
 const sorted = (values: readonly string[] | undefined) => [...new Set((values ?? []).filter((value) => value.trim()))].sort();
 const operationKey = (target: string, source: string, suffix = "") => `${target}:${source}${suffix ? `:${suffix}` : ""}`;
 const relationshipParentTypes = new Set(["organization", "contact", "booking"]);
+const maximumPersistedMatchItems = 20;
+const maximumPersistedMatchStringLength = 200;
+const contextClueFamilies = new Set<ContextClueEvidence["family"]>([
+  "identity", "direct_contact", "web_identity", "location",
+  "archive_relationship", "event_context", "narrative_context",
+]);
+const contextTargetTypes = new Set<ContextClueEvidence["targetEntityType"]>([
+  "organization", "contact", "booking", "calling_list", "activity",
+]);
+
+function boundedMatchString(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim().slice(0, maximumPersistedMatchStringLength)
+    : "";
+}
+
+function matchStringExceedsBound(value: unknown): boolean {
+  return typeof value === "string"
+    && value.trim().length > maximumPersistedMatchStringLength;
+}
+
+function sanitizedContextEvidence(value: unknown): ContextClueEvidence | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const clue = value as Partial<ContextClueEvidence>;
+  const label = boundedMatchString(clue.label);
+  const targetEntityId = boundedMatchString(clue.targetEntityId);
+  if (
+    !contextClueFamilies.has(clue.family as ContextClueEvidence["family"])
+    || !contextTargetTypes.has(clue.targetEntityType as ContextClueEvidence["targetEntityType"])
+    || (clue.authority !== "authoritative" && clue.authority !== "supporting")
+    || !label
+    || !targetEntityId
+  ) return null;
+  return {
+    family: clue.family as ContextClueEvidence["family"],
+    label,
+    targetEntityType: clue.targetEntityType as ContextClueEvidence["targetEntityType"],
+    targetEntityId,
+    authority: clue.authority,
+  };
+}
+
+function sanitizedMatch(match: MatchResult | undefined): MatchResult | undefined {
+  if (!match) return undefined;
+  const rawEvidence = Array.isArray(match.evidence) ? match.evidence : null;
+  const evidenceStringTruncated = (rawEvidence ?? []).some((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const clue = value as Partial<ContextClueEvidence>;
+    return matchStringExceedsBound(clue.label)
+      || matchStringExceedsBound(clue.targetEntityId);
+  });
+  const validEvidence = (rawEvidence ?? [])
+    .map(sanitizedContextEvidence)
+    .filter((clue): clue is ContextClueEvidence => clue !== null)
+    .sort((left, right) =>
+      left.family.localeCompare(right.family)
+      || left.label.localeCompare(right.label)
+      || left.targetEntityType.localeCompare(right.targetEntityType)
+      || left.targetEntityId.localeCompare(right.targetEntityId)
+      || left.authority.localeCompare(right.authority));
+  const evidence = validEvidence.slice(0, maximumPersistedMatchItems);
+  const evidenceTruncated = match.evidenceTruncated === true
+    || (match.kind === "exact" && matchStringExceedsBound(match.localId))
+    || evidenceStringTruncated
+    || (rawEvidence !== null && (rawEvidence.length !== validEvidence.length || validEvidence.length > evidence.length));
+  const proof = {
+    ...(rawEvidence !== null ? { evidence } : {}),
+    ...(evidenceTruncated ? { evidenceTruncated: true as const } : {}),
+  };
+  const reason = boundedMatchString(match.reason);
+  if (match.kind === "exact") {
+    return { kind: "exact", localId: boundedMatchString(match.localId), reason, ...proof };
+  }
+  if (match.kind === "ambiguous") {
+    const candidateIds = [...new Set(match.candidateIds.map(boundedMatchString).filter(Boolean))].sort();
+    const boundedCandidateIds = candidateIds.slice(0, maximumPersistedMatchItems);
+    return {
+      kind: "ambiguous",
+      candidateIds: boundedCandidateIds,
+      reason,
+      ...proof,
+      ...((match.candidateIdsTruncated === true || candidateIds.length > boundedCandidateIds.length)
+        ? { candidateIdsTruncated: true as const }
+        : {}),
+    };
+  }
+  return { kind: "none", reason, ...proof };
+}
 
 export function stableRelationshipIssues(
   sourceRecordId: string,
@@ -200,17 +289,7 @@ function hasImmutableOverwriteProof(
 export function buildActOrganizeManifest(input: { runId: string; sources: readonly ManifestSourceInput[] }): ActOrganizeManifest {
   const sources = input.sources.map((source) => ({
     ...source,
-    ...(source.match?.evidence
-      ? {
-          match: {
-            ...source.match,
-            evidence: [...source.match.evidence].sort((left, right) =>
-              left.family.localeCompare(right.family)
-              || left.label.localeCompare(right.label)
-              || left.targetEntityId.localeCompare(right.targetEntityId)),
-          },
-        }
-      : {}),
+    ...(source.match ? { match: sanitizedMatch(source.match) } : {}),
   })).sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId));
   const sourceById = new Map(sources.map((source) => [source.sourceRecordId, source]));
   const operations: ManifestOperation[] = []; const outcomes: ManifestOutcome[] = []; const diagnostics: ManifestDiagnostic[] = [];
@@ -263,7 +342,14 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     if (!source.normalized) { issues.push({ code: "unsupported_record", reason: "normalization_failed" }); diagnostics.push({ code: "unsupported_record", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unsupported", issues, candidates: [], match: null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const candidates = source.match?.kind === "ambiguous" ? source.match.candidateIds.map((candidateId) => ({ candidateId })) : [];
     if (source.match?.kind === "ambiguous") { issues.push({ code: "ambiguous_match", reason: source.match.reason }); diagnostics.push({ code: "ambiguous_match", sourceRecordId: source.sourceRecordId }); }
-    const hasBlockingPreOperationIssue = reviewIssues.length > 0 || source.match?.kind === "ambiguous";
+    const incompleteContextProof = source.match?.evidenceTruncated === true;
+    if (incompleteContextProof && source.match?.kind !== "ambiguous") {
+      issues.push({ code: "ambiguous_match", reason: "context_evidence_truncated" });
+      diagnostics.push({ code: "ambiguous_match", sourceRecordId: source.sourceRecordId });
+    }
+    const hasBlockingPreOperationIssue = reviewIssues.length > 0
+      || source.match?.kind === "ambiguous"
+      || incompleteContextProof;
     if (hasBlockingPreOperationIssue) { outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "awaiting_review", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     if (standaloneUnassigned && !resolvedRelationshipIssues.has(syntheticUnassignedIssue?.relationshipSlot)) { issues.push(syntheticUnassignedIssue!); diagnostics.push({ code: "unassigned", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unassigned", issues, candidates: [], match: source.match as unknown as Record<string, unknown>, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const targetType = targetForKind[source.normalized.kind]; if (!targetType) { issues.push({ code: "unsupported_record", reason: "unknown_normalized_kind" }); diagnostics.push({ code: "unsupported_record", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unsupported", issues, candidates: [], match: null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
