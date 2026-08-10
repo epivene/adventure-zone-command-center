@@ -33,6 +33,18 @@ export type NarrativeContextMention = {
   streamType: string;
 };
 
+type NarrativeNameCandidate = {
+  phrase: string;
+  sourceRecordId: string;
+  streamType: string;
+  kind: string;
+};
+
+type NarrativeNameTrieNode = {
+  candidates: NarrativeNameCandidate[];
+  children: Map<string, NarrativeNameTrieNode>;
+};
+
 const stopPhrases = new Set(["the", "and", "for", "unknown", "none", "n a"]);
 
 function value(record: Record<string, unknown>, keys: readonly string[]): string | null {
@@ -82,6 +94,44 @@ function finalize(index: Map<string, Set<string>>): Map<string, readonly string[
     .map(([key, ids]) => [key, [...ids].sort()]));
 }
 
+function narrativeTokens(normalizedText: string): string[] {
+  return normalizedText.match(/[\p{L}\p{N}]+/gu) ?? [];
+}
+
+function narrativeNameTrie(candidates: readonly NarrativeNameCandidate[]): NarrativeNameTrieNode {
+  const root: NarrativeNameTrieNode = { candidates: [], children: new Map() };
+  for (const candidate of candidates) {
+    let node = root;
+    for (const token of narrativeTokens(candidate.phrase)) {
+      let child = node.children.get(token);
+      if (!child) {
+        child = { candidates: [], children: new Map() };
+        node.children.set(token, child);
+      }
+      node = child;
+    }
+    node.candidates.push(candidate);
+  }
+  return root;
+}
+
+function narrativeCandidatesInText(
+  normalizedText: string,
+  root: NarrativeNameTrieNode,
+): NarrativeNameCandidate[] {
+  const tokens = narrativeTokens(normalizedText);
+  const matches: NarrativeNameCandidate[] = [];
+  for (let start = 0; start < tokens.length; start += 1) {
+    let node: NarrativeNameTrieNode | undefined = root;
+    for (let position = start; position < tokens.length; position += 1) {
+      node = node.children.get(tokens[position]!);
+      if (!node) break;
+      matches.push(...node.candidates);
+    }
+  }
+  return matches;
+}
+
 export function buildActContextIndex(
   rows: readonly ContextIndexRow[],
   localCandidates: ContextIndexLocalCandidates,
@@ -91,7 +141,7 @@ export function buildActContextIndex(
     "websiteHost", "location", "eventDate", "eventLocation",
   ].map((key) => [key, new Map<string, Set<string>>()])) as Record<ContextIndexName, Map<string, Set<string>>>;
   const sourceTypes = new Map<string, string>();
-  const narrativeNames: Array<{ phrase: string; sourceRecordId: string; streamType: string; kind: string }> = [];
+  const narrativeNames: NarrativeNameCandidate[] = [];
   const add = (name: ContextIndexName, key: string | null, id: string) => {
     if (!key) return;
     const ids = mutable[name].get(key) ?? new Set<string>();
@@ -152,6 +202,7 @@ export function buildActContextIndex(
   const uniqueNarrativeNames = narrativeNames.filter((candidate) =>
     narrativeNameCounts.get(`${candidate.kind}\u0000${candidate.phrase}`) === 1,
   );
+  const uniqueNarrativeNameTrie = narrativeNameTrie(uniqueNarrativeNames);
   return {
     ...indexes,
     unique(name: ContextIndexName, key: string): string | null {
@@ -163,8 +214,8 @@ export function buildActContextIndex(
       for (const [field, rawText] of Object.entries(fields)) {
         const normalizedText = normalizeMatchingText(rawText ?? null);
         if (!normalizedText) continue;
-        for (const candidate of uniqueNarrativeNames) {
-          if (!normalizedText.includes(candidate.phrase)) continue;
+        const candidates = new Set(narrativeCandidatesInText(normalizedText, uniqueNarrativeNameTrie));
+        for (const candidate of candidates) {
           mentions.push({
             family: "narrative_context",
             label: `${field} mentions ${candidate.kind} name`,
