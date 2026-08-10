@@ -372,7 +372,50 @@ describe("durable review adapter projections", () => {
     })).resolves.toMatchObject({ id: "decision-1", decidedBy: "original-owner" });
   });
 
-  it("returns an exact durable individual replay before current source applicability validation", async () => {
+  it("commits a review mutation before starting the memory-heavy manifest rebuild", async () => {
+    const events: string[] = [];
+    const transaction = {};
+    const database = {
+      transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+        events.push("transaction:start");
+        const result = await callback(transaction);
+        events.push("transaction:commit");
+        return result;
+      },
+    } as never;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveAssignment")
+      .mockImplementation(async (input) => {
+        events.push("assignment:save");
+        return { id: "assignment-1", ...input } as never;
+      });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockImplementation(async () => {
+        events.push("manifest:rebuild");
+        return { status: "ready_to_apply", manifest: { digest: "digest", diagnostics: [], outcomes: [], operations: [] } };
+      });
+
+    await new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .saveAssignmentAndRebuild("run", {
+        sourceRecordId: "source-1",
+        sourceVersionId: "version-1",
+        targetEntityType: "organization",
+        targetEntityId: "organization-1",
+        assignedBy: "owner",
+        requestKey: "assignment-key",
+        role: "primary",
+        isPrimary: true,
+        manualAuthority: true,
+      });
+
+    expect(events).toEqual([
+      "transaction:start",
+      "assignment:save",
+      "transaction:commit",
+      "manifest:rebuild",
+    ]);
+  });
+
+  it("rebuilds an exact durable individual replay after current source applicability validation is skipped", async () => {
     const input = {
       runId: "run", sourceRecordId: "source-1", sourceVersionId: "version-1",
       scope: "field_conflict" as const, decision: "keep_local" as const,
@@ -415,11 +458,11 @@ describe("durable review adapter projections", () => {
       transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
     } as never;
     const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
-      .mockRejectedValue(new Error("replay must not rebuild"));
+      .mockResolvedValue({ status: "ready_to_apply", manifest: { digest: "digest", diagnostics: [], outcomes: [], operations: [] } });
 
     await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
       .saveDecisionAndRebuild("run", input)).resolves.toMatchObject({ id: "decision-1", sourceVersionId: "version-1" });
-    expect(rebuild).not.toHaveBeenCalled();
+    expect(rebuild).toHaveBeenCalledOnce();
     expect(events).toEqual(["source:lock"]);
   });
 
@@ -514,6 +557,11 @@ describe("durable review adapter projections", () => {
         events.push("transaction:commit");
         return result;
       },
+      update: () => ({
+        set: () => ({
+          where: async () => { events.push("request:update"); },
+        }),
+      }),
     } as never;
     vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveDecision")
       .mockImplementation(async (input) => {
@@ -550,7 +598,8 @@ describe("durable review adapter projections", () => {
     expect(result).toMatchObject({ manifestDigest: "digest-2", decisions: [{ decidedBy: "authenticated-owner" }, { decidedBy: "authenticated-owner" }] });
     expect(events).toEqual([
       "transaction:start", "lock", "request:check", "sources:lock", "manifest", "decision-key:check",
-      "save:a:authenticated-owner", "save:b:authenticated-owner", "rebuild", "manifest", "request:save", "transaction:commit",
+      "save:a:authenticated-owner", "save:b:authenticated-owner", "request:save", "transaction:commit",
+      "rebuild", "request:update",
     ]);
   });
 
@@ -606,7 +655,7 @@ describe("durable review adapter projections", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("does not commit the bulk transaction when the organizer fails", async () => {
+  it("keeps bulk decisions durable for retry when the organizer fails after commit", async () => {
     let committed = false;
     let selects = 0;
     const transaction = {
@@ -616,6 +665,7 @@ describe("durable review adapter projections", () => {
         return chain;
       },
       execute: async () => ({ rows: [{ sourceRecordId: "a", sourceVersionId: "v-a", streamType: "company" }] }),
+      insert: () => ({ values: async () => {} }),
     };
     const database = {
       transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
@@ -639,7 +689,7 @@ describe("durable review adapter projections", () => {
       owner: "owner", requestKey: "bulk", requestFingerprint: "fingerprint",
       ...unsupportedBulkStoreInput([{ sourceRecordId: "a", sourceVersionId: "v-a" }]),
     })).rejects.toMatchObject({ code: "manifest_rebuild_failed" });
-    expect(committed).toBe(false);
+    expect(committed).toBe(true);
   });
 
   it("rejects a stale locked digest before inserting any bulk decision", async () => {

@@ -38,6 +38,7 @@ const manifestWriteBatchSize = 250;
 // while the event loop is CPU-bound. Keep enough fenced lease headroom for a
 // large archive; normal database work still renews every minute.
 const organizerLeaseMs = 30 * 60_000;
+const pendingReviewManifestDigest = "__pending_review_rebuild__";
 export function manifestWriteBatches<T>(rows: readonly T[]): T[][] {
   const batches: T[][] = [];
   for (let index = 0; index < rows.length; index += manifestWriteBatchSize)
@@ -1563,20 +1564,21 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
     if (!request) return null;
     if (request.requestedBy !== input.owner) throw Object.assign(new Error("run_not_found"), { code: "run_not_found", status: 404 });
     if (request.requestFingerprint !== input.requestFingerprint) throw Object.assign(new Error("request_replay_mismatch"), { code: "request_replay_mismatch", status: 409 });
+    if (request.manifestDigest === pendingReviewManifestDigest) return null;
     return this.bulkRequestResult(request);
   }
   private async atomicReviewMutation<T>(runId: string, mutation: (store: DrizzleActReviewCommandStore) => Promise<T>): Promise<T> {
-    return this.database.transaction(async (transaction) => {
+    const result = await this.database.transaction(async (transaction) => {
       const store = new DrizzleActReviewCommandStore(transaction as unknown as DrizzleDatabase, this.scope, this.applyService);
-      const result = await mutation(store);
-      await store.rebuildAfterReviewChange(runId);
-      return result;
+      return mutation(store);
     });
+    await this.rebuildAfterReviewChange(runId);
+    return result;
   }
   saveAssignmentAndRebuild(runId: string, input: SaveAssignmentInput) { return this.atomicReviewMutation(runId, (store) => store.saveAssignment(input)); }
   supersedeAssignmentAndRebuild(runId: string, sourceRecordId: string, assignmentId: string, actor: string, expectedSourceVersionId: string, requestKey: string) { return this.atomicReviewMutation(runId, (store) => store.supersedeAssignment(sourceRecordId, assignmentId, actor, expectedSourceVersionId, requestKey)); }
   async saveDecisionAndRebuild(runId: string, input: SaveDecisionInput) {
-    return this.database.transaction(async (transaction) => {
+    const saved = await this.database.transaction(async (transaction) => {
       const [run] = await transaction
         .select({ id: actReplacementRuns.id })
         .from(actReplacementRuns)
@@ -1602,13 +1604,13 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
       const currentManifest = await store.getManifest(runId);
       if (!currentManifest) throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
       const validated = await store.validatedIndividualDecision(runId, input, currentManifest, lockedSource);
-      const saved = await store.saveDecision(validated, true, true);
-      await store.rebuildAfterReviewChange(runId);
-      return saved;
+      return store.saveDecision(validated, true, true);
     });
+    await this.rebuildAfterReviewChange(runId);
+    return saved;
   }
   async saveDecisionsAndRebuild(runId: string, input: SaveDecisionsAndRebuildInput): Promise<SaveDecisionsAndRebuildResult> {
-    return this.database.transaction(async (transaction) => {
+    const transactionResult = await this.database.transaction(async (transaction) => {
       const [run] = await transaction
         .select({ summary: actReplacementRuns.summary })
         .from(actReplacementRuns)
@@ -1626,7 +1628,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
         if (priorRequest.requestedBy !== input.owner) throw Object.assign(new Error("run_not_found"), { code: "run_not_found", status: 404 });
         if (priorRequest.requestFingerprint !== input.requestFingerprint)
           throw Object.assign(new Error("request_replay_mismatch"), { code: "request_replay_mismatch", status: 409 });
-        return store.bulkRequestResult(priorRequest);
+        return { decisions: (await store.bulkRequestResult(priorRequest)).decisions };
       }
       if (text(object(run.summary).manifestDigest) !== input.expectedManifestDigest)
         throw Object.assign(new Error("manifest_digest_mismatch"), { code: "manifest_digest_mismatch", status: 409 });
@@ -1662,24 +1664,35 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
           true,
         ));
       }
-      await store.rebuildAfterReviewChange(runId);
-      const manifest = await store.getManifest(runId);
-      if (!manifest) throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
-      const result = { decisions, manifestDigest: manifest.digest, reviewedOperationIds: reviewedOperationIds(manifest, decisions) };
       await transaction.insert(actReplacementBulkReviewRequests).values({
         runId,
         requestKey: input.requestKey,
         requestFingerprint: input.requestFingerprint,
         requestedBy: input.owner,
-        manifestDigest: result.manifestDigest,
+        manifestDigest: pendingReviewManifestDigest,
         decisionIds: decisions.map((decision) => decision.id),
-        reviewedOperationIds: result.reviewedOperationIds,
+        reviewedOperationIds: [],
       });
-      return result;
+      return { decisions };
     });
+    const rebuilt = await this.rebuildAfterReviewChange(runId);
+    const result = {
+      decisions: transactionResult.decisions,
+      manifestDigest: rebuilt.manifest.digest,
+      reviewedOperationIds: reviewedOperationIds(rebuilt.manifest, transactionResult.decisions),
+    };
+    await this.database
+      .update(actReplacementBulkReviewRequests)
+      .set({ manifestDigest: result.manifestDigest, reviewedOperationIds: result.reviewedOperationIds })
+      .where(and(
+        eq(actReplacementBulkReviewRequests.runId, runId),
+        eq(actReplacementBulkReviewRequests.requestKey, input.requestKey),
+        eq(actReplacementBulkReviewRequests.requestFingerprint, input.requestFingerprint),
+      ));
+    return result;
   }
   async supersedeDecisionAndRebuild(runId: string, sourceRecordId: string, decisionId: string, actor: string, requestKey: string) {
-    return this.database.transaction(async (transaction) => {
+    const decision = await this.database.transaction(async (transaction) => {
       const [run] = await transaction
         .select({ id: actReplacementRuns.id })
         .from(actReplacementRuns)
@@ -1712,20 +1725,27 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReader impleme
         return decision;
       }
       const decision = await store.supersedeDecision(sourceRecordId, decisionId, actor, requestKey, true);
-      await store.rebuildAfterReviewChange(runId);
-      const manifest = await store.getManifest(runId);
-      if (!manifest) throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
       await transaction.insert(actReplacementBulkReviewRequests).values({
         runId,
         requestKey,
         requestFingerprint: fingerprint,
         requestedBy: actor,
-        manifestDigest: manifest.digest,
+        manifestDigest: pendingReviewManifestDigest,
         decisionIds: [decision.id],
         reviewedOperationIds: [],
       });
       return decision;
     });
+    const rebuilt = await this.rebuildAfterReviewChange(runId);
+    await this.database
+      .update(actReplacementBulkReviewRequests)
+      .set({ manifestDigest: rebuilt.manifest.digest })
+      .where(and(
+        eq(actReplacementBulkReviewRequests.runId, runId),
+        eq(actReplacementBulkReviewRequests.requestKey, requestKey),
+        eq(actReplacementBulkReviewRequests.requestFingerprint, decisionSupersessionRequestFingerprint({ sourceRecordId, decisionId, actor })),
+      ));
+    return decision;
   }
 }
 
