@@ -210,13 +210,20 @@ describe("ProductionActOrganizer", () => {
       phase: "extract_complete",
       sources: [companySource, contactSource, noteSource],
     });
+    const shuffledStore = new InMemoryProductionOrganizerStore({
+      runId: "run-shuffled",
+      phase: "extract_complete",
+      sources: [noteSource, companySource, contactSource],
+    });
     const organizer = new ProductionActOrganizer(store);
 
     const first = await organizer.organize("run-1");
     const second = await organizer.organize("run-1");
+    const shuffled = await new ProductionActOrganizer(shuffledStore).organize("run-shuffled");
 
     expect(first.status).toBe("ready_to_apply");
     expect(second.manifest.digest).toBe(first.manifest.digest);
+    expect(shuffled.manifest).toEqual(first.manifest);
     expect(store.persistedOperationKeys).toEqual([
       "organization:company-1",
       "contact:contact-1",
