@@ -10,12 +10,12 @@ import {
   ACT_PAGE_SIZES,
   applyNext,
   approveReadyOperations,
+  approveSafeDefaults,
   assignReviewParent,
   bulkDecideReviewRecords,
   decideReviewRecord,
   getAssignmentTargets,
   getLatestRun,
-  getManifest,
   getReview,
   getRun,
   organizeRun,
@@ -56,8 +56,6 @@ type ReviewSelection = {
 };
 
 type BulkDecisionChoice =
-  | "link_existing"
-  | "keep_separate"
   | "keep_local"
   | "use_source"
   | "keep_unlinked"
@@ -78,8 +76,8 @@ type ImportConfirmation = {
   manifestDigest: string;
   requestKey: string;
   approvedOperationCount: number;
-  affectedSourceRecordCount: number;
   retryFailed: boolean;
+  reviewedOnly: boolean;
 };
 
 function isFinished(phase: ActReplacementWorkflowStatus["phase"]) {
@@ -109,8 +107,11 @@ function errorCode(error: unknown) {
   return error instanceof Error ? error.message : null;
 }
 
-function safeImportRequestKey(run: ActReplacementWorkflowStatus) {
-  return `act-safe-${run.runId}-${run.manifestDigest}`;
+function safeImportRequestKey(
+  run: ActReplacementWorkflowStatus,
+  mode: "safe" | "reviewed",
+) {
+  return `act-${mode}-${run.runId}-${run.manifestDigest}`;
 }
 
 function StageProgress({ active }: { active: number }) {
@@ -254,9 +255,6 @@ export default function ActMigrationPage() {
         setReview(result);
         const validKeys = new Set<string>();
         for (const row of result.rows) {
-          if (bulkSelectionSignature(row, undefined, "duplicate_identity")) {
-            validKeys.add(`${row.sourceRecordId}:duplicate_identity`);
-          }
           for (const conflict of row.conflicts ?? []) {
             if (bulkSelectionSignature(row, conflict.fieldName)) {
               validKeys.add(`${row.sourceRecordId}:${conflict.fieldName}`);
@@ -414,36 +412,57 @@ export default function ActMigrationPage() {
     if (!run?.manifestDigest || applyLocked || !beginBusy("apply")) return;
     setError(null);
     try {
-      const requestKey = safeImportRequestKey(run);
-      const approval = await approveReadyOperations(
+      const hasReviewedRecovery = run.reviewedReadyOperationCount > 0;
+      const reviewedOnly = run.safeOperationCount === 0 && hasReviewedRecovery;
+      const requestKey = safeImportRequestKey(
+        run,
+        hasReviewedRecovery ? "reviewed" : "safe",
+      );
+      const approval = await (hasReviewedRecovery
+        ? approveReadyOperations
+        : approveSafeDefaults)(
         run.runId,
         run.manifestDigest,
         requestKey,
       );
-      const { manifest } = await getManifest(run.runId);
-      if (manifest.digest !== approval.manifestDigest || !manifest.operations) {
-        throw Object.assign(new Error("review_changed"), { status: 409 });
-      }
-      const approvedOperationIds = new Set(approval.approvedOperationIds);
-      const approvedOperations = manifest.operations.filter((operation) =>
-        approvedOperationIds.has(operation.operationKey),
-      );
-      if (approvedOperations.length !== approval.approvedOperationIds.length) {
+      if (run.manifestDigest !== approval.manifestDigest) {
         throw Object.assign(new Error("review_changed"), { status: 409 });
       }
       setImportConfirmation({
         runId: run.runId,
         manifestDigest: approval.manifestDigest,
         requestKey,
-        approvedOperationCount: approvedOperations.length,
-        affectedSourceRecordCount: new Set(
-          approvedOperations.map((operation) => operation.sourceRecordId),
-        ).size,
+        approvedOperationCount:
+          reviewedOnly
+            ? run.reviewedReadyOperationCount
+            : approval.approvedOperationIds.length,
         retryFailed,
+        reviewedOnly,
       });
     } catch (caught) {
       setError(staleReviewMessage(caught, "Could not prepare safe import"));
     } finally {
+      endBusy();
+    }
+  };
+
+  const importAmbiguousAsNew = async (row: ReviewRow) => {
+    if (!run?.canReview || resolvingSourceRecordId || !beginBusy("review")) {
+      return;
+    }
+    setResolvingSourceRecordId(row.sourceRecordId);
+    setError(null);
+    try {
+      await decideReviewRecord(run.runId, row.sourceRecordId, {
+        sourceVersionId: row.sourceVersionId,
+        scope: "duplicate_identity",
+        decision: "keep_separate",
+      });
+      await refreshAfterReviewCommand(run.runId);
+    } catch (caught) {
+      setError(staleReviewMessage(caught, "Could not save the review decision"));
+    } finally {
+      setResolvingSourceRecordId(null);
       endBusy();
     }
   };
@@ -501,30 +520,6 @@ export default function ActMigrationPage() {
     }
   };
 
-  const importAmbiguousAsNew = async (row: ReviewRow) => {
-    if (!run?.canReview || resolvingSourceRecordId || !beginBusy("review"))
-      return;
-    setResolvingSourceRecordId(row.sourceRecordId);
-    setError(null);
-    try {
-      // The decision endpoint saves the version-bound decision and atomically
-      // rebuilds the manifest from the existing archive.
-      await decideReviewRecord(run.runId, row.sourceRecordId, {
-        sourceVersionId: row.sourceVersionId,
-        scope: "duplicate_identity",
-        decision: "keep_separate",
-      });
-      await refreshAfterReviewCommand(run.runId);
-    } catch (caught) {
-      setError(
-        staleReviewMessage(caught, "Could not save the review decision"),
-      );
-    } finally {
-      setResolvingSourceRecordId(null);
-      endBusy();
-    }
-  };
-
   const saveDecision = async (
     row: ReviewRow,
     body: Parameters<typeof decideReviewRecord>[2],
@@ -577,7 +572,7 @@ export default function ActMigrationPage() {
   const toggleSelection = (
     row: ReviewRow,
     fieldName?: string,
-    kindHint?: "duplicate_identity" | "relationship" | "unsupported_record",
+    kindHint?: "relationship" | "unsupported_record",
   ) => {
     if (busyRef.current !== null) return;
     const signature = bulkSelectionSignature(row, fieldName, kindHint);
@@ -621,17 +616,6 @@ export default function ActMigrationPage() {
       sourceRecordId: row.sourceRecordId,
       sourceVersionId: row.sourceVersionId,
     }));
-    if (first.signature.kind === "duplicate_identity") {
-      if (decision !== "link_existing" && decision !== "keep_separate") return null;
-      return {
-        expectedManifestDigest: manifestDigest,
-        requestKey,
-        selections: selectionPayload,
-        scope: "duplicate_identity",
-        decision,
-        fieldName: null,
-      };
-    }
     if (first.signature.kind === "field_conflict" && first.fieldName) {
       const reviewedSelections = selections.map(({ row }) => {
         const reviewToken = row.conflicts.find((conflict) => conflict.fieldName === first.fieldName)?.reviewToken;
@@ -773,8 +757,8 @@ export default function ActMigrationPage() {
         Import everything from Act!
       </h1>
       <p className="mt-2 text-slate-600">
-        Fetch and organize the archive, review anything uncertain, then import
-        only the records that are safe by default.
+        Automatic review uses the saved archive, followed by a separate safe
+        import. Uncertain data stays preserved in the archive.
       </p>
 
       <StageProgress active={stage} />
@@ -803,11 +787,11 @@ export default function ActMigrationPage() {
           </p>
           <h2 className="mt-1 text-xl font-semibold text-slate-900">
             {run.phase === "extract_complete"
-              ? "Prepare the archived records for review"
-              : "Rebuild the review from the saved archive"}
+              ? "Automatically review the fetched archive"
+              : "Automatically review the saved archive"}
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            This builds a durable review manifest without changing any profile.
+            This uses saved context clues to prepare a safe import without changing any profile.
           </p>
           <button
             type="button"
@@ -818,16 +802,18 @@ export default function ActMigrationPage() {
             {busy === "organize"
               ? "Organizing…"
               : run.phase === "extract_complete"
-                ? "Organize fetched records"
-                : "Rebuild review from archive"}
+                ? "Auto-review fetched archive"
+                : "Auto-review saved archive"}
           </button>
         </section>
       )}
 
       {showReview && run && (
         <ImportReview
+          autoResolvedCount={run.autoResolvedCount}
           safeOperationCount={run.safeOperationCount}
-          reviewRequiredCount={run.reviewRequiredCount}
+          reviewedReadyOperationCount={run.reviewedReadyOperationCount}
+          archivedOnlyCount={run.archivedOnlyCount}
           review={review}
           loading={
             reviewLoading ||
@@ -884,15 +870,19 @@ export default function ActMigrationPage() {
             });
           }}
           canImport={
-            run.canApplySafe &&
+            (run.canApplySafe || run.canApplyReviewed) &&
             busy === null &&
             !applyLocked &&
             !requiresAttention
           }
           importLabel={
             run.phase === "applying" || run.nextApplyCursor > 0
-              ? "Resume safe import"
-              : "Import safe records"
+              ? run.safeOperationCount === 0 && run.reviewedReadyOperationCount > 0
+                ? "Resume reviewed import"
+                : "Resume safe import"
+              : run.safeOperationCount === 0 && run.reviewedReadyOperationCount > 0
+                ? "Import reviewed changes"
+                : "Import safe records"
           }
           onSearch={(search) => {
             setReviewPage(1);
@@ -909,15 +899,6 @@ export default function ActMigrationPage() {
             setReviewSelections(new Map());
           }}
           onToggleSelection={toggleSelection}
-          onSelectAllPage={(rows) => {
-            const selections = rows.slice(0, 200).flatMap((row) => {
-              const signature = bulkSelectionSignature(row, undefined, "duplicate_identity");
-              return signature ? [{ row, signature } satisfies ReviewSelection] : [];
-            });
-            const first = selections[0]?.signature;
-            if (!first || selections.some((selection) => selection.signature.value !== first.value)) return;
-            setReviewSelections(new Map(selections.map((selection) => [reviewSelectionKey(selection), selection])));
-          }}
           onKeepLocal={(row, fieldName) =>
             void saveDecision(row, {
               sourceVersionId: row.sourceVersionId,
@@ -1037,7 +1018,7 @@ export default function ActMigrationPage() {
           alreadyPresent={alreadyPresentTotal}
           blocked={blockedTotal}
           failed={failedTotal}
-          remainingReview={run.reviewRequiredCount}
+          archivedOnlyCount={run.archivedOnlyCount}
         />
       )}
 
@@ -1101,7 +1082,9 @@ export default function ActMigrationPage() {
             >
               {importConfirmation.retryFailed
                 ? "Retry failed import?"
-                : "Import safe records?"}
+                : importConfirmation.reviewedOnly
+                  ? "Import reviewed changes?"
+                  : "Import safe records?"}
             </h2>
             <p className="mt-3 text-sm text-slate-700">
               Only reviewer-approved overwrites may replace populated fields.
@@ -1109,10 +1092,11 @@ export default function ActMigrationPage() {
               this archive.
             </p>
             <p className="mt-3 text-sm font-medium text-slate-900">
-              {importConfirmation.approvedOperationCount.toLocaleString()} approved
-              operations affecting {importConfirmation.affectedSourceRecordCount.toLocaleString()} distinct
-              source record{importConfirmation.affectedSourceRecordCount === 1 ? "" : "s"} will be
-              processed in batches of 25.
+              {importConfirmation.approvedOperationCount.toLocaleString()} {importConfirmation.reviewedOnly
+                ? importConfirmation.approvedOperationCount === 1
+                  ? "reviewed change"
+                  : "reviewed changes"
+                : "safe operations"} will be processed in batches of 25.
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
@@ -1130,7 +1114,9 @@ export default function ActMigrationPage() {
               >
                 {importConfirmation.retryFailed
                   ? "Yes, retry failed import"
-                  : "Yes, import safe records"}
+                  : importConfirmation.reviewedOnly
+                    ? "Yes, import reviewed changes"
+                    : "Yes, import safe records"}
               </button>
             </div>
           </div>
