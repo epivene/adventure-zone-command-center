@@ -6,6 +6,7 @@ import type { ContextClueFamily } from "./matching/context-clue-resolver";
 export type ReviewIssueCode = "ambiguous_match" | "field_conflict" | "relationship_unresolved" | "unassigned" | "unsupported_record" | "unsupported_field";
 export type ReviewSummary = {
   decisionRequired: number;
+  archivedOnly: number;
   issueCounts: Partial<Record<ReviewIssueCode, number>>;
   diagnosticCounts: Partial<Record<ReviewIssueCode, number>>;
 };
@@ -198,7 +199,8 @@ export function summarizeReviewOutcomes(outcomes: readonly Pick<ManifestOutcome,
     }
   }
   return {
-    decisionRequired: outcomes.filter((outcome) => reviewStates.has(outcome.state)).length,
+    decisionRequired: 0,
+    archivedOnly: outcomes.filter((outcome) => reviewStates.has(outcome.state)).length,
     issueCounts,
     diagnosticCounts,
   };
