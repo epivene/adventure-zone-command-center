@@ -540,6 +540,7 @@ function safeReviewPage(page: Awaited<ReturnType<typeof readReview>>) {
     manifestDigest: page.manifestDigest,
     summary: {
       decisionRequired: page.summary.decisionRequired,
+      archivedOnly: page.summary.archivedOnly,
       issueCounts: { ...page.summary.issueCounts },
       diagnosticCounts: { ...page.summary.diagnosticCounts },
     },
