@@ -145,7 +145,8 @@ describe("Act review reader", () => {
     });
 
     expect(page.summary).toEqual({
-      decisionRequired: 5,
+      decisionRequired: 0,
+      archivedOnly: 5,
       issueCounts: {
         ambiguous_match: 1,
         field_conflict: 1,
@@ -235,7 +236,7 @@ describe("Act review reader", () => {
   it("prefers a bounded reader page without loading the full manifest or archive", async () => {
     const expected = {
       rows: [], page: 1, pageSize: 25, total: 0, manifestDigest: "digest-bounded",
-      summary: { decisionRequired: 0, issueCounts: {}, diagnosticCounts: {} },
+      summary: { decisionRequired: 0, archivedOnly: 0, issueCounts: {}, diagnosticCounts: {} },
     };
     const reader = {
       async getManifest() { throw new Error("full manifest must not be loaded"); },
@@ -246,7 +247,7 @@ describe("Act review reader", () => {
     await expect(readReview(reader, { runId: "run", pageSize: 25 })).resolves.toBe(expected);
   });
 
-  it("counts every review-state record even when its internal issue is not actionable", async () => {
+  it("archives every review-state record even when its internal issue is not actionable", async () => {
     const reader = new InMemoryReviewReader();
     reader.seed("run-incomplete", {
       digest: "digest-incomplete",
@@ -267,7 +268,7 @@ describe("Act review reader", () => {
 
     await expect(readReview(reader, { runId: "run-incomplete", pageSize: 25 }))
       .resolves.toMatchObject({
-        summary: { decisionRequired: 1, issueCounts: {}, diagnosticCounts: {} },
+        summary: { decisionRequired: 0, archivedOnly: 1, issueCounts: {}, diagnosticCounts: {} },
       });
   });
 
