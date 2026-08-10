@@ -6,6 +6,12 @@ import type {
   ActReplacementStatus,
   StartActReplacementRun,
 } from "@/features/act-replacement/import-types";
+import {
+  ActApprovalService,
+  InMemoryApprovalRepository,
+} from "@/features/act-replacement/approval-service";
+import type { ManifestOperation } from "@/features/act-replacement/manifest-builder";
+import { fingerprintSourceContent } from "@/features/act-replacement/source-fingerprint";
 import { issueToken, requireOwnerMiddleware } from "@/lib/auth";
 import {
   createActReplacementRouter,
@@ -50,6 +56,7 @@ function status(
   pageSize: 25 | 50 | 100 | 200 = 50,
 ): ActReplacementStatus & {
   safeOperationCount: number;
+  reviewedReadyOperationCount: number;
   reviewRequiredCount: number;
   appliedOperationCount: number;
   alreadyPresentOperationCount: number;
@@ -60,6 +67,7 @@ function status(
   canOrganize: boolean;
   canReview: boolean;
   canApplySafe: boolean;
+  canApplyReviewed: boolean;
 } {
   return {
     runId,
@@ -117,6 +125,7 @@ function status(
     canResume: true,
     canStartOver: true,
     safeOperationCount: 0,
+    reviewedReadyOperationCount: 0,
     reviewRequiredCount: 0,
     appliedOperationCount: 0,
     alreadyPresentOperationCount: 0,
@@ -127,6 +136,7 @@ function status(
     canOrganize: false,
     canReview: false,
     canApplySafe: false,
+    canApplyReviewed: false,
   };
 }
 
@@ -277,6 +287,7 @@ function workflowReview(overrides: Record<string, unknown> = {}) {
     workflow: {
       summarize: vi.fn().mockResolvedValue({
         safeOperationCount: 3,
+        reviewedReadyOperationCount: 1,
         reviewRequiredCount: 2,
         appliedOperationCount: 4,
         alreadyPresentOperationCount: 2,
@@ -287,6 +298,7 @@ function workflowReview(overrides: Record<string, unknown> = {}) {
         canOrganize: false,
         canReview: true,
         canApplySafe: true,
+        canApplyReviewed: true,
       }),
     },
     ...overrides,
@@ -680,6 +692,7 @@ describe("owner import workflow", () => {
     expect(response.status).toBe(200);
     expect(response.body.run).toMatchObject({
       safeOperationCount: 3,
+      reviewedReadyOperationCount: 1,
       reviewRequiredCount: 2,
       appliedOperationCount: 4,
       alreadyPresentOperationCount: 2,
@@ -690,6 +703,7 @@ describe("owner import workflow", () => {
       canOrganize: false,
       canReview: true,
       canApplySafe: true,
+      canApplyReviewed: true,
       applyEnabled: false,
     });
   });
@@ -755,7 +769,8 @@ describe("owner import workflow", () => {
       total: 1,
       manifestDigest: MANIFEST_DIGEST,
       summary: {
-        decisionRequired: 1,
+        decisionRequired: 0,
+        archivedOnly: 1,
         issueCounts: { ambiguous_match: 1 },
         diagnosticCounts: {},
       },
@@ -803,7 +818,8 @@ describe("owner import workflow", () => {
           total: 3,
           manifestDigest: MANIFEST_DIGEST,
           summary: {
-            decisionRequired: 3,
+            decisionRequired: 0,
+            archivedOnly: 3,
             issueCounts: { field_conflict: 3 },
             diagnosticCounts: { unsupported_field: 1 },
           },
@@ -855,7 +871,8 @@ describe("owner import workflow", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       summary: {
-        decisionRequired: 3,
+        decisionRequired: 0,
+        archivedOnly: 3,
         issueCounts: { field_conflict: 3 },
         diagnosticCounts: { unsupported_field: 1 },
       },
@@ -1204,6 +1221,68 @@ describe("owner import workflow", () => {
     });
   });
 
+  it("routes reviewed approval through persisted terminal identity state", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const repository = new InMemoryApprovalRepository();
+    const link: ManifestOperation = {
+      operationKey: "organization:source:identity",
+      sourceRecordId: SOURCE_RECORD_ID,
+      sourceVersionId: SOURCE_VERSION_ID,
+      targetType: "organization",
+      action: "link_existing",
+      payload: { localId: TARGET_ENTITY_ID },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const overwrite: ManifestOperation = {
+      ...link,
+      operationKey: "organization:source:field:phone",
+      action: "overwrite_reviewed",
+      payload: {
+        entityId: TARGET_ENTITY_ID,
+        fieldName: "phone",
+        value: "555-ACT",
+        proof: {
+          entityType: "organization", entityId: TARGET_ENTITY_ID, fieldName: "phone",
+          sourceVersionId: SOURCE_VERSION_ID,
+          expectedLocalValueFingerprint: fingerprintSourceContent({ value: "555-LOCAL" }),
+          decisionId: "decision-phone", decision: "use_source",
+          localValue: "555-LOCAL", sourceValue: "555-ACT",
+        },
+        decision: {
+          id: "decision-phone", sourceVersionId: SOURCE_VERSION_ID,
+          scope: "field_conflict", decision: "use_source", fieldName: "phone",
+          targetEntityType: "organization", targetEntityId: TARGET_ENTITY_ID,
+        },
+      },
+      dependencyOperationKeys: [link.operationKey],
+      safeByDefault: false,
+    };
+    repository.seed(RUN_ID, {
+      digest: MANIFEST_DIGEST,
+      outcomes: [{
+        sourceRecordId: SOURCE_RECORD_ID, sourceVersionId: SOURCE_VERSION_ID, state: "ready",
+        issues: [], candidates: [], match: { kind: "exact", localId: TARGET_ENTITY_ID, reason: "exact_external_link" },
+        mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [link.operationKey, overwrite.operationKey],
+      }],
+      operations: [link, overwrite],
+      operationStatuses: { [link.operationKey]: "already_present" },
+    });
+
+    const response = await request(testApp(store, true, workflowReview({ commands: new ActApprovalService(repository) })))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/approvals/ready`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ expectedManifestDigest: MANIFEST_DIGEST, requestKey: "persisted-ready" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.approvedOperationIds).toEqual(expect.arrayContaining([
+      link.operationKey,
+      overwrite.operationKey,
+    ]));
+  });
+
   it("strictly validates and owner-scopes safe-default approval", async () => {
     const store = new MemoryControlStore();
     addRun(store);
@@ -1248,6 +1327,78 @@ describe("owner import workflow", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       approvedOperationIds: ["organization:one"],
+      manifestDigest: MANIFEST_DIGEST,
+    });
+  });
+
+  it("routes the page approval through real mixed-outcome safety closure", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const repository = new InMemoryApprovalRepository();
+    repository.seed(RUN_ID, {
+      digest: MANIFEST_DIGEST,
+      outcomes: [{
+        sourceRecordId: SOURCE_RECORD_ID,
+        sourceVersionId: SOURCE_VERSION_ID,
+        state: "awaiting_review",
+        issues: [{ code: "field_conflict", reason: "phone" }],
+        candidates: [],
+        match: {
+          kind: "exact",
+          localId: TARGET_ENTITY_ID,
+          reason: "authoritative_context_clue",
+          evidence: [{
+            family: "identity",
+            label: "exact Act link",
+            targetEntityType: "organization",
+            targetEntityId: TARGET_ENTITY_ID,
+            authority: "authoritative",
+          }],
+        },
+        mappingWarnings: [],
+        unsupportedFieldPaths: [],
+        operationKeys: ["safe-link", "unsafe-overwrite"],
+      }],
+      operations: [
+        {
+          operationKey: "safe-link",
+          sourceRecordId: SOURCE_RECORD_ID,
+          sourceVersionId: SOURCE_VERSION_ID,
+          targetType: "organization",
+          action: "link_existing",
+          payload: { localId: TARGET_ENTITY_ID },
+          dependencyOperationKeys: [],
+          requiredForSourceOutcome: true,
+          safeByDefault: true,
+        },
+        {
+          operationKey: "unsafe-overwrite",
+          sourceRecordId: SOURCE_RECORD_ID,
+          sourceVersionId: SOURCE_VERSION_ID,
+          targetType: "organization",
+          action: "overwrite_reviewed",
+          payload: {},
+          dependencyOperationKeys: ["safe-link"],
+          requiredForSourceOutcome: true,
+          safeByDefault: false,
+        },
+      ],
+    });
+    const commands = new ActApprovalService(repository);
+    const review = workflowReview({ commands });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/approvals/safe-defaults`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        requestKey: "page-safe-import",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      approvedOperationIds: ["safe-link"],
+      rejectedOperationIds: ["unsafe-overwrite"],
       manifestDigest: MANIFEST_DIGEST,
     });
   });
