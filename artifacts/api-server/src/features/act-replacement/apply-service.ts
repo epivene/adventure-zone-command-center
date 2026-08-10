@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { isAutomaticallyImportableAction } from "./automatic-review-policy";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { localValueFingerprint, verifyOverwrite } from "./local-edit-policy";
+import {
+  hasReviewedOverwriteProof,
+  hasReviewedRelationshipProof,
+  isReviewedRelationship,
+} from "./review-proof";
 import type { ActApplyAction } from "./import-types";
 import type { ApplyRepository, ApplyAttempt, ApplyBatchRecord, StoredOperation } from "./apply-repository";
 
@@ -10,6 +16,63 @@ const fail = (code: string): never => { throw Object.assign(new Error(code), { c
 
 export class ActApplyService {
   constructor(private readonly repository: ApplyRepository, private readonly enabled = false) {}
+  private async validateReviewedProof(operation: StoredOperation): Promise<void> {
+    if (operation.action === "overwrite_reviewed") {
+      if (!hasReviewedOverwriteProof(operation)) fail("review_proof_required");
+      const entityId = String(operation.payload.entityId ?? "");
+      const target = await this.repository.getTarget(operation.targetType, entityId);
+      if (!target || target.id !== entityId || target.entityType !== operation.targetType) {
+        fail("review_target_not_found");
+      }
+      const reviewedTarget = target ?? fail("review_target_not_found");
+      if (operation.status !== "applied" && operation.status !== "already_present") {
+        const fieldName = String(operation.payload.fieldName ?? "");
+        const proof = operation.payload.proof as Record<string, unknown>;
+        if (localValueFingerprint(reviewedTarget.values[fieldName]) !== proof.expectedLocalValueFingerprint) {
+          fail("local_edit_detected");
+        }
+      }
+      return;
+    }
+    if (isReviewedRelationship(operation)) {
+      if (!hasReviewedRelationshipProof(operation)) fail("review_proof_required");
+      const parentType = String(operation.payload.parentType ?? "");
+      const parentEntityId = String(operation.payload.parentEntityId ?? "");
+      const target = await this.repository.getTarget(parentType, parentEntityId);
+      if (!target || target.id !== parentEntityId || target.entityType !== parentType) {
+        fail("review_target_not_found");
+      }
+    }
+  }
+  private validateReviewedRootIdentities(operations: readonly StoredOperation[]): void {
+    const byKey = new Map(operations.map((operation) => [operation.operationKey, operation]));
+    for (const root of operations) {
+      const reviewedRelationship = isReviewedRelationship(root);
+      if (root.action !== "overwrite_reviewed" && !reviewedRelationship) continue;
+      const targetId = typeof root.payload.entityId === "string" ? root.payload.entityId : "";
+      const seen = new Set<string>();
+      let matchedIdentity = false;
+      const visit = (key: string) => {
+        if (seen.has(key)) return;
+        seen.add(key);
+        const dependency = byKey.get(key);
+        if (!dependency) return;
+        if (dependency.action === "link_existing") {
+          if (dependency.sourceRecordId === root.sourceRecordId
+            && (reviewedRelationship
+              || (dependency.targetType === root.targetType
+                && dependency.payload.localId === targetId))
+            && (dependency.status === "applied" || dependency.status === "already_present")) {
+            matchedIdentity = true;
+          }
+          return;
+        }
+        for (const nested of dependency.dependencyOperationKeys ?? []) visit(nested);
+      };
+      for (const dependency of root.dependencyOperationKeys ?? []) visit(dependency);
+      if (!matchedIdentity) fail("link_target_mismatch");
+    }
+  }
   async apply(input: { runId: string; approvedOperationIds: string[]; expectedManifestDigest: string; requestKey: string; approvalRequestKey?: string; startCursor?: number; requestedBy?: string; retryFailed?: boolean }): Promise<ApplyBatchStatus> {
     if (!this.enabled) fail("act_apply_disabled");
     if (this.repository.durableApply !== true) fail("durable_apply_unavailable");
@@ -24,20 +87,47 @@ export class ActApplyService {
     const operations = await this.repository.getOperations(input.runId, input.approvedOperationIds); if (operations.length !== new Set(input.approvedOperationIds).size) fail("operation_not_found");
     if (operations.some((operation) => operation.sourceVersionId.trim() === "")) fail("source_version_missing");
     for (const operation of operations) {
-      if (operation.action === "overwrite_reviewed") {
-        if (!operation.payload.proof || !operation.payload.decision) fail("review_proof_required");
+      if (operation.action === "overwrite_reviewed" || isReviewedRelationship(operation)) {
+        await this.validateReviewedProof(operation);
         continue;
       }
       if (!operation.safeByDefault) fail("operation_not_safe");
     }
-    if (operations.some((operation) => operation.status !== "applied" && operation.status !== "already_present" && operation.outcomeState !== "ready" && !(input.retryFailed && operation.outcomeState === "failed"))) fail("outcome_not_ready");
+    const approvalReleasedOperations = operations.filter((operation) =>
+      operation.status !== "applied"
+      && operation.status !== "already_present"
+      && operation.outcomeState !== "ready"
+      && !(input.retryFailed && operation.outcomeState === "failed")
+      && isAutomaticallyImportableAction(operation));
+    if (approvalReleasedOperations.length > 0 && input.approvalRequestKey) {
+      const approvalRequestKey = input.approvalRequestKey;
+      const approval = await this.repository.getApproval(input.runId, approvalRequestKey)
+        ?? fail("approval_not_found");
+      if (approval.manifestDigest !== input.expectedManifestDigest) fail("approval_manifest_mismatch");
+      const approvedIds = new Set(approval.approvedOperationIds);
+      if (input.approvedOperationIds.some((operationId) => !approvedIds.has(operationId))) {
+        fail("operation_not_approved");
+      }
+    }
+    if (operations.some((operation) => operation.status !== "applied"
+      && operation.status !== "already_present"
+      && operation.outcomeState !== "ready"
+      && !(input.retryFailed && operation.outcomeState === "failed")
+      && !(input.approvalRequestKey && isAutomaticallyImportableAction(operation)))) fail("outcome_not_ready");
     if (operations.some((operation) => operation.latestSourceVersionId !== operation.sourceVersionId)) fail("source_version_changed");
     const keys = new Set(operations.map((operation) => operation.operationKey));
     const priorDependencyIds = [...new Set(operations.flatMap((operation) => operation.dependencyOperationKeys ?? []).filter((dependency) => !keys.has(dependency)))];
+    let priorDependencies: StoredOperation[] = [];
     if (priorDependencyIds.length) {
-      const priorDependencies = await this.repository.getOperations(input.runId, priorDependencyIds);
+      priorDependencies = await this.repository.getOperations(input.runId, priorDependencyIds);
       if (priorDependencies.length !== priorDependencyIds.length || priorDependencies.some((dependency) => dependency.status !== "applied" && dependency.status !== "already_present")) fail("dependency_not_approved");
+      for (const dependency of priorDependencies) {
+        if (dependency.action === "overwrite_reviewed" || isReviewedRelationship(dependency)) {
+          await this.validateReviewedProof(dependency);
+        }
+      }
     }
+    this.validateReviewedRootIdentities([...operations, ...priorDependencies]);
     const attemptToken = randomUUID();
     const claim = await this.repository.createBatch({ batchId: `${input.runId}:${input.requestKey}`, runId: input.runId, requestKey: input.requestKey, approvalRequestKey: input.approvalRequestKey, startCursor: input.startCursor, manifestDigest: input.expectedManifestDigest, operationIds: [...input.approvedOperationIds], state: "applying", leaseOwner: input.requestedBy, leaseExpiresAt: Date.now() + 120_000, attemptToken, fingerprint: replayFingerprint });
     if (!claim.claimed) return status(claim.batch);
