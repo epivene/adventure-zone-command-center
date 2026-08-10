@@ -58,7 +58,7 @@ describe("conservative Act replacement matchers", () => {
   it("prefers one exact external link and sorts ambiguous link candidates", () => {
     const source = contact({ externalLinks: [{ localId: "contact-9", entityType: "contact", sourceEntityType: "contact", actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1" }] });
     const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
-    expect(matchContact(source, [localContact()], context)).toEqual({
+    expect(matchContact(source, [], context)).toEqual({
       kind: "exact", localId: "contact-9", reason: "exact_external_link",
     });
     const ambiguous = contact({ externalLinks: [
@@ -69,6 +69,101 @@ describe("conservative Act replacement matchers", () => {
       kind: "ambiguous", candidateIds: ["contact-a", "contact-z"], reason: "multiple_exact_external_links",
     });
     expect(matchContact(contact({ externalLinks: [{ localId: "contact-9", sourceDatabaseKey: "db-1" }] }), [], context)).toEqual({ kind: "none", reason: "no_unique_contact_identity" });
+  });
+
+  it("fails closed when a contact external link contradicts supporting identity clues", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
+    const source = contact({ externalLinks: [{
+      localId: "contact-linked", entityType: "contact", sourceEntityType: "contact",
+      actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1",
+    }] });
+
+    expect(matchContact(source, [localContact({ id: "contact-supported" })], context)).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["contact-linked", "contact-supported"],
+      reason: "conflicting_context_clues",
+    });
+  });
+
+  it("fails closed when a linked contact identifier has duplicate local candidates", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
+    const source = contact({ externalLinks: [{
+      localId: "contact-linked", entityType: "contact", sourceEntityType: "contact",
+      actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1",
+    }] });
+
+    expect(matchContact(source, [
+      localContact({ id: "contact-linked", firstName: "Janet" }),
+      localContact({ id: "contact-duplicate", firstName: "Janet" }),
+    ], context)).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["contact-duplicate", "contact-linked"],
+      reason: "multiple_normalized_email_candidates",
+    });
+  });
+
+  it("fails closed when the populated linked contact name disagrees", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
+    const source = contact({ externalLinks: [{
+      localId: "contact-linked", entityType: "contact", sourceEntityType: "contact",
+      actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1",
+    }] });
+
+    expect(matchContact(source, [localContact({
+      id: "contact-linked",
+      firstName: "Janet",
+      email: null,
+      phone: null,
+    })], context)).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["contact-linked"],
+      reason: "conflicting_contact_fields",
+    });
+  });
+
+  it("fails closed when an organization external link contradicts supporting context clues", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "company", sourceActRecordId: "ACT-COMPANY-1" };
+    const source = organization({ externalLinks: [{
+      localId: "org-linked", entityType: "organization", sourceEntityType: "company",
+      actRecordId: "ACT-COMPANY-1", sourceRecordId: "source-company", sourceDatabaseKey: "db-1",
+    }] });
+
+    expect(matchOrganization(source, [localOrganization({ id: "org-supported" })], context)).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["org-linked", "org-supported"],
+      reason: "conflicting_context_clues",
+    });
+  });
+
+  it("fails closed when a linked organization name agrees but its populated phone conflicts", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "company", sourceActRecordId: "ACT-COMPANY-1" };
+    const source = organization({ externalLinks: [{
+      localId: "org-linked", entityType: "organization", sourceEntityType: "company",
+      actRecordId: "ACT-COMPANY-1", sourceRecordId: "source-company", sourceDatabaseKey: "db-1",
+    }] });
+
+    expect(matchOrganization(source, [localOrganization({
+      id: "org-linked",
+      phone: "555-999-0000",
+    })], context)).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["org-linked"],
+      reason: "conflicting_organization_fields",
+    });
+  });
+
+  it("keeps an external link exact when supporting clues agree with it", () => {
+    const context = { sourceDatabaseKey: "db-1", sourceEntityType: "contact", sourceActRecordId: "ACT-1" };
+    const source = contact({ externalLinks: [{
+      localId: "contact-1", entityType: "contact", sourceEntityType: "contact",
+      actRecordId: "ACT-1", sourceRecordId: "source-contact", sourceDatabaseKey: "db-1",
+    }] });
+
+    expect(matchContact(source, [localContact()], context)).toMatchObject({
+      kind: "exact",
+      localId: "contact-1",
+      reason: "exact_external_link",
+    });
   });
 
   it("ignores external links from another source identity or target entity", () => {
@@ -113,7 +208,7 @@ describe("conservative Act replacement matchers", () => {
   });
 
   it("requires a compatible name plus unique non-shared email or phone", () => {
-    expect(matchContact(contact(), [localContact({ id: "contact-2", email: "other@example.com", phone: null }), localContact()])).toEqual({
+    expect(matchContact(contact(), [localContact({ id: "contact-2", firstName: "Janet", email: "other@example.com", phone: null }), localContact()])).toEqual({
       kind: "exact",
       localId: "contact-1",
       reason: "two_independent_context_clues",
@@ -151,6 +246,20 @@ describe("conservative Act replacement matchers", () => {
         expect.objectContaining({ family: "identity" }),
         expect.objectContaining({ family: "archive_relationship" }),
       ]),
+    });
+  });
+
+  it("does not auto-resolve a contact when another local shares the identity clue", () => {
+    expect(matchContact(
+      contact({ phone: null }),
+      [
+        localContact({ id: "contact-a", phone: null }),
+        localContact({ id: "contact-b", email: "other@example.com", phone: null }),
+      ],
+    )).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["contact-a", "contact-b"],
+      reason: "conflicting_context_clues",
     });
   });
 
@@ -198,6 +307,20 @@ describe("conservative Act replacement matchers", () => {
     )).toEqual({
       kind: "none",
       reason: "conflicting_organization_fields",
+    });
+  });
+
+  it("does not auto-resolve an organization when another local shares its name", () => {
+    expect(matchOrganization(
+      organization({ phone: null, address1: null, city: null, region: null, postalCode: null }),
+      [
+        localOrganization({ id: "org-a", phone: null, address1: null, city: null, region: null, postalCode: null }),
+        localOrganization({ id: "org-b", phone: null, website: null, address1: null, city: null, region: null, postalCode: null }),
+      ],
+    )).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["org-a", "org-b"],
+      reason: "conflicting_context_clues",
     });
   });
 
