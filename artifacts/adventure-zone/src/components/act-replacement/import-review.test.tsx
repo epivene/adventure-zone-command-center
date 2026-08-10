@@ -6,11 +6,76 @@ import { ImportReview } from "./import-review";
 afterEach(cleanup);
 
 describe("ImportReview", () => {
+  it("summarizes automatic review and keeps archived diagnostics optional", () => {
+    render(
+      <ImportReview
+        autoResolvedCount={12}
+        safeOperationCount={19}
+        archivedOnlyCount={7}
+        review={{
+          page: 1,
+          pageSize: 25,
+          total: 1,
+          manifestDigest: "a".repeat(64),
+          summary: {
+            decisionRequired: 0,
+            archivedOnly: 7,
+            issueCounts: { ambiguous_match: 1 },
+            diagnosticCounts: {},
+          },
+          rows: [
+            {
+              sourceRecordId: "archived-source",
+              sourceVersionId: "archived-version",
+              state: "awaiting_review",
+              issueCodes: ["ambiguous_match"],
+              issues: [{ code: "ambiguous_match" }],
+              conflicts: [],
+              candidates: [],
+              canImportStandalone: true,
+              operationKeys: [],
+              streamType: "company",
+              display: { name: "Archived Company" },
+            },
+          ],
+        }}
+        onSearch={() => {}}
+        onPageChange={() => {}}
+        onImportAsNew={() => {}}
+        onImport={() => {}}
+      />,
+    );
+
+    expect(
+      screen.getByText("12 records auto-resolved from strong context clues"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("19 safe operations ready")).toBeInTheDocument();
+    expect(
+      screen.getByText("7 uncertain records kept in the archive"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/You do not need to review these before importing the safe data/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Import safe records" }),
+    ).toBeEnabled();
+    expect(
+      screen.getByText("Optional archived-record diagnostics"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Optional archived-record diagnostics").closest("details")).not.toHaveAttribute("open");
+    expect(
+      screen.queryByText("Select all safe matches on this page"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Accept selected safe matches"),
+    ).not.toBeInTheDocument();
+  });
+
   it("keeps unsupported-field diagnostics visible without actionable issue groups", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={0}
+        archivedOnlyCount={0}
         review={{
           page: 1,
           pageSize: 25,
@@ -18,6 +83,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 0,
+            archivedOnly: 0,
             issueCounts: {},
             diagnosticCounts: { unsupported_field: 7 },
           },
@@ -39,7 +105,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={42}
-        reviewRequiredCount={3}
+        archivedOnlyCount={3}
         review={{
           page: 1,
           pageSize: 25,
@@ -47,6 +113,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 3,
+            archivedOnly: 3,
             issueCounts: { ambiguous_match: 2 },
             diagnosticCounts: { unsupported_field: 1 },
           },
@@ -90,7 +157,7 @@ describe("ImportReview", () => {
     );
 
     expect(screen.getByText("42 safe operations ready")).toBeInTheDocument();
-    expect(screen.getByText("3 records need your review")).toBeInTheDocument();
+    expect(screen.getByText("3 uncertain records kept in the archive")).toBeInTheDocument();
     expect(screen.getByText("Issue groups on this page")).toBeInTheDocument();
     expect(screen.getByText("Ambiguous match (2)")).toBeInTheDocument();
     expect(screen.getByText("Unsupported field (1)")).toBeInTheDocument();
@@ -105,7 +172,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={1}
-        reviewRequiredCount={26}
+        archivedOnlyCount={26}
         review={{
           page: 1,
           pageSize: 25,
@@ -113,6 +180,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 26,
+            archivedOnly: 26,
             issueCounts: {},
             diagnosticCounts: {},
           },
@@ -156,7 +224,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={1}
+        archivedOnlyCount={1}
         canResolveAmbiguous
         review={{
           page: 1,
@@ -165,6 +233,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 1,
+            archivedOnly: 1,
             issueCounts: { ambiguous_match: 1 },
             diagnosticCounts: {},
           },
@@ -207,7 +276,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={2}
+        archivedOnlyCount={2}
         canResolveAmbiguous
         review={{
           page: 1,
@@ -216,6 +285,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 2,
+            archivedOnly: 2,
             issueCounts: { field_conflict: 2, ambiguous_match: 2 },
             diagnosticCounts: {},
           },
@@ -336,7 +406,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={1}
-        reviewRequiredCount={4}
+        archivedOnlyCount={4}
         activeIssue={null}
         selectedKeys={new Set(["conflict-1:phone"])}
         assignmentTargetsByRow={{
@@ -356,6 +426,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 4,
+            archivedOnly: 4,
             issueCounts: {
               field_conflict: 12,
               relationship_unresolved: 2,
@@ -445,7 +516,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={1}
+        archivedOnlyCount={1}
         review={{
           page: 1,
           pageSize: 25,
@@ -453,6 +524,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 1,
+            archivedOnly: 1,
             issueCounts: { relationship_unresolved: 1 },
             diagnosticCounts: {},
           },
@@ -529,13 +601,13 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={1}
+        archivedOnlyCount={1}
         review={{
           page: 1,
           pageSize: 25,
           total: 1,
           manifestDigest: "a".repeat(64),
-          summary: { decisionRequired: 1, issueCounts: { relationship_unresolved: 1 }, diagnosticCounts: {} },
+          summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: { relationship_unresolved: 1 }, diagnosticCounts: {} },
           rows: [row],
         }}
         assignmentTargetsByRow={{ [row.sourceRecordId]: [contactTarget] }}
@@ -578,10 +650,10 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={1}
+        archivedOnlyCount={1}
         review={{
           page: 1, pageSize: 25, total: 1, manifestDigest: "a".repeat(64),
-          summary: { decisionRequired: 1, issueCounts: { relationship_unresolved: 2 }, diagnosticCounts: {} },
+          summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: { relationship_unresolved: 2 }, diagnosticCounts: {} },
           rows: [row],
         }}
         onSearch={() => {}}
@@ -631,7 +703,7 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={2}
+        archivedOnlyCount={2}
         canResolveAmbiguous
         review={{
           page: 1,
@@ -640,6 +712,7 @@ describe("ImportReview", () => {
           manifestDigest: "a".repeat(64),
           summary: {
             decisionRequired: 2,
+            archivedOnly: 2,
             issueCounts: { unsupported_record: 1, relationship_unresolved: 1 },
             diagnosticCounts: {},
           },
@@ -664,10 +737,7 @@ describe("ImportReview", () => {
     ).toBeDisabled();
   });
 
-  it("shows safe match evidence and offers page-level mobile-friendly bulk acceptance", () => {
-    const onToggleSelection = vi.fn();
-    const onSelectAllPage = vi.fn();
-    const onBulkDecision = vi.fn();
+  it("shows strong-match evidence without duplicate-identity bulk controls", () => {
     const row: ReviewRow = {
       sourceRecordId: "recommended-company",
       sourceVersionId: "recommended-version",
@@ -694,18 +764,14 @@ describe("ImportReview", () => {
     render(
       <ImportReview
         safeOperationCount={0}
-        reviewRequiredCount={1}
+        archivedOnlyCount={1}
         review={{
           page: 1, pageSize: 25, total: 1, manifestDigest: "a".repeat(64),
-          summary: { decisionRequired: 1, issueCounts: { ambiguous_match: 1 }, diagnosticCounts: {} },
+          summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: { ambiguous_match: 1 }, diagnosticCounts: {} },
           rows: [row],
         }}
-        selectedKeys={new Set(["recommended-company:duplicate_identity"])}
         onSearch={() => {}}
         onPageChange={() => {}}
-        onToggleSelection={onToggleSelection}
-        onSelectAllPage={onSelectAllPage}
-        onBulkDecision={onBulkDecision}
         onImportAsNew={() => {}}
         onImport={() => {}}
       />,
@@ -713,13 +779,16 @@ describe("ImportReview", () => {
 
     expect(screen.getByText("Matched from name + company relationship")).toBeInTheDocument();
     expect(screen.getByText(/Adventure Zone LLC/)).toHaveTextContent("Chicago, IL");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Select safe match for bulk review — Adventure Zone" }));
-    expect(onToggleSelection).toHaveBeenCalledWith(row, undefined, "duplicate_identity");
-    fireEvent.click(screen.getByRole("button", { name: "Select all safe matches on this page" }));
-    expect(onSelectAllPage).toHaveBeenCalledWith([row]);
-    const accept = screen.getByRole("button", { name: "Accept selected safe matches" });
-    expect(accept).toHaveClass("w-full");
-    fireEvent.click(accept);
-    expect(onBulkDecision).toHaveBeenCalledWith("link_existing");
+    expect(
+      screen.queryByRole("checkbox", {
+        name: "Select safe match for bulk review — Adventure Zone",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Select all safe matches on this page" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Accept selected safe matches" }),
+    ).not.toBeInTheDocument();
   });
 });
