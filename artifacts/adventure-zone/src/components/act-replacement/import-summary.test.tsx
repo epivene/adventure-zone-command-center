@@ -5,14 +5,14 @@ import { ImportSummary } from "./import-summary";
 afterEach(cleanup);
 
 describe("ImportSummary", () => {
-  it("shows safe outcome totals and review work that remains", () => {
+  it("shows safe outcome totals and records kept safely in the archive", () => {
     render(
       <ImportSummary
         applied={18}
         alreadyPresent={4}
         blocked={2}
         failed={1}
-        remainingReview={3}
+        archivedOnlyCount={3}
       />,
     );
 
@@ -24,6 +24,8 @@ describe("ImportSummary", () => {
     expect(screen.getByText("Blocked")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("Failed")).toBeInTheDocument();
-    expect(screen.getByText("3 records still need review")).toBeInTheDocument();
+    expect(
+      screen.getByText("3 records were kept safely in the archive"),
+    ).toBeInTheDocument();
   });
 });
