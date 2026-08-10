@@ -16,13 +16,13 @@ export function ImportSummary({
   alreadyPresent,
   blocked,
   failed,
-  remainingReview,
+  archivedOnlyCount,
 }: {
   applied: number;
   alreadyPresent: number;
   blocked: number;
   failed: number;
-  remainingReview: number;
+  archivedOnlyCount: number;
 }) {
   return (
     <section
@@ -47,9 +47,10 @@ export function ImportSummary({
         <SummaryTotal label="Failed" value={failed} />
       </dl>
       <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-        {remainingReview.toLocaleString()}{" "}
-        {remainingReview === 1 ? "record still needs" : "records still need"}{" "}
-        review
+        {archivedOnlyCount.toLocaleString()}{" "}
+        {archivedOnlyCount === 1
+          ? "record was kept safely in the archive"
+          : "records were kept safely in the archive"}
       </p>
     </section>
   );
