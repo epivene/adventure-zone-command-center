@@ -173,6 +173,15 @@ export type ReviewRow = {
   }>;
   canImportStandalone: boolean;
   operationKeys: string[];
+  recommendation?: {
+    action: "link_existing" | "import_new" | "assign_parent" | "keep_archived";
+    target?: ReviewCandidate;
+    confidence: "authoritative" | "two_independent_clues";
+    evidence: Array<{
+      family: "identity" | "direct_contact" | "web_identity" | "location" | "archive_relationship" | "event_context" | "narrative_context";
+      label: string;
+    }>;
+  };
   streamType?: string;
   display: Record<string, ReviewDisplayValue>;
 };
@@ -277,6 +286,11 @@ type BulkReviewDecisionCommon = {
 };
 export type BulkReviewDecisionRequest = BulkReviewDecisionCommon &
   (
+    | {
+        scope: "duplicate_identity";
+        decision: "link_existing" | "keep_separate";
+        fieldName: null;
+      }
     | {
         scope: "field_conflict";
         decision: "keep_local" | "use_source";
