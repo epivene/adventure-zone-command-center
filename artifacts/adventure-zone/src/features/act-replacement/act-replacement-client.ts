@@ -66,6 +66,9 @@ export type ActReplacementStatus = {
 
 export type ActReplacementWorkflowStatus = ActReplacementStatus & {
   safeOperationCount: number;
+  reviewedReadyOperationCount: number;
+  autoResolvedCount: number;
+  archivedOnlyCount: number;
   reviewRequiredCount: number;
   appliedOperationCount: number;
   alreadyPresentOperationCount: number;
@@ -76,6 +79,7 @@ export type ActReplacementWorkflowStatus = ActReplacementStatus & {
   canOrganize: boolean;
   canReview: boolean;
   canApplySafe: boolean;
+  canApplyReviewed: boolean;
 };
 
 export type ImportManifest = {
@@ -153,6 +157,7 @@ export type ReviewCandidate = {
 };
 export type ReviewSummary = {
   decisionRequired: number;
+  archivedOnly: number;
   issueCounts: Partial<Record<ReviewIssueCode, number>>;
   diagnosticCounts: Partial<Record<ReviewIssueCode, number>>;
 };
