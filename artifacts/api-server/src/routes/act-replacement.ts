@@ -123,6 +123,16 @@ const bulkDecisionSchema = z.discriminatedUnion("scope", [
       expectedManifestDigest: digestSchema,
       requestKey: z.string().trim().min(1),
       selections: z.array(bulkSelectionSchema).min(1).max(200),
+      scope: z.literal("duplicate_identity"),
+      decision: z.enum(["link_existing", "keep_separate"]),
+      fieldName: z.null(),
+    })
+    .strict(),
+  z
+    .object({
+      expectedManifestDigest: digestSchema,
+      requestKey: z.string().trim().min(1),
+      selections: z.array(bulkSelectionSchema).min(1).max(200),
       scope: z.literal("field_conflict"),
       decision: z.enum(["keep_local", "use_source"]),
       fieldName: z.string().trim().min(1),
