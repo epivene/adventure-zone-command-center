@@ -97,6 +97,36 @@ describe("resolveContextClues", () => {
     });
   });
 
+  it("fails closed when an authoritative clue conflicts with a supporting target", () => {
+    expect(resolveContextClues([
+      clue("identity", "org-1", {
+        label: "exact Act link",
+        authority: "authoritative",
+      }),
+      clue("location", "org-2"),
+    ])).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["org-1", "org-2"],
+      reason: "conflicting_context_clues",
+    });
+  });
+
+  it("bounds evidence and candidate ids returned for persistence", () => {
+    const result = resolveContextClues(
+      Array.from({ length: 30 }, (_, index) =>
+        clue("identity", `org-${String(index).padStart(2, "0")}`),
+      ),
+    );
+
+    expect(result.kind).toBe("ambiguous");
+    expect(result.evidence).toHaveLength(20);
+    if (result.kind === "ambiguous") {
+      expect(result.candidateIds).toHaveLength(20);
+      expect(result.candidateIds[0]).toBe("org-00");
+      expect(result.candidateIds[19]).toBe("org-19");
+    }
+  });
+
   it("is deterministic regardless of clue order", () => {
     const clues = [
       clue("web_identity", "org-1"),
