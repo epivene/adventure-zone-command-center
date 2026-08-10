@@ -5,6 +5,7 @@ import type {
   ReviewIssueCode,
   ReviewPage,
   ReviewRow,
+  ReviewSummary,
 } from "@/features/act-replacement/act-replacement-client";
 
 const safeDisplayFields = new Set([
@@ -52,9 +53,8 @@ const issueLabels: Record<ReviewIssueCode, string> = {
 };
 
 type BulkDecision =
-  "link_existing" | "keep_separate" | "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
+  "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
 export type SelectionKind =
-  | "duplicate_identity"
   | "field_conflict"
   | "relationship"
   | "unsupported_record";
@@ -153,21 +153,6 @@ export function bulkSelectionSignature(
       : null;
   }
 
-  const recommendation = row.recommendation;
-  if (
-    (!kindHint || kindHint === "duplicate_identity") &&
-    recommendation?.action === "link_existing" &&
-    recommendation.target
-  ) {
-    const families = [...new Set(recommendation.evidence.map((item) => item.family))].sort();
-    if (recommendation.confidence === "two_independent_clues" && families.length < 2) return null;
-    if (families.length === 0) return null;
-    return {
-      kind: "duplicate_identity",
-      value: `${recommendation.target.entityType}\u0000${recommendation.confidence}\u0000${families.join(",")}`,
-    };
-  }
-
   const unsupportedReasons = [
     ...new Set(
       (row.issues ?? [])
@@ -204,8 +189,10 @@ export function bulkSelectionSignature(
 }
 
 export function ImportReview({
+  autoResolvedCount = 0,
   safeOperationCount,
-  reviewRequiredCount,
+  reviewedReadyOperationCount = 0,
+  archivedOnlyCount = 0,
   review,
   loading = false,
   canImport = true,
@@ -218,12 +205,11 @@ export function ImportReview({
   onPageChange,
   onIssueChange = () => {},
   onToggleSelection = () => {},
-  onSelectAllPage = () => {},
   onKeepLocal = () => {},
   onUseSource = () => {},
   onIgnoreUnsupported = () => {},
   onLinkExisting = () => {},
-  onImportAsNew,
+  onImportAsNew = () => {},
   onAssignParent = () => {},
   onKeepUnlinked = () => {},
   onBulkDecision = () => {},
@@ -232,8 +218,10 @@ export function ImportReview({
   onImport,
   resolvingSourceRecordId = null,
 }: {
+  autoResolvedCount?: number;
   safeOperationCount: number;
-  reviewRequiredCount: number;
+  reviewedReadyOperationCount?: number;
+  archivedOnlyCount?: number;
   review: ReviewPage | null;
   loading?: boolean;
   canImport?: boolean;
@@ -250,12 +238,11 @@ export function ImportReview({
     fieldName?: string,
     kind?: Exclude<SelectionKind, "field_conflict">,
   ) => void;
-  onSelectAllPage?: (rows: ReviewRow[]) => void;
   onKeepLocal?: (row: ReviewRow, fieldName: string) => void;
   onUseSource?: (row: ReviewRow, fieldName: string) => void;
   onIgnoreUnsupported?: (row: ReviewRow, issue?: RelationshipIssue) => void;
   onLinkExisting?: (row: ReviewRow, target: AssignmentTarget) => void;
-  onImportAsNew: (row: ReviewRow) => void;
+  onImportAsNew?: (row: ReviewRow) => void;
   onAssignParent?: (row: ReviewRow, target: AssignmentTarget, issue: RelationshipIssue) => void;
   onKeepUnlinked?: (row: ReviewRow, issue: RelationshipIssue) => void;
   onBulkDecision?: (decision: BulkDecision) => void;
@@ -266,8 +253,9 @@ export function ImportReview({
 }) {
   const [search, setSearch] = useState("");
   const [targetIds, setTargetIds] = useState<Record<string, string>>({});
-  const summary = review?.summary ?? {
+  const summary: ReviewSummary = review?.summary ?? {
     decisionRequired: review?.total ?? 0,
+    archivedOnly: review?.total ?? 0,
     issueCounts: {},
     diagnosticCounts: {},
   };
@@ -277,10 +265,6 @@ export function ImportReview({
 
   const selectedSignature = useMemo<BulkSelectionSignature | null>(() => {
     for (const row of review?.rows ?? []) {
-      if (selectedKeys.has(rowSelectionKey(row, "duplicate_identity"))) {
-        const signature = bulkSelectionSignature(row, undefined, "duplicate_identity");
-        if (signature) return signature;
-      }
       for (const conflict of row.conflicts ?? []) {
         if (selectedKeys.has(fieldSelectionKey(row, conflict.fieldName))) {
           const signature = bulkSelectionSignature(row, conflict.fieldName);
@@ -308,11 +292,6 @@ export function ImportReview({
   const selectedCount = useMemo(() => {
     let count = 0;
     for (const row of review?.rows ?? []) {
-      if (
-        selectedKind === "duplicate_identity" &&
-        selectedKeys.has(rowSelectionKey(row, "duplicate_identity")) &&
-        bulkSelectionSignature(row, undefined, "duplicate_identity")
-      ) count += 1;
       for (const conflict of row.conflicts ?? []) {
         if (
           selectedKind === "field_conflict" &&
@@ -334,16 +313,6 @@ export function ImportReview({
     }
     return count;
   }, [review?.rows, selectedKeys, selectedKind]);
-
-  const recommendedRows = useMemo(
-    () => (review?.rows ?? []).filter((row) => {
-      const signature = bulkSelectionSignature(row, undefined, "duplicate_identity");
-      return Boolean(signature && (!selectedSignature || (
-        selectedSignature.kind === signature.kind && selectedSignature.value === signature.value
-      )));
-    }),
-    [review?.rows, selectedSignature],
-  );
 
   const selectedRelationshipsCanImportStandalone = useMemo(
     () => {
@@ -441,7 +410,15 @@ export function ImportReview({
         </h2>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <p className="font-semibold text-blue-900">
+            {autoResolvedCount.toLocaleString()} records auto-resolved from strong context clues
+          </p>
+          <p className="mt-1 text-sm text-blue-800">
+            Matching evidence agreed before any safe import is offered.
+          </p>
+        </div>
         <div className="rounded-lg border border-green-200 bg-green-50 p-4">
           <p className="font-semibold text-green-900">
             {safeOperationCount.toLocaleString()} safe operations ready
@@ -449,17 +426,27 @@ export function ImportReview({
           <p className="mt-1 text-sm text-green-800">
             Only additions and empty-field updates are included.
           </p>
+          {reviewedReadyOperationCount > 0 && (
+            <p className="mt-1 text-sm font-medium text-green-900">
+              {reviewedReadyOperationCount.toLocaleString()} proof-reviewed changes ready
+            </p>
+          )}
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="font-semibold text-amber-900">
-            {reviewRequiredCount.toLocaleString()} records need your review
+            {archivedOnlyCount.toLocaleString()} uncertain records kept in the archive
           </p>
           <p className="mt-1 text-sm text-amber-800">
-            These records are kept out of automatic import.
+            You do not need to review these before importing the safe data.
           </p>
         </div>
       </div>
 
+      <details className="rounded-lg border border-slate-200 p-4">
+        <summary className="cursor-pointer font-semibold text-slate-800">
+          Optional archived-record diagnostics
+        </summary>
+        <div className="mt-4 space-y-5">
       <form
         role="search"
         onSubmit={submitSearch}
@@ -522,17 +509,6 @@ export function ImportReview({
         </p>
       ) : null}
 
-      {recommendedRows.length > 0 && (
-        <button
-          type="button"
-          disabled={loading || !canResolveAmbiguous}
-          onClick={() => onSelectAllPage(recommendedRows)}
-          className="w-full rounded-lg border border-orange-300 bg-white px-4 py-3 text-sm font-semibold text-orange-900 disabled:opacity-50 sm:w-auto"
-        >
-          Select all safe matches on this page
-        </button>
-      )}
-
       {selectedKind && selectedCount > 0 && (
         <div
           aria-label="Bulk review actions"
@@ -543,26 +519,6 @@ export function ImportReview({
             {selectedCount === 1 ? "" : "s"}
           </p>
           <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
-            {selectedKind === "duplicate_identity" && (
-              <>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => onBulkDecision("link_existing")}
-                  className="w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
-                >
-                  Accept selected safe matches
-                </button>
-                <button
-                  type="button"
-                  disabled={loading}
-                  onClick={() => onBulkDecision("keep_separate")}
-                  className="w-full rounded-lg border border-orange-300 bg-white px-4 py-3 text-sm font-semibold text-orange-900 disabled:opacity-50 sm:w-auto"
-                >
-                  Import selected as new
-                </button>
-              </>
-            )}
             {selectedKind === "field_conflict" && (
               <>
                 <button
@@ -636,7 +592,9 @@ export function ImportReview({
               const isResolving =
                 resolvingSourceRecordId === row.sourceRecordId;
               const identityType = expectedAssignmentTargetType(row);
-              const identityTarget = identityType ? targetFor(row, [identityType]) : undefined;
+              const identityTarget = identityType
+                ? targetFor(row, [identityType])
+                : undefined;
               const recommendation = row.recommendation?.action === "link_existing" && row.recommendation.target
                 ? row.recommendation
                 : undefined;
@@ -683,16 +641,6 @@ export function ImportReview({
                           .map((item) => evidenceFamilyLabels[item.family])
                           .join(" + ")}
                       </p>
-                      <label className="mt-3 flex items-center gap-2 text-sm text-green-900">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select safe match for bulk review — ${recordLabel(row)}`}
-                          checked={selectedKeys.has(rowSelectionKey(row, "duplicate_identity"))}
-                          disabled={!canSelect(row, undefined, "duplicate_identity") || loading || !canResolveAmbiguous}
-                          onChange={() => onToggleSelection(row, undefined, "duplicate_identity")}
-                        />
-                        Select safe match for bulk review
-                      </label>
                     </div>
                   )}
                   {(row.issues ?? []).map((issue) => (
@@ -705,6 +653,43 @@ export function ImportReview({
                         : readable(issue.code)}
                     </p>
                   ))}
+
+                  {canResolveAmbiguous &&
+                    (row.issueCodes ?? []).includes("ambiguous_match") && (
+                      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
+                        {targetPicker(
+                          row,
+                          "Link",
+                          identityType ? [identityType] : [],
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`Link existing record — ${recordLabel(row)}`}
+                          disabled={!identityTarget || loading || isResolving}
+                          onClick={() => {
+                            if (identityTarget) onLinkExisting(row, identityTarget);
+                          }}
+                          className="w-full rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-900 disabled:opacity-50 sm:w-auto"
+                        >
+                          Link existing record
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={
+                            isResolving
+                              ? `Saving decision… — ${recordLabel(row)}`
+                              : `Import as new record — ${recordLabel(row)}`
+                          }
+                          disabled={loading || isResolving}
+                          onClick={() => onImportAsNew(row)}
+                          className="w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
+                        >
+                          {isResolving
+                            ? "Saving decision…"
+                            : "Import as new record"}
+                        </button>
+                      </div>
+                    )}
 
                   {(row.conflicts ?? []).map((conflict) => (
                     <div
@@ -768,39 +753,6 @@ export function ImportReview({
                       )}
                     </div>
                   ))}
-
-                  {canResolveAmbiguous &&
-                    (row.issueCodes ?? []).includes("ambiguous_match") && (
-                      <div className="mt-4 grid gap-2 sm:flex sm:flex-wrap">
-                        {targetPicker(row, "Link", expectedAssignmentTargetType(row) ? [expectedAssignmentTargetType(row)!] : [])}
-                        <button
-                          type="button"
-                          aria-label={`Link existing record — ${recordLabel(row)}`}
-                          disabled={!identityTarget || loading || isResolving}
-                          onClick={() => {
-                            if (identityTarget) onLinkExisting(row, identityTarget);
-                          }}
-                          className="w-full rounded-lg border border-orange-300 bg-orange-50 px-4 py-3 text-sm font-semibold text-orange-900 disabled:opacity-50 sm:w-auto"
-                        >
-                          Link existing record
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={
-                            isResolving
-                              ? `Saving decision… — ${recordLabel(row)}`
-                              : `Import as new record — ${recordLabel(row)}`
-                          }
-                          disabled={loading || isResolving}
-                          onClick={() => onImportAsNew(row)}
-                          className="w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
-                        >
-                          {isResolving
-                            ? "Saving decision…"
-                            : "Import as new record"}
-                        </button>
-                      </div>
-                    )}
 
                   {canResolveAmbiguous && relationshipIssue(row) && (
                     <div className="mt-4 rounded-lg bg-slate-50 p-3">
@@ -925,8 +877,10 @@ export function ImportReview({
           </button>
         </nav>
       )}
+        </div>
+      </details>
 
-      {safeOperationCount > 0 && (
+      {safeOperationCount + reviewedReadyOperationCount > 0 && (
         <button
           type="button"
           disabled={!canImport}
