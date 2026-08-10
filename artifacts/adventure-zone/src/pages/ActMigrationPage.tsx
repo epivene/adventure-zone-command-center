@@ -55,6 +55,14 @@ type ReviewSelection = {
   signature: BulkSelectionSignature;
 };
 
+type BulkDecisionChoice =
+  | "link_existing"
+  | "keep_separate"
+  | "keep_local"
+  | "use_source"
+  | "keep_unlinked"
+  | "ignore_source";
+
 type BulkConfirmation = {
   runId: string;
   decision: "use_source";
@@ -246,6 +254,9 @@ export default function ActMigrationPage() {
         setReview(result);
         const validKeys = new Set<string>();
         for (const row of result.rows) {
+          if (bulkSelectionSignature(row, undefined, "duplicate_identity")) {
+            validKeys.add(`${row.sourceRecordId}:duplicate_identity`);
+          }
           for (const conflict of row.conflicts ?? []) {
             if (bulkSelectionSignature(row, conflict.fieldName)) {
               validKeys.add(`${row.sourceRecordId}:${conflict.fieldName}`);
@@ -566,7 +577,7 @@ export default function ActMigrationPage() {
   const toggleSelection = (
     row: ReviewRow,
     fieldName?: string,
-    kindHint?: "relationship" | "unsupported_record",
+    kindHint?: "duplicate_identity" | "relationship" | "unsupported_record",
   ) => {
     if (busyRef.current !== null) return;
     const signature = bulkSelectionSignature(row, fieldName, kindHint);
@@ -591,7 +602,7 @@ export default function ActMigrationPage() {
 
   const bulkRequestFor = (
     selections: readonly ReviewSelection[],
-    decision: "keep_local" | "use_source" | "keep_unlinked" | "ignore_source",
+    decision: BulkDecisionChoice,
     manifestDigest: string,
     requestKey = crypto.randomUUID(),
   ): BulkReviewDecisionRequest | null => {
@@ -610,6 +621,17 @@ export default function ActMigrationPage() {
       sourceRecordId: row.sourceRecordId,
       sourceVersionId: row.sourceVersionId,
     }));
+    if (first.signature.kind === "duplicate_identity") {
+      if (decision !== "link_existing" && decision !== "keep_separate") return null;
+      return {
+        expectedManifestDigest: manifestDigest,
+        requestKey,
+        selections: selectionPayload,
+        scope: "duplicate_identity",
+        decision,
+        fieldName: null,
+      };
+    }
     if (first.signature.kind === "field_conflict" && first.fieldName) {
       const reviewedSelections = selections.map(({ row }) => {
         const reviewToken = row.conflicts.find((conflict) => conflict.fieldName === first.fieldName)?.reviewToken;
@@ -660,7 +682,7 @@ export default function ActMigrationPage() {
   };
 
   const saveBulkDecision = async (
-    decision: "keep_local" | "use_source" | "keep_unlinked" | "ignore_source",
+    decision: BulkDecisionChoice,
     snapshot?: BulkConfirmation,
   ) => {
     if (!run?.canReview || !run.manifestDigest || !beginBusy("review")) return;
@@ -887,6 +909,15 @@ export default function ActMigrationPage() {
             setReviewSelections(new Map());
           }}
           onToggleSelection={toggleSelection}
+          onSelectAllPage={(rows) => {
+            const selections = rows.slice(0, 200).flatMap((row) => {
+              const signature = bulkSelectionSignature(row, undefined, "duplicate_identity");
+              return signature ? [{ row, signature } satisfies ReviewSelection] : [];
+            });
+            const first = selections[0]?.signature;
+            if (!first || selections.some((selection) => selection.signature.value !== first.value)) return;
+            setReviewSelections(new Map(selections.map((selection) => [reviewSelectionKey(selection), selection])));
+          }}
           onKeepLocal={(row, fieldName) =>
             void saveDecision(row, {
               sourceVersionId: row.sourceVersionId,
