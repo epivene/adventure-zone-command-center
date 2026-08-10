@@ -1,4 +1,5 @@
 import app from "./app";
+import { runActReviewMigrations } from "@workspace/db/migrations";
 import { logger } from "./lib/logger";
 import { validateOwnerConfig } from "./lib/auth";
 import {
@@ -23,6 +24,14 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+const appliedMigrations = await runActReviewMigrations();
+logger.info(
+  { appliedMigrations },
+  appliedMigrations.length > 0
+    ? "Database migrations applied"
+    : "Database schema is current",
+);
 
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
