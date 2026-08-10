@@ -1,7 +1,9 @@
+import type { ContextClueEvidence } from "./context-clue-resolver";
+
 export type MatchResult =
-  | { kind: "exact"; localId: string; reason: string }
-  | { kind: "none"; reason: string }
-  | { kind: "ambiguous"; candidateIds: string[]; reason: string };
+  | { kind: "exact"; localId: string; reason: string; evidence?: ContextClueEvidence[] }
+  | { kind: "none"; reason: string; evidence?: ContextClueEvidence[] }
+  | { kind: "ambiguous"; candidateIds: string[]; reason: string; evidence?: ContextClueEvidence[] };
 
 export type ExternalLink = {
   localId: string;

@@ -1100,6 +1100,53 @@ describe("durable review adapter projections", () => {
     });
   });
 
+  it("cascades company resolution into contact and narrative timeline context", () => {
+    const fetchedAt = new Date("2026-08-10T12:00:00.000Z");
+    const source = (sourceRecordId: string, streamType: string, actRecordId: string | null, rawSnapshot: Record<string, unknown>, relationshipEvidence: Record<string, unknown> = {}) => ({
+      sourceRecordId,
+      sourceVersionId: `${sourceRecordId}-version`,
+      latestSourceVersionId: `${sourceRecordId}-version`,
+      streamType,
+      actRecordId,
+      rawSnapshot,
+      fetchedAt,
+      relationshipEvidence,
+    });
+    const sources = manifestSourcesFromArchiveRows({
+      rows: [
+        source("company-1", "company", "company-act-1", { Name: "Adventure Zone", Website: "https://adventure.example" }),
+        source("contact-1", "contact", "contact-act-1", { FirstName: "Merle", LastName: "Highchurch" }),
+        source("history-1", "history", "history-act-1", { Subject: "Adventure Zone follow-up", Details: "Merle Highchurch confirmed the event." }),
+        source("relationship-1", "company_contact", null, {}, {
+          source: "endpoint",
+          parentKind: "contact",
+          parentActRecordId: "contact-act-1",
+          targetKind: "company",
+          targetActRecordId: "company-act-1",
+        }),
+      ],
+      localCandidates: {
+        organizations: [{ id: "local-company-1", name: "Adventure Zone", website: "https://adventure.example", phone: null, industry: null, address1: null, address2: null, city: null, region: null, postalCode: null }],
+        contacts: [{ id: "local-contact-1", firstName: "Merle", lastName: "Highchurch", email: null, phone: null, organizationIds: ["local-company-1"] }],
+      },
+    });
+
+    expect(sources.find((row) => row.sourceRecordId === "company-1")?.match).toMatchObject({ kind: "exact", localId: "local-company-1" });
+    expect(sources.find((row) => row.sourceRecordId === "contact-1")?.match).toMatchObject({
+      kind: "exact",
+      localId: "local-contact-1",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "identity" }),
+        expect.objectContaining({ family: "archive_relationship" }),
+      ]),
+    });
+    expect(sources.find((row) => row.sourceRecordId === "history-1")?.relationships).toEqual({
+      organizationSourceIds: ["company-1"],
+      contactSourceIds: ["contact-1"],
+      bookingSourceIds: [],
+    });
+  });
+
   it("keeps durable replay projection lookup growth near-linear", () => {
     const lookupCount = (size: number) => {
       let lookups = 0;

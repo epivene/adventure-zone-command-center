@@ -112,19 +112,52 @@ describe("conservative Act replacement matchers", () => {
     ] }), [], context)).toEqual({ kind: "none", reason: "no_unique_contact_identity" });
   });
 
-  it("matches contacts by unique non-shared email, then unique phone", () => {
+  it("requires a compatible name plus unique non-shared email or phone", () => {
     expect(matchContact(contact(), [localContact({ id: "contact-2", email: "other@example.com", phone: null }), localContact()])).toEqual({
-      kind: "exact", localId: "contact-1", reason: "unique_normalized_email",
+      kind: "exact",
+      localId: "contact-1",
+      reason: "two_independent_context_clues",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "identity" }),
+        expect.objectContaining({ family: "direct_contact" }),
+      ]),
     });
     expect(matchContact(contact({ email: null, emailIdentityMatchSafe: false }), [localContact({ email: null, phone: "(555) 123-4567" })])).toEqual({
-      kind: "exact", localId: "contact-1", reason: "unique_normalized_phone",
+      kind: "exact",
+      localId: "contact-1",
+      reason: "two_independent_context_clues",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "identity" }),
+        expect.objectContaining({ family: "direct_contact" }),
+      ]),
+    });
+    expect(matchContact(contact(), [localContact({ firstName: "Janet" })])).toEqual({
+      kind: "ambiguous",
+      candidateIds: ["contact-1"],
+      reason: "insufficient_independent_context_clues",
+      evidence: [expect.objectContaining({ family: "direct_contact" })],
+    });
+  });
+
+  it("can use a resolved organization relationship as the second family", () => {
+    expect(matchContact(
+      contact({ email: null, emailIdentityMatchSafe: false, phone: null, resolvedOrganizationId: "org-1" }),
+      [localContact({ email: null, phone: null, organizationIds: ["org-1"] })],
+    )).toEqual({
+      kind: "exact",
+      localId: "contact-1",
+      reason: "two_independent_context_clues",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "identity" }),
+        expect.objectContaining({ family: "archive_relationship" }),
+      ]),
     });
   });
 
   it("blocks shared mailboxes, duplicate identifiers, and conflicting identifiers", () => {
-    expect(matchContact(contact({ email: "info@example.com", emailIdentityMatchSafe: false, phone: null }), [localContact({ id: "a", email: "info@example.com", phone: null })])).toEqual({
-      kind: "ambiguous", candidateIds: ["a"], reason: "name_only_match_requires_review",
-    });
+    expect(matchContact(contact({ email: "info@example.com", emailIdentityMatchSafe: false, phone: null }), [localContact({ id: "a", email: "info@example.com", phone: null })])).toEqual(expect.objectContaining({
+      kind: "ambiguous", candidateIds: ["a"], reason: "insufficient_independent_context_clues",
+    }));
     expect(matchContact(contact(), [localContact({ id: "z" }), localContact({ id: "a" })])).toEqual({
       kind: "ambiguous", candidateIds: ["a", "z"], reason: "multiple_normalized_email_candidates",
     });
@@ -140,16 +173,32 @@ describe("conservative Act replacement matchers", () => {
   });
 
   it("requires two agreeing strong organization fields and rejects conflicting candidates", () => {
-    expect(matchOrganization(organization(), [localOrganization()])).toEqual({
-      kind: "exact", localId: "org-1", reason: "two_strong_organization_fields",
-    });
-    expect(matchOrganization(organization({ name: "Acme Adventures", phone: null, website: null, address1: null, postalCode: null, city: null, region: null }), [localOrganization({ id: "z", city: "Boulder", region: null, phone: null, website: null, address1: null, postalCode: null }), localOrganization({ id: "a", city: "Denver", region: null, phone: null, website: null, address1: null, postalCode: null })])).toEqual({
-      kind: "ambiguous", candidateIds: ["a", "z"], reason: "insufficient_agreeing_organization_fields",
-    });
+    expect(matchOrganization(organization(), [localOrganization()])).toEqual(expect.objectContaining({
+      kind: "exact", localId: "org-1", reason: "two_independent_context_clues",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "identity" }),
+        expect.objectContaining({ family: "direct_contact" }),
+        expect.objectContaining({ family: "web_identity" }),
+        expect.objectContaining({ family: "location" }),
+      ]),
+    }));
+    expect(matchOrganization(organization({ name: "Acme Adventures", phone: null, website: null, address1: null, postalCode: null, city: null, region: null }), [localOrganization({ id: "z", city: "Boulder", region: null, phone: null, website: null, address1: null, postalCode: null }), localOrganization({ id: "a", city: "Denver", region: null, phone: null, website: null, address1: null, postalCode: null })])).toEqual(expect.objectContaining({
+      kind: "ambiguous", candidateIds: ["a", "z"], reason: "insufficient_independent_context_clues",
+    }));
     expect(matchOrganization(organization(), [localOrganization({ phone: "9999999999", address1: "99 Other St", postalCode: "99999" })])).toEqual({
       kind: "none", reason: "conflicting_organization_fields",
     });
-    expect(matchOrganization(organization({ region: null, phone: null, website: null, address1: null, postalCode: null }), [localOrganization({ region: null, phone: null, website: null, address1: null, postalCode: null })])).toEqual({ kind: "ambiguous", candidateIds: ["org-1"], reason: "insufficient_agreeing_organization_fields" });
+    expect(matchOrganization(organization({ region: null, phone: null, website: null, address1: null, postalCode: null }), [localOrganization({ region: null, phone: null, website: null, address1: null, postalCode: null })])).toEqual({ kind: "ambiguous", candidateIds: ["org-1"], reason: "insufficient_independent_context_clues", evidence: [expect.objectContaining({ family: "identity" })] });
+  });
+
+  it("counts organization location values as one family", () => {
+    expect(matchOrganization(
+      organization({ phone: null, website: null }),
+      [localOrganization({ phone: null, website: null, name: "Different Name" })],
+    )).toEqual({
+      kind: "none",
+      reason: "conflicting_organization_fields",
+    });
   });
 
   it("requires an exact organization, exact name, and compatible date for bookings", () => {
@@ -160,15 +209,26 @@ describe("conservative Act replacement matchers", () => {
     const candidates: LocalBookingCandidate[] = [
       { id: "booking-1", name: "Summer Trip", organizationId: "org-1", startsAt: "2026-08-12" },
     ];
-    expect(matchBooking(source, candidates, { kind: "exact", localId: "org-1", reason: "manual_assignment" })).toEqual({ kind: "exact", localId: "booking-1", reason: "exact_organization_name_date" });
+    expect(matchBooking(source, candidates, { kind: "exact", localId: "org-1", reason: "manual_assignment" })).toEqual({
+      kind: "exact",
+      localId: "booking-1",
+      reason: "two_independent_context_clues",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "archive_relationship", targetEntityId: "booking-1" }),
+        expect.objectContaining({ family: "identity", targetEntityId: "booking-1" }),
+        expect.objectContaining({ family: "event_context", targetEntityId: "booking-1" }),
+      ]),
+    });
     expect(matchBooking(source, candidates, { kind: "ambiguous", candidateIds: ["org-1", "org-2"], reason: "multiple" })).toEqual({ kind: "none", reason: "organization_match_not_exact" });
-    expect(matchBooking(source, [{ ...candidates[0], startsAt: "2026-08-13" }], { kind: "exact", localId: "org-1", reason: "x" })).toEqual({ kind: "none", reason: "no_compatible_booking_date" });
+    expect(matchBooking(source, [{ ...candidates[0], startsAt: "2026-08-13" }], { kind: "exact", localId: "org-1", reason: "x" })).toEqual(expect.objectContaining({
+      kind: "ambiguous", candidateIds: ["booking-1"], reason: "conflicting_booking_context",
+    }));
   });
 
   it("is deterministic regardless of candidate order and never uses text", () => {
     const source = contact({ email: null, emailIdentityMatchSafe: false, phone: null });
     const candidates = [localContact({ id: "z", email: null, phone: null }), localContact({ id: "a", email: null, phone: null })];
     expect(matchContact(source, candidates)).toEqual(matchContact(source, [...candidates].reverse()));
-    expect(matchContact(source, candidates)).toEqual({ kind: "ambiguous", candidateIds: ["a", "z"], reason: "name_only_match_requires_review" });
+    expect(matchContact(source, candidates)).toEqual(expect.objectContaining({ kind: "ambiguous", candidateIds: ["a", "z"], reason: "insufficient_independent_context_clues" }));
   });
 });

@@ -15,8 +15,8 @@ export type SaveDecisionInput = Omit<Decision, "id" | "active"> & {
 export type BulkReviewDecisionInput = {
   runId: string;
   expectedManifestDigest: string;
-  scope: "field_conflict" | "relationship" | "unsupported_record";
-  decision: "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
+  scope: "duplicate_identity" | "field_conflict" | "relationship" | "unsupported_record";
+  decision: "link_existing" | "keep_separate" | "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
   fieldName: string | null;
   requestedBy: string;
   requestKey: string;
@@ -81,6 +81,7 @@ const decisionsByScope: Record<string, readonly string[]> = {
   unsupported_record: ["ignore_source"],
 };
 const bulkDecisionsByScope: Record<string, readonly string[]> = {
+  duplicate_identity: ["link_existing", "keep_separate"],
   field_conflict: ["keep_local", "use_source"],
   relationship: ["keep_unlinked", "ignore_source"],
   unsupported_record: ["ignore_source"],
@@ -98,6 +99,29 @@ const identityTargetByStream: Readonly<Record<string, string>> = {
 const clean = (value: unknown) => typeof value === "string" ? value.trim() : "";
 const object = (value: unknown): Record<string, unknown> => value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 function fail(code: string, status = 400): never { throw Object.assign(new Error(code), { code, status }); }
+
+const contextClueFamilies = new Set(["identity", "direct_contact", "web_identity", "location", "archive_relationship", "event_context", "narrative_context"]);
+function contextIdentityRecommendation(outcome: ActOrganizeManifest["outcomes"][number], source: ReviewSourceState) {
+  const match = object(outcome.match);
+  const targetEntityId = clean(match.localId);
+  const targetEntityType = identityTargetByStream[clean(source.streamType).toLowerCase()];
+  if (match.kind !== "exact" || !targetEntityId || !targetEntityType || !Array.isArray(match.evidence)) return null;
+  const families = new Set<string>();
+  let authoritative = false;
+  for (const rawEvidence of match.evidence) {
+    const evidence = object(rawEvidence);
+    if (evidence.targetEntityId !== targetEntityId || evidence.targetEntityType !== targetEntityType) return null;
+    if (typeof evidence.family !== "string" || !contextClueFamilies.has(evidence.family)) return null;
+    families.add(evidence.family);
+    if (evidence.authority === "authoritative") authoritative = true;
+  }
+  if (!authoritative && families.size < 2) return null;
+  return {
+    targetEntityType,
+    targetEntityId,
+    signature: `${targetEntityType}\u0000${authoritative ? "authoritative" : "two_independent_clues"}\u0000${[...families].sort().join(",")}`,
+  };
+}
 export function decisionWithReviewedProof(input: SaveDecisionInput, state: ConflictReviewState): SaveDecisionInput {
   const token = input.reviewToken;
   if (!token) fail("review_token_required", 409);
@@ -177,6 +201,17 @@ export function validateIndividualDecisionAgainstCurrentState(
   const hasTargetId = Boolean(clean(input.targetEntityId));
 
   if (input.scope === "duplicate_identity") {
+    const recommendation = contextIdentityRecommendation(outcome, source);
+    if (recommendation) {
+      if (input.fieldName || input.relationshipSlot) fail("decision_field_not_allowed", 409);
+      if (input.decision === "keep_separate") {
+        if (hasTargetType || hasTargetId) fail("decision_target_not_allowed", 409);
+        return {};
+      }
+      if (input.targetEntityType !== recommendation.targetEntityType || input.targetEntityId !== recommendation.targetEntityId)
+        fail("invalid_duplicate_target", 409);
+      return {};
+    }
     const ambiguous = outcome.issues.some((issue) => issue.code === "ambiguous_match");
     const unassigned = outcome.issues.some((issue) => issue.code === "unassigned");
     if (input.fieldName || input.relationshipSlot) fail("decision_field_not_allowed", 409);
@@ -250,7 +285,15 @@ export function prepareBulkReviewDecisions(
     let targetEntityType: string | null = null;
     let targetEntityId: string | null = null;
     let relationshipSlot: string | null = null;
-    if (input.scope === "field_conflict") {
+    if (input.scope === "duplicate_identity") {
+      const recommendation = contextIdentityRecommendation(outcome, source);
+      if (!recommendation) fail("bulk_selection_not_applicable", 409);
+      homogeneity.push(recommendation.signature);
+      if (input.decision === "link_existing") {
+        targetEntityType = recommendation.targetEntityType;
+        targetEntityId = recommendation.targetEntityId;
+      }
+    } else if (input.scope === "field_conflict") {
       const applicable = outcome.issues.some((issue) => issue.code === "field_conflict" && issue.reason === input.fieldName);
       if (!applicable) fail("bulk_selection_not_applicable", 409);
       if (input.decision === "use_source") {

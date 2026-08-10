@@ -1,5 +1,6 @@
 import { normalizeMatchingText } from "@/features/act-migration/matching-normalization";
 import type { Opportunity } from "../normalizers/opportunity-normalizer";
+import { resolveContextClues, type ContextClueEvidence } from "./context-clue-resolver";
 import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
 
 export type BookingMatchSource = Opportunity & {
@@ -46,13 +47,58 @@ export function matchBooking(
   const sourceName = normalizeMatchingText(source.name);
   const sourceDay = day(source.startsAt);
   if (!sourceName || !sourceDay) return { kind: "none", reason: "booking_name_or_date_missing" };
-  const candidates = locals.filter((candidate) =>
-    candidate.organizationId === organizationMatch.localId &&
-    normalizeMatchingText(candidate.name) === sourceName &&
-    day(candidate.startsAt) === sourceDay,
-  );
-  const ids = uniqueSorted(candidates.map((candidate) => candidate.id));
-  if (ids.length === 1) return { kind: "exact", localId: ids[0]!, reason: "exact_organization_name_date" };
-  if (ids.length > 1) return { kind: "ambiguous", candidateIds: ids, reason: "multiple_compatible_booking_candidates" };
+  const evidenceByCandidate = locals
+    .filter((candidate) => candidate.organizationId === organizationMatch.localId)
+    .map((candidate) => {
+      const evidence: ContextClueEvidence[] = [{
+        family: "archive_relationship",
+        label: "matched organization",
+        targetEntityType: "booking",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      }];
+      if (normalizeMatchingText(candidate.name) === sourceName) evidence.push({
+        family: "identity",
+        label: "matching booking name",
+        targetEntityType: "booking",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      });
+      if (day(candidate.startsAt) === sourceDay) evidence.push({
+        family: "event_context",
+        label: "matching event date",
+        targetEntityType: "booking",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      });
+      return { candidate, evidence };
+    });
+  const exactEvidence = evidenceByCandidate
+    .filter(({ evidence }) => evidence.length === 3)
+    .flatMap(({ evidence }) => evidence);
+  const resolution = resolveContextClues(exactEvidence);
+  if (resolution.kind === "resolved") {
+    return {
+      kind: "exact",
+      localId: resolution.targetEntityId,
+      reason: "two_independent_context_clues",
+      evidence: resolution.evidence,
+    };
+  }
+  if (resolution.kind === "ambiguous") {
+    return {
+      kind: "ambiguous",
+      candidateIds: resolution.candidateIds,
+      reason: "multiple_compatible_booking_candidates",
+      evidence: resolution.evidence,
+    };
+  }
+  const partial = evidenceByCandidate.filter(({ evidence }) => evidence.length >= 2);
+  if (partial.length > 0) return {
+    kind: "ambiguous",
+    candidateIds: uniqueSorted(partial.map(({ candidate }) => candidate.id)),
+    reason: "conflicting_booking_context",
+    evidence: partial.flatMap(({ evidence }) => evidence),
+  };
   return { kind: "none", reason: "no_compatible_booking_date" };
 }

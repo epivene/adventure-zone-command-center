@@ -1,4 +1,8 @@
 import { isSharedMailboxEmail, normalizeMatchingEmail, normalizeMatchingText } from "@/features/act-migration/matching-normalization";
+import {
+  resolveContextClues,
+  type ContextClueEvidence,
+} from "./context-clue-resolver";
 import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
 
 export type ContactMatchSource = {
@@ -14,6 +18,7 @@ export type ContactMatchSource = {
   city?: string | null;
   region?: string | null;
   postalCode?: string | null;
+  resolvedOrganizationId?: string | null;
   externalLinks?: readonly (ExternalLink & { sourceRecordId?: string | null })[];
   manualAssignment?: ManualAssignment | null;
 };
@@ -30,6 +35,7 @@ export type LocalContactCandidate = {
   city?: string | null;
   region?: string | null;
   postalCode?: string | null;
+  organizationIds?: readonly string[];
 };
 
 function phone(value: string | null | undefined): string | null {
@@ -69,11 +75,91 @@ export function matchContact(
   if (emailIds.length === 1 && phoneIds.length === 1 && emailIds[0] !== phoneIds[0]) {
     return { kind: "ambiguous", candidateIds: uniqueSorted([...emailIds, ...phoneIds]), reason: "conflicting_contact_identity" };
   }
-  if (emailIds.length === 1) return { kind: "exact", localId: emailIds[0]!, reason: "unique_normalized_email" };
-  if (phoneIds.length === 1) return { kind: "exact", localId: phoneIds[0]!, reason: "unique_normalized_phone" };
-
   const name = fullName(source);
-  const names = name ? locals.filter((candidate) => fullName(candidate) === name).map((candidate) => candidate.id) : [];
-  if (names.length) return { kind: "ambiguous", candidateIds: uniqueSorted(names), reason: "name_only_match_requires_review" };
+  const clues: ContextClueEvidence[] = [];
+  for (const candidate of locals) {
+    if (name && fullName(candidate) === name) {
+      clues.push({
+        family: "identity",
+        label: "contact name agrees",
+        targetEntityType: "contact",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      });
+    }
+    if (emailIds.length === 1 && emailIds[0] === candidate.id) {
+      clues.push({
+        family: "direct_contact",
+        label: "email agrees",
+        targetEntityType: "contact",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      });
+    }
+    if (phoneIds.length === 1 && phoneIds[0] === candidate.id) {
+      clues.push({
+        family: "direct_contact",
+        label: "phone agrees",
+        targetEntityType: "contact",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      });
+    }
+    if (
+      source.resolvedOrganizationId &&
+      candidate.organizationIds?.includes(source.resolvedOrganizationId)
+    ) {
+      clues.push({
+        family: "archive_relationship",
+        label: "organization relationship agrees",
+        targetEntityType: "contact",
+        targetEntityId: candidate.id,
+        authority: "supporting",
+      });
+    }
+  }
+  const familiesByTarget = new Map<string, Set<ContextClueEvidence["family"]>>();
+  for (const clue of clues) {
+    const families = familiesByTarget.get(clue.targetEntityId) ?? new Set();
+    families.add(clue.family);
+    familiesByTarget.set(clue.targetEntityId, families);
+  }
+  const qualifiedIds = uniqueSorted(
+    [...familiesByTarget]
+      .filter(([, families]) => families.size >= 2)
+      .map(([targetEntityId]) => targetEntityId),
+  );
+  const resolutionClues = qualifiedIds.length === 1 && [...familiesByTarget]
+    .filter(([targetEntityId]) => targetEntityId !== qualifiedIds[0])
+    .every(([, families]) => [...families].every((family) => family === "identity"))
+    ? clues.filter((clue) => clue.targetEntityId === qualifiedIds[0])
+    : clues;
+  const resolution = resolveContextClues(resolutionClues);
+  if (resolution.kind === "resolved") {
+    return {
+      kind: "exact",
+      localId: resolution.targetEntityId,
+      reason: resolution.reason,
+      evidence: resolution.evidence,
+    };
+  }
+  if (resolution.kind === "ambiguous") {
+    const onlyIdentity = resolution.evidence.every((clue) => clue.family === "identity");
+    return {
+      ...resolution,
+      reason: onlyIdentity
+        ? "insufficient_independent_context_clues"
+        : resolution.reason,
+    };
+  }
+  const candidateIds = uniqueSorted(clues.map((clue) => clue.targetEntityId));
+  if (candidateIds.length) {
+    return {
+      kind: "ambiguous",
+      candidateIds,
+      reason: resolution.reason,
+      evidence: resolution.evidence,
+    };
+  }
   return { kind: "none", reason: safeEmail || sourcePhone ? "no_unique_contact_identity" : "no_safe_contact_identity" };
 }

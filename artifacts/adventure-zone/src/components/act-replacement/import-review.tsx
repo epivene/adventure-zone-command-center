@@ -52,8 +52,9 @@ const issueLabels: Record<ReviewIssueCode, string> = {
 };
 
 type BulkDecision =
-  "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
+  "link_existing" | "keep_separate" | "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
 export type SelectionKind =
+  | "duplicate_identity"
   | "field_conflict"
   | "relationship"
   | "unsupported_record";
@@ -64,6 +65,17 @@ export type BulkSelectionSignature = {
   fieldName?: string;
 };
 type RelationshipIssue = NonNullable<ReviewRow["relationshipIssues"]>[number];
+
+const evidenceFamilyLabels: Record<NonNullable<ReviewRow["recommendation"]>["evidence"][number]["family"], string> = {
+  identity: "name",
+  direct_contact: "contact details",
+  web_identity: "website",
+  location: "location",
+  archive_relationship: "company relationship",
+  event_context: "event details",
+  narrative_context: "archived context",
+};
+const evidenceFamilyOrder = Object.keys(evidenceFamilyLabels) as Array<keyof typeof evidenceFamilyLabels>;
 
 const assignmentTargetTypeByStream: Record<
   string,
@@ -129,10 +141,10 @@ export function bulkSelectionSignature(
   kindHint?: Exclude<SelectionKind, "field_conflict">,
 ): BulkSelectionSignature | null {
   if (fieldName) {
-    const hasConflict = row.conflicts.some(
+    const hasConflict = (row.conflicts ?? []).some(
       (conflict) => conflict.fieldName === fieldName,
     );
-    const hasMatchingIssue = row.issues.some(
+    const hasMatchingIssue = (row.issues ?? []).some(
       (issue) =>
         issue.code === "field_conflict" && issue.reason === fieldName,
     );
@@ -141,9 +153,24 @@ export function bulkSelectionSignature(
       : null;
   }
 
+  const recommendation = row.recommendation;
+  if (
+    (!kindHint || kindHint === "duplicate_identity") &&
+    recommendation?.action === "link_existing" &&
+    recommendation.target
+  ) {
+    const families = [...new Set(recommendation.evidence.map((item) => item.family))].sort();
+    if (recommendation.confidence === "two_independent_clues" && families.length < 2) return null;
+    if (families.length === 0) return null;
+    return {
+      kind: "duplicate_identity",
+      value: `${recommendation.target.entityType}\u0000${recommendation.confidence}\u0000${families.join(",")}`,
+    };
+  }
+
   const unsupportedReasons = [
     ...new Set(
-      row.issues
+      (row.issues ?? [])
         .filter((issue) => issue.code === "unsupported_record")
         .map((issue) => issue.reason?.trim())
         .filter((reason): reason is string => Boolean(reason)),
@@ -191,6 +218,7 @@ export function ImportReview({
   onPageChange,
   onIssueChange = () => {},
   onToggleSelection = () => {},
+  onSelectAllPage = () => {},
   onKeepLocal = () => {},
   onUseSource = () => {},
   onIgnoreUnsupported = () => {},
@@ -222,6 +250,7 @@ export function ImportReview({
     fieldName?: string,
     kind?: Exclude<SelectionKind, "field_conflict">,
   ) => void;
+  onSelectAllPage?: (rows: ReviewRow[]) => void;
   onKeepLocal?: (row: ReviewRow, fieldName: string) => void;
   onUseSource?: (row: ReviewRow, fieldName: string) => void;
   onIgnoreUnsupported?: (row: ReviewRow, issue?: RelationshipIssue) => void;
@@ -248,6 +277,10 @@ export function ImportReview({
 
   const selectedSignature = useMemo<BulkSelectionSignature | null>(() => {
     for (const row of review?.rows ?? []) {
+      if (selectedKeys.has(rowSelectionKey(row, "duplicate_identity"))) {
+        const signature = bulkSelectionSignature(row, undefined, "duplicate_identity");
+        if (signature) return signature;
+      }
       for (const conflict of row.conflicts ?? []) {
         if (selectedKeys.has(fieldSelectionKey(row, conflict.fieldName))) {
           const signature = bulkSelectionSignature(row, conflict.fieldName);
@@ -275,6 +308,11 @@ export function ImportReview({
   const selectedCount = useMemo(() => {
     let count = 0;
     for (const row of review?.rows ?? []) {
+      if (
+        selectedKind === "duplicate_identity" &&
+        selectedKeys.has(rowSelectionKey(row, "duplicate_identity")) &&
+        bulkSelectionSignature(row, undefined, "duplicate_identity")
+      ) count += 1;
       for (const conflict of row.conflicts ?? []) {
         if (
           selectedKind === "field_conflict" &&
@@ -296,6 +334,16 @@ export function ImportReview({
     }
     return count;
   }, [review?.rows, selectedKeys, selectedKind]);
+
+  const recommendedRows = useMemo(
+    () => (review?.rows ?? []).filter((row) => {
+      const signature = bulkSelectionSignature(row, undefined, "duplicate_identity");
+      return Boolean(signature && (!selectedSignature || (
+        selectedSignature.kind === signature.kind && selectedSignature.value === signature.value
+      )));
+    }),
+    [review?.rows, selectedSignature],
+  );
 
   const selectedRelationshipsCanImportStandalone = useMemo(
     () => {
@@ -474,6 +522,17 @@ export function ImportReview({
         </p>
       ) : null}
 
+      {recommendedRows.length > 0 && (
+        <button
+          type="button"
+          disabled={loading || !canResolveAmbiguous}
+          onClick={() => onSelectAllPage(recommendedRows)}
+          className="w-full rounded-lg border border-orange-300 bg-white px-4 py-3 text-sm font-semibold text-orange-900 disabled:opacity-50 sm:w-auto"
+        >
+          Select all safe matches on this page
+        </button>
+      )}
+
       {selectedKind && selectedCount > 0 && (
         <div
           aria-label="Bulk review actions"
@@ -484,6 +543,26 @@ export function ImportReview({
             {selectedCount === 1 ? "" : "s"}
           </p>
           <div className="mt-3 grid gap-2 sm:flex sm:flex-wrap">
+            {selectedKind === "duplicate_identity" && (
+              <>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onBulkDecision("link_existing")}
+                  className="w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50 sm:w-auto"
+                >
+                  Accept selected safe matches
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => onBulkDecision("keep_separate")}
+                  className="w-full rounded-lg border border-orange-300 bg-white px-4 py-3 text-sm font-semibold text-orange-900 disabled:opacity-50 sm:w-auto"
+                >
+                  Import selected as new
+                </button>
+              </>
+            )}
             {selectedKind === "field_conflict" && (
               <>
                 <button
@@ -558,6 +637,9 @@ export function ImportReview({
                 resolvingSourceRecordId === row.sourceRecordId;
               const identityType = expectedAssignmentTargetType(row);
               const identityTarget = identityType ? targetFor(row, [identityType]) : undefined;
+              const recommendation = row.recommendation?.action === "link_existing" && row.recommendation.target
+                ? row.recommendation
+                : undefined;
               return (
                 <li
                   key={`${row.sourceRecordId}:${row.sourceVersionId}`}
@@ -588,6 +670,30 @@ export function ImportReview({
                     <p className="mt-3 text-sm text-slate-500">
                       No display details are available for this archived record.
                     </p>
+                  )}
+                  {recommendation && (
+                    <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3">
+                      <p className="text-sm font-semibold text-green-900">
+                        Suggested match: {recommendation.target!.label}
+                        {recommendation.target!.detail ? ` — ${recommendation.target!.detail}` : ""}
+                      </p>
+                      <p className="mt-1 text-sm text-green-800">
+                        Matched from {[...recommendation.evidence]
+                          .sort((left, right) => evidenceFamilyOrder.indexOf(left.family) - evidenceFamilyOrder.indexOf(right.family))
+                          .map((item) => evidenceFamilyLabels[item.family])
+                          .join(" + ")}
+                      </p>
+                      <label className="mt-3 flex items-center gap-2 text-sm text-green-900">
+                        <input
+                          type="checkbox"
+                          aria-label={`Select safe match for bulk review — ${recordLabel(row)}`}
+                          checked={selectedKeys.has(rowSelectionKey(row, "duplicate_identity"))}
+                          disabled={!canSelect(row, undefined, "duplicate_identity") || loading || !canResolveAmbiguous}
+                          onChange={() => onToggleSelection(row, undefined, "duplicate_identity")}
+                        />
+                        Select safe match for bulk review
+                      </label>
+                    </div>
                   )}
                   {(row.issues ?? []).map((issue) => (
                     <p

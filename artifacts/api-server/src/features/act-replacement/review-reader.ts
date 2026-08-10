@@ -1,6 +1,7 @@
 import { stableRelationshipIssues, type ActOrganizeManifest, type ManifestOutcome, type ManifestOperation } from "./manifest-builder";
 import { projectActReviewDisplay } from "./review-display";
 import { fingerprintSourceContent } from "./source-fingerprint";
+import type { ContextClueFamily } from "./matching/context-clue-resolver";
 
 export type ReviewIssueCode = "ambiguous_match" | "field_conflict" | "relationship_unresolved" | "unassigned" | "unsupported_record" | "unsupported_field";
 export type ReviewSummary = {
@@ -59,6 +60,12 @@ export type ReviewRow = {
   relationshipIssues: ReviewRelationshipIssue[];
   canImportStandalone: boolean;
   operationKeys: string[];
+  recommendation?: {
+    action: "link_existing" | "import_new" | "assign_parent" | "keep_archived";
+    target?: ReviewCandidate;
+    confidence: "authoritative" | "two_independent_clues";
+    evidence: Array<{ family: ContextClueFamily; label: string }>;
+  };
   streamType?: string;
   display?: Record<string, unknown>;
 };
@@ -96,6 +103,48 @@ const object = (value: unknown): Record<string, unknown> =>
   value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+
+const safeEvidenceLabels: Readonly<Record<ContextClueFamily, string>> = {
+  identity: "Matching name",
+  direct_contact: "Matching email or phone",
+  web_identity: "Matching website",
+  location: "Matching location",
+  archive_relationship: "Matching saved relationship",
+  event_context: "Matching event details",
+  narrative_context: "Matching archived context",
+};
+
+function contextRecommendation(
+  outcome: ManifestOutcome,
+  model: { entityType: string } | null,
+  targetByKey: ReadonlyMap<string, ReviewTargetProjection>,
+): ReviewRow["recommendation"] {
+  const match = object(outcome.match);
+  const localId = typeof match.localId === "string" ? match.localId : null;
+  if (match.kind !== "exact" || !localId || !model || !Array.isArray(match.evidence)) return undefined;
+  const families = new Map<ContextClueFamily, string>();
+  let authoritative = false;
+  for (const rawEvidence of match.evidence.slice(0, 20)) {
+    const evidence = object(rawEvidence);
+    const family = evidence.family;
+    if (typeof family !== "string" || !Object.hasOwn(safeEvidenceLabels, family)) continue;
+    if (evidence.targetEntityId !== localId || evidence.targetEntityType !== model.entityType) continue;
+    if (evidence.authority === "authoritative") authoritative = true;
+    const typedFamily = family as ContextClueFamily;
+    if (!families.has(typedFamily)) families.set(typedFamily, safeEvidenceLabels[typedFamily]);
+  }
+  if (!authoritative && families.size < 2) return undefined;
+  const target = targetByKey.get(`${model.entityType}:${localId}`);
+  return {
+    action: "link_existing",
+    ...(target ? { target: { id: target.id, entityType: target.entityType, label: target.label, detail: target.detail } } : {}),
+    confidence: authoritative ? "authoritative" : "two_independent_clues",
+    evidence: [...families.entries()]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .slice(0, 7)
+      .map(([family, label]) => ({ family, label })),
+  };
+}
 
 function safeValue(value: unknown): ReviewSafeValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return value;
@@ -208,6 +257,7 @@ export function projectReviewRow(input: {
   const sourceOperations = (input.operations ?? []).filter((operation) => operation.sourceRecordId === input.outcome.sourceRecordId);
   const targetByKey = new Map((input.targets ?? []).map((target) => [`${target.entityType}:${target.id}`, target]));
   const model = targetModel(input.source?.streamType);
+  const recommendation = contextRecommendation(input.outcome, model, targetByKey);
   const candidates = input.outcome.candidates.flatMap((candidate) => {
     const candidateId = object(candidate).candidateId;
     const target = typeof candidateId === "string" && model
@@ -281,6 +331,7 @@ export function projectReviewRow(input: {
     relationshipIssues,
     canImportStandalone: relationshipIssues.some((issue) => issue.canImportStandalone),
     operationKeys: [...input.outcome.operationKeys],
+    ...(recommendation ? { recommendation } : {}),
     ...(input.source?.streamType ? { streamType: input.source.streamType } : {}),
     ...(input.source?.display ? { display: projectActReviewDisplay(input.source.streamType, input.source.display) } : {}),
   };

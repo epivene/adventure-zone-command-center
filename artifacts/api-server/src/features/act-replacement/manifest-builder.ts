@@ -198,7 +198,20 @@ function hasImmutableOverwriteProof(
 
 /** Pure, deterministic manifest construction. It never selects an ambiguous match. */
 export function buildActOrganizeManifest(input: { runId: string; sources: readonly ManifestSourceInput[] }): ActOrganizeManifest {
-  const sources = [...input.sources].sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId));
+  const sources = input.sources.map((source) => ({
+    ...source,
+    ...(source.match?.evidence
+      ? {
+          match: {
+            ...source.match,
+            evidence: [...source.match.evidence].sort((left, right) =>
+              left.family.localeCompare(right.family)
+              || left.label.localeCompare(right.label)
+              || left.targetEntityId.localeCompare(right.targetEntityId)),
+          },
+        }
+      : {}),
+  })).sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId));
   const sourceById = new Map(sources.map((source) => [source.sourceRecordId, source]));
   const operations: ManifestOperation[] = []; const outcomes: ManifestOutcome[] = []; const diagnostics: ManifestDiagnostic[] = [];
   for (const source of sources) {
@@ -339,7 +352,8 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
         sourceOps.push(revisionedOperation(operationKey(relationshipTarget, source.sourceRecordId, parentId), relationship));
       }
     }
-    const provenance = baseOperation(source, targetType, "record_provenance", { evidence: sorted(source.provenance), mappingWarnings: warnings, unsupportedFieldPaths: unsupported, unsupportedNormalizedFields }, sourceOps.map((operation) => operation.operationKey), false, true);
+    const matchEvidenceFamilies = [...new Set(source.match?.evidence?.map((item) => item.family) ?? [])].sort();
+    const provenance = baseOperation(source, targetType, "record_provenance", { evidence: sorted(source.provenance), matchEvidenceFamilies, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, unsupportedNormalizedFields }, sourceOps.map((operation) => operation.operationKey), false, true);
     sourceOps.push(revisionedOperation(operationKey("provenance", source.sourceRecordId), provenance));
     operations.push(...sourceOps);
     outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: issues.some((issue) => issue.code === "relationship_unresolved" || issue.code === "field_conflict") ? "awaiting_review" : "ready", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: sourceOps.map((operation) => operation.operationKey) });

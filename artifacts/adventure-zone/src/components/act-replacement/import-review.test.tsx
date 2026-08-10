@@ -663,4 +663,63 @@ describe("ImportReview", () => {
       }),
     ).toBeDisabled();
   });
+
+  it("shows safe match evidence and offers page-level mobile-friendly bulk acceptance", () => {
+    const onToggleSelection = vi.fn();
+    const onSelectAllPage = vi.fn();
+    const onBulkDecision = vi.fn();
+    const row: ReviewRow = {
+      sourceRecordId: "recommended-company",
+      sourceVersionId: "recommended-version",
+      state: "awaiting_review",
+      issueCodes: ["ambiguous_match"],
+      issues: [{ code: "ambiguous_match" }],
+      conflicts: [],
+      candidates: [],
+      canImportStandalone: false,
+      operationKeys: [],
+      streamType: "company",
+      display: { name: "Adventure Zone" },
+      recommendation: {
+        action: "link_existing",
+        target: { id: "organization-1", entityType: "organization", label: "Adventure Zone LLC", detail: "Chicago, IL" },
+        confidence: "two_independent_clues",
+        evidence: [
+          { family: "identity", label: "Matching name" },
+          { family: "archive_relationship", label: "Matching saved relationship" },
+        ],
+      },
+    };
+
+    render(
+      <ImportReview
+        safeOperationCount={0}
+        reviewRequiredCount={1}
+        review={{
+          page: 1, pageSize: 25, total: 1, manifestDigest: "a".repeat(64),
+          summary: { decisionRequired: 1, issueCounts: { ambiguous_match: 1 }, diagnosticCounts: {} },
+          rows: [row],
+        }}
+        selectedKeys={new Set(["recommended-company:duplicate_identity"])}
+        onSearch={() => {}}
+        onPageChange={() => {}}
+        onToggleSelection={onToggleSelection}
+        onSelectAllPage={onSelectAllPage}
+        onBulkDecision={onBulkDecision}
+        onImportAsNew={() => {}}
+        onImport={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Matched from name + company relationship")).toBeInTheDocument();
+    expect(screen.getByText(/Adventure Zone LLC/)).toHaveTextContent("Chicago, IL");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select safe match for bulk review — Adventure Zone" }));
+    expect(onToggleSelection).toHaveBeenCalledWith(row, undefined, "duplicate_identity");
+    fireEvent.click(screen.getByRole("button", { name: "Select all safe matches on this page" }));
+    expect(onSelectAllPage).toHaveBeenCalledWith([row]);
+    const accept = screen.getByRole("button", { name: "Accept selected safe matches" });
+    expect(accept).toHaveClass("w-full");
+    fireEvent.click(accept);
+    expect(onBulkDecision).toHaveBeenCalledWith("link_existing");
+  });
 });

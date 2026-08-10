@@ -1015,6 +1015,32 @@ describe("owner import workflow", () => {
     expect(bulkDecide).toHaveBeenCalledWith({ ...body, runId: RUN_ID, requestedBy: "owner" });
   });
 
+  it("accepts bounded bulk context-identity decisions", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const bulkDecide = vi.fn().mockResolvedValue({ decisions: [], manifestDigest: MANIFEST_DIGEST, reviewedOperationIds: [] });
+    const review = workflowReview({
+      reader: { getManifest: vi.fn().mockResolvedValue({ outcomes: [{ sourceRecordId: "source-one" }] }), listSources: vi.fn().mockResolvedValue([]) },
+      commands: { bulkDecide },
+    });
+    const body = {
+      expectedManifestDigest: MANIFEST_DIGEST,
+      requestKey: "bulk-context",
+      scope: "duplicate_identity",
+      decision: "link_existing",
+      fieldName: null,
+      selections: [{ sourceRecordId: "source-one", sourceVersionId: "version-one" }],
+    };
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/decisions/bulk`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(response.status).toBe(201);
+    expect(bulkDecide).toHaveBeenCalledWith({ ...body, runId: RUN_ID, requestedBy: "owner" });
+  });
+
   it("checks bulk run ownership once without loading a manifest per selection", async () => {
     const store = new MemoryControlStore();
     addRun(store);

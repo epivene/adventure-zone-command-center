@@ -866,6 +866,54 @@ describe("ActMigrationPage", () => {
     );
   });
 
+  it("accepts selected context matches in one bounded request and refreshes status and review", async () => {
+    const run = readyRun({ reviewRequiredCount: 1, canOrganize: true });
+    const row = {
+      sourceRecordId: "recommended-company",
+      sourceVersionId: "recommended-version",
+      state: "awaiting_review" as const,
+      issueCodes: ["ambiguous_match"] as const,
+      issues: [{ code: "ambiguous_match" as const }],
+      conflicts: [], candidates: [], canImportStandalone: false, operationKeys: [],
+      streamType: "company",
+      display: { name: "Adventure Zone" },
+      recommendation: {
+        action: "link_existing" as const,
+        target: { id: "organization-1", entityType: "organization" as const, label: "Adventure Zone LLC", detail: "Chicago, IL" },
+        confidence: "two_independent_clues" as const,
+        evidence: [
+          { family: "identity" as const, label: "Matching name" },
+          { family: "archive_relationship" as const, label: "Matching saved relationship" },
+        ],
+      },
+    };
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run: { ...run, reviewRequiredCount: 0 } });
+    client.getReview.mockResolvedValue({
+      page: 1, pageSize: 25, total: 1, manifestDigest: digest,
+      summary: { decisionRequired: 1, issueCounts: { ambiguous_match: 1 }, diagnosticCounts: {} },
+      rows: [row],
+    });
+    client.bulkDecideReviewRecords.mockResolvedValue({});
+
+    render(<ActMigrationPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Select all safe matches on this page" }));
+    fireEvent.click(screen.getByRole("button", { name: "Accept selected safe matches" }));
+
+    await waitFor(() => expect(client.bulkDecideReviewRecords).toHaveBeenCalledWith(
+      run.runId,
+      expect.objectContaining({
+        expectedManifestDigest: digest,
+        scope: "duplicate_identity",
+        decision: "link_existing",
+        fieldName: null,
+        selections: [{ sourceRecordId: row.sourceRecordId, sourceVersionId: row.sourceVersionId }],
+      }),
+    ));
+    await waitFor(() => expect(client.getRun).toHaveBeenCalledWith(run.runId));
+    await waitFor(() => expect(client.getReview).toHaveBeenCalledTimes(2));
+  });
+
   it("filters and isolates row-specific assignment target searches", async () => {
     const run = readyRun({ reviewRequiredCount: 2, canOrganize: true });
     const contactRow = {
@@ -948,6 +996,7 @@ describe("ActMigrationPage", () => {
     const activitySearch = screen.getByRole("searchbox", {
       name: "Search existing records — Parent target for Call Ada",
     });
+    expect(client.getAssignmentTargets).not.toHaveBeenCalled();
     fireEvent.change(contactSearch, { target: { value: "Ada" } });
     fireEvent.change(activitySearch, { target: { value: "Call" } });
 

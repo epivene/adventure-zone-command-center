@@ -128,6 +128,35 @@ describe("buildActOrganizeManifest", () => {
     expect(result.digest).toBe(createHash("sha256").update(JSON.stringify({ operations: result.operations, outcomes: result.outcomes })).digest("hex"));
   });
 
+  it("persists sorted context evidence and records only sanitized clue provenance", () => {
+    const result = buildActOrganizeManifest({ runId: "run", sources: [source({
+      match: {
+        kind: "exact",
+        localId: "organization-1",
+        reason: "two_independent_context_clues",
+        evidence: [
+          { family: "web_identity", label: "website agrees", targetEntityType: "organization", targetEntityId: "organization-1", authority: "supporting" },
+          { family: "identity", label: "organization name agrees", targetEntityType: "organization", targetEntityId: "organization-1", authority: "supporting" },
+        ],
+      },
+      localFields: { name: "Acme" },
+      unsupportedFieldPaths: ["customFields.Legacy"],
+    })] });
+
+    expect(result.outcomes[0]?.match).toMatchObject({
+      kind: "exact",
+      localId: "organization-1",
+      evidence: [
+        expect.objectContaining({ family: "identity" }),
+        expect.objectContaining({ family: "web_identity" }),
+      ],
+    });
+    expect(result.operations.find((operation) => operation.action === "record_provenance")?.payload).toMatchObject({
+      matchEvidenceFamilies: ["identity", "web_identity"],
+      unsupportedFieldPaths: ["customFields.Legacy"],
+    });
+  });
+
   it("emits fill operations only for supported contact fields and ignores matching metadata", () => {
     const result = buildActOrganizeManifest({ runId: "run", sources: [source({
       streamType: "contact",

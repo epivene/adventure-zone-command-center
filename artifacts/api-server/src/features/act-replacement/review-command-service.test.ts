@@ -538,6 +538,88 @@ it("rejects reusing a decision supersession request key for a different decision
 });
 
 describe("atomic bulk review decisions", () => {
+  it("bulk accepts homogeneous two-clue identity recommendations and derives their targets", async () => {
+    const recommended = (sourceRecordId: "a" | "b") => ({
+      ...reviewOutcome(sourceRecordId, `v-${sourceRecordId}`, "field_conflict", "phone"),
+      match: {
+        kind: "exact",
+        localId: `local-${sourceRecordId}`,
+        reason: "two_independent_context_clues",
+        evidence: [
+          { family: "identity", label: "name", targetEntityType: "organization", targetEntityId: `local-${sourceRecordId}`, authority: "supporting" },
+          { family: "web_identity", label: "website", targetEntityType: "organization", targetEntityId: `local-${sourceRecordId}`, authority: "supporting" },
+        ],
+      },
+    });
+    const create = () => {
+      const service = bulkService({ outcomes: [recommended("a"), recommended("b")] });
+      service.store.seedTarget("organization", "local-a");
+      service.store.seedTarget("organization", "local-b");
+      return service;
+    };
+    const input = {
+      ...unsupportedBulkInput,
+      scope: "duplicate_identity" as const,
+      decision: "link_existing" as const,
+      fieldName: null,
+      requestKey: "bulk-context-link",
+    };
+
+    const linked = create();
+    await expect(linked.commands.bulkDecide(input)).resolves.toMatchObject({
+      decisions: expect.arrayContaining([
+        expect.objectContaining({ sourceRecordId: "a", scope: "duplicate_identity", decision: "link_existing", targetEntityType: "organization", targetEntityId: "local-a" }),
+        expect.objectContaining({ sourceRecordId: "b", scope: "duplicate_identity", decision: "link_existing", targetEntityType: "organization", targetEntityId: "local-b" }),
+      ]),
+    });
+    expect(linked.rebuilds()).toBe(1);
+
+    const separated = create();
+    await expect(separated.commands.bulkDecide({ ...input, decision: "keep_separate", requestKey: "bulk-context-separate" })).resolves.toMatchObject({
+      decisions: expect.arrayContaining([
+        expect.objectContaining({ decision: "keep_separate", targetEntityType: null, targetEntityId: null }),
+      ]),
+    });
+  });
+
+  it("rejects identity bulk decisions with conflicting targets, mixed confidence, or no evidence", async () => {
+    const evidence = (targetEntityId: string, authority: "supporting" | "authoritative" = "supporting") => ({
+      family: "identity",
+      label: "name",
+      targetEntityType: "organization" as const,
+      targetEntityId,
+      authority,
+    });
+    const recommended = (sourceRecordId: "a" | "b", matchEvidence: ReturnType<typeof evidence>[]) => ({
+      ...reviewOutcome(sourceRecordId, `v-${sourceRecordId}`, "field_conflict", "phone"),
+      match: { kind: "exact" as const, localId: `local-${sourceRecordId}`, evidence: matchEvidence },
+    });
+    const input = {
+      ...unsupportedBulkInput,
+      scope: "duplicate_identity" as const,
+      decision: "link_existing" as const,
+      fieldName: null,
+      requestKey: "bulk-invalid-context",
+    };
+    const cases = [
+      [
+        recommended("a", [evidence("local-a"), { ...evidence("other-a"), family: "web_identity" }]),
+        recommended("b", [evidence("local-b"), { ...evidence("local-b"), family: "web_identity" }]),
+      ],
+      [
+        recommended("a", [evidence("local-a", "authoritative")]),
+        recommended("b", [evidence("local-b"), { ...evidence("local-b"), family: "web_identity" }]),
+      ],
+      [recommended("a", []), recommended("b", [])],
+    ];
+
+    for (const outcomes of cases) {
+      const { commands, rebuilds } = bulkService({ outcomes });
+      await expect(commands.bulkDecide(input)).rejects.toMatchObject({ status: 409 });
+      expect(rebuilds()).toBe(0);
+    }
+  });
+
   it("requires immutable conflict tokens for individual and bulk use-source decisions", async () => {
     const { commands } = fieldBulkService();
 
@@ -668,7 +750,7 @@ describe("atomic bulk review decisions", () => {
       { ...unsupportedBulkInput, selections: [] },
       { ...unsupportedBulkInput, selections: Array.from({ length: 201 }, (_, index) => ({ sourceRecordId: `source-${index}`, sourceVersionId: `version-${index}` })) },
       { ...unsupportedBulkInput, selections: [unsupportedBulkInput.selections[0], unsupportedBulkInput.selections[0]] },
-      { ...unsupportedBulkInput, scope: "duplicate_identity", decision: "keep_separate" },
+      { ...unsupportedBulkInput, scope: "duplicate_identity", decision: "keep_local" },
       { ...unsupportedBulkInput, scope: "field_conflict", decision: "keep_local", fieldName: null },
       { ...unsupportedBulkInput, fieldName: "phone" },
       { ...unsupportedBulkInput, requestedBy: " " },

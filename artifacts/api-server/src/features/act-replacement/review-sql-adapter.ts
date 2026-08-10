@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gt, inArray, isNull, lte, notInArray, or, sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { logger } from "@/lib/logger";
-import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyBatches, actReplacementApplyOperations, actReplacementBulkReviewRequests, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, activities, bookings, callingLists, contacts, organizations } from "@workspace/db/schema";
+import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyBatches, actReplacementApplyOperations, actReplacementBulkReviewRequests, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, activities, bookingContacts, bookings, callingLists, contacts, organizationContacts, organizations } from "@workspace/db/schema";
 import { DrizzleActSourceAssignmentRepository } from "./assignment-repository";
 import type { ActApplyService } from "./apply-service";
 import type { ApprovalClosure, ApprovalRepository } from "./approval-service";
@@ -17,7 +17,8 @@ import { resolveActSourceGraph, type ActRelationshipEvidence, type ActSourceAssi
 import { matchOrganization, type LocalOrganizationCandidate } from "./matching/organization-matcher";
 import { matchContact, type LocalContactCandidate } from "./matching/contact-matcher";
 import { matchBooking, type LocalBookingCandidate } from "./matching/booking-matcher";
-import type { ExternalLink } from "./matching/match-result";
+import { uniqueSorted, type ExternalLink, type MatchResult } from "./matching/match-result";
+import { buildActContextIndex } from "./context-index";
 import { decisionSupersessionRequestFingerprint, decisionWithReviewedProof, individualDecisionRequestFingerprint, prepareBulkReviewDecisions, reviewedOperationIds, validateIndividualDecisionAgainstCurrentState, type Assignment, type BulkReviewDecisionResult, type BulkReviewRequestLookup, type ConflictReviewState, type Decision, type ReviewCommandStore, type SaveAssignmentInput, type SaveDecisionInput, type SaveDecisionsAndRebuildInput, type SaveDecisionsAndRebuildResult } from "./review-command-service";
 import { assignmentTargetEntityTypes, assignmentTargetLikePattern, isAssignmentTargetEntityType, projectReviewRow, type AssignmentTargetEntityType, type ReviewCandidate, type ReviewIssueCode, type ReviewPage, type ReviewReadInput, type ReviewReader, type ReviewSourceRecord, type ReviewTargetProjection } from "./review-reader";
 import { projectActReviewDisplay } from "./review-display";
@@ -210,6 +211,8 @@ type OrganizerLocalCandidates = {
   organizations?: readonly LocalOrganizationCandidate[];
   contacts?: readonly LocalContactCandidate[];
   bookings?: readonly LocalBookingCandidate[];
+  organizationContacts?: readonly { organizationId: string; contactId: string }[];
+  bookingContacts?: readonly { bookingId: string; contactId: string }[];
   externalLinks?: readonly (ExternalLink & { sourceRecordId?: string | null })[];
 };
 
@@ -377,30 +380,100 @@ export function manifestSourcesFromArchiveRows(input: { rows: readonly ArchivedO
     relationshipProvenanceBySource.set(sourceRecordId, rows);
   }
 
+  const baseRelationshipsForRow = (row: ArchivedOrganizerSourceRow): ManifestSourceInput["relationships"] =>
+    row.streamType === "contact"
+      ? { organizationSourceIds: [...(resolution.graph.companiesByContact.get(row.sourceRecordId) ?? [])] }
+      : row.streamType === "opportunity"
+        ? {
+            organizationSourceIds: [...(resolution.graph.companiesByOpportunity.get(row.sourceRecordId) ?? [])],
+            contactSourceIds: [...(resolution.graph.contactsByOpportunity.get(row.sourceRecordId) ?? [])],
+          }
+        : row.streamType === "group"
+          ? { contactSourceIds: [...(resolution.graph.contactsByGroup.get(row.sourceRecordId) ?? [])] }
+          : ["activity", "note", "history"].includes(row.streamType)
+            ? {
+                organizationSourceIds: [...(resolution.graph.timelineParents.get(row.sourceRecordId)?.companyIds ?? [])],
+                contactSourceIds: [...(resolution.graph.timelineParents.get(row.sourceRecordId)?.contactIds ?? [])],
+                bookingSourceIds: [...(resolution.graph.timelineParents.get(row.sourceRecordId)?.opportunityIds ?? [])],
+              }
+            : undefined;
+  const normalizedBySource = new Map(roots.map((row) => [
+    row.sourceRecordId,
+    normalizeArchivedSource(row, baseRelationshipsForRow(row)),
+  ]));
+  const exactTargetForRow = (row: ArchivedOrganizerSourceRow) => {
+    const decisions = decisionsBySourceVersion.get(`${row.sourceRecordId}\u0000${row.sourceVersionId}`) ?? [];
+    const decision = decisions.find((candidate) => candidate.scope === "duplicate_identity");
+    if (decision?.decision === "keep_separate") return null;
+    if (decision?.decision === "link_existing") return decision.targetEntityId;
+    return (assignmentsBySource.get(row.sourceRecordId) ?? [])
+      .find((candidate) => candidate.targetEntityType === targetForStream[row.streamType])?.targetEntityId ?? null;
+  };
+  const isKeepSeparate = (row: ArchivedOrganizerSourceRow) =>
+    (decisionsBySourceVersion.get(`${row.sourceRecordId}\u0000${row.sourceVersionId}`) ?? [])
+      .some((candidate) => candidate.scope === "duplicate_identity" && candidate.decision === "keep_separate");
+  const authoritativeOr = (row: ArchivedOrganizerSourceRow, automatic: () => MatchResult): MatchResult => {
+    if (isKeepSeparate(row)) return { kind: "none", reason: "manual_keep_separate" };
+    const target = exactTargetForRow(row);
+    return target ? { kind: "exact", localId: target, reason: "manual_review" } : automatic();
+  };
+  const companyMatches = new Map<string, MatchResult>();
+  for (const row of roots.filter((candidate) => candidate.streamType === "company")) {
+    const normalized = normalizedBySource.get(row.sourceRecordId)!;
+    companyMatches.set(row.sourceRecordId, authoritativeOr(row, () => normalized.ok && normalized.value.kind === "organization"
+      ? matchOrganization({ ...normalized.value, sourceRecordId: row.sourceRecordId, externalLinks: input.localCandidates?.externalLinks }, input.localCandidates?.organizations ?? [], { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
+      : { kind: "none", reason: "organization_normalization_failed" }));
+  }
+  const contactMatches = new Map<string, MatchResult>();
+  for (const row of roots.filter((candidate) => candidate.streamType === "contact")) {
+    const normalized = normalizedBySource.get(row.sourceRecordId)!;
+    const companySourceIds = baseRelationshipsForRow(row)?.organizationSourceIds ?? [];
+    const resolvedCompanyIds = uniqueSorted(companySourceIds.flatMap((sourceId) => {
+      const match = companyMatches.get(sourceId);
+      return match?.kind === "exact" ? [match.localId] : [];
+    }));
+    contactMatches.set(row.sourceRecordId, authoritativeOr(row, () => normalized.ok && normalized.value.kind === "contact"
+      ? matchContact({
+          ...normalized.value,
+          sourceRecordId: row.sourceRecordId,
+          resolvedOrganizationId: resolvedCompanyIds.length === 1 ? resolvedCompanyIds[0] : null,
+          externalLinks: input.localCandidates?.externalLinks,
+        }, input.localCandidates?.contacts ?? [], { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
+      : { kind: "none", reason: "contact_normalization_failed" }));
+  }
+  const contextIndex = buildActContextIndex(roots, input.localCandidates ?? {});
+  const inferredTimelineParents = new Map<string, { organizationSourceIds: string[]; contactSourceIds: string[]; bookingSourceIds: string[] }>();
+  for (const row of roots.filter((candidate) => ["activity", "note", "history"].includes(candidate.streamType))) {
+    const raw = row.rawSnapshot;
+    const mentions = contextIndex.narrativeMentions({
+      subject: text(raw.subject) || text(raw.Subject),
+      regarding: text(raw.regarding) || text(raw.Regarding),
+      details: text(raw.details) || text(raw.Details),
+      body: text(raw.body) || text(raw.Body),
+    });
+    const mentionedContacts = uniqueSorted(mentions.filter((mention) => mention.streamType === "contact" && contactMatches.get(mention.sourceRecordId)?.kind === "exact").map((mention) => mention.sourceRecordId));
+    const mentionedCompanies = uniqueSorted(mentions.filter((mention) => mention.streamType === "company" && companyMatches.get(mention.sourceRecordId)?.kind === "exact").map((mention) => mention.sourceRecordId));
+    const compatiblePairs = mentionedContacts.flatMap((contactSourceId) =>
+      mentionedCompanies.filter((companySourceId) => resolution.graph.companiesByContact.get(contactSourceId)?.has(companySourceId)).map((companySourceId) => ({ contactSourceId, companySourceId })),
+    );
+    const explicit = baseRelationshipsForRow(row);
+    if (compatiblePairs.length === 1 && !(explicit?.contactSourceIds?.length || explicit?.organizationSourceIds?.length)) {
+      inferredTimelineParents.set(row.sourceRecordId, {
+        contactSourceIds: [compatiblePairs[0]!.contactSourceId],
+        organizationSourceIds: [compatiblePairs[0]!.companySourceId],
+        bookingSourceIds: [],
+      });
+      relationshipProvenanceBySource.set(row.sourceRecordId, [
+        ...(relationshipProvenanceBySource.get(row.sourceRecordId) ?? []),
+        "context:subject_or_body_mentions_resolved_parent",
+      ]);
+    }
+  }
+
   return roots
     .map((row): ManifestSourceInput => {
-      const relationships =
-        row.streamType === "contact"
-          ? {
-              organizationSourceIds: [...(resolution.graph.companiesByContact.get(row.sourceRecordId) ?? [])],
-            }
-          : row.streamType === "opportunity"
-            ? {
-                organizationSourceIds: [...(resolution.graph.companiesByOpportunity.get(row.sourceRecordId) ?? [])],
-                contactSourceIds: [...(resolution.graph.contactsByOpportunity.get(row.sourceRecordId) ?? [])],
-              }
-            : row.streamType === "group"
-              ? {
-                  contactSourceIds: [...(resolution.graph.contactsByGroup.get(row.sourceRecordId) ?? [])],
-                }
-              : ["activity", "note", "history"].includes(row.streamType)
-                ? {
-                    organizationSourceIds: [...(resolution.graph.timelineParents.get(row.sourceRecordId)?.companyIds ?? [])],
-                    contactSourceIds: [...(resolution.graph.timelineParents.get(row.sourceRecordId)?.contactIds ?? [])],
-                    bookingSourceIds: [...(resolution.graph.timelineParents.get(row.sourceRecordId)?.opportunityIds ?? [])],
-                  }
-                : undefined;
-      const normalized = normalizeArchivedSource(row, relationships);
+      const relationships = inferredTimelineParents.get(row.sourceRecordId) ?? baseRelationshipsForRow(row);
+      const normalized = normalizedBySource.get(row.sourceRecordId)!;
       const activeDecisions = decisionsBySourceVersion.get(`${row.sourceRecordId}\u0000${row.sourceVersionId}`) ?? [];
       const decision = activeDecisions.find((candidate) => candidate.scope === "duplicate_identity");
       const activeAssignments = assignmentsBySource.get(row.sourceRecordId) ?? [];
@@ -423,10 +496,10 @@ export function manifestSourcesFromArchiveRows(input: { rows: readonly ArchivedO
       };
       const automaticMatch = exactTarget
         ? ({ kind: "none", reason: "manual_review" } as const)
-        : normalized.ok && normalized.value.kind === "organization"
-        ? matchOrganization({ ...normalized.value, sourceRecordId: row.sourceRecordId, externalLinks: input.localCandidates?.externalLinks }, input.localCandidates?.organizations ?? [], { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
-        : normalized.ok && normalized.value.kind === "contact"
-          ? matchContact({ ...normalized.value, sourceRecordId: row.sourceRecordId, externalLinks: input.localCandidates?.externalLinks }, input.localCandidates?.contacts ?? [], { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
+        : row.streamType === "company"
+        ? companyMatches.get(row.sourceRecordId) ?? { kind: "none", reason: "no_candidate" }
+        : row.streamType === "contact"
+          ? contactMatches.get(row.sourceRecordId) ?? { kind: "none", reason: "no_candidate" }
           : normalized.ok && normalized.value.kind === "booking"
             ? matchBooking({ ...normalized.value, sourceRecordId: row.sourceRecordId, externalLinks: input.localCandidates?.externalLinks }, input.localCandidates?.bookings ?? [], organizationMatchForBooking(), { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
           : ({ kind: "none", reason: "no_candidate" } as const);
@@ -591,7 +664,7 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
       .innerJoin(actSourceRecordVersions, and(eq(actSourceRecordVersions.id, actReplacementObservations.versionId), eq(actSourceRecordVersions.sourceRecordId, actSourceRecords.id)))
       .where(and(eq(actReplacementObservations.runId, runId), eq(actReplacementObservations.sourceDatabaseKey, this.scope.sourceDatabaseKey)));
     const sourceIds = rows.map((row) => row.sourceRecordId);
-    const [assignments, decisions, localOrganizations, localContacts, localBookings, externalLinks] = await Promise.all([
+    const [assignments, decisions, localOrganizations, localContacts, localBookings, localOrganizationContacts, localBookingContacts, externalLinks] = await Promise.all([
       sourceIds.length
       ? await this.database
           .select()
@@ -605,10 +678,24 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
           .where(and(inArray(actReplacementReviewDecisions.sourceRecordId, sourceIds), eq(actReplacementReviewDecisions.active, true)))
       : [],
       this.database.select({ id: organizations.id, name: organizations.name, phone: organizations.phone, website: organizations.website, industry: organizations.actIndustry, address1: organizations.address1, address2: organizations.address2, city: organizations.city, region: organizations.region, postalCode: organizations.postalCode }).from(organizations),
-      this.database.select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, jobTitle: contacts.jobTitle, address1: contacts.address1, address2: contacts.address2, city: contacts.city, region: contacts.region, postalCode: contacts.postalCode }).from(contacts),
+      this.database.select({ id: contacts.id, organizationId: contacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, jobTitle: contacts.jobTitle, address1: contacts.address1, address2: contacts.address2, city: contacts.city, region: contacts.region, postalCode: contacts.postalCode }).from(contacts),
       this.database.select({ id: bookings.id, name: bookings.name, organizationId: bookings.organizationId, venueName: bookings.venueName, address1: bookings.address1, city: bookings.city, region: bookings.region, postalCode: bookings.postalCode, startsAt: bookings.startsAt, endsAt: bookings.endsAt, localStatus: bookings.status, localProbability: bookings.probability, notes: bookings.notes }).from(bookings),
+      this.database.select({ organizationId: organizationContacts.organizationId, contactId: organizationContacts.contactId }).from(organizationContacts).where(eq(organizationContacts.active, true)),
+      this.database.select({ bookingId: bookingContacts.bookingId, contactId: bookingContacts.contactId }).from(bookingContacts),
       this.database.select({ localId: actExternalLinks.entityId, entityType: actExternalLinks.entityType, sourceEntityType: actExternalLinks.sourceEntityType, actRecordId: actExternalLinks.actRecordId, sourceRecordId: actExternalLinks.sourceRecordId, sourceDatabaseKey: actExternalLinks.sourceDatabaseKey }).from(actExternalLinks),
     ]);
+    const organizationIdsByContact = new Map<string, Set<string>>();
+    for (const relationship of localOrganizationContacts) {
+      const organizationIds = organizationIdsByContact.get(relationship.contactId) ?? new Set<string>();
+      organizationIds.add(relationship.organizationId);
+      organizationIdsByContact.set(relationship.contactId, organizationIds);
+    }
+    for (const contact of localContacts) {
+      if (!contact.organizationId) continue;
+      const organizationIds = organizationIdsByContact.get(contact.id) ?? new Set<string>();
+      organizationIds.add(contact.organizationId);
+      organizationIdsByContact.set(contact.id, organizationIds);
+    }
     return manifestSourcesFromArchiveRows({
       rows,
       assignments: assignments.map((assignment) => ({
@@ -639,8 +726,13 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
       })),
       localCandidates: {
         organizations: localOrganizations,
-        contacts: localContacts,
+        contacts: localContacts.map(({ organizationId: _organizationId, ...contact }) => ({
+          ...contact,
+          organizationIds: [...(organizationIdsByContact.get(contact.id) ?? [])].sort(),
+        })),
         bookings: localBookings.map((booking) => ({ ...booking, startsAt: booking.startsAt?.toISOString() ?? null, endsAt: booking.endsAt?.toISOString() ?? null })),
+        organizationContacts: localOrganizationContacts,
+        bookingContacts: localBookingContacts,
         externalLinks,
       },
       sourceDatabaseKey: this.scope.sourceDatabaseKey,

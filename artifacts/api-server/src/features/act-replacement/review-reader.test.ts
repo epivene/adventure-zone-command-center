@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { InMemoryReviewReader, readReview, safeSource } from "./review-reader";
+import { InMemoryReviewReader, projectReviewRow, readReview, safeSource } from "./review-reader";
 import type { ActOrganizeManifest } from "./manifest-builder";
 
 const manifest: ActOrganizeManifest = { digest: "digest-1", operations: [], diagnostics: [], outcomes: [
@@ -9,6 +9,43 @@ const manifest: ActOrganizeManifest = { digest: "digest-1", operations: [], diag
   { sourceRecordId: "c", sourceVersionId: "v3", state: "unsupported", issues: [{ code: "unsupported_record" }], candidates: [], match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [] },
 ] };
 describe("Act review reader", () => {
+  it("projects a safe context recommendation without exposing raw evidence labels", () => {
+    const row = projectReviewRow({
+      outcome: {
+        sourceRecordId: "company-context",
+        sourceVersionId: "v-context",
+        state: "awaiting_review",
+        issues: [{ code: "field_conflict", reason: "phone" }],
+        candidates: [],
+        match: {
+          kind: "exact",
+          localId: "local-company",
+          reason: "two_independent_context_clues",
+          evidence: [
+            { family: "identity", label: "raw private company name", targetEntityType: "organization", targetEntityId: "local-company", authority: "supporting" },
+            { family: "web_identity", label: "https://private.example/secret", targetEntityType: "organization", targetEntityId: "local-company", authority: "supporting" },
+          ],
+        },
+        mappingWarnings: [],
+        unsupportedFieldPaths: [],
+        operationKeys: [],
+      },
+      source: { sourceRecordId: "company-context", sourceVersionId: "v-context", streamType: "company", display: { Name: "Acme" } },
+      targets: [{ id: "local-company", entityType: "organization", label: "Acme", detail: null }],
+    });
+
+    expect(row.recommendation).toEqual({
+      action: "link_existing",
+      target: { id: "local-company", entityType: "organization", label: "Acme", detail: null },
+      confidence: "two_independent_clues",
+      evidence: [
+        { family: "identity", label: "Matching name" },
+        { family: "web_identity", label: "Matching website" },
+      ],
+    });
+    expect(JSON.stringify(row)).not.toContain("private.example");
+    expect(JSON.stringify(row)).not.toContain("raw private");
+  });
   it("paginates/filter rows and returns only safe display data", async () => {
     const reader = new InMemoryReviewReader(); reader.seed("r", manifest, [{ sourceRecordId: "a", sourceVersionId: "v1", streamType: "note", display: { name: "Back call" }, raw: { token: "secret", body: "safe" } }, { sourceRecordId: "b", sourceVersionId: "v2", streamType: "company", display: { name: "Acme" } }]);
     await expect(readReview(reader, { runId: "r", state: "unassigned", pageSize: 25 })).resolves.toMatchObject({ total: 1, manifestDigest: "digest-1", rows: [{ sourceRecordId: "a", display: { name: "Back call" } }] });
