@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { resolveContextClues } from "./matching/context-clue-resolver";
 import { buildActOrganizeManifest, type ManifestSourceInput } from "./manifest-builder";
 import { normalizeTimeline } from "./normalizers/timeline-normalizer";
 
@@ -155,6 +156,121 @@ describe("buildActOrganizeManifest", () => {
       matchEvidenceFamilies: ["identity", "web_identity"],
       unsupportedFieldPaths: ["customFields.Legacy"],
     });
+  });
+
+  it("emits no import operation when authoritative and supporting evidence contradict", () => {
+    const resolution = resolveContextClues([
+      {
+        family: "identity",
+        label: "exact Act link",
+        targetEntityType: "organization",
+        targetEntityId: "organization-1",
+        authority: "authoritative",
+      },
+      {
+        family: "location",
+        label: "address identifies another record",
+        targetEntityType: "organization",
+        targetEntityId: "organization-2",
+        authority: "supporting",
+      },
+    ]);
+    expect(resolution.kind).toBe("ambiguous");
+    if (resolution.kind !== "ambiguous") throw new Error("expected ambiguous resolution");
+    const result = buildActOrganizeManifest({
+      runId: "run",
+      sources: [source({ match: resolution })],
+    });
+    expect(result.outcomes[0]).toMatchObject({
+      state: "awaiting_review",
+      match: { kind: "ambiguous" },
+    });
+    expect(result.operations).toEqual([]);
+  });
+
+  it("bounds and sanitizes context proof before persisting the manifest", () => {
+    const evidence = Array.from({ length: 25 }, (_, index) => ({
+      family: "identity" as const,
+      label: ` clue ${String(index).padStart(2, "0")} `,
+      targetEntityType: "organization" as const,
+      targetEntityId: " organization-1 ",
+      authority: "supporting" as const,
+    }));
+    const result = buildActOrganizeManifest({
+      runId: "run",
+      sources: [source({
+        match: {
+          kind: "exact",
+          localId: "organization-1",
+          reason: "two_independent_context_clues",
+          evidence,
+        },
+        localFields: { name: "Acme" },
+      })],
+    });
+
+    expect(result.outcomes[0]?.match).toMatchObject({
+      kind: "exact",
+      localId: "organization-1",
+      evidenceTruncated: true,
+    });
+    const persistedEvidence = result.outcomes[0]?.match?.evidence;
+    expect(Array.isArray(persistedEvidence) ? persistedEvidence : []).toHaveLength(20);
+    expect((persistedEvidence as Array<Record<string, unknown>>)[0]).toEqual({
+      family: "identity",
+      label: "clue 00",
+      targetEntityType: "organization",
+      targetEntityId: "organization-1",
+      authority: "supporting",
+    });
+    expect(result.outcomes[0]).toMatchObject({
+      state: "awaiting_review",
+      issues: expect.arrayContaining([
+        expect.objectContaining({
+          code: "ambiguous_match",
+          reason: "context_evidence_truncated",
+        }),
+      ]),
+      operationKeys: [],
+    });
+    expect(result.operations).toEqual([]);
+  });
+
+  it("does not let string bounds hide conflicting context targets", () => {
+    const sharedPrefix = "x".repeat(200);
+    const result = buildActOrganizeManifest({
+      runId: "run",
+      sources: [source({
+        match: {
+          kind: "exact",
+          localId: `${sharedPrefix}a`,
+          reason: "authoritative_context_clue",
+          evidence: [
+            {
+              family: "identity",
+              label: "exact Act link",
+              targetEntityType: "organization",
+              targetEntityId: `${sharedPrefix}a`,
+              authority: "authoritative",
+            },
+            {
+              family: "location",
+              label: "different location",
+              targetEntityType: "organization",
+              targetEntityId: `${sharedPrefix}b`,
+              authority: "supporting",
+            },
+          ],
+        },
+      })],
+    });
+
+    expect(result.outcomes[0]).toMatchObject({
+      state: "awaiting_review",
+      match: { evidenceTruncated: true },
+      operationKeys: [],
+    });
+    expect(result.operations).toEqual([]);
   });
 
   it("emits fill operations only for supported contact fields and ignores matching metadata", () => {
@@ -316,6 +432,113 @@ describe("buildActOrganizeManifest", () => {
         safeByDefault: false,
       }),
     ]));
+  });
+
+  it("rebuilds deterministic safe context links while preserving manual targets and populated-field conflicts", () => {
+    // Protects against input-order-dependent manifests, leaking raw clue
+    // labels into operations, or silently turning a populated-field conflict
+    // into an automatic overwrite.
+    const inputs = [
+      source({
+        sourceRecordId: "two-clue-context",
+        sourceVersionId: "two-clue-version",
+        match: {
+          kind: "exact",
+          localId: "organization-context",
+          reason: "two_independent_context_clues",
+          evidence: [
+            {
+              family: "web_identity",
+              label: "website agrees with https://example.test/private-path",
+              targetEntityType: "organization",
+              targetEntityId: "organization-context",
+              authority: "supporting",
+            },
+            {
+              family: "identity",
+              label: "name agrees with the archived organization",
+              targetEntityType: "organization",
+              targetEntityId: "organization-context",
+              authority: "supporting",
+            },
+          ],
+        },
+        localFields: { name: "Acme" },
+      }),
+      source({
+        sourceRecordId: "manual-target",
+        sourceVersionId: "manual-version",
+        match: {
+          kind: "exact",
+          localId: "organization-chosen-by-review",
+          reason: "manual_review",
+        },
+        localFields: { name: "Acme" },
+      }),
+      source({
+        sourceRecordId: "populated-conflict",
+        sourceVersionId: "conflict-version",
+        normalized: {
+          kind: "organization",
+          name: "Acme",
+          phone: "555-ACT",
+          website: "https://example.test",
+        },
+        match: {
+          kind: "exact",
+          localId: "organization-conflict",
+          reason: "exact_external_link",
+        },
+        localFields: { name: "Acme", phone: "555-LOCAL", website: null },
+      }),
+    ];
+
+    const first = buildActOrganizeManifest({ runId: "run", sources: inputs });
+    const reordered = buildActOrganizeManifest({
+      runId: "run",
+      sources: [...inputs].reverse(),
+    });
+    const rebuilt = buildActOrganizeManifest({ runId: "run", sources: inputs });
+
+    expect(reordered).toEqual(first);
+    expect(rebuilt).toEqual(first);
+    expect(rebuilt.digest).toBe(first.digest);
+    expect(first.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "two-clue-context",
+      action: "link_existing",
+      safeByDefault: true,
+      payload: expect.objectContaining({ localId: "organization-context" }),
+    }));
+    const twoClueProvenance = first.operations.find(
+      (operation) => operation.sourceRecordId === "two-clue-context" && operation.action === "record_provenance",
+    );
+    expect(twoClueProvenance?.payload).toMatchObject({
+      matchEvidenceFamilies: ["identity", "web_identity"],
+    });
+    expect(JSON.stringify(twoClueProvenance?.payload)).not.toContain("private-path");
+    expect(first.operations.find(
+      (operation) => operation.sourceRecordId === "two-clue-context" && operation.action === "link_existing",
+    )?.payload).not.toHaveProperty("decision");
+    expect(first.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "manual-target",
+      action: "link_existing",
+      payload: expect.objectContaining({ localId: "organization-chosen-by-review" }),
+    }));
+    expect(first.outcomes).toContainEqual(expect.objectContaining({
+      sourceRecordId: "populated-conflict",
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "field_conflict", reason: "phone" }),
+      ]),
+    }));
+    expect(first.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "populated-conflict",
+      action: "link_existing",
+      safeByDefault: true,
+    }));
+    expect(first.operations).not.toContainEqual(expect.objectContaining({
+      sourceRecordId: "populated-conflict",
+      action: "overwrite_reviewed",
+    }));
   });
 
   it("keeps an explicitly ignored unsupported record archived and resolved", () => {
