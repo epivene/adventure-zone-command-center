@@ -56,8 +56,8 @@ export function matchContact(
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
   const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "contact", ...context }, source.externalLinks);
-  if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
   if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
+  const linkedId = linked[0];
   const safeEmail = source.emailIdentityMatchSafe && !isSharedMailboxEmail(source.email)
     ? normalizeMatchingEmail(source.email)
     : null;
@@ -76,6 +76,26 @@ export function matchContact(
     return { kind: "ambiguous", candidateIds: uniqueSorted([...emailIds, ...phoneIds]), reason: "conflicting_contact_identity" };
   }
   const name = fullName(source);
+  const linkedCandidate = linkedId
+    ? locals.find((candidate) => candidate.id === linkedId)
+    : undefined;
+  if (linkedCandidate) {
+    const linkedName = fullName(linkedCandidate);
+    const linkedEmail = normalizeMatchingEmail(linkedCandidate.email ?? null);
+    const linkedPhone = phone(linkedCandidate.phone);
+    const linkedFieldsConflict = Boolean(
+      (name && linkedName && name !== linkedName)
+      || (safeEmail && linkedEmail && safeEmail !== linkedEmail)
+      || (sourcePhone && linkedPhone && sourcePhone !== linkedPhone),
+    );
+    if (linkedFieldsConflict) {
+      return {
+        kind: "ambiguous",
+        candidateIds: [linkedId],
+        reason: "conflicting_contact_fields",
+      };
+    }
+  }
   const clues: ContextClueEvidence[] = [];
   for (const candidate of locals) {
     if (name && fullName(candidate) === name) {
@@ -118,23 +138,39 @@ export function matchContact(
       });
     }
   }
-  const familiesByTarget = new Map<string, Set<ContextClueEvidence["family"]>>();
-  for (const clue of clues) {
-    const families = familiesByTarget.get(clue.targetEntityId) ?? new Set();
-    families.add(clue.family);
-    familiesByTarget.set(clue.targetEntityId, families);
+  if (linkedId) {
+    if (clues.length === 0) {
+      return { kind: "exact", localId: linkedId, reason: "exact_external_link" };
+    }
+    const resolution = resolveContextClues([{
+      family: "identity",
+      label: "exact external link",
+      targetEntityType: "contact",
+      targetEntityId: linkedId,
+      authority: "authoritative",
+    }, ...clues]);
+    if (resolution.kind === "resolved" && resolution.targetEntityId === linkedId) {
+      return {
+        kind: "exact",
+        localId: linkedId,
+        reason: "exact_external_link",
+        evidence: resolution.evidence,
+        ...(resolution.evidenceTruncated ? { evidenceTruncated: true } : {}),
+      };
+    }
+    return {
+      kind: "ambiguous",
+      candidateIds: uniqueSorted(resolution.kind === "resolved"
+        ? [linkedId, resolution.targetEntityId]
+        : resolution.kind === "ambiguous"
+          ? resolution.candidateIds
+          : [linkedId, ...clues.map((clue) => clue.targetEntityId)]),
+      reason: "conflicting_context_clues",
+      evidence: resolution.evidence,
+      ...(resolution.evidenceTruncated ? { evidenceTruncated: true } : {}),
+    };
   }
-  const qualifiedIds = uniqueSorted(
-    [...familiesByTarget]
-      .filter(([, families]) => families.size >= 2)
-      .map(([targetEntityId]) => targetEntityId),
-  );
-  const resolutionClues = qualifiedIds.length === 1 && [...familiesByTarget]
-    .filter(([targetEntityId]) => targetEntityId !== qualifiedIds[0])
-    .every(([, families]) => [...families].every((family) => family === "identity"))
-    ? clues.filter((clue) => clue.targetEntityId === qualifiedIds[0])
-    : clues;
-  const resolution = resolveContextClues(resolutionClues);
+  const resolution = resolveContextClues(clues);
   if (resolution.kind === "resolved") {
     return {
       kind: "exact",
