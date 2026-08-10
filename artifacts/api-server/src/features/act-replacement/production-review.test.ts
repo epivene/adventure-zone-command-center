@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import {
   ActApprovalService,
@@ -9,6 +10,8 @@ import { InMemoryApplyRepository } from "./apply-repository";
 import { ActApplyService } from "./apply-service";
 import {
   createProductionReview,
+  boundedOutcomeMatchProjection,
+  boundedReviewedPayloadProjection,
   projectImportWorkflow,
   type ImportWorkflowProjectionInput,
 } from "./production-review";
@@ -45,13 +48,197 @@ function input(): ImportWorkflowProjectionInput {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "pending",
+        targetType: "organization",
+        selectedTargetId: "local-one",
       },
     ],
     batches: [],
   };
 }
 
+const projectedOverwritePayload = (
+  entityId = "organization-a",
+  overrides: Record<string, unknown> = {},
+) => ({
+  entityId,
+  fieldName: "phone",
+  value: "555-ACT",
+  proof: {
+    entityType: "organization",
+    entityId,
+    fieldName: "phone",
+    sourceVersionId: "v-reviewed-source",
+    expectedLocalValueFingerprint: fingerprintSourceContent({ value: "555-LOCAL" }),
+    decisionId: "decision-reviewed",
+    decision: "use_source",
+    localValue: "555-LOCAL",
+    sourceValue: "555-ACT",
+  },
+  decision: {
+    id: "decision-reviewed",
+    sourceVersionId: "v-reviewed-source",
+    scope: "field_conflict",
+    decision: "use_source",
+    fieldName: "phone",
+    targetEntityType: "organization",
+    targetEntityId: entityId,
+  },
+  ...overrides,
+});
+
 describe("durable production workflow projection", () => {
+  it("projects bounded sanitized context proof instead of materializing raw match JSON", () => {
+    const rendered = new PgDialect().sqlToQuery(
+      boundedOutcomeMatchProjection as never,
+    );
+
+    expect(rendered.sql).toContain("jsonb_array_elements");
+    expect(rendered.sql).toContain("with ordinality");
+    expect(rendered.sql).toContain("jsonb_build_object");
+    expect(rendered.sql).toContain("left(");
+    expect(rendered.sql).toContain("char_length");
+    expect(rendered.params).toContain(20);
+    expect(rendered.params).toContain(200);
+    expect(rendered.sql).not.toContain("jsonb_path_query_array");
+    expect(rendered.sql).not.toContain("jsonb_agg(proof.value)");
+  });
+
+  it("projects only bounded reviewed proof fields for canonical validation", () => {
+    const rendered = new PgDialect().sqlToQuery(
+      boundedReviewedPayloadProjection as never,
+    );
+
+    expect(rendered.sql).toContain("overwrite_reviewed");
+    expect(rendered.sql).toContain("create_relationship");
+    expect(rendered.sql).toContain("jsonb_build_object");
+    expect(rendered.sql).toContain("pg_column_size");
+    expect(rendered.sql).toContain("left(");
+    expect(rendered.params).toContain(16_384);
+    expect(rendered.params).toContain(200);
+    expect(rendered.sql).toContain("'sourceValue'");
+    expect(rendered.sql).toContain("->'value'");
+    expect(rendered.sql).not.toContain("jsonb_agg");
+    expect(rendered.sql).not.toContain("then \"act_replacement_apply_operations\".\"payload\"");
+  });
+
+  it("approves and applies only the dependency-closed safe subset of a mixed awaiting-review outcome", async () => {
+    const runId = "mixed-awaiting-review-run";
+    const manifest: ActOrganizeManifest = {
+      digest: CURRENT_DIGEST,
+      diagnostics: [],
+      outcomes: [{
+        sourceRecordId: "source-one",
+        sourceVersionId: "version-one",
+        state: "awaiting_review",
+        issues: [{ code: "field_conflict", reason: "phone" }],
+        candidates: [],
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          reason: "context_clue_authoritative",
+          evidence: [{
+            family: "identity",
+            label: "exact Act link",
+            targetEntityType: "organization",
+            targetEntityId: "local-one",
+            authority: "authoritative",
+          }],
+        },
+        mappingWarnings: [],
+        unsupportedFieldPaths: [],
+        operationKeys: ["safe-link", "unsafe-overwrite"],
+      }],
+      operations: [
+        {
+          operationKey: "safe-link",
+          sourceRecordId: "source-one",
+          sourceVersionId: "version-one",
+          targetType: "organization",
+          action: "link_existing",
+          payload: { localId: "local-one" },
+          dependencyOperationKeys: [],
+          requiredForSourceOutcome: true,
+          safeByDefault: true,
+        },
+        {
+          operationKey: "unsafe-overwrite",
+          sourceRecordId: "source-one",
+          sourceVersionId: "version-one",
+          targetType: "organization",
+          action: "overwrite_reviewed",
+          payload: { entityId: "local-one", fieldName: "phone", value: "Act" },
+          dependencyOperationKeys: ["safe-link"],
+          requiredForSourceOutcome: true,
+          safeByDefault: false,
+        },
+      ],
+    };
+    const projection = projectImportWorkflow({
+      phase: "ready_to_apply",
+      summary: { manifestDigest: manifest.digest },
+      outcomes: manifest.outcomes,
+      operations: manifest.operations.map((operation) => ({
+        ...operation,
+        status: "pending" as const,
+      })),
+      batches: [],
+    });
+    expect(projection.safeOperationCount).toBe(1);
+
+    const approvalRepository = new InMemoryApprovalRepository();
+    approvalRepository.seed(runId, manifest);
+    const approval = await new ActApprovalService(
+      approvalRepository,
+    ).approveReady({
+      runId,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "page-ready-import",
+      requestedBy: "owner",
+    });
+    expect(approval.approvedOperationIds).toEqual(["safe-link"]);
+    expect(approval.rejectedOperationIds).toEqual(["unsafe-overwrite"]);
+
+    const applyRepository = new InMemoryApplyRepository({ unsafeForTests: true });
+    applyRepository.seedManifest(runId, manifest.digest);
+    applyRepository.seedOperations(manifest.operations);
+    applyRepository.seedApproval(
+      runId,
+      "page-ready-import",
+      approval.approvedOperationIds,
+      manifest.digest,
+    );
+    for (const operation of applyRepository.operations.values()) {
+      operation.outcomeState = "awaiting_review";
+    }
+    applyRepository.targets.set("organization:local-one", {
+      id: "local-one",
+      entityType: "organization",
+      values: { name: "Local record", phone: "Local" },
+      sourceIds: new Set(),
+    });
+
+    const applied = await new ActApplyService(applyRepository, true).apply({
+      runId,
+      approvedOperationIds: approval.approvedOperationIds,
+      expectedManifestDigest: manifest.digest,
+      requestKey: "apply-safe-defaults",
+      approvalRequestKey: "page-ready-import",
+      requestedBy: "owner",
+    });
+
+    expect(applied).toMatchObject({
+      state: "complete",
+      operationCount: 1,
+      alreadyPresentCount: 1,
+    });
+    expect(applyRepository.operations.get("safe-link")?.status).toBe(
+      "already_present",
+    );
+    expect(applyRepository.operations.get("unsafe-overwrite")?.status).toBe(
+      "pending",
+    );
+  });
+
   it("approves only safe or proof-reviewed operations from a mixed archived migration", async () => {
     const runId = "mixed-safety-run";
     const fetchedAt = new Date("2026-08-08T12:00:00.000Z");
@@ -343,10 +530,6 @@ describe("durable production workflow projection", () => {
       "organization:exact-empty:identity:local-fill",
       "organization:keep-local:identity:local-keep",
       "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
     ];
     const expectedSafeApprovedOperationIds = [
       "organization:ambiguous-kept-separate",
@@ -355,10 +538,6 @@ describe("durable production workflow projection", () => {
       fillPhoneKey,
       "organization:keep-local:identity:local-keep",
       "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
     ];
     expect(safe).toEqual({
       selectedOperationIds: expectedSafeSelectedOperationIds,
@@ -366,12 +545,23 @@ describe("durable production workflow projection", () => {
       dependencyOperationIds: ["organization:exact-empty:identity:local-fill"],
       rejectedOperationIds: [
         "organization:use-act:field:phone:decision:decision-use-act",
+        provenanceAmbiguousKey,
+        provenanceCreateKey,
+        provenanceFillKey,
+        provenanceKeepKey,
         provenanceUseKey,
       ],
-      selectedCount: 10,
+      selectedCount: 6,
       dependencyCount: 1,
-      rejectedCount: 2,
+      rejectedCount: 6,
       manifestDigest: manifest.digest,
+    });
+
+    approvals.seed(runId, {
+      ...manifest,
+      operationStatuses: {
+        "organization:use-act:identity:local-use": "already_present",
+      },
     });
 
     const ready = await approvalService.approveReady({
@@ -506,10 +696,10 @@ describe("durable production workflow projection", () => {
       runId,
       manifestDigest: manifest.digest,
       state: "complete_with_issues",
-      operationCount: 10,
-      completedCount: 5,
+      operationCount: 6,
+      completedCount: 2,
       alreadyPresentCount: 3,
-      blockedCount: 2,
+      blockedCount: 1,
       failedCount: 0,
     });
     expect(fillTarget.values).toEqual({
@@ -533,30 +723,19 @@ describe("durable production workflow projection", () => {
     });
 
     overwriteTarget.values.phone = "concurrent-reviewed-edit";
-    const explicitApply = await applyService.apply({
+    await expect(applyService.apply({
       runId,
       approvedOperationIds: explicit.approvedOperationIds,
       expectedManifestDigest: manifest.digest,
       requestKey: "apply-reviewed-overwrite",
       requestedBy: "owner",
-    });
-    expect(explicitApply).toEqual({
-      batchId: `${runId}:apply-reviewed-overwrite`,
-      runId,
-      manifestDigest: manifest.digest,
-      state: "complete_with_issues",
-      operationCount: 2,
-      completedCount: 0,
-      alreadyPresentCount: 1,
-      blockedCount: 0,
-      failedCount: 1,
-    });
+    })).rejects.toMatchObject({ code: "local_edit_detected" });
+    expect(applyRepository.batches.has(`${runId}:apply-reviewed-overwrite`)).toBe(false);
     expect(overwriteTarget.values.phone).toBe("concurrent-reviewed-edit");
     expect(
       applyRepository.operations.get("organization:use-act:field:phone:decision:decision-use-act"),
     ).toMatchObject({
-      status: "failed",
-      lastErrorCode: "local_edit_detected",
+      status: "pending",
     });
   });
 
@@ -589,6 +768,589 @@ describe("durable production workflow projection", () => {
 
     state.operations[0]!.status = "applied";
     expect(projectImportWorkflow(state).canOrganize).toBe(false);
+  });
+
+  it("projects a pending safe link from an awaiting-review source", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [{
+            family: "identity",
+            label: "exact Act link",
+            targetEntityType: "organization",
+            targetEntityId: "local-one",
+            authority: "authoritative",
+          }],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "local-one",
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 1,
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("includes a safe dependency closure only when every dependency is automatically importable", () => {
+    const state = input();
+    state.outcomes = [{
+      sourceRecordId: "source-one",
+      state: "ready",
+      match: { kind: "exact", localId: "local-one", reason: "exact_external_link" },
+    }];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: ["organization:source-one:create"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "local-one",
+      },
+      {
+        operationKey: "organization:source-one:create",
+        sourceRecordId: "source-one",
+        action: "create",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+      },
+    ];
+
+    expect(projectImportWorkflow(state).safeOperationCount).toBe(2);
+
+    state.operations = state.operations.map((operation, index) =>
+      index === 1
+        ? {
+            ...operation,
+            action: "create_relationship",
+            targetType: "organization_contact",
+          }
+        : operation,
+    );
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      archivedOnlyCount: 1,
+      operations: expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "organization:source-one:identity:local-one",
+          heldForReview: true,
+        }),
+        expect.objectContaining({
+          operationKey: "organization:source-one:create",
+          heldForReview: true,
+        }),
+      ]),
+    });
+  });
+
+  it("does not use a dependency-blocked link as context proof when another root is safe", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityId: "local-one",
+              targetEntityType: "organization",
+              authority: "authoritative",
+            },
+          ],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:create",
+        sourceRecordId: "source-one",
+        action: "create",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [
+          "organization_contact:source-one:relationship",
+        ],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization_contact:source-one:relationship",
+        sourceRecordId: "source-one",
+        action: "create_relationship",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 1,
+      autoResolvedCount: 0,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("excludes overwrite-reviewed operations from the safe projection", () => {
+    const state = input();
+    state.operations = state.operations.map((operation) => ({
+      ...operation,
+      action: "overwrite_reviewed",
+      targetType: "organization",
+    }));
+
+    expect(projectImportWorkflow(state).safeOperationCount).toBe(0);
+  });
+
+  it.each([
+    { state: "awaiting_review", match: { kind: "ambiguous" } },
+    { state: "unassigned", match: null },
+    { state: "unsupported", match: null },
+  ])("projects a $state source without a safe operation as archived-only", (outcome) => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "source-one", ...outcome }];
+    state.operations = [
+      {
+        operationKey: "organization_contact:source-one:parent",
+        sourceRecordId: "source-one",
+        action: "create_relationship",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      archivedOnlyCount: 1,
+      reviewRequiredCount: 0,
+      canReview: true,
+    });
+  });
+
+  it("keeps optional diagnostics reachable when no decision is mandatory", () => {
+    const state = input();
+    state.outcomes = [{
+      sourceRecordId: "source-one",
+      state: "ready",
+      hasOptionalReview: true,
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 0,
+      canReview: true,
+    });
+  });
+
+  it("keeps proven context counts stable after the safe operation is applied", () => {
+    const state = input();
+    state.phase = "complete";
+    state.outcomes = [{
+      sourceRecordId: "source-one",
+      state: "applied",
+      match: {
+        kind: "exact",
+        localId: "local-one",
+        evidence: [{
+          family: "identity",
+          label: "exact Act link",
+          targetEntityType: "organization",
+          targetEntityId: "local-one",
+          authority: "authoritative",
+        }],
+      },
+    }];
+    state.operations = [{
+      operationKey: "organization:source-one:identity:local-one",
+      sourceRecordId: "source-one",
+      action: "link_existing",
+      dependencyOperationKeys: [],
+      safeByDefault: true,
+      status: "already_present",
+      targetType: "organization",
+      selectedTargetId: "local-one",
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      autoResolvedCount: 1,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("archives a contradictory context link instead of offering it for automatic import", () => {
+    const state = input();
+    state.outcomes = [{
+      sourceRecordId: "source-one",
+      state: "awaiting_review",
+      match: {
+        kind: "exact",
+        localId: "local-one",
+        evidence: [
+          {
+            family: "identity",
+            label: "exact Act link",
+            targetEntityType: "organization",
+            targetEntityId: "local-one",
+            authority: "authoritative",
+          },
+          {
+            family: "location",
+            label: "different location",
+            targetEntityType: "organization",
+            targetEntityId: "local-two",
+            authority: "supporting",
+          },
+        ],
+      },
+    }];
+    state.operations = [{
+      operationKey: "organization:source-one:identity:local-one",
+      sourceRecordId: "source-one",
+      action: "link_existing",
+      dependencyOperationKeys: [],
+      safeByDefault: true,
+      status: "pending",
+      targetType: "organization",
+      selectedTargetId: "local-one",
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      autoResolvedCount: 0,
+      archivedOnlyCount: 1,
+      canReview: true,
+    });
+  });
+
+  it("counts a proven context match once when it emits multiple safe operations", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityId: "local-one",
+              targetEntityType: "organization",
+              authority: "authoritative",
+            },
+          ],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "local-one",
+      },
+      {
+        operationKey: "organization:source-one:phone",
+        sourceRecordId: "source-one",
+        action: "fill_missing",
+        dependencyOperationKeys: [
+          "organization:source-one:identity:local-one",
+        ],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "local-one",
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      autoResolvedCount: 1,
+      safeOperationCount: 2,
+    });
+  });
+
+  it("projects a safe exact link while excluding its conflicting reviewed overwrite", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityId: "local-one",
+              targetEntityType: "organization",
+              authority: "authoritative",
+            },
+          ],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "local-one",
+      },
+      {
+        operationKey: "organization:source-one:field:phone",
+        sourceRecordId: "source-one",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: [
+          "organization:source-one:identity:local-one",
+        ],
+        safeByDefault: false,
+        status: "pending",
+        targetType: "organization",
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      autoResolvedCount: 1,
+      safeOperationCount: 1,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("allows safe application when archived-only sources coexist", () => {
+    const state = input();
+    state.outcomes = [
+      { sourceRecordId: "source-one", state: "ready", match: null },
+      {
+        sourceRecordId: "source-two",
+        state: "awaiting_review",
+        match: { kind: "ambiguous" },
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 1,
+      archivedOnlyCount: 1,
+      canApplySafe: true,
+    });
+  });
+
+  it("imports only dependency-closed context-safe operations while retaining mixed uncertain records in the archive", () => {
+    // Protects against source-state gating, double-counting proven records,
+    // or treating unsafe relationship dependencies as safe imports.
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "authoritative-link",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "organization-authoritative",
+          evidence: [{
+            family: "identity",
+            targetEntityType: "organization",
+            targetEntityId: "organization-authoritative",
+            authority: "authoritative",
+          }],
+        },
+      },
+      {
+        sourceRecordId: "two-clue-link",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "organization-two-clue",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityType: "organization",
+              targetEntityId: "organization-two-clue",
+              authority: "supporting",
+            },
+            {
+              family: "web_identity",
+              targetEntityType: "organization",
+              targetEntityId: "organization-two-clue",
+              authority: "supporting",
+            },
+          ],
+        },
+      },
+      {
+        sourceRecordId: "safe-fill-with-conflict",
+        state: "awaiting_review",
+        match: { kind: "exact", localId: "organization-conflict", reason: "exact_external_link" },
+      },
+      {
+        sourceRecordId: "ambiguous",
+        state: "awaiting_review",
+        match: { kind: "ambiguous", candidateIds: ["one", "two"] },
+      },
+      { sourceRecordId: "unsupported", state: "unsupported", match: null },
+      {
+        sourceRecordId: "unsafe-relationship-dependency",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "organization-blocked",
+          evidence: [{
+            family: "identity",
+            targetEntityType: "organization",
+            targetEntityId: "organization-blocked",
+            authority: "authoritative",
+          }],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:authoritative-link:identity",
+        sourceRecordId: "authoritative-link",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "organization-authoritative",
+      },
+      {
+        operationKey: "organization:two-clue-link:identity",
+        sourceRecordId: "two-clue-link",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "organization-two-clue",
+      },
+      {
+        operationKey: "organization:safe-fill-with-conflict:identity",
+        sourceRecordId: "safe-fill-with-conflict",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "organization-conflict",
+      },
+      {
+        operationKey: "organization:safe-fill-with-conflict:field:website",
+        sourceRecordId: "safe-fill-with-conflict",
+        action: "fill_missing",
+        dependencyOperationKeys: ["organization:safe-fill-with-conflict:identity"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization:safe-fill-with-conflict:field:phone",
+        sourceRecordId: "safe-fill-with-conflict",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:safe-fill-with-conflict:identity"],
+        safeByDefault: false,
+        status: "pending",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization:unsafe-relationship-dependency:identity",
+        sourceRecordId: "unsafe-relationship-dependency",
+        action: "link_existing",
+        dependencyOperationKeys: ["organization_contact:unsafe-relationship-dependency:relationship"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        selectedTargetId: "organization-blocked",
+      },
+      {
+        operationKey: "organization_contact:unsafe-relationship-dependency:relationship",
+        sourceRecordId: "unsafe-relationship-dependency",
+        action: "create_relationship",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 4,
+      autoResolvedCount: 2,
+      archivedOnlyCount: 3,
+      reviewRequiredCount: 0,
+      canApplySafe: true,
+      operations: expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "organization:safe-fill-with-conflict:field:phone",
+          heldForReview: false,
+        }),
+        expect.objectContaining({
+          operationKey: "organization:unsafe-relationship-dependency:identity",
+          heldForReview: true,
+        }),
+      ]),
+    });
+  });
+
+  it("keeps failed outcomes visible without labeling them archived-only", () => {
+    const state = input();
+    state.outcomes = [
+      { sourceRecordId: "source-one", state: "failed", match: null },
+    ];
+    state.operations = state.operations.map((operation) => ({
+      ...operation,
+      status: "failed",
+      targetType: "organization",
+    }));
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      archivedOnlyCount: 0,
+      reviewRequiredCount: 0,
+      failedOperationCount: 1,
+      operations: [expect.objectContaining({ heldForReview: false })],
+    });
   });
 
   it("keeps remaining review work actionable after applying one safe subset and applies the rebuilt subset", async () => {
@@ -711,7 +1473,8 @@ describe("durable production workflow projection", () => {
     expect(completedWorkflow).toMatchObject({
       canOrganize: false,
       canReview: true,
-      reviewRequiredCount: 1,
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 1,
       appliedOperationCount: 1,
     });
 
@@ -790,6 +1553,7 @@ describe("durable production workflow projection", () => {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "already_present",
+        targetType: "contact",
       },
       {
         operationKey: "contact:not-terminal",
@@ -798,6 +1562,7 @@ describe("durable production workflow projection", () => {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "already_present",
+        targetType: "contact",
       },
     ];
     state.batches = [
@@ -833,6 +1598,7 @@ describe("durable production workflow projection", () => {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "already_present",
+        targetType: "contact",
       },
     ];
     state.batches = [
@@ -873,6 +1639,379 @@ describe("durable production workflow projection", () => {
       manifestDigest: CURRENT_DIGEST,
       nextApplyCursor: 0,
       canApplySafe: true,
+    });
+  });
+
+  it("enables reviewed recovery when its identity link is already terminal", () => {
+    const state = input();
+    state.outcomes = [{
+      sourceRecordId: "reviewed-source",
+      state: "ready",
+      hasOptionalReview: true,
+      match: { kind: "exact", localId: "organization-a" },
+    }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "already_present",
+        targetType: "organization",
+        selectedTargetId: "organization-a",
+      },
+      {
+        operationKey: "organization:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        sourceVersionId: "v-reviewed-source",
+        targetType: "organization",
+        reviewedPayload: projectedOverwritePayload(),
+      },
+    ];
+    state.batches = [{
+      requestKey: "prior-safe:0",
+      manifestDigest: CURRENT_DIGEST,
+      operationIds: ["organization:reviewed-source"],
+      state: "complete",
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      reviewedReadyOperationCount: 1,
+      canApplySafe: false,
+      canApplyReviewed: true,
+    });
+  });
+
+  it("does not project reviewed readiness when the reviewed root targets another entity", () => {
+    const state = input();
+    state.outcomes = [{
+      sourceRecordId: "reviewed-source",
+      state: "ready",
+      match: { kind: "exact", localId: "organization-a" },
+    }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "already_present",
+        targetType: "organization",
+        selectedTargetId: "organization-a",
+      },
+      {
+        operationKey: "organization:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        sourceVersionId: "v-reviewed-source",
+        targetType: "organization",
+        reviewedPayload: projectedOverwritePayload("organization-b"),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewedReadyOperationCount: 0,
+      canApplyReviewed: false,
+    });
+  });
+
+  it("does not project reviewed readiness when the reviewed root has another entity type", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready", match: { kind: "exact", localId: "organization-a" } }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "already_present",
+        targetType: "organization",
+        selectedTargetId: "organization-a",
+      },
+      {
+        operationKey: "contact:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        sourceVersionId: "v-reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        targetType: "contact",
+        reviewedPayload: {
+          ...projectedOverwritePayload(),
+          proof: { ...(projectedOverwritePayload().proof as Record<string, unknown>), entityType: "contact" },
+          decision: { ...(projectedOverwritePayload().decision as Record<string, unknown>), targetEntityType: "contact" },
+        },
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({ reviewedReadyOperationCount: 0, canApplyReviewed: false });
+  });
+
+  it("fails projection closed when a relationship decision carries a field name", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready", match: { kind: "exact", localId: "organization-a" } }];
+    state.operations = [
+      { operationKey: "organization:reviewed-source", sourceRecordId: "reviewed-source", action: "link_existing", dependencyOperationKeys: [], safeByDefault: true, status: "already_present", targetType: "organization", selectedTargetId: "organization-a" },
+      {
+        operationKey: "organization-contact:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        sourceVersionId: "v-reviewed-source",
+        action: "create_relationship",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+        reviewedPayload: {
+          parentEntityId: "organization-parent",
+          parentType: "organization",
+          relationshipSlot: "organization",
+          decision: { id: "decision-parent", sourceVersionId: "v-reviewed-source", scope: "relationship", decision: "assign_parent", relationshipSlot: "organization", targetEntityType: "organization", targetEntityId: "organization-parent", fieldName: "phone" },
+        },
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({ reviewedReadyOperationCount: 0, canApplyReviewed: false });
+  });
+
+  it.each([
+    ["proof entity metadata", (payload: Record<string, unknown>) => ({ ...payload, proof: { ...(payload.proof as Record<string, unknown>), entityId: "other" } })],
+    ["proof field metadata", (payload: Record<string, unknown>) => ({ ...payload, proof: { ...(payload.proof as Record<string, unknown>), fieldName: "email" } })],
+    ["proof source version", (payload: Record<string, unknown>) => ({ ...payload, proof: { ...(payload.proof as Record<string, unknown>), sourceVersionId: "stale" } })],
+    ["expected local fingerprint", (payload: Record<string, unknown>) => ({ ...payload, proof: { ...(payload.proof as Record<string, unknown>), expectedLocalValueFingerprint: "bad" } })],
+    ["decision id binding", (payload: Record<string, unknown>) => ({ ...payload, decision: { ...(payload.decision as Record<string, unknown>), id: "other" } })],
+    ["decision type binding", (payload: Record<string, unknown>) => ({ ...payload, decision: { ...(payload.decision as Record<string, unknown>), decision: "keep_local" } })],
+    ["optional reviewed source value", (payload: Record<string, unknown>) => ({ ...payload, decision: { ...(payload.decision as Record<string, unknown>), reviewedSourceValue: "other" } })],
+    ["optional reviewed local value", (payload: Record<string, unknown>) => ({ ...payload, decision: { ...(payload.decision as Record<string, unknown>), reviewedLocalValue: "other" } })],
+    ["optional source fingerprint", (payload: Record<string, unknown>) => ({ ...payload, proof: { ...(payload.proof as Record<string, unknown>), sourceValueFingerprint: "bad" } })],
+    ["optional local fingerprint", (payload: Record<string, unknown>) => ({ ...payload, proof: { ...(payload.proof as Record<string, unknown>), localValueFingerprint: "bad" } })],
+    ["optional reviewed source fingerprint", (payload: Record<string, unknown>) => ({ ...payload, decision: { ...(payload.decision as Record<string, unknown>), reviewedSourceValueFingerprint: "bad" } })],
+    ["optional reviewed local fingerprint", (payload: Record<string, unknown>) => ({ ...payload, decision: { ...(payload.decision as Record<string, unknown>), reviewedLocalValueFingerprint: "bad" } })],
+  ])("fails projection closed for malformed %s", (_label, mutate) => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready", match: { kind: "exact", localId: "organization-a" } }];
+    state.operations = [
+      { operationKey: "organization:reviewed-source", sourceRecordId: "reviewed-source", action: "link_existing", dependencyOperationKeys: [], safeByDefault: true, status: "already_present", targetType: "organization", selectedTargetId: "organization-a" },
+      { operationKey: "organization:reviewed-source:field:phone", sourceRecordId: "reviewed-source", sourceVersionId: "v-reviewed-source", action: "overwrite_reviewed", dependencyOperationKeys: ["organization:reviewed-source"], safeByDefault: false, status: "pending", targetType: "organization", reviewedPayload: mutate(projectedOverwritePayload()) },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({ reviewedReadyOperationCount: 0, canApplyReviewed: false });
+  });
+
+  it.each([
+    ["assignment decision", { decision: "keep_local" }],
+    ["assignment target", { targetEntityId: "organization-other" }],
+    ["assignment type", { targetEntityType: "contact" }],
+    ["assignment slot", { relationshipSlot: "contact" }],
+    ["field exclusion", { fieldName: "phone" }],
+  ])("fails projection closed for malformed relationship %s", (_label, decisionOverride) => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready", match: { kind: "exact", localId: "organization-a" } }];
+    state.operations = [
+      { operationKey: "organization:reviewed-source", sourceRecordId: "reviewed-source", action: "link_existing", dependencyOperationKeys: [], safeByDefault: true, status: "already_present", targetType: "organization", selectedTargetId: "organization-a" },
+      {
+        operationKey: "organization-contact:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        sourceVersionId: "v-reviewed-source",
+        action: "create_relationship",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+        reviewedPayload: {
+          parentEntityId: "organization-parent",
+          parentType: "organization",
+          relationshipSlot: "organization",
+          decision: {
+            id: "decision-parent",
+            sourceVersionId: "v-reviewed-source",
+            scope: "relationship",
+            decision: "assign_parent",
+            relationshipSlot: "organization",
+            targetEntityType: "organization",
+            targetEntityId: "organization-parent",
+            ...decisionOverride,
+          },
+        },
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({ reviewedReadyOperationCount: 0, canApplyReviewed: false });
+  });
+
+  it("does not enable reviewed recovery without its identity dependency", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready" }];
+    state.operations = [{
+      operationKey: "organization:reviewed-source:field:phone",
+      sourceRecordId: "reviewed-source",
+      action: "overwrite_reviewed",
+      dependencyOperationKeys: ["organization:reviewed-source"],
+      safeByDefault: false,
+      status: "pending",
+      sourceVersionId: "v-reviewed-source",
+      targetType: "organization",
+      reviewedPayload: projectedOverwritePayload(),
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewedReadyOperationCount: 0,
+      canApplyReviewed: false,
+    });
+  });
+
+  it("does not enable reviewed recovery while its identity dependency is nonterminal", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready" }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        sourceVersionId: "v-reviewed-source",
+        targetType: "organization",
+        reviewedPayload: projectedOverwritePayload(),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewedReadyOperationCount: 0,
+      canApplyReviewed: false,
+    });
+  });
+
+  it("does not enable reviewed recovery when source-value proof fails the database projection", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready" }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "already_present",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        sourceVersionId: "v-reviewed-source",
+        targetType: "organization",
+        reviewedPayload: projectedOverwritePayload("organization-a", {
+          proof: {
+            ...(projectedOverwritePayload().proof as Record<string, unknown>),
+            sourceValue: "different-source",
+          },
+        }),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewedReadyOperationCount: 0,
+      canApplyReviewed: false,
+    });
+  });
+
+  it("does not enable reviewed recovery through a pending unsafe dependency", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready", match: { kind: "exact", localId: "organization-a" } }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "already_present",
+        targetType: "organization",
+        selectedTargetId: "organization-a",
+      },
+      {
+        operationKey: "organization:reviewed-source:unsafe",
+        sourceRecordId: "reviewed-source",
+        action: "record_provenance",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        targetType: "organization",
+      },
+      {
+        operationKey: "organization:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source:unsafe"],
+        safeByDefault: false,
+        status: "pending",
+        sourceVersionId: "v-reviewed-source",
+        targetType: "organization",
+        reviewedPayload: projectedOverwritePayload(),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewedReadyOperationCount: 0,
+      canApplyReviewed: false,
+    });
+  });
+
+  it("does not enable reviewed recovery through a terminal link bound to another target", () => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "reviewed-source", state: "ready", match: { kind: "exact", localId: "organization-a" } }];
+    state.operations = [
+      {
+        operationKey: "organization:reviewed-source",
+        sourceRecordId: "reviewed-source",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "already_present",
+        targetType: "organization",
+        selectedTargetId: "organization-b",
+      },
+      {
+        operationKey: "organization:reviewed-source:field:phone",
+        sourceRecordId: "reviewed-source",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:reviewed-source"],
+        safeByDefault: false,
+        status: "pending",
+        sourceVersionId: "v-reviewed-source",
+        targetType: "organization",
+        reviewedPayload: projectedOverwritePayload(),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewedReadyOperationCount: 0,
+      canApplyReviewed: false,
     });
   });
 
