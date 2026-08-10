@@ -47,6 +47,26 @@ describe("Act archive context index", () => {
     expect(JSON.stringify(index)).not.toContain(body);
   });
 
+  it("matches narrative names as token sequences instead of substrings", () => {
+    const index = buildActContextIndex([
+      { sourceRecordId: "company-fair", streamType: "company", rawSnapshot: { Name: "Fair" } },
+      { sourceRecordId: "company-county-fair", streamType: "company", rawSnapshot: { Name: "County Fair" } },
+    ], {});
+
+    expect(index.narrativeMentions({ body: "Meet at the fairgrounds." })).toEqual([]);
+    expect(index.narrativeMentions({ body: "Meet at the County-Fair pavilion." })).toEqual([
+      { family: "narrative_context", label: "body mentions company name", sourceRecordId: "company-county-fair", streamType: "company" },
+      { family: "narrative_context", label: "body mentions company name", sourceRecordId: "company-fair", streamType: "company" },
+    ]);
+  });
+
+  it("emits at most one mention per candidate and narrative field", () => {
+    const index = buildActContextIndex(rows, {});
+    expect(index.narrativeMentions({ body: "Adventure Zone called Adventure Zone." })).toEqual([
+      { family: "narrative_context", label: "body mentions company name", sourceRecordId: "company-1", streamType: "company" },
+    ]);
+  });
+
   it("indexes a representative archive without constructing an all-pairs matrix", () => {
     const archiveSize = 16_252;
     const index = buildActContextIndex(
