@@ -66,6 +66,14 @@ const migrationFiles = [
         AND column_name = 'request_fingerprint'
     ) AS ready`,
   },
+  {
+    name: "019_act_approval_provenance.sql",
+    markerSql: `SELECT COUNT(*) = 2 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'act_replacement_approval_requests'
+        AND column_name IN ('approval_mode', 'approval_mode_version')`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
