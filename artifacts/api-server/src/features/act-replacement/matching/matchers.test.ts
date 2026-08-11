@@ -154,6 +154,28 @@ describe("conservative Act replacement matchers", () => {
     });
   });
 
+  it("rejects name-and-organization matches that contradict provided direct contact values", () => {
+    expect(matchContact(
+      contact({ phone: null, resolvedOrganizationId: "org-1" }),
+      [localContact({ email: "different@example.com", phone: null, organizationIds: ["org-1"] })],
+    )).toEqual({
+      kind: "ambiguous",
+      candidateIds: ["contact-1"],
+      reason: "conflicting_contact_fields",
+      evidence: [],
+    });
+
+    expect(matchContact(
+      contact({ email: null, emailIdentityMatchSafe: false, resolvedOrganizationId: "org-1" }),
+      [localContact({ email: null, phone: "555-999-0000", organizationIds: ["org-1"] })],
+    )).toEqual({
+      kind: "ambiguous",
+      candidateIds: ["contact-1"],
+      reason: "conflicting_contact_fields",
+      evidence: [],
+    });
+  });
+
   it("blocks shared mailboxes, duplicate identifiers, and conflicting identifiers", () => {
     expect(matchContact(contact({ email: "info@example.com", emailIdentityMatchSafe: false, phone: null }), [localContact({ id: "a", email: "info@example.com", phone: null })])).toEqual(expect.objectContaining({
       kind: "ambiguous", candidateIds: ["a"], reason: "insufficient_independent_context_clues",
@@ -230,5 +252,39 @@ describe("conservative Act replacement matchers", () => {
     const candidates = [localContact({ id: "z", email: null, phone: null }), localContact({ id: "a", email: null, phone: null })];
     expect(matchContact(source, candidates)).toEqual(matchContact(source, [...candidates].reverse()));
     expect(matchContact(source, candidates)).toEqual(expect.objectContaining({ kind: "ambiguous", candidateIds: ["a", "z"], reason: "insufficient_independent_context_clues" }));
+  });
+
+  it("bounds high-cardinality contact and organization evidence and reports overflow", () => {
+    const contacts = Array.from({ length: 64 }, (_, index) => localContact({
+      id: `contact-${String(index).padStart(3, "0")}`,
+      email: null,
+      phone: null,
+      organizationIds: ["org-1"],
+    }));
+    const contactResult = matchContact(
+      contact({ email: null, emailIdentityMatchSafe: false, phone: null, resolvedOrganizationId: "org-1" }),
+      contacts,
+    );
+    expect(contactResult).toMatchObject({
+      kind: "ambiguous",
+      reason: "candidate_limit_exceeded",
+      overflow: true,
+    });
+    if (contactResult.kind !== "ambiguous") throw new Error("expected ambiguous contact overflow");
+    expect(contactResult.candidateIds.length).toBeLessThanOrEqual(20);
+    expect(contactResult.evidence?.length).toBeLessThanOrEqual(20);
+
+    const organizations = Array.from({ length: 64 }, (_, index) => localOrganization({
+      id: `organization-${String(index).padStart(3, "0")}`,
+    }));
+    const organizationResult = matchOrganization(organization(), organizations);
+    expect(organizationResult).toMatchObject({
+      kind: "ambiguous",
+      reason: "candidate_limit_exceeded",
+      overflow: true,
+    });
+    if (organizationResult.kind !== "ambiguous") throw new Error("expected ambiguous organization overflow");
+    expect(organizationResult.candidateIds.length).toBeLessThanOrEqual(20);
+    expect(organizationResult.evidence?.length).toBeLessThanOrEqual(20);
   });
 });

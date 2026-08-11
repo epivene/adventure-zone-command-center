@@ -1,6 +1,7 @@
 import type { ActApplyAction, ActApplyTargetType, ActReplacementStreamType } from "./import-types";
 import { digestManifestRows } from "./manifest-digest";
 import type { MatchResult } from "./matching/match-result";
+import { automaticReviewProof } from "./automatic-review-policy";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { isMateriallyPopulated, isNormalizedMetadataField, writablePhysicalColumn } from "./writable-target-fields";
 
@@ -355,8 +356,23 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     const matchEvidenceFamilies = [...new Set(source.match?.evidence?.map((item) => item.family) ?? [])].sort();
     const provenance = baseOperation(source, targetType, "record_provenance", { evidence: sorted(source.provenance), matchEvidenceFamilies, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, unsupportedNormalizedFields }, sourceOps.map((operation) => operation.operationKey), false, true);
     sourceOps.push(revisionedOperation(operationKey("provenance", source.sourceRecordId), provenance));
+    const outcome: ManifestOutcome = { sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: issues.some((issue) => issue.code === "relationship_unresolved" || issue.code === "field_conflict") ? "awaiting_review" : "ready", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: sourceOps.map((operation) => operation.operationKey) };
+    const policyOperations = sourceOps.map((operation) => ({
+      ...operation,
+      status: "pending",
+    }));
+    sourceOps.forEach((operation, index) => {
+      operation.payload = {
+        ...operation.payload,
+        automaticReview: automaticReviewProof({
+          outcome,
+          operations: policyOperations,
+          operation: policyOperations[index]!,
+        }),
+      };
+    });
     operations.push(...sourceOps);
-    outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: issues.some((issue) => issue.code === "relationship_unresolved" || issue.code === "field_conflict") ? "awaiting_review" : "ready", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: sourceOps.map((operation) => operation.operationKey) });
+    outcomes.push(outcome);
   }
   const order = (operation: ManifestOperation) => operation.operationKey.startsWith("provenance:") ? rank.provenance : rank[operation.targetType] ?? 999;
   operations.sort((a, b) => order(a) - order(b) || a.operationKey.localeCompare(b.operationKey));

@@ -97,6 +97,20 @@ describe("resolveContextClues", () => {
     });
   });
 
+  it("does not let an authoritative clue override contradictory supporting evidence", () => {
+    expect(resolveContextClues([
+      clue("identity", "org-1", {
+        label: "exact Act link",
+        authority: "authoritative",
+      }),
+      clue("location", "org-2"),
+    ])).toMatchObject({
+      kind: "ambiguous",
+      candidateIds: ["org-1", "org-2"],
+      reason: "conflicting_context_clues",
+    });
+  });
+
   it("is deterministic regardless of clue order", () => {
     const clues = [
       clue("web_identity", "org-1"),

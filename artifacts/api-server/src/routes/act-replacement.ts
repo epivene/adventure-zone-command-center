@@ -532,6 +532,16 @@ function safeApproval(result: {
   };
 }
 
+function safeAutomaticApproval(result: {
+  approvedOperationIds: string[];
+  manifestDigest: string;
+}) {
+  return {
+    approvedOperationCount: result.approvedOperationIds.length,
+    manifestDigest: result.manifestDigest,
+  };
+}
+
 function safeReviewPage(page: Awaited<ReturnType<typeof readReview>>) {
   return {
     page: page.page,
@@ -540,6 +550,7 @@ function safeReviewPage(page: Awaited<ReturnType<typeof readReview>>) {
     manifestDigest: page.manifestDigest,
     summary: {
       decisionRequired: page.summary.decisionRequired,
+      archivedOnly: page.summary.archivedOnly,
       issueCounts: { ...page.summary.issueCounts },
       diagnosticCounts: { ...page.summary.diagnosticCounts },
     },
@@ -936,7 +947,7 @@ export function createActReplacementRouter(
         });
         if (!owned) return runNotFound(res);
         res.json(
-          safeApproval(
+          safeAutomaticApproval(
             await review.commands.approveSafeDefaults({
               runId: owned.runId,
               expectedManifestDigest: body.data.expectedManifestDigest,
@@ -954,31 +965,19 @@ export function createActReplacementRouter(
     "/migration/act-replacement/runs/:runId/approvals/ready",
     async (req, res) => {
       const runId = runIdSchema.safeParse(req.params.runId);
-      const review = requireReview(res);
-      if (!runId.success || !review) {
+      if (!runId.success) {
         if (!runId.success) runNotFound(res);
         return;
       }
       const context = serverContext(dependencies, res);
       if (!context) return;
-      const body = safeApprovalSchema.safeParse(req.body);
-      if (!body.success) return invalidRequest(res);
       try {
         const owned = await dependencies.store.findOwnedRun({
           runId: runId.data,
           ...context,
         });
         if (!owned) return runNotFound(res);
-        res.json(
-          safeApproval(
-            await review.commands.approveReady({
-              runId: owned.runId,
-              expectedManifestDigest: body.data.expectedManifestDigest,
-              requestKey: body.data.requestKey,
-              requestedBy: context.requestedBy,
-            }),
-          ),
-        );
+        res.status(410).json({ code: "safe_defaults_required" });
       } catch (error) {
         handleRouteError(error, res);
       }

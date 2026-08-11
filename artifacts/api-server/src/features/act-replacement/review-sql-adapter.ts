@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyBatches, actReplacementApplyOperations, actReplacementBulkReviewRequests, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, activities, bookingContacts, bookings, callingLists, contacts, organizationContacts, organizations } from "@workspace/db/schema";
 import { DrizzleActSourceAssignmentRepository } from "./assignment-repository";
 import type { ActApplyService } from "./apply-service";
-import type { ApprovalClosure, ApprovalRepository } from "./approval-service";
+import { actApprovalModes, type ActApprovalMode, type ApprovalManifest, type ApprovalOperation, type ApprovalRepository, type ApprovalRequest } from "./approval-service";
 import type { ActOrganizeManifest, ManifestDiagnostic, ManifestNormalized, ManifestOperation, ManifestOutcome, ManifestReviewIssue, ManifestSourceInput } from "./manifest-builder";
 import { digestManifestRows } from "./manifest-digest";
 import { normalizeCompany } from "./normalizers/company-normalizer";
@@ -162,8 +162,10 @@ export function approvalClosureFromDurableRow(
     dependencyCount: number;
     rejectedCount: number;
     manifestDigest: string;
+    approvalMode: unknown;
+    approvalModeVersion: unknown;
   },
-): ApprovalClosure {
+): ApprovalRequest {
   if (manifest.digest !== row.manifestDigest)
     throw Object.assign(new Error("approval_replay_manifest_mismatch"), {
       code: "approval_replay_manifest_mismatch",
@@ -183,6 +185,9 @@ export function approvalClosureFromDurableRow(
       code: "approval_replay_rejected_ids_unavailable",
       status: 409,
     });
+  const approvalMode = actApprovalModes.includes(row.approvalMode as ActApprovalMode)
+    ? row.approvalMode as ActApprovalMode
+    : null;
   return {
     selectedOperationIds,
     approvedOperationIds,
@@ -192,6 +197,8 @@ export function approvalClosureFromDurableRow(
     dependencyCount: row.dependencyCount,
     rejectedCount: row.rejectedCount,
     manifestDigest: row.manifestDigest,
+    approvalMode,
+    approvalModeVersion: typeof row.approvalModeVersion === "number" ? row.approvalModeVersion : null,
   };
 }
 
@@ -1080,10 +1087,11 @@ export class DrizzleActReviewReader implements ReviewReader {
         select code, count(*)::int as total from issue_rows group by code
       )
       select nullif(scoped_run.summary->>'manifestDigest', '') as "manifestDigest",
+        0::int as "decisionRequired",
         (select count(distinct ${actReplacementOutcomes.sourceRecordId})::int
           from ${actReplacementOutcomes} cross join scoped_run
           where ${actReplacementOutcomes.runId} = ${input.runId}
-            and ${actReplacementOutcomes.state} in (${sql.join(decisionReviewStates.map((state) => sql`${state}`), sql`, `)})) as "decisionRequired",
+            and ${actReplacementOutcomes.state} in (${sql.join(decisionReviewStates.map((state) => sql`${state}`), sql`, `)})) as "archivedOnly",
         coalesce((select jsonb_object_agg(code, total) from issue_counts where code <> ${"unsupported_field"}), '{}'::jsonb) as "issueCounts",
         coalesce((select jsonb_object_agg(code, total) from issue_counts where code = ${"unsupported_field"}), '{}'::jsonb) as "diagnosticCounts"
       from scoped_run`);
@@ -1198,6 +1206,7 @@ export class DrizzleActReviewReader implements ReviewReader {
       manifestDigest: typeof summaryRow.manifestDigest === "string" ? summaryRow.manifestDigest : null,
       summary: {
         decisionRequired: integer(summaryRow.decisionRequired),
+        archivedOnly: integer(summaryRow.archivedOnly),
         issueCounts: object(summaryRow.issueCounts) as Partial<Record<ReviewIssueCode, number>>,
         diagnosticCounts: object(summaryRow.diagnosticCounts) as Partial<Record<ReviewIssueCode, number>>,
       },
@@ -1211,6 +1220,105 @@ export class DrizzleActReviewReader implements ReviewReader {
   }
 }
 
+export function automaticReviewProofSql(payload: SQLWrapper): SQL<unknown> {
+  const proof = sql`${payload}->'automaticReview'`;
+  return sql`case
+    when jsonb_typeof(${proof}) = 'object'
+      and ${proof} ?& array['version','eligible','disposition','basis']::text[]
+      and (${proof} - 'version' - 'eligible' - 'disposition' - 'basis') = '{}'::jsonb
+      and jsonb_typeof(${proof}->'version') = 'number'
+      and ${proof}->'version' = '1'::jsonb
+      and jsonb_typeof(${proof}->'eligible') = 'boolean'
+      and jsonb_typeof(${proof}->'disposition') = 'string'
+      and jsonb_typeof(${proof}->'basis') = 'string'
+    then ${proof}
+    else null
+  end`;
+}
+
+export const approvalOperationSelection = {
+  operationKey: actReplacementApplyOperations.operationKey,
+  sourceRecordId: actReplacementApplyOperations.sourceRecordId,
+  sourceVersionId: actReplacementApplyOperations.sourceVersionId,
+  targetType: actReplacementApplyOperations.targetType,
+  action: actReplacementApplyOperations.action,
+  payload: sql<Record<string, unknown>>`jsonb_strip_nulls(jsonb_build_object(
+    'automaticReview', ${automaticReviewProofSql(actReplacementApplyOperations.payload)},
+    'entityId', case when ${actReplacementApplyOperations.action} = 'overwrite_reviewed'
+      then ${actReplacementApplyOperations.payload}->'entityId' else null end,
+    'fieldName', case when ${actReplacementApplyOperations.action} = 'overwrite_reviewed'
+      then ${actReplacementApplyOperations.payload}->'fieldName' else null end,
+    'value', case when ${actReplacementApplyOperations.action} = 'overwrite_reviewed'
+      then ${actReplacementApplyOperations.payload}->'value' else null end,
+    'proof', case
+      when ${actReplacementApplyOperations.action} = 'overwrite_reviewed'
+        and jsonb_typeof(${actReplacementApplyOperations.payload}->'proof') = 'object'
+      then jsonb_strip_nulls(jsonb_build_object(
+        'localValue', ${actReplacementApplyOperations.payload}#>'{proof,localValue}',
+        'sourceValue', ${actReplacementApplyOperations.payload}#>'{proof,sourceValue}'
+      ))
+      else null
+    end,
+    'decision', case
+      when ${actReplacementApplyOperations.action} = 'overwrite_reviewed'
+        and jsonb_typeof(${actReplacementApplyOperations.payload}->'decision') = 'object'
+      then jsonb_strip_nulls(jsonb_build_object(
+        'id', ${actReplacementApplyOperations.payload}#>'{decision,id}',
+        'scope', ${actReplacementApplyOperations.payload}#>'{decision,scope}',
+        'decision', ${actReplacementApplyOperations.payload}#>'{decision,decision}',
+        'sourceVersionId', ${actReplacementApplyOperations.payload}#>'{decision,sourceVersionId}',
+        'fieldName', ${actReplacementApplyOperations.payload}#>'{decision,fieldName}',
+        'targetEntityType', ${actReplacementApplyOperations.payload}#>'{decision,targetEntityType}',
+        'targetEntityId', ${actReplacementApplyOperations.payload}#>'{decision,targetEntityId}'
+      ))
+      else null
+    end
+  ))`,
+  dependencyOperationKeys:
+    actReplacementApplyOperations.dependencyOperationKeys,
+  requiredForSourceOutcome:
+    actReplacementApplyOperations.requiredForSourceOutcome,
+  safeByDefault: actReplacementApplyOperations.safeByDefault,
+  status: actReplacementApplyOperations.status,
+};
+
+export const approvalOutcomeSelection = {
+  sourceRecordId: actReplacementOutcomes.sourceRecordId,
+  sourceVersionId: actReplacementOutcomes.sourceVersionId,
+  state: actReplacementOutcomes.state,
+};
+
+export function approvalManifestFromRows(input: {
+  digest: string;
+  operations: readonly Record<string, unknown>[];
+  outcomes: readonly Record<string, unknown>[];
+}): ApprovalManifest {
+  const operations: ApprovalOperation[] = input.operations.map((row) => ({
+    operationKey: text(row.operationKey),
+    sourceRecordId: text(row.sourceRecordId),
+    sourceVersionId: text(row.sourceVersionId),
+    targetType: text(row.targetType) as ManifestOperation["targetType"],
+    action: text(row.action) as ManifestOperation["action"],
+    payload: object(row.payload),
+    dependencyOperationKeys: array<string>(row.dependencyOperationKeys),
+    requiredForSourceOutcome: row.requiredForSourceOutcome === true,
+    safeByDefault: row.safeByDefault === true,
+    status: text(row.status),
+  }));
+  const outcomes: ManifestOutcome[] = input.outcomes.map((row) => ({
+    sourceRecordId: text(row.sourceRecordId),
+    sourceVersionId: text(row.sourceVersionId),
+    state: text(row.state) as ManifestOutcome["state"],
+    issues: [],
+    candidates: [],
+    match: null,
+    mappingWarnings: [],
+    unsupportedFieldPaths: [],
+    operationKeys: [],
+  }));
+  return { digest: input.digest, operations, outcomes };
+}
+
 class DrizzleApprovalRepository implements ApprovalRepository {
   constructor(
     private readonly reader: DrizzleActReviewReader,
@@ -1218,14 +1326,30 @@ class DrizzleApprovalRepository implements ApprovalRepository {
     private readonly scope: SourceDatabaseScope,
   ) {}
   async getManifest(runId: string) {
-    const manifest = await this.reader.getManifest(runId);
-    return manifest
-      ? {
-          digest: manifest.digest,
-          operations: manifest.operations,
-          outcomes: manifest.outcomes,
-        }
-      : null;
+    const [run] = await this.database
+      .select({ summary: actReplacementRuns.summary })
+      .from(actReplacementRuns)
+      .where(and(
+        eq(actReplacementRuns.id, runId),
+        eq(actReplacementRuns.sourceDatabaseKey, this.scope.sourceDatabaseKey),
+      ))
+      .limit(1);
+    if (!run) return null;
+    const [operations, outcomes] = await Promise.all([
+      this.database
+        .select(approvalOperationSelection)
+        .from(actReplacementApplyOperations)
+        .where(eq(actReplacementApplyOperations.runId, runId)),
+      this.database
+        .select(approvalOutcomeSelection)
+        .from(actReplacementOutcomes)
+        .where(eq(actReplacementOutcomes.runId, runId)),
+    ]);
+    return approvalManifestFromRows({
+      digest: text(object(run.summary).manifestDigest),
+      operations: operations as unknown as Array<Record<string, unknown>>,
+      outcomes: outcomes as unknown as Array<Record<string, unknown>>,
+    });
   }
   async getRequest(runId: string, requestKey: string) {
     if (!(await this.reader.ownsRun(runId))) return null;
@@ -1235,7 +1359,7 @@ class DrizzleApprovalRepository implements ApprovalRepository {
       .where(and(eq(actReplacementApprovalRequests.runId, runId), eq(actReplacementApprovalRequests.requestKey, requestKey)))
       .limit(1);
     if (!row) return null;
-    const manifest = await this.reader.getManifest(runId);
+    const manifest = await this.getManifest(runId);
     if (!manifest)
       throw Object.assign(new Error("approval_replay_manifest_not_found"), {
         code: "approval_replay_manifest_not_found",
@@ -1243,23 +1367,25 @@ class DrizzleApprovalRepository implements ApprovalRepository {
       });
     return approvalClosureFromDurableRow(manifest, row);
   }
-  async saveRequest(runId: string, requestKey: string, closure: ApprovalClosure) {
+  async saveRequest(runId: string, requestKey: string, request: ApprovalRequest) {
     if (!(await this.reader.ownsRun(runId))) throw new Error("run_not_found");
     const [row] = await this.database
       .insert(actReplacementApprovalRequests)
       .values({
         runId,
         requestKey,
-        manifestDigest: closure.manifestDigest,
-        selectedOperationIds: closure.selectedOperationIds,
-        dependencyClosedOperationIds: closure.approvedOperationIds,
-        selectedCount: closure.selectedCount,
-        dependencyCount: closure.dependencyCount,
-        rejectedCount: closure.rejectedCount,
+        manifestDigest: request.manifestDigest,
+        approvalMode: request.approvalMode,
+        approvalModeVersion: request.approvalModeVersion,
+        selectedOperationIds: request.selectedOperationIds,
+        dependencyClosedOperationIds: request.approvedOperationIds,
+        selectedCount: request.selectedCount,
+        dependencyCount: request.dependencyCount,
+        rejectedCount: request.rejectedCount,
       })
       .onConflictDoNothing({ target: [actReplacementApprovalRequests.runId, actReplacementApprovalRequests.requestKey] })
       .returning();
-    if (row) return closure;
+    if (row) return request;
     const prior = await this.getRequest(runId, requestKey);
     if (!prior) throw new Error("approval_request_not_saved");
     return prior;

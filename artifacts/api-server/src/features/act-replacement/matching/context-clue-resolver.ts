@@ -121,7 +121,7 @@ export function resolveContextClues(
     [...allTargets.values()].map((target) => target.targetEntityId),
   )].sort();
 
-  if (authoritativeTargets.size === 1) {
+  if (authoritativeTargets.size === 1 && allTargets.size === 1) {
     const [key, target] = authoritativeTargets.entries().next().value!;
     if ([...authoritativeTargets.keys()].every((candidate) => candidate === key)) {
       return {

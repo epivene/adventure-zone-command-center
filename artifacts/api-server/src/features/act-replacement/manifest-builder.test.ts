@@ -157,6 +157,91 @@ describe("buildActOrganizeManifest", () => {
     });
   });
 
+  it("persists bounded automatic proof for only policy-approved operations", () => {
+    const result = buildActOrganizeManifest({ runId: "run", sources: [
+      source({
+        sourceRecordId: "safe-create",
+        sourceVersionId: "safe-create-version",
+      }),
+      source({
+        sourceRecordId: "proven-link",
+        sourceVersionId: "proven-link-version",
+        normalized: {
+          kind: "organization",
+          name: "Proven",
+          phone: null,
+          website: "https://proven.example",
+        },
+        match: {
+          kind: "exact",
+          localId: "organization-proven",
+          reason: "two_independent_context_clues",
+          evidence: [
+            { family: "identity", label: "name agrees", targetEntityType: "organization", targetEntityId: "organization-proven", authority: "supporting" },
+            { family: "web_identity", label: "website agrees", targetEntityType: "organization", targetEntityId: "organization-proven", authority: "supporting" },
+          ],
+        },
+        localFields: { name: "Proven", website: null },
+      }),
+      source({
+        sourceRecordId: "weak-link",
+        sourceVersionId: "weak-link-version",
+        match: {
+          kind: "exact",
+          localId: "organization-weak",
+          reason: "two_independent_context_clues",
+          evidence: [
+            { family: "identity", label: "only one weak clue", targetEntityType: "organization", targetEntityId: "organization-weak", authority: "supporting" },
+          ],
+        },
+        localFields: { name: "Acme" },
+      }),
+      source({
+        sourceRecordId: "contact-child",
+        sourceVersionId: "contact-child-version",
+        streamType: "contact",
+        normalized: { kind: "contact", firstName: "Child", lastName: "Contact" },
+        relationships: { organizationSourceIds: ["safe-create"] },
+      }),
+    ] });
+
+    const automaticProof = (sourceRecordId: string, action: string) =>
+      result.operations.find((operation) =>
+        operation.sourceRecordId === sourceRecordId && operation.action === action
+      )?.payload.automaticReview;
+
+    expect(automaticProof("safe-create", "create")).toMatchObject({
+      version: 1,
+      eligible: true,
+      disposition: "safe_ready",
+      basis: "safe_create",
+    });
+    expect(automaticProof("proven-link", "link_existing")).toMatchObject({
+      eligible: true,
+      disposition: "auto_resolved",
+      basis: "proven_context_match",
+    });
+    expect(automaticProof("proven-link", "fill_missing")).toMatchObject({
+      eligible: true,
+      disposition: "auto_resolved",
+    });
+    expect(automaticProof("weak-link", "link_existing")).toMatchObject({
+      eligible: false,
+      disposition: "archived_only",
+      basis: "not_automatically_safe",
+    });
+    expect(automaticProof("contact-child", "create_relationship")).toMatchObject({
+      eligible: false,
+      basis: "not_automatically_safe",
+    });
+    expect(automaticProof("proven-link", "record_provenance")).toMatchObject({
+      eligible: false,
+      disposition: "auto_resolved",
+    });
+    expect(JSON.stringify(automaticProof("proven-link", "link_existing")))
+      .not.toContain("website agrees");
+  });
+
   it("emits fill operations only for supported contact fields and ignores matching metadata", () => {
     const result = buildActOrganizeManifest({ runId: "run", sources: [source({
       streamType: "contact",
@@ -318,6 +403,113 @@ describe("buildActOrganizeManifest", () => {
     ]));
   });
 
+  it("rebuilds deterministic safe context links while preserving manual targets and populated-field conflicts", () => {
+    // Protects against input-order-dependent manifests, leaking raw clue
+    // labels into operations, or silently turning a populated-field conflict
+    // into an automatic overwrite.
+    const inputs = [
+      source({
+        sourceRecordId: "two-clue-context",
+        sourceVersionId: "two-clue-version",
+        match: {
+          kind: "exact",
+          localId: "organization-context",
+          reason: "two_independent_context_clues",
+          evidence: [
+            {
+              family: "web_identity",
+              label: "website agrees with https://example.test/private-path",
+              targetEntityType: "organization",
+              targetEntityId: "organization-context",
+              authority: "supporting",
+            },
+            {
+              family: "identity",
+              label: "name agrees with the archived organization",
+              targetEntityType: "organization",
+              targetEntityId: "organization-context",
+              authority: "supporting",
+            },
+          ],
+        },
+        localFields: { name: "Acme" },
+      }),
+      source({
+        sourceRecordId: "manual-target",
+        sourceVersionId: "manual-version",
+        match: {
+          kind: "exact",
+          localId: "organization-chosen-by-review",
+          reason: "manual_review",
+        },
+        localFields: { name: "Acme" },
+      }),
+      source({
+        sourceRecordId: "populated-conflict",
+        sourceVersionId: "conflict-version",
+        normalized: {
+          kind: "organization",
+          name: "Acme",
+          phone: "555-ACT",
+          website: "https://example.test",
+        },
+        match: {
+          kind: "exact",
+          localId: "organization-conflict",
+          reason: "exact_external_link",
+        },
+        localFields: { name: "Acme", phone: "555-LOCAL", website: null },
+      }),
+    ];
+
+    const first = buildActOrganizeManifest({ runId: "run", sources: inputs });
+    const reordered = buildActOrganizeManifest({
+      runId: "run",
+      sources: [...inputs].reverse(),
+    });
+    const rebuilt = buildActOrganizeManifest({ runId: "run", sources: inputs });
+
+    expect(reordered).toEqual(first);
+    expect(rebuilt).toEqual(first);
+    expect(rebuilt.digest).toBe(first.digest);
+    expect(first.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "two-clue-context",
+      action: "link_existing",
+      safeByDefault: true,
+      payload: expect.objectContaining({ localId: "organization-context" }),
+    }));
+    const twoClueProvenance = first.operations.find(
+      (operation) => operation.sourceRecordId === "two-clue-context" && operation.action === "record_provenance",
+    );
+    expect(twoClueProvenance?.payload).toMatchObject({
+      matchEvidenceFamilies: ["identity", "web_identity"],
+    });
+    expect(JSON.stringify(twoClueProvenance?.payload)).not.toContain("private-path");
+    expect(first.operations.find(
+      (operation) => operation.sourceRecordId === "two-clue-context" && operation.action === "link_existing",
+    )?.payload).not.toHaveProperty("decision");
+    expect(first.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "manual-target",
+      action: "link_existing",
+      payload: expect.objectContaining({ localId: "organization-chosen-by-review" }),
+    }));
+    expect(first.outcomes).toContainEqual(expect.objectContaining({
+      sourceRecordId: "populated-conflict",
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "field_conflict", reason: "phone" }),
+      ]),
+    }));
+    expect(first.operations).toContainEqual(expect.objectContaining({
+      sourceRecordId: "populated-conflict",
+      action: "link_existing",
+      safeByDefault: true,
+    }));
+    expect(first.operations).not.toContainEqual(expect.objectContaining({
+      sourceRecordId: "populated-conflict",
+      action: "overwrite_reviewed",
+    }));
+  });
+
   it("keeps an explicitly ignored unsupported record archived and resolved", () => {
     const manifest = buildActOrganizeManifest({ runId: "run", sources: [{
       ...unsupportedSource,
@@ -353,7 +545,7 @@ describe("buildActOrganizeManifest", () => {
     ] });
 
     expect(manifest.outcomes.find((outcome) => outcome.sourceRecordId === "timeline-1")).toMatchObject({ state: "ready" });
-    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship", payload: { parentSourceRecordId: "company-1", parentType: "organization" } }));
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship", payload: expect.objectContaining({ parentSourceRecordId: "company-1", parentType: "organization" }) }));
   });
 
   it("keeps valid timeline parents when only one unresolved relationship is kept unlinked", () => {
@@ -370,7 +562,7 @@ describe("buildActOrganizeManifest", () => {
     ] });
 
     expect(manifest.outcomes.find((outcome) => outcome.sourceRecordId === "timeline-1")).toMatchObject({ state: "ready" });
-    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship", payload: { parentSourceRecordId: "company-1", parentType: "organization" } }));
+    expect(manifest.operations).toContainEqual(expect.objectContaining({ sourceRecordId: "timeline-1", targetType: "activity_association", action: "create_relationship", payload: expect.objectContaining({ parentSourceRecordId: "company-1", parentType: "organization" }) }));
   });
 
   it("does not ignore a supported record from an unsupported-record decision", () => {

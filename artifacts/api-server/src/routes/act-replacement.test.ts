@@ -755,7 +755,8 @@ describe("owner import workflow", () => {
       total: 1,
       manifestDigest: MANIFEST_DIGEST,
       summary: {
-        decisionRequired: 1,
+        decisionRequired: 0,
+        archivedOnly: 1,
         issueCounts: { ambiguous_match: 1 },
         diagnosticCounts: {},
       },
@@ -803,7 +804,8 @@ describe("owner import workflow", () => {
           total: 3,
           manifestDigest: MANIFEST_DIGEST,
           summary: {
-            decisionRequired: 3,
+            decisionRequired: 0,
+            archivedOnly: 3,
             issueCounts: { field_conflict: 3 },
             diagnosticCounts: { unsupported_field: 1 },
           },
@@ -855,7 +857,8 @@ describe("owner import workflow", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({
       summary: {
-        decisionRequired: 3,
+        decisionRequired: 0,
+        archivedOnly: 3,
         issueCounts: { field_conflict: 3 },
         diagnosticCounts: { unsupported_field: 1 },
       },
@@ -1168,7 +1171,7 @@ describe("owner import workflow", () => {
     expect(bulkDecide).toHaveBeenCalledOnce();
   });
 
-  it("approves ready operations for an owned run using the authenticated owner", async () => {
+  it("retires the legacy ready-outcome approval route", async () => {
     const store = new MemoryControlStore();
     addRun(store);
     const approveReady = vi.fn().mockResolvedValue({
@@ -1191,17 +1194,9 @@ describe("owner import workflow", () => {
         requestKey: "ready-approval",
       });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      approvedOperationIds: ["contact:source-one"],
-      manifestDigest: MANIFEST_DIGEST,
-    });
-    expect(approveReady).toHaveBeenCalledWith({
-      runId: RUN_ID,
-      expectedManifestDigest: MANIFEST_DIGEST,
-      requestKey: "ready-approval",
-      requestedBy: "owner",
-    });
+    expect(response.status).toBe(410);
+    expect(response.body).toEqual({ code: "safe_defaults_required" });
+    expect(approveReady).not.toHaveBeenCalled();
   });
 
   it("strictly validates and owner-scopes safe-default approval", async () => {
@@ -1246,8 +1241,8 @@ describe("owner import workflow", () => {
     expect(invalid.status).toBe(400);
     expect(approveSafeDefaults).toHaveBeenCalledOnce();
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      approvedOperationIds: ["organization:one"],
+    expect(response.body).toEqual({
+      approvedOperationCount: 1,
       manifestDigest: MANIFEST_DIGEST,
     });
   });

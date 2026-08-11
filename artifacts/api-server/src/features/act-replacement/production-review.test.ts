@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import {
   ActApprovalService,
@@ -11,6 +13,8 @@ import {
   createProductionReview,
   projectImportWorkflow,
   type ImportWorkflowProjectionInput,
+  workflowOperationSelection,
+  workflowOutcomeSelection,
 } from "./production-review";
 import { ProductionActOrganizer } from "./production-organizer";
 import {
@@ -32,6 +36,18 @@ import {
 const CURRENT_DIGEST = "a".repeat(64);
 const STALE_DIGEST = "b".repeat(64);
 
+function automaticProof(
+  disposition: "safe_ready" | "auto_resolved" | "archived_only" = "safe_ready",
+  basis:
+    | "safe_create"
+    | "trusted_exact_match"
+    | "proven_context_match"
+    | "not_automatically_safe" = "safe_create",
+  eligible = basis !== "not_automatically_safe",
+) {
+  return { version: 1 as const, eligible, disposition, basis };
+}
+
 function input(): ImportWorkflowProjectionInput {
   return {
     phase: "ready_to_apply",
@@ -45,6 +61,13 @@ function input(): ImportWorkflowProjectionInput {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "pending",
+        targetType: "organization",
+        automaticReview: {
+          version: 1,
+          eligible: true,
+          disposition: "safe_ready",
+          basis: "safe_create",
+        },
       },
     ],
     batches: [],
@@ -52,6 +75,105 @@ function input(): ImportWorkflowProjectionInput {
 }
 
 describe("durable production workflow projection", () => {
+  it("fails closed when a safe-by-default operation lacks bounded automatic proof", () => {
+    const state = input();
+    state.operations = [{
+      ...state.operations[0]!,
+      automaticReview: undefined,
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      archivedOnlyCount: 1,
+      canApplySafe: false,
+    });
+  });
+
+  it("keeps archived-only diagnostics available without creating review blockers", () => {
+    const state = input();
+    state.operations = [{
+      ...state.operations[0]!,
+      automaticReview: {
+        version: 1,
+        eligible: false,
+        disposition: "archived_only",
+        basis: "not_automatically_safe",
+      },
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 1,
+      canReview: true,
+    });
+  });
+
+  it("preserves a completed automatic disposition when optional provenance remains pending", () => {
+    const state = input();
+    state.operations = [
+      {
+        ...state.operations[0]!,
+        action: "link_existing",
+        status: "applied",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "provenance:source-one",
+        sourceRecordId: "source-one",
+        action: "record_provenance",
+        dependencyOperationKeys: ["organization:one"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "provenance",
+        automaticReview: automaticProof(
+          "archived_only",
+          "not_automatically_safe",
+          false,
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      autoResolvedCount: 1,
+      archivedOnlyCount: 0,
+      operations: expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "provenance:source-one",
+          heldForReview: false,
+        }),
+      ]),
+    });
+  });
+
+  it("uses a bounded outcome status projection that never selects match metadata", () => {
+    expect(Object.keys(workflowOutcomeSelection).sort()).toEqual([
+      "leaseExpiresAt",
+      "sourceRecordId",
+      "state",
+    ]);
+    expect(workflowOutcomeSelection).not.toHaveProperty("match");
+  });
+
+  it("rejects string-coerced and extra-key automatic proofs in the workflow SQL reader", () => {
+    const rendered = new PgDialect().sqlToQuery(
+      sql`select ${workflowOperationSelection.automaticReview}`,
+    ).sql;
+
+    expect(rendered).toContain("?& array['version','eligible','disposition','basis']::text[]");
+    expect(rendered).toContain("- 'version' - 'eligible' - 'disposition' - 'basis'");
+    expect(rendered).toContain("jsonb_typeof");
+    expect(rendered).toContain("->'version') = 'number'");
+    expect(rendered).toContain("->'eligible') = 'boolean'");
+    expect(rendered).toContain("->'disposition') = 'string'");
+    expect(rendered).toContain("->'basis') = 'string'");
+    expect(rendered).not.toContain("#>> '{automaticReview");
+    expect(rendered).not.toContain("jsonb_build_object");
+  });
+
   it("approves only safe or proof-reviewed operations from a mixed archived migration", async () => {
     const runId = "mixed-safety-run";
     const fetchedAt = new Date("2026-08-08T12:00:00.000Z");
@@ -343,10 +465,6 @@ describe("durable production workflow projection", () => {
       "organization:exact-empty:identity:local-fill",
       "organization:keep-local:identity:local-keep",
       "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
     ];
     const expectedSafeApprovedOperationIds = [
       "organization:ambiguous-kept-separate",
@@ -355,10 +473,6 @@ describe("durable production workflow projection", () => {
       fillPhoneKey,
       "organization:keep-local:identity:local-keep",
       "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
     ];
     expect(safe).toEqual({
       selectedOperationIds: expectedSafeSelectedOperationIds,
@@ -366,11 +480,15 @@ describe("durable production workflow projection", () => {
       dependencyOperationIds: ["organization:exact-empty:identity:local-fill"],
       rejectedOperationIds: [
         "organization:use-act:field:phone:decision:decision-use-act",
+        provenanceAmbiguousKey,
+        provenanceCreateKey,
+        provenanceFillKey,
+        provenanceKeepKey,
         provenanceUseKey,
       ],
-      selectedCount: 10,
+      selectedCount: 6,
       dependencyCount: 1,
-      rejectedCount: 2,
+      rejectedCount: 6,
       manifestDigest: manifest.digest,
     });
 
@@ -380,42 +498,7 @@ describe("durable production workflow projection", () => {
       requestKey: "approve-ready",
       requestedBy: "owner",
     });
-    const expectedReadyOperationIds = [
-      "organization:ambiguous-kept-separate",
-      "organization:create-with-unsupported",
-      "organization:exact-empty:identity:local-fill",
-      fillPhoneKey,
-      "organization:keep-local:identity:local-keep",
-      "organization:use-act:identity:local-use",
-      "organization:use-act:field:phone:decision:decision-use-act",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
-    ];
-    const expectedReadySelectedOperationIds = [
-      "organization:ambiguous-kept-separate",
-      "organization:create-with-unsupported",
-      fillPhoneKey,
-      "organization:exact-empty:identity:local-fill",
-      "organization:keep-local:identity:local-keep",
-      "organization:use-act:field:phone:decision:decision-use-act",
-      "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
-    ];
-    expect(ready).toEqual({
-      selectedOperationIds: expectedReadySelectedOperationIds,
-      approvedOperationIds: expectedReadyOperationIds,
-      dependencyOperationIds: ["organization:exact-empty:identity:local-fill", "organization:use-act:identity:local-use"],
-      rejectedOperationIds: [provenanceUseKey],
-      selectedCount: 11,
-      dependencyCount: 2,
-      rejectedCount: 1,
-      manifestDigest: manifest.digest,
-    });
+    expect(ready).toEqual(safe);
 
     const explicit = await approvalService.approve({
       runId,
@@ -494,11 +577,18 @@ describe("durable production workflow projection", () => {
       website: "https://use.example",
     });
     const applyService = new ActApplyService(applyRepository, true);
+    applyRepository.seedApproval(
+      runId,
+      "safe-defaults",
+      safe.approvedOperationIds,
+      manifest.digest,
+    );
     const safeApply = await applyService.apply({
       runId,
       approvedOperationIds: safe.approvedOperationIds,
       expectedManifestDigest: manifest.digest,
       requestKey: "apply-safe-defaults",
+      approvalRequestKey: "safe-defaults",
       requestedBy: "owner",
     });
     expect(safeApply).toEqual({
@@ -506,10 +596,10 @@ describe("durable production workflow projection", () => {
       runId,
       manifestDigest: manifest.digest,
       state: "complete_with_issues",
-      operationCount: 10,
-      completedCount: 5,
+      operationCount: 6,
+      completedCount: 2,
       alreadyPresentCount: 3,
-      blockedCount: 2,
+      blockedCount: 1,
       failedCount: 0,
     });
     expect(fillTarget.values).toEqual({
@@ -533,11 +623,19 @@ describe("durable production workflow projection", () => {
     });
 
     overwriteTarget.values.phone = "concurrent-reviewed-edit";
+    applyRepository.seedApproval(
+      runId,
+      "explicit-reviewed-overwrite",
+      explicit.approvedOperationIds,
+      manifest.digest,
+      "explicit_manual",
+    );
     const explicitApply = await applyService.apply({
       runId,
       approvedOperationIds: explicit.approvedOperationIds,
       expectedManifestDigest: manifest.digest,
       requestKey: "apply-reviewed-overwrite",
+      approvalRequestKey: "explicit-reviewed-overwrite",
       requestedBy: "owner",
     });
     expect(explicitApply).toEqual({
@@ -591,6 +689,541 @@ describe("durable production workflow projection", () => {
     expect(projectImportWorkflow(state).canOrganize).toBe(false);
   });
 
+  it("projects a pending safe link from an awaiting-review source", () => {
+    const state = input();
+    state.outcomes = [
+      { sourceRecordId: "source-one", state: "awaiting_review" },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "trusted_exact_match",
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 1,
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("includes a safe dependency closure only when every dependency is automatically importable", () => {
+    const state = input();
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: ["organization:source-one:create"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "trusted_exact_match",
+        ),
+      },
+      {
+        operationKey: "organization:source-one:create",
+        sourceRecordId: "source-one",
+        action: "create",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(),
+      },
+    ];
+
+    expect(projectImportWorkflow(state).safeOperationCount).toBe(2);
+
+    state.operations = state.operations.map((operation, index) =>
+      index === 1
+        ? {
+            ...operation,
+            action: "create_relationship",
+            targetType: "organization_contact",
+            automaticReview: automaticProof(
+              "safe_ready",
+              "not_automatically_safe",
+              false,
+            ),
+          }
+        : operation,
+    );
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      archivedOnlyCount: 1,
+      operations: expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "organization:source-one:identity:local-one",
+          heldForReview: true,
+        }),
+        expect.objectContaining({
+          operationKey: "organization:source-one:create",
+          heldForReview: true,
+        }),
+      ]),
+    });
+  });
+
+  it("does not use a dependency-blocked link as context proof when another root is safe", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityId: "local-one",
+              targetEntityType: "organization",
+              authority: "authoritative",
+            },
+          ],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:create",
+        sourceRecordId: "source-one",
+        action: "create",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(),
+      },
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [
+          "organization_contact:source-one:relationship",
+        ],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "trusted_exact_match",
+        ),
+      },
+      {
+        operationKey: "organization_contact:source-one:relationship",
+        sourceRecordId: "source-one",
+        action: "create_relationship",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "not_automatically_safe",
+          false,
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 1,
+      autoResolvedCount: 0,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("excludes overwrite-reviewed operations from the safe projection", () => {
+    const state = input();
+    state.operations = state.operations.map((operation) => ({
+      ...operation,
+      action: "overwrite_reviewed",
+      targetType: "organization",
+    }));
+
+    expect(projectImportWorkflow(state).safeOperationCount).toBe(0);
+  });
+
+  it.each([
+    { state: "awaiting_review", match: { kind: "ambiguous" } },
+    { state: "unassigned", match: null },
+    { state: "unsupported", match: null },
+  ])("projects a $state source without a safe operation as archived-only", (outcome) => {
+    const state = input();
+    state.outcomes = [{ sourceRecordId: "source-one", ...outcome }];
+    state.operations = [
+      {
+        operationKey: "organization_contact:source-one:parent",
+        sourceRecordId: "source-one",
+        action: "create_relationship",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+        automaticReview: automaticProof(
+          "archived_only",
+          "not_automatically_safe",
+          false,
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      archivedOnlyCount: 1,
+      reviewRequiredCount: 0,
+      canReview: true,
+    });
+  });
+
+  it("counts a proven context match once when it emits multiple safe operations", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityId: "local-one",
+              targetEntityType: "organization",
+              authority: "authoritative",
+            },
+          ],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "organization:source-one:phone",
+        sourceRecordId: "source-one",
+        action: "fill_missing",
+        dependencyOperationKeys: [
+          "organization:source-one:identity:local-one",
+        ],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      autoResolvedCount: 1,
+      safeOperationCount: 2,
+    });
+  });
+
+  it("projects a safe exact link while excluding its conflicting reviewed overwrite", () => {
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "source-one",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "local-one",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityId: "local-one",
+              targetEntityType: "organization",
+              authority: "authoritative",
+            },
+          ],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:source-one:identity:local-one",
+        sourceRecordId: "source-one",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "organization:source-one:field:phone",
+        sourceRecordId: "source-one",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: [
+          "organization:source-one:identity:local-one",
+        ],
+        safeByDefault: false,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "not_automatically_safe",
+          false,
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      autoResolvedCount: 1,
+      safeOperationCount: 1,
+      archivedOnlyCount: 0,
+    });
+  });
+
+  it("allows safe application when archived-only sources coexist", () => {
+    const state = input();
+    state.outcomes = [
+      { sourceRecordId: "source-one", state: "ready", match: null },
+      {
+        sourceRecordId: "source-two",
+        state: "awaiting_review",
+        match: { kind: "ambiguous" },
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 1,
+      archivedOnlyCount: 1,
+      canApplySafe: true,
+    });
+  });
+
+  it("imports only dependency-closed context-safe operations while retaining mixed uncertain records in the archive", () => {
+    // Protects against source-state gating, double-counting proven records,
+    // or treating unsafe relationship dependencies as safe imports.
+    const state = input();
+    state.outcomes = [
+      {
+        sourceRecordId: "authoritative-link",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "organization-authoritative",
+          evidence: [{
+            family: "identity",
+            targetEntityType: "organization",
+            targetEntityId: "organization-authoritative",
+            authority: "authoritative",
+          }],
+        },
+      },
+      {
+        sourceRecordId: "two-clue-link",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "organization-two-clue",
+          evidence: [
+            {
+              family: "identity",
+              targetEntityType: "organization",
+              targetEntityId: "organization-two-clue",
+              authority: "supporting",
+            },
+            {
+              family: "web_identity",
+              targetEntityType: "organization",
+              targetEntityId: "organization-two-clue",
+              authority: "supporting",
+            },
+          ],
+        },
+      },
+      {
+        sourceRecordId: "safe-fill-with-conflict",
+        state: "awaiting_review",
+        match: { kind: "exact", localId: "organization-conflict", reason: "exact_external_link" },
+      },
+      {
+        sourceRecordId: "ambiguous",
+        state: "awaiting_review",
+        match: { kind: "ambiguous", candidateIds: ["one", "two"] },
+      },
+      { sourceRecordId: "unsupported", state: "unsupported", match: null },
+      {
+        sourceRecordId: "unsafe-relationship-dependency",
+        state: "awaiting_review",
+        match: {
+          kind: "exact",
+          localId: "organization-blocked",
+          evidence: [{
+            family: "identity",
+            targetEntityType: "organization",
+            targetEntityId: "organization-blocked",
+            authority: "authoritative",
+          }],
+        },
+      },
+    ];
+    state.operations = [
+      {
+        operationKey: "organization:authoritative-link:identity",
+        sourceRecordId: "authoritative-link",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "organization:two-clue-link:identity",
+        sourceRecordId: "two-clue-link",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "organization:safe-fill-with-conflict:identity",
+        sourceRecordId: "safe-fill-with-conflict",
+        action: "link_existing",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "trusted_exact_match",
+        ),
+      },
+      {
+        operationKey: "organization:safe-fill-with-conflict:field:website",
+        sourceRecordId: "safe-fill-with-conflict",
+        action: "fill_missing",
+        dependencyOperationKeys: ["organization:safe-fill-with-conflict:identity"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "trusted_exact_match",
+        ),
+      },
+      {
+        operationKey: "organization:safe-fill-with-conflict:field:phone",
+        sourceRecordId: "safe-fill-with-conflict",
+        action: "overwrite_reviewed",
+        dependencyOperationKeys: ["organization:safe-fill-with-conflict:identity"],
+        safeByDefault: false,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "safe_ready",
+          "not_automatically_safe",
+          false,
+        ),
+      },
+      {
+        operationKey: "organization:unsafe-relationship-dependency:identity",
+        sourceRecordId: "unsafe-relationship-dependency",
+        action: "link_existing",
+        dependencyOperationKeys: ["organization_contact:unsafe-relationship-dependency:relationship"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "organization_contact:unsafe-relationship-dependency:relationship",
+        sourceRecordId: "unsafe-relationship-dependency",
+        action: "create_relationship",
+        dependencyOperationKeys: [],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "organization_contact",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "not_automatically_safe",
+          false,
+        ),
+      },
+    ];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 4,
+      autoResolvedCount: 2,
+      archivedOnlyCount: 3,
+      reviewRequiredCount: 0,
+      canApplySafe: true,
+      operations: expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "organization:safe-fill-with-conflict:field:phone",
+          heldForReview: false,
+        }),
+        expect.objectContaining({
+          operationKey: "organization:unsafe-relationship-dependency:identity",
+          heldForReview: true,
+        }),
+      ]),
+    });
+  });
+
+  it("keeps failed outcomes visible without labeling them archived-only", () => {
+    const state = input();
+    state.outcomes = [
+      { sourceRecordId: "source-one", state: "failed", match: null },
+    ];
+    state.operations = state.operations.map((operation) => ({
+      ...operation,
+      status: "failed",
+      targetType: "organization",
+    }));
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      archivedOnlyCount: 0,
+      reviewRequiredCount: 0,
+      failedOperationCount: 1,
+      operations: [expect.objectContaining({ heldForReview: false })],
+    });
+  });
+
   it("keeps remaining review work actionable after applying one safe subset and applies the rebuilt subset", async () => {
     const runId = "two-subset-run";
     const firstDigest = "c".repeat(64);
@@ -601,7 +1234,10 @@ describe("durable production workflow projection", () => {
       sourceVersionId: "safe-version",
       targetType: "organization",
       action: "create",
-      payload: { normalized: { kind: "organization", name: "Safe first" } },
+      payload: {
+        normalized: { kind: "organization", name: "Safe first" },
+        automaticReview: automaticProof(),
+      },
       dependencyOperationKeys: [],
       requiredForSourceOutcome: true,
       safeByDefault: true,
@@ -644,6 +1280,7 @@ describe("durable production workflow projection", () => {
       action: "create",
       payload: {
         normalized: { kind: "organization", name: "Reviewed second" },
+        automaticReview: automaticProof(),
       },
       dependencyOperationKeys: [],
       requiredForSourceOutcome: true,
@@ -711,7 +1348,8 @@ describe("durable production workflow projection", () => {
     expect(completedWorkflow).toMatchObject({
       canOrganize: false,
       canReview: true,
-      reviewRequiredCount: 1,
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 1,
       appliedOperationCount: 1,
     });
 
@@ -790,6 +1428,7 @@ describe("durable production workflow projection", () => {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "already_present",
+        targetType: "contact",
       },
       {
         operationKey: "contact:not-terminal",
@@ -798,6 +1437,7 @@ describe("durable production workflow projection", () => {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "already_present",
+        targetType: "contact",
       },
     ];
     state.batches = [
@@ -833,6 +1473,7 @@ describe("durable production workflow projection", () => {
         dependencyOperationKeys: [],
         safeByDefault: true,
         status: "already_present",
+        targetType: "contact",
       },
     ];
     state.batches = [

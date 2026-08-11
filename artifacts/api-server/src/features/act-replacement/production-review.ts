@@ -1,6 +1,7 @@
 import type { ActApplyService } from "./apply-service";
 import { ActApplyCoordinator } from "./apply-coordinator";
 import {
+  automaticReviewProofSql,
   DrizzleActReviewCommandStore,
   DrizzleActReviewReader,
 } from "./review-sql-adapter";
@@ -9,8 +10,12 @@ import type { ReviewCommandStore } from "./review-command-service";
 import type { ReviewReader } from "./review-reader";
 import { createDrizzleApplyRepository } from "./drizzle-apply-repository";
 import { ActApplyService as ApplyService } from "./apply-service";
+import {
+  isAutomaticallyApprovedOperation,
+  readAutomaticReviewProofForOperation,
+} from "./automatic-review-policy";
 import type { ImportWorkflow } from "./import-types";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
   actReplacementApplyBatches,
   actReplacementApplyOperations,
@@ -28,11 +33,39 @@ type WorkflowReader = {
   summarize(runId: string): Promise<ImportWorkflow>;
 };
 
+export const workflowOutcomeSelection = {
+  sourceRecordId: actReplacementOutcomes.sourceRecordId,
+  state: actReplacementOutcomes.state,
+  leaseExpiresAt: actReplacementOutcomes.leaseExpiresAt,
+};
+
+export const workflowOperationSelection = {
+  operationKey: actReplacementApplyOperations.operationKey,
+  sourceRecordId: actReplacementApplyOperations.sourceRecordId,
+  action: actReplacementApplyOperations.action,
+  dependencyOperationKeys:
+    actReplacementApplyOperations.dependencyOperationKeys,
+  safeByDefault: actReplacementApplyOperations.safeByDefault,
+  status: actReplacementApplyOperations.status,
+  sourceVersionId: actReplacementApplyOperations.sourceVersionId,
+  targetType: actReplacementApplyOperations.targetType,
+  requiredForSourceOutcome:
+    actReplacementApplyOperations.requiredForSourceOutcome,
+  leaseExpiresAt: actReplacementApplyOperations.leaseExpiresAt,
+  automaticReview: automaticReviewProofSql(
+    actReplacementApplyOperations.payload,
+  ),
+};
+
 export type ImportWorkflowProjectionInput = {
   phase: string;
   organizerLeaseExpiresAt?: Date | null;
   summary: Record<string, unknown> | null | undefined;
-  outcomes: readonly { sourceRecordId: string; state: string }[];
+  outcomes: readonly {
+    sourceRecordId: string;
+    state: string;
+    match?: unknown;
+  }[];
   operations: readonly {
     operationKey: string;
     sourceRecordId: string;
@@ -41,9 +74,11 @@ export type ImportWorkflowProjectionInput = {
     safeByDefault: boolean;
     status: string;
     sourceVersionId?: string | null;
-    targetType?: string;
+    targetType: string;
     requiredForSourceOutcome?: boolean;
     leaseExpiresAt?: Date | null;
+    automaticReview?: unknown;
+    payload?: unknown;
   }[];
   batches: readonly {
     id?: string;
@@ -64,11 +99,13 @@ export type ImportWorkflowProjectionInput = {
 export function projectImportWorkflow(
   input: ImportWorkflowProjectionInput,
 ): ImportWorkflow {
-  const readySourceIds = new Set(
-    input.outcomes
-      .filter((outcome) => outcome.state === "ready")
-      .map((outcome) => outcome.sourceRecordId),
-  );
+  type ProjectionOperation = ImportWorkflowProjectionInput["operations"][number];
+  const operationsBySourceId = new Map<string, ProjectionOperation[]>();
+  for (const operation of input.operations) {
+    const sourceOperations = operationsBySourceId.get(operation.sourceRecordId);
+    if (sourceOperations) sourceOperations.push(operation);
+    else operationsBySourceId.set(operation.sourceRecordId, [operation]);
+  }
   const operationByKey = new Map(
     input.operations.map((operation) => [operation.operationKey, operation]),
   );
@@ -81,10 +118,7 @@ export function projectImportWorkflow(
     const operation = operationByKey.get(operationKey);
     if (
       !operation ||
-      trail.has(operationKey) ||
-      !readySourceIds.has(operation.sourceRecordId) ||
-      !operation.safeByDefault ||
-      operation.action === "overwrite_reviewed"
+      trail.has(operationKey)
     ) {
       return false;
     }
@@ -94,8 +128,7 @@ export function projectImportWorkflow(
     ) {
       return true;
     }
-    if (operation.status !== "pending" && operation.status !== "failed")
-      return false;
+    if (!isAutomaticallyApprovedOperation(operation)) return false;
     if (closure.has(operationKey)) return true;
     const nextTrail = new Set(trail).add(operationKey);
     for (const dependency of operation.dependencyOperationKeys) {
@@ -114,10 +147,46 @@ export function projectImportWorkflow(
     }
   }
 
+  const dispositions = input.outcomes.map((outcome) => {
+    if (outcome.state === "failed") {
+      return { sourceRecordId: outcome.sourceRecordId, disposition: "failed" as const };
+    }
+    const sourceOperations = operationsBySourceId.get(outcome.sourceRecordId) ?? [];
+    const proofs = sourceOperations.map((operation) =>
+      readAutomaticReviewProofForOperation(operation),
+    );
+    const eligibleProofs = proofs.filter(
+      (proof): proof is NonNullable<typeof proof> => proof?.eligible === true,
+    );
+    const sourceDispositions = new Set(
+      eligibleProofs.map((proof) => proof.disposition),
+    );
+    let disposition =
+      eligibleProofs.length > 0 &&
+      sourceDispositions.size === 1
+        ? [...sourceDispositions][0]!
+        : "archived_only";
+    const hasNonterminalEligibleAutomaticOperation = sourceOperations.some(
+      (operation) => isAutomaticallyApprovedOperation(operation),
+    );
+    const hasSafeClosure = sourceOperations.some((operation) =>
+      safeOperationKeys.has(operation.operationKey),
+    );
+    if (
+      hasNonterminalEligibleAutomaticOperation &&
+      !hasSafeClosure &&
+      (disposition === "safe_ready" || disposition === "auto_resolved")
+    ) disposition = "archived_only";
+    return { sourceRecordId: outcome.sourceRecordId, disposition };
+  });
   const safeOperationCount = safeOperationKeys.size;
-  const reviewRequiredCount = input.outcomes.filter((outcome) =>
-    ["awaiting_review", "unassigned", "unsupported"].includes(outcome.state),
+  const autoResolvedCount = dispositions.filter(
+    ({ disposition }) => disposition === "auto_resolved",
   ).length;
+  const archivedOnlyCount = dispositions.filter(
+    ({ disposition }) => disposition === "archived_only",
+  ).length;
+  const reviewRequiredCount = 0;
   const summaryDigest = input.summary?.manifestDigest;
   const manifestDigest =
     typeof summaryDigest === "string" &&
@@ -217,14 +286,10 @@ export function projectImportWorkflow(
     },
     { active: 0, expired: 0 },
   );
-  const heldSourceIds = new Set(
-    input.outcomes
-      .filter((outcome) =>
-        ["awaiting_review", "unassigned", "unsupported", "failed"].includes(
-          outcome.state,
-        ),
-      )
-      .map((outcome) => outcome.sourceRecordId),
+  const archivedOnlySourceIds = new Set(
+    dispositions
+      .filter(({ disposition }) => disposition === "archived_only")
+      .map(({ sourceRecordId }) => sourceRecordId),
   );
   const canRebuildUnapplied =
     input.phase === "ready_to_apply" &&
@@ -233,6 +298,8 @@ export function projectImportWorkflow(
 
   return {
     safeOperationCount,
+    autoResolvedCount,
+    archivedOnlyCount,
     reviewRequiredCount,
     appliedOperationCount: input.operations.filter(
       (operation) => operation.status === "applied",
@@ -255,8 +322,10 @@ export function projectImportWorkflow(
       organizerLeaseExpired ||
       canRebuildUnapplied,
     canReview:
-      reviewRequiredCount > 0 &&
+      archivedOnlyCount > 0 &&
       (canRebuildUnapplied ||
+        input.phase === "ready_to_apply" ||
+        input.phase === "applying" ||
         input.phase === "complete" ||
         input.phase === "complete_with_issues"),
     canApplySafe:
@@ -284,7 +353,7 @@ export function projectImportWorkflow(
       status:
         operation.status as ImportWorkflow["operations"][number]["status"],
       requiredForSourceOutcome: operation.requiredForSourceOutcome === true,
-      heldForReview: heldSourceIds.has(operation.sourceRecordId),
+      heldForReview: archivedOnlySourceIds.has(operation.sourceRecordId),
       dependencyOperationKeys: [...operation.dependencyOperationKeys],
       safeByDefault: operation.safeByDefault,
     })),
@@ -339,28 +408,11 @@ class DrizzleWorkflowReader implements WorkflowReader {
 
     const [outcomes, operations, batches, checkpoints] = await Promise.all([
       this.database
-        .select({
-          sourceRecordId: actReplacementOutcomes.sourceRecordId,
-          state: actReplacementOutcomes.state,
-          leaseExpiresAt: actReplacementOutcomes.leaseExpiresAt,
-        })
+        .select(workflowOutcomeSelection)
         .from(actReplacementOutcomes)
         .where(eq(actReplacementOutcomes.runId, runId)),
       this.database
-        .select({
-          operationKey: actReplacementApplyOperations.operationKey,
-          sourceRecordId: actReplacementApplyOperations.sourceRecordId,
-          action: actReplacementApplyOperations.action,
-          dependencyOperationKeys:
-            actReplacementApplyOperations.dependencyOperationKeys,
-          safeByDefault: actReplacementApplyOperations.safeByDefault,
-          status: actReplacementApplyOperations.status,
-          sourceVersionId: actReplacementApplyOperations.sourceVersionId,
-          targetType: actReplacementApplyOperations.targetType,
-          requiredForSourceOutcome:
-            actReplacementApplyOperations.requiredForSourceOutcome,
-          leaseExpiresAt: actReplacementApplyOperations.leaseExpiresAt,
-        })
+        .select(workflowOperationSelection)
         .from(actReplacementApplyOperations)
         .where(eq(actReplacementApplyOperations.runId, runId)),
       this.database

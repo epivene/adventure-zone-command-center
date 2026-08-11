@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 
-import { runActReviewMigrations } from "@workspace/db/migrations";
+import { loadActReviewMigrations, runActReviewMigrations } from "@workspace/db/migrations";
 
 describe("runActReviewMigrations", () => {
+  it("loads the approval provenance migration with a two-column marker", async () => {
+    const migrations = await loadActReviewMigrations();
+    const provenance = migrations.find((migration) => migration.name === "019_act_approval_provenance.sql");
+
+    expect(provenance).toBeDefined();
+    expect(provenance?.markerSql).toContain("COUNT(*) = 2");
+    expect(provenance?.markerSql).toContain("approval_mode");
+    expect(provenance?.markerSql).toContain("approval_mode_version");
+  });
+
   it("serializes schema repair and applies only migrations whose marker is missing", async () => {
     const queries: string[] = [];
     const client = {

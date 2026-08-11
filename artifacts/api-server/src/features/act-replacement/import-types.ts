@@ -237,6 +237,8 @@ export type ActExtractionCounters = {
 
 export type ImportWorkflow = {
   safeOperationCount: number;
+  autoResolvedCount: number;
+  archivedOnlyCount: number;
   reviewRequiredCount: number;
   appliedOperationCount: number;
   alreadyPresentOperationCount: number;

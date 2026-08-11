@@ -1,5 +1,5 @@
 import type { ActApplyService, ApplyBatchStatus } from "./apply-service";
-import type { ApplyBatchRecord } from "./apply-repository";
+import type { ApplyBatchRecord, StoredApproval } from "./apply-repository";
 
 export const MAX_ACT_APPLY_BATCH_SIZE = 25;
 
@@ -20,7 +20,7 @@ export type ApplyCoordinatorStatus = {
 };
 
 export type ApplyCoordinatorStore = {
-  getApproval(runId: string, requestKey: string): Promise<{ approvedOperationIds: string[]; manifestDigest: string } | null>;
+  getApproval(runId: string, requestKey: string): Promise<StoredApproval | null>;
   listApprovalBatches(runId: string, approvalRequestKey: string): Promise<ApplyBatchRecord[]>;
   updateRunPhase(runId: string, phase: "ready_to_apply" | "applying" | "complete" | "complete_with_issues", errorCode?: string): Promise<void>;
 };

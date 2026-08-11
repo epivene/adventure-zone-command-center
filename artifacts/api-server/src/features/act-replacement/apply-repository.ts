@@ -1,5 +1,6 @@
 import type { ManifestOperation } from "./manifest-builder";
 import { localValueFingerprint } from "./local-edit-policy";
+import type { ActApprovalMode } from "./approval-service";
 
 export type StoredOperation = ManifestOperation & { id: string; status: "pending" | "leased" | "applied" | "already_present" | "blocked" | "failed"; attemptCount: number; lastErrorCode?: string; outcomeState: string; latestSourceVersionId: string | null };
 export type ApplyTarget = { id: string; entityType: string; values: Record<string, unknown>; sourceIds?: Set<string>; importedFingerprints?: Map<string, string> };
@@ -9,6 +10,7 @@ export type ApplyBatchClaim = { batch: ApplyBatchRecord; claimed: boolean };
 export type FillMissingResult = "applied" | "already_present" | "local_value_nonempty";
 export type ApplyOrigin = { entityType: string; entityId: string; fieldName: string; sourceRecordId: string; sourceVersionId: string; operationId: string; sourceValueFingerprint: string };
 export type ReviewedOverwriteInput = { target: ApplyTarget; field: string; value: unknown; expectedLocalValue: unknown; expectedLocalValueFingerprint: string; origin: ApplyOrigin; operation: StoredOperation };
+export type StoredApproval = { approvedOperationIds: string[]; manifestDigest: string; approvalMode: ActApprovalMode | null; approvalModeVersion: number | null };
 
 const storedValuesEquivalent = (current: unknown, proposed: unknown): boolean => {
   if (Object.is(current, proposed)) return true;
@@ -27,7 +29,7 @@ export interface ApplyRepository {
   readonly durableApply: true;
   getOperations(runId: string, ids: string[]): Promise<StoredOperation[]>;
   getManifestDigest(runId: string): Promise<string | null>;
-  getApproval(runId: string, requestKey: string): Promise<{ approvedOperationIds: string[]; manifestDigest: string } | null>;
+  getApproval(runId: string, requestKey: string): Promise<StoredApproval | null>;
   listApprovalBatches(runId: string, approvalRequestKey: string): Promise<ApplyBatchRecord[]>;
   updateRunPhase(runId: string, phase: "ready_to_apply" | "applying" | "complete" | "complete_with_issues", errorCode?: string): Promise<void>;
   createBatch(input: Omit<ApplyBatchRecord, "completed" | "alreadyPresent" | "blocked" | "failed">): Promise<ApplyBatchClaim>;
@@ -55,8 +57,8 @@ export class InMemoryApplyRepository implements ApplyRepository {
   readonly activeOrganizerRuns = new Set<string>();
   seedManifest(runId: string, digest: string) { this.digests.set(runId, digest); this.runPhases.set(runId, "ready_to_apply"); }
   async getManifestDigest(runId: string) { return this.digests.get(runId) ?? null; }
-  readonly approvals = new Map<string, { approvedOperationIds: string[]; manifestDigest: string }>(); readonly runPhases = new Map<string, string>();
-  seedApproval(runId: string, requestKey: string, approvedOperationIds: string[], manifestDigest: string) { this.approvals.set(`${runId}:${requestKey}`, { approvedOperationIds: [...approvedOperationIds], manifestDigest }); }
+  readonly approvals = new Map<string, StoredApproval>(); readonly runPhases = new Map<string, string>();
+  seedApproval(runId: string, requestKey: string, approvedOperationIds: string[], manifestDigest: string, approvalMode: ActApprovalMode | null = "automatic_safe", approvalModeVersion: number | null = approvalMode === null ? null : 1) { this.approvals.set(`${runId}:${requestKey}`, { approvedOperationIds: [...approvedOperationIds], manifestDigest, approvalMode, approvalModeVersion }); }
   async getApproval(runId: string, requestKey: string) { return this.approvals.get(`${runId}:${requestKey}`) ?? null; }
   async listApprovalBatches(runId: string, approvalRequestKey: string) { return [...this.batches.values()].filter((batch) => batch.runId === runId && batch.approvalRequestKey === approvalRequestKey).sort((a, b) => (a.startCursor ?? 0) - (b.startCursor ?? 0) || a.requestKey.localeCompare(b.requestKey)).map((batch) => ({ ...batch, operationIds: [...batch.operationIds] })); }
   async updateRunPhase(runId: string, phase: "ready_to_apply" | "applying" | "complete" | "complete_with_issues") { this.runPhases.set(runId, phase); }

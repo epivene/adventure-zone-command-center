@@ -40,6 +40,32 @@ describe("DrizzleApplyRepository", () => {
     expect(repository.durableApply).toBe(true);
   });
 
+  it("loads durable approval provenance for apply authorization", async () => {
+    const dialect = new PgDialect();
+    let statement = "";
+    const database = {
+      execute: async (query: TestQuery) => {
+        statement = dialect.sqlToQuery(query).sql;
+        return { rows: [{
+          manifestDigest: "digest-1",
+          approvedOperationIds: ["operation-1"],
+          approvalMode: "explicit_manual",
+          approvalModeVersion: 1,
+        }] };
+      },
+    } as never;
+
+    await expect(new DrizzleApplyRepository(database).getApproval("run-1", "request-1"))
+      .resolves.toEqual({
+        manifestDigest: "digest-1",
+        approvedOperationIds: ["operation-1"],
+        approvalMode: "explicit_manual",
+        approvalModeVersion: 1,
+      });
+    expect(statement).toContain("approval_mode as \"approvalMode\"");
+    expect(statement).toContain("approval_mode_version as \"approvalModeVersion\"");
+  });
+
   it("fails closed for unsupported target types before any SQL is issued", async () => {
     const database = { execute: async () => { throw new Error("SQL must not run"); } } as never;
     const repository = new DrizzleApplyRepository(withSuccessfulFences(database) as never);

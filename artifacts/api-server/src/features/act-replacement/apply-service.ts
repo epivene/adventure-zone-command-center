@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { localValueFingerprint, verifyOverwrite } from "./local-edit-policy";
+import { isAutomaticallyApprovedOperation } from "./automatic-review-policy";
+import { ACT_APPROVAL_MODE_VERSION, hasReviewedOverwriteProof } from "./approval-service";
 import type { ActApplyAction } from "./import-types";
 import type { ApplyRepository, ApplyAttempt, ApplyBatchRecord, StoredOperation } from "./apply-repository";
 
@@ -30,7 +32,24 @@ export class ActApplyService {
       }
       if (!operation.safeByDefault) fail("operation_not_safe");
     }
-    if (operations.some((operation) => operation.status !== "applied" && operation.status !== "already_present" && operation.outcomeState !== "ready" && !(input.retryFailed && operation.outcomeState === "failed"))) fail("outcome_not_ready");
+    const approval = input.approvalRequestKey
+      ? await this.repository.getApproval(input.runId, input.approvalRequestKey)
+      : null;
+    const approvedIds = new Set(
+      approval?.manifestDigest === input.expectedManifestDigest
+        ? approval.approvedOperationIds
+        : [],
+    );
+    if (operations.some((operation) => {
+      if (operation.status === "applied" || operation.status === "already_present") return false;
+      if (!input.approvalRequestKey || !approvedIds.has(operation.operationKey)) return true;
+      if (operation.action === "overwrite_reviewed") {
+        return approval?.approvalMode !== "explicit_manual"
+          || approval.approvalModeVersion !== ACT_APPROVAL_MODE_VERSION
+          || !hasReviewedOverwriteProof(operation);
+      }
+      return !isAutomaticallyApprovedOperation(operation);
+    })) fail("outcome_not_ready");
     if (operations.some((operation) => operation.latestSourceVersionId !== operation.sourceVersionId)) fail("source_version_changed");
     const keys = new Set(operations.map((operation) => operation.operationKey));
     const priorDependencyIds = [...new Set(operations.flatMap((operation) => operation.dependencyOperationKeys ?? []).filter((dependency) => !keys.has(dependency)))];
