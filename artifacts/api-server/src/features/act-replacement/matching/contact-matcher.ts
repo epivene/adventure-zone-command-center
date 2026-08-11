@@ -3,7 +3,16 @@ import {
   resolveContextClues,
   type ContextClueEvidence,
 } from "./context-clue-resolver";
-import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
+import {
+  boundedUniqueSorted,
+  BoundedCollection,
+  BoundedIdSet,
+  externalLinkCandidateSet,
+  type ExternalLink,
+  type ManualAssignment,
+  type MatchResult,
+  uniqueSorted,
+} from "./match-result";
 
 export type ContactMatchSource = {
   sourceRecordId: string;
@@ -55,31 +64,68 @@ export function matchContact(
   if (source.manualAssignment?.active !== false && source.manualAssignment?.localId) {
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
-  const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "contact", ...context }, source.externalLinks);
-  if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
-  if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
+  const linked = externalLinkCandidateSet({ sourceRecordId: source.sourceRecordId, targetEntityType: "contact", ...context }, source.externalLinks);
+  if (linked.overflow) return { kind: "ambiguous", candidateIds: linked.values, reason: "candidate_limit_exceeded", overflow: true };
+  if (linked.values.length === 1) return { kind: "exact", localId: linked.values[0]!, reason: "exact_external_link" };
+  if (linked.values.length > 1) return { kind: "ambiguous", candidateIds: linked.values, reason: "multiple_exact_external_links" };
+  const sourceEmail = normalizeMatchingEmail(source.email);
   const safeEmail = source.emailIdentityMatchSafe && !isSharedMailboxEmail(source.email)
-    ? normalizeMatchingEmail(source.email)
+    ? sourceEmail
     : null;
   const sourcePhone = phone(source.phone);
-  const byEmail = safeEmail
-    ? locals.filter((candidate) => normalizeMatchingEmail(candidate.email ?? null) === safeEmail).map((candidate) => candidate.id)
-    : [];
-  const byPhone = sourcePhone
-    ? locals.filter((candidate) => phone(candidate.phone) === sourcePhone).map((candidate) => candidate.id)
-    : [];
-  const emailIds = uniqueSorted(byEmail);
-  const phoneIds = uniqueSorted(byPhone);
+  const byEmail = new BoundedIdSet();
+  const byPhone = new BoundedIdSet();
+  for (const candidate of locals) {
+    if (safeEmail && normalizeMatchingEmail(candidate.email ?? null) === safeEmail) {
+      byEmail.add(candidate.id);
+    }
+    if (sourcePhone && phone(candidate.phone) === sourcePhone) {
+      byPhone.add(candidate.id);
+    }
+  }
+  const emailIds = byEmail.values();
+  const phoneIds = byPhone.values();
+  if (byEmail.overflow || byPhone.overflow) {
+    return {
+      kind: "ambiguous",
+      candidateIds: boundedUniqueSorted([...emailIds, ...phoneIds]).values,
+      reason: "candidate_limit_exceeded",
+      overflow: true,
+    };
+  }
   if (emailIds.length > 1) return { kind: "ambiguous", candidateIds: emailIds, reason: "multiple_normalized_email_candidates" };
   if (phoneIds.length > 1) return { kind: "ambiguous", candidateIds: phoneIds, reason: "multiple_normalized_phone_candidates" };
   if (emailIds.length === 1 && phoneIds.length === 1 && emailIds[0] !== phoneIds[0]) {
     return { kind: "ambiguous", candidateIds: uniqueSorted([...emailIds, ...phoneIds]), reason: "conflicting_contact_identity" };
   }
   const name = fullName(source);
-  const clues: ContextClueEvidence[] = [];
+  const clues = new BoundedCollection<ContextClueEvidence>((clue) =>
+    `${clue.targetEntityType}\u0000${clue.targetEntityId}\u0000${clue.family}\u0000${clue.authority}\u0000${clue.label}`
+  );
+  const conflicting = new BoundedIdSet();
   for (const candidate of locals) {
-    if (name && fullName(candidate) === name) {
-      clues.push({
+    const nameAgrees = Boolean(name && fullName(candidate) === name);
+    const emailAgrees = emailIds.length === 1 && emailIds[0] === candidate.id;
+    const phoneAgrees = phoneIds.length === 1 && phoneIds[0] === candidate.id;
+    const organizationAgrees = Boolean(
+      source.resolvedOrganizationId &&
+      candidate.organizationIds?.includes(source.resolvedOrganizationId),
+    );
+    const candidateEmail = normalizeMatchingEmail(candidate.email ?? null);
+    const candidatePhone = phone(candidate.phone);
+    const directConflict = Boolean(
+      (sourceEmail && candidateEmail && sourceEmail !== candidateEmail) ||
+      (sourcePhone && candidatePhone && sourcePhone !== candidatePhone),
+    );
+    if (
+      directConflict &&
+      (nameAgrees || emailAgrees || phoneAgrees || organizationAgrees)
+    ) {
+      conflicting.add(candidate.id);
+      continue;
+    }
+    if (nameAgrees) {
+      clues.add({
         family: "identity",
         label: "contact name agrees",
         targetEntityType: "contact",
@@ -87,8 +133,8 @@ export function matchContact(
         authority: "supporting",
       });
     }
-    if (emailIds.length === 1 && emailIds[0] === candidate.id) {
-      clues.push({
+    if (emailAgrees) {
+      clues.add({
         family: "direct_contact",
         label: "email agrees",
         targetEntityType: "contact",
@@ -96,8 +142,8 @@ export function matchContact(
         authority: "supporting",
       });
     }
-    if (phoneIds.length === 1 && phoneIds[0] === candidate.id) {
-      clues.push({
+    if (phoneAgrees) {
+      clues.add({
         family: "direct_contact",
         label: "phone agrees",
         targetEntityType: "contact",
@@ -106,10 +152,9 @@ export function matchContact(
       });
     }
     if (
-      source.resolvedOrganizationId &&
-      candidate.organizationIds?.includes(source.resolvedOrganizationId)
+      organizationAgrees
     ) {
-      clues.push({
+      clues.add({
         family: "archive_relationship",
         label: "organization relationship agrees",
         targetEntityType: "contact",
@@ -118,7 +163,37 @@ export function matchContact(
       });
     }
   }
-  const resolution = resolveContextClues(clues);
+  const boundedClues = clues.values();
+  const conflictingIds = conflicting.values();
+  if (clues.overflow || conflicting.overflow) {
+    return {
+      kind: "ambiguous",
+      candidateIds: boundedUniqueSorted([
+        ...boundedClues.map((clue) => clue.targetEntityId),
+        ...conflictingIds,
+      ]).values,
+      reason: "candidate_limit_exceeded",
+      evidence: boundedClues,
+      overflow: true,
+    };
+  }
+  const familiesByTarget = new Map<string, Set<ContextClueEvidence["family"]>>();
+  for (const clue of boundedClues) {
+    const families = familiesByTarget.get(clue.targetEntityId) ?? new Set();
+    families.add(clue.family);
+    familiesByTarget.set(clue.targetEntityId, families);
+  }
+  const qualifiedIds = uniqueSorted(
+    [...familiesByTarget]
+      .filter(([, families]) => families.size >= 2)
+      .map(([targetEntityId]) => targetEntityId),
+  );
+  const resolutionClues = qualifiedIds.length === 1 && [...familiesByTarget]
+    .filter(([targetEntityId]) => targetEntityId !== qualifiedIds[0])
+    .every(([, families]) => [...families].every((family) => family === "identity"))
+    ? boundedClues.filter((clue) => clue.targetEntityId === qualifiedIds[0])
+    : boundedClues;
+  const resolution = resolveContextClues(resolutionClues);
   if (resolution.kind === "resolved") {
     return {
       kind: "exact",
@@ -130,13 +205,25 @@ export function matchContact(
   if (resolution.kind === "ambiguous") {
     const onlyIdentity = resolution.evidence.every((clue) => clue.family === "identity");
     return {
-      ...resolution,
-      reason: onlyIdentity
+      kind: "ambiguous",
+      candidateIds: uniqueSorted([...resolution.candidateIds, ...conflictingIds]),
+      reason: conflictingIds.length
+        ? "conflicting_contact_fields"
+        : onlyIdentity
         ? "insufficient_independent_context_clues"
         : resolution.reason,
+      evidence: resolution.evidence,
     };
   }
-  const candidateIds = uniqueSorted(clues.map((clue) => clue.targetEntityId));
+  if (conflictingIds.length) {
+    return {
+      kind: "ambiguous",
+      candidateIds: conflictingIds,
+      reason: "conflicting_contact_fields",
+      evidence: resolution.evidence,
+    };
+  }
+  const candidateIds = uniqueSorted(boundedClues.map((clue) => clue.targetEntityId));
   if (candidateIds.length) {
     return {
       kind: "ambiguous",
