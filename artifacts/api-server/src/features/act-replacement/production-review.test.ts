@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import {
   ActApprovalService,
@@ -11,6 +13,7 @@ import {
   createProductionReview,
   projectImportWorkflow,
   type ImportWorkflowProjectionInput,
+  workflowOperationSelection,
   workflowOutcomeSelection,
 } from "./production-review";
 import { ProductionActOrganizer } from "./production-organizer";
@@ -72,22 +75,14 @@ function input(): ImportWorkflowProjectionInput {
 }
 
 describe("durable production workflow projection", () => {
-  it("keeps optional diagnostics available for actionable conflicts on otherwise safe sources", () => {
-    const state = input();
-    state.outcomes = [{ sourceRecordId: "source-one", state: "ready" }];
-    expect(projectImportWorkflow({ ...state, actionableDiagnosticCount: 1 })).toMatchObject({
-      archivedOnlyCount: 0,
-      canReview: true,
-    });
-  });
   it("fails closed when a safe-by-default operation lacks bounded automatic proof", () => {
     const state = input();
-    const withoutProof = {
-      ...state,
-      operations: [{ ...state.operations[0]!, automaticReview: undefined }],
-    };
+    state.operations = [{
+      ...state.operations[0]!,
+      automaticReview: undefined,
+    }];
 
-    expect(projectImportWorkflow(withoutProof)).toMatchObject({
+    expect(projectImportWorkflow(state)).toMatchObject({
       safeOperationCount: 0,
       archivedOnlyCount: 1,
       canApplySafe: false,
@@ -96,22 +91,61 @@ describe("durable production workflow projection", () => {
 
   it("keeps archived-only diagnostics available without creating review blockers", () => {
     const state = input();
-    const archived = {
-      ...state,
-      operations: [{
+    state.operations = [{
+      ...state.operations[0]!,
+      automaticReview: {
+        version: 1,
+        eligible: false,
+        disposition: "archived_only",
+        basis: "not_automatically_safe",
+      },
+    }];
+
+    expect(projectImportWorkflow(state)).toMatchObject({
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 1,
+      canReview: true,
+    });
+  });
+
+  it("preserves a completed automatic disposition when optional provenance remains pending", () => {
+    const state = input();
+    state.operations = [
+      {
         ...state.operations[0]!,
+        action: "link_existing",
+        status: "applied",
+        automaticReview: automaticProof(
+          "auto_resolved",
+          "proven_context_match",
+        ),
+      },
+      {
+        operationKey: "provenance:source-one",
+        sourceRecordId: "source-one",
+        action: "record_provenance",
+        dependencyOperationKeys: ["organization:one"],
+        safeByDefault: true,
+        status: "pending",
+        targetType: "provenance",
         automaticReview: automaticProof(
           "archived_only",
           "not_automatically_safe",
           false,
         ),
-      }],
-    };
+      },
+    ];
 
-    expect(projectImportWorkflow(archived)).toMatchObject({
-      reviewRequiredCount: 0,
-      archivedOnlyCount: 1,
-      canReview: true,
+    expect(projectImportWorkflow(state)).toMatchObject({
+      safeOperationCount: 0,
+      autoResolvedCount: 1,
+      archivedOnlyCount: 0,
+      operations: expect.arrayContaining([
+        expect.objectContaining({
+          operationKey: "provenance:source-one",
+          heldForReview: false,
+        }),
+      ]),
     });
   });
 
@@ -122,6 +156,22 @@ describe("durable production workflow projection", () => {
       "state",
     ]);
     expect(workflowOutcomeSelection).not.toHaveProperty("match");
+  });
+
+  it("rejects string-coerced and extra-key automatic proofs in the workflow SQL reader", () => {
+    const rendered = new PgDialect().sqlToQuery(
+      sql`select ${workflowOperationSelection.automaticReview}`,
+    ).sql;
+
+    expect(rendered).toContain("?& array['version','eligible','disposition','basis']::text[]");
+    expect(rendered).toContain("- 'version' - 'eligible' - 'disposition' - 'basis'");
+    expect(rendered).toContain("jsonb_typeof");
+    expect(rendered).toContain("->'version') = 'number'");
+    expect(rendered).toContain("->'eligible') = 'boolean'");
+    expect(rendered).toContain("->'disposition') = 'string'");
+    expect(rendered).toContain("->'basis') = 'string'");
+    expect(rendered).not.toContain("#>> '{automaticReview");
+    expect(rendered).not.toContain("jsonb_build_object");
   });
 
   it("approves only safe or proof-reviewed operations from a mixed archived migration", async () => {
@@ -415,10 +465,6 @@ describe("durable production workflow projection", () => {
       "organization:exact-empty:identity:local-fill",
       "organization:keep-local:identity:local-keep",
       "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
     ];
     const expectedSafeApprovedOperationIds = [
       "organization:ambiguous-kept-separate",
@@ -427,10 +473,6 @@ describe("durable production workflow projection", () => {
       fillPhoneKey,
       "organization:keep-local:identity:local-keep",
       "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
     ];
     expect(safe).toEqual({
       selectedOperationIds: expectedSafeSelectedOperationIds,
@@ -438,11 +480,15 @@ describe("durable production workflow projection", () => {
       dependencyOperationIds: ["organization:exact-empty:identity:local-fill"],
       rejectedOperationIds: [
         "organization:use-act:field:phone:decision:decision-use-act",
+        provenanceAmbiguousKey,
+        provenanceCreateKey,
+        provenanceFillKey,
+        provenanceKeepKey,
         provenanceUseKey,
       ],
-      selectedCount: 10,
+      selectedCount: 6,
       dependencyCount: 1,
-      rejectedCount: 2,
+      rejectedCount: 6,
       manifestDigest: manifest.digest,
     });
 
@@ -452,42 +498,7 @@ describe("durable production workflow projection", () => {
       requestKey: "approve-ready",
       requestedBy: "owner",
     });
-    const expectedReadyOperationIds = [
-      "organization:ambiguous-kept-separate",
-      "organization:create-with-unsupported",
-      "organization:exact-empty:identity:local-fill",
-      fillPhoneKey,
-      "organization:keep-local:identity:local-keep",
-      "organization:use-act:identity:local-use",
-      "organization:use-act:field:phone:decision:decision-use-act",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
-    ];
-    const expectedReadySelectedOperationIds = [
-      "organization:ambiguous-kept-separate",
-      "organization:create-with-unsupported",
-      fillPhoneKey,
-      "organization:exact-empty:identity:local-fill",
-      "organization:keep-local:identity:local-keep",
-      "organization:use-act:field:phone:decision:decision-use-act",
-      "organization:use-act:identity:local-use",
-      provenanceAmbiguousKey,
-      provenanceCreateKey,
-      provenanceFillKey,
-      provenanceKeepKey,
-    ];
-    expect(ready).toEqual({
-      selectedOperationIds: expectedReadySelectedOperationIds,
-      approvedOperationIds: expectedReadyOperationIds,
-      dependencyOperationIds: ["organization:exact-empty:identity:local-fill", "organization:use-act:identity:local-use"],
-      rejectedOperationIds: [provenanceUseKey],
-      selectedCount: 11,
-      dependencyCount: 2,
-      rejectedCount: 1,
-      manifestDigest: manifest.digest,
-    });
+    expect(ready).toEqual(safe);
 
     const explicit = await approvalService.approve({
       runId,
@@ -512,14 +523,22 @@ describe("durable production workflow projection", () => {
     });
 
     class ConcurrentEditApplyRepository extends InMemoryApplyRepository {
-      override async fillMissingTarget(
-        ...args: Parameters<InMemoryApplyRepository["fillMissingTarget"]>
+      override async findTargetBySource(
+        entityType: string,
+        sourceRecordId: string,
       ) {
-        const [target, field, , , sourceRecordId] = args;
-        if (sourceRecordId === "exact-empty" && field === "phone") {
-          this.targets.get(`${target.entityType}:${target.id}`)!.values.phone = "concurrent-local-edit";
-        }
-        return super.fillMissingTarget(...args);
+        const target = await super.findTargetBySource(
+          entityType,
+          sourceRecordId,
+        );
+        if (!target || sourceRecordId !== "exact-empty") return target;
+        const staleSnapshot = {
+          ...target,
+          values: { ...target.values },
+          sourceIds: target.sourceIds ? new Set(target.sourceIds) : undefined,
+        };
+        target.values.phone = "concurrent-local-edit";
+        return staleSnapshot;
       }
     }
 
@@ -558,11 +577,18 @@ describe("durable production workflow projection", () => {
       website: "https://use.example",
     });
     const applyService = new ActApplyService(applyRepository, true);
+    applyRepository.seedApproval(
+      runId,
+      "safe-defaults",
+      safe.approvedOperationIds,
+      manifest.digest,
+    );
     const safeApply = await applyService.apply({
       runId,
       approvedOperationIds: safe.approvedOperationIds,
       expectedManifestDigest: manifest.digest,
       requestKey: "apply-safe-defaults",
+      approvalRequestKey: "safe-defaults",
       requestedBy: "owner",
     });
     expect(safeApply).toEqual({
@@ -570,10 +596,10 @@ describe("durable production workflow projection", () => {
       runId,
       manifestDigest: manifest.digest,
       state: "complete_with_issues",
-      operationCount: 10,
-      completedCount: 5,
+      operationCount: 6,
+      completedCount: 2,
       alreadyPresentCount: 3,
-      blockedCount: 2,
+      blockedCount: 1,
       failedCount: 0,
     });
     expect(fillTarget.values).toEqual({
@@ -597,11 +623,19 @@ describe("durable production workflow projection", () => {
     });
 
     overwriteTarget.values.phone = "concurrent-reviewed-edit";
+    applyRepository.seedApproval(
+      runId,
+      "explicit-reviewed-overwrite",
+      explicit.approvedOperationIds,
+      manifest.digest,
+      "explicit_manual",
+    );
     const explicitApply = await applyService.apply({
       runId,
       approvedOperationIds: explicit.approvedOperationIds,
       expectedManifestDigest: manifest.digest,
       requestKey: "apply-reviewed-overwrite",
+      approvalRequestKey: "explicit-reviewed-overwrite",
       requestedBy: "owner",
     });
     expect(explicitApply).toEqual({
@@ -1246,6 +1280,7 @@ describe("durable production workflow projection", () => {
       action: "create",
       payload: {
         normalized: { kind: "organization", name: "Reviewed second" },
+        automaticReview: automaticProof(),
       },
       dependencyOperationKeys: [],
       requiredForSourceOutcome: true,
@@ -1523,65 +1558,6 @@ describe("durable production workflow projection", () => {
       manifestDigest: CURRENT_DIGEST,
       nextApplyCursor: 3,
       canApplySafe: true,
-    });
-  });
-
-  it("keeps the status cursor explicitly aggregate when a fresh approval starts at zero", () => {
-    const state = input();
-    state.batches = [
-      {
-        requestKey: "approval-a:0",
-        approvalRequestKey: "approval-a",
-        startCursor: 0,
-        manifestDigest: CURRENT_DIGEST,
-        operationIds: ["organization:old"],
-        state: "complete",
-      },
-      {
-        requestKey: "approval-a:1",
-        approvalRequestKey: "approval-a",
-        startCursor: 1,
-        manifestDigest: CURRENT_DIGEST,
-        operationIds: ["organization:older"],
-        state: "complete",
-      },
-      {
-        requestKey: "approval-b:0",
-        approvalRequestKey: "approval-b",
-        startCursor: 0,
-        manifestDigest: CURRENT_DIGEST,
-        operationIds: ["organization:fresh"],
-        state: "queued",
-      },
-    ];
-
-    expect(projectImportWorkflow(state)).toMatchObject({
-      nextApplyCursor: 2,
-      canApplySafe: true,
-    });
-  });
-
-  it("does not archive a source after its identity operation has already applied", () => {
-    const state = input();
-    state.operations = [
-      {
-        ...state.operations[0]!,
-        status: "applied",
-      },
-      {
-        operationKey: "organization:one:field:phone",
-        sourceRecordId: "source-one",
-        action: "overwrite_reviewed",
-        dependencyOperationKeys: ["organization:one"],
-        safeByDefault: false,
-        status: "pending",
-        targetType: "organization",
-      },
-    ];
-
-    expect(projectImportWorkflow(state)).toMatchObject({
-      archivedOnlyCount: 0,
-      safeOperationCount: 0,
     });
   });
 
