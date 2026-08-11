@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ActApprovalService, InMemoryApprovalRepository } from "./approval-service";
+import { ActApprovalService, InMemoryApprovalRepository, type ApprovalRepository } from "./approval-service";
 import { buildActOrganizeManifest, type ManifestOperation, type ManifestOutcome } from "./manifest-builder";
 import { fingerprintSourceContent } from "./source-fingerprint";
 const automaticReview = (
@@ -40,11 +40,41 @@ describe("Act approval closure", () => {
       outcomes: [outcome("safe", "ready"), outcome("conflict", "awaiting_review")],
       operations: [op("safe:create", [], true, "safe"), op("conflict:create", [], true, "conflict")],
     });
+    const service = new ActApprovalService(repo);
 
-    const result = await new ActApprovalService(repo).approveSafeDefaults({ runId: "r", expectedManifestDigest: "d", requestKey: "safe-defaults", requestedBy: "owner" });
+    const result = await service.approveSafeDefaults({ runId: "r", expectedManifestDigest: "d", requestKey: "safe-defaults", requestedBy: "owner" });
 
     expect(result.approvedOperationIds).toEqual(["conflict:create", "safe:create"]);
     expect(result.rejectedOperationIds).toEqual([]);
+    await expect(service.approveSafeDefaults({ runId: "r", expectedManifestDigest: "d", requestKey: "safe-defaults", requestedBy: "owner" })).resolves.toEqual(result);
+  });
+
+  it("replays the same automatic approval after its operations become terminal", async () => {
+    const repo = new InMemoryApprovalRepository();
+    repo.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [op("safe:create", [], true, "safe")],
+    });
+    const service = new ActApprovalService(repo);
+    const first = await service.approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "safe-defaults",
+      requestedBy: "owner",
+    });
+    repo.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [{ ...op("safe:create", [], true, "safe"), status: "applied" }],
+    });
+
+    await expect(service.approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "safe-defaults",
+      requestedBy: "owner",
+    })).resolves.toEqual(first);
   });
 
   it("approves an awaiting-review safe link while excluding unsafe and dependency-blocked roots", async () => {
@@ -103,6 +133,15 @@ describe("Act approval closure", () => {
 
     expect(result.approvedOperationIds).toEqual([]);
     expect(result.rejectedOperationIds).toEqual(["malformed:create", "missing:create"]);
+
+    const legacyReady = await new ActApprovalService(repo).approveReady({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "legacy-proof-required",
+      requestedBy: "owner",
+    });
+    expect(legacyReady.approvedOperationIds).toEqual([]);
+    expect(legacyReady.rejectedOperationIds).toEqual(["malformed:create", "missing:create"]);
   });
 
   it("never automatically approves generic relationship or provenance actions", async () => {
@@ -113,7 +152,7 @@ describe("Act approval closure", () => {
       operations: [
         op("safe:create", [], true, "safe"),
         { ...op("safe:relationship", ["safe:create"], true, "safe"), action: "create_relationship", targetType: "organization_contact" },
-        { ...op("safe:provenance", ["safe:create"], true, "safe"), action: "record_provenance", targetType: "organization_contact" },
+        { ...op("safe:provenance", ["safe:create"], true, "safe"), action: "record_provenance" },
       ],
     });
 
@@ -190,6 +229,203 @@ describe("Act approval closure", () => {
     expect(result.approvedOperationIds).toEqual(["organization:a", "organization:a:field:phone"]);
   });
 
+  it("does not replay an explicit reviewed overwrite as automatic safe defaults", async () => {
+    const repo = new InMemoryApprovalRepository();
+    repo.seed("r", {
+      digest: "d",
+      outcomes: [outcome("a", "ready")],
+      operations: [op("organization:a", [], true, "a"), reviewedOverwrite()],
+    });
+    const service = new ActApprovalService(repo);
+
+    await service.approve({
+      runId: "r",
+      operationIds: ["organization:a:field:phone"],
+      includeDependencies: true,
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    });
+
+    await expect(service.approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    })).rejects.toMatchObject({ code: "request_replay_mode_mismatch", status: 409 });
+  });
+
+  it("does not replay an identical explicit manual closure as automatic safe defaults", async () => {
+    const repo = new InMemoryApprovalRepository();
+    repo.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [op("safe:create", [], true, "safe")],
+    });
+    const service = new ActApprovalService(repo);
+
+    await service.approve({
+      runId: "r",
+      operationIds: ["safe:create"],
+      includeDependencies: true,
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    });
+
+    await expect(service.approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    })).rejects.toMatchObject({ code: "request_replay_mode_mismatch", status: 409 });
+  });
+
+  it("does not replay an identical automatic closure as an explicit manual approval", async () => {
+    const repo = new InMemoryApprovalRepository();
+    repo.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [op("safe:create", [], true, "safe")],
+    });
+    const service = new ActApprovalService(repo);
+
+    await service.approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    });
+
+    await expect(service.approve({
+      runId: "r",
+      operationIds: ["safe:create"],
+      includeDependencies: true,
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    })).rejects.toMatchObject({ code: "request_replay_mode_mismatch", status: 409 });
+  });
+
+  it("does not accept an explicit reviewed overwrite that wins a concurrent automatic save", async () => {
+    const base = new InMemoryApprovalRepository();
+    base.seed("r", {
+      digest: "d",
+      outcomes: [outcome("a", "ready")],
+      operations: [op("organization:a", [], true, "a"), reviewedOverwrite()],
+    });
+    await new ActApprovalService(base).approve({
+      runId: "r",
+      operationIds: ["organization:a:field:phone"],
+      includeDependencies: true,
+      expectedManifestDigest: "d",
+      requestKey: "explicit-request",
+      requestedBy: "owner",
+    });
+    const explicit = await base.getRequest("r", "explicit-request");
+    expect(explicit).not.toBeNull();
+    const concurrentRepository: ApprovalRepository = {
+      getManifest: (runId) => base.getManifest(runId),
+      getRequest: async () => null,
+      saveRequest: async () => explicit!,
+    };
+
+    await expect(new ActApprovalService(concurrentRepository).approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    })).rejects.toMatchObject({ code: "request_replay_mode_mismatch", status: 409 });
+  });
+
+  it("does not accept an identical manual closure that wins a concurrent automatic save", async () => {
+    const base = new InMemoryApprovalRepository();
+    base.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [op("safe:create", [], true, "safe")],
+    });
+    await new ActApprovalService(base).approve({
+      runId: "r",
+      operationIds: ["safe:create"],
+      includeDependencies: true,
+      expectedManifestDigest: "d",
+      requestKey: "manual-request",
+      requestedBy: "owner",
+    });
+    const manual = await base.getRequest("r", "manual-request");
+    expect(manual).not.toBeNull();
+    const concurrentRepository: ApprovalRepository = {
+      getManifest: (runId) => base.getManifest(runId),
+      getRequest: async () => null,
+      saveRequest: async () => manual!,
+    };
+
+    await expect(new ActApprovalService(concurrentRepository).approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "shared-request-key",
+      requestedBy: "owner",
+    })).rejects.toMatchObject({ code: "request_replay_mode_mismatch", status: 409 });
+  });
+
+  it("treats a legacy approval without provenance as non-automatic", async () => {
+    const repo = new InMemoryApprovalRepository();
+    repo.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [op("safe:create", [], true, "safe")],
+    });
+    repo.seedRequest("r", "legacy-request", {
+      selectedOperationIds: ["safe:create"],
+      approvedOperationIds: ["safe:create"],
+      dependencyOperationIds: [],
+      rejectedOperationIds: [],
+      selectedCount: 1,
+      dependencyCount: 0,
+      rejectedCount: 0,
+      manifestDigest: "d",
+      approvalMode: null,
+      approvalModeVersion: null,
+    });
+
+    await expect(new ActApprovalService(repo).approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "legacy-request",
+      requestedBy: "owner",
+    })).rejects.toMatchObject({ code: "request_replay_mode_mismatch", status: 409 });
+  });
+
+  it("preserves a concurrent same-mode automatic save", async () => {
+    const base = new InMemoryApprovalRepository();
+    base.seed("r", {
+      digest: "d",
+      outcomes: [outcome("safe", "ready")],
+      operations: [op("safe:create", [], true, "safe")],
+    });
+    const expected = await new ActApprovalService(base).approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "automatic-winner",
+      requestedBy: "owner",
+    });
+    const winner = await base.getRequest("r", "automatic-winner");
+    expect(winner).not.toBeNull();
+    const concurrentRepository: ApprovalRepository = {
+      getManifest: (runId) => base.getManifest(runId),
+      getRequest: async () => null,
+      saveRequest: async () => winner!,
+    };
+
+    await expect(new ActApprovalService(concurrentRepository).approveSafeDefaults({
+      runId: "r",
+      expectedManifestDigest: "d",
+      requestKey: "automatic-request",
+      requestedBy: "owner",
+    })).resolves.toEqual(expected);
+  });
+
   it("rejects an explicitly selected reviewed overwrite without matching durable proof", async () => {
     const repo = new InMemoryApprovalRepository();
     repo.seed("r", {
@@ -218,7 +454,7 @@ describe("Act approval closure", () => {
     })).rejects.toMatchObject({ code: "review_proof_required" });
   });
 
-  it("approves safe operations and proof-bearing reviewed overwrites for ready outcomes", async () => {
+  it("enforces the central automatic predicate for legacy ready approval", async () => {
     const repo = new InMemoryApprovalRepository();
     repo.seed("r", {
       digest: "d",
@@ -232,10 +468,14 @@ describe("Act approval closure", () => {
 
     const result = await new ActApprovalService(repo).approveReady({ runId: "r", expectedManifestDigest: "d", requestKey: "ready", requestedBy: "owner" });
 
-    expect(result.approvedOperationIds).toEqual(["organization:a", "organization:a:field:phone", "provenance:a"]);
+    expect(result.approvedOperationIds).toEqual(["organization:a"]);
+    expect(result.rejectedOperationIds).toEqual([
+      "organization:a:field:phone",
+      "provenance:a",
+    ]);
   });
 
-  it("approves real exact-match fills and reviewed overwrites without admitting held or unsafe work", async () => {
+  it("uses the same automatic closure for ready and safe-default approval", async () => {
     const decision = {
       decisionId: "decision-use-source",
       sourceVersionId: "v-overwrite",
@@ -319,14 +559,11 @@ describe("Act approval closure", () => {
       "organization:fill:identity:local-fill",
       fillOperationKey,
       "organization:overwrite:identity:local-overwrite",
-      "organization:overwrite:field:phone:decision:decision-use-source",
     ]));
     expect(ready.approvedOperationIds).not.toContain("organization:ambiguous");
     expect(ready.approvedOperationIds).not.toContain("contact:unresolved");
     expect(ready.approvedOperationIds).not.toContain("organization:unsafe");
-    expect(ready.approvedOperationIds.filter((operationId) =>
-      manifest.operations.find((operation) => operation.operationKey === operationId)?.action === "overwrite_reviewed"
-    )).toEqual(["organization:overwrite:field:phone:decision:decision-use-source"]);
+    expect(ready.approvedOperationIds).not.toContain("organization:overwrite:field:phone:decision:decision-use-source");
 
     const safe = await service.approveSafeDefaults({
       runId: "r",
@@ -334,8 +571,8 @@ describe("Act approval closure", () => {
       requestKey: "real-safe-defaults",
       requestedBy: "owner",
     });
-    expect(safe.approvedOperationIds).toContain(fillOperationKey);
-    expect(safe.approvedOperationIds).not.toContain("organization:overwrite:field:phone:decision:decision-use-source");
+    expect(safe.approvedOperationIds).toEqual(ready.approvedOperationIds);
+    expect(safe.rejectedOperationIds).toEqual(ready.rejectedOperationIds);
   });
 
   it("keeps a reviewed overwrite without matching durable proof out of ready approval", async () => {
@@ -382,9 +619,12 @@ describe("Act approval closure", () => {
 
     const result = await new ActApprovalService(repo).approveReady({ runId: "r", expectedManifestDigest: "d", requestKey: "ready-reviewed-dependency", requestedBy: "owner" });
 
-    expect(result.selectedOperationIds).toEqual(["organization:a:field:phone"]);
-    expect(result.approvedOperationIds).toEqual(["organization:a:field:phone"]);
-    expect(result.rejectedOperationIds).toContain("safe:create");
+    expect(result.selectedOperationIds).toEqual([]);
+    expect(result.approvedOperationIds).toEqual([]);
+    expect(result.rejectedOperationIds).toEqual([
+      "organization:a:field:phone",
+      "safe:create",
+    ]);
   });
 
   it("rejects a safe root whose dependency is an overwrite operation", async () => {
