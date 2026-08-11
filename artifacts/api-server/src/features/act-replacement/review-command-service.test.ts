@@ -194,10 +194,10 @@ describe("Act review command service", () => {
     })).rejects.toMatchObject({ code: "review_target_not_found", status: 409 });
   });
   it("returns dependency closure and refuses apply when disabled", async () => { const s = service(); await expect(s.approve({ runId: "r", operationIds: ["organization:a"], expectedManifestDigest: "d", requestKey: "k", requestedBy: "owner" })).resolves.toMatchObject({ approvedOperationIds: ["organization:a"] }); await expect(s.apply({ runId: "r", approvedOperationIds: ["organization:a"], expectedManifestDigest: "d", requestKey: "k", requestedBy: "owner" })).rejects.toMatchObject({ code: "act_apply_disabled" }); });
-  it("exposes ready-outcome approval through the review command service", async () => {
+  it("fails closed when legacy ready approval has no automatic proof", async () => {
     const s = service();
 
-    await expect(s.approveReady({ runId: "r", expectedManifestDigest: "d", requestKey: "ready", requestedBy: "owner" })).resolves.toMatchObject({ approvedOperationIds: ["organization:a"] });
+    await expect(s.approveReady({ runId: "r", expectedManifestDigest: "d", requestKey: "ready", requestedBy: "owner" })).resolves.toMatchObject({ approvedOperationIds: [] });
   });
 });
 
@@ -297,17 +297,16 @@ describe("relationship review decisions", () => {
       payload: expect.objectContaining({ localId: "local-organization-id" }),
     }));
 
-    await expect(commands.approveReady({
+    const approval = await commands.approveReady({
       runId: "run",
       expectedManifestDigest: rebuilt!.digest,
       requestKey: "approve-assigned-parent",
       requestedBy: "owner",
-    })).resolves.toMatchObject({
-      approvedOperationIds: expect.arrayContaining([
-        "activity:timeline-source",
-        expect.stringMatching(/^activity_association:timeline-source:/),
-      ]),
     });
+    expect(approval.approvedOperationIds).toContain("activity:timeline-source");
+    expect(approval.approvedOperationIds).not.toEqual(expect.arrayContaining([
+      expect.stringMatching(/^activity_association:timeline-source:/),
+    ]));
   });
 
   it("rebuilds a supported broken relationship as a standalone import and approves no relationship operation", async () => {
