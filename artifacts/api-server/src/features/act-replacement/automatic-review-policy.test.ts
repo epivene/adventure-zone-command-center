@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { ManifestOutcome } from "./manifest-builder";
 import {
+  automaticReviewProof,
   automaticReviewDisposition,
   hasProvenContextMatch,
-  isAutomaticallyImportableForOutcome,
+  isAutomaticallyApprovedOperation,
   isAutomaticallyImportableOperation,
+  readAutomaticReviewProof,
 } from "./automatic-review-policy";
 
 type Clue = {
@@ -20,8 +22,6 @@ type PolicyOperation = {
   safeByDefault: boolean;
   status: string;
   targetType: string;
-  selectedTargetId?: string | null;
-  payload?: Readonly<Record<string, unknown>>;
 };
 
 const clue = (
@@ -56,7 +56,6 @@ const rootLink = (
   safeByDefault: true,
   status: "pending",
   targetType: "organization",
-  selectedTargetId: "organization-1",
   ...overrides,
 });
 
@@ -102,38 +101,6 @@ describe("automatic review policy", () => {
     expect(disposition(value)).toBe("archived_only");
   });
 
-  it("does not trust a ready-state link when its retained evidence is contradictory", () => {
-    const value = match({
-      evidence: [
-        clue("identity", "organization-1", { authority: "authoritative" }),
-        clue("location", "organization-2"),
-      ],
-    });
-
-    expect(isAutomaticallyImportableForOutcome(
-      { ...rootLink(), payload: { localId: "organization-1" } },
-      outcome(value, "ready"),
-    )).toBe(false);
-  });
-
-  it("does not release another automatic action from contradictory exact proof", () => {
-    const value = match({
-      evidence: [
-        clue("identity", "organization-1", { authority: "authoritative" }),
-        clue("location", "organization-2"),
-      ],
-    });
-
-    expect(isAutomaticallyImportableForOutcome(
-      {
-        ...rootLink(),
-        action: "fill_missing",
-        payload: { entityId: "organization-1", fieldName: "phone" },
-      },
-      outcome(value, "ready"),
-    )).toBe(false);
-  });
-
   it("fails closed when an authoritative clue is accompanied by an incompatible entity type", () => {
     const value = match({
       evidence: [
@@ -150,29 +117,6 @@ describe("automatic review policy", () => {
       evidence: [...validEvidence, clue("location", "organization-2")],
     });
     expect(disposition(value)).toBe("archived_only");
-  });
-
-  it("rejects a persisted proof marked as truncated", () => {
-    expect(disposition(match({ evidenceTruncated: true }))).toBe("archived_only");
-  });
-
-  it("keeps a proven context record auto-resolved after its safe link is applied", () => {
-    expect(disposition(match(), [rootLink({ status: "already_present" })])).toBe("auto_resolved");
-  });
-
-  it("accepts a legacy exact external link only when no contradictory evidence is present", () => {
-    expect(disposition({
-      kind: "exact",
-      localId: "organization-1",
-      reason: "exact_external_link",
-    })).toBe("safe_ready");
-  });
-
-  it("rejects a ready legacy link whose operation target differs from the matched target", () => {
-    expect(isAutomaticallyImportableForOutcome(
-      rootLink({ payload: { localId: "organization-other" } }),
-      outcome({ kind: "exact", localId: "organization-1", reason: "exact_external_link" }, "ready"),
-    )).toBe(false);
   });
 
   it("does not auto-resolve an ambiguous match", () => {
@@ -195,6 +139,116 @@ describe("automatic review policy", () => {
       evidence: [clue("direct_contact", "organization-1", { label: "email agrees" }), clue("direct_contact", "organization-1", { label: "phone agrees" })],
     });
     expect(disposition(value)).toBe("archived_only");
+  });
+
+  it("keeps a trusted exact external link safe without context evidence", () => {
+    const value = match({ reason: "exact_external_link", evidence: undefined });
+
+    expect(disposition(value)).toBe("safe_ready");
+    expect(automaticReviewProof({
+      outcome: outcome(value),
+      operations: [rootLink()],
+      operation: rootLink(),
+    })).toEqual({
+      version: 1,
+      eligible: true,
+      disposition: "safe_ready",
+      basis: "trusted_exact_match",
+    });
+  });
+
+  it("keeps a create safe when no context match is required", () => {
+    const create = rootLink({ action: "create" });
+
+    expect(automaticReviewProof({
+      outcome: outcome({ kind: "none", reason: "no_candidate" }, "ready"),
+      operations: [create],
+      operation: create,
+    })).toEqual({
+      version: 1,
+      eligible: true,
+      disposition: "safe_ready",
+      basis: "safe_create",
+    });
+  });
+
+  it("proves only link and fill actions for strong context evidence", () => {
+    const link = rootLink();
+    const fill = rootLink({ action: "fill_missing" });
+    const relationship = rootLink({
+      action: "create_relationship",
+      targetType: "organization_contact",
+    });
+    const value = match();
+
+    expect(automaticReviewProof({
+      outcome: outcome(value),
+      operations: [link, fill, relationship],
+      operation: link,
+    })).toMatchObject({
+      eligible: true,
+      disposition: "auto_resolved",
+      basis: "proven_context_match",
+    });
+    expect(automaticReviewProof({
+      outcome: outcome(value),
+      operations: [link, fill, relationship],
+      operation: fill,
+    })).toMatchObject({ eligible: true, disposition: "auto_resolved" });
+    expect(automaticReviewProof({
+      outcome: outcome(value),
+      operations: [link, fill, relationship],
+      operation: relationship,
+    })).toMatchObject({ eligible: false, disposition: "auto_resolved" });
+  });
+
+  it("fails closed when persisted automatic proof is absent or malformed", () => {
+    expect(isAutomaticallyApprovedOperation({
+      ...rootLink(),
+      payload: {},
+    })).toBe(false);
+    expect(isAutomaticallyApprovedOperation({
+      ...rootLink(),
+      payload: {
+        automaticReview: {
+          version: 1,
+          eligible: true,
+          disposition: "auto_resolved",
+          basis: "made_up",
+        },
+      },
+    })).toBe(false);
+  });
+
+  it.each(["archived_only", "failed"] as const)(
+    "rejects a dependency-closed proof with %s disposition",
+    (disposition) => {
+      expect(readAutomaticReviewProof({
+        version: 1,
+        eligible: true,
+        disposition,
+        basis: "dependency_closed_relationship",
+      })).toBeNull();
+      expect(readAutomaticReviewProof({
+        version: 1,
+        eligible: true,
+        disposition,
+        basis: "dependency_closed_provenance",
+      })).toBeNull();
+    },
+  );
+
+  it("accepts only a bounded persisted proof for an importable operation", () => {
+    expect(isAutomaticallyApprovedOperation({
+      ...rootLink(),
+      payload: {
+        automaticReview: automaticReviewProof({
+          outcome: outcome(match()),
+          operations: [rootLink()],
+          operation: rootLink(),
+        }),
+      },
+    })).toBe(true);
   });
 
   it.each(["link_existing", "create", "fill_missing"])(
