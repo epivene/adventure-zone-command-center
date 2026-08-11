@@ -3,7 +3,16 @@ import {
   resolveContextClues,
   type ContextClueEvidence,
 } from "./context-clue-resolver";
-import { externalLinkCandidates, type ExternalLink, type ManualAssignment, type MatchResult, uniqueSorted } from "./match-result";
+import {
+  boundedUniqueSorted,
+  BoundedCollection,
+  BoundedIdSet,
+  externalLinkCandidateSet,
+  type ExternalLink,
+  type ManualAssignment,
+  type MatchResult,
+  uniqueSorted,
+} from "./match-result";
 
 export type OrganizationMatchSource = {
   sourceRecordId: string;
@@ -58,12 +67,15 @@ export function matchOrganization(
   if (source.manualAssignment?.active !== false && source.manualAssignment?.localId) {
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
-  const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "organization", ...context }, source.externalLinks);
-  if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
-  if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
+  const linked = externalLinkCandidateSet({ sourceRecordId: source.sourceRecordId, targetEntityType: "organization", ...context }, source.externalLinks);
+  if (linked.overflow) return { kind: "ambiguous", candidateIds: linked.values, reason: "candidate_limit_exceeded", overflow: true };
+  if (linked.values.length === 1) return { kind: "exact", localId: linked.values[0]!, reason: "exact_external_link" };
+  if (linked.values.length > 1) return { kind: "ambiguous", candidateIds: linked.values, reason: "multiple_exact_external_links" };
   const expected = normalized(source);
-  const clues: ContextClueEvidence[] = [];
-  const conflicting: string[] = [];
+  const clues = new BoundedCollection<ContextClueEvidence>((clue) =>
+    `${clue.targetEntityType}\u0000${clue.targetEntityId}\u0000${clue.family}\u0000${clue.authority}\u0000${clue.label}`
+  );
+  const conflicting = new BoundedIdSet();
   for (const candidate of locals) {
     const actual = normalized(candidate);
     const fields: Array<{
@@ -80,10 +92,10 @@ export function matchOrganization(
     ];
     const conflicts = fields.some((field) => field.provided && !field.agrees);
     const agreements = fields.filter((field) => field.provided && field.agrees);
-    if (agreements.length && conflicts) conflicting.push(candidate.id);
+    if (agreements.length && conflicts) conflicting.add(candidate.id);
     if (!conflicts) {
       for (const agreement of agreements) {
-        clues.push({
+        clues.add({
           family: agreement.family,
           label: agreement.label,
           targetEntityType: "organization",
@@ -93,8 +105,38 @@ export function matchOrganization(
       }
     }
   }
-  const resolution = resolveContextClues(clues);
-  if (resolution.kind === "resolved" && conflicting.length === 0) {
+  const boundedClues = clues.values();
+  const conflictingIds = conflicting.values();
+  if (clues.overflow || conflicting.overflow) {
+    return {
+      kind: "ambiguous",
+      candidateIds: boundedUniqueSorted([
+        ...boundedClues.map((clue) => clue.targetEntityId),
+        ...conflictingIds,
+      ]).values,
+      reason: "candidate_limit_exceeded",
+      evidence: boundedClues,
+      overflow: true,
+    };
+  }
+  const familiesByTarget = new Map<string, Set<ContextClueEvidence["family"]>>();
+  for (const clue of boundedClues) {
+    const families = familiesByTarget.get(clue.targetEntityId) ?? new Set();
+    families.add(clue.family);
+    familiesByTarget.set(clue.targetEntityId, families);
+  }
+  const qualifiedIds = uniqueSorted(
+    [...familiesByTarget]
+      .filter(([, families]) => families.size >= 2)
+      .map(([targetEntityId]) => targetEntityId),
+  );
+  const resolutionClues = qualifiedIds.length === 1 && [...familiesByTarget]
+    .filter(([targetEntityId]) => targetEntityId !== qualifiedIds[0])
+    .every(([, families]) => [...families].every((family) => family === "identity"))
+    ? boundedClues.filter((clue) => clue.targetEntityId === qualifiedIds[0])
+    : boundedClues;
+  const resolution = resolveContextClues(resolutionClues);
+  if (resolution.kind === "resolved" && conflictingIds.length === 0) {
     return {
       kind: "exact",
       localId: resolution.targetEntityId,
@@ -109,9 +151,9 @@ export function matchOrganization(
         ...(resolution.kind === "resolved"
           ? [resolution.targetEntityId]
           : resolution.candidateIds),
-        ...conflicting,
+        ...conflictingIds,
       ]),
-      reason: conflicting.length
+      reason: conflictingIds.length
         ? "conflicting_organization_fields"
         : resolution.evidence.every((clue) => clue.family === "identity")
           ? "insufficient_independent_context_clues"
@@ -119,8 +161,8 @@ export function matchOrganization(
       evidence: resolution.evidence,
     };
   }
-  if (conflicting.length) return { kind: "none", reason: "conflicting_organization_fields" };
-  const candidateIds = uniqueSorted(clues.map((clue) => clue.targetEntityId));
+  if (conflictingIds.length) return { kind: "none", reason: "conflicting_organization_fields" };
+  const candidateIds = uniqueSorted(boundedClues.map((clue) => clue.targetEntityId));
   if (candidateIds.length) return { kind: "ambiguous", candidateIds, reason: resolution.reason, evidence: resolution.evidence };
   return { kind: "none", reason: "conflicting_organization_fields" };
 }
