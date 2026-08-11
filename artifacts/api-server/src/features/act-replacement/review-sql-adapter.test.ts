@@ -1,95 +1,15 @@
 import { sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { approvalClosureFromDurableRow, boundedApprovalMatchProjection, boundedApprovalPayloadProjection, boundedSourceIdChunks, DrizzleActReviewCommandStore, DrizzleActReviewReader, DrizzleProductionOrganizerStore, lockBulkSourceRowsQuery, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, operationSemanticsMatch, projectActReviewDisplay, staleNonterminalOperationPredicate } from "./review-sql-adapter";
-import { approvalProjectionIsIncomplete, projectBoundedApprovalPayload } from "./approval-projection";
+import { approvalClosureFromDurableRow, approvalManifestFromRows, approvalOperationSelection, approvalOutcomeSelection, DrizzleActReviewCommandStore, DrizzleActReviewReader, DrizzleProductionOrganizerStore, lockBulkSourceRowsQuery, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, operationSemanticsMatch, projectActReviewDisplay, staleNonterminalOperationPredicate } from "./review-sql-adapter";
 import { ProductionActOrganizer, type ProductionOrganizerStore } from "./production-organizer";
 import { individualDecisionRequestFingerprint } from "./review-command-service";
 import { fingerprintSourceContent } from "./source-fingerprint";
-import { actReplacementReviewDecisions, actReplacementRuns, actSourceRecords } from "@workspace/db/schema";
+import { actReplacementApplyOperations, actReplacementReviewDecisions, actReplacementRuns, actSourceRecords } from "@workspace/db/schema";
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable review adapter projections", () => {
-  it("projects only bounded approval identity and proof fields", () => {
-    const dialect = new PgDialect();
-    const payload = dialect.sqlToQuery(boundedApprovalPayloadProjection("reviewed") as never).sql;
-    const safePayload = dialect.sqlToQuery(boundedApprovalPayloadProjection("safe") as never).sql;
-    const match = dialect.sqlToQuery(boundedApprovalMatchProjection() as never).sql;
-
-    expect(payload).toContain("localId");
-    expect(payload).toContain("proof");
-    expect(payload).toContain("octet_length");
-    expect(payload).toContain("_approvalProjection");
-    expect(payload).not.toContain("normalized");
-    expect(payload).not.toContain("rawSnapshot");
-    expect(safePayload).not.toContain("proof");
-    expect(safePayload).not.toContain("decision");
-    expect(safePayload).not.toContain("sourceValue");
-    expect(safePayload).not.toContain("localValue");
-    expect(match).toContain("localId");
-    expect(match).toContain("jsonb_array_elements");
-    expect(match).toContain("ordinality");
-    expect(match).toContain("family");
-    expect(match).not.toContain("clue");
-    expect(match).not.toContain("candidates");
-    expect(dialect.sqlToQuery(boundedApprovalMatchProjection() as never).params).toContain(20);
-    expect(dialect.sqlToQuery(boundedApprovalPayloadProjection("reviewed") as never).params).toEqual(
-      expect.arrayContaining([200, 16 * 1024]),
-    );
-  });
-
-  it("hard-bounds multi-megabyte reviewed values and marks the proof ineligible", () => {
-    const huge = "x".repeat(3 * 1024 * 1024);
-    const projected = projectBoundedApprovalPayload("overwrite_reviewed", {
-      entityId: "organization-a",
-      fieldName: "phone",
-      value: huge,
-      proof: {
-        entityType: "organization",
-        entityId: "organization-a",
-        fieldName: "phone",
-        sourceVersionId: "version-a",
-        expectedLocalValueFingerprint: "fingerprint",
-        decisionId: "decision-a",
-        decision: "use_source",
-        localValue: huge,
-        sourceValue: huge,
-      },
-      decision: { id: "decision-a", decision: "use_source" },
-    }, "reviewed");
-
-    expect(Buffer.byteLength(JSON.stringify(projected))).toBeLessThan(64 * 1024);
-    expect(approvalProjectionIsIncomplete(projected)).toBe(true);
-    expect(projected).not.toHaveProperty("value", huge);
-    expect(projected).not.toHaveProperty("proof.localValue", huge);
-    expect(projected).not.toHaveProperty("proof.sourceValue", huge);
-  });
-
-  it("omits reviewed blobs entirely from safe-only projection", () => {
-    const huge = "x".repeat(3 * 1024 * 1024);
-    const projected = projectBoundedApprovalPayload("overwrite_reviewed", {
-      value: huge,
-      proof: { sourceValue: huge, localValue: huge },
-      decision: { reviewedSourceValue: huge },
-    }, "safe");
-
-    expect(JSON.stringify(projected)).not.toContain(huge.slice(0, 1024));
-    expect(Buffer.byteLength(JSON.stringify(projected))).toBeLessThan(512);
-    expect(projected).toMatchObject({
-      _approvalProjection: { mode: "safe", reviewedPayloadOmitted: true },
-    });
-  });
-
-  it("chunks archive source lookups at a deterministic conservative bound", () => {
-    const ids = Array.from({ length: 1_203 }, (_, index) => `source-${String(index).padStart(4, "0")}`).reverse();
-    const chunks = boundedSourceIdChunks(ids);
-
-    expect(chunks.map((chunk) => chunk.length)).toEqual([500, 500, 203]);
-    expect(chunks.flat()).toEqual([...ids].sort());
-    expect(Math.max(...chunks.map((chunk) => chunk.length))).toBeLessThanOrEqual(500);
-  });
-
   const unsupportedBulkStoreInput = (selections: Array<{ sourceRecordId: string; sourceVersionId: string }>) => ({
     scope: "unsupported_record" as const,
     decision: "ignore_source" as const,
@@ -110,6 +30,51 @@ describe("durable review adapter projections", () => {
       unsupportedFieldPaths: [],
       operationKeys: [],
     })),
+  });
+  it("bounds approval manifest reads and preserves operation status", () => {
+    expect(Object.keys(approvalOutcomeSelection).sort()).toEqual([
+      "sourceRecordId",
+      "sourceVersionId",
+      "state",
+    ]);
+    expect(approvalOutcomeSelection).not.toHaveProperty("match");
+    expect(approvalOperationSelection).toHaveProperty("status");
+    expect(approvalOperationSelection.payload).not.toBe(
+      actReplacementApplyOperations.payload,
+    );
+
+    const manifest = approvalManifestFromRows({
+      digest: "a".repeat(64),
+      operations: [{
+        operationKey: "organization:a",
+        sourceRecordId: "a",
+        sourceVersionId: "v-a",
+        targetType: "organization",
+        action: "create",
+        payload: { automaticReview: { version: 1, eligible: true, disposition: "safe_ready", basis: "safe_create" } },
+        dependencyOperationKeys: [],
+        requiredForSourceOutcome: true,
+        safeByDefault: true,
+        status: "applied",
+      }],
+      outcomes: [{
+        sourceRecordId: "a",
+        sourceVersionId: "v-a",
+        state: "ready",
+        match: { evidence: [{ secret: "unbounded-match-sentinel" }] },
+      }],
+    });
+
+    expect(manifest.operations[0]).toMatchObject({
+      operationKey: "organization:a",
+      status: "applied",
+    });
+    expect(manifest.outcomes[0]).toMatchObject({
+      sourceRecordId: "a",
+      state: "ready",
+      match: null,
+    });
+    expect(JSON.stringify(manifest)).not.toContain("unbounded-match-sentinel");
   });
   it("aggregates globally, pages in SQL, and loads payloads only for page sources", async () => {
     const queries: unknown[] = [];
