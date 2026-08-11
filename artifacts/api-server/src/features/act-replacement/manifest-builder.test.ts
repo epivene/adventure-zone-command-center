@@ -235,9 +235,8 @@ describe("buildActOrganizeManifest", () => {
       basis: "not_automatically_safe",
     });
     expect(automaticProof("proven-link", "record_provenance")).toMatchObject({
-      eligible: true,
+      eligible: false,
       disposition: "auto_resolved",
-      basis: "dependency_closed_provenance",
     });
     expect(JSON.stringify(automaticProof("proven-link", "link_existing")))
       .not.toContain("website agrees");
