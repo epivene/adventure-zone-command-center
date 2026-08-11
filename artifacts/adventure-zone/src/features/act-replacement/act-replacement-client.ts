@@ -66,7 +66,6 @@ export type ActReplacementStatus = {
 
 export type ActReplacementWorkflowStatus = ActReplacementStatus & {
   safeOperationCount: number;
-  reviewedReadyOperationCount: number;
   autoResolvedCount: number;
   archivedOnlyCount: number;
   reviewRequiredCount: number;
@@ -79,7 +78,6 @@ export type ActReplacementWorkflowStatus = ActReplacementStatus & {
   canOrganize: boolean;
   canReview: boolean;
   canApplySafe: boolean;
-  canApplyReviewed: boolean;
 };
 
 export type ImportManifest = {
@@ -207,6 +205,11 @@ export type ApprovalClosure = {
   selectedCount: number;
   dependencyCount: number;
   rejectedCount: number;
+  manifestDigest: string;
+};
+
+export type AutomaticApprovalSummary = {
+  approvedOperationCount: number;
   manifestDigest: string;
 };
 
@@ -423,7 +426,7 @@ export const approveSafeDefaults = (
   expectedManifestDigest: string,
   requestKey: string = crypto.randomUUID(),
 ) =>
-  request<ApprovalClosure>(
+  request<AutomaticApprovalSummary>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/approvals/safe-defaults`,
     {
       method: "POST",
