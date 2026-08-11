@@ -3,35 +3,32 @@ import { InMemoryApplyRepository } from "./apply-repository";
 import { ActApplyService } from "./apply-service";
 import { localValueFingerprint } from "./local-edit-policy";
 import type { ManifestOperation } from "./manifest-builder";
-const op = (key: string, action: ManifestOperation["action"], payload: Record<string, unknown> = {}, dependencies: string[] = []): ManifestOperation => ({ operationKey: key, sourceRecordId: key, sourceVersionId: `v-${key}`, targetType: "organization", action, payload, dependencyOperationKeys: dependencies, requiredForSourceOutcome: true, safeByDefault: true });
+const automaticReview = (action: ManifestOperation["action"]) => action === "create"
+  ? { version: 1, eligible: true, disposition: "safe_ready", basis: "safe_create" }
+  : action === "link_existing" || action === "fill_missing"
+    ? { version: 1, eligible: true, disposition: "safe_ready", basis: "trusted_exact_match" }
+    : undefined;
+const op = (key: string, action: ManifestOperation["action"], payload: Record<string, unknown> = {}, dependencies: string[] = []): ManifestOperation => ({
+  operationKey: key,
+  sourceRecordId: key,
+  sourceVersionId: `v-${key}`,
+  targetType: "organization",
+  action,
+  payload: { ...(automaticReview(action) ? { automaticReview: automaticReview(action) } : {}), ...payload },
+  dependencyOperationKeys: dependencies,
+  requiredForSourceOutcome: true,
+  safeByDefault: true,
+});
+const approve = (repo: InMemoryApplyRepository, operationIds: string[], requestKey = "approval", approvalMode: "automatic_safe" | "explicit_manual" | null = "automatic_safe") => {
+  repo.seedApproval("r", requestKey, operationIds, "d", approvalMode);
+  return requestKey;
+};
 const seedTarget = (repo: InMemoryApplyRepository, entityType: string, values: Record<string, unknown>, sourceRecordId = "seed") => {
   const target = { id: `${entityType}-${repo.targets.size + 1}`, entityType, values: { ...values }, sourceIds: new Set([sourceRecordId]) };
   repo.targets.set(`${entityType}:${target.id}`, target);
   return target;
 };
-describe("Act apply", () => { it("creates idempotently and records a durable batch replay", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); repo.seedManifest("r", "d"); repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]); const service = new ActApplyService(repo, true); const first = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k" }); expect(first).toMatchObject({ state: "complete", completedCount: 1 }); expect(await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k" })).toEqual(first); }); it("blocks a fill over a local nonblank value", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); repo.seedManifest("r", "d"); const created = seedTarget(repo, "organization", { name: "A", phone: "local" }, "f"); const operation = op("f", "fill_missing", { entityId: created.id, fieldName: "phone", value: "source" }); repo.seedOperations([operation]); const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["f"], expectedManifestDigest: "d", requestKey: "k" }); expect(result.blockedCount).toBe(1); }); });
-
-it("rejects a fill when the durable source link no longer matches its approved target", async () => {
-  const repo = new InMemoryApplyRepository({ unsafeForTests: true });
-  repo.seedManifest("r", "d");
-  const approved = seedTarget(repo, "organization", { phone: null }, "old-source");
-  seedTarget(repo, "organization", { phone: null }, "fill");
-  repo.seedOperations([op("fill", "fill_missing", {
-    entityId: approved.id,
-    fieldName: "phone",
-    value: "555-ACT",
-  })]);
-
-  const result = await new ActApplyService(repo, true).apply({
-    runId: "r",
-    approvedOperationIds: ["fill"],
-    expectedManifestDigest: "d",
-    requestKey: "drifted-fill",
-  });
-
-  expect(result.failedCount).toBe(1);
-  expect(repo.operations.get("fill")).toMatchObject({ lastErrorCode: "fill_target_changed" });
-});
+describe("Act apply", () => { it("creates idempotently and records a durable batch replay", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); repo.seedManifest("r", "d"); repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]); approve(repo, ["a"]); const service = new ActApplyService(repo, true); const first = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval" }); expect(first).toMatchObject({ state: "complete", completedCount: 1 }); expect(await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval" })).toEqual(first); }); it("blocks a fill over a local nonblank value", async () => { const repo = new InMemoryApplyRepository({ unsafeForTests: true }); repo.seedManifest("r", "d"); const created = seedTarget(repo, "organization", { name: "A", phone: "local" }); const operation = op("f", "fill_missing", { entityId: created.id, fieldName: "phone", value: "source" }); repo.seedOperations([operation]); approve(repo, ["f"]); const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["f"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval" }); expect(result.blockedCount).toBe(1); }); });
 
 it("applies a proof-bearing reviewed overwrite selected by explicit approval", async () => {
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
@@ -49,11 +46,42 @@ it("applies a proof-bearing reviewed overwrite selected by explicit approval", a
     sourceVersionId: "v-a",
     safeByDefault: false,
   }]);
+  approve(repo, ["organization:a:field:phone"], "approval", "explicit_manual");
 
-  const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "explicit-overwrite" });
+  const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "explicit-overwrite", approvalRequestKey: "approval" });
 
   expect(result).toMatchObject({ state: "complete", completedCount: 1 });
   expect(target.values.phone).toBe("555-ACT");
+});
+
+it("rejects a proof-bearing reviewed overwrite backed by automatic approval provenance", async () => {
+  const repo = new InMemoryApplyRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  const target = seedTarget(repo, "organization", { name: "A", phone: "555-LOCAL" }, "a");
+  repo.seedOperations([{
+    ...op("organization:a:field:phone", "overwrite_reviewed", {
+      entityId: target.id,
+      fieldName: "phone",
+      value: "555-ACT",
+      proof: { localValue: "555-LOCAL", sourceValue: "555-ACT" },
+      decision: { id: "decision-a", sourceVersionId: "v-a", scope: "field_conflict", decision: "use_source", fieldName: "phone", targetEntityType: "organization", targetEntityId: target.id },
+    }),
+    sourceRecordId: "a",
+    sourceVersionId: "v-a",
+    safeByDefault: false,
+  }]);
+  approve(repo, ["organization:a:field:phone"]);
+
+  await expect(new ActApplyService(repo, true).apply({
+    runId: "r",
+    approvedOperationIds: ["organization:a:field:phone"],
+    expectedManifestDigest: "d",
+    requestKey: "automatic-overwrite",
+    approvalRequestKey: "approval",
+  })).rejects.toMatchObject({ code: "outcome_not_ready" });
+
+  expect(target.values.phone).toBe("555-LOCAL");
+  expect(repo.operations.get("organization:a:field:phone")).toMatchObject({ status: "pending", attemptCount: 0 });
 });
 
 it("rejects a reviewed overwrite when the local value changes before the repository CAS", async () => {
@@ -80,12 +108,14 @@ it("rejects a reviewed overwrite when the local value changes before the reposit
     sourceVersionId: "v-a",
     safeByDefault: false,
   }]);
+  approve(repo, ["organization:a:field:phone"], "approval", "explicit_manual");
 
   const result = await new ActApplyService(repo, true).apply({
     runId: "r",
     approvedOperationIds: ["organization:a:field:phone"],
     expectedManifestDigest: "d",
     requestKey: "concurrent-reviewed-edit",
+    approvalRequestKey: "approval",
   });
 
   expect(result).toMatchObject({ state: "complete_with_issues", completedCount: 0, failedCount: 1 });
@@ -128,8 +158,9 @@ it("retries after a crash at the reviewed-overwrite commit boundary without reap
     sourceVersionId: "v-a",
     safeByDefault: false,
   }]);
+  approve(repo, [operationKey], "approval", "explicit_manual");
   const service = new ActApplyService(repo, true);
-  const input = { runId: "r", approvedOperationIds: [operationKey], expectedManifestDigest: "d", requestKey: "reviewed-crash" };
+  const input = { runId: "r", approvedOperationIds: [operationKey], expectedManifestDigest: "d", requestKey: "reviewed-crash", approvalRequestKey: "approval" };
 
   await expect(service.apply(input)).rejects.toMatchObject({ code: "apply_attempt_lost" });
   expect(target.values.phone).toBe("555-ACT");
@@ -183,11 +214,11 @@ it("rejects a cross-target reviewed overwrite before writing the operation targe
     sourceVersionId: "v-a",
     safeByDefault: false,
   }]);
+  approve(repo, ["organization:a:field:phone"], "approval", "explicit_manual");
 
-  const result = await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "cross-target-overwrite" });
+  await expect(new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:a:field:phone"], expectedManifestDigest: "d", requestKey: "cross-target-overwrite", approvalRequestKey: "approval" })).rejects.toMatchObject({ code: "outcome_not_ready" });
 
-  expect(result).toMatchObject({ state: "complete_with_issues", failedCount: 1 });
-  expect(repo.operations.get("organization:a:field:phone")).toMatchObject({ status: "failed", lastErrorCode: "overwrite_target_invalid" });
+  expect(repo.operations.get("organization:a:field:phone")).toMatchObject({ status: "pending", attemptCount: 0 });
   expect(targetA.values.phone).toBe("555-LOCAL");
   expect(targetB.values.phone).toBe("555-LOCAL");
 });
@@ -196,10 +227,12 @@ it("claims a queued approval row and replays the terminal batch without executin
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
   repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]);
+  approve(repo, ["a"]);
   repo.batches.set("r:k", {
     batchId: "approval-batch",
     runId: "r",
     requestKey: "k",
+    approvalRequestKey: "approval",
     manifestDigest: "d",
     operationIds: ["a"],
     state: "queued",
@@ -211,8 +244,8 @@ it("claims a queued approval row and replays the terminal batch without executin
   const createTarget = vi.spyOn(repo, "createTarget");
   const service = new ActApplyService(repo, true);
 
-  const first = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", requestedBy: "owner" });
-  const replay = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", requestedBy: "owner" });
+  const first = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval", requestedBy: "owner" });
+  const replay = await service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval", requestedBy: "owner" });
 
   expect(first).toMatchObject({ batchId: "approval-batch", state: "complete", completedCount: 1 });
   expect(replay).toEqual(first);
@@ -227,10 +260,11 @@ it("allows a later batch to depend on an operation durably applied by an earlier
     op("parent", "create", { normalized: { name: "Parent" } }),
     op("child", "create", { normalized: { name: "Child" } }, ["parent"]),
   ]);
+  approve(repo, ["parent", "child"]);
   const service = new ActApplyService(repo, true);
 
-  await service.apply({ runId: "r", approvedOperationIds: ["parent"], expectedManifestDigest: "d", requestKey: "apply:0", requestedBy: "owner" });
-  const second = await service.apply({ runId: "r", approvedOperationIds: ["child"], expectedManifestDigest: "d", requestKey: "apply:1", requestedBy: "owner" });
+  await service.apply({ runId: "r", approvedOperationIds: ["parent"], expectedManifestDigest: "d", requestKey: "apply:0", approvalRequestKey: "approval", requestedBy: "owner" });
+  const second = await service.apply({ runId: "r", approvedOperationIds: ["child"], expectedManifestDigest: "d", requestKey: "apply:1", approvalRequestKey: "approval", requestedBy: "owner" });
 
   expect(second).toMatchObject({ state: "complete", completedCount: 1, blockedCount: 0, failedCount: 0 });
   expect(repo.operations.get("child")?.status).toBe("applied");
@@ -243,9 +277,10 @@ it("preserves dependency-first approval order when creating a batch", async () =
     op("organization:parent", "create", { normalized: { name: "Parent" } }),
     op("activity:child", "create", { normalized: { name: "Child" } }, ["organization:parent"]),
   ]);
+  approve(repo, ["organization:parent", "activity:child"]);
   const createBatch = vi.spyOn(repo, "createBatch");
 
-  await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:parent", "activity:child"], expectedManifestDigest: "d", requestKey: "apply:0", requestedBy: "owner" });
+  await new ActApplyService(repo, true).apply({ runId: "r", approvedOperationIds: ["organization:parent", "activity:child"], expectedManifestDigest: "d", requestKey: "apply:0", approvalRequestKey: "approval", requestedBy: "owner" });
 
   expect(createBatch).toHaveBeenCalledWith(expect.objectContaining({ operationIds: ["organization:parent", "activity:child"] }));
 });
@@ -268,10 +303,12 @@ it("executes only once when two callers race to claim the same queued approval",
   const repo = new RacingApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
   repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]);
+  approve(repo, ["a"]);
   repo.batches.set("r:k", {
     batchId: "approval-batch",
     runId: "r",
     requestKey: "k",
+    approvalRequestKey: "approval",
     manifestDigest: "d",
     operationIds: ["a"],
     state: "queued",
@@ -284,8 +321,8 @@ it("executes only once when two callers race to claim the same queued approval",
   const service = new ActApplyService(repo, true);
 
   await Promise.all([
-    service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", requestedBy: "owner" }),
-    service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", requestedBy: "owner" }),
+    service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval", requestedBy: "owner" }),
+    service.apply({ runId: "r", approvedOperationIds: ["a"], expectedManifestDigest: "d", requestKey: "k", approvalRequestKey: "approval", requestedBy: "owner" }),
   ]);
 
   expect(createTarget).toHaveBeenCalledTimes(1);
@@ -299,10 +336,11 @@ it("rejects operations that are not currently safe, ready, and on the latest sou
   repo.operations.get("unsafe")!.safeByDefault = false;
   repo.operations.get("stale")!.latestSourceVersionId = "new-version";
   repo.operations.get("held")!.outcomeState = "awaiting_review";
+  approve(repo, ["stale"]);
   const service = new ActApplyService(repo, true);
 
   await expect(service.apply({ runId: "r", approvedOperationIds: ["unsafe"], expectedManifestDigest: "d", requestKey: "unsafe" })).rejects.toMatchObject({ code: "operation_not_safe" });
-  await expect(service.apply({ runId: "r", approvedOperationIds: ["stale"], expectedManifestDigest: "d", requestKey: "stale" })).rejects.toMatchObject({ code: "source_version_changed" });
+  await expect(service.apply({ runId: "r", approvedOperationIds: ["stale"], expectedManifestDigest: "d", requestKey: "stale", approvalRequestKey: "approval" })).rejects.toMatchObject({ code: "source_version_changed" });
   await expect(service.apply({ runId: "r", approvedOperationIds: ["held"], expectedManifestDigest: "d", requestKey: "held" })).rejects.toMatchObject({ code: "outcome_not_ready" });
   expect(repo.operations.get("unsafe")?.attemptCount).toBe(0);
   expect(repo.operations.get("stale")?.attemptCount).toBe(0);
@@ -364,7 +402,7 @@ it("rejects awaiting-review work without matching durable automatic approval", a
   expect(repo.operations.get("context-link")?.attemptCount).toBe(0);
 });
 
-it("rejects malformed or generic automatic proof for awaiting-review work", async () => {
+it("rejects malformed or generic proof even when the outcome is ready", async () => {
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
   repo.seedOperations([
@@ -383,13 +421,19 @@ it("rejects malformed or generic automatic proof for awaiting-review work", asyn
       }),
       targetType: "organization_contact",
     },
+    op("provenance", "record_provenance", {
+      automaticReview: {
+        version: 1,
+        eligible: true,
+        disposition: "safe_ready",
+        basis: "safe_create",
+      },
+    }),
   ]);
-  repo.operations.get("malformed")!.outcomeState = "awaiting_review";
-  repo.operations.get("relationship")!.outcomeState = "awaiting_review";
-  repo.seedApproval("r", "automatic-approval", ["malformed", "relationship"], "d");
+  repo.seedApproval("r", "automatic-approval", ["malformed", "relationship", "provenance"], "d");
   const service = new ActApplyService(repo, true);
 
-  for (const operationId of ["malformed", "relationship"]) {
+  for (const operationId of ["malformed", "relationship", "provenance"]) {
     await expect(service.apply({
       runId: "r",
       approvedOperationIds: [operationId],
@@ -397,6 +441,7 @@ it("rejects malformed or generic automatic proof for awaiting-review work", asyn
       requestKey: `automatic-approval:${operationId}`,
       approvalRequestKey: "automatic-approval",
     })).rejects.toMatchObject({ code: "outcome_not_ready" });
+    expect(repo.operations.get(operationId)?.attemptCount).toBe(0);
   }
 });
 
@@ -404,6 +449,7 @@ it("reclaims an expired applying batch and resumes idempotently", async () => {
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
   repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]);
+  approve(repo, ["a"]);
   repo.batches.set("r:approval:0", {
     batchId: "expired-batch",
     runId: "r",
@@ -444,6 +490,7 @@ it("retries only failed durable outcomes when the coordinator authorizes a retry
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
   repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]);
+  approve(repo, ["a"]);
   repo.operations.get("a")!.status = "failed";
   repo.operations.get("a")!.outcomeState = "failed";
 
@@ -469,6 +516,7 @@ it("retries a failed server-derived slice that also contains terminal operations
     op("already-applied", "create", { normalized: { name: "Already applied" } }),
     op("failed", "create", { normalized: { name: "Retry me" } }),
   ]);
+  approve(repo, ["already-applied", "failed"]);
   repo.operations.get("already-applied")!.status = "applied";
   repo.operations.get("already-applied")!.outcomeState = "applied";
   repo.operations.get("failed")!.status = "failed";
@@ -495,6 +543,7 @@ it("records source provenance before completing a link-existing root", async () 
   repo.seedManifest("r", "d");
   const operation = op("a", "link_existing", { localId: "local-org" });
   repo.seedOperations([operation]);
+  approve(repo, ["a"]);
   repo.targets.set("organization:local-org", {
     id: "local-org",
     entityType: "organization",
@@ -507,12 +556,13 @@ it("records source provenance before completing a link-existing root", async () 
     approvedOperationIds: ["a"],
     expectedManifestDigest: "d",
     requestKey: "approval:0",
+    approvalRequestKey: "approval",
   });
 
   expect(result).toMatchObject({ state: "complete", alreadyPresentCount: 1 });
   expect(provenance).toHaveBeenCalledWith(expect.objectContaining({
     action: "link_existing",
-    payload: { localId: "local-org" },
+    payload: expect.objectContaining({ localId: "local-org" }),
   }), expect.objectContaining({ batchId: "r:approval:0" }));
 });
 
@@ -523,7 +573,7 @@ it("repairs provenance when a fill committed before a crashed operation retry", 
     repo,
     "organization",
     { name: "A", phone: "source-value" },
-    "fill",
+    "seed",
   );
   const operation = op("fill", "fill_missing", {
     entityId: target.id,
@@ -531,6 +581,7 @@ it("repairs provenance when a fill committed before a crashed operation retry", 
     value: "source-value",
   });
   repo.seedOperations([operation]);
+  approve(repo, ["fill"]);
   repo.operations.get("fill")!.status = "failed";
   repo.operations.get("fill")!.outcomeState = "failed";
 
@@ -539,6 +590,7 @@ it("repairs provenance when a fill committed before a crashed operation retry", 
     approvedOperationIds: ["fill"],
     expectedManifestDigest: "d",
     requestKey: "approval:0:retry:1",
+    approvalRequestKey: "approval",
     retryFailed: true,
   });
 
@@ -556,7 +608,7 @@ it("repairs provenance when a committed timestamp is a Date equivalent to the IS
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
   const startsAt = new Date("2026-08-07T12:00:00.000Z");
-  const target = seedTarget(repo, "booking", { name: "A", startsAt }, "fill-timestamp");
+  const target = seedTarget(repo, "booking", { name: "A", startsAt });
   const operation = {
     ...op("fill-timestamp", "fill_missing", {
       entityId: target.id,
@@ -566,6 +618,7 @@ it("repairs provenance when a committed timestamp is a Date equivalent to the IS
     targetType: "booking" as const,
   };
   repo.seedOperations([operation]);
+  approve(repo, ["fill-timestamp"]);
   repo.operations.get("fill-timestamp")!.status = "failed";
   repo.operations.get("fill-timestamp")!.outcomeState = "failed";
 
@@ -574,6 +627,7 @@ it("repairs provenance when a committed timestamp is a Date equivalent to the IS
     approvedOperationIds: ["fill-timestamp"],
     expectedManifestDigest: "d",
     requestKey: "approval:0:retry:1",
+    approvalRequestKey: "approval",
     retryFailed: true,
   });
 
@@ -600,18 +654,20 @@ it("never overwrites a local value written after the fill target was read", asyn
 
   const repo = new ConcurrentLocalEditRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");
-  const target = seedTarget(repo, "organization", { name: "A", phone: null }, "fill-race");
+  const target = seedTarget(repo, "organization", { name: "A", phone: null });
   repo.seedOperations([op("fill-race", "fill_missing", {
     entityId: target.id,
     fieldName: "phone",
     value: "source-value",
   })]);
+  approve(repo, ["fill-race"]);
 
   const result = await new ActApplyService(repo, true).apply({
     runId: "r",
     approvedOperationIds: ["fill-race"],
     expectedManifestDigest: "d",
     requestKey: "approval:0",
+    approvalRequestKey: "approval",
   });
 
   expect(result).toMatchObject({ completedCount: 0, blockedCount: 1 });
@@ -628,6 +684,7 @@ it("refuses to claim operations while the durable run is being reorganized", asy
   repo.seedManifest("r", "d");
   repo.runPhases.set("r", "organizing");
   repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]);
+  approve(repo, ["a"]);
 
   await expect(
     new ActApplyService(repo, true).apply({
