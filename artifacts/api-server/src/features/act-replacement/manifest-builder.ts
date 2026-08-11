@@ -317,19 +317,18 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
       ));
     }
     if (source.normalized.kind !== "timeline") {
-      if (rootAction === "link_existing" && source.match?.kind === "exact" && source.localFields) {
-        const localId = source.match.localId;
+      if (rootAction === "link_existing" && source.localFields) {
         const values = Object.entries(source.normalized).filter(([key, value]) => Boolean(writablePhysicalColumn(targetType, key)) && isMateriallyPopulated(value));
         for (const [fieldName, value] of values) {
           const localValue = source.localFields[fieldName];
           if (localValue !== null && localValue !== undefined && localValue !== "" && localValue !== value) {
             const fieldDecision = decisions.find((decision) => decision.scope === "field_conflict" && decision.fieldName === fieldName);
             if (fieldDecision?.decision === "keep_local") continue;
-            if (fieldDecision?.decision === "use_source" && hasImmutableOverwriteProof(fieldDecision, targetType, localId, fieldName)) { sourceOps.push(reviewedOverwriteOperation(source, targetType, localId, fieldName, fieldDecision)); continue; }
+            if (fieldDecision?.decision === "use_source" && source.match?.kind === "exact" && hasImmutableOverwriteProof(fieldDecision, targetType, source.match.localId, fieldName)) { sourceOps.push(reviewedOverwriteOperation(source, targetType, source.match.localId, fieldName, fieldDecision)); continue; }
             issues.push({ code: "field_conflict", reason: fieldName }); diagnostics.push({ code: "field_conflict", sourceRecordId: source.sourceRecordId, path: fieldName }); continue;
           }
           if (localValue === null || localValue === undefined || localValue === "") {
-            const fill = baseOperation(source, targetType, "fill_missing", { entityId: localId, fieldName, value }, [identityOperationKey(source, targetType)], true, true);
+            const fill = baseOperation(source, targetType, "fill_missing", { fieldName, value }, [identityOperationKey(source, targetType)], true, true);
             sourceOps.push(revisionedOperation(operationKey(targetType, source.sourceRecordId, `field:${fieldName}`), fill));
           }
         }
