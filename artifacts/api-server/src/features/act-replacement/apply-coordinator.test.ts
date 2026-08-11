@@ -1,23 +1,46 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ApplyBatchRecord } from "./apply-repository";
+import type { ApplyBatchRecord, StoredApproval } from "./apply-repository";
 import {
   ActApplyCoordinator,
   type ApplyCoordinatorStore,
 } from "./apply-coordinator";
+
+type Equal<Left, Right> = (
+  <Value>() => Value extends Left ? 1 : 2
+) extends (
+  <Value>() => Value extends Right ? 1 : 2
+)
+  ? true
+  : false;
+type Expect<Value extends true> = Value;
+type CoordinatorApproval = Awaited<ReturnType<ApplyCoordinatorStore["getApproval"]>>;
+
+// This fails if the coordinator narrows durable approvals and drops their
+// mode/version provenance before the apply service gets a chance to enforce it.
+type _CoordinatorPreservesApprovalProvenance = Expect<
+  Equal<CoordinatorApproval, StoredApproval | null>
+>;
 
 const approvedOperationIds = Array.from(
   { length: 61 },
   (_, index) => `operation-${index}`,
 );
 
+const automaticApproval: StoredApproval = {
+  approvedOperationIds,
+  manifestDigest: "digest-1",
+  approvalMode: "automatic_safe",
+  approvalModeVersion: 1,
+};
+
 function store(
   batches: ApplyBatchRecord[] = [],
 ): ApplyCoordinatorStore & { updateRunPhase: ReturnType<typeof vi.fn> } {
   return {
     getApproval: vi.fn().mockResolvedValue({
-      approvedOperationIds,
-      manifestDigest: "digest-1",
+      ...automaticApproval,
+      approvedOperationIds: [...automaticApproval.approvedOperationIds],
     }),
     listApprovalBatches: vi.fn().mockResolvedValue(batches),
     updateRunPhase: vi.fn().mockResolvedValue(undefined),
