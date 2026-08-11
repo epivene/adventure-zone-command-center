@@ -10,16 +10,10 @@ import type { ReviewReader } from "./review-reader";
 import { createDrizzleApplyRepository } from "./drizzle-apply-repository";
 import { ActApplyService as ApplyService } from "./apply-service";
 import {
-  automaticReviewDisposition,
-  isAutomaticallyImportableForOutcome,
-  isAutomaticallyImportableOperation,
+  isAutomaticallyApprovedOperation,
+  readAutomaticReviewProofForOperation,
 } from "./automatic-review-policy";
 import type { ImportWorkflow } from "./import-types";
-import { validateReviewedClosure } from "./reviewed-closure";
-import {
-  hasReviewedOverwriteProof,
-  hasReviewedRelationshipProof,
-} from "./review-proof";
 import { and, asc, eq, sql } from "drizzle-orm";
 import {
   actReplacementApplyBatches,
@@ -38,143 +32,11 @@ type WorkflowReader = {
   summarize(runId: string): Promise<ImportWorkflow>;
 };
 
-const maximumProjectedMatchItems = 20;
-const maximumProjectedMatchStringLength = 200;
-
-export const boundedOutcomeMatchProjection = sql<Record<string, unknown> | null>`
-  case
-    when ${actReplacementOutcomes.match} is null
-      or jsonb_typeof(${actReplacementOutcomes.match}) <> 'object'
-      then null
-    else jsonb_strip_nulls(jsonb_build_object(
-      'kind', left(${actReplacementOutcomes.match}->>'kind', ${maximumProjectedMatchStringLength}),
-      'localId', left(${actReplacementOutcomes.match}->>'localId', ${maximumProjectedMatchStringLength}),
-      'reason', left(${actReplacementOutcomes.match}->>'reason', ${maximumProjectedMatchStringLength}),
-      'evidence', case
-        when jsonb_typeof(${actReplacementOutcomes.match}->'evidence') = 'array'
-          then (
-            select coalesce(
-              jsonb_agg(
-                jsonb_build_object(
-                  'family', left(proof.value->>'family', ${maximumProjectedMatchStringLength}),
-                  'label', left(btrim(proof.value->>'label'), ${maximumProjectedMatchStringLength}),
-                  'targetEntityType', left(proof.value->>'targetEntityType', ${maximumProjectedMatchStringLength}),
-                  'targetEntityId', left(btrim(proof.value->>'targetEntityId'), ${maximumProjectedMatchStringLength}),
-                  'authority', left(proof.value->>'authority', ${maximumProjectedMatchStringLength})
-                ) order by proof.ordinality
-              ),
-              '[]'::jsonb
-            )
-            from jsonb_array_elements(${actReplacementOutcomes.match}->'evidence')
-              with ordinality as proof(value, ordinality)
-            where proof.ordinality <= ${maximumProjectedMatchItems}
-              and jsonb_typeof(proof.value) = 'object'
-              and proof.value->>'family' in (
-                'identity', 'direct_contact', 'web_identity', 'location',
-                'archive_relationship', 'event_context', 'narrative_context'
-              )
-              and proof.value->>'targetEntityType' in (
-                'organization', 'contact', 'booking', 'calling_list', 'activity'
-              )
-              and proof.value->>'authority' in ('authoritative', 'supporting')
-              and nullif(btrim(proof.value->>'label'), '') is not null
-              and nullif(btrim(proof.value->>'targetEntityId'), '') is not null
-          )
-        else null
-      end,
-      'evidenceTruncated', case
-        when ${actReplacementOutcomes.match}->>'evidenceTruncated' = 'true' then true
-        when char_length(btrim(${actReplacementOutcomes.match}->>'localId')) > ${maximumProjectedMatchStringLength}
-          then true
-        when jsonb_typeof(${actReplacementOutcomes.match}->'evidence') = 'array'
-          then case
-            when jsonb_array_length(${actReplacementOutcomes.match}->'evidence') > ${maximumProjectedMatchItems}
-              or exists (
-                select 1
-                from jsonb_array_elements(${actReplacementOutcomes.match}->'evidence') as raw_proof(value)
-                where jsonb_typeof(raw_proof.value) <> 'object'
-                  or coalesce(raw_proof.value->>'family', '') not in (
-                    'identity', 'direct_contact', 'web_identity', 'location',
-                    'archive_relationship', 'event_context', 'narrative_context'
-                  )
-                  or coalesce(raw_proof.value->>'targetEntityType', '') not in (
-                    'organization', 'contact', 'booking', 'calling_list', 'activity'
-                  )
-                  or coalesce(raw_proof.value->>'authority', '') not in ('authoritative', 'supporting')
-                  or nullif(btrim(raw_proof.value->>'label'), '') is null
-                  or nullif(btrim(raw_proof.value->>'targetEntityId'), '') is null
-                  or char_length(btrim(raw_proof.value->>'label')) > ${maximumProjectedMatchStringLength}
-                  or char_length(btrim(raw_proof.value->>'targetEntityId')) > ${maximumProjectedMatchStringLength}
-              )
-              then true
-            else null
-          end
-        else null
-      end
-    ))
-  end
-`;
-
-const maximumProjectedReviewValueBytes = 16_384;
-
-export const boundedReviewedPayloadProjection = sql<Record<string, unknown> | null>`
-  case
-    when ${actReplacementApplyOperations.action} not in ('overwrite_reviewed', 'create_relationship')
-      or jsonb_typeof(${actReplacementApplyOperations.payload}) <> 'object'
-      then null
-    when coalesce(pg_column_size(${actReplacementApplyOperations.payload}->'value'), 0) > ${maximumProjectedReviewValueBytes}
-      or coalesce(pg_column_size(${actReplacementApplyOperations.payload}->'proof'->'localValue'), 0) > ${maximumProjectedReviewValueBytes}
-      or coalesce(pg_column_size(${actReplacementApplyOperations.payload}->'proof'->'sourceValue'), 0) > ${maximumProjectedReviewValueBytes}
-      or coalesce(pg_column_size(${actReplacementApplyOperations.payload}->'decision'->'reviewedSourceValue'), 0) > ${maximumProjectedReviewValueBytes}
-      or coalesce(pg_column_size(${actReplacementApplyOperations.payload}->'decision'->'reviewedLocalValue'), 0) > ${maximumProjectedReviewValueBytes}
-      then null
-    else jsonb_build_object(
-      'entityId', left(${actReplacementApplyOperations.payload}->>'entityId', ${maximumProjectedMatchStringLength}),
-      'fieldName', left(${actReplacementApplyOperations.payload}->>'fieldName', ${maximumProjectedMatchStringLength}),
-      'value', ${actReplacementApplyOperations.payload}->'value',
-      'parentEntityId', left(${actReplacementApplyOperations.payload}->>'parentEntityId', ${maximumProjectedMatchStringLength}),
-      'parentType', left(${actReplacementApplyOperations.payload}->>'parentType', ${maximumProjectedMatchStringLength}),
-      'relationshipSlot', left(${actReplacementApplyOperations.payload}->>'relationshipSlot', ${maximumProjectedMatchStringLength}),
-      'proof', case when jsonb_typeof(${actReplacementApplyOperations.payload}->'proof') = 'object' then
-        jsonb_build_object(
-          'entityType', left(${actReplacementApplyOperations.payload}->'proof'->>'entityType', ${maximumProjectedMatchStringLength}),
-          'entityId', left(${actReplacementApplyOperations.payload}->'proof'->>'entityId', ${maximumProjectedMatchStringLength}),
-          'fieldName', left(${actReplacementApplyOperations.payload}->'proof'->>'fieldName', ${maximumProjectedMatchStringLength}),
-          'sourceVersionId', left(${actReplacementApplyOperations.payload}->'proof'->>'sourceVersionId', ${maximumProjectedMatchStringLength}),
-          'expectedLocalValueFingerprint', left(${actReplacementApplyOperations.payload}->'proof'->>'expectedLocalValueFingerprint', ${maximumProjectedMatchStringLength}),
-          'decisionId', left(${actReplacementApplyOperations.payload}->'proof'->>'decisionId', ${maximumProjectedMatchStringLength}),
-          'decision', left(${actReplacementApplyOperations.payload}->'proof'->>'decision', ${maximumProjectedMatchStringLength}),
-          'localValue', ${actReplacementApplyOperations.payload}->'proof'->'localValue',
-          'sourceValue', ${actReplacementApplyOperations.payload}->'proof'->'sourceValue'
-        )
-        || case when ${actReplacementApplyOperations.payload}->'proof' ? 'sourceValueFingerprint'
-          then jsonb_build_object('sourceValueFingerprint', left(${actReplacementApplyOperations.payload}->'proof'->>'sourceValueFingerprint', ${maximumProjectedMatchStringLength})) else '{}'::jsonb end
-        || case when ${actReplacementApplyOperations.payload}->'proof' ? 'localValueFingerprint'
-          then jsonb_build_object('localValueFingerprint', left(${actReplacementApplyOperations.payload}->'proof'->>'localValueFingerprint', ${maximumProjectedMatchStringLength})) else '{}'::jsonb end
-      else null end,
-      'decision', case when jsonb_typeof(${actReplacementApplyOperations.payload}->'decision') = 'object' then
-        jsonb_build_object(
-          'id', left(${actReplacementApplyOperations.payload}->'decision'->>'id', ${maximumProjectedMatchStringLength}),
-          'sourceVersionId', left(${actReplacementApplyOperations.payload}->'decision'->>'sourceVersionId', ${maximumProjectedMatchStringLength}),
-          'scope', left(${actReplacementApplyOperations.payload}->'decision'->>'scope', ${maximumProjectedMatchStringLength}),
-          'decision', left(${actReplacementApplyOperations.payload}->'decision'->>'decision', ${maximumProjectedMatchStringLength}),
-          'fieldName', left(${actReplacementApplyOperations.payload}->'decision'->>'fieldName', ${maximumProjectedMatchStringLength}),
-          'relationshipSlot', left(${actReplacementApplyOperations.payload}->'decision'->>'relationshipSlot', ${maximumProjectedMatchStringLength}),
-          'targetEntityType', left(${actReplacementApplyOperations.payload}->'decision'->>'targetEntityType', ${maximumProjectedMatchStringLength}),
-          'targetEntityId', left(${actReplacementApplyOperations.payload}->'decision'->>'targetEntityId', ${maximumProjectedMatchStringLength})
-        )
-        || case when ${actReplacementApplyOperations.payload}->'decision' ? 'reviewedSourceValue'
-          then jsonb_build_object('reviewedSourceValue', ${actReplacementApplyOperations.payload}->'decision'->'reviewedSourceValue') else '{}'::jsonb end
-        || case when ${actReplacementApplyOperations.payload}->'decision' ? 'reviewedSourceValueFingerprint'
-          then jsonb_build_object('reviewedSourceValueFingerprint', left(${actReplacementApplyOperations.payload}->'decision'->>'reviewedSourceValueFingerprint', ${maximumProjectedMatchStringLength})) else '{}'::jsonb end
-        || case when ${actReplacementApplyOperations.payload}->'decision' ? 'reviewedLocalValue'
-          then jsonb_build_object('reviewedLocalValue', ${actReplacementApplyOperations.payload}->'decision'->'reviewedLocalValue') else '{}'::jsonb end
-        || case when ${actReplacementApplyOperations.payload}->'decision' ? 'reviewedLocalValueFingerprint'
-          then jsonb_build_object('reviewedLocalValueFingerprint', left(${actReplacementApplyOperations.payload}->'decision'->>'reviewedLocalValueFingerprint', ${maximumProjectedMatchStringLength})) else '{}'::jsonb end
-      else null end
-    )
-  end
-`;
+export const workflowOutcomeSelection = {
+  sourceRecordId: actReplacementOutcomes.sourceRecordId,
+  state: actReplacementOutcomes.state,
+  leaseExpiresAt: actReplacementOutcomes.leaseExpiresAt,
+};
 
 export type ImportWorkflowProjectionInput = {
   phase: string;
@@ -184,7 +46,6 @@ export type ImportWorkflowProjectionInput = {
     sourceRecordId: string;
     state: string;
     match?: unknown;
-    hasOptionalReview?: boolean;
   }[];
   operations: readonly {
     operationKey: string;
@@ -195,12 +56,10 @@ export type ImportWorkflowProjectionInput = {
     status: string;
     sourceVersionId?: string | null;
     targetType: string;
-    selectedTargetId?: string | null;
-    reviewedPayload?: Record<string, unknown> | null;
-    reviewedTargetId?: string | null;
-    reviewedTargetType?: string | null;
     requiredForSourceOutcome?: boolean;
     leaseExpiresAt?: Date | null;
+    automaticReview?: unknown;
+    payload?: unknown;
   }[];
   batches: readonly {
     id?: string;
@@ -216,6 +75,7 @@ export type ImportWorkflowProjectionInput = {
   requiredStreams?: readonly string[];
   leases?: readonly { state: string; leaseExpiresAt?: Date | null }[];
   now?: Date;
+  actionableDiagnosticCount?: number;
 };
 
 export function projectImportWorkflow(
@@ -231,10 +91,6 @@ export function projectImportWorkflow(
   const operationByKey = new Map(
     input.operations.map((operation) => [operation.operationKey, operation]),
   );
-  const outcomeBySourceId = new Map(
-    input.outcomes.map((outcome) => [outcome.sourceRecordId, outcome]),
-  );
-  const safeHistoryOperationKeys = new Set<string>();
   const safeOperationKeys = new Set<string>();
   const collectSafeClosure = (
     operationKey: string,
@@ -248,19 +104,13 @@ export function projectImportWorkflow(
     ) {
       return false;
     }
-    const outcome = outcomeBySourceId.get(operation.sourceRecordId);
-    if (!isAutomaticallyImportableForOutcome(
-      operation,
-      { state: outcome?.state, match: outcome?.match ?? null },
-    )) return false;
     if (
       operation.status === "applied" ||
       operation.status === "already_present"
     ) {
-      closure.add(operationKey);
       return true;
     }
-    if (!isAutomaticallyImportableOperation(operation)) return false;
+    if (!isAutomaticallyApprovedOperation(operation)) return false;
     if (closure.has(operationKey)) return true;
     const nextTrail = new Set(trail).add(operationKey);
     for (const dependency of operation.dependencyOperationKeys) {
@@ -269,85 +119,57 @@ export function projectImportWorkflow(
     closure.add(operationKey);
     return true;
   };
-  for (const operation of input.operations) {
+  for (const operation of input.operations.filter(
+    (candidate) =>
+      candidate.status === "pending" || candidate.status === "failed",
+  )) {
     const closure = new Set<string>();
     if (collectSafeClosure(operation.operationKey, new Set(), closure)) {
-      for (const operationKey of closure) safeHistoryOperationKeys.add(operationKey);
-    }
-  }
-  for (const operationKey of safeHistoryOperationKeys) {
-    const operation = operationByKey.get(operationKey);
-    if (operation && isAutomaticallyImportableOperation(operation)) {
-      safeOperationKeys.add(operationKey);
+      for (const operationKey of closure) safeOperationKeys.add(operationKey);
     }
   }
 
-  const dispositions = input.outcomes.map((outcome) => ({
-    sourceRecordId: outcome.sourceRecordId,
-    disposition: automaticReviewDisposition({
-      outcome: {
-        state: outcome.state,
-        match: outcome.match,
-      },
-      operations: (operationsBySourceId.get(outcome.sourceRecordId) ?? [])
-        .filter((operation) => safeHistoryOperationKeys.has(operation.operationKey)),
-    }),
-  }));
+  const dispositions = input.outcomes.map((outcome) => {
+    if (outcome.state === "failed") {
+      return { sourceRecordId: outcome.sourceRecordId, disposition: "failed" as const };
+    }
+    const sourceOperations = operationsBySourceId.get(outcome.sourceRecordId) ?? [];
+    const proofs = sourceOperations.map((operation) =>
+      readAutomaticReviewProofForOperation(operation),
+    );
+    const sourceDispositions = new Set(
+      proofs.flatMap((proof) => proof ? [proof.disposition] : []),
+    );
+    let disposition =
+      sourceOperations.length > 0 &&
+      proofs.every(Boolean) &&
+      sourceDispositions.size === 1
+        ? [...sourceDispositions][0]!
+        : "archived_only";
+    const hasTerminalOperation = sourceOperations.some(
+      (operation) =>
+        operation.status === "applied" || operation.status === "already_present",
+    );
+    if (hasTerminalOperation && disposition === "archived_only") {
+      disposition = "safe_ready";
+    }
+    const hasNonterminalOperation = sourceOperations.some(
+      (operation) =>
+        operation.status !== "applied" &&
+        operation.status !== "already_present",
+    );
+    const hasSafeClosure = sourceOperations.some((operation) =>
+      safeOperationKeys.has(operation.operationKey),
+    );
+    if (
+      !hasTerminalOperation &&
+      hasNonterminalOperation &&
+      !hasSafeClosure &&
+      (disposition === "safe_ready" || disposition === "auto_resolved")
+    ) disposition = "archived_only";
+    return { sourceRecordId: outcome.sourceRecordId, disposition };
+  });
   const safeOperationCount = safeOperationKeys.size;
-  const reviewedReadyOperationKeys = new Set<string>();
-  const reviewedClosureOperations = input.operations.map((operation) => {
-    const proofOperation = {
-      action: operation.action,
-      sourceVersionId: operation.sourceVersionId ?? "",
-      targetType: operation.targetType,
-      payload: operation.reviewedPayload ?? {},
-    };
-    const reviewedProofValid = operation.action === "overwrite_reviewed"
-      ? hasReviewedOverwriteProof(proofOperation)
-      : operation.action === "create_relationship"
-        ? hasReviewedRelationshipProof(proofOperation)
-        : false;
-    return {
-      ...operation,
-      reviewedProofValid,
-      reviewedTargetId: operation.action === "overwrite_reviewed"
-        && typeof operation.reviewedPayload?.entityId === "string"
-        ? operation.reviewedPayload.entityId
-        : null,
-      reviewedTargetType: operation.action === "overwrite_reviewed"
-        ? operation.targetType
-        : null,
-    };
-  });
-  const reviewedClosureOperationByKey = new Map(
-    reviewedClosureOperations.map((operation) => [operation.operationKey, operation]),
-  );
-  const reviewedClosureOutcomes = input.outcomes.map((outcome) => {
-    const match = outcome.match && typeof outcome.match === "object" && !Array.isArray(outcome.match)
-      ? outcome.match as Record<string, unknown>
-      : {};
-    return {
-      sourceRecordId: outcome.sourceRecordId,
-      state: outcome.state,
-      matchedTargetId: match.kind === "exact" && typeof match.localId === "string"
-        ? match.localId
-        : null,
-    };
-  });
-  for (const operation of input.operations) {
-    if (reviewedClosureOperationByKey.get(operation.operationKey)?.reviewedProofValid !== true
-      || (operation.action !== "overwrite_reviewed" && operation.action !== "create_relationship")
-      || (operation.status !== "pending" && operation.status !== "failed")
-      || outcomeBySourceId.get(operation.sourceRecordId)?.state !== "ready") continue;
-    const closure = validateReviewedClosure({
-      rootOperationKey: operation.operationKey,
-      operations: reviewedClosureOperations,
-      outcomes: reviewedClosureOutcomes,
-      requireTerminalIdentity: true,
-    });
-    if (closure.ok) reviewedReadyOperationKeys.add(operation.operationKey);
-  }
-  const reviewedReadyOperationCount = reviewedReadyOperationKeys.size;
   const autoResolvedCount = dispositions.filter(
     ({ disposition }) => disposition === "auto_resolved",
   ).length;
@@ -463,13 +285,9 @@ export function projectImportWorkflow(
     input.phase === "ready_to_apply" &&
     input.batches.length === 0 &&
     input.operations.every((operation) => operation.status === "pending");
-  const hasOptionalReview = archivedOnlyCount > 0 || input.outcomes.some(
-    (outcome) => outcome.hasOptionalReview === true,
-  );
 
   return {
     safeOperationCount,
-    reviewedReadyOperationCount,
     autoResolvedCount,
     archivedOnlyCount,
     reviewRequiredCount,
@@ -494,20 +312,15 @@ export function projectImportWorkflow(
       organizerLeaseExpired ||
       canRebuildUnapplied,
     canReview:
-      manifestDigest !== null &&
-      hasOptionalReview &&
-      (input.phase === "ready_to_apply" ||
+      (archivedOnlyCount > 0 || (input.actionableDiagnosticCount ?? 0) > 0) &&
+      (canRebuildUnapplied ||
+        input.phase === "ready_to_apply" ||
+        input.phase === "applying" ||
         input.phase === "complete" ||
         input.phase === "complete_with_issues"),
     canApplySafe:
       manifestDigest !== null &&
       safeOperationCount > 0 &&
-      (input.phase === "ready_to_apply" ||
-        input.phase === "applying" ||
-        input.phase === "complete_with_issues"),
-    canApplyReviewed:
-      manifestDigest !== null &&
-      reviewedReadyOperationCount > 0 &&
       (input.phase === "ready_to_apply" ||
         input.phase === "applying" ||
         input.phase === "complete_with_issues"),
@@ -583,22 +396,9 @@ class DrizzleWorkflowReader implements WorkflowReader {
       });
     }
 
-    const [outcomes, operations, batches, checkpoints] = await Promise.all([
+    const [outcomes, operations, batches, checkpoints, diagnosticRows] = await Promise.all([
       this.database
-        .select({
-          sourceRecordId: actReplacementOutcomes.sourceRecordId,
-          state: actReplacementOutcomes.state,
-          match: boundedOutcomeMatchProjection,
-          hasOptionalReview: sql<boolean>`
-            ${actReplacementOutcomes.state} in ('awaiting_review', 'unassigned', 'unsupported')
-            or case
-              when jsonb_typeof(${actReplacementOutcomes.issues}) = 'array'
-                then jsonb_array_length(${actReplacementOutcomes.issues}) > 0
-              else false
-            end
-          `,
-          leaseExpiresAt: actReplacementOutcomes.leaseExpiresAt,
-        })
+        .select(workflowOutcomeSelection)
         .from(actReplacementOutcomes)
         .where(eq(actReplacementOutcomes.runId, runId)),
       this.database
@@ -612,17 +412,27 @@ class DrizzleWorkflowReader implements WorkflowReader {
           status: actReplacementApplyOperations.status,
           sourceVersionId: actReplacementApplyOperations.sourceVersionId,
           targetType: actReplacementApplyOperations.targetType,
-          selectedTargetId: sql<string | null>`case
-            when ${actReplacementApplyOperations.action} = 'link_existing'
-              and jsonb_typeof(${actReplacementApplyOperations.payload}) = 'object'
-              and char_length(coalesce(${actReplacementApplyOperations.payload}->>'localId', '')) between 1 and 200
-            then ${actReplacementApplyOperations.payload}->>'localId'
-            else null
-          end`,
-          reviewedPayload: boundedReviewedPayloadProjection,
           requiredForSourceOutcome:
             actReplacementApplyOperations.requiredForSourceOutcome,
           leaseExpiresAt: actReplacementApplyOperations.leaseExpiresAt,
+          automaticReview: sql<unknown>`jsonb_build_object(
+            'version', case when ${actReplacementApplyOperations.payload} #>> '{automaticReview,version}' = '1' then 1 else null end,
+            'eligible', case
+              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,eligible}' = 'true' then true
+              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,eligible}' = 'false' then false
+              else null
+            end,
+            'disposition', case
+              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,disposition}' in ('auto_resolved','safe_ready','archived_only','failed')
+                then ${actReplacementApplyOperations.payload} #>> '{automaticReview,disposition}'
+              else null
+            end,
+            'basis', case
+              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,basis}' in ('safe_create','trusted_exact_match','proven_context_match','dependency_closed_relationship','dependency_closed_provenance','not_automatically_safe')
+                then ${actReplacementApplyOperations.payload} #>> '{automaticReview,basis}'
+              else null
+            end
+          )`,
         })
         .from(actReplacementApplyOperations)
         .where(eq(actReplacementApplyOperations.runId, runId)),
@@ -654,6 +464,16 @@ class DrizzleWorkflowReader implements WorkflowReader {
         })
         .from(actReplacementCheckpoints)
         .where(eq(actReplacementCheckpoints.runId, runId)),
+      this.database
+        .select({
+          count: sql<number>`count(*) filter (where exists (
+            select 1
+            from jsonb_array_elements(coalesce(${actReplacementOutcomes.issues}, '[]'::jsonb)) issue(value)
+            where issue.value->>'code' in ('field_conflict', 'relationship_unresolved', 'unassigned', 'ambiguous_match')
+          ))::int`,
+        })
+        .from(actReplacementOutcomes)
+        .where(eq(actReplacementOutcomes.runId, runId)),
     ]);
 
     return projectImportWorkflow({
@@ -670,6 +490,7 @@ class DrizzleWorkflowReader implements WorkflowReader {
         ...outcomes.filter((outcome) => outcome.state === "leased"),
         ...checkpoints.filter((checkpoint) => checkpoint.state === "leased"),
       ],
+      actionableDiagnosticCount: Number(diagnosticRows[0]?.count ?? 0),
       now: new Date(),
     });
   }
