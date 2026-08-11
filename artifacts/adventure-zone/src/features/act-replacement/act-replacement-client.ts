@@ -208,7 +208,7 @@ export type ApprovalClosure = {
   manifestDigest: string;
 };
 
-export type AutomaticApprovalSummary = {
+export type SafeDefaultApproval = {
   approvedOperationCount: number;
   manifestDigest: string;
 };
@@ -426,7 +426,7 @@ export const approveSafeDefaults = (
   expectedManifestDigest: string,
   requestKey: string = crypto.randomUUID(),
 ) =>
-  request<AutomaticApprovalSummary>(
+  request<SafeDefaultApproval>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/approvals/safe-defaults`,
     {
       method: "POST",
