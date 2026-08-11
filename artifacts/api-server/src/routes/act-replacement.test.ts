@@ -1281,6 +1281,38 @@ describe("owner import workflow", () => {
     }));
   });
 
+  it("uses bounded source ownership instead of loading the full manifest", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const ownsSourceInRun = vi.fn().mockResolvedValue(true);
+    const getManifest = vi.fn().mockRejectedValue(new Error("full_manifest_must_not_load"));
+    const decide = vi.fn().mockResolvedValue({ id: "decision-1" });
+    const review = workflowReview({
+      reader: {
+        ownsSourceInRun,
+        getManifest,
+        listSources: vi.fn().mockResolvedValue([]),
+      },
+      commands: { decide },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/source-records/${SOURCE_RECORD_ID}/decisions`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        runId: RUN_ID,
+        sourceVersionId: SOURCE_VERSION_ID,
+        scope: "field_conflict",
+        decision: "keep_local",
+        fieldName: "phone",
+        requestKey: "bounded-decision-request",
+      });
+
+    expect(response.status).toBe(201);
+    expect(ownsSourceInRun).toHaveBeenCalledWith(RUN_ID, SOURCE_RECORD_ID);
+    expect(getManifest).not.toHaveBeenCalled();
+  });
+
   it("strictly rejects malformed UUIDs and unknown individual decision fields", async () => {
     const store = new MemoryControlStore();
     addRun(store);
