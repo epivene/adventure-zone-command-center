@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { actExternalLinks, actReplacementApprovalRequests, actReplacementApplyBatches, actReplacementApplyOperations, actReplacementBulkReviewRequests, actReplacementObservations, actReplacementOutcomes, actReplacementRuns, actReplacementReviewDecisions, actSourceAssignments, actSourceRecordVersions, actSourceRecords, activities, bookingContacts, bookings, callingLists, contacts, organizationContacts, organizations } from "@workspace/db/schema";
 import { DrizzleActSourceAssignmentRepository } from "./assignment-repository";
 import type { ActApplyService } from "./apply-service";
-import type { ApprovalClosure, ApprovalOperationStatus, ApprovalRepository } from "./approval-service";
+import type { ApprovalClosure, ApprovalManifest, ApprovalOperation, ApprovalRepository } from "./approval-service";
 import type { ActOrganizeManifest, ManifestDiagnostic, ManifestNormalized, ManifestOperation, ManifestOutcome, ManifestReviewIssue, ManifestSourceInput } from "./manifest-builder";
 import { digestManifestRows } from "./manifest-digest";
 import { normalizeCompany } from "./normalizers/company-normalizer";
@@ -24,7 +24,6 @@ import { assignmentTargetEntityTypes, assignmentTargetLikePattern, isAssignmentT
 import { projectActReviewDisplay } from "./review-display";
 import { organizerErrorCode, ProductionActOrganizer, type OrganizerRun, type ProductionOrganizerStore } from "./production-organizer";
 import { fingerprintSourceContent } from "./source-fingerprint";
-import { approvalIdentifierLimit, approvalJsonValueLimit, type ApprovalSnapshotMode } from "./approval-projection";
 
 export { projectActReviewDisplay } from "./review-display";
 
@@ -35,7 +34,6 @@ const text = (value: unknown) => (typeof value === "string" ? value : "");
 const array = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 const object = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {});
 const manifestWriteBatchSize = 250;
-const sourceLookupChunkSize = 500;
 // Manifest construction is synchronous, so its timer heartbeat cannot run
 // while the event loop is CPU-bound. Keep enough fenced lease headroom for a
 // large archive; normal database work still renews every minute.
@@ -46,182 +44,6 @@ export function manifestWriteBatches<T>(rows: readonly T[]): T[][] {
   for (let index = 0; index < rows.length; index += manifestWriteBatchSize)
     batches.push(rows.slice(index, index + manifestWriteBatchSize));
   return batches;
-}
-export function boundedSourceIdChunks(sourceRecordIds: readonly string[]): string[][] {
-  const sourceIds = [...new Set(sourceRecordIds)].sort();
-  const chunks: string[][] = [];
-  for (let index = 0; index < sourceIds.length; index += sourceLookupChunkSize) {
-    chunks.push(sourceIds.slice(index, index + sourceLookupChunkSize));
-  }
-  return chunks;
-}
-const boundedApprovalText = (value: SQLWrapper) => sql`
-  case when length(coalesce(${value}::text, '')) <= ${approvalIdentifierLimit}
-    then ${value}::text else left(${value}::text, ${approvalIdentifierLimit}) end`;
-const boundedApprovalJson = (value: SQLWrapper) => sql`
-  case when octet_length(coalesce((${value})::text, 'null')) <= ${approvalJsonValueLimit}
-    then ${value} else null end`;
-const approvalTextTruncated = (value: SQLWrapper) => sql`
-  length(coalesce(${value}::text, '')) > ${approvalIdentifierLimit}`;
-const approvalJsonTruncated = (value: SQLWrapper) => sql`
-  octet_length(coalesce((${value})::text, 'null')) > ${approvalJsonValueLimit}`;
-
-export function boundedApprovalPayloadProjection(mode: ApprovalSnapshotMode = "reviewed") {
-  const payload = actReplacementApplyOperations.payload;
-  const action = actReplacementApplyOperations.action;
-  const localId = sql`${payload}->>'localId'`;
-  if (mode === "safe") {
-    return sql<Record<string, unknown>>`
-      case ${action}
-        when 'link_existing' then jsonb_build_object(
-          'localId', ${boundedApprovalText(localId)},
-          '_approvalProjection', jsonb_build_object(
-            'mode', 'safe',
-            'truncated', ${approvalTextTruncated(localId)},
-            'reviewedPayloadOmitted', false))
-        else jsonb_build_object('_approvalProjection', jsonb_build_object(
-          'mode', 'safe',
-          'truncated', false,
-          'reviewedPayloadOmitted', ${action} in ('overwrite_reviewed', 'create_relationship')))
-      end`;
-  }
-
-  const entityId = sql`${payload}->>'entityId'`;
-  const fieldName = sql`${payload}->>'fieldName'`;
-  const value = sql`${payload}->'value'`;
-  const proof = sql`${payload}->'proof'`;
-  const decision = sql`${payload}->'decision'`;
-  const proofLocalValue = sql`${proof}->'localValue'`;
-  const proofSourceValue = sql`${proof}->'sourceValue'`;
-  const decisionLocalValue = sql`${decision}->'reviewedLocalValue'`;
-  const decisionSourceValue = sql`${decision}->'reviewedSourceValue'`;
-  const proofProjection = sql`jsonb_strip_nulls(jsonb_build_object(
-    'entityType', ${boundedApprovalText(sql`${proof}->>'entityType'`)},
-    'entityId', ${boundedApprovalText(sql`${proof}->>'entityId'`)},
-    'fieldName', ${boundedApprovalText(sql`${proof}->>'fieldName'`)},
-    'sourceVersionId', ${boundedApprovalText(sql`${proof}->>'sourceVersionId'`)},
-    'expectedLocalValueFingerprint', ${boundedApprovalText(sql`${proof}->>'expectedLocalValueFingerprint'`)},
-    'decisionId', ${boundedApprovalText(sql`${proof}->>'decisionId'`)},
-    'decision', ${boundedApprovalText(sql`${proof}->>'decision'`)},
-    'sourceValueFingerprint', ${boundedApprovalText(sql`${proof}->>'sourceValueFingerprint'`)},
-    'localValueFingerprint', ${boundedApprovalText(sql`${proof}->>'localValueFingerprint'`)},
-    'localValue', ${boundedApprovalJson(proofLocalValue)},
-    'sourceValue', ${boundedApprovalJson(proofSourceValue)}))`;
-  const decisionProjection = sql`jsonb_strip_nulls(jsonb_build_object(
-    'id', ${boundedApprovalText(sql`${decision}->>'id'`)},
-    'sourceVersionId', ${boundedApprovalText(sql`${decision}->>'sourceVersionId'`)},
-    'scope', ${boundedApprovalText(sql`${decision}->>'scope'`)},
-    'decision', ${boundedApprovalText(sql`${decision}->>'decision'`)},
-    'fieldName', ${boundedApprovalText(sql`${decision}->>'fieldName'`)},
-    'targetEntityType', ${boundedApprovalText(sql`${decision}->>'targetEntityType'`)},
-    'targetEntityId', ${boundedApprovalText(sql`${decision}->>'targetEntityId'`)},
-    'relationshipSlot', ${boundedApprovalText(sql`${decision}->>'relationshipSlot'`)},
-    'reviewedSourceValueFingerprint', ${boundedApprovalText(sql`${decision}->>'reviewedSourceValueFingerprint'`)},
-    'reviewedLocalValueFingerprint', ${boundedApprovalText(sql`${decision}->>'reviewedLocalValueFingerprint'`)},
-    'reviewedSourceValue', ${boundedApprovalJson(decisionSourceValue)},
-    'reviewedLocalValue', ${boundedApprovalJson(decisionLocalValue)}))`;
-  const proofIdentifiersTruncated = sql`(
-    ${approvalTextTruncated(sql`${proof}->>'entityType'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'entityId'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'fieldName'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'sourceVersionId'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'expectedLocalValueFingerprint'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'decisionId'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'decision'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'sourceValueFingerprint'`)}
-    or ${approvalTextTruncated(sql`${proof}->>'localValueFingerprint'`)})`;
-  const decisionIdentifiersTruncated = sql`(
-    ${approvalTextTruncated(sql`${decision}->>'id'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'sourceVersionId'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'scope'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'decision'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'fieldName'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'targetEntityType'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'targetEntityId'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'relationshipSlot'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'reviewedSourceValueFingerprint'`)}
-    or ${approvalTextTruncated(sql`${decision}->>'reviewedLocalValueFingerprint'`)})`;
-  const proofTruncated = sql`(
-    ${approvalJsonTruncated(value)}
-    or ${approvalJsonTruncated(proofLocalValue)}
-    or ${approvalJsonTruncated(proofSourceValue)}
-    or ${approvalJsonTruncated(decisionLocalValue)}
-    or ${approvalJsonTruncated(decisionSourceValue)}
-    or ${approvalTextTruncated(entityId)}
-    or ${approvalTextTruncated(fieldName)}
-    or ${proofIdentifiersTruncated}
-    or ${decisionIdentifiersTruncated})`;
-  const parentEntityId = sql`${payload}->>'parentEntityId'`;
-  const parentType = sql`${payload}->>'parentType'`;
-  const relationshipSlot = sql`${payload}->>'relationshipSlot'`;
-
-  return sql<Record<string, unknown>>`
-    case ${action}
-      when 'link_existing' then jsonb_build_object(
-        'localId', ${boundedApprovalText(localId)},
-        '_approvalProjection', jsonb_build_object(
-          'mode', 'reviewed', 'truncated', ${approvalTextTruncated(localId)},
-          'reviewedPayloadOmitted', false))
-      when 'overwrite_reviewed' then jsonb_build_object(
-        'entityId', ${boundedApprovalText(entityId)},
-        'fieldName', ${boundedApprovalText(fieldName)},
-        'value', ${boundedApprovalJson(value)},
-        'proof', ${proofProjection},
-        'decision', ${decisionProjection},
-        '_approvalProjection', jsonb_build_object(
-          'mode', 'reviewed', 'truncated', ${proofTruncated},
-          'reviewedPayloadOmitted', false))
-      when 'create_relationship' then jsonb_build_object(
-        'parentEntityId', ${boundedApprovalText(parentEntityId)},
-        'parentType', ${boundedApprovalText(parentType)},
-        'relationshipSlot', ${boundedApprovalText(relationshipSlot)},
-        'decision', ${decisionProjection},
-        '_approvalProjection', jsonb_build_object(
-          'mode', 'reviewed',
-          'truncated', ${approvalTextTruncated(parentEntityId)}
-            or ${approvalTextTruncated(parentType)}
-            or ${approvalTextTruncated(relationshipSlot)}
-            or ${decisionIdentifiersTruncated}
-            or ${approvalJsonTruncated(decisionLocalValue)}
-            or ${approvalJsonTruncated(decisionSourceValue)},
-          'reviewedPayloadOmitted', false))
-      else jsonb_build_object('_approvalProjection', jsonb_build_object(
-        'mode', 'reviewed', 'truncated', false, 'reviewedPayloadOmitted', false))
-    end`;
-}
-export function boundedApprovalMatchProjection() {
-  const match = actReplacementOutcomes.match;
-  const evidenceArray = sql`case when jsonb_typeof(${match}->'evidence') = 'array'
-    then ${match}->'evidence' else '[]'::jsonb end`;
-  return sql<Record<string, unknown> | null>`
-    case when ${match} is null then null
-      else jsonb_strip_nulls(jsonb_build_object(
-        'kind', ${boundedApprovalText(sql`${match}->>'kind'`)},
-        'localId', ${boundedApprovalText(sql`${match}->>'localId'`)},
-        'reason', ${boundedApprovalText(sql`${match}->>'reason'`)},
-        'evidenceTruncated', coalesce((${match}->>'evidenceTruncated')::boolean, false)
-          or jsonb_array_length(${evidenceArray}) > ${20}
-          or ${approvalTextTruncated(sql`${match}->>'kind'`)}
-          or ${approvalTextTruncated(sql`${match}->>'localId'`)}
-          or ${approvalTextTruncated(sql`${match}->>'reason'`)}
-          or coalesce((select bool_or(
-            ${approvalTextTruncated(sql`evidence.value->>'family'`)}
-            or ${approvalTextTruncated(sql`evidence.value->>'authority'`)}
-            or ${approvalTextTruncated(sql`evidence.value->>'targetEntityId'`)}
-            or ${approvalTextTruncated(sql`evidence.value->>'targetEntityType'`)})
-            from jsonb_array_elements(${evidenceArray}) as evidence(value)), false),
-        'evidence', coalesce((
-          select jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
-            'family', ${boundedApprovalText(sql`evidence.value->>'family'`)},
-            'authority', ${boundedApprovalText(sql`evidence.value->>'authority'`)},
-            'targetEntityId', ${boundedApprovalText(sql`evidence.value->>'targetEntityId'`)},
-            'targetEntityType', ${boundedApprovalText(sql`evidence.value->>'targetEntityType'`)})) order by evidence.ordinality)
-          from jsonb_array_elements(
-            ${evidenceArray}
-          ) with ordinality as evidence(value, ordinality)
-          where evidence.ordinality <= ${20}
-        ), '[]'::jsonb)))
-    end`;
 }
 
 export function staleNonterminalOperationPredicate(runId: string, operationKeys: string[]) {
@@ -842,22 +664,20 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
       .innerJoin(actSourceRecords, and(eq(actSourceRecords.id, actReplacementObservations.sourceRecordId), eq(actSourceRecords.sourceDatabaseKey, this.scope.sourceDatabaseKey)))
       .innerJoin(actSourceRecordVersions, and(eq(actSourceRecordVersions.id, actReplacementObservations.versionId), eq(actSourceRecordVersions.sourceRecordId, actSourceRecords.id)))
       .where(and(eq(actReplacementObservations.runId, runId), eq(actReplacementObservations.sourceDatabaseKey, this.scope.sourceDatabaseKey)));
-    const sourceIdChunks = boundedSourceIdChunks(rows.map((row) => row.sourceRecordId));
-    const assignments: Array<typeof actSourceAssignments.$inferSelect> = [];
-    const decisions: Array<typeof actReplacementReviewDecisions.$inferSelect> = [];
-    for (const sourceIds of sourceIdChunks) {
-      assignments.push(...await this.database
-        .select()
-        .from(actSourceAssignments)
-        .where(and(inArray(actSourceAssignments.sourceRecordId, sourceIds), isNull(actSourceAssignments.supersededAt))));
-      decisions.push(...await this.database
-        .select()
-        .from(actReplacementReviewDecisions)
-        .where(and(inArray(actReplacementReviewDecisions.sourceRecordId, sourceIds), eq(actReplacementReviewDecisions.active, true))));
-    }
-    assignments.sort((left, right) => left.sourceRecordId.localeCompare(right.sourceRecordId) || left.id.localeCompare(right.id));
-    decisions.sort((left, right) => left.sourceRecordId.localeCompare(right.sourceRecordId) || left.id.localeCompare(right.id));
-    const [localOrganizations, localContacts, localBookings, localOrganizationContacts, localBookingContacts, externalLinks] = await Promise.all([
+    const sourceIds = rows.map((row) => row.sourceRecordId);
+    const [assignments, decisions, localOrganizations, localContacts, localBookings, localOrganizationContacts, localBookingContacts, externalLinks] = await Promise.all([
+      sourceIds.length
+      ? await this.database
+          .select()
+          .from(actSourceAssignments)
+          .where(and(inArray(actSourceAssignments.sourceRecordId, sourceIds), isNull(actSourceAssignments.supersededAt)))
+      : [],
+      sourceIds.length
+      ? await this.database
+          .select()
+          .from(actReplacementReviewDecisions)
+          .where(and(inArray(actReplacementReviewDecisions.sourceRecordId, sourceIds), eq(actReplacementReviewDecisions.active, true)))
+      : [],
       this.database.select({ id: organizations.id, name: organizations.name, phone: organizations.phone, website: organizations.website, industry: organizations.actIndustry, address1: organizations.address1, address2: organizations.address2, city: organizations.city, region: organizations.region, postalCode: organizations.postalCode }).from(organizations),
       this.database.select({ id: contacts.id, organizationId: contacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, jobTitle: contacts.jobTitle, address1: contacts.address1, address2: contacts.address2, city: contacts.city, region: contacts.region, postalCode: contacts.postalCode }).from(contacts),
       this.database.select({ id: bookings.id, name: bookings.name, organizationId: bookings.organizationId, venueName: bookings.venueName, address1: bookings.address1, city: bookings.city, region: bookings.region, postalCode: bookings.postalCode, startsAt: bookings.startsAt, endsAt: bookings.endsAt, localStatus: bookings.status, localProbability: bookings.probability, notes: bookings.notes }).from(bookings),
@@ -1393,13 +1213,88 @@ export class DrizzleActReviewReader implements ReviewReader {
   }
 }
 
+export const approvalOperationSelection = {
+  operationKey: actReplacementApplyOperations.operationKey,
+  sourceRecordId: actReplacementApplyOperations.sourceRecordId,
+  sourceVersionId: actReplacementApplyOperations.sourceVersionId,
+  targetType: actReplacementApplyOperations.targetType,
+  action: actReplacementApplyOperations.action,
+  payload: sql<unknown>`jsonb_build_object(
+    'automaticReview', jsonb_build_object(
+      'version', ${actReplacementApplyOperations.payload} #> '{automaticReview,version}',
+      'eligible', ${actReplacementApplyOperations.payload} #> '{automaticReview,eligible}',
+      'disposition', ${actReplacementApplyOperations.payload} #> '{automaticReview,disposition}',
+      'basis', ${actReplacementApplyOperations.payload} #> '{automaticReview,basis}'
+    ),
+    'entityId', ${actReplacementApplyOperations.payload} #> '{entityId}',
+    'fieldName', ${actReplacementApplyOperations.payload} #> '{fieldName}',
+    'value', ${actReplacementApplyOperations.payload} #> '{value}',
+    'proof', jsonb_build_object(
+      'localValue', ${actReplacementApplyOperations.payload} #> '{proof,localValue}',
+      'sourceValue', ${actReplacementApplyOperations.payload} #> '{proof,sourceValue}'
+    ),
+    'decision', jsonb_build_object(
+      'id', ${actReplacementApplyOperations.payload} #> '{decision,id}',
+      'scope', ${actReplacementApplyOperations.payload} #> '{decision,scope}',
+      'decision', ${actReplacementApplyOperations.payload} #> '{decision,decision}',
+      'sourceVersionId', ${actReplacementApplyOperations.payload} #> '{decision,sourceVersionId}',
+      'fieldName', ${actReplacementApplyOperations.payload} #> '{decision,fieldName}',
+      'targetEntityType', ${actReplacementApplyOperations.payload} #> '{decision,targetEntityType}',
+      'targetEntityId', ${actReplacementApplyOperations.payload} #> '{decision,targetEntityId}'
+    )
+  )`,
+  dependencyOperationKeys:
+    actReplacementApplyOperations.dependencyOperationKeys,
+  requiredForSourceOutcome:
+    actReplacementApplyOperations.requiredForSourceOutcome,
+  safeByDefault: actReplacementApplyOperations.safeByDefault,
+  status: actReplacementApplyOperations.status,
+};
+
+export const approvalOutcomeSelection = {
+  sourceRecordId: actReplacementOutcomes.sourceRecordId,
+  sourceVersionId: actReplacementOutcomes.sourceVersionId,
+  state: actReplacementOutcomes.state,
+};
+
+export function approvalManifestFromRows(input: {
+  digest: string;
+  operations: readonly Record<string, unknown>[];
+  outcomes: readonly Record<string, unknown>[];
+}): ApprovalManifest {
+  const operations: ApprovalOperation[] = input.operations.map((row) => ({
+    operationKey: text(row.operationKey),
+    sourceRecordId: text(row.sourceRecordId),
+    sourceVersionId: text(row.sourceVersionId),
+    targetType: text(row.targetType) as ManifestOperation["targetType"],
+    action: text(row.action) as ManifestOperation["action"],
+    payload: object(row.payload),
+    dependencyOperationKeys: array<string>(row.dependencyOperationKeys),
+    requiredForSourceOutcome: row.requiredForSourceOutcome === true,
+    safeByDefault: row.safeByDefault === true,
+    status: text(row.status),
+  }));
+  const outcomes: ManifestOutcome[] = input.outcomes.map((row) => ({
+    sourceRecordId: text(row.sourceRecordId),
+    sourceVersionId: text(row.sourceVersionId),
+    state: text(row.state) as ManifestOutcome["state"],
+    issues: [],
+    candidates: [],
+    match: null,
+    mappingWarnings: [],
+    unsupportedFieldPaths: [],
+    operationKeys: [],
+  }));
+  return { digest: input.digest, operations, outcomes };
+}
+
 class DrizzleApprovalRepository implements ApprovalRepository {
   constructor(
     private readonly reader: DrizzleActReviewReader,
     private readonly database: DrizzleDatabase,
     private readonly scope: SourceDatabaseScope,
   ) {}
-  async getSnapshot(runId: string, mode: ApprovalSnapshotMode) {
+  async getManifest(runId: string) {
     const [run] = await this.database
       .select({ summary: actReplacementRuns.summary })
       .from(actReplacementRuns)
@@ -1409,47 +1304,21 @@ class DrizzleApprovalRepository implements ApprovalRepository {
       ))
       .limit(1);
     if (!run) return null;
-    const boundedPayload = boundedApprovalPayloadProjection(mode);
-    const boundedMatch = boundedApprovalMatchProjection();
-    const [operationRows, outcomeRows] = await Promise.all([
+    const [operations, outcomes] = await Promise.all([
       this.database
-      .select({
-        operationKey: actReplacementApplyOperations.operationKey,
-        sourceRecordId: actReplacementApplyOperations.sourceRecordId,
-        sourceVersionId: actReplacementApplyOperations.sourceVersionId,
-        targetType: actReplacementApplyOperations.targetType,
-        action: actReplacementApplyOperations.action,
-        payload: boundedPayload,
-        dependencyOperationKeys: actReplacementApplyOperations.dependencyOperationKeys,
-        requiredForSourceOutcome: actReplacementApplyOperations.requiredForSourceOutcome,
-        safeByDefault: actReplacementApplyOperations.safeByDefault,
-        status: actReplacementApplyOperations.status,
-      })
-      .from(actReplacementApplyOperations)
-      .where(eq(actReplacementApplyOperations.runId, runId)),
+        .select(approvalOperationSelection)
+        .from(actReplacementApplyOperations)
+        .where(eq(actReplacementApplyOperations.runId, runId)),
       this.database
-        .select({
-          sourceRecordId: actReplacementOutcomes.sourceRecordId,
-          sourceVersionId: actReplacementOutcomes.sourceVersionId,
-          state: actReplacementOutcomes.state,
-          match: boundedMatch,
-        })
+        .select(approvalOutcomeSelection)
         .from(actReplacementOutcomes)
         .where(eq(actReplacementOutcomes.runId, runId)),
     ]);
-    const manifest = manifestFromRows({
-      operations: operationRows as unknown as Array<Record<string, unknown>>,
-      outcomes: outcomeRows as unknown as Array<Record<string, unknown>>,
-    }, text(object(run.summary).manifestDigest));
-    return {
-      digest: manifest.digest,
-      operations: manifest.operations,
-      outcomes: manifest.outcomes,
-      operationStatuses: Object.fromEntries(operationRows.map((row) => [
-        row.operationKey,
-        row.status as ApprovalOperationStatus,
-      ])),
-    };
+    return approvalManifestFromRows({
+      digest: text(object(run.summary).manifestDigest),
+      operations: operations as unknown as Array<Record<string, unknown>>,
+      outcomes: outcomes as unknown as Array<Record<string, unknown>>,
+    });
   }
   async getRequest(runId: string, requestKey: string) {
     if (!(await this.reader.ownsRun(runId))) return null;
@@ -1459,18 +1328,13 @@ class DrizzleApprovalRepository implements ApprovalRepository {
       .where(and(eq(actReplacementApprovalRequests.runId, runId), eq(actReplacementApprovalRequests.requestKey, requestKey)))
       .limit(1);
     if (!row) return null;
-    return {
-      selectedOperationIds: array<string>(row.selectedOperationIds),
-      approvedOperationIds: array<string>(row.dependencyClosedOperationIds),
-      dependencyOperationIds: array<string>(row.dependencyClosedOperationIds)
-        .filter((operationId) => !array<string>(row.selectedOperationIds).includes(operationId))
-        .sort(),
-      rejectedOperationIds: [],
-      selectedCount: row.selectedCount,
-      dependencyCount: row.dependencyCount,
-      rejectedCount: row.rejectedCount,
-      manifestDigest: row.manifestDigest,
-    };
+    const manifest = await this.getManifest(runId);
+    if (!manifest)
+      throw Object.assign(new Error("approval_replay_manifest_not_found"), {
+        code: "approval_replay_manifest_not_found",
+        status: 409,
+      });
+    return approvalClosureFromDurableRow(manifest, row);
   }
   async saveRequest(runId: string, requestKey: string, closure: ApprovalClosure) {
     if (!(await this.reader.ownsRun(runId))) throw new Error("run_not_found");
