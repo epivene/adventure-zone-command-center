@@ -5,7 +5,7 @@ import { approvalClosureFromDurableRow, approvalManifestFromRows, approvalOperat
 import { ProductionActOrganizer, type ProductionOrganizerStore } from "./production-organizer";
 import { individualDecisionRequestFingerprint } from "./review-command-service";
 import { fingerprintSourceContent } from "./source-fingerprint";
-import { actReplacementApplyOperations, actReplacementReviewDecisions, actReplacementRuns, actSourceRecords } from "@workspace/db/schema";
+import { actReplacementApprovalRequests, actReplacementApplyOperations, actReplacementOutcomes, actReplacementReviewDecisions, actReplacementRuns, actSourceRecords } from "@workspace/db/schema";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -39,9 +39,6 @@ describe("durable review adapter projections", () => {
     ]);
     expect(approvalOutcomeSelection).not.toHaveProperty("match");
     expect(approvalOperationSelection).toHaveProperty("status");
-    expect(approvalOperationSelection.payload).not.toBe(
-      actReplacementApplyOperations.payload,
-    );
 
     const manifest = approvalManifestFromRows({
       digest: "a".repeat(64),
@@ -75,6 +72,146 @@ describe("durable review adapter projections", () => {
       match: null,
     });
     expect(JSON.stringify(manifest)).not.toContain("unbounded-match-sentinel");
+  });
+
+  it("projects only bounded proof fields for durable approval reads", () => {
+    const rendered = new PgDialect().sqlToQuery(
+      sql`select ${approvalOperationSelection.payload}`,
+    );
+
+    expect(rendered.sql).toContain("jsonb_strip_nulls");
+    expect(rendered.sql).toContain("automaticReview");
+    expect(rendered.sql).toContain("overwrite_reviewed");
+    expect(rendered.sql).not.toContain("normalized");
+  });
+
+  it("rejects string-coerced and extra-key automatic proofs in the approval SQL reader", () => {
+    const rendered = new PgDialect().sqlToQuery(
+      sql`select ${approvalOperationSelection.payload}`,
+    ).sql;
+
+    expect(rendered).toContain("?& array['version','eligible','disposition','basis']::text[]");
+    expect(rendered).toContain("- 'version' - 'eligible' - 'disposition' - 'basis'");
+    expect(rendered).toContain("->'version') = 'number'");
+    expect(rendered).toContain("->'eligible') = 'boolean'");
+    expect(rendered).toContain("->'disposition') = 'string'");
+    expect(rendered).toContain("->'basis') = 'string'");
+    expect(rendered).not.toContain("#>> '{automaticReview");
+  });
+
+  it("replays approval requests through the bounded SQL manifest reader", async () => {
+    const manifestDigest = "a".repeat(64);
+    const operation = {
+      operationKey: "organization:a",
+      sourceRecordId: "a",
+      sourceVersionId: "v-a",
+      targetType: "organization",
+      action: "create",
+      payload: {
+        automaticReview: {
+          version: 1,
+          eligible: true,
+          disposition: "safe_ready",
+          basis: "safe_create",
+        },
+      },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+      status: "pending",
+    };
+    const request = {
+      selectedOperationIds: [operation.operationKey],
+      dependencyClosedOperationIds: [operation.operationKey],
+      selectedCount: 1,
+      dependencyCount: 0,
+      rejectedCount: 0,
+      manifestDigest,
+      approvalMode: "automatic_safe",
+      approvalModeVersion: 1,
+    };
+    const database = {
+      select: () => {
+        let table: unknown;
+        const rows = () => {
+          if (table === actReplacementRuns)
+            return [{ id: "run", summary: { manifestDigest } }];
+          if (table === actReplacementApprovalRequests) return [request];
+          if (table === actReplacementApplyOperations) return [operation];
+          if (table === actReplacementOutcomes)
+            return [{ sourceRecordId: "a", sourceVersionId: "v-a", state: "archived_only" }];
+          return [];
+        };
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; },
+          where: () => chain,
+          limit: async () => rows(),
+          then: (resolve: (value: unknown[]) => unknown) => resolve(rows()),
+        };
+        return chain;
+      },
+    } as never;
+    const store = new DrizzleActReviewCommandStore(
+      database,
+      { sourceDatabaseKey: "act-db" },
+      {} as never,
+    );
+    vi.spyOn(store, "getManifest").mockRejectedValue(
+      new Error("unbounded manifest reader called"),
+    );
+
+    await expect(store.getApprovalRepository().getRequest("run", "request"))
+      .resolves.toMatchObject({
+        approvedOperationIds: [operation.operationKey],
+        manifestDigest,
+        approvalMode: "automatic_safe",
+        approvalModeVersion: 1,
+      });
+  });
+
+  it("writes approval provenance with every durable approval request", async () => {
+    let inserted: Record<string, unknown> | undefined;
+    const database = {
+      select: () => {
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: async () => [{ id: "run" }],
+        };
+        return chain;
+      },
+      insert: () => ({
+        values: (value: Record<string, unknown>) => {
+          inserted = value;
+          return {
+            onConflictDoNothing: () => ({ returning: async () => [{ id: "request" }] }),
+          };
+        },
+      }),
+    } as never;
+    const repository = new DrizzleActReviewCommandStore(
+      database,
+      { sourceDatabaseKey: "act-db" },
+      {} as never,
+    ).getApprovalRepository();
+
+    await repository.saveRequest("run", "request", {
+      selectedOperationIds: ["safe:create"],
+      approvedOperationIds: ["safe:create"],
+      dependencyOperationIds: [],
+      rejectedOperationIds: [],
+      selectedCount: 1,
+      dependencyCount: 0,
+      rejectedCount: 0,
+      manifestDigest: "a".repeat(64),
+      approvalMode: "automatic_safe",
+      approvalModeVersion: 1,
+    });
+
+    expect(inserted).toMatchObject({
+      approvalMode: "automatic_safe",
+      approvalModeVersion: 1,
+    });
   });
   it("aggregates globally, pages in SQL, and loads payloads only for page sources", async () => {
     const queries: unknown[] = [];
@@ -901,6 +1038,8 @@ describe("durable review adapter projections", () => {
       dependencyCount: 0,
       rejectedCount: 1,
       manifestDigest: manifest.digest,
+      approvalMode: "automatic_safe",
+      approvalModeVersion: 1,
     };
 
     const first = approvalClosureFromDurableRow(manifest, row);
@@ -909,8 +1048,38 @@ describe("durable review adapter projections", () => {
     expect(first).toMatchObject({
       rejectedOperationIds: ["conflict:create"],
       rejectedCount: 1,
+      approvalMode: "automatic_safe",
+      approvalModeVersion: 1,
     });
     expect(replay).toEqual(first);
+  });
+
+  it("preserves null provenance on legacy durable approval rows", () => {
+    const manifest = manifestFromRows({
+      operations: [{
+        operationKey: "safe:create",
+        sourceRecordId: "safe",
+        sourceVersionId: "v-safe",
+        targetType: "organization",
+        action: "create",
+        payload: {},
+        dependencyOperationKeys: [],
+        requiredForSourceOutcome: true,
+        safeByDefault: true,
+      }],
+      outcomes: [],
+    });
+
+    expect(approvalClosureFromDurableRow(manifest, {
+      selectedOperationIds: ["safe:create"],
+      dependencyClosedOperationIds: ["safe:create"],
+      selectedCount: 1,
+      dependencyCount: 0,
+      rejectedCount: 0,
+      manifestDigest: manifest.digest,
+      approvalMode: null,
+      approvalModeVersion: null,
+    })).toMatchObject({ approvalMode: null, approvalModeVersion: null });
   });
 
   it("reconstructs the canonical manifest digest from persisted rows", () => {
@@ -1464,6 +1633,98 @@ describe("durable review adapter projections", () => {
       expect.objectContaining({ sourceRecordId: "contact-1", state: "awaiting_review", issues: expect.arrayContaining([expect.objectContaining({ code: "archive_incomplete" }), expect.objectContaining({ code: "ambiguous_match" })]) }),
     ]));
     expect(result.manifest.operations.some((operation) => ["company-1", "contact-1"].includes(operation.sourceRecordId))).toBe(false);
+  });
+
+  it("archives a contact whose name and organization agree but direct contact data conflicts", async () => {
+    const fetchedAt = new Date("2026-08-07T12:00:00.000Z");
+    const sources = manifestSourcesFromArchiveRows({
+      rows: [
+        {
+          sourceRecordId: "company-1", sourceVersionId: "company-version-1", latestSourceVersionId: "company-version-1", streamType: "company", actRecordId: "company-act-1", archiveCompleteness: "complete", rawSnapshot: { Name: "Adventure Zone" }, fetchedAt, relationshipEvidence: {},
+        },
+        {
+          sourceRecordId: "contact-1", sourceVersionId: "contact-version-1", latestSourceVersionId: "contact-version-1", streamType: "contact", actRecordId: "contact-act-1", archiveCompleteness: "complete", rawSnapshot: { FirstName: "Jane", LastName: "Doe", EmailAddress: "source@example.com" }, fetchedAt, relationshipEvidence: {},
+        },
+        {
+          sourceRecordId: "relationship-1", sourceVersionId: "relationship-version-1", latestSourceVersionId: "relationship-version-1", streamType: "company_contact", actRecordId: null, archiveCompleteness: "complete", rawSnapshot: {}, fetchedAt, relationshipEvidence: { source: "endpoint", parentKind: "contact", parentActRecordId: "contact-act-1", targetKind: "company", targetActRecordId: "company-act-1" },
+        },
+      ],
+      assignments: [
+        { sourceRecordId: "company-1", targetEntityType: "organization", targetEntityId: "local-org", manualAuthority: true, active: true },
+      ],
+      localCandidates: {
+        contacts: [{
+          id: "local-contact",
+          firstName: "Jane",
+          lastName: "Doe",
+          email: "different@example.com",
+          organizationIds: ["local-org"],
+        }],
+      },
+    });
+    const result = await new ProductionActOrganizer({
+      async claim(runId) { return { runId, phase: "organizing", claimToken: "claim-contact-conflict" }; },
+      async loadSources() { return sources; },
+      async renew() { return true; },
+      async persistManifest() {},
+      async complete() {},
+      async release() {},
+    }).organize("run-contact-conflict");
+
+    expect(result.manifest.outcomes).toContainEqual(expect.objectContaining({
+      sourceRecordId: "contact-1",
+      state: "awaiting_review",
+      issues: expect.arrayContaining([
+        expect.objectContaining({ code: "ambiguous_match", reason: "conflicting_contact_fields" }),
+      ]),
+    }));
+    expect(result.manifest.operations.some((operation) => operation.sourceRecordId === "contact-1")).toBe(false);
+  });
+
+  it("archives matcher overflow with only bounded candidates and evidence", async () => {
+    const fetchedAt = new Date("2026-08-07T12:00:00.000Z");
+    const sources = manifestSourcesFromArchiveRows({
+      rows: [{
+        sourceRecordId: "company-overflow", sourceVersionId: "company-overflow-version", latestSourceVersionId: "company-overflow-version", streamType: "company", actRecordId: "company-overflow-act", archiveCompleteness: "complete", rawSnapshot: { Name: "Acme Adventures", Phone: "555-111-2222", Website: "https://acme.example.com", Address1: "1 Main St", City: "Denver", State: "CO", ZipCode: "80202" }, fetchedAt, relationshipEvidence: {},
+      }],
+      localCandidates: {
+        organizations: Array.from({ length: 64 }, (_, index) => ({
+          id: `organization-${String(index).padStart(3, "0")}`,
+          name: "Acme Adventures",
+          phone: "555-111-2222",
+          website: "https://acme.example.com",
+          address1: "1 Main St",
+          city: "Denver",
+          region: "CO",
+          postalCode: "80202",
+        })),
+      },
+    });
+    const result = await new ProductionActOrganizer({
+      async claim(runId) { return { runId, phase: "organizing", claimToken: "claim-overflow" }; },
+      async loadSources() { return sources; },
+      async renew() { return true; },
+      async persistManifest() {},
+      async complete() {},
+      async release() {},
+    }).organize("run-overflow");
+    const outcome = result.manifest.outcomes.find((candidate) => candidate.sourceRecordId === "company-overflow");
+    const match = outcome?.match as {
+      candidateIds?: unknown;
+      evidence?: unknown;
+    } | null | undefined;
+
+    expect(outcome).toMatchObject({
+      state: "awaiting_review",
+      match: {
+        kind: "ambiguous",
+        reason: "candidate_limit_exceeded",
+        overflow: true,
+      },
+    });
+    expect(Array.isArray(match?.candidateIds) ? match.candidateIds.length : Infinity).toBeLessThanOrEqual(20);
+    expect(Array.isArray(match?.evidence) ? match.evidence.length : Infinity).toBeLessThanOrEqual(20);
+    expect(result.manifest.operations.some((operation) => operation.sourceRecordId === "company-overflow")).toBe(false);
   });
 
   it("matches booking candidates only through an exact resolved local organization", async () => {
