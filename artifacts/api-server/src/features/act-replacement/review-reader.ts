@@ -74,6 +74,7 @@ export type ReviewPage = { rows: ReviewRow[]; page: number; pageSize: number; to
 
 export type ReviewReader = {
   getManifest(runId: string): Promise<ActOrganizeManifest | null>;
+  ownsSourceInRun?(runId: string, sourceRecordId: string): Promise<boolean>;
   listSources(runId: string): Promise<ReviewSourceRecord[]>;
   getSource?(sourceRecordId: string): Promise<ReviewSourceRecord | null>;
   readReviewPage?(input: ReviewReadInput): Promise<ReviewPage>;
@@ -372,6 +373,9 @@ export class InMemoryReviewReader implements ReviewReader {
   targets: ReviewTargetProjection[] = [];
   seed(runId: string, manifest: ActOrganizeManifest, sources: ReviewSourceRecord[] = [], targets: ReviewTargetProjection[] = []) { this.manifests.set(runId, manifest); this.sources.set(runId, sources.map((source) => ({ ...source }))); this.targets = targets.map((target) => ({ ...target, fields: target.fields ? { ...target.fields } : undefined })); }
   async getManifest(runId: string) { return this.manifests.get(runId) ?? null; }
+  async ownsSourceInRun(runId: string, sourceRecordId: string) {
+    return Boolean(this.manifests.get(runId)?.outcomes.some((outcome) => outcome.sourceRecordId === sourceRecordId));
+  }
   async listSources(runId: string) { return (this.sources.get(runId) ?? []).map((source) => ({ ...source })); }
   async getSource(sourceRecordId: string) { for (const sources of this.sources.values()) { const found = sources.find((source) => source.sourceRecordId === sourceRecordId); if (found) return { ...found }; } return null; }
   async listAssignmentTargets(query: { search?: string; entityType?: string; entityTypes?: string[] }) {

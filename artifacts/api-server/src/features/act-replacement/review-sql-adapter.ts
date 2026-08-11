@@ -1022,6 +1022,19 @@ export class DrizzleActReviewReader implements ReviewReader {
       outcomes: outcomeRows as unknown as Array<Record<string, unknown>>,
     }, text(object(run.summary).manifestDigest));
   }
+  async ownsSourceInRun(runId: string, sourceRecordId: string) {
+    const [row] = await this.database
+      .select({ sourceRecordId: actReplacementOutcomes.sourceRecordId })
+      .from(actReplacementOutcomes)
+      .innerJoin(actSourceRecords, eq(actSourceRecords.id, actReplacementOutcomes.sourceRecordId))
+      .where(and(
+        eq(actReplacementOutcomes.runId, runId),
+        eq(actReplacementOutcomes.sourceRecordId, sourceRecordId),
+        eq(actSourceRecords.sourceDatabaseKey, this.scope.sourceDatabaseKey),
+      ))
+      .limit(1);
+    return Boolean(row);
+  }
   async listSources(runId: string): Promise<ReviewSourceRecord[]> {
     if (!(await this.ownsRun(runId))) return [];
     const rows = await this.database

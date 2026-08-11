@@ -644,6 +644,9 @@ export function createActReplacementRouter(
   ) => {
     const owned = await dependencies.store.findOwnedRun({ runId, ...context });
     if (!owned) return false;
+    if (review.reader.ownsSourceInRun) {
+      return review.reader.ownsSourceInRun(runId, sourceRecordId);
+    }
     const manifest = await review.reader.getManifest(runId);
     return Boolean(
       manifest?.outcomes.some(
