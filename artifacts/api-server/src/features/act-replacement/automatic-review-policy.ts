@@ -1,5 +1,4 @@
 import type { ManifestOutcome } from "./manifest-builder";
-import { approvalProjectionIsIncomplete } from "./approval-projection";
 
 export type AutomaticReviewDisposition =
   | "auto_resolved"
@@ -7,13 +6,33 @@ export type AutomaticReviewDisposition =
   | "archived_only"
   | "failed";
 
+export type AutomaticReviewBasis =
+  | "safe_create"
+  | "trusted_exact_match"
+  | "proven_context_match"
+  | "dependency_closed_relationship"
+  | "dependency_closed_provenance"
+  | "not_automatically_safe";
+
+export type AutomaticReviewProof = {
+  version: 1;
+  eligible: boolean;
+  disposition: AutomaticReviewDisposition;
+  basis: AutomaticReviewBasis;
+};
+
 export type AutomaticReviewOperation = {
   action: string;
   safeByDefault: boolean;
   status: string;
   targetType: string;
-  selectedTargetId?: string | null;
-  payload?: Readonly<Record<string, unknown>>;
+  dependencyOperationKeys?: readonly string[];
+  operationKey?: string;
+};
+
+type ProofBearingOperation = AutomaticReviewOperation & {
+  automaticReview?: unknown;
+  payload?: unknown;
 };
 
 const maximumEvidence = 20;
@@ -21,6 +40,8 @@ const automaticallyImportableActions = new Set([
   "link_existing",
   "create",
   "fill_missing",
+  "create_relationship",
+  "record_provenance",
 ]);
 const compatibleTargetTypes = new Set([
   "organization",
@@ -38,11 +59,46 @@ const contextClueFamilies = new Set([
   "event_context",
   "narrative_context",
 ]);
+const trustedExactReasons = new Set([
+  "exact_external_link",
+  "manual_assignment",
+  "manual_review",
+]);
+const dispositions = new Set<AutomaticReviewDisposition>([
+  "auto_resolved",
+  "safe_ready",
+  "archived_only",
+  "failed",
+]);
+const bases = new Set<AutomaticReviewBasis>([
+  "safe_create",
+  "trusted_exact_match",
+  "proven_context_match",
+  "dependency_closed_relationship",
+  "dependency_closed_provenance",
+  "not_automatically_safe",
+]);
 
 function object(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
+}
+
+function selectedTargetTypesFromOperations(
+  operations: readonly AutomaticReviewOperation[],
+): ReadonlySet<string> {
+  const selectedTargetTypes = new Set<string>();
+  for (const operation of operations) {
+    if (
+      operation.action !== "link_existing" ||
+      !isAutomaticallyImportableOperation(operation)
+    ) continue;
+    if (compatibleTargetTypes.has(operation.targetType)) {
+      selectedTargetTypes.add(operation.targetType);
+    }
+  }
+  return selectedTargetTypes;
 }
 
 export function hasProvenContextMatch(
@@ -55,7 +111,6 @@ export function hasProvenContextMatch(
   const localId = match.localId;
   if (
     match.kind !== "exact" ||
-    match.evidenceTruncated === true ||
     typeof localId !== "string" ||
     !localId ||
     !Array.isArray(match.evidence) ||
@@ -74,7 +129,8 @@ export function hasProvenContextMatch(
       typeof evidence.targetEntityType !== "string" ||
       !compatibleTargetTypes.has(evidence.targetEntityType) ||
       !input.selectedTargetTypes.has(evidence.targetEntityType) ||
-      (evidence.authority !== "authoritative" && evidence.authority !== "supporting")
+      (evidence.authority !== "authoritative" &&
+        evidence.authority !== "supporting")
     ) return false;
     if (evidence.authority === "authoritative") authoritative = true;
     families.add(evidence.family);
@@ -85,87 +141,211 @@ export function hasProvenContextMatch(
 export function isAutomaticallyImportableOperation(
   operation: AutomaticReviewOperation,
 ): boolean {
-  return isAutomaticallyImportableAction(operation)
-    && (operation.status === "pending" || operation.status === "failed");
+  return isAutomaticallyImportableAction(operation) &&
+    (operation.status === "pending" || operation.status === "failed");
 }
 
 export function isAutomaticallyImportableAction(
-  operation: Pick<AutomaticReviewOperation, "action" | "safeByDefault">,
+  operation: Pick<AutomaticReviewOperation, "action" | "safeByDefault" | "dependencyOperationKeys">,
 ): boolean {
-  return operation.safeByDefault
-    && automaticallyImportableActions.has(operation.action)
+  if (!operation.safeByDefault || !automaticallyImportableActions.has(operation.action)) return false;
+  if (operation.action === "create_relationship" || operation.action === "record_provenance") {
+    return (operation.dependencyOperationKeys?.length ?? 0) > 0;
+  }
+  return true;
 }
 
-function isLegacyExactExternalLink(match: Record<string, unknown>): boolean {
-  return match.kind === "exact"
-    && match.reason === "exact_external_link"
-    && typeof match.localId === "string"
-    && match.localId !== ""
-    && match.evidenceTruncated !== true
-    && (!Array.isArray(match.evidence) || match.evidence.length === 0);
-}
-
-export function isAutomaticallyImportableForOutcome(
-  operation: AutomaticReviewOperation,
-  outcome: { state?: string; match: unknown },
-): boolean {
-  if (approvalProjectionIsIncomplete(operation.payload)) return false;
-  if (!isAutomaticallyImportableAction(operation)) return false;
+function exactMatchBasis(
+  outcome: { match: unknown },
+  operations: readonly AutomaticReviewOperation[],
+): AutomaticReviewBasis | null {
   const match = object(outcome.match);
-  if (match.kind === "ambiguous" || match.evidenceTruncated === true) {
+  if (match.kind !== "exact") return null;
+
+  if (match.evidence !== undefined) {
+    return hasProvenContextMatch({
+      outcome: { match: outcome.match as ManifestOutcome["match"] },
+      selectedTargetTypes: selectedTargetTypesFromOperations(operations),
+    })
+      ? "proven_context_match"
+      : null;
+  }
+
+  return typeof match.reason === "string" && trustedExactReasons.has(match.reason)
+    ? "trusted_exact_match"
+    : null;
+}
+
+function directOperationBasis(input: {
+  outcome: { state: string; match: unknown };
+  operations: readonly AutomaticReviewOperation[];
+  operation: AutomaticReviewOperation;
+}): AutomaticReviewBasis | null {
+  if (!isAutomaticallyImportableOperation(input.operation)) return null;
+  const match = object(input.outcome.match);
+  if (input.operation.action === "create") {
+    return match.kind === "exact" || match.kind === "ambiguous"
+      ? null
+      : "safe_create";
+  }
+  if (
+    input.operation.action === "link_existing" ||
+    input.operation.action === "fill_missing"
+  ) return exactMatchBasis(input.outcome, input.operations);
+  return null;
+}
+
+function evaluate(input: {
+  outcome: { state: string; match: unknown };
+  operations: readonly AutomaticReviewOperation[];
+}): {
+  disposition: AutomaticReviewDisposition;
+  basisByOperation: Map<AutomaticReviewOperation, AutomaticReviewBasis>;
+} {
+  const basisByOperation = new Map<
+    AutomaticReviewOperation,
+    AutomaticReviewBasis
+  >();
+  if (input.outcome.state === "failed") {
+    return { disposition: "failed", basisByOperation };
+  }
+
+  const match = object(input.outcome.match);
+  if (
+    match.kind === "ambiguous" ||
+    input.outcome.state === "unassigned" ||
+    input.outcome.state === "unsupported" ||
+    input.outcome.state === "ignored"
+  ) return { disposition: "archived_only", basisByOperation };
+
+  const operationByKey = new Map<string, AutomaticReviewOperation>();
+  for (const operation of input.operations) {
+    if (operation.operationKey) operationByKey.set(operation.operationKey, operation);
+  }
+  const evaluated = new Map<AutomaticReviewOperation, AutomaticReviewBasis | null>();
+  const visiting = new Set<AutomaticReviewOperation>();
+  const basisFor = (operation: AutomaticReviewOperation): AutomaticReviewBasis | null => {
+    if (evaluated.has(operation)) return evaluated.get(operation) ?? null;
+    if (visiting.has(operation)) return null;
+    visiting.add(operation);
+
+    let basis = directOperationBasis({ ...input, operation });
+    if (operation.action === "create_relationship" || operation.action === "record_provenance") {
+      const dependencyKeys = operation.dependencyOperationKeys ?? [];
+      const dependenciesAreSafe = dependencyKeys.length > 0 && dependencyKeys.every((key) => {
+        const dependency = operationByKey.get(key);
+        return dependency !== undefined && basisFor(dependency) !== null;
+      });
+      basis = dependenciesAreSafe
+        ? operation.action === "create_relationship"
+          ? "dependency_closed_relationship"
+          : "dependency_closed_provenance"
+        : null;
+    }
+
+    visiting.delete(operation);
+    evaluated.set(operation, basis);
+    return basis;
+  };
+  for (const operation of input.operations) {
+    const basis = basisFor(operation);
+    if (basis) basisByOperation.set(operation, basis);
+  }
+  if (basisByOperation.size === 0) {
+    return { disposition: "archived_only", basisByOperation };
+  }
+  const autoResolved = [...basisByOperation.values()].some(
+    (basis) => basis === "proven_context_match",
+  );
+  return {
+    disposition: autoResolved ? "auto_resolved" : "safe_ready",
+    basisByOperation,
+  };
+}
+
+export function automaticReviewProof(input: {
+  outcome: { state: string; match: unknown };
+  operations: readonly AutomaticReviewOperation[];
+  operation: AutomaticReviewOperation;
+}): AutomaticReviewProof {
+  const result = evaluate(input);
+  const correspondingOperation = input.operation.operationKey
+    ? input.operations.find((operation) =>
+        operation.operationKey === input.operation.operationKey
+      )
+    : undefined;
+  const basis = result.basisByOperation.get(input.operation) ??
+    (correspondingOperation
+      ? result.basisByOperation.get(correspondingOperation) ?? null
+      : directOperationBasis(input));
+  return {
+    version: 1,
+    eligible: Boolean(basis),
+    disposition: result.disposition,
+    basis: basis ?? "not_automatically_safe",
+  };
+}
+
+export function readAutomaticReviewProof(value: unknown): AutomaticReviewProof | null {
+  const proof = object(value);
+  if (
+    proof.version !== 1 ||
+    typeof proof.eligible !== "boolean" ||
+    typeof proof.disposition !== "string" ||
+    !dispositions.has(proof.disposition as AutomaticReviewDisposition) ||
+    typeof proof.basis !== "string" ||
+    !bases.has(proof.basis as AutomaticReviewBasis)
+  ) return null;
+  const eligibleBasis =
+    proof.basis === "safe_create" ||
+    proof.basis === "trusted_exact_match" ||
+    proof.basis === "proven_context_match" ||
+    proof.basis === "dependency_closed_relationship" ||
+    proof.basis === "dependency_closed_provenance";
+  if (proof.eligible !== eligibleBasis) return null;
+  if (
+    (proof.basis === "dependency_closed_relationship" ||
+      proof.basis === "dependency_closed_provenance") &&
+    proof.disposition !== "safe_ready" &&
+    proof.disposition !== "auto_resolved"
+  ) return null;
+  if (
+    (proof.basis === "proven_context_match" &&
+      proof.disposition !== "auto_resolved") ||
+    ((proof.basis === "safe_create" || proof.basis === "trusted_exact_match") &&
+      proof.disposition !== "safe_ready")
+  ) return null;
+  return proof as AutomaticReviewProof;
+}
+
+export function readAutomaticReviewProofForOperation(
+  operation: Pick<ProofBearingOperation, "automaticReview" | "payload">,
+): AutomaticReviewProof | null {
+  const payload = object(operation.payload);
+  return readAutomaticReviewProof(
+    operation.automaticReview ?? payload.automaticReview,
+  );
+}
+
+export function isAutomaticallyApprovedOperation(
+  operation: ProofBearingOperation,
+): boolean {
+  const proof = readAutomaticReviewProofForOperation(operation);
+  if (proof?.eligible !== true || !isAutomaticallyImportableOperation(operation)) {
     return false;
   }
-  const selectedTargetTypes = compatibleTargetTypes.has(operation.targetType)
-    ? new Set([operation.targetType])
-    : new Set<string>();
-  const hasProvenMatch = hasProvenContextMatch({
-    outcome: { match: outcome.match as ManifestOutcome["match"] },
-    selectedTargetTypes,
-  });
-  if (
-    match.kind === "exact"
-    && Array.isArray(match.evidence)
-    && match.evidence.length > 0
-    && !hasProvenMatch
-  ) return false;
-  if (operation.action !== "link_existing") return true;
-  const payloadLocalId = operation.payload?.localId ?? operation.selectedTargetId;
-  if (
-    typeof payloadLocalId !== "string"
-    || payloadLocalId === ""
-    || payloadLocalId !== match.localId
-  ) return false;
-  if (
-    outcome.state === "ready"
-    && match.kind !== "none"
-    && (!Array.isArray(match.evidence) || match.evidence.length === 0)
-  ) return true;
-  return hasProvenMatch || isLegacyExactExternalLink(match);
+  return proof.basis === "safe_create"
+    ? operation.action === "create"
+    : proof.basis === "dependency_closed_relationship"
+      ? operation.action === "create_relationship"
+      : proof.basis === "dependency_closed_provenance"
+        ? operation.action === "record_provenance"
+        : operation.action === "link_existing" || operation.action === "fill_missing";
 }
 
 export function automaticReviewDisposition(input: {
   outcome: { state: string; match: unknown };
   operations: readonly AutomaticReviewOperation[];
 }): AutomaticReviewDisposition {
-  if (input.outcome.state === "failed") return "failed";
-  const match = object(input.outcome.match);
-  if (match.kind === "ambiguous") return "archived_only";
-
-  const automaticActionOperations = input.operations.filter(
-    isAutomaticallyImportableAction,
-  );
-  if (automaticActionOperations.length === 0) return "archived_only";
-
-  const identityLinks = automaticActionOperations.filter(
-    (operation) => operation.action === "link_existing",
-  );
-  if (identityLinks.length > 0) {
-    if (!identityLinks.every((operation) =>
-      isAutomaticallyImportableForOutcome(operation, input.outcome))) {
-      return "archived_only";
-    }
-    return isLegacyExactExternalLink(match) ? "safe_ready" : "auto_resolved";
-  }
-
-  return "safe_ready";
+  return evaluate(input).disposition;
 }
