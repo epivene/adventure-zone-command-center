@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { localValueFingerprint, verifyOverwrite } from "./local-edit-policy";
 import { isAutomaticallyApprovedOperation } from "./automatic-review-policy";
+import { ACT_APPROVAL_MODE_VERSION, hasReviewedOverwriteProof } from "./approval-service";
 import type { ActApplyAction } from "./import-types";
 import type { ApplyRepository, ApplyAttempt, ApplyBatchRecord, StoredOperation } from "./apply-repository";
 
@@ -31,23 +32,23 @@ export class ActApplyService {
       }
       if (!operation.safeByDefault) fail("operation_not_safe");
     }
-    const automaticApproval = input.approvalRequestKey
+    const approval = input.approvalRequestKey
       ? await this.repository.getApproval(input.runId, input.approvalRequestKey)
       : null;
-    const automaticallyApprovedIds = new Set(
-      automaticApproval?.manifestDigest === input.expectedManifestDigest
-        ? automaticApproval.approvedOperationIds
+    const approvedIds = new Set(
+      approval?.manifestDigest === input.expectedManifestDigest
+        ? approval.approvedOperationIds
         : [],
     );
     if (operations.some((operation) => {
       if (operation.status === "applied" || operation.status === "already_present") return false;
-      if (operation.outcomeState === "ready") return false;
-      if (input.retryFailed && operation.outcomeState === "failed") return false;
-      return !(
-        input.approvalRequestKey &&
-        automaticallyApprovedIds.has(operation.operationKey) &&
-        isAutomaticallyApprovedOperation(operation)
-      );
+      if (!input.approvalRequestKey || !approvedIds.has(operation.operationKey)) return true;
+      if (operation.action === "overwrite_reviewed") {
+        return approval?.approvalMode !== "explicit_manual"
+          || approval.approvalModeVersion !== ACT_APPROVAL_MODE_VERSION
+          || !hasReviewedOverwriteProof(operation);
+      }
+      return !isAutomaticallyApprovedOperation(operation);
     })) fail("outcome_not_ready");
     if (operations.some((operation) => operation.latestSourceVersionId !== operation.sourceVersionId)) fail("source_version_changed");
     const keys = new Set(operations.map((operation) => operation.operationKey));
@@ -82,16 +83,13 @@ export class ActApplyService {
         batch.alreadyPresent += 1;
       }
       else if (action === "fill_missing" || action === "overwrite_reviewed") {
-        const approvedTargetId = typeof payload.entityId === "string" && payload.entityId.trim() !== ""
-          ? payload.entityId
-          : fail(action === "fill_missing" ? "fill_target_missing" : "overwrite_target_invalid");
-        const maybeTarget = await this.repository.getTarget(operation.targetType, approvedTargetId);
+        const maybeTarget = await this.repository.getTarget(operation.targetType, String(payload.entityId ?? payload.localId ?? "")) ?? await this.repository.findTargetBySource?.(operation.targetType, operation.sourceRecordId);
         if (!maybeTarget) throw Object.assign(new Error("target_not_found"), { code: "target_not_found" });
         const target = maybeTarget;
         const field = String(payload.fieldName ?? "");
         const current = target.values[field];
         if (action === "fill_missing") {
-          const fillResult = await this.repository.fillMissingTarget(target, field, payload.value, attempt, operation.sourceRecordId);
+          const fillResult = await this.repository.fillMissingTarget(target, field, payload.value, attempt);
           if (fillResult === "local_value_nonempty") {
             operation.status = "blocked";
             operation.lastErrorCode = "local_value_nonempty";
