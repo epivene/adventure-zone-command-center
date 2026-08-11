@@ -40,6 +40,32 @@ describe("DrizzleApplyRepository", () => {
     expect(repository.durableApply).toBe(true);
   });
 
+  it("loads durable approval provenance for apply authorization", async () => {
+    const dialect = new PgDialect();
+    let statement = "";
+    const database = {
+      execute: async (query: TestQuery) => {
+        statement = dialect.sqlToQuery(query).sql;
+        return { rows: [{
+          manifestDigest: "digest-1",
+          approvedOperationIds: ["operation-1"],
+          approvalMode: "explicit_manual",
+          approvalModeVersion: 1,
+        }] };
+      },
+    } as never;
+
+    await expect(new DrizzleApplyRepository(database).getApproval("run-1", "request-1"))
+      .resolves.toEqual({
+        manifestDigest: "digest-1",
+        approvedOperationIds: ["operation-1"],
+        approvalMode: "explicit_manual",
+        approvalModeVersion: 1,
+      });
+    expect(statement).toContain("approval_mode as \"approvalMode\"");
+    expect(statement).toContain("approval_mode_version as \"approvalModeVersion\"");
+  });
+
   it("fails closed for unsupported target types before any SQL is issued", async () => {
     const database = { execute: async () => { throw new Error("SQL must not run"); } } as never;
     const repository = new DrizzleApplyRepository(withSuccessfulFences(database) as never);
@@ -191,7 +217,6 @@ describe("DrizzleApplyRepository", () => {
       const rendered = dialect.sqlToQuery(query).sql;
       statements.push(rendered);
       if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
-      if (rendered.includes("from act_external_links") && rendered.includes("for update")) return { rows: [{ id: "target-1", phone: null }] };
       if (rendered.startsWith("update organizations")) return { rows: [] };
       if (rendered.startsWith("select phone as value")) return { rows: [{ value: "concurrent-local-edit", sameValue: false }] };
       throw new Error(`Unexpected SQL: ${rendered}`);
@@ -203,53 +228,14 @@ describe("DrizzleApplyRepository", () => {
     const repository = new DrizzleApplyRepository(database);
 
     const result = await (repository as unknown as {
-      fillMissingTarget(target: { id: string; entityType: string; values: Record<string, unknown> }, field: string, value: unknown, applyAttempt: typeof attempt, sourceRecordId: string): Promise<string>;
-    }).fillMissingTarget({ id: "target-1", entityType: "organization", values: { phone: null } }, "phone", "source-value", attempt, "source-1");
+      fillMissingTarget(target: { id: string; entityType: string; values: Record<string, unknown> }, field: string, value: unknown, applyAttempt: typeof attempt): Promise<string>;
+    }).fillMissingTarget({ id: "target-1", entityType: "organization", values: { phone: null } }, "phone", "source-value", attempt);
 
     expect(result).toBe("local_value_nonempty");
-    expect(statements[2]).toContain("where id =");
-    expect(statements[2]).toContain("phone is null or phone =");
-    expect(statements[2]).toContain("returning phone as value");
-    expect(statements[3]).toContain("phone is not distinct from");
-  });
-
-  it("rejects a stale source binding inside the same transaction as the conditional fill", async () => {
-    const dialect = new PgDialect();
-    const statements: string[] = [];
-    const execute = async (query: Parameters<PgDialect["sqlToQuery"]>[0]) => {
-      const rendered = dialect.sqlToQuery(query).sql;
-      statements.push(rendered);
-      if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
-      if (rendered.includes("from act_source_records")) {
-        return { rows: [{ sourceDatabaseKey: "act-db", streamType: "Company", actRecordId: "act-1" }] };
-      }
-      if (rendered.includes("for update")) return { rows: [] };
-      if (rendered.startsWith("update organizations")) return { rows: [{ value: "source-value" }] };
-      throw new Error(`Unexpected SQL: ${rendered}`);
-    };
-    const database = {
-      execute,
-      transaction: async (callback: (tx: { execute: typeof execute }) => Promise<unknown>) => callback({ execute }),
-    } as never;
-    const repository = new DrizzleApplyRepository(database) as unknown as {
-      fillMissingTarget(
-        target: { id: string; entityType: string; values: Record<string, unknown> },
-        field: string,
-        value: unknown,
-        applyAttempt: typeof attempt,
-        sourceRecordId: string,
-      ): Promise<string>;
-    };
-
-    await expect(repository.fillMissingTarget(
-      { id: "target-1", entityType: "organization", values: { phone: null } },
-      "phone",
-      "source-value",
-      attempt,
-      "source-1",
-    )).rejects.toMatchObject({ code: "fill_target_changed" });
-    expect(statements.some((statement) => statement.includes("for update"))).toBe(true);
-    expect(statements.some((statement) => statement.startsWith("update organizations"))).toBe(false);
+    expect(statements[1]).toContain("where id =");
+    expect(statements[1]).toContain("phone is null or phone =");
+    expect(statements[1]).toContain("returning phone as value");
+    expect(statements[2]).toContain("phone is not distinct from");
   });
 
   it("uses null-only fill predicates for timestamp columns", async () => {
@@ -259,7 +245,6 @@ describe("DrizzleApplyRepository", () => {
       const rendered = dialect.sqlToQuery(query).sql;
       statements.push(rendered);
       if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
-      if (rendered.includes("from act_external_links") && rendered.includes("for update")) return { rows: [{ id: "booking-1", starts_at: null }] };
       if (rendered.startsWith("update bookings")) return { rows: [{ value: new Date("2026-08-07T12:00:00.000Z") }] };
       throw new Error(`Unexpected SQL: ${rendered}`);
     };
@@ -270,11 +255,10 @@ describe("DrizzleApplyRepository", () => {
       "startsAt",
       "2026-08-07T12:00:00.000Z",
       attempt,
-      "source-1",
     );
 
-    expect(statements[2]).toContain("starts_at is null");
-    expect(statements[2]).not.toContain("starts_at is null or");
+    expect(statements[1]).toContain("starts_at is null");
+    expect(statements[1]).not.toContain("starts_at is null or");
   });
 
   it.each([
@@ -287,7 +271,6 @@ describe("DrizzleApplyRepository", () => {
       const rendered = dialect.sqlToQuery(query).sql;
       statements.push(rendered);
       if (rendered.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
-      if (rendered.includes("from act_external_links") && rendered.includes("for update")) return { rows: [{ id: "booking-1", starts_at: null }] };
       if (rendered.startsWith("update bookings")) return { rows: [] };
       if (rendered.startsWith("select starts_at as value")) {
         return { rows: [{ value: new Date("2026-08-07T12:00:00.000Z"), ...(rendered.includes("is not distinct from") ? { sameValue } : {}) }] };
@@ -301,9 +284,8 @@ describe("DrizzleApplyRepository", () => {
       "startsAt",
       payload,
       attempt,
-      "source-1",
     )).resolves.toBe(expected);
-    expect(statements[3]).toContain("starts_at is not distinct from");
+    expect(statements[2]).toContain("starts_at is not distinct from");
   });
 
   it("durably records an idempotent external source link", async () => {
