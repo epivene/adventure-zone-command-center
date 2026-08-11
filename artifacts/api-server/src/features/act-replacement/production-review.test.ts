@@ -158,11 +158,14 @@ describe("durable production workflow projection", () => {
     expect(workflowOutcomeSelection).not.toHaveProperty("match");
   });
 
-  it("rejects string-coerced and extra-key automatic proofs in the workflow SQL reader", () => {
+  it("guards object-only automatic proof operations behind a nested case", () => {
     const rendered = new PgDialect().sqlToQuery(
       sql`select ${workflowOperationSelection.automaticReview}`,
     ).sql;
 
+    expect(rendered).toContain(
+      "when jsonb_typeof(\"act_replacement_apply_operations\".\"payload\"->'automaticReview') = 'object' then case",
+    );
     expect(rendered).toContain("?& array['version','eligible','disposition','basis']::text[]");
     expect(rendered).toContain("- 'version' - 'eligible' - 'disposition' - 'basis'");
     expect(rendered).toContain("jsonb_typeof");
