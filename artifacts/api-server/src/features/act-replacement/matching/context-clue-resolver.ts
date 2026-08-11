@@ -29,19 +29,14 @@ export type ContextResolution =
       targetEntityId: string;
       reason: string;
       evidence: ContextClueEvidence[];
-      evidenceTruncated?: boolean;
     }
-  | { kind: "none"; reason: string; evidence: ContextClueEvidence[]; evidenceTruncated?: boolean }
+  | { kind: "none"; reason: string; evidence: ContextClueEvidence[] }
   | {
       kind: "ambiguous";
       candidateIds: string[];
       reason: string;
       evidence: ContextClueEvidence[];
-      evidenceTruncated?: boolean;
     };
-
-const maximumPersistedEvidence = 20;
-const maximumPersistedCandidates = 20;
 
 const authorityRank: Record<ContextClueEvidence["authority"], number> = {
   authoritative: 0,
@@ -90,15 +85,13 @@ function normalizedEvidence(
 
 /**
  * Resolves conservative context evidence without assigning numeric weights.
- * All evidence must agree on one target. That target then needs either one
- * authoritative clue or two independent supporting clue families.
+ * One authoritative target wins. Otherwise all evidence must agree on one
+ * target and span at least two independent clue families.
  */
 export function resolveContextClues(
   clues: readonly ContextClueEvidence[],
 ): ContextResolution {
-  const completeEvidence = normalizedEvidence(clues);
-  const evidence = completeEvidence.slice(0, maximumPersistedEvidence);
-  const evidenceTruncated = completeEvidence.length > evidence.length;
+  const evidence = normalizedEvidence(clues);
   const authoritativeTargets = new Map<
     string,
     { targetEntityType: ContextTargetEntityType; targetEntityId: string }
@@ -109,7 +102,7 @@ export function resolveContextClues(
   >();
   const familiesByTarget = new Map<string, Set<ContextClueFamily>>();
 
-  for (const clue of completeEvidence) {
+  for (const clue of evidence) {
     const key = targetKey(clue);
     const target = {
       targetEntityType: clue.targetEntityType,
@@ -124,23 +117,11 @@ export function resolveContextClues(
     }
   }
 
-  const completeCandidateIds = [...new Set(
+  const candidateIds = [...new Set(
     [...allTargets.values()].map((target) => target.targetEntityId),
   )].sort();
-  const candidateIds = completeCandidateIds.slice(0, maximumPersistedCandidates);
-  const boundedProof = evidenceTruncated ? { evidenceTruncated: true as const } : {};
 
-  if (authoritativeTargets.size > 1 || allTargets.size > 1) {
-    return {
-      kind: "ambiguous",
-      candidateIds,
-      reason: "conflicting_context_clues",
-      evidence,
-      ...boundedProof,
-    };
-  }
-
-  if (authoritativeTargets.size === 1) {
+  if (authoritativeTargets.size === 1 && allTargets.size === 1) {
     const [key, target] = authoritativeTargets.entries().next().value!;
     if ([...authoritativeTargets.keys()].every((candidate) => candidate === key)) {
       return {
@@ -148,9 +129,17 @@ export function resolveContextClues(
         ...target,
         reason: "authoritative_context_clue",
         evidence,
-        ...boundedProof,
       };
     }
+  }
+
+  if (authoritativeTargets.size > 1 || allTargets.size > 1) {
+    return {
+      kind: "ambiguous",
+      candidateIds,
+      reason: "conflicting_context_clues",
+      evidence,
+    };
   }
 
   const onlyTarget = allTargets.entries().next().value as
@@ -164,7 +153,6 @@ export function resolveContextClues(
       kind: "none",
       reason: "insufficient_independent_context_clues",
       evidence,
-      ...boundedProof,
     };
   }
 
@@ -173,6 +161,5 @@ export function resolveContextClues(
     ...onlyTarget[1],
     reason: "two_independent_context_clues",
     evidence,
-    ...boundedProof,
   };
 }
