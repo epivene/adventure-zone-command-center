@@ -1,5 +1,6 @@
 import type { ManifestOperation } from "./manifest-builder";
 import { localValueFingerprint } from "./local-edit-policy";
+import type { ActApprovalMode } from "./approval-service";
 
 export type StoredOperation = ManifestOperation & { id: string; status: "pending" | "leased" | "applied" | "already_present" | "blocked" | "failed"; attemptCount: number; lastErrorCode?: string; outcomeState: string; latestSourceVersionId: string | null };
 export type ApplyTarget = { id: string; entityType: string; values: Record<string, unknown>; sourceIds?: Set<string>; importedFingerprints?: Map<string, string> };
@@ -9,6 +10,7 @@ export type ApplyBatchClaim = { batch: ApplyBatchRecord; claimed: boolean };
 export type FillMissingResult = "applied" | "already_present" | "local_value_nonempty";
 export type ApplyOrigin = { entityType: string; entityId: string; fieldName: string; sourceRecordId: string; sourceVersionId: string; operationId: string; sourceValueFingerprint: string };
 export type ReviewedOverwriteInput = { target: ApplyTarget; field: string; value: unknown; expectedLocalValue: unknown; expectedLocalValueFingerprint: string; origin: ApplyOrigin; operation: StoredOperation };
+export type StoredApproval = { approvedOperationIds: string[]; manifestDigest: string; approvalMode: ActApprovalMode | null; approvalModeVersion: number | null };
 
 const storedValuesEquivalent = (current: unknown, proposed: unknown): boolean => {
   if (Object.is(current, proposed)) return true;
@@ -27,7 +29,7 @@ export interface ApplyRepository {
   readonly durableApply: true;
   getOperations(runId: string, ids: string[]): Promise<StoredOperation[]>;
   getManifestDigest(runId: string): Promise<string | null>;
-  getApproval(runId: string, requestKey: string): Promise<{ approvedOperationIds: string[]; manifestDigest: string } | null>;
+  getApproval(runId: string, requestKey: string): Promise<StoredApproval | null>;
   listApprovalBatches(runId: string, approvalRequestKey: string): Promise<ApplyBatchRecord[]>;
   updateRunPhase(runId: string, phase: "ready_to_apply" | "applying" | "complete" | "complete_with_issues", errorCode?: string): Promise<void>;
   createBatch(input: Omit<ApplyBatchRecord, "completed" | "alreadyPresent" | "blocked" | "failed">): Promise<ApplyBatchClaim>;
@@ -36,7 +38,7 @@ export interface ApplyRepository {
   getTarget(entityType: string, id: string): Promise<ApplyTarget | null>;
   findTargetBySource?(entityType: string, sourceRecordId: string): Promise<ApplyTarget | null>;
   createTarget(entityType: string, values: Record<string, unknown>, sourceRecordId: string, sourceVersionId: string | undefined, attempt: ApplyAttempt): Promise<{ target: ApplyTarget; alreadyPresent: boolean }>;
-  fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt, sourceRecordId: string): Promise<FillMissingResult>;
+  fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt): Promise<FillMissingResult>;
   writeTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt): Promise<void>;
   applyReviewedOverwrite(input: ReviewedOverwriteInput, attempt: ApplyAttempt): Promise<void>;
   recordOrigin(input: ApplyOrigin, attempt: ApplyAttempt): Promise<void>;
@@ -55,8 +57,8 @@ export class InMemoryApplyRepository implements ApplyRepository {
   readonly activeOrganizerRuns = new Set<string>();
   seedManifest(runId: string, digest: string) { this.digests.set(runId, digest); this.runPhases.set(runId, "ready_to_apply"); }
   async getManifestDigest(runId: string) { return this.digests.get(runId) ?? null; }
-  readonly approvals = new Map<string, { approvedOperationIds: string[]; manifestDigest: string }>(); readonly runPhases = new Map<string, string>();
-  seedApproval(runId: string, requestKey: string, approvedOperationIds: string[], manifestDigest: string) { this.approvals.set(`${runId}:${requestKey}`, { approvedOperationIds: [...approvedOperationIds], manifestDigest }); }
+  readonly approvals = new Map<string, StoredApproval>(); readonly runPhases = new Map<string, string>();
+  seedApproval(runId: string, requestKey: string, approvedOperationIds: string[], manifestDigest: string, approvalMode: ActApprovalMode | null = "automatic_safe", approvalModeVersion: number | null = approvalMode === null ? null : 1) { this.approvals.set(`${runId}:${requestKey}`, { approvedOperationIds: [...approvedOperationIds], manifestDigest, approvalMode, approvalModeVersion }); }
   async getApproval(runId: string, requestKey: string) { return this.approvals.get(`${runId}:${requestKey}`) ?? null; }
   async listApprovalBatches(runId: string, approvalRequestKey: string) { return [...this.batches.values()].filter((batch) => batch.runId === runId && batch.approvalRequestKey === approvalRequestKey).sort((a, b) => (a.startCursor ?? 0) - (b.startCursor ?? 0) || a.requestKey.localeCompare(b.requestKey)).map((batch) => ({ ...batch, operationIds: [...batch.operationIds] })); }
   async updateRunPhase(runId: string, phase: "ready_to_apply" | "applying" | "complete" | "complete_with_issues") { this.runPhases.set(runId, phase); }
@@ -67,7 +69,7 @@ export class InMemoryApplyRepository implements ApplyRepository {
   async getTarget(entityType: string, id: string) { return this.targets.get(`${entityType}:${id}`) ?? null; }
   async findTargetBySource(entityType: string, sourceRecordId: string) { return [...this.targets.values()].find((target) => target.entityType === entityType && target.sourceIds?.has(sourceRecordId)) ?? null; }
   async createTarget(entityType: string, values: Record<string, unknown>, sourceRecordId: string, _sourceVersionId: string | undefined, attempt: ApplyAttempt) { this.assertAttempt(attempt); const existing = [...this.targets.values()].find((target) => target.entityType === entityType && target.sourceIds?.has(sourceRecordId)); if (existing) return { target: existing, alreadyPresent: true }; const target = { id: `${entityType}-${this.targets.size + 1}`, entityType, values: { ...values }, sourceIds: new Set([sourceRecordId]) }; this.targets.set(`${entityType}:${target.id}`, target); return { target, alreadyPresent: false }; }
-  async fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt, sourceRecordId: string): Promise<FillMissingResult> { this.assertAttempt(attempt); const authoritative = this.targets.get(`${target.entityType}:${target.id}`); if (!authoritative) throw Object.assign(new Error("target_not_found"), { code: "target_not_found" }); if (!authoritative.sourceIds?.has(sourceRecordId)) throw Object.assign(new Error("fill_target_changed"), { code: "fill_target_changed", status: 409 }); const current = authoritative.values[field]; if (current !== null && current !== undefined && current !== "") return storedValuesEquivalent(current, value) ? "already_present" : "local_value_nonempty"; authoritative.values[field] = value; target.values[field] = value; return "applied"; }
+  async fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt): Promise<FillMissingResult> { this.assertAttempt(attempt); const authoritative = this.targets.get(`${target.entityType}:${target.id}`); if (!authoritative) throw Object.assign(new Error("target_not_found"), { code: "target_not_found" }); const current = authoritative.values[field]; if (current !== null && current !== undefined && current !== "") return storedValuesEquivalent(current, value) ? "already_present" : "local_value_nonempty"; authoritative.values[field] = value; target.values[field] = value; return "applied"; }
   async writeTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt) { this.assertAttempt(attempt); target.values[field] = value; }
   async applyReviewedOverwrite(input: ReviewedOverwriteInput, attempt: ApplyAttempt) { this.assertAttempt(attempt); const authoritative = this.targets.get(`${input.target.entityType}:${input.target.id}`); if (!authoritative) throw Object.assign(new Error("target_not_found"), { code: "target_not_found" }); if (localValueFingerprint(input.expectedLocalValue) !== input.expectedLocalValueFingerprint || localValueFingerprint(authoritative.values[input.field]) !== input.expectedLocalValueFingerprint) throw Object.assign(new Error("local_edit_detected"), { code: "local_edit_detected" }); authoritative.values[input.field] = input.value; input.target.values[input.field] = input.value; const originIndex = this.origins.findIndex((origin) => origin.entityType === input.origin.entityType && origin.entityId === input.origin.entityId && origin.fieldName === input.origin.fieldName); if (originIndex === -1) this.origins.push({ ...input.origin }); else this.origins[originIndex] = { ...input.origin }; this.operations.set(input.operation.operationKey, { ...input.operation, status: "applied", lastErrorCode: undefined, payload: { ...input.operation.payload }, dependencyOperationKeys: [...input.operation.dependencyOperationKeys] }); }
   async recordOrigin(input: Record<string, unknown>, attempt: ApplyAttempt) { this.assertAttempt(attempt); this.origins.push(input); }
