@@ -532,6 +532,16 @@ function safeApproval(result: {
   };
 }
 
+function safeAutomaticApproval(result: {
+  approvedOperationIds: string[];
+  manifestDigest: string;
+}) {
+  return {
+    approvedOperationCount: result.approvedOperationIds.length,
+    manifestDigest: result.manifestDigest,
+  };
+}
+
 function safeReviewPage(page: Awaited<ReturnType<typeof readReview>>) {
   return {
     page: page.page,
@@ -937,7 +947,7 @@ export function createActReplacementRouter(
         });
         if (!owned) return runNotFound(res);
         res.json(
-          safeApproval(
+          safeAutomaticApproval(
             await review.commands.approveSafeDefaults({
               runId: owned.runId,
               expectedManifestDigest: body.data.expectedManifestDigest,
