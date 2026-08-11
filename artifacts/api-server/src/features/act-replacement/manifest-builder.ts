@@ -1,7 +1,7 @@
 import type { ActApplyAction, ActApplyTargetType, ActReplacementStreamType } from "./import-types";
 import { digestManifestRows } from "./manifest-digest";
 import type { MatchResult } from "./matching/match-result";
-import type { ContextClueEvidence } from "./matching/context-clue-resolver";
+import { automaticReviewProof } from "./automatic-review-policy";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { isMateriallyPopulated, isNormalizedMetadataField, writablePhysicalColumn } from "./writable-target-fields";
 
@@ -38,94 +38,6 @@ const rank: Record<string, number> = { organization: 10, contact: 20, calling_li
 const sorted = (values: readonly string[] | undefined) => [...new Set((values ?? []).filter((value) => value.trim()))].sort();
 const operationKey = (target: string, source: string, suffix = "") => `${target}:${source}${suffix ? `:${suffix}` : ""}`;
 const relationshipParentTypes = new Set(["organization", "contact", "booking"]);
-const maximumPersistedMatchItems = 20;
-const maximumPersistedMatchStringLength = 200;
-const contextClueFamilies = new Set<ContextClueEvidence["family"]>([
-  "identity", "direct_contact", "web_identity", "location",
-  "archive_relationship", "event_context", "narrative_context",
-]);
-const contextTargetTypes = new Set<ContextClueEvidence["targetEntityType"]>([
-  "organization", "contact", "booking", "calling_list", "activity",
-]);
-
-function boundedMatchString(value: unknown): string {
-  return typeof value === "string"
-    ? value.trim().slice(0, maximumPersistedMatchStringLength)
-    : "";
-}
-
-function matchStringExceedsBound(value: unknown): boolean {
-  return typeof value === "string"
-    && value.trim().length > maximumPersistedMatchStringLength;
-}
-
-function sanitizedContextEvidence(value: unknown): ContextClueEvidence | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const clue = value as Partial<ContextClueEvidence>;
-  const label = boundedMatchString(clue.label);
-  const targetEntityId = boundedMatchString(clue.targetEntityId);
-  if (
-    !contextClueFamilies.has(clue.family as ContextClueEvidence["family"])
-    || !contextTargetTypes.has(clue.targetEntityType as ContextClueEvidence["targetEntityType"])
-    || (clue.authority !== "authoritative" && clue.authority !== "supporting")
-    || !label
-    || !targetEntityId
-  ) return null;
-  return {
-    family: clue.family as ContextClueEvidence["family"],
-    label,
-    targetEntityType: clue.targetEntityType as ContextClueEvidence["targetEntityType"],
-    targetEntityId,
-    authority: clue.authority,
-  };
-}
-
-function sanitizedMatch(match: MatchResult | undefined): MatchResult | undefined {
-  if (!match) return undefined;
-  const rawEvidence = Array.isArray(match.evidence) ? match.evidence : null;
-  const evidenceStringTruncated = (rawEvidence ?? []).some((value) => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const clue = value as Partial<ContextClueEvidence>;
-    return matchStringExceedsBound(clue.label)
-      || matchStringExceedsBound(clue.targetEntityId);
-  });
-  const validEvidence = (rawEvidence ?? [])
-    .map(sanitizedContextEvidence)
-    .filter((clue): clue is ContextClueEvidence => clue !== null)
-    .sort((left, right) =>
-      left.family.localeCompare(right.family)
-      || left.label.localeCompare(right.label)
-      || left.targetEntityType.localeCompare(right.targetEntityType)
-      || left.targetEntityId.localeCompare(right.targetEntityId)
-      || left.authority.localeCompare(right.authority));
-  const evidence = validEvidence.slice(0, maximumPersistedMatchItems);
-  const evidenceTruncated = match.evidenceTruncated === true
-    || (match.kind === "exact" && matchStringExceedsBound(match.localId))
-    || evidenceStringTruncated
-    || (rawEvidence !== null && (rawEvidence.length !== validEvidence.length || validEvidence.length > evidence.length));
-  const proof = {
-    ...(rawEvidence !== null ? { evidence } : {}),
-    ...(evidenceTruncated ? { evidenceTruncated: true as const } : {}),
-  };
-  const reason = boundedMatchString(match.reason);
-  if (match.kind === "exact") {
-    return { kind: "exact", localId: boundedMatchString(match.localId), reason, ...proof };
-  }
-  if (match.kind === "ambiguous") {
-    const candidateIds = [...new Set(match.candidateIds.map(boundedMatchString).filter(Boolean))].sort();
-    const boundedCandidateIds = candidateIds.slice(0, maximumPersistedMatchItems);
-    return {
-      kind: "ambiguous",
-      candidateIds: boundedCandidateIds,
-      reason,
-      ...proof,
-      ...((match.candidateIdsTruncated === true || candidateIds.length > boundedCandidateIds.length)
-        ? { candidateIdsTruncated: true as const }
-        : {}),
-    };
-  }
-  return { kind: "none", reason, ...proof };
-}
 
 export function stableRelationshipIssues(
   sourceRecordId: string,
@@ -289,7 +201,17 @@ function hasImmutableOverwriteProof(
 export function buildActOrganizeManifest(input: { runId: string; sources: readonly ManifestSourceInput[] }): ActOrganizeManifest {
   const sources = input.sources.map((source) => ({
     ...source,
-    ...(source.match ? { match: sanitizedMatch(source.match) } : {}),
+    ...(source.match?.evidence
+      ? {
+          match: {
+            ...source.match,
+            evidence: [...source.match.evidence].sort((left, right) =>
+              left.family.localeCompare(right.family)
+              || left.label.localeCompare(right.label)
+              || left.targetEntityId.localeCompare(right.targetEntityId)),
+          },
+        }
+      : {}),
   })).sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId));
   const sourceById = new Map(sources.map((source) => [source.sourceRecordId, source]));
   const operations: ManifestOperation[] = []; const outcomes: ManifestOutcome[] = []; const diagnostics: ManifestDiagnostic[] = [];
@@ -342,14 +264,7 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     if (!source.normalized) { issues.push({ code: "unsupported_record", reason: "normalization_failed" }); diagnostics.push({ code: "unsupported_record", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unsupported", issues, candidates: [], match: null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const candidates = source.match?.kind === "ambiguous" ? source.match.candidateIds.map((candidateId) => ({ candidateId })) : [];
     if (source.match?.kind === "ambiguous") { issues.push({ code: "ambiguous_match", reason: source.match.reason }); diagnostics.push({ code: "ambiguous_match", sourceRecordId: source.sourceRecordId }); }
-    const incompleteContextProof = source.match?.evidenceTruncated === true;
-    if (incompleteContextProof && source.match?.kind !== "ambiguous") {
-      issues.push({ code: "ambiguous_match", reason: "context_evidence_truncated" });
-      diagnostics.push({ code: "ambiguous_match", sourceRecordId: source.sourceRecordId });
-    }
-    const hasBlockingPreOperationIssue = reviewIssues.length > 0
-      || source.match?.kind === "ambiguous"
-      || incompleteContextProof;
+    const hasBlockingPreOperationIssue = reviewIssues.length > 0 || source.match?.kind === "ambiguous";
     if (hasBlockingPreOperationIssue) { outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "awaiting_review", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     if (standaloneUnassigned && !resolvedRelationshipIssues.has(syntheticUnassignedIssue?.relationshipSlot)) { issues.push(syntheticUnassignedIssue!); diagnostics.push({ code: "unassigned", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unassigned", issues, candidates: [], match: source.match as unknown as Record<string, unknown>, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
     const targetType = targetForKind[source.normalized.kind]; if (!targetType) { issues.push({ code: "unsupported_record", reason: "unknown_normalized_kind" }); diagnostics.push({ code: "unsupported_record", sourceRecordId: source.sourceRecordId }); outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: "unsupported", issues, candidates: [], match: null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: [] }); continue; }
@@ -402,18 +317,19 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
       ));
     }
     if (source.normalized.kind !== "timeline") {
-      if (rootAction === "link_existing" && source.localFields) {
+      if (rootAction === "link_existing" && source.match?.kind === "exact" && source.localFields) {
+        const localId = source.match.localId;
         const values = Object.entries(source.normalized).filter(([key, value]) => Boolean(writablePhysicalColumn(targetType, key)) && isMateriallyPopulated(value));
         for (const [fieldName, value] of values) {
           const localValue = source.localFields[fieldName];
           if (localValue !== null && localValue !== undefined && localValue !== "" && localValue !== value) {
             const fieldDecision = decisions.find((decision) => decision.scope === "field_conflict" && decision.fieldName === fieldName);
             if (fieldDecision?.decision === "keep_local") continue;
-            if (fieldDecision?.decision === "use_source" && source.match?.kind === "exact" && hasImmutableOverwriteProof(fieldDecision, targetType, source.match.localId, fieldName)) { sourceOps.push(reviewedOverwriteOperation(source, targetType, source.match.localId, fieldName, fieldDecision)); continue; }
+            if (fieldDecision?.decision === "use_source" && hasImmutableOverwriteProof(fieldDecision, targetType, localId, fieldName)) { sourceOps.push(reviewedOverwriteOperation(source, targetType, localId, fieldName, fieldDecision)); continue; }
             issues.push({ code: "field_conflict", reason: fieldName }); diagnostics.push({ code: "field_conflict", sourceRecordId: source.sourceRecordId, path: fieldName }); continue;
           }
           if (localValue === null || localValue === undefined || localValue === "") {
-            const fill = baseOperation(source, targetType, "fill_missing", { fieldName, value }, [identityOperationKey(source, targetType)], true, true);
+            const fill = baseOperation(source, targetType, "fill_missing", { entityId: localId, fieldName, value }, [identityOperationKey(source, targetType)], true, true);
             sourceOps.push(revisionedOperation(operationKey(targetType, source.sourceRecordId, `field:${fieldName}`), fill));
           }
         }
@@ -441,8 +357,23 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     const matchEvidenceFamilies = [...new Set(source.match?.evidence?.map((item) => item.family) ?? [])].sort();
     const provenance = baseOperation(source, targetType, "record_provenance", { evidence: sorted(source.provenance), matchEvidenceFamilies, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, unsupportedNormalizedFields }, sourceOps.map((operation) => operation.operationKey), false, true);
     sourceOps.push(revisionedOperation(operationKey("provenance", source.sourceRecordId), provenance));
+    const outcome: ManifestOutcome = { sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: issues.some((issue) => issue.code === "relationship_unresolved" || issue.code === "field_conflict") ? "awaiting_review" : "ready", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: sourceOps.map((operation) => operation.operationKey) };
+    const policyOperations = sourceOps.map((operation) => ({
+      ...operation,
+      status: "pending",
+    }));
+    sourceOps.forEach((operation, index) => {
+      operation.payload = {
+        ...operation.payload,
+        automaticReview: automaticReviewProof({
+          outcome,
+          operations: policyOperations,
+          operation: policyOperations[index]!,
+        }),
+      };
+    });
     operations.push(...sourceOps);
-    outcomes.push({ sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: issues.some((issue) => issue.code === "relationship_unresolved" || issue.code === "field_conflict") ? "awaiting_review" : "ready", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: sourceOps.map((operation) => operation.operationKey) });
+    outcomes.push(outcome);
   }
   const order = (operation: ManifestOperation) => operation.operationKey.startsWith("provenance:") ? rank.provenance : rank[operation.targetType] ?? 999;
   operations.sort((a, b) => order(a) - order(b) || a.operationKey.localeCompare(b.operationKey));
