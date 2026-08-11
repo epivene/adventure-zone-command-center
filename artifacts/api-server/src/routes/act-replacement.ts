@@ -965,31 +965,19 @@ export function createActReplacementRouter(
     "/migration/act-replacement/runs/:runId/approvals/ready",
     async (req, res) => {
       const runId = runIdSchema.safeParse(req.params.runId);
-      const review = requireReview(res);
-      if (!runId.success || !review) {
+      if (!runId.success) {
         if (!runId.success) runNotFound(res);
         return;
       }
       const context = serverContext(dependencies, res);
       if (!context) return;
-      const body = safeApprovalSchema.safeParse(req.body);
-      if (!body.success) return invalidRequest(res);
       try {
         const owned = await dependencies.store.findOwnedRun({
           runId: runId.data,
           ...context,
         });
         if (!owned) return runNotFound(res);
-        res.json(
-          safeApproval(
-            await review.commands.approveReady({
-              runId: owned.runId,
-              expectedManifestDigest: body.data.expectedManifestDigest,
-              requestKey: body.data.requestKey,
-              requestedBy: context.requestedBy,
-            }),
-          ),
-        );
+        res.status(410).json({ code: "safe_defaults_required" });
       } catch (error) {
         handleRouteError(error, res);
       }
