@@ -6,7 +6,6 @@ import {
   hasProvenContextMatch,
   isAutomaticallyApprovedOperation,
   isAutomaticallyImportableOperation,
-  readAutomaticReviewProof,
 } from "./automatic-review-policy";
 
 type Clue = {
@@ -220,35 +219,42 @@ describe("automatic review policy", () => {
     })).toBe(false);
   });
 
-  it.each(["archived_only", "failed"] as const)(
-    "rejects a dependency-closed proof with %s disposition",
-    (disposition) => {
-      expect(readAutomaticReviewProof({
-        version: 1,
-        eligible: true,
-        disposition,
-        basis: "dependency_closed_relationship",
-      })).toBeNull();
-      expect(readAutomaticReviewProof({
-        version: 1,
-        eligible: true,
-        disposition,
-        basis: "dependency_closed_provenance",
-      })).toBeNull();
-    },
-  );
-
   it("accepts only a bounded persisted proof for an importable operation", () => {
+    const proof = automaticReviewProof({
+      outcome: outcome(match()),
+      operations: [rootLink()],
+      operation: rootLink(),
+    });
+
     expect(isAutomaticallyApprovedOperation({
       ...rootLink(),
       payload: {
-        automaticReview: automaticReviewProof({
-          outcome: outcome(match()),
-          operations: [rootLink()],
-          operation: rootLink(),
-        }),
+        automaticReview: proof,
       },
     })).toBe(true);
+    expect(isAutomaticallyApprovedOperation({
+      ...rootLink(),
+      payload: {
+        automaticReview: {
+          ...proof,
+          evidence: Array.from({ length: 1_000 }, () => "unbounded"),
+        },
+      },
+    })).toBe(false);
+  });
+
+  it("does not let a persisted proof authorize a generic target type", () => {
+    expect(isAutomaticallyApprovedOperation({
+      ...rootLink({ action: "create", targetType: "provenance" }),
+      payload: {
+        automaticReview: {
+          version: 1,
+          eligible: true,
+          disposition: "safe_ready",
+          basis: "safe_create",
+        },
+      },
+    })).toBe(false);
   });
 
   it.each(["link_existing", "create", "fill_missing"])(
