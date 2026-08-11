@@ -1,6 +1,7 @@
 import type { ActApplyService } from "./apply-service";
 import { ActApplyCoordinator } from "./apply-coordinator";
 import {
+  automaticReviewProofSql,
   DrizzleActReviewCommandStore,
   DrizzleActReviewReader,
 } from "./review-sql-adapter";
@@ -36,6 +37,24 @@ export const workflowOutcomeSelection = {
   sourceRecordId: actReplacementOutcomes.sourceRecordId,
   state: actReplacementOutcomes.state,
   leaseExpiresAt: actReplacementOutcomes.leaseExpiresAt,
+};
+
+export const workflowOperationSelection = {
+  operationKey: actReplacementApplyOperations.operationKey,
+  sourceRecordId: actReplacementApplyOperations.sourceRecordId,
+  action: actReplacementApplyOperations.action,
+  dependencyOperationKeys:
+    actReplacementApplyOperations.dependencyOperationKeys,
+  safeByDefault: actReplacementApplyOperations.safeByDefault,
+  status: actReplacementApplyOperations.status,
+  sourceVersionId: actReplacementApplyOperations.sourceVersionId,
+  targetType: actReplacementApplyOperations.targetType,
+  requiredForSourceOutcome:
+    actReplacementApplyOperations.requiredForSourceOutcome,
+  leaseExpiresAt: actReplacementApplyOperations.leaseExpiresAt,
+  automaticReview: automaticReviewProofSql(
+    actReplacementApplyOperations.payload,
+  ),
 };
 
 export type ImportWorkflowProjectionInput = {
@@ -75,7 +94,6 @@ export type ImportWorkflowProjectionInput = {
   requiredStreams?: readonly string[];
   leases?: readonly { state: string; leaseExpiresAt?: Date | null }[];
   now?: Date;
-  actionableDiagnosticCount?: number;
 };
 
 export function projectImportWorkflow(
@@ -137,33 +155,25 @@ export function projectImportWorkflow(
     const proofs = sourceOperations.map((operation) =>
       readAutomaticReviewProofForOperation(operation),
     );
+    const eligibleProofs = proofs.filter(
+      (proof): proof is NonNullable<typeof proof> => proof?.eligible === true,
+    );
     const sourceDispositions = new Set(
-      proofs.flatMap((proof) => proof ? [proof.disposition] : []),
+      eligibleProofs.map((proof) => proof.disposition),
     );
     let disposition =
-      sourceOperations.length > 0 &&
-      proofs.every(Boolean) &&
+      eligibleProofs.length > 0 &&
       sourceDispositions.size === 1
         ? [...sourceDispositions][0]!
         : "archived_only";
-    const hasTerminalOperation = sourceOperations.some(
-      (operation) =>
-        operation.status === "applied" || operation.status === "already_present",
-    );
-    if (hasTerminalOperation && disposition === "archived_only") {
-      disposition = "safe_ready";
-    }
-    const hasNonterminalOperation = sourceOperations.some(
-      (operation) =>
-        operation.status !== "applied" &&
-        operation.status !== "already_present",
+    const hasNonterminalEligibleAutomaticOperation = sourceOperations.some(
+      (operation) => isAutomaticallyApprovedOperation(operation),
     );
     const hasSafeClosure = sourceOperations.some((operation) =>
       safeOperationKeys.has(operation.operationKey),
     );
     if (
-      !hasTerminalOperation &&
-      hasNonterminalOperation &&
+      hasNonterminalEligibleAutomaticOperation &&
       !hasSafeClosure &&
       (disposition === "safe_ready" || disposition === "auto_resolved")
     ) disposition = "archived_only";
@@ -312,7 +322,7 @@ export function projectImportWorkflow(
       organizerLeaseExpired ||
       canRebuildUnapplied,
     canReview:
-      (archivedOnlyCount > 0 || (input.actionableDiagnosticCount ?? 0) > 0) &&
+      archivedOnlyCount > 0 &&
       (canRebuildUnapplied ||
         input.phase === "ready_to_apply" ||
         input.phase === "applying" ||
@@ -396,44 +406,13 @@ class DrizzleWorkflowReader implements WorkflowReader {
       });
     }
 
-    const [outcomes, operations, batches, checkpoints, diagnosticRows] = await Promise.all([
+    const [outcomes, operations, batches, checkpoints] = await Promise.all([
       this.database
         .select(workflowOutcomeSelection)
         .from(actReplacementOutcomes)
         .where(eq(actReplacementOutcomes.runId, runId)),
       this.database
-        .select({
-          operationKey: actReplacementApplyOperations.operationKey,
-          sourceRecordId: actReplacementApplyOperations.sourceRecordId,
-          action: actReplacementApplyOperations.action,
-          dependencyOperationKeys:
-            actReplacementApplyOperations.dependencyOperationKeys,
-          safeByDefault: actReplacementApplyOperations.safeByDefault,
-          status: actReplacementApplyOperations.status,
-          sourceVersionId: actReplacementApplyOperations.sourceVersionId,
-          targetType: actReplacementApplyOperations.targetType,
-          requiredForSourceOutcome:
-            actReplacementApplyOperations.requiredForSourceOutcome,
-          leaseExpiresAt: actReplacementApplyOperations.leaseExpiresAt,
-          automaticReview: sql<unknown>`jsonb_build_object(
-            'version', case when ${actReplacementApplyOperations.payload} #>> '{automaticReview,version}' = '1' then 1 else null end,
-            'eligible', case
-              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,eligible}' = 'true' then true
-              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,eligible}' = 'false' then false
-              else null
-            end,
-            'disposition', case
-              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,disposition}' in ('auto_resolved','safe_ready','archived_only','failed')
-                then ${actReplacementApplyOperations.payload} #>> '{automaticReview,disposition}'
-              else null
-            end,
-            'basis', case
-              when ${actReplacementApplyOperations.payload} #>> '{automaticReview,basis}' in ('safe_create','trusted_exact_match','proven_context_match','dependency_closed_relationship','dependency_closed_provenance','not_automatically_safe')
-                then ${actReplacementApplyOperations.payload} #>> '{automaticReview,basis}'
-              else null
-            end
-          )`,
-        })
+        .select(workflowOperationSelection)
         .from(actReplacementApplyOperations)
         .where(eq(actReplacementApplyOperations.runId, runId)),
       this.database
@@ -464,16 +443,6 @@ class DrizzleWorkflowReader implements WorkflowReader {
         })
         .from(actReplacementCheckpoints)
         .where(eq(actReplacementCheckpoints.runId, runId)),
-      this.database
-        .select({
-          count: sql<number>`count(*) filter (where exists (
-            select 1
-            from jsonb_array_elements(coalesce(${actReplacementOutcomes.issues}, '[]'::jsonb)) issue(value)
-            where issue.value->>'code' in ('field_conflict', 'relationship_unresolved', 'unassigned', 'ambiguous_match')
-          ))::int`,
-        })
-        .from(actReplacementOutcomes)
-        .where(eq(actReplacementOutcomes.runId, runId)),
     ]);
 
     return projectImportWorkflow({
@@ -490,7 +459,6 @@ class DrizzleWorkflowReader implements WorkflowReader {
         ...outcomes.filter((outcome) => outcome.state === "leased"),
         ...checkpoints.filter((checkpoint) => checkpoint.state === "leased"),
       ],
-      actionableDiagnosticCount: Number(diagnosticRows[0]?.count ?? 0),
       now: new Date(),
     });
   }
