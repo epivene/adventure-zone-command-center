@@ -59,8 +59,8 @@ export function matchOrganization(
     return { kind: "exact", localId: source.manualAssignment.localId, reason: "manual_assignment" };
   }
   const linked = externalLinkCandidates({ sourceRecordId: source.sourceRecordId, targetEntityType: "organization", ...context }, source.externalLinks);
+  if (linked.length === 1) return { kind: "exact", localId: linked[0]!, reason: "exact_external_link" };
   if (linked.length > 1) return { kind: "ambiguous", candidateIds: linked, reason: "multiple_exact_external_links" };
-  const linkedId = linked[0];
   const expected = normalized(source);
   const clues: ContextClueEvidence[] = [];
   const conflicting: string[] = [];
@@ -80,7 +80,7 @@ export function matchOrganization(
     ];
     const conflicts = fields.some((field) => field.provided && !field.agrees);
     const agreements = fields.filter((field) => field.provided && field.agrees);
-    if ((agreements.length || candidate.id === linkedId) && conflicts) conflicting.push(candidate.id);
+    if (agreements.length && conflicts) conflicting.push(candidate.id);
     if (!conflicts) {
       for (const agreement of agreements) {
         clues.push({
@@ -92,45 +92,6 @@ export function matchOrganization(
         });
       }
     }
-  }
-  if (linkedId) {
-    if (conflicting.length > 0) {
-      return {
-        kind: "ambiguous",
-        candidateIds: uniqueSorted([linkedId, ...conflicting]),
-        reason: "conflicting_organization_fields",
-      };
-    }
-    if (clues.length === 0) {
-      return { kind: "exact", localId: linkedId, reason: "exact_external_link" };
-    }
-    const resolution = resolveContextClues([{
-      family: "identity",
-      label: "exact external link",
-      targetEntityType: "organization",
-      targetEntityId: linkedId,
-      authority: "authoritative",
-    }, ...clues]);
-    if (resolution.kind === "resolved" && resolution.targetEntityId === linkedId) {
-      return {
-        kind: "exact",
-        localId: linkedId,
-        reason: "exact_external_link",
-        evidence: resolution.evidence,
-        ...(resolution.evidenceTruncated ? { evidenceTruncated: true } : {}),
-      };
-    }
-    return {
-      kind: "ambiguous",
-      candidateIds: uniqueSorted(resolution.kind === "resolved"
-        ? [linkedId, resolution.targetEntityId]
-        : resolution.kind === "ambiguous"
-          ? resolution.candidateIds
-          : [linkedId, ...clues.map((clue) => clue.targetEntityId)]),
-      reason: "conflicting_context_clues",
-      evidence: resolution.evidence,
-      ...(resolution.evidenceTruncated ? { evidenceTruncated: true } : {}),
-    };
   }
   const resolution = resolveContextClues(clues);
   if (resolution.kind === "resolved" && conflicting.length === 0) {
