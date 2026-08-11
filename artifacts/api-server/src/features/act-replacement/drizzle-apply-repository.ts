@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import type { ManifestOperation } from "./manifest-builder";
-import type { ApplyAttempt, ApplyBatchClaim, ApplyBatchRecord, ApplyOrigin, ApplyRepository, ApplyTarget, FillMissingResult, ReviewedOverwriteInput, StoredOperation } from "./apply-repository";
+import type { ApplyAttempt, ApplyBatchClaim, ApplyBatchRecord, ApplyOrigin, ApplyRepository, ApplyTarget, FillMissingResult, ReviewedOverwriteInput, StoredApproval, StoredOperation } from "./apply-repository";
 import { localValueFingerprint } from "./local-edit-policy";
 import { writableFieldAcceptsBlank, writablePhysicalColumn, writableTargetFieldColumns } from "./writable-target-fields";
 
@@ -44,10 +44,15 @@ export class DrizzleApplyRepository implements ApplyRepository {
     const result = await this.query(sql`select summary->>'manifestDigest' as digest from act_replacement_runs where id = ${runId} limit 1`);
     return result[0]?.digest ? asString(result[0].digest) : null;
   }
-  async getApproval(runId: string, requestKey: string) {
-    const result = await this.query(sql`select manifest_digest as "manifestDigest", dependency_closed_operation_ids as "approvedOperationIds" from act_replacement_approval_requests where run_id = ${runId} and request_key = ${requestKey} limit 1`);
+  async getApproval(runId: string, requestKey: string): Promise<StoredApproval | null> {
+    const result = await this.query(sql`select manifest_digest as "manifestDigest", approval_mode as "approvalMode", approval_mode_version as "approvalModeVersion", dependency_closed_operation_ids as "approvedOperationIds" from act_replacement_approval_requests where run_id = ${runId} and request_key = ${requestKey} limit 1`);
     const row = result[0];
-    return row ? { manifestDigest: asString(row.manifestDigest), approvedOperationIds: asJson<string[]>(row.approvedOperationIds, []) } : null;
+    return row ? {
+      manifestDigest: asString(row.manifestDigest),
+      approvedOperationIds: asJson<string[]>(row.approvedOperationIds, []),
+      approvalMode: row.approvalMode === "automatic_safe" || row.approvalMode === "explicit_manual" ? row.approvalMode : null,
+      approvalModeVersion: typeof row.approvalModeVersion === "number" ? row.approvalModeVersion : null,
+    } : null;
   }
   async listApprovalBatches(runId: string, approvalRequestKey: string) {
     const result = await this.query(sql`select request_key as "requestKey" from act_replacement_apply_batches where run_id = ${runId} and approval_request_key = ${approvalRequestKey} order by start_cursor asc, created_at asc, id asc`);
@@ -113,22 +118,6 @@ export class DrizzleApplyRepository implements ApplyRepository {
     if (legacyLinked[0]) return this.target(entityType, legacyLinked[0], sourceRecordId);
     if (entityType === "calling_list") return null;
     const result = await this.query(sql`select * from ${sql.raw(table)} where act_record_id = ${source.actRecordId} limit 1`, executor); const row = result[0]; return row ? this.target(entityType, row, sourceRecordId) : null;
-  }
-  private async lockTargetBySourceWith(executor: SqlExecutor, entityType: string, sourceRecordId: string) {
-    const table = entityTables[entityType]; if (!table) return null;
-    if (entityType === "activity") {
-      const result = await this.query(sql`select * from activities where source_record_id = ${sourceRecordId} limit 1 for update`, executor);
-      return result[0] ? this.target(entityType, result[0], sourceRecordId) : null;
-    }
-    const linked = await this.query(sql`select target.* from act_external_links links inner join ${sql.raw(table)} target on target.id = links.entity_id where links.source_record_id = ${sourceRecordId} and links.entity_type = ${entityType} limit 1 for update of target, links`, executor);
-    if (linked[0]) return this.target(entityType, linked[0], sourceRecordId);
-    const source = await this.sourceIdentity(sourceRecordId, executor);
-    if (!source.actRecordId) return null;
-    const legacyLinked = await this.query(sql`select target.* from act_external_links links inner join ${sql.raw(table)} target on target.id = links.entity_id where links.source_record_id is null and links.source_database_key = ${source.sourceDatabaseKey} and links.source_entity_type = ${source.streamType} and links.act_record_id = ${source.actRecordId} and links.entity_type = ${entityType} limit 1 for update of target, links`, executor);
-    if (legacyLinked[0]) return this.target(entityType, legacyLinked[0], sourceRecordId);
-    if (entityType === "calling_list") return null;
-    const result = await this.query(sql`select * from ${sql.raw(table)} where act_record_id = ${source.actRecordId} limit 1 for update`, executor);
-    return result[0] ? this.target(entityType, result[0], sourceRecordId) : null;
   }
   private async sourceIdentity(sourceRecordId: string, executor: SqlExecutor = this.database) {
     const result = await this.query(sql`select source_database_key as "sourceDatabaseKey", stream_type as "streamType", act_record_id as "actRecordId" from act_source_records where id = ${sourceRecordId} limit 1`, executor);
@@ -216,13 +205,11 @@ export class DrizzleApplyRepository implements ApplyRepository {
       if (applied.length !== 1) throw Object.assign(new Error("local_edit_detected"), { code: "local_edit_detected", status: 409 });
     });
   }
-  async fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt, sourceRecordId: string): Promise<FillMissingResult> {
+  async fillMissingTarget(target: ApplyTarget, field: string, value: unknown, attempt: ApplyAttempt): Promise<FillMissingResult> {
     const table = entityTables[target.entityType];
     const column = writablePhysicalColumn(target.entityType, field);
     if (!table || !column) throw Object.assign(new Error("unsupported_target_field"), { code: "unsupported_target_field" });
     return this.withAttempt(attempt, async (executor) => {
-      const linkedTarget = await this.lockTargetBySourceWith(executor, target.entityType, sourceRecordId);
-      if (!linkedTarget || linkedTarget.id !== target.id) throw Object.assign(new Error("fill_target_changed"), { code: "fill_target_changed", status: 409 });
       const blankCondition = writableFieldAcceptsBlank(target.entityType, field) ? sql` or ${sql.raw(column)} = ''` : sql``;
       const updated = await this.query(sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${value}, updated_at = now() where id = ${target.id} and (${sql.raw(column)} is null${blankCondition}) returning ${sql.raw(column)} as value`, executor);
       if (updated.length === 1) return "applied";
