@@ -1171,7 +1171,7 @@ describe("owner import workflow", () => {
     expect(bulkDecide).toHaveBeenCalledOnce();
   });
 
-  it("approves ready operations for an owned run using the authenticated owner", async () => {
+  it("retires the legacy ready-outcome approval route", async () => {
     const store = new MemoryControlStore();
     addRun(store);
     const approveReady = vi.fn().mockResolvedValue({
@@ -1194,17 +1194,9 @@ describe("owner import workflow", () => {
         requestKey: "ready-approval",
       });
 
-    expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({
-      approvedOperationIds: ["contact:source-one"],
-      manifestDigest: MANIFEST_DIGEST,
-    });
-    expect(approveReady).toHaveBeenCalledWith({
-      runId: RUN_ID,
-      expectedManifestDigest: MANIFEST_DIGEST,
-      requestKey: "ready-approval",
-      requestedBy: "owner",
-    });
+    expect(response.status).toBe(410);
+    expect(response.body).toEqual({ code: "safe_defaults_required" });
+    expect(approveReady).not.toHaveBeenCalled();
   });
 
   it("strictly validates and owner-scopes safe-default approval", async () => {
