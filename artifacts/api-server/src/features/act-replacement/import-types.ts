@@ -237,7 +237,6 @@ export type ActExtractionCounters = {
 
 export type ImportWorkflow = {
   safeOperationCount: number;
-  reviewedReadyOperationCount: number;
   autoResolvedCount: number;
   archivedOnlyCount: number;
   reviewRequiredCount: number;
@@ -250,7 +249,6 @@ export type ImportWorkflow = {
   canOrganize: boolean;
   canReview: boolean;
   canApplySafe: boolean;
-  canApplyReviewed: boolean;
   requiredStreams: string[];
   leaseSummary: { active: number; expired: number };
   operations: Array<{
