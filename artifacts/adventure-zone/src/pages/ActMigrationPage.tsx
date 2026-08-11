@@ -9,7 +9,6 @@ import { ImportSummary } from "@/components/act-replacement/import-summary";
 import {
   ACT_PAGE_SIZES,
   applyNext,
-  approveReadyOperations,
   approveSafeDefaults,
   assignReviewParent,
   bulkDecideReviewRecords,
@@ -77,7 +76,6 @@ type ImportConfirmation = {
   requestKey: string;
   approvedOperationCount: number;
   retryFailed: boolean;
-  reviewedOnly: boolean;
 };
 
 function isFinished(phase: ActReplacementWorkflowStatus["phase"]) {
@@ -109,9 +107,19 @@ function errorCode(error: unknown) {
 
 function safeImportRequestKey(
   run: ActReplacementWorkflowStatus,
-  mode: "safe" | "reviewed",
+  retryFailed: boolean,
 ) {
-  return `act-${mode}-${run.runId}-${run.manifestDigest}`;
+  const mode = retryFailed ? "retry" : "apply";
+  return [
+    "act-safe",
+    run.runId,
+    run.manifestDigest,
+    mode,
+    run.safeOperationCount,
+    run.appliedOperationCount,
+    run.alreadyPresentOperationCount,
+    run.failedOperationCount,
+  ].join("-");
 }
 
 function StageProgress({ active }: { active: number }) {
@@ -412,32 +420,24 @@ export default function ActMigrationPage() {
     if (!run?.manifestDigest || applyLocked || !beginBusy("apply")) return;
     setError(null);
     try {
-      const hasReviewedRecovery = run.reviewedReadyOperationCount > 0;
-      const reviewedOnly = run.safeOperationCount === 0 && hasReviewedRecovery;
-      const requestKey = safeImportRequestKey(
-        run,
-        hasReviewedRecovery ? "reviewed" : "safe",
-      );
-      const approval = await (hasReviewedRecovery
-        ? approveReadyOperations
-        : approveSafeDefaults)(
+      const requestKey = safeImportRequestKey(run, retryFailed);
+      const approval = await approveSafeDefaults(
         run.runId,
         run.manifestDigest,
         requestKey,
       );
-      if (run.manifestDigest !== approval.manifestDigest) {
+      if (
+        approval.manifestDigest !== run.manifestDigest ||
+        approval.approvedOperationCount !== run.safeOperationCount
+      ) {
         throw Object.assign(new Error("review_changed"), { status: 409 });
       }
       setImportConfirmation({
         runId: run.runId,
         manifestDigest: approval.manifestDigest,
         requestKey,
-        approvedOperationCount:
-          reviewedOnly
-            ? run.reviewedReadyOperationCount
-            : approval.approvedOperationIds.length,
+        approvedOperationCount: approval.approvedOperationCount,
         retryFailed,
-        reviewedOnly,
       });
     } catch (caught) {
       setError(staleReviewMessage(caught, "Could not prepare safe import"));
@@ -480,7 +480,7 @@ export default function ActMigrationPage() {
     };
     setSessionTotals(totals);
     try {
-      let cursor = run.nextApplyCursor;
+      let cursor = 0;
       setRun((current) =>
         current ? { ...current, phase: "applying" } : current,
       );
@@ -812,7 +812,6 @@ export default function ActMigrationPage() {
         <ImportReview
           autoResolvedCount={run.autoResolvedCount}
           safeOperationCount={run.safeOperationCount}
-          reviewedReadyOperationCount={run.reviewedReadyOperationCount}
           archivedOnlyCount={run.archivedOnlyCount}
           review={review}
           loading={
@@ -870,20 +869,12 @@ export default function ActMigrationPage() {
             });
           }}
           canImport={
-            (run.canApplySafe || run.canApplyReviewed) &&
+            run.canApplySafe &&
             busy === null &&
             !applyLocked &&
             !requiresAttention
           }
-          importLabel={
-            run.phase === "applying" || run.nextApplyCursor > 0
-              ? run.safeOperationCount === 0 && run.reviewedReadyOperationCount > 0
-                ? "Resume reviewed import"
-                : "Resume safe import"
-              : run.safeOperationCount === 0 && run.reviewedReadyOperationCount > 0
-                ? "Import reviewed changes"
-                : "Import safe records"
-          }
+          importLabel="Import safe records"
           onSearch={(search) => {
             setReviewPage(1);
             setReviewSearch(search);
@@ -1082,9 +1073,7 @@ export default function ActMigrationPage() {
             >
               {importConfirmation.retryFailed
                 ? "Retry failed import?"
-                : importConfirmation.reviewedOnly
-                  ? "Import reviewed changes?"
-                  : "Import safe records?"}
+                : "Import safe records?"}
             </h2>
             <p className="mt-3 text-sm text-slate-700">
               Only reviewer-approved overwrites may replace populated fields.
@@ -1092,11 +1081,8 @@ export default function ActMigrationPage() {
               this archive.
             </p>
             <p className="mt-3 text-sm font-medium text-slate-900">
-              {importConfirmation.approvedOperationCount.toLocaleString()} {importConfirmation.reviewedOnly
-                ? importConfirmation.approvedOperationCount === 1
-                  ? "reviewed change"
-                  : "reviewed changes"
-                : "safe operations"} will be processed in batches of 25.
+              {importConfirmation.approvedOperationCount.toLocaleString()} safe operations will be
+              processed in batches of 25.
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
@@ -1114,9 +1100,7 @@ export default function ActMigrationPage() {
               >
                 {importConfirmation.retryFailed
                   ? "Yes, retry failed import"
-                  : importConfirmation.reviewedOnly
-                    ? "Yes, import reviewed changes"
-                    : "Yes, import safe records"}
+                  : "Yes, import safe records"}
               </button>
             </div>
           </div>
