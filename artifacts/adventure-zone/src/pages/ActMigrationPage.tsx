@@ -874,7 +874,11 @@ export default function ActMigrationPage() {
             !applyLocked &&
             !requiresAttention
           }
-          importLabel="Import safe records"
+          importLabel={
+            run.phase === "applying" || run.nextApplyCursor > 0
+              ? "Resume safe import"
+              : "Import safe records"
+          }
           onSearch={(search) => {
             setReviewPage(1);
             setReviewSearch(search);
