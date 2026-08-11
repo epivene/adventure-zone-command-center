@@ -1236,15 +1236,17 @@ export class DrizzleActReviewReader implements ReviewReader {
 export function automaticReviewProofSql(payload: SQLWrapper): SQL<unknown> {
   const proof = sql`${payload}->'automaticReview'`;
   return sql`case
-    when jsonb_typeof(${proof}) = 'object'
-      and ${proof} ?& array['version','eligible','disposition','basis']::text[]
-      and (${proof} - 'version' - 'eligible' - 'disposition' - 'basis') = '{}'::jsonb
-      and jsonb_typeof(${proof}->'version') = 'number'
-      and ${proof}->'version' = '1'::jsonb
-      and jsonb_typeof(${proof}->'eligible') = 'boolean'
-      and jsonb_typeof(${proof}->'disposition') = 'string'
-      and jsonb_typeof(${proof}->'basis') = 'string'
-    then ${proof}
+    when jsonb_typeof(${proof}) = 'object' then case
+      when ${proof} ?& array['version','eligible','disposition','basis']::text[]
+        and (${proof} - 'version' - 'eligible' - 'disposition' - 'basis') = '{}'::jsonb
+        and jsonb_typeof(${proof}->'version') = 'number'
+        and ${proof}->'version' = '1'::jsonb
+        and jsonb_typeof(${proof}->'eligible') = 'boolean'
+        and jsonb_typeof(${proof}->'disposition') = 'string'
+        and jsonb_typeof(${proof}->'basis') = 'string'
+      then ${proof}
+      else null
+    end
     else null
   end`;
 }
