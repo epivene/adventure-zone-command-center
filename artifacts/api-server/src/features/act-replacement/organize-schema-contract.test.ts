@@ -217,6 +217,28 @@ describe("Act organize/apply schema contract", () => {
     );
   });
 
+  it("persists nullable approval provenance without upgrading legacy approvals", async () => {
+    const migration = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/019_act_approval_provenance.sql", import.meta.url)),
+      "utf8",
+    );
+    const approvals = getTableColumns(table("actReplacementApprovalRequests"));
+
+    expect(columns("actReplacementApprovalRequests")).toEqual(expect.arrayContaining([
+      "approval_mode",
+      "approval_mode_version",
+    ]));
+    expect(approvals.approvalMode.notNull).toBe(false);
+    expect(approvals.approvalModeVersion.notNull).toBe(false);
+    expect(approvals.approvalMode.hasDefault).toBe(false);
+    expect(approvals.approvalModeVersion.hasDefault).toBe(false);
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS approval_mode text");
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS approval_mode_version integer");
+    expect(migration).toContain("'automatic_safe','explicit_manual'");
+    expect(migration).toContain("approval_mode IS NULL AND approval_mode_version IS NULL");
+    expect(migration).not.toMatch(/UPDATE\s+act_replacement_approval_requests/i);
+  });
+
   const postgresOnly = process.env.TEST_DATABASE_URL ? describe : describe.skip;
   postgresOnly("PostgreSQL constraint behavior", () => {
     it("allows terminal batches sequentially but only one queued/applying batch", async () => {
