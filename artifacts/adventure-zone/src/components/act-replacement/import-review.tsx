@@ -191,7 +191,6 @@ export function bulkSelectionSignature(
 export function ImportReview({
   autoResolvedCount = 0,
   safeOperationCount,
-  reviewedReadyOperationCount = 0,
   archivedOnlyCount = 0,
   review,
   loading = false,
@@ -220,7 +219,6 @@ export function ImportReview({
 }: {
   autoResolvedCount?: number;
   safeOperationCount: number;
-  reviewedReadyOperationCount?: number;
   archivedOnlyCount?: number;
   review: ReviewPage | null;
   loading?: boolean;
@@ -426,11 +424,6 @@ export function ImportReview({
           <p className="mt-1 text-sm text-green-800">
             Only additions and empty-field updates are included.
           </p>
-          {reviewedReadyOperationCount > 0 && (
-            <p className="mt-1 text-sm font-medium text-green-900">
-              {reviewedReadyOperationCount.toLocaleString()} proof-reviewed changes ready
-            </p>
-          )}
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="font-semibold text-amber-900">
@@ -880,7 +873,7 @@ export function ImportReview({
         </div>
       </details>
 
-      {safeOperationCount + reviewedReadyOperationCount > 0 && (
+      {safeOperationCount > 0 && (
         <button
           type="button"
           disabled={!canImport}
