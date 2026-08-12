@@ -77,4 +77,30 @@ describe("OrganizationsPage duplicate refresh", () => {
       screen.queryByText("Scanning for duplicates…"),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps the loaded duplicate view mounted when background refresh fails", async () => {
+    const groups = [{ normalizedName: "ten mile pride", organizations: [] }];
+    let duplicateCalls = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url.startsWith("/organizations?"))
+        return Promise.resolve({ organizations: [] });
+      duplicateCalls += 1;
+      return duplicateCalls === 1
+        ? Promise.resolve({ groups })
+        : Promise.reject(new Error("offline"));
+    });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Find Duplicates" }));
+    expect(await screen.findByText("Merge all 1 group")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Test background refresh" }),
+    );
+
+    expect(
+      await screen.findByText("Could not refresh duplicate status: offline"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Merge all 1 group")).toBeInTheDocument();
+  });
 });
