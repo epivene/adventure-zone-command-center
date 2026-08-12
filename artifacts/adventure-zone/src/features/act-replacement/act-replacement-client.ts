@@ -503,13 +503,28 @@ export const assignReviewParent = (
     },
   );
 };
-export const applyNext = (runId: string, body: ApplyNextRequest) =>
-  request<ApplyNextResponse>(
-    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/apply-next`,
-    { method: "POST", body: JSON.stringify(body) },
-  );
-export const startSafeApply = (runId: string, body: ApplyNextRequest) =>
-  request<{ accepted: true; started: boolean }>(
+export const applyNext = async (
+  runId: string,
+  body: ApplyNextRequest,
+): Promise<ApplyNextResponse> => {
+  await request<{ accepted: true; started: boolean }>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/apply-all`,
     { method: "POST", body: JSON.stringify(body) },
   );
+  return {
+    batch: {
+      batchId: `server-owned:${runId}`,
+      runId,
+      manifestDigest: body.expectedManifestDigest,
+      state: "applying",
+      operationCount: 0,
+      completedCount: 0,
+      alreadyPresentCount: 0,
+      blockedCount: 0,
+      failedCount: 0,
+    },
+    nextCursor: 0,
+    hasMore: false,
+    requiresReview: false,
+  };
+};
