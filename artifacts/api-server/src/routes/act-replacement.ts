@@ -674,6 +674,38 @@ export function createActReplacementRouter(
   dependencies: ActReplacementRouteDependencies,
 ): IRouter {
   const router: IRouter = Router();
+  const activeApplyJobs = new Map<string, Promise<void>>();
+
+  const startApplyJob = (
+    runId: string,
+    input: z.infer<typeof applyNextSchema> & { requestedBy: string },
+    coordinator: Pick<ActApplyCoordinator, "applyNext">,
+  ) => {
+    if (activeApplyJobs.has(runId)) return false;
+    const job = (async () => {
+      for (;;) {
+        const result = await coordinator.applyNext({ runId, ...input });
+        if (!result.hasMore || result.requiresReview) return;
+      }
+    })()
+      .catch((error) => {
+        logger.error(
+          {
+            runId,
+            errorCode:
+              error && typeof error === "object" && "code" in error
+                ? String((error as { code?: unknown }).code)
+                : "apply_worker_failed",
+          },
+          "Act safe import worker stopped",
+        );
+      })
+      .finally(() => {
+        activeApplyJobs.delete(runId);
+      });
+    activeApplyJobs.set(runId, job);
+    return true;
+  };
 
   const requireReview = (res: Response) => {
     if (!dependencies.review)
@@ -1085,6 +1117,40 @@ export function createActReplacementRouter(
             requestedBy: context.requestedBy,
           }),
         );
+      } catch (error) {
+        handleRouteError(error, res);
+      }
+    },
+  );
+  router.post(
+    "/migration/act-replacement/runs/:runId/apply-all",
+    async (req, res) => {
+      const parsed = applyNextSchema.safeParse(req.body);
+      if (!parsed.success) return invalidRequest(res);
+      const runId = runIdSchema.safeParse(req.params.runId);
+      const review = requireReview(res);
+      if (!runId.success || !review) {
+        if (!runId.success) runNotFound(res);
+        return;
+      }
+      const context = serverContext(dependencies, res);
+      if (!context) return;
+      try {
+        const owned = await dependencies.store.findOwnedRun({
+          runId: runId.data,
+          ...context,
+        });
+        if (!owned) return runNotFound(res);
+        if (process.env.ACT_MIGRATION_APPLY_ENABLED !== "true")
+          return res
+            .status(403)
+            .json({ code: "act_apply_disabled", previewOnly: true });
+        const started = startApplyJob(
+          owned.runId,
+          { ...parsed.data, requestedBy: context.requestedBy },
+          review.applyCoordinator,
+        );
+        res.status(202).json({ accepted: true, started });
       } catch (error) {
         handleRouteError(error, res);
       }
