@@ -3,7 +3,36 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
+  safeImportApprovalRequestKey,
 } from "./safe-import-recovery";
+
+describe("safeImportApprovalRequestKey", () => {
+  it("reuses one approval coordinator after durable import progress changes", () => {
+    const beforeProgress = safeImportApprovalRequestKey({
+      runId: "run-1",
+      manifestDigest: "digest-1",
+      retryFailed: false,
+    });
+    const afterProgress = safeImportApprovalRequestKey({
+      runId: "run-1",
+      manifestDigest: "digest-1",
+      retryFailed: false,
+    });
+
+    expect(beforeProgress).toBe("act-safe-run-1-digest-1-apply");
+    expect(afterProgress).toBe(beforeProgress);
+  });
+
+  it("keeps failed-operation retries separate from the normal import", () => {
+    expect(
+      safeImportApprovalRequestKey({
+        runId: "run-1",
+        manifestDigest: "digest-1",
+        retryFailed: true,
+      }),
+    ).toBe("act-safe-run-1-digest-1-retry");
+  });
+});
 
 describe("safe import transient recovery", () => {
   it("refreshes durable progress before continuing after a lost response", async () => {
