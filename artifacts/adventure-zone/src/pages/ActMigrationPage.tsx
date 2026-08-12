@@ -487,13 +487,8 @@ export default function ActMigrationPage() {
           refreshState: async () => {
             const durableRun = await refreshRun(confirmation.runId);
             return {
-              cursor: durableRun.nextApplyCursor,
               done: isFinished(durableRun.phase),
             };
-          },
-          onRefreshedCursor: (durableCursor) => {
-            cursor = Math.max(cursor, durableCursor);
-            setError(null);
           },
         });
         if (!result) return;
