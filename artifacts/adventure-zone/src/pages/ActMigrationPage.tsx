@@ -496,13 +496,19 @@ export default function ActMigrationPage() {
               batchSize: APPLY_BATCH_SIZE,
               ...(confirmation.retryFailed ? { retryFailed: true } : {}),
             }),
-          refreshCursor: async () =>
-            (await refreshRun(confirmation.runId)).nextApplyCursor,
+          refreshState: async () => {
+            const durableRun = await refreshRun(confirmation.runId);
+            return {
+              cursor: durableRun.nextApplyCursor,
+              done: isFinished(durableRun.phase),
+            };
+          },
           onRefreshedCursor: (durableCursor) => {
             cursor = Math.max(cursor, durableCursor);
             setError(null);
           },
         });
+        if (!result) return;
         totals.applied += result.batch.completedCount;
         totals.alreadyPresent += result.batch.alreadyPresentCount;
         totals.blocked += result.batch.blockedCount;
