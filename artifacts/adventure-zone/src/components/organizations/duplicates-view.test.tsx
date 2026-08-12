@@ -65,7 +65,7 @@ describe("DuplicatesView bulk merge", () => {
     render(
       <DuplicatesView
         groups={[group("alpha", "a"), group("bravo", "b")]}
-        onRefresh={vi.fn()}
+        onRefresh={vi.fn().mockResolvedValue([])}
       />,
     );
 
@@ -94,7 +94,7 @@ describe("DuplicatesView bulk merge", () => {
     render(
       <DuplicatesView
         groups={[group("alpha", "a"), group("bravo", "b")]}
-        onRefresh={vi.fn()}
+        onRefresh={vi.fn().mockResolvedValue([])}
       />,
     );
 
@@ -126,6 +126,11 @@ describe("DuplicatesView bulk merge", () => {
   });
 
   it("stops on failure and resumes only the remaining groups", async () => {
+    const remainingGroups = [group("bravo", "b"), group("charlie", "c")];
+    const onRefresh = vi
+      .fn()
+      .mockResolvedValueOnce(remainingGroups)
+      .mockResolvedValueOnce([]);
     apiPost
       .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error("offline"))
@@ -138,7 +143,7 @@ describe("DuplicatesView bulk merge", () => {
           group("bravo", "b"),
           group("charlie", "c"),
         ]}
-        onRefresh={vi.fn()}
+        onRefresh={onRefresh}
       />,
     );
 
@@ -175,14 +180,115 @@ describe("DuplicatesView bulk merge", () => {
 
   it("reconciles remaining groups with refreshed server truth", () => {
     const { rerender } = render(
-      <DuplicatesView groups={[group("alpha", "a")]} onRefresh={vi.fn()} />,
+      <DuplicatesView
+        groups={[group("alpha", "a")]}
+        onRefresh={vi.fn().mockResolvedValue([])}
+      />,
     );
 
     rerender(
-      <DuplicatesView groups={[group("bravo", "b")]} onRefresh={vi.fn()} />,
+      <DuplicatesView
+        groups={[group("bravo", "b")]}
+        onRefresh={vi.fn().mockResolvedValue([])}
+      />,
     );
 
     expect(screen.queryByText("alpha primary")).not.toBeInTheDocument();
     expect(screen.getByText("bravo primary")).toBeInTheDocument();
+  });
+
+  it("does not offer Resume until server reconciliation finishes", async () => {
+    const refresh = deferred();
+    const alpha = group("alpha", "a");
+    apiPost.mockRejectedValueOnce(new Error("connection lost"));
+    render(
+      <DuplicatesView
+        groups={[alpha]}
+        onRefresh={vi.fn().mockReturnValue(refresh.promise)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Merge all 1 group" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Merge all 1 group",
+      }),
+    );
+
+    expect(
+      await screen.findByText("Checking server status…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Resume remaining merges" }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => refresh.resolve([alpha]));
+
+    expect(
+      await screen.findByRole("button", { name: "Resume remaining merges" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps groups visible and requires a status retry when refresh fails", async () => {
+    apiPost.mockRejectedValueOnce(new Error("connection lost"));
+    render(
+      <DuplicatesView
+        groups={[group("alpha", "a")]}
+        onRefresh={vi.fn().mockResolvedValue(null)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Merge all 1 group" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Merge all 1 group",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Retry status refresh" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("alpha primary")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Resume remaining merges" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("requires explicit reselection if the refreshed Primary disappeared", async () => {
+    const alpha = group("alpha", "a");
+    const refreshedAlpha = {
+      ...alpha,
+      organizations: [
+        organization("primary-a", "alpha original"),
+        organization("replacement-a", "alpha replacement"),
+      ],
+    };
+    apiPost.mockRejectedValueOnce(new Error("connection lost"));
+    render(
+      <DuplicatesView
+        groups={[alpha]}
+        onRefresh={vi.fn().mockResolvedValue([refreshedAlpha])}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /alpha duplicate/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Merge all 1 group" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Merge all 1 group",
+      }),
+    );
+
+    const resume = await screen.findByRole("button", {
+      name: "Resume remaining merges",
+    });
+    expect(resume).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Choose a Primary below before resuming",
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: /alpha original/i }));
+
+    expect(resume).toBeEnabled();
   });
 });
