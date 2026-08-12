@@ -1384,7 +1384,7 @@ describe("durable review adapter projections", () => {
     const sources = manifestSourcesFromArchiveRows({
       rows: [
         source("company-1", "company", "company-act-1", { Name: "10 Mile Pride (Breckenridge) CO" }),
-        source("contact-1", "contact", "contact-act-1", { FirstName: "Breck", LastName: "Create", EmailAddress: "info@breckcreate.org" }),
+        source("contact-1", "contact", "contact-act-1", { FirstName: "Breck", LastName: "Create", EmailAddress: "info@breckcreate.org", BusinessPhone: "(970) 547-3100" }),
         source("relationship-1", "company_contact", null, {}, {
           source: "endpoint",
           parentKind: "contact",
@@ -1403,6 +1403,7 @@ describe("durable review adapter projections", () => {
           firstName: "Breck",
           lastName: "Create",
           email: "info@breckcreate.org",
+          phone: "970-547-3100",
           organizationIds: ["local-company-1"],
         }],
       },
