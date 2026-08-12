@@ -12,12 +12,26 @@ import {
 } from "./checkpoint-repository";
 
 describe("manual Act extraction resume", () => {
-  it("requeues every leased checkpoint when the owner explicitly resumes", () => {
-    expect(manualResumeCheckpointStates).toContain("leased");
+  it("does not steal a live leased checkpoint when the owner explicitly resumes", async () => {
+    expect(manualResumeCheckpointStates).not.toContain("leased");
+    const source = await readFile(
+      new URL("./checkpoint-repository.ts", import.meta.url),
+      "utf8",
+    );
+    const resumeMethod = source.slice(
+      source.indexOf("  async resumeRun("),
+      source.indexOf("  async createRun("),
+    );
+    expect(resumeMethod).toContain(
+      "lte(actReplacementCheckpoints.leaseExpiresAt, input.now)",
+    );
   });
 
   it("locks the run before recovering checkpoints to match archive lock order", async () => {
-    const source = await readFile(new URL("./checkpoint-repository.ts", import.meta.url), "utf8");
+    const source = await readFile(
+      new URL("./checkpoint-repository.ts", import.meta.url),
+      "utf8",
+    );
     const resumeMethod = source.slice(
       source.indexOf("  async resumeRun("),
       source.indexOf("  async createRun("),
@@ -31,7 +45,6 @@ describe("manual Act extraction resume", () => {
     expect(runLock).toBeLessThan(checkpointRecovery);
   });
 });
-
 
 describe("Act extraction status polling", () => {
   it("does not enter the checkpoint-locking finalization transaction while work is open", async () => {
@@ -88,8 +101,10 @@ describe("Act extraction status polling", () => {
           return Promise.resolve(rows);
         },
         then<TResult1 = unknown[], TResult2 = never>(
-          onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
-          onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+          onfulfilled?:
+            ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
+          onrejected?:
+            ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
         ) {
           return Promise.resolve(rows).then(onfulfilled, onrejected);
         },
