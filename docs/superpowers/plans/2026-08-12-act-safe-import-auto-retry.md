@@ -21,10 +21,12 @@
 ### Task 1: Automatic transient recovery
 
 **Files:**
+
 - Modify: `artifacts/adventure-zone/src/pages/ActMigrationPage.tsx`
 - Test: `artifacts/adventure-zone/src/pages/ActMigrationPage.test.tsx`
 
 **Interfaces:**
+
 - Consumes: `applyNext(runId, request)` and `getRun(runId)` from `act-replacement-client.ts`.
 - Produces: `isTransientApplyError(error: unknown): boolean`, 10-record apply requests, and a loop that refreshes durable state before retrying.
 
@@ -104,10 +106,12 @@ git commit -m "Automatically recover Act safe imports"
 ### Task 2: Bounded retries and non-retryable safety
 
 **Files:**
+
 - Modify: `artifacts/adventure-zone/src/pages/ActMigrationPage.test.tsx`
 - Verify: `artifacts/adventure-zone/src/pages/ActMigrationPage.tsx`
 
 **Interfaces:**
+
 - Consumes: `MAX_TRANSIENT_APPLY_RETRIES = 3` and `isTransientApplyError` from Task 1.
 - Produces: regression coverage that proves the loop terminates and existing safety stops remain unchanged.
 
@@ -172,11 +176,13 @@ git commit -m "Bound Act safe import retries"
 ### Task 3: Full verification and release
 
 **Files:**
+
 - Verify: `artifacts/adventure-zone/src/pages/ActMigrationPage.tsx`
 - Verify: `artifacts/adventure-zone/src/pages/ActMigrationPage.test.tsx`
 - Verify: `docs/superpowers/specs/2026-08-12-act-safe-import-auto-retry-design.md`
 
 **Interfaces:**
+
 - Consumes: completed behavior from Tasks 1–2.
 - Produces: a focused GitHub PR and merged production commit.
 
