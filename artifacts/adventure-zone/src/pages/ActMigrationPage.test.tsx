@@ -1648,6 +1648,7 @@ describe("ActMigrationPage", () => {
     client.getManifest.mockResolvedValue(manifestForApproval(52));
     client.applyNext
       .mockResolvedValueOnce(batchResult(25, true))
+      .mockResolvedValueOnce(batchResult(25, true))
       .mockResolvedValueOnce(batchResult(50, true))
       .mockResolvedValueOnce(
         batchResult(52, false, { operationCount: 2, completedCount: 2 }),
@@ -1663,7 +1664,7 @@ describe("ActMigrationPage", () => {
       screen.getByRole("button", { name: "Yes, import safe records" }),
     );
 
-    await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(4));
     expect(screen.queryByText("apply_cursor_stalled")).not.toBeInTheDocument();
   });
 

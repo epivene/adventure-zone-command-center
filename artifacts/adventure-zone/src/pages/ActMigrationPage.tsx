@@ -35,6 +35,7 @@ import {
   applyNextWithTransientRecovery,
   safeImportApprovalRequestKey,
   shouldReuseSafeImportApproval,
+  trackApplyCursorProgress,
 } from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
@@ -484,7 +485,10 @@ export default function ActMigrationPage() {
     };
     setSessionTotals(totals);
     try {
-      let cursor = 0;
+      let cursorProgress: {
+        cursor: number | null;
+        consecutiveReplays: number;
+      } = { cursor: null, consecutiveReplays: 0 };
       setRun((current) =>
         current ? { ...current, phase: "applying" } : current,
       );
@@ -519,8 +523,11 @@ export default function ActMigrationPage() {
           await refreshRun(confirmation.runId);
           return;
         }
-        if (result.nextCursor <= cursor) throw new Error("apply_cursor_stalled");
-        cursor = result.nextCursor;
+        cursorProgress = trackApplyCursorProgress({
+          previousCursor: cursorProgress.cursor,
+          nextCursor: result.nextCursor,
+          consecutiveReplays: cursorProgress.consecutiveReplays,
+        });
       }
     } catch (caught) {
       if (errorCode(caught) === "act_apply_disabled") {

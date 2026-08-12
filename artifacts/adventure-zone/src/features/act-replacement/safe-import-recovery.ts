@@ -1,5 +1,32 @@
 export const APPLY_BATCH_SIZE = 10;
 export const MAX_TRANSIENT_APPLY_ATTEMPTS = 3;
+const MAX_CONSECUTIVE_CURSOR_REPLAYS = 3;
+
+type CursorProgress = {
+  cursor: number;
+  consecutiveReplays: number;
+};
+
+export function trackApplyCursorProgress(input: {
+  previousCursor: number | null;
+  nextCursor: number;
+  consecutiveReplays: number;
+}): CursorProgress {
+  if (
+    input.previousCursor !== null &&
+    input.nextCursor <= input.previousCursor
+  ) {
+    const consecutiveReplays = input.consecutiveReplays + 1;
+    if (
+      input.nextCursor < input.previousCursor ||
+      consecutiveReplays >= MAX_CONSECUTIVE_CURSOR_REPLAYS
+    ) {
+      throw new Error("apply_cursor_stalled");
+    }
+    return { cursor: input.nextCursor, consecutiveReplays };
+  }
+  return { cursor: input.nextCursor, consecutiveReplays: 0 };
+}
 
 export function shouldReuseSafeImportApproval(input: {
   phase: string;

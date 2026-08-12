@@ -4,6 +4,7 @@ import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
   safeImportApprovalRequestKey,
+  trackApplyCursorProgress,
   shouldReuseSafeImportApproval,
 } from "./safe-import-recovery";
 
@@ -133,5 +134,44 @@ describe("safe import transient recovery", () => {
 
     expect(apply).toHaveBeenCalledTimes(1);
     expect(refreshState).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("trackApplyCursorProgress", () => {
+  it("accepts a replayed cursor after a lost apply response", () => {
+    const advanced = trackApplyCursorProgress({
+      previousCursor: null,
+      nextCursor: 100,
+      consecutiveReplays: 0,
+    });
+
+    const replayed = trackApplyCursorProgress({
+      previousCursor: advanced.cursor,
+      nextCursor: 100,
+      consecutiveReplays: advanced.consecutiveReplays,
+    });
+
+    expect(replayed).toEqual({ cursor: 100, consecutiveReplays: 1 });
+  });
+
+  it("resets the replay guard when the cursor advances", () => {
+    expect(
+      trackApplyCursorProgress({
+        previousCursor: 100,
+        nextCursor: 110,
+        consecutiveReplays: 2,
+      }),
+    ).toEqual({ cursor: 110, consecutiveReplays: 0 });
+  });
+
+  it("stops after three consecutive cursor replays", () => {
+    expect(() =>
+      trackApplyCursorProgress({
+        previousCursor: 100,
+        nextCursor: 100,
+        consecutiveReplays: 2,
+      }),
+    ).toThrow("apply_cursor_stalled");
   });
 });
