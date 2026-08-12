@@ -600,7 +600,7 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     });
   });
 
-  it("requeues a leased checkpoint even when its recorded expiry is in the future", async () => {
+  it("leaves a live leased checkpoint alone when the owner explicitly resumes", async () => {
     const input = startInput();
     const { runId } = await repository.createRun(input);
     const now = new Date("2026-08-01T12:00:00.000Z");
@@ -616,8 +616,8 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     });
 
     await expect(repository.resumeRun({ runId, now })).resolves.toEqual({
-      recoveredCheckpointCount: 1,
-      states: { "company_contact:relationship": 1 },
+      recoveredCheckpointCount: 0,
+      states: {},
     });
 
     await expect(
@@ -634,11 +634,42 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
     ).resolves.toEqual({
       rows: [
         {
-          state: "pending",
-          lease_owner: null,
-          lease_expires_at: null,
+          state: "leased",
+          lease_owner: "stranded-worker",
+          lease_expires_at: new Date("2099-01-01T00:00:00.000Z"),
         },
       ],
+    });
+  });
+
+  it("requeues an expired leased checkpoint when the owner explicitly resumes", async () => {
+    const input = startInput();
+    const { runId } = await repository.createRun(input);
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    const checkpointId = await seedCheckpoint({
+      runId,
+      databaseKey: input.sourceDatabaseKey,
+      streamType: "company_contact",
+      kind: "relationship",
+      partitionKey: "company-contact:expired",
+      state: "leased",
+      leaseOwner: "stranded-worker",
+      leaseExpiresAt: new Date("2026-08-01T11:59:00.000Z"),
+    });
+
+    await expect(repository.resumeRun({ runId, now })).resolves.toEqual({
+      recoveredCheckpointCount: 1,
+      states: { "company_contact:relationship": 1 },
+    });
+
+    await expect(
+      pool.query(
+        `SELECT state, lease_owner, lease_expires_at
+         FROM act_replacement_checkpoints WHERE id = $1`,
+        [checkpointId],
+      ),
+    ).resolves.toEqual({
+      rows: [{ state: "pending", lease_owner: null, lease_expires_at: null }],
     });
   });
 
@@ -654,7 +685,7 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
       partitionKey: "company-contact:lock-order",
       state: "leased",
       leaseOwner: "stranded-worker",
-      leaseExpiresAt: new Date("2099-01-01T00:00:00.000Z"),
+      leaseExpiresAt: new Date("2026-08-01T11:59:00.000Z"),
     });
     const blocker = await pool.connect();
     await blocker.query("BEGIN");

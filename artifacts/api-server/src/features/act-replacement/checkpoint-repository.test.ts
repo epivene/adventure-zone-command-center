@@ -12,8 +12,19 @@ import {
 } from "./checkpoint-repository";
 
 describe("manual Act extraction resume", () => {
-  it("requeues every leased checkpoint when the owner explicitly resumes", () => {
-    expect(manualResumeCheckpointStates).toContain("leased");
+  it("does not steal a live leased checkpoint when the owner explicitly resumes", async () => {
+    expect(manualResumeCheckpointStates).not.toContain("leased");
+    const source = await readFile(
+      new URL("./checkpoint-repository.ts", import.meta.url),
+      "utf8",
+    );
+    const resumeMethod = source.slice(
+      source.indexOf("  async resumeRun("),
+      source.indexOf("  async createRun("),
+    );
+    expect(resumeMethod).toContain(
+      "lte(actReplacementCheckpoints.leaseExpiresAt, input.now)",
+    );
   });
 
   it("locks the run before recovering checkpoints to match archive lock order", async () => {
