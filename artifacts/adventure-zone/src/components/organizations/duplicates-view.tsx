@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { OrganizationListRecord } from "@/features/organizations/organization-repository";
 import {
   BulkDuplicateMergeError,
@@ -292,11 +292,20 @@ export function DuplicatesView({
     null,
   );
   const [canResume, setCanResume] = useState(false);
+  const previousGroups = useRef(groups);
+  const awaitingExternalReconciliation = useRef(false);
   const { toast } = useToast();
 
   useEffect(() => {
+    const receivedFreshGroups = previousGroups.current !== groups;
+    previousGroups.current = groups;
     setLocalGroups(groups);
     setPrimaryIds((current) => reconcilePrimaryIds(current, groups));
+    if (receivedFreshGroups && awaitingExternalReconciliation.current) {
+      awaitingExternalReconciliation.current = false;
+      setReconciliationError(null);
+      setCanResume(true);
+    }
   }, [groups]);
 
   function handleMerged(groupName: string) {
@@ -312,10 +321,12 @@ export function DuplicatesView({
     setCanResume(false);
     const refreshedGroups = await onRefresh();
     if (refreshedGroups === null) {
+      awaitingExternalReconciliation.current = true;
       setReconciliationError(
         "Could not confirm which merges reached the server. Check your connection and retry the status refresh.",
       );
     } else {
+      awaitingExternalReconciliation.current = false;
       setLocalGroups(refreshedGroups);
       setPrimaryIds((current) => reconcilePrimaryIds(current, refreshedGroups));
       setCanResume(true);
