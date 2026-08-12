@@ -23,7 +23,10 @@ export async function applyNextWithTransientRecovery<Result>({
     try {
       return await apply();
     } catch (error) {
-      if (!isTransientApplyError(error) || attempt === MAX_TRANSIENT_APPLY_ATTEMPTS) {
+      if (
+        !isTransientApplyError(error) ||
+        attempt === MAX_TRANSIENT_APPLY_ATTEMPTS
+      ) {
         throw error;
       }
       const refreshed = await refreshState();
