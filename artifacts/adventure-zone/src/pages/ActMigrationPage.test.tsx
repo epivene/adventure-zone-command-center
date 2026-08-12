@@ -1756,6 +1756,44 @@ describe("ActMigrationPage", () => {
     });
   });
 
+  it("refreshes durable progress and continues after a transient apply failure", async () => {
+    client.getLatestRun.mockResolvedValue({ run: readyRun() });
+    client.approveSafeDefaults.mockResolvedValue(
+      approvalWithOperationIds(42),
+    );
+    client.applyNext
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(batchResult(20, false));
+    client.getRun
+      .mockResolvedValueOnce({
+        run: readyRun({ phase: "applying", nextApplyCursor: 10 }),
+      })
+      .mockResolvedValue({
+        run: readyRun({
+          phase: "complete",
+          safeOperationCount: 0,
+          nextApplyCursor: 20,
+        }),
+      });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import safe records" }),
+    );
+    await screen.findByRole("dialog");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(2));
+    expect(client.getRun).toHaveBeenCalledWith(readyRun().runId);
+    expect(client.applyNext).toHaveBeenLastCalledWith(
+      readyRun().runId,
+      expect.objectContaining({ batchSize: 10 }),
+    );
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+  });
+
   it("shows the server safety lock and does not retry act_apply_disabled", async () => {
     client.getLatestRun.mockResolvedValue({ run: readyRun() });
     client.approveSafeDefaults.mockResolvedValue(
