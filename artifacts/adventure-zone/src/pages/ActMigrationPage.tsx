@@ -33,6 +33,7 @@ import {
 import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
+  safeImportApprovalRequestKey,
 } from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
@@ -58,10 +59,7 @@ type ReviewSelection = {
 };
 
 type BulkDecisionChoice =
-  | "keep_local"
-  | "use_source"
-  | "keep_unlinked"
-  | "ignore_source";
+  "keep_local" | "use_source" | "keep_unlinked" | "ignore_source";
 
 type BulkConfirmation = {
   runId: string;
@@ -106,23 +104,6 @@ function errorCode(error: unknown) {
     if (typeof code === "string") return code;
   }
   return error instanceof Error ? error.message : null;
-}
-
-function safeImportRequestKey(
-  run: ActReplacementWorkflowStatus,
-  retryFailed: boolean,
-) {
-  const mode = retryFailed ? "retry" : "apply";
-  return [
-    "act-safe",
-    run.runId,
-    run.manifestDigest,
-    mode,
-    run.safeOperationCount,
-    run.appliedOperationCount,
-    run.alreadyPresentOperationCount,
-    run.failedOperationCount,
-  ].join("-");
 }
 
 function StageProgress({ active }: { active: number }) {
@@ -288,7 +269,8 @@ export default function ActMigrationPage() {
           setError(errorCode(caught) ?? "Could not load review records");
       })
       .finally(() => {
-        if (requestToken === reviewRequestToken.current) setReviewLoading(false);
+        if (requestToken === reviewRequestToken.current)
+          setReviewLoading(false);
       });
   }, [
     run?.manifestDigest,
@@ -331,7 +313,11 @@ export default function ActMigrationPage() {
   };
 
   useEffect(() => {
-    const activeModal = bulkConfirmation ? "bulk" : importConfirmation ? "import" : null;
+    const activeModal = bulkConfirmation
+      ? "bulk"
+      : importConfirmation
+        ? "import"
+        : null;
     if (!activeModal) return;
     modalReturnFocus.current = document.activeElement as HTMLElement | null;
     (activeModal === "bulk"
@@ -351,7 +337,7 @@ export default function ActMigrationPage() {
             : '[aria-labelledby="confirm-safe-import-heading"]',
         );
         const focusable = dialog?.querySelectorAll<HTMLElement>(
-          'button:not([disabled])',
+          "button:not([disabled])",
         );
         if (!focusable?.length) return;
         const first = focusable[0];
@@ -423,7 +409,11 @@ export default function ActMigrationPage() {
     if (!run?.manifestDigest || applyLocked || !beginBusy("apply")) return;
     setError(null);
     try {
-      const requestKey = safeImportRequestKey(run, retryFailed);
+      const requestKey = safeImportApprovalRequestKey({
+        runId: run.runId,
+        manifestDigest: run.manifestDigest,
+        retryFailed,
+      });
       const approval = await approveSafeDefaults(
         run.runId,
         run.manifestDigest,
@@ -463,7 +453,9 @@ export default function ActMigrationPage() {
       });
       await refreshAfterReviewCommand(run.runId);
     } catch (caught) {
-      setError(staleReviewMessage(caught, "Could not save the review decision"));
+      setError(
+        staleReviewMessage(caught, "Could not save the review decision"),
+      );
     } finally {
       setResolvingSourceRecordId(null);
       endBusy();
@@ -523,7 +515,8 @@ export default function ActMigrationPage() {
           await refreshRun(confirmation.runId);
           return;
         }
-        if (result.nextCursor <= cursor) throw new Error("apply_cursor_stalled");
+        if (result.nextCursor <= cursor)
+          throw new Error("apply_cursor_stalled");
         cursor = result.nextCursor;
       }
     } catch (caught) {
@@ -563,8 +556,8 @@ export default function ActMigrationPage() {
     target: AssignmentTarget,
     relationship: NonNullable<ReviewRow["relationshipIssues"]>[number],
   ) => {
-    const currentRelationship = row.relationshipIssues?.find((issue) =>
-      issue.relationshipSlot === relationship.relationshipSlot,
+    const currentRelationship = row.relationshipIssues?.find(
+      (issue) => issue.relationshipSlot === relationship.relationshipSlot,
     );
     if (
       !run?.canReview ||
@@ -603,8 +596,8 @@ export default function ActMigrationPage() {
         next.delete(key);
         return next;
       }
-      const selectedSignature = current.values().next().value
-        ?.signature as BulkSelectionSignature | undefined;
+      const selectedSignature = current.values().next().value?.signature as
+        BulkSelectionSignature | undefined;
       return selectedSignature &&
         (selectedSignature.kind !== signature.kind ||
           selectedSignature.value !== signature.value)
@@ -636,14 +629,20 @@ export default function ActMigrationPage() {
     }));
     if (first.signature.kind === "field_conflict" && first.fieldName) {
       const reviewedSelections = selections.map(({ row }) => {
-        const reviewToken = row.conflicts.find((conflict) => conflict.fieldName === first.fieldName)?.reviewToken;
+        const reviewToken = row.conflicts.find(
+          (conflict) => conflict.fieldName === first.fieldName,
+        )?.reviewToken;
         return {
           sourceRecordId: row.sourceRecordId,
           sourceVersionId: row.sourceVersionId,
           ...(decision === "use_source" && reviewToken ? { reviewToken } : {}),
         };
       });
-      if (decision === "use_source" && reviewedSelections.some((selection) => !selection.reviewToken)) return null;
+      if (
+        decision === "use_source" &&
+        reviewedSelections.some((selection) => !selection.reviewToken)
+      )
+        return null;
       return {
         expectedManifestDigest: manifestDigest,
         requestKey,
@@ -656,7 +655,11 @@ export default function ActMigrationPage() {
     if (first.signature.kind === "relationship") {
       if (
         decision === "keep_unlinked" &&
-        selections.some((selection) => selection.row.relationshipIssues?.length !== 1 || !selection.row.relationshipIssues[0]?.canImportStandalone)
+        selections.some(
+          (selection) =>
+            selection.row.relationshipIssues?.length !== 1 ||
+            !selection.row.relationshipIssues[0]?.canImportStandalone,
+        )
       ) {
         return null;
       }
@@ -771,314 +774,326 @@ export default function ActMigrationPage() {
   return (
     <main className="mx-auto max-w-4xl px-4 pb-12">
       <div inert={bulkConfirmation !== null || importConfirmation !== null}>
-      <h1 className="mt-8 text-2xl font-bold text-slate-900">
-        Import everything from Act!
-      </h1>
-      <p className="mt-2 text-slate-600">
-        Automatic review uses the saved archive, followed by a separate safe
-        import. Uncertain data stays preserved in the archive.
-      </p>
+        <h1 className="mt-8 text-2xl font-bold text-slate-900">
+          Import everything from Act!
+        </h1>
+        <p className="mt-2 text-slate-600">
+          Automatic review uses the saved archive, followed by a separate safe
+          import. Uncertain data stays preserved in the archive.
+        </p>
 
-      <StageProgress active={stage} />
+        <StageProgress active={stage} />
 
-      {error && (
-        <div
-          role="alert"
-          className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-        >
-          {error}
-        </div>
-      )}
-
-      {run && (
-        <ExtractionProgress
-          status={run}
-          onResume={() => void runStatusAction(() => resumeRun(run.runId))}
-          onStartOver={startOver}
-        />
-      )}
-
-      {run?.canOrganize && (
-        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm font-semibold uppercase tracking-wide text-orange-700">
-            Organize
-          </p>
-          <h2 className="mt-1 text-xl font-semibold text-slate-900">
-            {run.phase === "extract_complete"
-              ? "Automatically review the fetched archive"
-              : "Automatically review the saved archive"}
-          </h2>
-          <p className="mt-2 text-sm text-slate-600">
-            This uses saved context clues to prepare a safe import without changing any profile.
-          </p>
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void organize()}
-            className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+        {error && (
+          <div
+            role="alert"
+            className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
           >
-            {busy === "organize"
-              ? "Organizing…"
-              : run.phase === "extract_complete"
-                ? "Auto-review fetched archive"
-                : "Auto-review saved archive"}
-          </button>
-        </section>
-      )}
+            {error}
+          </div>
+        )}
 
-      {showReview && run && (
-        <ImportReview
-          autoResolvedCount={run.autoResolvedCount}
-          safeOperationCount={run.safeOperationCount}
-          archivedOnlyCount={run.archivedOnlyCount}
-          review={review}
-          loading={
-            reviewLoading ||
-            busy !== null ||
-            bulkConfirmation !== null ||
-            importConfirmation !== null
-          }
-          canResolveAmbiguous={run.canReview}
-          activeIssue={activeIssue}
-          selectedKeys={new Set(reviewSelections.keys())}
-          assignmentTargetsByRow={assignmentTargetsByRow}
-          onAssignmentTargetSearch={(row, search, entityTypes) => {
-            if (!entityTypes.length || busyRef.current !== null) return;
-            const requestToken = ++targetSearchSequence.current;
-            targetSearchTokens.current.set(row.sourceRecordId, requestToken);
-            setError(null);
-            setAssignmentTargetsByRow((current) => {
-              const { [row.sourceRecordId]: _discarded, ...remaining } = current;
-              return remaining;
-            });
-            void getAssignmentTargets({ search, entityTypes })
-              .then((result) => {
-                const targets = result.targets;
-                if (
-                  targetSearchTokens.current.get(row.sourceRecordId) ===
-                  requestToken
-                ) {
-                  setAssignmentTargetsByRow((current) => ({
-                    ...current,
-                    [row.sourceRecordId]: targets.filter(
-                      (target) => entityTypes.includes(target.entityType),
-                    ),
-                  }));
-                }
-              })
-              .catch((caught) => {
-                if (
-                  targetSearchTokens.current.get(row.sourceRecordId) ===
-                  requestToken
-                ) {
-                  setError(
-                    errorCode(caught) ?? "Could not search assignment targets",
-                  );
-                }
-              });
-          }}
-          onAssignmentTargetClose={(row) => {
-            const requestToken = ++targetSearchSequence.current;
-            targetSearchTokens.current.set(row.sourceRecordId, requestToken);
-            setError(null);
-            setAssignmentTargetsByRow((current) => {
-              const { [row.sourceRecordId]: _discarded, ...remaining } = current;
-              return remaining;
-            });
-          }}
-          canImport={
-            run.canApplySafe &&
-            busy === null &&
-            !applyLocked &&
-            !requiresAttention
-          }
-          importLabel={
-            run.phase === "applying" || run.nextApplyCursor > 0
-              ? "Resume safe import"
-              : "Import safe records"
-          }
-          onSearch={(search) => {
-            setReviewPage(1);
-            setReviewSearch(search);
-            setReviewSelections(new Map());
-          }}
-          onPageChange={(page) => {
-            setReviewPage(page);
-            setReviewSelections(new Map());
-          }}
-          onIssueChange={(issue) => {
-            setActiveIssue(issue);
-            setReviewPage(1);
-            setReviewSelections(new Map());
-          }}
-          onToggleSelection={toggleSelection}
-          onKeepLocal={(row, fieldName) =>
-            void saveDecision(row, {
-              sourceVersionId: row.sourceVersionId,
-              scope: "field_conflict",
-              decision: "keep_local",
-              fieldName,
-            })
-          }
-          onUseSource={(row, fieldName) => {
-            const reviewToken = row.conflicts.find((conflict) => conflict.fieldName === fieldName)?.reviewToken;
-            if (!reviewToken) return;
-            void saveDecision(row, {
-              sourceVersionId: row.sourceVersionId,
-              scope: "field_conflict",
-              decision: "use_source",
-              fieldName,
-              reviewToken,
-            });
-          }}
-          onIgnoreUnsupported={(row, relationship) =>
-            void saveDecision(row, {
-              sourceVersionId: row.sourceVersionId,
-              scope: relationship ? "relationship" : "unsupported_record",
-              decision: "ignore_source",
-              ...(relationship ? { relationshipSlot: relationship.relationshipSlot } : {}),
-            })
-          }
-          onLinkExisting={(row, target) =>
-            void saveDecision(row, {
-              sourceVersionId: row.sourceVersionId,
-              scope: "duplicate_identity",
-              decision: "link_existing",
-              targetEntityType: target.entityType,
-              targetEntityId: target.id,
-            })
-          }
-          onImportAsNew={(row) => void importAmbiguousAsNew(row)}
-          onAssignParent={(row, target, relationship) => void saveAssignment(row, target, relationship)}
-          onKeepUnlinked={(row, relationship) => {
-            if (!relationship?.canImportStandalone) return;
-            void saveDecision(row, {
-              sourceVersionId: row.sourceVersionId,
-              scope: "relationship",
-              decision: "keep_unlinked",
-              relationshipSlot: relationship.relationshipSlot,
-              targetEntityType: relationship.expectedParentTypes.length === 1
-                ? relationship.expectedParentTypes[0]
-                : null,
-            });
-          }}
-          onBulkDecision={(decision) => {
-            if (decision === "use_source") {
-              if (!run.manifestDigest) return;
-              const request = bulkRequestFor(
-                [...reviewSelections.values()],
-                decision,
-                run.manifestDigest,
-              );
-              if (!request || request.scope !== "field_conflict") {
-                setReviewSelections(new Map());
-                return;
-              }
-              setBulkConfirmation({
-                runId: run.runId,
-                decision,
-                count: request.selections.length,
-                fieldName: request.fieldName,
-                manifestDigest: request.expectedManifestDigest,
-                requestKey: request.requestKey,
-                selections: request.selections.map((selection) => ({ ...selection })),
-              });
-              return;
-            }
-            void saveBulkDecision(decision);
-          }}
-          resolvingSourceRecordId={resolvingSourceRecordId}
-          onImport={() => {
-            void prepareSafeImport(false);
-          }}
-        />
-      )}
+        {run && (
+          <ExtractionProgress
+            status={run}
+            onResume={() => void runStatusAction(() => resumeRun(run.runId))}
+            onStartOver={startOver}
+          />
+        )}
 
-      {requiresAttention && (
-        <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
-          <h2 className="font-semibold text-amber-900">
-            Automatic import stopped safely
-          </h2>
-          <p className="mt-1 text-sm text-amber-800">
-            A blocked or failed operation needs review before another attempt.
-          </p>
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void reviewIssues()}
-            className="mt-3 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50"
-          >
-            Review issues before retrying
-          </button>
-          {Boolean(run?.failedOperationCount) && (
+        {run?.canOrganize && (
+          <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-sm font-semibold uppercase tracking-wide text-orange-700">
+              Organize
+            </p>
+            <h2 className="mt-1 text-xl font-semibold text-slate-900">
+              {run.phase === "extract_complete"
+                ? "Automatically review the fetched archive"
+                : "Automatically review the saved archive"}
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              This uses saved context clues to prepare a safe import without
+              changing any profile.
+            </p>
             <button
               type="button"
-              disabled={busy !== null || applyLocked}
-              onClick={() => {
-                void prepareSafeImport(true);
-              }}
-              className="mt-3 ml-2 rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              disabled={busy !== null}
+              onClick={() => void organize()}
+              className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
             >
-              Retry failed import
+              {busy === "organize"
+                ? "Organizing…"
+                : run.phase === "extract_complete"
+                  ? "Auto-review fetched archive"
+                  : "Auto-review saved archive"}
+            </button>
+          </section>
+        )}
+
+        {showReview && run && (
+          <ImportReview
+            autoResolvedCount={run.autoResolvedCount}
+            safeOperationCount={run.safeOperationCount}
+            archivedOnlyCount={run.archivedOnlyCount}
+            review={review}
+            loading={
+              reviewLoading ||
+              busy !== null ||
+              bulkConfirmation !== null ||
+              importConfirmation !== null
+            }
+            canResolveAmbiguous={run.canReview}
+            activeIssue={activeIssue}
+            selectedKeys={new Set(reviewSelections.keys())}
+            assignmentTargetsByRow={assignmentTargetsByRow}
+            onAssignmentTargetSearch={(row, search, entityTypes) => {
+              if (!entityTypes.length || busyRef.current !== null) return;
+              const requestToken = ++targetSearchSequence.current;
+              targetSearchTokens.current.set(row.sourceRecordId, requestToken);
+              setError(null);
+              setAssignmentTargetsByRow((current) => {
+                const { [row.sourceRecordId]: _discarded, ...remaining } =
+                  current;
+                return remaining;
+              });
+              void getAssignmentTargets({ search, entityTypes })
+                .then((result) => {
+                  const targets = result.targets;
+                  if (
+                    targetSearchTokens.current.get(row.sourceRecordId) ===
+                    requestToken
+                  ) {
+                    setAssignmentTargetsByRow((current) => ({
+                      ...current,
+                      [row.sourceRecordId]: targets.filter((target) =>
+                        entityTypes.includes(target.entityType),
+                      ),
+                    }));
+                  }
+                })
+                .catch((caught) => {
+                  if (
+                    targetSearchTokens.current.get(row.sourceRecordId) ===
+                    requestToken
+                  ) {
+                    setError(
+                      errorCode(caught) ??
+                        "Could not search assignment targets",
+                    );
+                  }
+                });
+            }}
+            onAssignmentTargetClose={(row) => {
+              const requestToken = ++targetSearchSequence.current;
+              targetSearchTokens.current.set(row.sourceRecordId, requestToken);
+              setError(null);
+              setAssignmentTargetsByRow((current) => {
+                const { [row.sourceRecordId]: _discarded, ...remaining } =
+                  current;
+                return remaining;
+              });
+            }}
+            canImport={
+              run.canApplySafe &&
+              busy === null &&
+              !applyLocked &&
+              !requiresAttention
+            }
+            importLabel={
+              run.phase === "applying" || run.nextApplyCursor > 0
+                ? "Resume safe import"
+                : "Import safe records"
+            }
+            onSearch={(search) => {
+              setReviewPage(1);
+              setReviewSearch(search);
+              setReviewSelections(new Map());
+            }}
+            onPageChange={(page) => {
+              setReviewPage(page);
+              setReviewSelections(new Map());
+            }}
+            onIssueChange={(issue) => {
+              setActiveIssue(issue);
+              setReviewPage(1);
+              setReviewSelections(new Map());
+            }}
+            onToggleSelection={toggleSelection}
+            onKeepLocal={(row, fieldName) =>
+              void saveDecision(row, {
+                sourceVersionId: row.sourceVersionId,
+                scope: "field_conflict",
+                decision: "keep_local",
+                fieldName,
+              })
+            }
+            onUseSource={(row, fieldName) => {
+              const reviewToken = row.conflicts.find(
+                (conflict) => conflict.fieldName === fieldName,
+              )?.reviewToken;
+              if (!reviewToken) return;
+              void saveDecision(row, {
+                sourceVersionId: row.sourceVersionId,
+                scope: "field_conflict",
+                decision: "use_source",
+                fieldName,
+                reviewToken,
+              });
+            }}
+            onIgnoreUnsupported={(row, relationship) =>
+              void saveDecision(row, {
+                sourceVersionId: row.sourceVersionId,
+                scope: relationship ? "relationship" : "unsupported_record",
+                decision: "ignore_source",
+                ...(relationship
+                  ? { relationshipSlot: relationship.relationshipSlot }
+                  : {}),
+              })
+            }
+            onLinkExisting={(row, target) =>
+              void saveDecision(row, {
+                sourceVersionId: row.sourceVersionId,
+                scope: "duplicate_identity",
+                decision: "link_existing",
+                targetEntityType: target.entityType,
+                targetEntityId: target.id,
+              })
+            }
+            onImportAsNew={(row) => void importAmbiguousAsNew(row)}
+            onAssignParent={(row, target, relationship) =>
+              void saveAssignment(row, target, relationship)
+            }
+            onKeepUnlinked={(row, relationship) => {
+              if (!relationship?.canImportStandalone) return;
+              void saveDecision(row, {
+                sourceVersionId: row.sourceVersionId,
+                scope: "relationship",
+                decision: "keep_unlinked",
+                relationshipSlot: relationship.relationshipSlot,
+                targetEntityType:
+                  relationship.expectedParentTypes.length === 1
+                    ? relationship.expectedParentTypes[0]
+                    : null,
+              });
+            }}
+            onBulkDecision={(decision) => {
+              if (decision === "use_source") {
+                if (!run.manifestDigest) return;
+                const request = bulkRequestFor(
+                  [...reviewSelections.values()],
+                  decision,
+                  run.manifestDigest,
+                );
+                if (!request || request.scope !== "field_conflict") {
+                  setReviewSelections(new Map());
+                  return;
+                }
+                setBulkConfirmation({
+                  runId: run.runId,
+                  decision,
+                  count: request.selections.length,
+                  fieldName: request.fieldName,
+                  manifestDigest: request.expectedManifestDigest,
+                  requestKey: request.requestKey,
+                  selections: request.selections.map((selection) => ({
+                    ...selection,
+                  })),
+                });
+                return;
+              }
+              void saveBulkDecision(decision);
+            }}
+            resolvingSourceRecordId={resolvingSourceRecordId}
+            onImport={() => {
+              void prepareSafeImport(false);
+            }}
+          />
+        )}
+
+        {requiresAttention && (
+          <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <h2 className="font-semibold text-amber-900">
+              Automatic import stopped safely
+            </h2>
+            <p className="mt-1 text-sm text-amber-800">
+              A blocked or failed operation needs review before another attempt.
+            </p>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void reviewIssues()}
+              className="mt-3 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50"
+            >
+              Review issues before retrying
+            </button>
+            {Boolean(run?.failedOperationCount) && (
+              <button
+                type="button"
+                disabled={busy !== null || applyLocked}
+                onClick={() => {
+                  void prepareSafeImport(true);
+                }}
+                className="mt-3 ml-2 rounded-lg bg-amber-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Retry failed import
+              </button>
+            )}
+          </section>
+        )}
+
+        {showSummary && run && (
+          <ImportSummary
+            applied={appliedTotal}
+            alreadyPresent={alreadyPresentTotal}
+            blocked={blockedTotal}
+            failed={failedTotal}
+            archivedOnlyCount={run.archivedOnlyCount}
+          />
+        )}
+
+        <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+          <details>
+            <summary className="cursor-pointer text-sm font-semibold text-slate-800">
+              Advanced settings
+            </summary>
+            <label
+              className="mt-4 block text-sm font-medium text-slate-700"
+              htmlFor="batch-size"
+            >
+              Batch size
+            </label>
+            <select
+              id="batch-size"
+              value={pageSize}
+              onChange={(event) =>
+                setPageSize(Number(event.target.value) as ActPageSize)
+              }
+              disabled={Boolean(run && !isFinished(run.phase))}
+              className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            >
+              {ACT_PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+            {run && !isFinished(run.phase) && (
+              <p className="mt-2 text-xs text-slate-500">
+                Active run batch size is fixed at {run.pageSize}.
+              </p>
+            )}
+          </details>
+          {canStart && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={start}
+              className="mt-5 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {busy === "fetch" ? "Starting…" : "Import everything from Act!"}
             </button>
           )}
         </section>
-      )}
-
-      {showSummary && run && (
-        <ImportSummary
-          applied={appliedTotal}
-          alreadyPresent={alreadyPresentTotal}
-          blocked={blockedTotal}
-          failed={failedTotal}
-          archivedOnlyCount={run.archivedOnlyCount}
-        />
-      )}
-
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <details>
-          <summary className="cursor-pointer text-sm font-semibold text-slate-800">
-            Advanced settings
-          </summary>
-          <label
-            className="mt-4 block text-sm font-medium text-slate-700"
-            htmlFor="batch-size"
-          >
-            Batch size
-          </label>
-          <select
-            id="batch-size"
-            value={pageSize}
-            onChange={(event) =>
-              setPageSize(Number(event.target.value) as ActPageSize)
-            }
-            disabled={Boolean(run && !isFinished(run.phase))}
-            className="mt-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
-          >
-            {ACT_PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-          {run && !isFinished(run.phase) && (
-            <p className="mt-2 text-xs text-slate-500">
-              Active run batch size is fixed at {run.pageSize}.
-            </p>
-          )}
-        </details>
-        {canStart && (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={start}
-            className="mt-5 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {busy === "fetch" ? "Starting…" : "Import everything from Act!"}
-          </button>
-        )}
-      </section>
-
       </div>
 
       {importConfirmation && (
@@ -1099,12 +1114,12 @@ export default function ActMigrationPage() {
             </h2>
             <p className="mt-3 text-sm text-slate-700">
               Only reviewer-approved overwrites may replace populated fields.
-              Imported records are not automatically removed if you later revisit
-              this archive.
+              Imported records are not automatically removed if you later
+              revisit this archive.
             </p>
             <p className="mt-3 text-sm font-medium text-slate-900">
-              {importConfirmation.approvedOperationCount.toLocaleString()} safe operations will be
-              processed automatically in small batches.
+              {importConfirmation.approvedOperationCount.toLocaleString()} safe
+              operations will be processed automatically in small batches.
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
