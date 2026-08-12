@@ -254,6 +254,42 @@ describe("DuplicatesView bulk merge", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("unblocks Resume when a parent status retry refreshes the groups", async () => {
+    const alpha = group("alpha", "a");
+    apiPost.mockRejectedValueOnce(new Error("connection lost"));
+    const { rerender } = render(
+      <DuplicatesView
+        groups={[alpha]}
+        onRefresh={vi.fn().mockResolvedValue(null)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Merge all 1 group" }));
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Merge all 1 group",
+      }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Retry status refresh" }),
+    ).toBeInTheDocument();
+
+    rerender(
+      <DuplicatesView
+        groups={[alpha]}
+        onRefresh={vi.fn().mockResolvedValue([alpha])}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Resume remaining merges" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Retry status refresh" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("requires explicit reselection if the refreshed Primary disappeared", async () => {
     const alpha = group("alpha", "a");
     const refreshedAlpha = {
