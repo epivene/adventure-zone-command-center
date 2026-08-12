@@ -1496,6 +1496,38 @@ describe("owner import workflow", () => {
     expect(applyNext).not.toHaveBeenCalled();
   });
 
+  it("continues all safe batches on the server after returning 202", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const applyNext = vi
+      .fn()
+      .mockResolvedValueOnce({ hasMore: true, requiresReview: false })
+      .mockResolvedValueOnce({ hasMore: false, requiresReview: false });
+    const review = workflowReview({ applyCoordinator: { applyNext } });
+    process.env.ACT_MIGRATION_APPLY_ENABLED = "true";
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-all`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        approvalRequestKey: "apply-one",
+        batchSize: 10,
+      });
+
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({ accepted: true, started: true });
+    await vi.waitFor(() => expect(applyNext).toHaveBeenCalledTimes(2));
+    expect(applyNext).toHaveBeenNthCalledWith(1, {
+      runId: RUN_ID,
+      expectedManifestDigest: MANIFEST_DIGEST,
+      approvalRequestKey: "apply-one",
+      requestedBy: "owner",
+      batchSize: 10,
+    });
+  });
+
   it("keeps next-batch writes locked when the server apply flag is disabled", async () => {
     const store = new MemoryControlStore();
     addRun(store);
