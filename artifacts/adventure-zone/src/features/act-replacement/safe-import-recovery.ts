@@ -1,6 +1,13 @@
 export const APPLY_BATCH_SIZE = 10;
 export const MAX_TRANSIENT_APPLY_ATTEMPTS = 3;
 
+export function shouldReuseSafeImportApproval(input: {
+  phase: string;
+  retryFailed: boolean;
+}) {
+  return input.phase === "applying" && !input.retryFailed;
+}
+
 export function safeImportApprovalRequestKey(input: {
   runId: string;
   manifestDigest: string;
