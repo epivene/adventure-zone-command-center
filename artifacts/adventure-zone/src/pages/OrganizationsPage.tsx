@@ -104,6 +104,20 @@ export default function OrganizationsPage() {
           </div>
           {dupLoading && dupGroups === null ? (
             <p className="text-slate-500">Scanning for duplicates…</p>
+          ) : dupGroups !== null ? (
+            <>
+              {dupError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="text-rose-700">
+                    Could not refresh duplicate status: {dupError}
+                  </p>
+                  <button className="button-secondary mt-3" onClick={loadDuplicates}>
+                    Retry status refresh
+                  </button>
+                </div>
+              ) : null}
+              <DuplicatesView groups={dupGroups} onRefresh={loadDuplicates} />
+            </>
           ) : dupError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
               <p className="text-rose-700">{dupError}</p>
@@ -111,8 +125,6 @@ export default function OrganizationsPage() {
                 Retry
               </button>
             </div>
-          ) : dupGroups !== null ? (
-            <DuplicatesView groups={dupGroups} onRefresh={loadDuplicates} />
           ) : null}
         </div>
       ) : loading ? (
