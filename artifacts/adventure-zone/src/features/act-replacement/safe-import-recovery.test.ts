@@ -4,7 +4,34 @@ import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
   safeImportApprovalRequestKey,
+  shouldReuseSafeImportApproval,
 } from "./safe-import-recovery";
+
+describe("shouldReuseSafeImportApproval", () => {
+  it("reuses approval for a normal import that is already applying", () => {
+    expect(
+      shouldReuseSafeImportApproval({
+        phase: "applying",
+        retryFailed: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("requires approval for a new import or explicit failed-operation retry", () => {
+    expect(
+      shouldReuseSafeImportApproval({
+        phase: "ready_to_apply",
+        retryFailed: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldReuseSafeImportApproval({
+        phase: "complete_with_issues",
+        retryFailed: true,
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("safeImportApprovalRequestKey", () => {
   it("reuses one approval coordinator after durable import progress changes", () => {
