@@ -89,7 +89,10 @@ export interface ActReplacementCheckpointRepository {
     leaseOwner: string;
     now: Date;
   }): Promise<void>;
-  resumeRun(input: { runId: string; now: Date }): Promise<ActResumeDiagnostics>;
+  resumeRun(input: {
+    runId: string;
+    now: Date;
+  }): Promise<ActResumeDiagnostics>;
   markDetailCapabilityUnavailable(input: {
     runId: string;
     checkpointId: string;
@@ -831,7 +834,13 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
           ),
       ).size;
       const hasRecoverableContactNoteFailure = checkpoints.some(
-        ({ state, streamType, checkpointKind, partitionKey, errorCode }) =>
+        ({
+          state,
+          streamType,
+          checkpointKind,
+          partitionKey,
+          errorCode,
+        }) =>
           state === "failed" &&
           streamType === "note" &&
           checkpointKind === "relationship" &&
