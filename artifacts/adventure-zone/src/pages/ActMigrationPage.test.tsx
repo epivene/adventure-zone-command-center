@@ -1519,7 +1519,7 @@ describe("ActMigrationPage", () => {
     expect(client.approveSafeDefaults).toHaveBeenCalledOnce();
     expect(client.approveReadyOperations).not.toHaveBeenCalled();
     expect(confirmation).toHaveTextContent(
-      "5 safe operations will be processed in batches of 25.",
+      "5 safe operations will be processed automatically in small batches.",
     );
     expect(confirmation).not.toHaveTextContent(/distinct source records/i);
   });
@@ -1536,7 +1536,7 @@ describe("ActMigrationPage", () => {
     );
 
     expect(await screen.findByRole("dialog")).toHaveTextContent(
-      "52 safe operations will be processed in batches of 25.",
+      "52 safe operations will be processed automatically in small batches.",
     );
     expect(client.getManifest).not.toHaveBeenCalled();
     expect(client.approveSafeDefaults).toHaveBeenCalledOnce();
@@ -1568,7 +1568,7 @@ describe("ActMigrationPage", () => {
       "Imported records are not automatically removed",
     );
     expect(screen.getByRole("dialog")).toHaveTextContent(
-      "52 safe operations will be processed in batches of 25.",
+      "52 safe operations will be processed automatically in small batches.",
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Yes, import safe records" }),
@@ -1583,7 +1583,7 @@ describe("ActMigrationPage", () => {
     );
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(3));
     const calls = client.applyNext.mock.calls;
-    expect(calls.every(([, body]) => body.batchSize === 25)).toBe(true);
+    expect(calls.every(([, body]) => body.batchSize === 10)).toBe(true);
     expect(new Set(calls.map(([, body]) => body.approvalRequestKey)).size).toBe(
       1,
     );
@@ -1614,7 +1614,7 @@ describe("ActMigrationPage", () => {
       await screen.findByRole("button", { name: "Resume safe import" }),
     );
     expect(await screen.findByRole("dialog")).toHaveTextContent(
-      "27 safe operations will be processed in batches of 25.",
+      "27 safe operations will be processed automatically in small batches.",
     );
     fireEvent.click(
       screen.getByRole("button", { name: "Yes, import safe records" }),
@@ -1622,7 +1622,7 @@ describe("ActMigrationPage", () => {
 
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
     expect(client.applyNext.mock.calls[0][1]).toMatchObject({
-      batchSize: 25,
+      batchSize: 10,
       approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-apply-27-25-0-0`,
     });
     expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty("cursor");
@@ -1754,6 +1754,44 @@ describe("ActMigrationPage", () => {
       approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-retry-5-0-0-1`,
       retryFailed: true,
     });
+  });
+
+  it("refreshes durable progress and continues after a transient apply failure", async () => {
+    client.getLatestRun.mockResolvedValue({ run: readyRun() });
+    client.approveSafeDefaults.mockResolvedValue(
+      approvalWithOperationIds(42),
+    );
+    client.applyNext
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(batchResult(20, false));
+    client.getRun
+      .mockResolvedValueOnce({
+        run: readyRun({ phase: "applying", nextApplyCursor: 10 }),
+      })
+      .mockResolvedValue({
+        run: readyRun({
+          phase: "complete",
+          safeOperationCount: 0,
+          nextApplyCursor: 20,
+        }),
+      });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import safe records" }),
+    );
+    await screen.findByRole("dialog");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(2));
+    expect(client.getRun).toHaveBeenCalledWith(readyRun().runId);
+    expect(client.applyNext).toHaveBeenLastCalledWith(
+      readyRun().runId,
+      expect.objectContaining({ batchSize: 10 }),
+    );
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
   });
 
   it("shows the server safety lock and does not retry act_apply_disabled", async () => {

@@ -30,9 +30,12 @@ import {
   type ReviewPage,
   type ReviewRow,
 } from "@/features/act-replacement/act-replacement-client";
+import {
+  APPLY_BATCH_SIZE,
+  applyNextWithTransientRecovery,
+} from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
-const APPLY_BATCH_SIZE = 25;
 
 type SessionTotals = {
   applied: number;
@@ -485,12 +488,27 @@ export default function ActMigrationPage() {
         current ? { ...current, phase: "applying" } : current,
       );
       for (;;) {
-        const result = await applyNext(confirmation.runId, {
-          expectedManifestDigest: confirmation.manifestDigest,
-          approvalRequestKey: confirmation.requestKey,
-          batchSize: APPLY_BATCH_SIZE,
-          ...(confirmation.retryFailed ? { retryFailed: true } : {}),
+        const result = await applyNextWithTransientRecovery({
+          apply: () =>
+            applyNext(confirmation.runId, {
+              expectedManifestDigest: confirmation.manifestDigest,
+              approvalRequestKey: confirmation.requestKey,
+              batchSize: APPLY_BATCH_SIZE,
+              ...(confirmation.retryFailed ? { retryFailed: true } : {}),
+            }),
+          refreshState: async () => {
+            const durableRun = await refreshRun(confirmation.runId);
+            return {
+              cursor: durableRun.nextApplyCursor,
+              done: isFinished(durableRun.phase),
+            };
+          },
+          onRefreshedCursor: (durableCursor) => {
+            cursor = Math.max(cursor, durableCursor);
+            setError(null);
+          },
         });
+        if (!result) return;
         totals.applied += result.batch.completedCount;
         totals.alreadyPresent += result.batch.alreadyPresentCount;
         totals.blocked += result.batch.blockedCount;
@@ -1086,7 +1104,7 @@ export default function ActMigrationPage() {
             </p>
             <p className="mt-3 text-sm font-medium text-slate-900">
               {importConfirmation.approvedOperationCount.toLocaleString()} safe operations will be
-              processed in batches of 25.
+              processed automatically in small batches.
             </p>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
