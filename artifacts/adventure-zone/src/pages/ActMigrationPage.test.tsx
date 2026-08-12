@@ -273,7 +273,9 @@ describe("ActMigrationPage", () => {
     expect(
       screen.getByText("12 records auto-resolved from strong context clues"),
     ).toBeInTheDocument();
-    expect(screen.getByText("3 uncertain records kept in the archive")).toBeInTheDocument();
+    expect(
+      screen.getByText("3 uncertain records kept in the archive"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/automatic review.*separate safe import/i),
     ).toBeInTheDocument();
@@ -402,7 +404,12 @@ describe("ActMigrationPage", () => {
           fieldName: "phone",
           localValue: "555-LOCAL",
           sourceValue: "555-ACT",
-          target: { id: "local-organization", entityType: "organization", label: "Adventure Zone", detail: null },
+          target: {
+            id: "local-organization",
+            entityType: "organization",
+            label: "Adventure Zone",
+            detail: null,
+          },
           reviewToken: individualReviewToken,
         },
       ],
@@ -457,42 +464,75 @@ describe("ActMigrationPage", () => {
       sourceVersionId: "activity-version",
       state: "awaiting_review" as const,
       issueCodes: ["relationship_unresolved"] as const,
-      issues: [{ code: "relationship_unresolved" as const, reason: "Missing parents" }],
-      conflicts: [], candidates: [], canImportStandalone: false, operationKeys: [],
+      issues: [
+        { code: "relationship_unresolved" as const, reason: "Missing parents" },
+      ],
+      conflicts: [],
+      candidates: [],
+      canImportStandalone: false,
+      operationKeys: [],
       relationshipIssues: [
-        { relationshipSlot: "primary-contact", issueCode: "relationship_unresolved" as const, reason: "Missing primary contact", expectedParentTypes: ["contact"] as const, canImportStandalone: false },
-        { relationshipSlot: "billing-contact", issueCode: "relationship_unresolved" as const, reason: "Missing billing contact", expectedParentTypes: ["contact"] as const, canImportStandalone: false },
+        {
+          relationshipSlot: "primary-contact",
+          issueCode: "relationship_unresolved" as const,
+          reason: "Missing primary contact",
+          expectedParentTypes: ["contact"] as const,
+          canImportStandalone: false,
+        },
+        {
+          relationshipSlot: "billing-contact",
+          issueCode: "relationship_unresolved" as const,
+          reason: "Missing billing contact",
+          expectedParentTypes: ["contact"] as const,
+          canImportStandalone: false,
+        },
       ],
       streamType: "activity",
       display: { subject: "Call Ada" },
     };
     client.getLatestRun.mockResolvedValue({ run });
     client.getReview.mockResolvedValue({
-      page: 1, pageSize: 25, total: 1, manifestDigest: digest,
-      summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: { relationship_unresolved: 2 }, diagnosticCounts: {} },
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      manifestDigest: digest,
+      summary: {
+        decisionRequired: 1,
+        archivedOnly: 1,
+        issueCounts: { relationship_unresolved: 2 },
+        diagnosticCounts: {},
+      },
       rows: [row],
     });
     client.decideReviewRecord.mockResolvedValue({ id: "decision-1" });
 
     render(<ActMigrationPage />);
-    const skips = await screen.findAllByRole("button", { name: /Keep archived and skip relationship/ });
+    const skips = await screen.findAllByRole("button", {
+      name: /Keep archived and skip relationship/,
+    });
     fireEvent.click(skips[1]!);
 
-    await waitFor(() => expect(client.decideReviewRecord).toHaveBeenCalledWith(
-      run.runId,
-      row.sourceRecordId,
-      {
-        sourceVersionId: row.sourceVersionId,
-        scope: "relationship",
-        decision: "ignore_source",
-        relationshipSlot: "billing-contact",
-      },
-    ));
+    await waitFor(() =>
+      expect(client.decideReviewRecord).toHaveBeenCalledWith(
+        run.runId,
+        row.sourceRecordId,
+        {
+          sourceVersionId: row.sourceVersionId,
+          scope: "relationship",
+          decision: "ignore_source",
+          relationshipSlot: "billing-contact",
+        },
+      ),
+    );
   });
 
   it("keeps a reviewed overwrite out of automatic approval while applying the rebuilt safe subset", async () => {
     const rebuiltDigest = "d".repeat(64);
-    const initialRun = readyRun({ canOrganize: true, reviewRequiredCount: 1, safeOperationCount: 1 });
+    const initialRun = readyRun({
+      canOrganize: true,
+      reviewRequiredCount: 1,
+      safeOperationCount: 1,
+    });
     const rebuiltRun = readyRun({
       canOrganize: true,
       reviewRequiredCount: 0,
@@ -505,13 +545,20 @@ describe("ActMigrationPage", () => {
       state: "awaiting_review" as const,
       issueCodes: ["field_conflict"] as const,
       issues: [{ code: "field_conflict" as const, reason: "phone" }],
-      conflicts: [{
-        fieldName: "phone",
-        localValue: "555-LOCAL",
-        sourceValue: "555-ACT",
-        target: { id: "local-organization", entityType: "organization", label: "Adventure Zone", detail: null },
-        reviewToken: individualReviewToken,
-      }],
+      conflicts: [
+        {
+          fieldName: "phone",
+          localValue: "555-LOCAL",
+          sourceValue: "555-ACT",
+          target: {
+            id: "local-organization",
+            entityType: "organization",
+            label: "Adventure Zone",
+            detail: null,
+          },
+          reviewToken: individualReviewToken,
+        },
+      ],
       candidates: [],
       canImportStandalone: false,
       operationKeys: ["organization:source-1"],
@@ -524,12 +571,30 @@ describe("ActMigrationPage", () => {
     client.getRun.mockResolvedValue({ run: rebuiltRun });
     client.getReview
       .mockResolvedValueOnce({
-        page: 1, pageSize: 25, total: 1, manifestDigest: digest,
-        summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: { field_conflict: 1 }, diagnosticCounts: {} }, rows: [row],
+        page: 1,
+        pageSize: 25,
+        total: 1,
+        manifestDigest: digest,
+        summary: {
+          decisionRequired: 1,
+          archivedOnly: 1,
+          issueCounts: { field_conflict: 1 },
+          diagnosticCounts: {},
+        },
+        rows: [row],
       })
       .mockResolvedValue({
-        page: 1, pageSize: 25, total: 0, manifestDigest: rebuiltDigest,
-        summary: { decisionRequired: 0, archivedOnly: 0, issueCounts: {}, diagnosticCounts: {} }, rows: [],
+        page: 1,
+        pageSize: 25,
+        total: 0,
+        manifestDigest: rebuiltDigest,
+        summary: {
+          decisionRequired: 0,
+          archivedOnly: 0,
+          issueCounts: {},
+          diagnosticCounts: {},
+        },
+        rows: [],
       });
     client.decideReviewRecord.mockResolvedValue({ id: "decision-1" });
     client.approveSafeDefaults.mockResolvedValue({
@@ -539,41 +604,80 @@ describe("ActMigrationPage", () => {
     client.getManifest.mockResolvedValue({
       manifest: {
         digest: rebuiltDigest,
-        operations: [safeOperationId, reviewedOverwriteId].map((operationKey) => ({
-          operationKey, sourceRecordId: "source-1", sourceVersionId: "version-1",
-          targetType: "organization", action: operationKey.includes(":field:") ? "overwrite_reviewed" : "link_existing",
-          dependencyOperationKeys: [], requiredForSourceOutcome: true, safeByDefault: !operationKey.includes(":field:"),
-        })),
+        operations: [safeOperationId, reviewedOverwriteId].map(
+          (operationKey) => ({
+            operationKey,
+            sourceRecordId: "source-1",
+            sourceVersionId: "version-1",
+            targetType: "organization",
+            action: operationKey.includes(":field:")
+              ? "overwrite_reviewed"
+              : "link_existing",
+            dependencyOperationKeys: [],
+            requiredForSourceOutcome: true,
+            safeByDefault: !operationKey.includes(":field:"),
+          }),
+        ),
       },
     });
     client.applyNext.mockResolvedValue({
-      batch: { batchId: "batch-1", runId: initialRun.runId, manifestDigest: rebuiltDigest, state: "complete", operationCount: 1, completedCount: 1, alreadyPresentCount: 0, blockedCount: 0, failedCount: 0 },
-      nextCursor: 1, hasMore: false, requiresReview: false,
+      batch: {
+        batchId: "batch-1",
+        runId: initialRun.runId,
+        manifestDigest: rebuiltDigest,
+        state: "complete",
+        operationCount: 1,
+        completedCount: 1,
+        alreadyPresentCount: 0,
+        blockedCount: 0,
+        failedCount: 0,
+      },
+      nextCursor: 1,
+      hasMore: false,
+      requiresReview: false,
     });
 
     render(<ActMigrationPage />);
-    fireEvent.click(await screen.findByRole("button", { name: "Use Act value — Phone for Adventure Zone" }));
-    await waitFor(() => expect(client.decideReviewRecord).toHaveBeenCalledWith(
-      initialRun.runId,
-      "source-1",
-      expect.objectContaining({ decision: "use_source", fieldName: "phone", reviewToken: individualReviewToken }),
-    ));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Use Act value — Phone for Adventure Zone",
+      }),
+    );
+    await waitFor(() =>
+      expect(client.decideReviewRecord).toHaveBeenCalledWith(
+        initialRun.runId,
+        "source-1",
+        expect.objectContaining({
+          decision: "use_source",
+          fieldName: "phone",
+          reviewToken: individualReviewToken,
+        }),
+      ),
+    );
     await waitFor(() => expect(client.getReview).toHaveBeenCalledTimes(2));
 
-    fireEvent.click(screen.getByRole("button", { name: "Import safe records" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import safe records" }),
+    );
     await screen.findByRole("dialog");
-    fireEvent.click(screen.getByRole("button", { name: "Yes, import safe records" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
 
-    await waitFor(() => expect(client.approveSafeDefaults).toHaveBeenCalledWith(
-      initialRun.runId,
-      rebuiltDigest,
-      expect.any(String),
-    ));
+    await waitFor(() =>
+      expect(client.approveSafeDefaults).toHaveBeenCalledWith(
+        initialRun.runId,
+        rebuiltDigest,
+        expect.any(String),
+      ),
+    );
     expect(client.approveReadyOperations).not.toHaveBeenCalled();
-    await waitFor(() => expect(client.applyNext).toHaveBeenCalledWith(
-      initialRun.runId,
-      expect.objectContaining({ expectedManifestDigest: rebuiltDigest }),
-    ));
+    await waitFor(() =>
+      expect(client.applyNext).toHaveBeenCalledWith(
+        initialRun.runId,
+        expect.objectContaining({ expectedManifestDigest: rebuiltDigest }),
+      ),
+    );
   });
 
   it("keeps review controls available after one safe subset completes and applies a rebuilt subset", async () => {
@@ -742,7 +846,12 @@ describe("ActMigrationPage", () => {
           fieldName: "phone",
           localValue: "555-LOCAL",
           sourceValue: "555-ACT",
-          target: { id: "local-organization", entityType: "organization", label: "Adventure Zone", detail: null },
+          target: {
+            id: "local-organization",
+            entityType: "organization",
+            label: "Adventure Zone",
+            detail: null,
+          },
           reviewToken: individualReviewToken,
         },
       ],
@@ -801,7 +910,12 @@ describe("ActMigrationPage", () => {
           fieldName: "phone",
           localValue: "555-LOCAL",
           sourceValue: "555-ACT",
-          target: { id: `local-${sourceRecordId}`, entityType: "organization", label: sourceRecordId, detail: null },
+          target: {
+            id: `local-${sourceRecordId}`,
+            entityType: "organization",
+            label: sourceRecordId,
+            detail: null,
+          },
           reviewToken: {
             sourceRecordId,
             sourceVersionId: `${sourceRecordId}-version`,
@@ -879,31 +993,54 @@ describe("ActMigrationPage", () => {
       state: "awaiting_review" as const,
       issueCodes: ["ambiguous_match"] as const,
       issues: [{ code: "ambiguous_match" as const }],
-      conflicts: [], candidates: [], canImportStandalone: false, operationKeys: [],
+      conflicts: [],
+      candidates: [],
+      canImportStandalone: false,
+      operationKeys: [],
       streamType: "company",
       display: { name: "Adventure Zone" },
       recommendation: {
         action: "link_existing" as const,
-        target: { id: "organization-1", entityType: "organization" as const, label: "Adventure Zone LLC", detail: "Chicago, IL" },
+        target: {
+          id: "organization-1",
+          entityType: "organization" as const,
+          label: "Adventure Zone LLC",
+          detail: "Chicago, IL",
+        },
         confidence: "two_independent_clues" as const,
         evidence: [
           { family: "identity" as const, label: "Matching name" },
-          { family: "archive_relationship" as const, label: "Matching saved relationship" },
+          {
+            family: "archive_relationship" as const,
+            label: "Matching saved relationship",
+          },
         ],
       },
     };
     client.getLatestRun.mockResolvedValue({ run });
-    client.getRun.mockResolvedValue({ run: { ...run, reviewRequiredCount: 0 } });
+    client.getRun.mockResolvedValue({
+      run: { ...run, reviewRequiredCount: 0 },
+    });
     client.getReview.mockResolvedValue({
-      page: 1, pageSize: 25, total: 1, manifestDigest: digest,
-      summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: { ambiguous_match: 1 }, diagnosticCounts: {} },
+      page: 1,
+      pageSize: 25,
+      total: 1,
+      manifestDigest: digest,
+      summary: {
+        decisionRequired: 1,
+        archivedOnly: 1,
+        issueCounts: { ambiguous_match: 1 },
+        diagnosticCounts: {},
+      },
       rows: [row],
     });
     render(<ActMigrationPage />);
 
     await screen.findByText("Matched from name + company relationship");
     expect(
-      screen.queryByRole("button", { name: "Select all safe matches on this page" }),
+      screen.queryByRole("button", {
+        name: "Select all safe matches on this page",
+      }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Accept selected safe matches" }),
@@ -937,13 +1074,15 @@ describe("ActMigrationPage", () => {
       conflicts: [],
       candidates: [],
       canImportStandalone: true,
-      relationshipIssues: [{
-        relationshipSlot: "timeline-parent",
-        issueCode: "relationship_unresolved" as const,
-        reason: "Missing parent",
-        expectedParentTypes: ["organization", "contact", "booking"] as const,
-        canImportStandalone: true,
-      }],
+      relationshipIssues: [
+        {
+          relationshipSlot: "timeline-parent",
+          issueCode: "relationship_unresolved" as const,
+          reason: "Missing parent",
+          expectedParentTypes: ["organization", "contact", "booking"] as const,
+          canImportStandalone: true,
+        },
+      ],
       operationKeys: [],
       streamType: "activity",
       display: { subject: "Call Ada" },
@@ -958,7 +1097,12 @@ describe("ActMigrationPage", () => {
       pageSize: 25,
       total: 2,
       manifestDigest: digest,
-      summary: { decisionRequired: 2, archivedOnly: 2, issueCounts: {}, diagnosticCounts: {} },
+      summary: {
+        decisionRequired: 2,
+        archivedOnly: 2,
+        issueCounts: {},
+        diagnosticCounts: {},
+      },
       rows: [contactRow, relationshipRow],
     });
     client.getAssignmentTargets
@@ -1006,19 +1150,33 @@ describe("ActMigrationPage", () => {
     expect(
       screen.getByRole("option", { name: "Adventure Zone" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Ada Lovelace" })).toBeInTheDocument();
-    expect(screen.queryByRole("option", { name: "Wrong child type" })).toBeNull();
+    expect(
+      screen.getByRole("option", { name: "Ada Lovelace" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "Wrong child type" }),
+    ).toBeNull();
 
-    fireEvent.change(screen.getByRole("combobox", {
-      name: "Select an existing record — Parent target for Call Ada",
-    }), { target: { value: "organization-1" } });
-    fireEvent.click(screen.getByRole("button", { name: "Assign parent — Call Ada" }));
-    await waitFor(() => expect(client.assignReviewParent).toHaveBeenCalledWith(
-      run.runId,
-      relationshipRow,
-      expect.objectContaining({ id: "organization-1", entityType: "organization" }),
-      relationshipRow.relationshipIssues[0],
-    ));
+    fireEvent.change(
+      screen.getByRole("combobox", {
+        name: "Select an existing record — Parent target for Call Ada",
+      }),
+      { target: { value: "organization-1" } },
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Assign parent — Call Ada" }),
+    );
+    await waitFor(() =>
+      expect(client.assignReviewParent).toHaveBeenCalledWith(
+        run.runId,
+        relationshipRow,
+        expect.objectContaining({
+          id: "organization-1",
+          entityType: "organization",
+        }),
+        relationshipRow.relationshipIssues[0],
+      ),
+    );
     resolveContact({
       targets: [
         {
@@ -1058,7 +1216,12 @@ describe("ActMigrationPage", () => {
       pageSize: 25,
       total: 1,
       manifestDigest: digest,
-      summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: {}, diagnosticCounts: {} },
+      summary: {
+        decisionRequired: 1,
+        archivedOnly: 1,
+        issueCounts: {},
+        diagnosticCounts: {},
+      },
       rows: [row],
     });
     client.getAssignmentTargets
@@ -1113,7 +1276,12 @@ describe("ActMigrationPage", () => {
       pageSize: 25,
       total: 1,
       manifestDigest: digest,
-      summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: {}, diagnosticCounts: {} },
+      summary: {
+        decisionRequired: 1,
+        archivedOnly: 1,
+        issueCounts: {},
+        diagnosticCounts: {},
+      },
       rows: [row],
     });
     client.getAssignmentTargets.mockRejectedValue(new Error("search failed"));
@@ -1123,9 +1291,7 @@ describe("ActMigrationPage", () => {
       name: "Search existing records — Link target for Ada",
     });
     fireEvent.change(search, { target: { value: "Ada" } });
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "search failed",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("search failed");
 
     fireEvent.change(search, { target: { value: "" } });
     expect(screen.queryByRole("alert")).toBeNull();
@@ -1179,7 +1345,12 @@ describe("ActMigrationPage", () => {
         pageSize: 25,
         total: 1,
         manifestDigest: digest,
-        summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: {}, diagnosticCounts: {} },
+        summary: {
+          decisionRequired: 1,
+          archivedOnly: 1,
+          issueCounts: {},
+          diagnosticCounts: {},
+        },
         rows: [row],
       });
       client.getAssignmentTargets
@@ -1213,7 +1384,9 @@ describe("ActMigrationPage", () => {
 
       settleOlder();
       await act(async () => Promise.resolve());
-      expect(screen.getByRole("option", { name: "Current Ada" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("option", { name: "Current Ada" }),
+      ).toBeInTheDocument();
       expect(screen.queryByRole("option", { name: "Old Ada" })).toBeNull();
       expect(screen.queryByRole("alert")).toBeNull();
     },
@@ -1256,7 +1429,12 @@ describe("ActMigrationPage", () => {
       pageSize: 25,
       total: 1,
       manifestDigest: digest,
-      summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: {}, diagnosticCounts: {} },
+      summary: {
+        decisionRequired: 1,
+        archivedOnly: 1,
+        issueCounts: {},
+        diagnosticCounts: {},
+      },
       rows: [row],
     });
     client.getAssignmentTargets.mockReturnValue(pendingSearch);
@@ -1348,7 +1526,12 @@ describe("ActMigrationPage", () => {
         pageSize: 25,
         total: 26,
         manifestDigest: digest,
-        summary: { decisionRequired: 26, archivedOnly: 26, issueCounts: {}, diagnosticCounts: {} },
+        summary: {
+          decisionRequired: 26,
+          archivedOnly: 26,
+          issueCounts: {},
+          diagnosticCounts: {},
+        },
         rows: [],
       })
       .mockResolvedValueOnce({
@@ -1356,7 +1539,12 @@ describe("ActMigrationPage", () => {
         pageSize: 25,
         total: 26,
         manifestDigest: digest,
-        summary: { decisionRequired: 1, archivedOnly: 1, issueCounts: {}, diagnosticCounts: {} },
+        summary: {
+          decisionRequired: 1,
+          archivedOnly: 1,
+          issueCounts: {},
+          diagnosticCounts: {},
+        },
         rows: [row],
       })
       .mockResolvedValueOnce({
@@ -1364,7 +1552,12 @@ describe("ActMigrationPage", () => {
         pageSize: 25,
         total: 25,
         manifestDigest: digest,
-        summary: { decisionRequired: 0, archivedOnly: 0, issueCounts: {}, diagnosticCounts: {} },
+        summary: {
+          decisionRequired: 0,
+          archivedOnly: 0,
+          issueCounts: {},
+          diagnosticCounts: {},
+        },
         rows: [],
       })
       .mockResolvedValueOnce({
@@ -1372,7 +1565,12 @@ describe("ActMigrationPage", () => {
         pageSize: 25,
         total: 25,
         manifestDigest: digest,
-        summary: { decisionRequired: 0, archivedOnly: 0, issueCounts: {}, diagnosticCounts: {} },
+        summary: {
+          decisionRequired: 0,
+          archivedOnly: 0,
+          issueCounts: {},
+          diagnosticCounts: {},
+        },
         rows: [],
       });
 
@@ -1447,7 +1645,9 @@ describe("ActMigrationPage", () => {
 
     render(<ActMigrationPage />);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Auto-review fetched archive" }),
+      await screen.findByRole("button", {
+        name: "Auto-review fetched archive",
+      }),
     );
 
     await waitFor(() =>
@@ -1504,17 +1704,29 @@ describe("ActMigrationPage", () => {
       }),
     );
 
-    await waitFor(() => expect(client.organizeRun).toHaveBeenCalledWith(extracted.runId));
+    await waitFor(() =>
+      expect(client.organizeRun).toHaveBeenCalledWith(extracted.runId),
+    );
     expect(client.getRun).toHaveBeenCalledWith(extracted.runId);
     expect(
-      await screen.findByText("5 safe operations ready", {}, { timeout: 5_000 }),
+      await screen.findByText(
+        "5 safe operations ready",
+        {},
+        { timeout: 5_000 },
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("2 records auto-resolved from strong context clues")).toBeInTheDocument();
-    expect(screen.getByText("3 uncertain records kept in the archive")).toBeInTheDocument();
+    expect(
+      screen.getByText("2 records auto-resolved from strong context clues"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("3 uncertain records kept in the archive"),
+    ).toBeInTheDocument();
     expect(client.decideReviewRecord).not.toHaveBeenCalled();
     expect(client.bulkDecideReviewRecords).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Import safe records" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import safe records" }),
+    );
     const confirmation = await screen.findByRole("dialog");
     expect(client.approveSafeDefaults).toHaveBeenCalledOnce();
     expect(client.approveReadyOperations).not.toHaveBeenCalled();
@@ -1546,9 +1758,7 @@ describe("ActMigrationPage", () => {
     client.getLatestRun.mockResolvedValue({
       run: readyRun({ safeOperationCount: 52, reviewRequiredCount: 0 }),
     });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(52),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(52));
     client.getManifest.mockResolvedValue(manifestForApproval(52));
     client.applyNext
       .mockResolvedValueOnce(batchResult(25, true))
@@ -1578,7 +1788,7 @@ describe("ActMigrationPage", () => {
       expect(client.approveSafeDefaults).toHaveBeenCalledWith(
         readyRun().runId,
         digest,
-        `act-safe-${readyRun().runId}-${digest}-apply-52-0-0-0`,
+        `act-safe-${readyRun().runId}-${digest}-apply`,
       ),
     );
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(3));
@@ -1603,9 +1813,7 @@ describe("ActMigrationPage", () => {
         nextApplyCursor: 25,
       }),
     });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(27),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(27));
     client.getManifest.mockResolvedValue(manifestForApproval(27));
     client.applyNext.mockResolvedValue(batchResult(50, false));
 
@@ -1623,7 +1831,7 @@ describe("ActMigrationPage", () => {
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
     expect(client.applyNext.mock.calls[0][1]).toMatchObject({
       batchSize: 10,
-      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-apply-27-25-0-0`,
+      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-apply`,
     });
     expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty("cursor");
     expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty(
@@ -1640,9 +1848,7 @@ describe("ActMigrationPage", () => {
         nextApplyCursor: 25,
       }),
     });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(52),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(52));
     client.getManifest.mockResolvedValue(manifestForApproval(52));
     client.applyNext
       .mockResolvedValueOnce(batchResult(25, true))
@@ -1688,9 +1894,7 @@ describe("ActMigrationPage", () => {
     client.getLatestRun.mockResolvedValue({
       run: readyRun({ safeOperationCount: 30 }),
     });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(30),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(30));
     client.applyNext.mockResolvedValue(
       batchResult(25, true, { completedCount: 24, blockedCount: 1 }),
     );
@@ -1729,9 +1933,7 @@ describe("ActMigrationPage", () => {
         canApplySafe: true,
       }),
     });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(5),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(5));
     client.applyNext.mockResolvedValue(batchResult(30, false));
 
     render(<ActMigrationPage />);
@@ -1751,16 +1953,14 @@ describe("ActMigrationPage", () => {
 
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
     expect(client.applyNext.mock.calls[0][1]).toMatchObject({
-      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-retry-5-0-0-1`,
+      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-retry`,
       retryFailed: true,
     });
   });
 
   it("refreshes durable progress and continues after a transient apply failure", async () => {
     client.getLatestRun.mockResolvedValue({ run: readyRun() });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(42),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(42));
     client.applyNext
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(batchResult(20, false));
@@ -1796,9 +1996,7 @@ describe("ActMigrationPage", () => {
 
   it("shows the server safety lock and does not retry act_apply_disabled", async () => {
     client.getLatestRun.mockResolvedValue({ run: readyRun() });
-    client.approveSafeDefaults.mockResolvedValue(
-      approvalWithOperationIds(42),
-    );
+    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(42));
     client.applyNext.mockRejectedValue(
       Object.assign(new Error("act_apply_disabled"), {
         code: "act_apply_disabled",
