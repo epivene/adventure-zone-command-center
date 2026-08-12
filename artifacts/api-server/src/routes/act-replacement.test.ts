@@ -242,6 +242,9 @@ function testApp(
   store: MemoryControlStore,
   configured = true,
   review?: NonNullable<ActReplacementRouteDependencies["review"]>,
+  reportInternalError?: NonNullable<
+    ActReplacementRouteDependencies["reportInternalError"]
+  >,
 ): ReturnType<typeof express> {
   const app = express();
   app.use(express.json());
@@ -256,6 +259,7 @@ function testApp(
           : { configured: false },
       now: () => new Date("2026-08-01T12:03:00.000Z"),
       ...(review ? { review } : {}),
+      ...(reportInternalError ? { reportInternalError } : {}),
     }),
   );
   return app;
@@ -486,6 +490,46 @@ describe("durable status routes", () => {
     expect(foreignDatabase.body).toEqual({ code: "run_not_found" });
     expect(foreignOwner.status).toBe(404);
     expect(foreignOwner.body).toEqual({ code: "run_not_found" });
+  });
+});
+
+describe("Act replacement summary diagnostics", () => {
+  it("reports the failing summary stage using only the underlying database error", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const databaseError = Object.assign(
+      new Error("cannot extract elements from a scalar"),
+      { name: "DatabaseError", code: "22023" },
+    );
+    const wrapper = Object.assign(
+      new Error("Failed query containing values that must not be logged"),
+      { cause: databaseError },
+    );
+    const reportInternalError = vi.fn();
+    const review = workflowReview({
+      workflow: {
+        summarize: vi.fn().mockRejectedValue(wrapper),
+      },
+    });
+
+    const response = await request(
+      testApp(store, true, review, reportInternalError),
+    )
+      .get("/api/migration/act-replacement/runs/latest")
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({ code: "act_replacement_unavailable" });
+    expect(reportInternalError).toHaveBeenCalledWith({
+      stage: "review_workflow_summary",
+      runId: RUN_ID,
+      errorName: "DatabaseError",
+      errorCode: "22023",
+      errorMessage: "cannot extract elements from a scalar",
+    });
+    expect(JSON.stringify(reportInternalError.mock.calls)).not.toContain(
+      "values that must not be logged",
+    );
   });
 });
 
