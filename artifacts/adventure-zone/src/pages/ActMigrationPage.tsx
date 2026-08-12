@@ -8,7 +8,7 @@ import {
 import { ImportSummary } from "@/components/act-replacement/import-summary";
 import {
   ACT_PAGE_SIZES,
-  startSafeApply,
+  applyNext,
   approveSafeDefaults,
   assignReviewParent,
   bulkDecideReviewRecords,
@@ -32,8 +32,10 @@ import {
 } from "@/features/act-replacement/act-replacement-client";
 import {
   APPLY_BATCH_SIZE,
+  applyNextWithTransientRecovery,
   safeImportApprovalRequestKey,
   shouldReuseSafeImportApproval,
+  trackApplyCursorProgress,
 } from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
@@ -475,32 +477,59 @@ export default function ActMigrationPage() {
     setImportConfirmation(null);
     setError(null);
     setNeedsAttention(false);
-    setSessionTotals({
+    const totals: SessionTotals = {
       applied: run.appliedOperationCount,
       alreadyPresent: run.alreadyPresentOperationCount,
       blocked: run.blockedOperationCount,
       failed: run.failedOperationCount,
-    });
+    };
+    setSessionTotals(totals);
     try {
+      let cursorProgress: {
+        cursor: number | null;
+        consecutiveReplays: number;
+      } = { cursor: null, consecutiveReplays: 0 };
       setRun((current) =>
         current ? { ...current, phase: "applying" } : current,
       );
-      await startSafeApply(confirmation.runId, {
-        expectedManifestDigest: confirmation.manifestDigest,
-        approvalRequestKey: confirmation.requestKey,
-        batchSize: APPLY_BATCH_SIZE,
-        ...(confirmation.retryFailed ? { retryFailed: true } : {}),
-      });
-      await refreshRun(confirmation.runId);
-    } catch (caught) {
-      // A lost response is ambiguous: the server may already own the import.
-      // Refresh durable state before showing an error or asking for another click.
-      try {
-        const durable = await refreshRun(confirmation.runId);
-        if (durable.phase === "applying" || isFinished(durable.phase)) return;
-      } catch {
-        // Preserve the original request error when status cannot be refreshed.
+      for (;;) {
+        const result = await applyNextWithTransientRecovery({
+          apply: () =>
+            applyNext(confirmation.runId, {
+              expectedManifestDigest: confirmation.manifestDigest,
+              approvalRequestKey: confirmation.requestKey,
+              batchSize: APPLY_BATCH_SIZE,
+              ...(confirmation.retryFailed ? { retryFailed: true } : {}),
+            }),
+          refreshState: async () => {
+            const durableRun = await refreshRun(confirmation.runId);
+            return {
+              done: isFinished(durableRun.phase),
+            };
+          },
+        });
+        if (!result) return;
+        totals.applied += result.batch.completedCount;
+        totals.alreadyPresent += result.batch.alreadyPresentCount;
+        totals.blocked += result.batch.blockedCount;
+        totals.failed += result.batch.failedCount;
+        setSessionTotals({ ...totals });
+        if (result.requiresReview) {
+          setNeedsAttention(true);
+          await refreshRun(confirmation.runId);
+          return;
+        }
+        if (!result.hasMore) {
+          await refreshRun(confirmation.runId);
+          return;
+        }
+        cursorProgress = trackApplyCursorProgress({
+          previousCursor: cursorProgress.cursor,
+          nextCursor: result.nextCursor,
+          consecutiveReplays: cursorProgress.consecutiveReplays,
+        });
       }
+    } catch (caught) {
       if (errorCode(caught) === "act_apply_disabled") {
         setApplyLocked(true);
         setError("Live import is still safely locked on the server");
