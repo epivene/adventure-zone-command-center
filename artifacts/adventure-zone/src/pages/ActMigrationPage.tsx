@@ -34,6 +34,7 @@ import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
   safeImportApprovalRequestKey,
+  shouldReuseSafeImportApproval,
 } from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
@@ -412,6 +413,18 @@ export default function ActMigrationPage() {
         manifestDigest: run.manifestDigest,
         retryFailed,
       });
+      if (
+        shouldReuseSafeImportApproval({ phase: run.phase, retryFailed })
+      ) {
+        setImportConfirmation({
+          runId: run.runId,
+          manifestDigest: run.manifestDigest,
+          requestKey,
+          approvedOperationCount: run.safeOperationCount,
+          retryFailed,
+        });
+        return;
+      }
       const approval = await approveSafeDefaults(
         run.runId,
         run.manifestDigest,
