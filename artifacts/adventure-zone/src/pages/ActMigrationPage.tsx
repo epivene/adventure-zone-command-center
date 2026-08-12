@@ -32,10 +32,8 @@ import {
 } from "@/features/act-replacement/act-replacement-client";
 import {
   APPLY_BATCH_SIZE,
-  applyNextWithTransientRecovery,
   safeImportApprovalRequestKey,
   shouldReuseSafeImportApproval,
-  trackApplyCursorProgress,
 } from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
