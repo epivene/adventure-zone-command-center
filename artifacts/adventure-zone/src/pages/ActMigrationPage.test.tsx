@@ -201,6 +201,7 @@ describe("ActMigrationPage", () => {
         await Promise.resolve();
       });
       expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    expect(screen.queryByText("apply_cursor_stalled")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -1578,7 +1579,7 @@ describe("ActMigrationPage", () => {
       expect(client.approveSafeDefaults).toHaveBeenCalledWith(
         readyRun().runId,
         digest,
-        `act-safe-${readyRun().runId}-${digest}-apply-52-0-0-0`,
+        `act-safe-${readyRun().runId}-${digest}-apply`,
       ),
     );
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledTimes(3));
@@ -1623,7 +1624,7 @@ describe("ActMigrationPage", () => {
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
     expect(client.applyNext.mock.calls[0][1]).toMatchObject({
       batchSize: 10,
-      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-apply-27-25-0-0`,
+      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-apply`,
     });
     expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty("cursor");
     expect(client.applyNext.mock.calls[0][1]).not.toHaveProperty(
@@ -1751,7 +1752,7 @@ describe("ActMigrationPage", () => {
 
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
     expect(client.applyNext.mock.calls[0][1]).toMatchObject({
-      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-retry-5-0-0-1`,
+      approvalRequestKey: `act-safe-${readyRun().runId}-${digest}-retry`,
       retryFailed: true,
     });
   });
@@ -1766,7 +1767,7 @@ describe("ActMigrationPage", () => {
       .mockResolvedValueOnce(batchResult(20, false));
     client.getRun
       .mockResolvedValueOnce({
-        run: readyRun({ phase: "applying", nextApplyCursor: 10 }),
+        run: readyRun({ phase: "applying", nextApplyCursor: 2_425 }),
       })
       .mockResolvedValue({
         run: readyRun({

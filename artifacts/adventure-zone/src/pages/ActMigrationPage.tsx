@@ -33,6 +33,7 @@ import {
 import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
+  safeImportApprovalRequestKey,
 } from "@/features/act-replacement/safe-import-recovery";
 
 const stages = ["Fetch", "Organize", "Review", "Import", "Finish"] as const;
@@ -106,23 +107,6 @@ function errorCode(error: unknown) {
     if (typeof code === "string") return code;
   }
   return error instanceof Error ? error.message : null;
-}
-
-function safeImportRequestKey(
-  run: ActReplacementWorkflowStatus,
-  retryFailed: boolean,
-) {
-  const mode = retryFailed ? "retry" : "apply";
-  return [
-    "act-safe",
-    run.runId,
-    run.manifestDigest,
-    mode,
-    run.safeOperationCount,
-    run.appliedOperationCount,
-    run.alreadyPresentOperationCount,
-    run.failedOperationCount,
-  ].join("-");
 }
 
 function StageProgress({ active }: { active: number }) {
@@ -423,7 +407,11 @@ export default function ActMigrationPage() {
     if (!run?.manifestDigest || applyLocked || !beginBusy("apply")) return;
     setError(null);
     try {
-      const requestKey = safeImportRequestKey(run, retryFailed);
+      const requestKey = safeImportApprovalRequestKey({
+        runId: run.runId,
+        manifestDigest: run.manifestDigest,
+        retryFailed,
+      });
       const approval = await approveSafeDefaults(
         run.runId,
         run.manifestDigest,
@@ -499,13 +487,8 @@ export default function ActMigrationPage() {
           refreshState: async () => {
             const durableRun = await refreshRun(confirmation.runId);
             return {
-              cursor: durableRun.nextApplyCursor,
               done: isFinished(durableRun.phase),
             };
-          },
-          onRefreshedCursor: (durableCursor) => {
-            cursor = Math.max(cursor, durableCursor);
-            setError(null);
           },
         });
         if (!result) return;

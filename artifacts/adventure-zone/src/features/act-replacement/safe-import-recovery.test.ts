@@ -3,7 +3,36 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APPLY_BATCH_SIZE,
   applyNextWithTransientRecovery,
+  safeImportApprovalRequestKey,
 } from "./safe-import-recovery";
+
+describe("safeImportApprovalRequestKey", () => {
+  it("reuses one approval coordinator after durable import progress changes", () => {
+    const beforeProgress = safeImportApprovalRequestKey({
+      runId: "run-1",
+      manifestDigest: "digest-1",
+      retryFailed: false,
+    });
+    const afterProgress = safeImportApprovalRequestKey({
+      runId: "run-1",
+      manifestDigest: "digest-1",
+      retryFailed: false,
+    });
+
+    expect(beforeProgress).toBe("act-safe-run-1-digest-1-apply");
+    expect(afterProgress).toBe(beforeProgress);
+  });
+
+  it("keeps failed-operation retries separate from the normal import", () => {
+    expect(
+      safeImportApprovalRequestKey({
+        runId: "run-1",
+        manifestDigest: "digest-1",
+        retryFailed: true,
+      }),
+    ).toBe("act-safe-run-1-digest-1-retry");
+  });
+});
 
 describe("safe import transient recovery", () => {
   it("refreshes durable progress before continuing after a lost response", async () => {
@@ -11,21 +40,20 @@ describe("safe import transient recovery", () => {
       .fn<() => Promise<{ nextCursor: number }>>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce({ nextCursor: 20 });
-    const refreshState = vi.fn().mockResolvedValue({ cursor: 10, done: false });
-    const refreshedCursors: number[] = [];
+    const refreshState = vi
+      .fn()
+      .mockResolvedValue({ cursor: 2_425, done: false });
 
     await expect(
       applyNextWithTransientRecovery({
         apply,
         refreshState,
-        onRefreshedCursor: (cursor) => refreshedCursors.push(cursor),
       }),
     ).resolves.toEqual({ nextCursor: 20 });
 
     expect(APPLY_BATCH_SIZE).toBe(10);
     expect(apply).toHaveBeenCalledTimes(2);
     expect(refreshState).toHaveBeenCalledTimes(1);
-    expect(refreshedCursors).toEqual([10]);
   });
 
   it("stops after three consecutive transient apply failures", async () => {
@@ -38,7 +66,6 @@ describe("safe import transient recovery", () => {
       applyNextWithTransientRecovery({
         apply,
         refreshState,
-        onRefreshedCursor: vi.fn(),
       }),
     ).rejects.toThrow("Failed to fetch");
 
@@ -57,7 +84,6 @@ describe("safe import transient recovery", () => {
       applyNextWithTransientRecovery({
         apply,
         refreshState,
-        onRefreshedCursor: vi.fn(),
       }),
     ).rejects.toBe(locked);
 
@@ -75,7 +101,6 @@ describe("safe import transient recovery", () => {
       applyNextWithTransientRecovery({
         apply,
         refreshState,
-        onRefreshedCursor: vi.fn(),
       }),
     ).resolves.toBeNull();
 
