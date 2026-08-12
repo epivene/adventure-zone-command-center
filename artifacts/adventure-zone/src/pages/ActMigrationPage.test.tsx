@@ -201,6 +201,7 @@ describe("ActMigrationPage", () => {
         await Promise.resolve();
       });
       expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument();
+    expect(screen.queryByText("apply_cursor_stalled")).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -1766,7 +1767,7 @@ describe("ActMigrationPage", () => {
       .mockResolvedValueOnce(batchResult(20, false));
     client.getRun
       .mockResolvedValueOnce({
-        run: readyRun({ phase: "applying", nextApplyCursor: 10 }),
+        run: readyRun({ phase: "applying", nextApplyCursor: 2_425 }),
       })
       .mockResolvedValue({
         run: readyRun({
