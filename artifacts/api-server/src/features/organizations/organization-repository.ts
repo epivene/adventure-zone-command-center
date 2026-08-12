@@ -157,6 +157,21 @@ export function buildOrganizationListCondition(
   return and(searchCondition, lastResortCondition, travelLegCondition) ?? undefined;
 }
 
+/** Candidate groups are intentionally name-based; location gaps are common in imported profiles. */
+export function duplicateOrganizationGroupsQuery() {
+  return sql`
+    SELECT
+      lower(trim(name)) AS normalized_name,
+      min(lower(trim(coalesce(city, '')))) AS normalized_city,
+      min(lower(trim(coalesce(region, '')))) AS normalized_region,
+      array_agg(id ORDER BY created_at ASC) AS ids
+    FROM organizations
+    GROUP BY 1
+    HAVING count(*) > 1
+    ORDER BY lower(trim(name))
+  `;
+}
+
 export class DrizzleOrganizationRepository implements OrganizationRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
@@ -395,23 +410,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
   }
 
   async findDuplicates(): Promise<DuplicateOrganizationGroup[]> {
-    // Find groups of organizations sharing the same normalized name + city + region
+    // This is a review list, not an automatic merge. Imported records often have
+    // no location even when an existing same-name profile does.
     const groupRows = await this.database.execute<{
       normalized_name: string;
       normalized_city: string;
       normalized_region: string;
       ids: string[];
-    }>(sql`
-      SELECT
-        lower(trim(name)) AS normalized_name,
-        lower(trim(coalesce(city, ''))) AS normalized_city,
-        lower(trim(coalesce(region, ''))) AS normalized_region,
-        array_agg(id ORDER BY created_at ASC) AS ids
-      FROM organizations
-      GROUP BY 1, 2, 3
-      HAVING count(*) > 1
-      ORDER BY lower(trim(name)), lower(trim(coalesce(city, '')))
-    `);
+    }>(duplicateOrganizationGroupsQuery());
 
     if (!groupRows.rows.length) return [];
 

@@ -586,7 +586,6 @@ describe("ActExtractionWorker", () => {
           {
             id: "note-1",
             subject: "Waiver",
-            body: "Remember the waiver",
           },
         ],
         nextSkip: null,
@@ -618,8 +617,26 @@ describe("ActExtractionWorker", () => {
               targetActRecordId: "contact/1",
             },
           }),
+          expect.objectContaining({
+            streamType: "note_contact",
+            sourceKey: "note-1:contact%2F1",
+            relationshipEvidence: {
+              source: "endpoint",
+              parentKind: "note",
+              parentActRecordId: "note-1",
+              targetKind: "contact",
+              targetActRecordId: "contact/1",
+            },
+          }),
         ],
-        derivedCheckpoints: [],
+        derivedCheckpoints: [
+          expect.objectContaining({
+            streamType: "note",
+            checkpointKind: "detail",
+            partitionKey: "detail:note-1",
+            parentActRecordId: "note-1",
+          }),
+        ],
       }),
     ]);
   });
