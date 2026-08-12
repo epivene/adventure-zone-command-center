@@ -49,6 +49,13 @@ const compatibleTargetTypes = new Set([
   "calling_list_member",
   "activity_association",
 ]);
+const identityTargetTypes = new Set([
+  "organization",
+  "contact",
+  "booking",
+  "calling_list",
+  "activity",
+]);
 const contextClueFamilies = new Set([
   "identity",
   "direct_contact",
@@ -177,14 +184,23 @@ function operationBasis(input: {
 }): AutomaticReviewBasis | null {
   if (!isAutomaticallyImportableOperation(input.operation)) return null;
   const match = object(input.outcome.match);
-  if (
-    input.operation.action === "create" ||
-    input.operation.action === "create_relationship"
-  ) {
+  if (input.operation.action === "create") {
     if (match.kind === "ambiguous") return null;
     return match.kind === "exact"
       ? exactMatchBasis(input.outcome, input.operations)
       : "safe_create";
+  }
+  if (input.operation.action === "create_relationship") {
+    if (match.kind === "ambiguous") return null;
+    if (match.kind === "exact") {
+      return exactMatchBasis(input.outcome, input.operations);
+    }
+    const hasSafeCreateRoot = input.operations.some((operation) =>
+      operation.action === "create" &&
+      identityTargetTypes.has(operation.targetType) &&
+      isAutomaticallyImportableOperation(operation)
+    );
+    return hasSafeCreateRoot ? "safe_create" : null;
   }
   if (
     input.operation.action === "link_existing" ||
