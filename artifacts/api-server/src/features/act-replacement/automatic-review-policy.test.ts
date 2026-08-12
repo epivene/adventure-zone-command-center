@@ -222,6 +222,7 @@ describe("automatic review policy", () => {
     });
     expect(isAutomaticallyApprovedOperation({
       ...relationship,
+      dependencyOperationKeys: ["activity:note-1"],
       payload: { automaticReview: proof },
     })).toBe(true);
   });
