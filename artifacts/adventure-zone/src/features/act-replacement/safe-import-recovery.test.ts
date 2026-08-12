@@ -11,20 +11,20 @@ describe("safe import transient recovery", () => {
       .fn<() => Promise<{ nextCursor: number }>>()
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce({ nextCursor: 20 });
-    const refreshCursor = vi.fn().mockResolvedValue(10);
+    const refreshState = vi.fn().mockResolvedValue({ cursor: 10, done: false });
     const refreshedCursors: number[] = [];
 
     await expect(
       applyNextWithTransientRecovery({
         apply,
-        refreshCursor,
+        refreshState,
         onRefreshedCursor: (cursor) => refreshedCursors.push(cursor),
       }),
     ).resolves.toEqual({ nextCursor: 20 });
 
     expect(APPLY_BATCH_SIZE).toBe(10);
     expect(apply).toHaveBeenCalledTimes(2);
-    expect(refreshCursor).toHaveBeenCalledTimes(1);
+    expect(refreshState).toHaveBeenCalledTimes(1);
     expect(refreshedCursors).toEqual([10]);
   });
 
@@ -32,18 +32,18 @@ describe("safe import transient recovery", () => {
     const apply = vi
       .fn<() => Promise<never>>()
       .mockRejectedValue(new TypeError("Failed to fetch"));
-    const refreshCursor = vi.fn().mockResolvedValue(0);
+    const refreshState = vi.fn().mockResolvedValue({ cursor: 0, done: false });
 
     await expect(
       applyNextWithTransientRecovery({
         apply,
-        refreshCursor,
+        refreshState,
         onRefreshedCursor: vi.fn(),
       }),
     ).rejects.toThrow("Failed to fetch");
 
     expect(apply).toHaveBeenCalledTimes(3);
-    expect(refreshCursor).toHaveBeenCalledTimes(2);
+    expect(refreshState).toHaveBeenCalledTimes(2);
   });
 
   it("does not retry a server-declared apply error", async () => {
@@ -51,17 +51,35 @@ describe("safe import transient recovery", () => {
       code: "act_apply_disabled",
     });
     const apply = vi.fn<() => Promise<never>>().mockRejectedValue(locked);
-    const refreshCursor = vi.fn().mockResolvedValue(0);
+    const refreshState = vi.fn().mockResolvedValue({ cursor: 0, done: false });
 
     await expect(
       applyNextWithTransientRecovery({
         apply,
-        refreshCursor,
+        refreshState,
         onRefreshedCursor: vi.fn(),
       }),
     ).rejects.toBe(locked);
 
     expect(apply).toHaveBeenCalledTimes(1);
-    expect(refreshCursor).not.toHaveBeenCalled();
+    expect(refreshState).not.toHaveBeenCalled();
+  });
+
+  it("does not retry when refresh proves the lost response completed the import", async () => {
+    const apply = vi
+      .fn<() => Promise<{ nextCursor: number }>>()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const refreshState = vi.fn().mockResolvedValue({ cursor: 42, done: true });
+
+    await expect(
+      applyNextWithTransientRecovery({
+        apply,
+        refreshState,
+        onRefreshedCursor: vi.fn(),
+      }),
+    ).resolves.toBeNull();
+
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(refreshState).toHaveBeenCalledTimes(1);
   });
 });
