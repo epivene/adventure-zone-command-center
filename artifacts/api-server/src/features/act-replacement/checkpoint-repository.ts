@@ -39,7 +39,7 @@ const activeRunPhases = [
 ] as const;
 const openCheckpointStates = ["pending", "leased", "retry_wait"] as const;
 const terminalCheckpointStates = ["complete", "unsupported", "failed"] as const;
-export const manualResumeCheckpointStates = ["leased", "retry_wait"] as const;
+export const manualResumeCheckpointStates = ["retry_wait"] as const;
 export type ActResumeDiagnostics = {
   recoveredCheckpointCount: number;
   states: Record<string, number>;
@@ -89,10 +89,7 @@ export interface ActReplacementCheckpointRepository {
     leaseOwner: string;
     now: Date;
   }): Promise<void>;
-  resumeRun(input: {
-    runId: string;
-    now: Date;
-  }): Promise<ActResumeDiagnostics>;
+  resumeRun(input: { runId: string; now: Date }): Promise<ActResumeDiagnostics>;
   markDetailCapabilityUnavailable(input: {
     runId: string;
     checkpointId: string;
@@ -223,6 +220,13 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
           like(actReplacementCheckpoints.partitionKey, "contact-notes:%"),
           eq(actReplacementCheckpoints.errorCode, "not_found"),
         );
+        const expiredLease = and(
+          eq(actReplacementCheckpoints.state, "leased"),
+          or(
+            isNull(actReplacementCheckpoints.leaseExpiresAt),
+            lte(actReplacementCheckpoints.leaseExpiresAt, input.now),
+          ),
+        );
         const recovered = await transaction
           .update(actReplacementCheckpoints)
           .set({
@@ -243,6 +247,7 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
                   actReplacementCheckpoints.state,
                   manualResumeCheckpointStates,
                 ),
+                expiredLease,
                 recoverableContactNotes,
               ),
             ),
@@ -826,13 +831,7 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
           ),
       ).size;
       const hasRecoverableContactNoteFailure = checkpoints.some(
-        ({
-          state,
-          streamType,
-          checkpointKind,
-          partitionKey,
-          errorCode,
-        }) =>
+        ({ state, streamType, checkpointKind, partitionKey, errorCode }) =>
           state === "failed" &&
           streamType === "note" &&
           checkpointKind === "relationship" &&
