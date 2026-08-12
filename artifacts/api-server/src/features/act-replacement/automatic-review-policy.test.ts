@@ -171,7 +171,7 @@ describe("automatic review policy", () => {
     });
   });
 
-  it("proves only link and fill actions for strong context evidence", () => {
+  it("proves link, fill, and relationship actions for strong context evidence", () => {
     const link = rootLink();
     const fill = rootLink({ action: "fill_missing" });
     const relationship = rootLink({
@@ -198,7 +198,7 @@ describe("automatic review policy", () => {
       outcome: outcome(value),
       operations: [link, fill, relationship],
       operation: relationship,
-    })).toMatchObject({ eligible: false, disposition: "auto_resolved" });
+    })).toMatchObject({ eligible: true, disposition: "auto_resolved", basis: "proven_context_match" });
   });
 
   it("fails closed when persisted automatic proof is absent or malformed", () => {
@@ -257,7 +257,7 @@ describe("automatic review policy", () => {
     })).toBe(false);
   });
 
-  it.each(["link_existing", "create", "fill_missing"])(
+  it.each(["link_existing", "create", "fill_missing", "create_relationship"])(
     "accepts a safe-by-default %s operation when pending",
     (action) => {
       expect(isAutomaticallyImportableOperation({ action, safeByDefault: true, status: "pending", targetType: "organization" })).toBe(true);
@@ -273,7 +273,6 @@ describe("automatic review policy", () => {
     { action: "create", safeByDefault: false, status: "pending", targetType: "organization" },
     { action: "create", safeByDefault: true, status: "blocked", targetType: "organization" },
     { action: "create", safeByDefault: true, status: "leased", targetType: "organization" },
-    { action: "create_relationship", safeByDefault: true, status: "pending", targetType: "organization_contact" },
     { action: "record_provenance", safeByDefault: true, status: "pending", targetType: "provenance" },
   ])("rejects a non-importable operation %#", (operation) => {
     expect(isAutomaticallyImportableOperation(operation)).toBe(false);
