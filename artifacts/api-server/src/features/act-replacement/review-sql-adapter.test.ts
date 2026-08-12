@@ -90,8 +90,9 @@ describe("durable review adapter projections", () => {
       sql`select ${approvalOperationSelection.payload}`,
     ).sql;
 
+    expect(rendered).toContain("::jsonb -> 'automaticReview'::text");
     expect(rendered).toContain("?& array['version','eligible','disposition','basis']::text[]");
-    expect(rendered).toContain("- 'version' - 'eligible' - 'disposition' - 'basis'");
+    expect(rendered).toContain("- 'version'::text - 'eligible'::text - 'disposition'::text - 'basis'::text");
     expect(rendered).toContain("->'version') = 'number'");
     expect(rendered).toContain("->'eligible') = 'boolean'");
     expect(rendered).toContain("->'disposition') = 'string'");
