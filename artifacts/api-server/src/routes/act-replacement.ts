@@ -30,6 +30,7 @@ import { projectActReviewDisplay } from "@/features/act-replacement/review-displ
 import { ReviewCommandService } from "@/features/act-replacement/review-command-service";
 import { createProductionReview } from "@/features/act-replacement/production-review";
 import type { ActApplyCoordinator } from "@/features/act-replacement/apply-coordinator";
+import { logger } from "@/lib/logger";
 
 const ownerIdentity = "owner";
 const pageSizeSchema = z.union([
@@ -282,11 +283,20 @@ export interface ActReplacementControlStore {
   ): Promise<readonly ActReplacementAuditRecord[]>;
 }
 
+export type ActReplacementSummaryDiagnostic = {
+  stage: "extraction_summary" | "review_workflow_summary";
+  runId: string;
+  errorName: string;
+  errorCode: string;
+  errorMessage: string;
+};
+
 export type ActReplacementRouteDependencies = {
   store: ActReplacementControlStore;
   getActConfiguration():
     { configured: false } | { configured: true; databaseName: string };
   now(): Date;
+  reportInternalError?(diagnostic: ActReplacementSummaryDiagnostic): void;
   review?: {
     reader: ReviewReader;
     commands: ReviewCommandService;
@@ -421,6 +431,9 @@ const productionDependencies: ActReplacementRouteDependencies = {
       : { configured: false };
   },
   now: () => new Date(),
+  reportInternalError(diagnostic) {
+    logger.error(diagnostic, "Act replacement run summary failed");
+  },
   review: {
     ...createProductionReview(() => {
       const environment = getActEnvironment();
@@ -593,6 +606,46 @@ function safeReviewPage(page: Awaited<ReturnType<typeof readReview>>) {
   };
 }
 
+function safeSummaryDiagnostic(
+  stage: ActReplacementSummaryDiagnostic["stage"],
+  runId: string,
+  error: unknown,
+): ActReplacementSummaryDiagnostic {
+  let underlying = error;
+  const seen = new Set<unknown>();
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (
+      !underlying ||
+      typeof underlying !== "object" ||
+      seen.has(underlying) ||
+      !("cause" in underlying) ||
+      !(underlying as { cause?: unknown }).cause
+    )
+      break;
+    seen.add(underlying);
+    underlying = (underlying as { cause: unknown }).cause;
+  }
+  const record =
+    underlying && typeof underlying === "object"
+      ? (underlying as Record<string, unknown>)
+      : {};
+  const message =
+    typeof record.message === "string"
+      ? record.message.replace(/\s+/g, " ").slice(0, 500)
+      : "unknown_error";
+  return {
+    stage,
+    runId,
+    errorName:
+      typeof record.name === "string" ? record.name : "UnknownError",
+    errorCode:
+      typeof record.code === "string" || typeof record.code === "number"
+        ? String(record.code)
+        : "unknown",
+    errorMessage: message,
+  };
+}
+
 function handleRouteError(error: unknown, res: Response) {
   if (error instanceof ActReplacementRunNotFoundError) {
     runNotFound(res);
@@ -627,14 +680,34 @@ export function createActReplacementRouter(
       res.status(503).json({ code: "review_unavailable" });
     return dependencies.review;
   };
+  const reportSummaryFailure = (
+    stage: ActReplacementSummaryDiagnostic["stage"],
+    runId: string,
+    error: unknown,
+  ) => {
+    dependencies.reportInternalError?.(
+      safeSummaryDiagnostic(stage, runId, error),
+    );
+  };
   const summarizeRun = async (runId: string) => {
-    const run = await dependencies.store.summarize(runId);
+    let run: ActReplacementStatus;
+    try {
+      run = await dependencies.store.summarize(runId);
+    } catch (error) {
+      reportSummaryFailure("extraction_summary", runId, error);
+      throw error;
+    }
     if (!dependencies.review) return run;
-    return {
-      ...run,
-      ...(await dependencies.review.workflow.summarize(runId)),
-      applyEnabled: process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
-    };
+    try {
+      return {
+        ...run,
+        ...(await dependencies.review.workflow.summarize(runId)),
+        applyEnabled: process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
+      };
+    } catch (error) {
+      reportSummaryFailure("review_workflow_summary", runId, error);
+      throw error;
+    }
   };
   const ownedSource = async (
     runId: string,
