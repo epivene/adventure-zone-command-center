@@ -195,7 +195,7 @@ export default function ActMigrationPage() {
   }, []);
 
   useEffect(() => {
-    if (!run || !["extracting", "organizing"].includes(run.phase)) return;
+    if (!run || !["extracting", "organizing", "applying"].includes(run.phase)) return;
     const runId = run.runId;
     let current = true;
     let polling = false;

@@ -1496,6 +1496,74 @@ describe("owner import workflow", () => {
     expect(applyNext).not.toHaveBeenCalled();
   });
 
+  it("continues all safe batches on the server after returning 202", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const applyNext = vi
+      .fn()
+      .mockResolvedValueOnce({ hasMore: true, requiresReview: false })
+      .mockResolvedValueOnce({ hasMore: false, requiresReview: false });
+    const review = workflowReview({ applyCoordinator: { applyNext } });
+    process.env.ACT_MIGRATION_APPLY_ENABLED = "true";
+
+    const response = await request(testApp(store, true, review))
+      .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-all`)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({
+        expectedManifestDigest: MANIFEST_DIGEST,
+        approvalRequestKey: "apply-one",
+        batchSize: 10,
+      });
+
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({ accepted: true, started: true });
+    await vi.waitFor(() => expect(applyNext).toHaveBeenCalledTimes(2));
+    expect(applyNext).toHaveBeenNthCalledWith(1, {
+      runId: RUN_ID,
+      expectedManifestDigest: MANIFEST_DIGEST,
+      approvalRequestKey: "apply-one",
+      requestedBy: "owner",
+      batchSize: 10,
+    });
+  });
+
+  it("reattaches repeated resume requests to the active server job", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    let finish!: (value: { hasMore: boolean; requiresReview: boolean }) => void;
+    const applyNext = vi.fn(
+      () =>
+        new Promise<{ hasMore: boolean; requiresReview: boolean }>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const app = testApp(
+      store,
+      true,
+      workflowReview({ applyCoordinator: { applyNext } }),
+    );
+    process.env.ACT_MIGRATION_APPLY_ENABLED = "true";
+    const send = () =>
+      request(app)
+        .post(`/api/migration/act-replacement/runs/${RUN_ID}/apply-all`)
+        .set("Authorization", `Bearer ${ownerToken()}`)
+        .send({
+          expectedManifestDigest: MANIFEST_DIGEST,
+          approvalRequestKey: "apply-one",
+          batchSize: 10,
+        });
+
+    const first = await send();
+    const repeated = await send();
+    finish({ hasMore: false, requiresReview: false });
+    delete process.env.ACT_MIGRATION_APPLY_ENABLED;
+
+    expect(first.body).toEqual({ accepted: true, started: true });
+    expect(repeated.body).toEqual({ accepted: true, started: false });
+    expect(applyNext).toHaveBeenCalledOnce();
+  });
+
   it("keeps next-batch writes locked when the server apply flag is disabled", async () => {
     const store = new MemoryControlStore();
     addRun(store);
