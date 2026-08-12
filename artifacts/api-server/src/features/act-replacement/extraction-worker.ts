@@ -544,7 +544,7 @@ export class ActExtractionWorker {
         if (!checkpoint.parentActRecordId || !isActPage(fetched)) {
           throw new ActApiError("invalid_response", false);
         }
-        const items = parseRootSourceRecords({
+        const notes = parseRootSourceRecords({
           streamType: "note",
           records: fetched.items,
           queryMode: fetched.queryMode,
@@ -558,9 +558,38 @@ export class ActExtractionWorker {
             targetActRecordId: checkpoint.parentActRecordId,
           },
         }));
+        const relationships = notes.flatMap((item) =>
+          item.actRecordId
+            ? parseRelationshipSourceRecords({
+                streamType: "note_contact",
+                parentKind: "note",
+                parentId: item.actRecordId,
+                targetKind: "contact",
+                records: [{ id: checkpoint.parentActRecordId }],
+              })
+            : [],
+        );
+        const derivedCheckpoints: DerivedCheckpointSpec[] = notes.flatMap(
+          (item) =>
+            item.actRecordId
+              ? [{
+                  streamType: "note",
+                  checkpointKind: "detail",
+                  partitionKey: `detail:${encodeURIComponent(item.actRecordId)}`,
+                  requiredness: "required",
+                  parentSourceRecordId: null,
+                  parentActRecordId: item.actRecordId,
+                  sourceRecordId: null,
+                  nextSkip: 0,
+                  pageSize: checkpoint.pageSize,
+                  queryMode: "plain",
+                  deriveDetails: false,
+                }]
+              : [],
+        );
         return {
-          items,
-          derivedCheckpoints: [],
+          items: [...notes, ...relationships],
+          derivedCheckpoints,
           nextSkip: fetched.nextSkip,
           queryMode: fetched.queryMode,
         };
