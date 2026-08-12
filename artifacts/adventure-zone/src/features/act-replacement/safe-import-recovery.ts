@@ -16,8 +16,7 @@ export function safeImportApprovalRequestKey(input: {
 
 type RecoveryInput<Result> = {
   apply: () => Promise<Result>;
-  refreshState: () => Promise<{ cursor: number; done: boolean }>;
-  onRefreshedCursor: (cursor: number) => void;
+  refreshState: () => Promise<{ done: boolean }>;
 };
 
 function isTransientApplyError(error: unknown) {
@@ -30,7 +29,6 @@ function isTransientApplyError(error: unknown) {
 export async function applyNextWithTransientRecovery<Result>({
   apply,
   refreshState,
-  onRefreshedCursor,
 }: RecoveryInput<Result>): Promise<Result | null> {
   for (let attempt = 1; attempt <= MAX_TRANSIENT_APPLY_ATTEMPTS; attempt += 1) {
     try {
@@ -43,7 +41,6 @@ export async function applyNextWithTransientRecovery<Result>({
         throw error;
       }
       const refreshed = await refreshState();
-      onRefreshedCursor(refreshed.cursor);
       if (refreshed.done) return null;
     }
   }
