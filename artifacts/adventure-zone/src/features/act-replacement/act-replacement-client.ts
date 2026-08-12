@@ -508,3 +508,8 @@ export const applyNext = (runId: string, body: ApplyNextRequest) =>
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/apply-next`,
     { method: "POST", body: JSON.stringify(body) },
   );
+export const startSafeApply = (runId: string, body: ApplyNextRequest) =>
+  request<{ accepted: true; started: boolean }>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/apply-all`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
