@@ -201,6 +201,31 @@ describe("automatic review policy", () => {
     })).toMatchObject({ eligible: true, disposition: "auto_resolved", basis: "proven_context_match" });
   });
 
+  it("proves a relationship for a safely created ACT note", () => {
+    const create = rootLink({ action: "create", targetType: "activity" });
+    const relationship = rootLink({
+      action: "create_relationship",
+      targetType: "activity_association",
+    });
+    const value = { kind: "none", reason: "no_candidate" };
+    const proof = automaticReviewProof({
+      outcome: outcome(value, "ready"),
+      operations: [create, relationship],
+      operation: relationship,
+    });
+
+    expect(proof).toEqual({
+      version: 1,
+      eligible: true,
+      disposition: "safe_ready",
+      basis: "safe_create",
+    });
+    expect(isAutomaticallyApprovedOperation({
+      ...relationship,
+      payload: { automaticReview: proof },
+    })).toBe(true);
+  });
+
   it("fails closed when persisted automatic proof is absent or malformed", () => {
     expect(isAutomaticallyApprovedOperation({
       ...rootLink(),
