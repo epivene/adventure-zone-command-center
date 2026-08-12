@@ -304,7 +304,7 @@ describe("relationship review decisions", () => {
       requestedBy: "owner",
     });
     expect(approval.approvedOperationIds).toContain("activity:timeline-source");
-    expect(approval.approvedOperationIds).not.toEqual(expect.arrayContaining([
+    expect(approval.approvedOperationIds).toEqual(expect.arrayContaining([
       expect.stringMatching(/^activity_association:timeline-source:/),
     ]));
   });
