@@ -28,6 +28,7 @@ export type AutomaticReviewOperation = {
 
 type ProofBearingOperation = AutomaticReviewOperation & {
   automaticReview?: unknown;
+  dependencyOperationKeys?: unknown;
   payload?: unknown;
 };
 
@@ -309,6 +310,16 @@ export function isAutomaticallyApprovedOperation(
     proof?.eligible !== true ||
     !compatibleTargetTypes.has(operation.targetType) ||
     !isAutomaticallyImportableOperation(operation)
+  ) {
+    return false;
+  }
+  if (
+    operation.action === "create_relationship" &&
+    (!Array.isArray(operation.dependencyOperationKeys) ||
+      operation.dependencyOperationKeys.length === 0 ||
+      operation.dependencyOperationKeys.some((key) =>
+        typeof key !== "string" || key.trim() === ""
+      ))
   ) {
     return false;
   }
