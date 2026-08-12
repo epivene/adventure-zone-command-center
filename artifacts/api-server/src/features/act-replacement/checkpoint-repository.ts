@@ -89,10 +89,7 @@ export interface ActReplacementCheckpointRepository {
     leaseOwner: string;
     now: Date;
   }): Promise<void>;
-  resumeRun(input: {
-    runId: string;
-    now: Date;
-  }): Promise<ActResumeDiagnostics>;
+  resumeRun(input: { runId: string; now: Date }): Promise<ActResumeDiagnostics>;
   markDetailCapabilityUnavailable(input: {
     runId: string;
     checkpointId: string;
@@ -167,9 +164,9 @@ function checkpointKindRank(
 ) {
   return sql<number>`case ${column}
     when 'list' then 0
-    when 'detail' then 1
-    when 'plain_list_fallback' then 2
-    when 'relationship' then 3
+    when 'relationship' then 1
+    when 'detail' then 2
+    when 'plain_list_fallback' then 3
     else 4 end`;
 }
 
@@ -398,8 +395,8 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
           .where(and(eq(actReplacementRuns.phase, "extracting"), eligible))
           .orderBy(
             sql`case when ${actReplacementCheckpoints.requiredness} = 'required' then 0 else 1 end`,
-            rootRank(actReplacementCheckpoints.streamType),
             checkpointKindRank(actReplacementCheckpoints.checkpointKind),
+            rootRank(actReplacementCheckpoints.streamType),
             asc(actReplacementCheckpoints.createdAt),
             asc(actReplacementCheckpoints.partitionKey),
             asc(actReplacementCheckpoints.id),
@@ -834,13 +831,7 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
           ),
       ).size;
       const hasRecoverableContactNoteFailure = checkpoints.some(
-        ({
-          state,
-          streamType,
-          checkpointKind,
-          partitionKey,
-          errorCode,
-        }) =>
+        ({ state, streamType, checkpointKind, partitionKey, errorCode }) =>
           state === "failed" &&
           streamType === "note" &&
           checkpointKind === "relationship" &&
