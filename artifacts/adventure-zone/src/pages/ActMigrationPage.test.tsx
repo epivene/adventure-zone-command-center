@@ -1614,6 +1614,7 @@ describe("ActMigrationPage", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Resume safe import" }),
     );
+    expect(client.approveSafeDefaults).not.toHaveBeenCalled();
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "27 safe operations will be processed automatically in small batches.",
     );
@@ -1632,7 +1633,7 @@ describe("ActMigrationPage", () => {
     );
   });
 
-  it("resets the progress cursor when a resumed run creates a fresh approval coordinator", async () => {
+  it("continues a resumed run with its existing approval coordinator", async () => {
     client.getLatestRun.mockResolvedValue({
       run: readyRun({
         phase: "applying",
@@ -1657,6 +1658,7 @@ describe("ActMigrationPage", () => {
       await screen.findByRole("button", { name: "Resume safe import" }),
     );
     await screen.findByRole("dialog");
+    expect(client.approveSafeDefaults).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("button", { name: "Yes, import safe records" }),
     );
