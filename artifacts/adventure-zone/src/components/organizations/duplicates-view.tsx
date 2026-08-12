@@ -252,12 +252,30 @@ function initialPrimaryIds(groups: DuplicateGroup[]) {
   );
 }
 
+function reconcilePrimaryIds(
+  current: Record<string, string>,
+  groups: DuplicateGroup[],
+) {
+  return Object.fromEntries(
+    groups.map((group) => {
+      if (!(group.normalizedName in current)) {
+        return [group.normalizedName, group.organizations[0]?.id ?? ""];
+      }
+      const selected = current[group.normalizedName];
+      const selectedStillExists = group.organizations.some(
+        (organization) => organization.id === selected,
+      );
+      return [group.normalizedName, selectedStillExists ? selected : ""];
+    }),
+  );
+}
+
 export function DuplicatesView({
   groups,
   onRefresh,
 }: {
   groups: DuplicateGroup[];
-  onRefresh: () => void | Promise<void>;
+  onRefresh: () => Promise<DuplicateGroup[] | null>;
 }) {
   const [localGroups, setLocalGroups] = useState(groups);
   const [primaryIds, setPrimaryIds] = useState<Record<string, string>>(() =>
@@ -269,24 +287,16 @@ export function DuplicatesView({
   const [bulkError, setBulkError] = useState<BulkDuplicateMergeError | null>(
     null,
   );
+  const [reconciling, setReconciling] = useState(false);
+  const [reconciliationError, setReconciliationError] = useState<string | null>(
+    null,
+  );
+  const [canResume, setCanResume] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     setLocalGroups(groups);
-    setPrimaryIds((current) =>
-      Object.fromEntries(
-        groups.map((group) => {
-          const selected = current[group.normalizedName];
-          const selectedStillExists = group.organizations.some(
-            (organization) => organization.id === selected,
-          );
-          return [
-            group.normalizedName,
-            selectedStillExists ? selected : (group.organizations[0]?.id ?? ""),
-          ];
-        }),
-      ),
-    );
+    setPrimaryIds((current) => reconcilePrimaryIds(current, groups));
   }, [groups]);
 
   function handleMerged(groupName: string) {
@@ -296,10 +306,29 @@ export function DuplicatesView({
     void onRefresh();
   }
 
+  async function reconcileAfterFailure() {
+    setReconciling(true);
+    setReconciliationError(null);
+    setCanResume(false);
+    const refreshedGroups = await onRefresh();
+    if (refreshedGroups === null) {
+      setReconciliationError(
+        "Could not confirm which merges reached the server. Check your connection and retry the status refresh.",
+      );
+    } else {
+      setLocalGroups(refreshedGroups);
+      setPrimaryIds((current) => reconcilePrimaryIds(current, refreshedGroups));
+      setCanResume(true);
+    }
+    setReconciling(false);
+  }
+
   async function runBulkMerge() {
     const pendingGroups = [...localGroups];
     setShowBulkDialog(false);
     setBulkError(null);
+    setCanResume(false);
+    setReconciliationError(null);
     setBulkProgress({ completed: 0, total: pendingGroups.length });
     setBulkMerging(true);
 
@@ -323,6 +352,7 @@ export function DuplicatesView({
         },
       );
       toast({ title: "All duplicate profiles were merged" });
+      void onRefresh();
     } catch (error) {
       const mergeError =
         error instanceof BulkDuplicateMergeError
@@ -334,11 +364,15 @@ export function DuplicatesView({
               cause: error,
             });
       setBulkError(mergeError);
+      await reconcileAfterFailure();
     } finally {
       setBulkMerging(false);
-      void onRefresh();
     }
   }
+
+  const missingPrimaryGroup = localGroups.find(
+    (group) => !primaryIds[group.normalizedName],
+  );
 
   if (!localGroups.length && !bulkMerging) {
     return (
@@ -374,12 +408,26 @@ export function DuplicatesView({
         </div>
         {bulkMerging ? (
           <p className="font-bold text-orange-700" aria-live="polite">
-            Merging {bulkProgress.completed} of {bulkProgress.total}
+            {reconciling
+              ? "Checking server status…"
+              : `Merging ${bulkProgress.completed} of ${bulkProgress.total}`}
           </p>
         ) : bulkError ? (
-          <button className="button-primary" onClick={runBulkMerge}>
-            Resume remaining merges
-          </button>
+          reconciliationError ? (
+            <button className="button-primary" onClick={reconcileAfterFailure}>
+              Retry status refresh
+            </button>
+          ) : (
+            <button
+              className="button-primary"
+              disabled={!canResume || Boolean(missingPrimaryGroup)}
+              onClick={runBulkMerge}
+            >
+              {reconciling
+                ? "Checking server status…"
+                : "Resume remaining merges"}
+            </button>
+          )
         ) : (
           <button
             className="button-primary"
@@ -405,6 +453,16 @@ export function DuplicatesView({
               ? bulkError.cause.message
               : "Unknown error"}
           </p>
+          {reconciliationError ? (
+            <p className="mt-2 text-sm font-semibold text-rose-800">
+              {reconciliationError}
+            </p>
+          ) : missingPrimaryGroup ? (
+            <p className="mt-2 text-sm font-semibold text-rose-800">
+              The previous Primary for “{missingPrimaryGroup.normalizedName}” is
+              no longer available. Choose a Primary below before resuming.
+            </p>
+          ) : null}
         </div>
       )}
 
