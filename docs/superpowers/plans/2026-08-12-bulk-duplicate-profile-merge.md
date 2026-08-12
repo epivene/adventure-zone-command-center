@@ -1,6 +1,6 @@
 # Bulk Duplicate Profile Merge Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a confirmed, resumable one-click action that sequentially merges every duplicate profile group into the profile already marked Primary.
 
@@ -28,17 +28,17 @@
 - Consumes: `DuplicateGroup`-shaped objects containing `normalizedName` and `organizations[].id`.
 - Produces: `mergeDuplicateGroups(groups, primaryIds, merge, onProgress): Promise<void>` and `BulkDuplicateMergeError` with `groupName`, `completed`, `total`, and `cause`.
 
-- [ ] **Step 1: Write the failing sequential-success test**
+- [x] **Step 1: Write the failing sequential-success test**
 
 Create fixtures for two literal groups and deferred merge promises. Assert that only the first request starts, its payload is `{ primaryId: "primary-a", duplicateIds: ["duplicate-a"] }`, and the second request does not start until the first resolves. Then assert literal progress events `[{ completed: 1, total: 2 }, { completed: 2, total: 2 }]`.
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `pnpm --filter @workspace/adventure-zone exec vitest run src/features/organizations/bulk-duplicate-merge.test.ts`
 
 Expected: FAIL because `bulk-duplicate-merge.ts` does not exist.
 
-- [ ] **Step 3: Implement the minimal queue**
+- [x] **Step 3: Implement the minimal queue**
 
 Implement the following public contract:
 
@@ -63,19 +63,19 @@ export async function mergeDuplicateGroups(
 
 For each group, read `primaryIds[group.normalizedName]`, reject a missing/nonmember primary, derive every other ID as `duplicateIds`, await `merge`, then report progress.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the focused Vitest command from Step 2. Expected: PASS.
 
-- [ ] **Step 5: Add the failing stop-on-error test**
+- [x] **Step 5: Add the failing stop-on-error test**
 
 Have the second merge reject with `new Error("offline")`. Assert the third request never starts and the thrown `BulkDuplicateMergeError` contains the literal second group name, `completed: 1`, and `total: 3`.
 
-- [ ] **Step 6: Verify RED, implement the typed error, and verify GREEN**
+- [x] **Step 6: Verify RED, implement the typed error, and verify GREEN**
 
 Run the focused test before and after implementation. Expected before: the raw error lacks progress fields. Expected after: all runner tests pass.
 
-- [ ] **Step 7: Commit the runner and tests**
+- [x] **Step 7: Commit the runner and tests**
 
 Commit message: `feat: add sequential duplicate merge runner`
 
@@ -91,25 +91,25 @@ Commit message: `feat: add sequential duplicate merge runner`
 - Consumes: `mergeDuplicateGroups` and `BulkDuplicateMergeError` from Task 1; existing `apiPost("/organizations/merge", request)`.
 - Produces: controlled per-group primary selection plus **Merge all N groups**, confirmation, `Merging X of N`, failure details, and **Resume remaining merges** behavior.
 
-- [ ] **Step 1: Write the failing confirmation-cancel test**
+- [x] **Step 1: Write the failing confirmation-cancel test**
 
 Render two duplicate groups with a hoisted `apiPost` mock. Click **Merge all 2 groups**, assert a dialog explains that linked records move before redundant profiles are removed, click **Cancel**, and assert no POST occurs.
 
-- [ ] **Step 2: Run the component test and verify RED**
+- [x] **Step 2: Run the component test and verify RED**
 
 Run: `pnpm --filter @workspace/adventure-zone exec vitest run src/components/organizations/duplicates-view.test.tsx`
 
 Expected: FAIL because the bulk action is absent.
 
-- [ ] **Step 3: Lift primary state and add the bulk confirmation**
+- [x] **Step 3: Lift primary state and add the bulk confirmation**
 
 In `DuplicatesView`, initialize a `Record<normalizedName, primaryId>` from each group's first organization. Make `DuplicateGroupCard` receive controlled `primaryId`, `onPrimaryChange`, and `disabled` props. Add a bulk confirmation dialog and disable radio buttons plus individual merge buttons while bulk processing is active.
 
-- [ ] **Step 4: Verify the cancellation test passes**
+- [x] **Step 4: Verify the cancellation test passes**
 
 Run the component test. Expected: PASS with zero POST calls after cancel.
 
-- [ ] **Step 5: Write the failing completion/progress test**
+- [x] **Step 5: Write the failing completion/progress test**
 
 Select the second profile as Primary in the first group, start and confirm bulk merge, and use deferred POST promises to assert:
 
@@ -123,19 +123,19 @@ expect(screen.getByText("Merging 0 of 2")).toBeInTheDocument();
 
 Resolve each request in turn, assert `Merging 1 of 2`, then the success state with no duplicate cards remaining.
 
-- [ ] **Step 6: Verify RED, implement queue integration, and verify GREEN**
+- [x] **Step 6: Verify RED, implement queue integration, and verify GREEN**
 
 Call `mergeDuplicateGroups` with a merge callback that delegates to `apiPost`. After each progress event, remove the completed group by `normalizedName`, update counters, and keep all editing controls disabled. On success, show a completion toast and call `onRefresh`.
 
-- [ ] **Step 7: Write the failing failure-and-resume test**
+- [x] **Step 7: Write the failing failure-and-resume test**
 
 Make group one succeed and group two fail. Assert group three was not posted, the UI reports the failed group and **1 of 3 completed**, and **Resume remaining merges** is shown. Click Resume, confirm only groups two and three are submitted, and assert the run reaches completion.
 
-- [ ] **Step 8: Verify RED, implement failure/resume state, and verify GREEN**
+- [x] **Step 8: Verify RED, implement failure/resume state, and verify GREEN**
 
 Catch `BulkDuplicateMergeError`, preserve the remaining local groups, expose the failed group/error text, call `onRefresh`, and have Resume take a fresh snapshot of the remaining groups. Re-run the focused component test until all cases pass.
 
-- [ ] **Step 9: Commit the UI and tests**
+- [x] **Step 9: Commit the UI and tests**
 
 Commit message: `feat: merge all duplicate profiles into primaries`
 
@@ -151,25 +151,25 @@ Commit message: `feat: merge all duplicate profiles into primaries`
 - Consumes: existing `loadDuplicates` and `DuplicatesView` props.
 - Produces: background duplicate refreshes that do not replace an already-loaded cleanup view with the scanning placeholder.
 
-- [ ] **Step 1: Write the failing background-refresh test**
+- [x] **Step 1: Write the failing background-refresh test**
 
 Mock `/organizations/duplicates` with an initial resolved group list and a deferred second response. Open **Find Duplicates**, wait for **Merge all 1 group**, trigger `onRefresh` through the rendered view, and assert the duplicate controls remain visible while the second GET is pending.
 
-- [ ] **Step 2: Run the focused page test and verify RED**
+- [x] **Step 2: Run the focused page test and verify RED**
 
 Run: `pnpm --filter @workspace/adventure-zone exec vitest run src/pages/OrganizationsPage.test.tsx`
 
 Expected: FAIL because `dupLoading` currently replaces the loaded duplicate view with **Scanning for duplicates…**.
 
-- [ ] **Step 3: Keep loaded groups mounted during background refresh**
+- [x] **Step 3: Keep loaded groups mounted during background refresh**
 
 Render the scanning placeholder only when `dupLoading && dupGroups === null`. When groups already exist, continue rendering `DuplicatesView` while `loadDuplicates` updates them in the background. Pass an async-compatible `onRefresh` without changing the API endpoint.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the focused page test. Expected: PASS.
 
-- [ ] **Step 5: Commit the page refresh behavior**
+- [x] **Step 5: Commit the page refresh behavior**
 
 Commit message: `fix: preserve duplicate merge progress during refresh`
 
@@ -181,7 +181,7 @@ Commit message: `fix: preserve duplicate merge progress during refresh`
 - Verify all files changed in Tasks 1-3.
 - Update the branch plan checkboxes as completed.
 
-- [ ] **Step 1: Run focused frontend tests**
+- [x] **Step 1: Run focused frontend tests**
 
 Run:
 
@@ -194,13 +194,13 @@ pnpm --filter @workspace/adventure-zone exec vitest run \
 
 Expected: all focused tests pass without unhandled rejections.
 
-- [ ] **Step 2: Run the full frontend test suite**
+- [x] **Step 2: Run the full frontend test suite**
 
 Run: `pnpm --filter @workspace/adventure-zone exec vitest run`
 
 Expected: all frontend tests pass.
 
-- [ ] **Step 3: Run typecheck and production builds**
+- [x] **Step 3: Run typecheck and production builds**
 
 Run:
 
@@ -212,14 +212,14 @@ pnpm --filter @workspace/api-server build
 
 Expected: all commands exit 0. If the known unrelated API test-fixture type error remains, report it explicitly rather than attributing it to this change.
 
-- [ ] **Step 4: Review the exact diff**
+- [x] **Step 4: Review the exact diff**
 
 Confirm there are no API route/schema changes, no database migration, no parallel merge calls, and no unrelated formatting changes.
 
-- [ ] **Step 5: Request code review and address Important findings**
+- [x] **Step 5: Request code review and address Important findings**
 
 Review the branch against the approved design, with special attention to stale group indices, lost-response retries, controlled primary selection, and mobile disconnect behavior.
 
-- [ ] **Step 6: Publish and merge**
+- [x] **Step 6: Publish and merge**
 
 Push `agent/bulk-duplicate-profile-merge`, open a PR to `main`, include test/build evidence, and merge after review passes.
