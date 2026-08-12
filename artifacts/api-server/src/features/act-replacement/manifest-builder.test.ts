@@ -231,8 +231,9 @@ describe("buildActOrganizeManifest", () => {
       basis: "not_automatically_safe",
     });
     expect(automaticProof("contact-child", "create_relationship")).toMatchObject({
-      eligible: false,
-      basis: "not_automatically_safe",
+      eligible: true,
+      disposition: "safe_ready",
+      basis: "safe_create",
     });
     expect(automaticProof("proven-link", "record_provenance")).toMatchObject({
       eligible: false,

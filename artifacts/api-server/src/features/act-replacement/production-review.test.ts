@@ -164,10 +164,10 @@ describe("durable production workflow projection", () => {
     ).sql;
 
     expect(rendered).toContain(
-      "when jsonb_typeof(\"act_replacement_apply_operations\".\"payload\"->'automaticReview') = 'object' then case",
+      "when jsonb_typeof(((\"act_replacement_apply_operations\".\"payload\")::jsonb -> 'automaticReview'::text)) = 'object' then case",
     );
     expect(rendered).toContain("?& array['version','eligible','disposition','basis']::text[]");
-    expect(rendered).toContain("- 'version' - 'eligible' - 'disposition' - 'basis'");
+    expect(rendered).toContain("- 'version'::text - 'eligible'::text - 'disposition'::text - 'basis'::text");
     expect(rendered).toContain("jsonb_typeof");
     expect(rendered).toContain("->'version') = 'number'");
     expect(rendered).toContain("->'eligible') = 'boolean'");

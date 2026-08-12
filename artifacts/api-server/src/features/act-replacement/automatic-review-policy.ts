@@ -28,6 +28,7 @@ export type AutomaticReviewOperation = {
 
 type ProofBearingOperation = AutomaticReviewOperation & {
   automaticReview?: unknown;
+  dependencyOperationKeys?: unknown;
   payload?: unknown;
 };
 
@@ -36,8 +37,20 @@ const automaticallyImportableActions = new Set([
   "link_existing",
   "create",
   "fill_missing",
+  "create_relationship",
 ]);
 const compatibleTargetTypes = new Set([
+  "organization",
+  "contact",
+  "booking",
+  "calling_list",
+  "activity",
+  "organization_contact",
+  "booking_contact",
+  "calling_list_member",
+  "activity_association",
+]);
+const identityTargetTypes = new Set([
   "organization",
   "contact",
   "booking",
@@ -173,9 +186,22 @@ function operationBasis(input: {
   if (!isAutomaticallyImportableOperation(input.operation)) return null;
   const match = object(input.outcome.match);
   if (input.operation.action === "create") {
-    return match.kind === "exact" || match.kind === "ambiguous"
-      ? null
+    if (match.kind === "ambiguous") return null;
+    return match.kind === "exact"
+      ? exactMatchBasis(input.outcome, input.operations)
       : "safe_create";
+  }
+  if (input.operation.action === "create_relationship") {
+    if (match.kind === "ambiguous") return null;
+    if (match.kind === "exact") {
+      return exactMatchBasis(input.outcome, input.operations);
+    }
+    const hasSafeCreateRoot = input.operations.some((operation) =>
+      operation.action === "create" &&
+      identityTargetTypes.has(operation.targetType) &&
+      isAutomaticallyImportableOperation(operation)
+    );
+    return hasSafeCreateRoot ? "safe_create" : null;
   }
   if (
     input.operation.action === "link_existing" ||
@@ -287,9 +313,21 @@ export function isAutomaticallyApprovedOperation(
   ) {
     return false;
   }
+  if (
+    operation.action === "create_relationship" &&
+    (!Array.isArray(operation.dependencyOperationKeys) ||
+      operation.dependencyOperationKeys.length === 0 ||
+      operation.dependencyOperationKeys.some((key) =>
+        typeof key !== "string" || key.trim() === ""
+      ))
+  ) {
+    return false;
+  }
   return proof.basis === "safe_create"
-    ? operation.action === "create"
-    : operation.action === "link_existing" || operation.action === "fill_missing";
+    ? operation.action === "create" || operation.action === "create_relationship"
+    : operation.action === "link_existing"
+      || operation.action === "fill_missing"
+      || operation.action === "create_relationship";
 }
 
 export function automaticReviewDisposition(input: {

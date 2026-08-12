@@ -433,22 +433,72 @@ export function manifestSourcesFromArchiveRows(input: { rows: readonly ArchivedO
       : { kind: "none", reason: "organization_normalization_failed" }));
   }
   const contactMatches = new Map<string, MatchResult>();
-  for (const row of roots.filter((candidate) => candidate.streamType === "contact")) {
-    const normalized = normalizedBySource.get(row.sourceRecordId)!;
-    const companySourceIds = baseRelationshipsForRow(row)?.organizationSourceIds ?? [];
-    const resolvedCompanyIds = uniqueSorted(companySourceIds.flatMap((sourceId) => {
-      const match = companyMatches.get(sourceId);
-      return match?.kind === "exact" ? [match.localId] : [];
-    }));
-    contactMatches.set(row.sourceRecordId, authoritativeOr(row, () => normalized.ok && normalized.value.kind === "contact"
-      ? matchContact({
-          ...normalized.value,
-          sourceRecordId: row.sourceRecordId,
-          resolvedOrganizationId: resolvedCompanyIds.length === 1 ? resolvedCompanyIds[0] : null,
-          externalLinks: input.localCandidates?.externalLinks,
-        }, input.localCandidates?.contacts ?? [], { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
-      : { kind: "none", reason: "contact_normalization_failed" }));
+  const refreshContactMatches = () => {
+    for (const row of roots.filter((candidate) => candidate.streamType === "contact")) {
+      const normalized = normalizedBySource.get(row.sourceRecordId)!;
+      const companySourceIds = baseRelationshipsForRow(row)?.organizationSourceIds ?? [];
+      const resolvedCompanyIds = uniqueSorted(companySourceIds.flatMap((sourceId) => {
+        const match = companyMatches.get(sourceId);
+        return match?.kind === "exact" ? [match.localId] : [];
+      }));
+      contactMatches.set(row.sourceRecordId, authoritativeOr(row, () => normalized.ok && normalized.value.kind === "contact"
+        ? matchContact({
+            ...normalized.value,
+            sourceRecordId: row.sourceRecordId,
+            resolvedOrganizationId: resolvedCompanyIds.length === 1 ? resolvedCompanyIds[0] : null,
+            externalLinks: input.localCandidates?.externalLinks,
+          }, input.localCandidates?.contacts ?? [], { sourceDatabaseKey: input.sourceDatabaseKey, sourceEntityType: row.streamType, sourceActRecordId: row.actRecordId })
+        : { kind: "none", reason: "contact_normalization_failed" }));
+    }
+  };
+  const localContactById = new Map(
+    (input.localCandidates?.contacts ?? []).map((contact) => [contact.id, contact] as const),
+  );
+  const contactSourceIdsByCompany = new Map<string, string[]>();
+  for (const [contactSourceId, companySourceIds] of resolution.graph.companiesByContact) {
+    for (const companySourceId of companySourceIds) {
+      const contactSourceIds = contactSourceIdsByCompany.get(companySourceId) ?? [];
+      contactSourceIds.push(contactSourceId);
+      contactSourceIdsByCompany.set(companySourceId, contactSourceIds);
+    }
   }
+  const strengthenCompanyMatchesFromContacts = () => {
+    for (const row of roots.filter((candidate) => candidate.streamType === "company")) {
+      const current = companyMatches.get(row.sourceRecordId);
+      if (!current || current.kind !== "ambiguous" || current.overflow) continue;
+      const nameCandidates = new Set(current.candidateIds);
+      const relationshipCandidates = uniqueSorted(
+        (contactSourceIdsByCompany.get(row.sourceRecordId) ?? []).flatMap((contactSourceId) => {
+          const contactMatch = contactMatches.get(contactSourceId);
+          if (contactMatch?.kind !== "exact") return [];
+          return localContactById.get(contactMatch.localId)?.organizationIds ?? [];
+        }),
+      ).filter((organizationId) => nameCandidates.has(organizationId));
+      if (relationshipCandidates.length !== 1) continue;
+      const localId = relationshipCandidates[0]!;
+      companyMatches.set(row.sourceRecordId, {
+        kind: "exact",
+        localId,
+        reason: "resolved_by_contact_relationship_context",
+        evidence: [
+          ...(current.evidence ?? []).filter((clue) => clue.targetEntityId === localId),
+          {
+            family: "archive_relationship",
+            label: "exact ACT contact belongs to the local organization",
+            targetEntityType: "organization",
+            targetEntityId: localId,
+            authority: "authoritative",
+          },
+        ],
+      });
+    }
+  };
+  refreshContactMatches();
+  strengthenCompanyMatchesFromContacts();
+  // A newly resolved company can provide the independent organization clue
+  // needed to resolve its remaining name-only contacts.
+  refreshContactMatches();
+  strengthenCompanyMatchesFromContacts();
   const contextIndex = buildActContextIndex(roots, input.localCandidates ?? {});
   const inferredTimelineParents = new Map<string, { organizationSourceIds: string[]; contactSourceIds: string[]; bookingSourceIds: string[] }>();
   for (const row of roots.filter((candidate) => ["activity", "note", "history"].includes(candidate.streamType))) {

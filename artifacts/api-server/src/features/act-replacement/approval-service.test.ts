@@ -144,7 +144,7 @@ describe("Act approval closure", () => {
     expect(legacyReady.rejectedOperationIds).toEqual(["malformed:create", "missing:create"]);
   });
 
-  it("never automatically approves generic relationship or provenance actions", async () => {
+  it("approves dependency-bound relationships while rejecting provenance actions", async () => {
     const repo = new InMemoryApprovalRepository();
     repo.seed("r", {
       digest: "d",
@@ -163,8 +163,8 @@ describe("Act approval closure", () => {
       requestedBy: "owner",
     });
 
-    expect(result.approvedOperationIds).toEqual(["safe:create"]);
-    expect(result.rejectedOperationIds).toEqual(["safe:provenance", "safe:relationship"]);
+    expect(result.approvedOperationIds).toEqual(["safe:create", "safe:relationship"]);
+    expect(result.rejectedOperationIds).toEqual(["safe:provenance"]);
   });
 
   it("approves only the remaining pending safe closure and treats terminal dependencies as satisfied", async () => {

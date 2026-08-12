@@ -1369,6 +1369,61 @@ describe("durable review adapter projections", () => {
     });
   });
 
+  it("resolves a name-only company through an exact ACT contact relationship", () => {
+    const fetchedAt = new Date("2026-08-10T12:00:00.000Z");
+    const source = (sourceRecordId: string, streamType: string, actRecordId: string | null, rawSnapshot: Record<string, unknown>, relationshipEvidence: Record<string, unknown> = {}) => ({
+      sourceRecordId,
+      sourceVersionId: `${sourceRecordId}-version`,
+      latestSourceVersionId: `${sourceRecordId}-version`,
+      streamType,
+      actRecordId,
+      rawSnapshot,
+      fetchedAt,
+      relationshipEvidence,
+    });
+    const sources = manifestSourcesFromArchiveRows({
+      rows: [
+        source("company-1", "company", "company-act-1", { Name: "10 Mile Pride (Breckenridge) CO" }),
+        source("contact-1", "contact", "contact-act-1", { FirstName: "Breck", LastName: "Create", EmailAddress: "info@breckcreate.org", BusinessPhone: "(970) 547-3100" }),
+        source("relationship-1", "company_contact", null, {}, {
+          source: "endpoint",
+          parentKind: "contact",
+          parentActRecordId: "contact-act-1",
+          targetKind: "company",
+          targetActRecordId: "company-act-1",
+        }),
+      ],
+      localCandidates: {
+        organizations: [
+          { id: "unrelated-company", name: "10 Mile Pride (Breckenridge) CO" },
+          { id: "local-company-1", name: "10 Mile Pride (Breckenridge) CO" },
+        ],
+        contacts: [{
+          id: "local-contact-1",
+          firstName: "Breck",
+          lastName: "Create",
+          email: "info@breckcreate.org",
+          phone: "970-547-3100",
+          organizationIds: ["local-company-1"],
+        }],
+      },
+    });
+
+    expect(sources.find((row) => row.sourceRecordId === "company-1")?.match).toMatchObject({
+      kind: "exact",
+      localId: "local-company-1",
+      reason: "resolved_by_contact_relationship_context",
+      evidence: expect.arrayContaining([
+        expect.objectContaining({ family: "identity", targetEntityId: "local-company-1" }),
+        expect.objectContaining({
+          family: "archive_relationship",
+          authority: "authoritative",
+          targetEntityId: "local-company-1",
+        }),
+      ]),
+    });
+  });
+
   it("cascades company resolution into contact and narrative timeline context", () => {
     const fetchedAt = new Date("2026-08-10T12:00:00.000Z");
     const source = (sourceRecordId: string, streamType: string, actRecordId: string | null, rawSnapshot: Record<string, unknown>, relationshipEvidence: Record<string, unknown> = {}) => ({
