@@ -9,9 +9,55 @@ import type { db as applicationDatabase } from "@/db/client";
 import * as schema from "@workspace/db/schema";
 import { DrizzleActSourceArchiveRepository } from "./archive-repository";
 import {
+  archiveReconciliationMatches,
   ActCheckpointConflictError,
   DrizzleActReplacementCheckpointRepository,
 } from "./checkpoint-repository";
+
+describe("Act archive reconciliation", () => {
+  it("reconciles note companion observations in one integrity bucket", () => {
+    expect(
+      archiveReconciliationMatches({
+        checkpoints: [
+          {
+            streamType: "note",
+            responseRows: 2,
+            observedIdentities: 2,
+            archivedIdentities: 2,
+            completeIdentities: 1,
+            partialIdentities: 1,
+            failedIdentities: 0,
+            snapshotVersionsInserted: 2,
+          },
+        ],
+        observations: [
+          { streamType: "note", versionId: "note-version" },
+          { streamType: "note_contact", versionId: "link-version" },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  it("does not let unrelated stream mismatches cancel", () => {
+    expect(
+      archiveReconciliationMatches({
+        checkpoints: [
+          {
+            streamType: "company",
+            responseRows: 1,
+            observedIdentities: 1,
+            archivedIdentities: 1,
+            completeIdentities: 1,
+            partialIdentities: 0,
+            failedIdentities: 0,
+            snapshotVersionsInserted: 1,
+          },
+        ],
+        observations: [{ streamType: "contact", versionId: "version-1" }],
+      }),
+    ).toBe(false);
+  });
+});
 
 const describeWithPostgres = process.env.TEST_DATABASE_URL
   ? describe
@@ -1154,6 +1200,92 @@ describeWithPostgres("Act replacement checkpoints on PostgreSQL", () => {
         completeIdentities: 0,
         partialIdentities: 1,
         failedIdentities: 0,
+      },
+    });
+  });
+
+  it("archives and finalizes a contact-note page with its companion relationship", async () => {
+    const input = startInput();
+    const { runId } = await repository.createRun(input);
+    const now = new Date("2026-08-01T12:00:00.000Z");
+    await pool.query(
+      `UPDATE act_replacement_checkpoints
+       SET state = 'complete', completed_at = $2 WHERE run_id = $1`,
+      [runId, now],
+    );
+    const checkpointId = await seedCheckpoint({
+      runId,
+      databaseKey: input.sourceDatabaseKey,
+      streamType: "note",
+      kind: "relationship",
+      partitionKey: "contact-notes:contact-1",
+      state: "leased",
+      leaseOwner: "note-worker",
+      leaseExpiresAt: new Date("2026-08-01T12:05:00.000Z"),
+      queryMode: "plain",
+      deriveDetails: false,
+    });
+    const common = {
+      snapshotScope: "relationship" as const,
+      sourceCreatedAt: null,
+      sourceEditedAt: null,
+    };
+
+    const counters = await archiveRepository.archiveCheckpointPage({
+      runId,
+      checkpointId,
+      leaseOwner: "note-worker",
+      expectedSkip: 0,
+      items: [
+        {
+          ...common,
+          streamType: "note",
+          sourceKey: "note-1",
+          actRecordId: "note-1",
+          archiveCompleteness: "complete",
+          raw: { id: "note-1", subject: "Waiver" },
+          relationshipEvidence: {
+            source: "endpoint",
+            parentKind: "note",
+            parentActRecordId: "note-1",
+            targetKind: "contact",
+            targetActRecordId: "contact-1",
+          },
+        },
+        {
+          ...common,
+          streamType: "note_contact",
+          sourceKey: "note-1:contact-1",
+          actRecordId: null,
+          archiveCompleteness: "complete",
+          raw: {},
+          relationshipEvidence: {
+            source: "endpoint",
+            parentKind: "note",
+            parentActRecordId: "note-1",
+            targetKind: "contact",
+            targetActRecordId: "contact-1",
+          },
+        },
+      ],
+      derivedCheckpoints: [],
+      nextSkip: null,
+      queryMode: "plain",
+      pageFingerprint: "contact-note-page",
+      now,
+    });
+
+    expect(counters).toMatchObject({
+      observedIdentities: 2,
+      archivedIdentities: 2,
+      completeIdentities: 2,
+    });
+    await expect(repository.summarize(runId)).resolves.toMatchObject({
+      phase: "extract_complete",
+      allStreams: {
+        observedIdentities: 2,
+        archivedIdentities: 2,
+        completeIdentities: 2,
       },
     });
   });

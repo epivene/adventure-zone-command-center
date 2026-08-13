@@ -11,6 +11,7 @@ import {
 } from "@workspace/db/schema";
 import type {
   ActArchiveCompleteness,
+  ActCheckpointKind,
   ActExtractionCounters,
   ActQueryMode,
   ActReplacementStreamType,
@@ -84,6 +85,19 @@ const zeroCounters = (): ActExtractionCounters => ({
 
 function conflicts(): never {
   throw new ActArchiveConflictError();
+}
+
+export function archiveStreamAllowedForCheckpoint(
+  checkpointStream: ActReplacementStreamType,
+  checkpointKind: ActCheckpointKind,
+  itemStream: ActReplacementStreamType,
+): boolean {
+  return (
+    itemStream === checkpointStream ||
+    (checkpointStream === "note" &&
+      checkpointKind === "relationship" &&
+      itemStream === "note_contact")
+  );
 }
 
 export function archivePageAction(
@@ -160,8 +174,7 @@ function safeDatabaseErrorMetadata(error: unknown) {
       return {
         errorName:
           typeof metadata.name === "string" ? metadata.name : "unknown",
-        pgCode:
-          typeof metadata.code === "string" ? metadata.code : "unknown",
+        pgCode: typeof metadata.code === "string" ? metadata.code : "unknown",
         constraint:
           typeof metadata.constraint === "string" ? metadata.constraint : null,
         table: typeof metadata.table === "string" ? metadata.table : null,
@@ -171,8 +184,7 @@ function safeDatabaseErrorMetadata(error: unknown) {
     current = metadata.cause;
   }
   return {
-    errorName:
-      error instanceof Error && error.name ? error.name : "unknown",
+    errorName: error instanceof Error && error.name ? error.name : "unknown",
     pgCode: "unknown",
     constraint: null,
     table: null,
@@ -244,7 +256,14 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           conflicts();
         }
         if (
-          input.items.some((item) => item.streamType !== checkpoint.streamType)
+          input.items.some(
+            (item) =>
+              !archiveStreamAllowedForCheckpoint(
+                checkpoint.streamType as ActReplacementStreamType,
+                checkpoint.checkpointKind as ActCheckpointKind,
+                item.streamType,
+              ),
+          )
         ) {
           conflicts();
         }
@@ -285,8 +304,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
                 retryAfter: null,
                 retryable: true,
                 errorCode: null,
-                completedAt:
-                  transition.state === "complete" ? input.now : null,
+                completedAt: transition.state === "complete" ? input.now : null,
                 updatedAt: input.now,
               })
               .where(eq(actReplacementCheckpoints.id, input.checkpointId));
