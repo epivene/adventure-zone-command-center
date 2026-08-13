@@ -101,7 +101,9 @@ function isFinished(phase: ActReplacementWorkflowStatus["phase"]) {
 function canResolveAutomaticReview(
   phase: ActReplacementWorkflowStatus["phase"],
 ) {
-  return ["ready_to_apply", "complete_with_issues"].includes(phase);
+  return ["ready_to_apply", "complete", "complete_with_issues"].includes(
+    phase,
+  );
 }
 
 function activeStage(
@@ -759,7 +761,7 @@ export default function ActMigrationPage() {
     if (
       !run?.manifestDigest ||
       !canResolveAutomaticReview(run.phase) ||
-      run.reviewRequiredCount <= 0 ||
+      run.archivedOnlyCount <= 0 ||
       !run.canReview ||
       !beginBusy("review")
     ) {
@@ -814,7 +816,7 @@ export default function ActMigrationPage() {
     run &&
       canResolveAutomaticReview(run.phase) &&
       run.manifestDigest &&
-      run.reviewRequiredCount > 0 &&
+      run.archivedOnlyCount > 0 &&
       run.canReview,
   );
   const visibleAutomaticReviewResult =
