@@ -23,18 +23,26 @@ vi.mock("@/components/organizations/duplicates-view", async () => {
       onRefresh,
     }: {
       groups: Array<{ normalizedName: string }>;
-      onRefresh: () => void;
-    }) =>
-      React.createElement(
+      onRefresh: () => Promise<Array<{ normalizedName: string }> | null>;
+    }) => {
+      const [refreshResult, setRefreshResult] = React.useState<string>("not requested");
+      return React.createElement(
         "div",
         null,
         React.createElement("p", null, `Merge all ${groups.length} group`),
         React.createElement(
           "button",
-          { onClick: onRefresh },
+          {
+            onClick: async () => {
+              const refreshed = await onRefresh();
+              setRefreshResult(refreshed?.[0]?.normalizedName ?? "unavailable");
+            },
+          },
           "Test background refresh",
         ),
-      ),
+        React.createElement("output", null, refreshResult),
+      );
+    },
   };
 });
 
@@ -102,5 +110,27 @@ describe("OrganizationsPage duplicate refresh", () => {
       await screen.findByText("Could not refresh duplicate status: offline"),
     ).toBeInTheDocument();
     expect(screen.getByText("Merge all 1 group")).toBeInTheDocument();
+  });
+
+  it("returns fresh duplicate groups to the reconciliation callback", async () => {
+    const initial = [{ normalizedName: "ten mile pride", organizations: [] }];
+    const refreshed = [{ normalizedName: "county fair", organizations: [] }];
+    let duplicateCalls = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url.startsWith("/organizations?"))
+        return Promise.resolve({ organizations: [] });
+      duplicateCalls += 1;
+      return Promise.resolve({ groups: duplicateCalls === 1 ? initial : refreshed });
+    });
+
+    render(<OrganizationsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Find Duplicates" }));
+    expect(await screen.findByText("Merge all 1 group")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Test background refresh" }),
+    );
+
+    expect(await screen.findByText("county fair")).toBeInTheDocument();
   });
 });

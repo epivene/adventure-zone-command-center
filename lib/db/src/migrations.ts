@@ -94,6 +94,42 @@ const migrationFiles = [
         AND column_name = 'manifest_digest_version'
     ) AS ready`,
   },
+  {
+    name: "020_assisted_calling.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
+  },
+  {
+    name: "021_call_session_metadata.sql",
+    markerSql: `SELECT COUNT(*) = 6 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'call_sessions'
+        AND column_name IN ('phone_id', 'direction', 'method', 'phone_number_snapshot', 'phone_extension_snapshot', 'script_kind')`,
+  },
+  {
+    name: "022_contact_phone_legacy_compatibility.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'contacts_sync_primary_phone'
+        AND NOT tgisinternal
+    ) AS ready`,
+  },
+  {
+    name: "023_contact_phone_canonical_dnc.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.contact_phones_contact_normalized_number_unique') IS NOT NULL
+      AND to_regprocedure(current_schema() || '.normalize_north_american_phone(text)') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'contacts_normalize_legacy_phone'
+          AND NOT tgisinternal
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'contacts_sync_primary_phone'
+          AND NOT tgisinternal
+      ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

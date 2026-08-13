@@ -12,7 +12,14 @@ import {
 } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { bookings, contacts, followUps, organizations } from "@/db/schema";
+import {
+  activities,
+  bookings,
+  callSessions,
+  contacts,
+  followUps,
+  organizations,
+} from "@/db/schema";
 import {
   bookingStatusValues,
   type BookingStatus,
@@ -37,6 +44,11 @@ export type FollowUpSummary = {
   contactId: string | null;
   bookingId: string | null;
   bookingName: string;
+  contactName: string | null;
+  organizationName: string | null;
+  bookingStatus: BookingStatus | null;
+  routeLeg: { id: string; name: string; color: string } | null;
+  lastContactedAt: Date | null;
   kind: string;
   dueAt: Date;
   createdAt: Date;
@@ -79,6 +91,7 @@ export type TodayDashboardFollowUpRow = {
   } | null;
   followUp: TodayDashboardFollowUpRecord;
   organization: { name: string } | null;
+  lastContactedAt: Date | null;
 };
 
 export type TodayQueueRequest = {
@@ -190,11 +203,14 @@ export async function enrichTodayDashboardOperations(
       ? {
           ...dashboard.nextCall,
           operations: withOperations(dashboard.nextCall.bookingId),
+          routeLeg:
+            withOperations(dashboard.nextCall.bookingId)?.leg ?? null,
         }
       : null,
     followUps: dashboard.followUps.map((followUp) => ({
       ...followUp,
       operations: withOperations(followUp.bookingId),
+      routeLeg: withOperations(followUp.bookingId)?.leg ?? null,
     })),
     needsFollowUpPlan: dashboard.needsFollowUpPlan.map((booking) => ({
       ...booking,
@@ -237,6 +253,28 @@ const followUpSelection = {
   },
   followUp: followUps,
   organization: { name: organizations.name },
+  lastContactedAt: sql<Date | null>`greatest(
+    (
+      select max(${callSessions.endedAt})
+      from ${callSessions}
+      where ${callSessions.endedAt} is not null
+        and (
+          (${followUps.bookingId} is not null and ${callSessions.bookingId} = ${followUps.bookingId})
+          or (${contacts.id} is not null and ${callSessions.contactId} = ${contacts.id})
+          or (${organizations.id} is not null and ${callSessions.organizationId} = ${organizations.id})
+        )
+    ),
+    (
+      select max(${activities.occurredAt})
+      from ${activities}
+      where ${activities.occurredAt} is not null
+        and (
+          (${followUps.bookingId} is not null and ${activities.bookingId} = ${followUps.bookingId})
+          or (${contacts.id} is not null and ${activities.contactId} = ${contacts.id})
+          or (${organizations.id} is not null and ${activities.organizationId} = ${organizations.id})
+        )
+    )
+  )`,
 };
 
 function priorityBucket(item: FollowUpSummary, now: Date) {
@@ -306,7 +344,13 @@ function classifyFollowUp(
 }
 
 function toFollowUpSummary(
-  { booking, contact, followUp, organization }: TodayDashboardFollowUpRow,
+  {
+    booking,
+    contact,
+    followUp,
+    organization,
+    lastContactedAt,
+  }: TodayDashboardFollowUpRow,
   now: Date,
 ): FollowUpSummary {
   return {
@@ -323,6 +367,13 @@ function toFollowUpSummary(
       (`${contact?.firstName ?? ""} ${contact?.lastName ?? ""}`.trim() ||
         organization?.name ||
         "Follow-up"),
+    contactName:
+      `${contact?.firstName ?? ""} ${contact?.lastName ?? ""}`.trim() ||
+      null,
+    organizationName: organization?.name ?? null,
+    bookingStatus: booking?.status ?? null,
+    routeLeg: null,
+    lastContactedAt,
     kind: followUp.kind,
     dueAt: followUp.dueAt,
     createdAt: followUp.createdAt,
@@ -393,8 +444,20 @@ export function createDrizzleTodayDashboardRepository(
       .select(followUpSelection)
       .from(followUps)
       .leftJoin(bookings, eq(followUps.bookingId, bookings.id))
-      .leftJoin(contacts, eq(followUps.contactId, contacts.id))
-      .leftJoin(organizations, eq(followUps.organizationId, organizations.id))
+      .leftJoin(
+        contacts,
+        eq(
+          contacts.id,
+          sql<string>`coalesce(${followUps.contactId}, ${bookings.primaryContactId})`,
+        ),
+      )
+      .leftJoin(
+        organizations,
+        eq(
+          organizations.id,
+          sql<string>`coalesce(${followUps.organizationId}, ${bookings.organizationId}, ${contacts.organizationId})`,
+        ),
+      )
       .where(condition)
       .orderBy(...todayFollowUpPriorityOrder(now));
   }

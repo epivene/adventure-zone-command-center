@@ -42,6 +42,8 @@ This project deploys as two Render services sharing a single PostgreSQL database
 | `ACT_USERNAME`                | Act! read-only username (server-only secret)                                        |
 | `ACT_PASSWORD`                | Act! password (server-only secret)                                                  |
 | `ACT_MIGRATION_APPLY_ENABLED` | `false`; Phase 1 is preview/read-only                                               |
+| `ASSISTED_CALLING_ENABLED`    | `false`; enable only after migration and owner smoke gates pass                     |
+| `VOICEMAIL_LAUNCH_URL`        | Optional private launcher URL; leave unset when no launcher is configured           |
 
 ### Frontend static site (`adventure-zone-web`) — build-time vars
 
@@ -172,6 +174,15 @@ Setting `ACT_MIGRATION_APPLY_ENABLED=false` stops new apply claims; it does not
 delete archived or imported rows. Any data reversal requires a separate audited
 plan.
 
+## Assisted-calling rollout
+
+Keep `ASSISTED_CALLING_ENABLED=false` during the initial code deployment and
+database migration. Follow [the assisted-calling runbook](docs/assisted-calling-runbook.md)
+for backfill verification, owner smoke testing, enablement, and rollback.
+`VOICEMAIL_LAUNCH_URL` is optional and server-only. Configure its private value
+in Render rather than committing it; the user-facing action remains **Leave
+voicemail**, and launching it does not record an outcome.
+
 ---
 
 ## Environment variable reference (summary)
@@ -183,6 +194,8 @@ RENDER_DATABASE_URL=postgres://...
 CLERK_SECRET_KEY=sk_live_...
 CLERK_PUBLISHABLE_KEY=pk_live_...
 OWNER_CLERK_USER_ID=user_...
+ASSISTED_CALLING_ENABLED=false
+VOICEMAIL_LAUNCH_URL=<optional private URL configured in Render>
 
 # Frontend static site (build-time)
 NODE_ENV=production              (set automatically by render.yaml)

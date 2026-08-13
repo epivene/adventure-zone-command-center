@@ -44,8 +44,10 @@ export default function OrganizationsPage() {
     try {
       const result = await apiGet<{ groups: DuplicateGroup[] }>("/organizations/duplicates");
       setDupGroups(result.groups);
+      return result.groups;
     } catch (e: any) {
       setDupError(e.message ?? "Failed to load duplicates");
+      return null;
     } finally {
       setDupLoading(false);
     }
