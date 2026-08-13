@@ -68,6 +68,7 @@ import {
   partitionOrganizationReviewGroups,
   type DuplicateOrganizationGroup,
 } from "./organization-repository";
+import { HierarchyConflictError } from "./organization-hierarchy";
 import router from "../../routes/organizations";
 
 const FIRST_ID = "11111111-1111-4111-8111-111111111111";
@@ -368,7 +369,7 @@ describe("organization family review", () => {
 
   it("returns 409 when the atomic family review reports stale candidates", async () => {
     repository.reviewOrganizationFamily.mockRejectedValue(
-      new hierarchy.HierarchyConflictError(
+      new HierarchyConflictError(
         "This organization family changed. Refresh the review list and try again.",
       ),
     );
