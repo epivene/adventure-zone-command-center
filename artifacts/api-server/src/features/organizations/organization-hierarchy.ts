@@ -75,19 +75,23 @@ async function lockOwnedLocations(
     .for("update");
 }
 
-export async function setOrganizationParent(
+export async function setOrganizationParents(
   database: HierarchyDatabase,
-  input: SetOrganizationParentInput,
+  input: { parentId: string; childIds: string[] },
   changedAt: Date,
 ): Promise<void> {
   await database.transaction(async (transaction) => {
-    if (input.childId === input.parentId) {
+    const childIds = [...new Set(input.childIds)].sort();
+    if (!childIds.length) {
+      throw new HierarchyConflictError("Select at least one location profile.");
+    }
+    if (childIds.includes(input.parentId)) {
       throw new HierarchyConflictError("A profile cannot be its own parent.");
     }
 
     const involvedOrganizations = await lockOrganizations(transaction, [
-      input.childId,
       input.parentId,
+      ...childIds,
     ]);
     const organizationById = new Map(
       involvedOrganizations.map((organization) => [
@@ -96,42 +100,65 @@ export async function setOrganizationParent(
       ]),
     );
     const parent = organizationById.get(input.parentId);
-    const child = organizationById.get(input.childId);
-    if (!parent || !child) {
+    const children = childIds.flatMap((childId) => {
+      const child = organizationById.get(childId);
+      return child ? [child] : [];
+    });
+    if (!parent || children.length !== childIds.length) {
       throw new HierarchyConflictError(
         "The selected organization profile no longer exists.",
       );
     }
-
     if (parent.parentOrganizationId) {
       throw new HierarchyConflictError(
         `${parent.name} is already a location and cannot own locations.`,
       );
     }
 
-    const childLocations = await lockOwnedLocations(transaction, [child.id]);
-    if (childLocations.length) {
-      throw new HierarchyConflictError(
-        `${child.name} already owns locations and cannot become a location.`,
-      );
+    const childLocations = await lockOwnedLocations(transaction, childIds);
+    const childParentIds = new Set(
+      childLocations.flatMap((location) =>
+        location.parentOrganizationId ? [location.parentOrganizationId] : [],
+      ),
+    );
+    for (const child of children) {
+      if (childParentIds.has(child.id)) {
+        throw new HierarchyConflictError(
+          `${child.name} already owns locations and cannot become a location.`,
+        );
+      }
     }
 
-    await transaction
-      .update(organizations)
-      .set({
-        parentOrganizationId: parent.id,
-        updatedAt: changedAt,
-      })
-      .where(eq(organizations.id, child.id));
+    for (const child of children) {
+      await transaction
+        .update(organizations)
+        .set({
+          parentOrganizationId: parent.id,
+          updatedAt: changedAt,
+        })
+        .where(eq(organizations.id, child.id));
 
-    await recordAuditEntry(transaction, {
-      entityType: "organization",
-      entityId: child.id,
-      action: "organization_parent_set",
-      before: { parentOrganizationId: child.parentOrganizationId },
-      after: { parentOrganizationId: parent.id },
-    });
+      await recordAuditEntry(transaction, {
+        entityType: "organization",
+        entityId: child.id,
+        action: "organization_parent_set",
+        before: { parentOrganizationId: child.parentOrganizationId },
+        after: { parentOrganizationId: parent.id },
+      });
+    }
   });
+}
+
+export async function setOrganizationParent(
+  database: HierarchyDatabase,
+  input: SetOrganizationParentInput,
+  changedAt: Date,
+): Promise<void> {
+  await setOrganizationParents(
+    database,
+    { parentId: input.parentId, childIds: [input.childId] },
+    changedAt,
+  );
 }
 
 export async function ungroupOrganization(
