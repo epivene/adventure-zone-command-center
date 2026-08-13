@@ -278,9 +278,17 @@ export async function loadProductionInput(
       postalCode: organization.postal_code as string | null,
       parentOrganizationId: organization.parent_organization_id as string | null,
     }));
+    const parentsWithLocations = new Set(
+      organizations.flatMap((organization) =>
+        organization.parentOrganizationId
+          ? [organization.parentOrganizationId]
+          : [],
+      ),
+    );
     const standaloneCandidates = organizations.filter(
       (organization) =>
         organization.parentOrganizationId === null &&
+        !parentsWithLocations.has(organization.id) &&
         organization.website?.trim(),
     );
     const discoveredFamilies = discoverOrganizationFamilyCandidates(
