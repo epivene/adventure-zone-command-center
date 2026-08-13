@@ -24,3 +24,5 @@ jobs:
           pnpm --filter @workspace/adventure-zone exec vitest run src/components/contacts/contact-form.test.tsx
           web_status=$?
           test $api_status -eq 0 -a $web_status -eq 0
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck
