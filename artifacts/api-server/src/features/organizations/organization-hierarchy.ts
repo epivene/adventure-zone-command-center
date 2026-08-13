@@ -75,12 +75,11 @@ async function lockOwnedLocations(
     .for("update");
 }
 
-export async function setOrganizationParents(
-  database: HierarchyDatabase,
+export async function setOrganizationParentsInTransaction(
+  transaction: HierarchyTransaction,
   input: { parentId: string; childIds: string[] },
   changedAt: Date,
 ): Promise<void> {
-  await database.transaction(async (transaction) => {
     const childIds = [...new Set(input.childIds)].sort();
     if (!childIds.length) {
       throw new HierarchyConflictError("Select at least one location profile.");
@@ -146,7 +145,16 @@ export async function setOrganizationParents(
         after: { parentOrganizationId: parent.id },
       });
     }
-  });
+}
+
+export async function setOrganizationParents(
+  database: HierarchyDatabase,
+  input: { parentId: string; childIds: string[] },
+  changedAt: Date,
+): Promise<void> {
+  await database.transaction((transaction) =>
+    setOrganizationParentsInTransaction(transaction, input, changedAt),
+  );
 }
 
 export async function setOrganizationParent(
@@ -187,12 +195,11 @@ export async function ungroupOrganization(
   });
 }
 
-export async function createOrganizationParent(
-  database: HierarchyDatabase,
+export async function createOrganizationParentInTransaction(
+  transaction: HierarchyTransaction,
   input: CreateOrganizationParentInput,
   changedAt: Date,
 ): Promise<{ parentId: string }> {
-  return database.transaction(async (transaction) => {
     const childIds = [...new Set(input.childIds)];
     const children = await transaction
       .select({
@@ -263,5 +270,14 @@ export async function createOrganizationParent(
     });
 
     return { parentId: parent.id };
-  });
+}
+
+export async function createOrganizationParent(
+  database: HierarchyDatabase,
+  input: CreateOrganizationParentInput,
+  changedAt: Date,
+): Promise<{ parentId: string }> {
+  return database.transaction((transaction) =>
+    createOrganizationParentInTransaction(transaction, input, changedAt),
+  );
 }
