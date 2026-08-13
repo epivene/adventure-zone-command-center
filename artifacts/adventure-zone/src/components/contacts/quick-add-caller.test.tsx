@@ -105,4 +105,20 @@ describe("QuickAddCaller duplicate confirmation", () => {
     expect(screen.queryByRole("button", { name: "Create separate contact" }))
       .not.toBeInTheDocument();
   });
+
+  it("shows the actionable validation message returned by the API", async () => {
+    vi.stubGlobal("crypto", { randomUUID: () => requestKey });
+    const onSubmit = vi.fn().mockRejectedValue(
+      new Error("Enter the caller's name."),
+    );
+    render(<QuickAddCaller onSubmit={onSubmit} />);
+    fillRequiredFields();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create caller" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter the caller's name.",
+    );
+  });
 });
