@@ -34,6 +34,7 @@ function organization(id: string, name: string) {
 function group(name: string, suffix: string): DuplicateGroup {
   return {
     normalizedName: name,
+    classification: "duplicate",
     city: "Breckenridge",
     region: "CO",
     organizations: [
