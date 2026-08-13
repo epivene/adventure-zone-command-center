@@ -14,6 +14,7 @@ export type CallerFinderInput = {
 
 export type CallerCandidateQuery = {
   normalizedPhone: string | null;
+  phoneFragment: string | null;
   query: string;
   includeNotes: boolean;
 };
@@ -42,6 +43,7 @@ const scores: Record<CallerMatchReason, number> = {
   "Recently contacted": 200,
   Location: 150,
   "Route leg": 150,
+  "Phone number": 600,
   "Same area code": 50,
   "Note text": 25,
 };
@@ -64,6 +66,7 @@ function noteSnippet(note: string) {
 function scoredSuggestion(
   candidate: CallerFinderCandidate,
   normalizedPhone: string | null,
+  phoneFragment: string | null,
   query: string,
   includeNotes: boolean,
 ): CallerSuggestion | null {
@@ -74,6 +77,14 @@ function scoredSuggestion(
 
   if (normalizedPhone && candidatePhones.has(normalizedPhone)) {
     reasons.push("Exact phone");
+  }
+  if (
+    phoneFragment &&
+    candidate.normalizedPhones.some((phone) =>
+      phone.replace(/\D/g, "").includes(phoneFragment),
+    )
+  ) {
+    reasons.push("Phone number");
   }
   if (
     normalizedQuery &&
@@ -154,10 +165,15 @@ export class CallerFinderService {
   async find(input: CallerFinderInput): Promise<CallerFinderResult> {
     const query = input.query.trim();
     const normalizedPhone = normalizeNorthAmericanPhone(input.phone);
+    const phoneDigits = input.phone.replace(/\D/g, "");
+    const phoneFragment = !normalizedPhone && phoneDigits.length >= 7 && phoneDigits.length <= 9
+      ? phoneDigits
+      : null;
     const includeNotes = query.length >= 3;
     const [candidates, exactMetadata] = await Promise.all([
       this.repository.findCallerCandidates({
         normalizedPhone,
+        phoneFragment,
         query,
         includeNotes,
       }),
@@ -169,7 +185,13 @@ export class CallerFinderService {
 
     const suggestions = candidates
       .map((candidate) =>
-        scoredSuggestion(candidate, normalizedPhone, query, includeNotes),
+        scoredSuggestion(
+          candidate,
+          normalizedPhone,
+          phoneFragment,
+          query,
+          includeNotes,
+        ),
       )
       .filter((suggestion): suggestion is CallerSuggestion => suggestion !== null)
       .toSorted((left, right) =>
