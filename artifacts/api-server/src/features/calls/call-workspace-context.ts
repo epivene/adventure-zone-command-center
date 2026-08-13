@@ -1,10 +1,12 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 import type { db as database } from "@/db/client";
 import {
+  activities,
   bookingContacts,
   bookings,
+  callSessions,
   contacts,
   followUps,
   organizationContacts,
@@ -68,6 +70,7 @@ export interface CallWorkspaceContextRepository {
     contactId: string,
   ): Promise<boolean>;
   hasBookingContact(bookingId: string, contactId: string): Promise<boolean>;
+  findLastContactedAt(context: CallWorkspaceContext): Promise<Date | null>;
 }
 
 export type CallWorkspaceQuery = {
@@ -79,7 +82,7 @@ export type CallWorkspaceQuery = {
 
 function validId(value: string | undefined) {
   if (!value) return null;
-  const parsed = z.uuid().safeParse(value);
+  const parsed = z.string().uuid().safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -87,6 +90,14 @@ export function activityTimelineParent(context: CallWorkspaceContext): ActivityP
   if (context.booking) return { bookingId: context.booking.id };
   if (context.contact) return { contactId: context.contact.id };
   return context.organization ? { organizationId: context.organization.id } : {};
+}
+
+export function lastContactedParents(context: CallWorkspaceContext): ActivityParent[] {
+  const parents: ActivityParent[] = [];
+  if (context.booking) parents.push({ bookingId: context.booking.id });
+  if (context.contact) parents.push({ contactId: context.contact.id });
+  if (context.organization) parents.push({ organizationId: context.organization.id });
+  return parents;
 }
 
 export async function loadCallWorkspaceContext(
@@ -244,5 +255,48 @@ export class DrizzleCallWorkspaceContextRepository
       ))
       .limit(1);
     return Boolean(record);
+  }
+
+  async findLastContactedAt(context: CallWorkspaceContext): Promise<Date | null> {
+    const parents = lastContactedParents(context);
+    if (parents.length === 0) return null;
+
+    const [calls, activityRecords] = await Promise.all([
+      Promise.all(parents.map(async (parent) => {
+        const condition = parent.bookingId
+          ? eq(callSessions.bookingId, parent.bookingId)
+          : parent.contactId
+          ? eq(callSessions.contactId, parent.contactId)
+          : eq(callSessions.organizationId, parent.organizationId!);
+        const [call] = await this.database
+          .select({ endedAt: callSessions.endedAt })
+          .from(callSessions)
+          .where(and(condition, isNotNull(callSessions.endedAt)))
+          .orderBy(desc(callSessions.endedAt))
+          .limit(1);
+        return call;
+      })),
+      Promise.all(parents.map(async (parent) => {
+        const condition = parent.bookingId
+          ? eq(activities.bookingId, parent.bookingId)
+          : parent.contactId
+          ? eq(activities.contactId, parent.contactId)
+          : eq(activities.organizationId, parent.organizationId!);
+        const [activity] = await this.database
+          .select({ occurredAt: activities.occurredAt })
+          .from(activities)
+          .where(and(condition, isNotNull(activities.occurredAt)))
+          .orderBy(desc(activities.occurredAt))
+          .limit(1);
+        return activity;
+      })),
+    ]);
+    const dates = [
+      ...calls.map((call) => call?.endedAt),
+      ...activityRecords.map((activity) => activity?.occurredAt),
+    ].filter((value): value is Date => value !== null && value !== undefined);
+    return dates.length
+      ? new Date(Math.max(...dates.map((value) => value.getTime())))
+      : null;
   }
 }

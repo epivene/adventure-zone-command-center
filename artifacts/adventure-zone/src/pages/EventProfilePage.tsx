@@ -9,6 +9,7 @@ export default function EventProfilePage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
 
   const params = new URLSearchParams(search);
   const contactId = params.get("contactId") ?? undefined;
@@ -25,10 +26,10 @@ export default function EventProfilePage() {
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`)
-      .then((d) => {
+      .then(async (d) => {
         // JSON dates arrive as strings — the workspace formats Date objects.
         const toDate = (v: any) => (v ? new Date(v) : null);
-        setData({
+        const normalized = {
           ...d,
           notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt) })),
           followUps: (d.followUps ?? []).map((f: any) => ({
@@ -37,7 +38,18 @@ export default function EventProfilePage() {
             completedAt: toDate(f.completedAt),
           })),
           bookings: (d.bookings ?? []).map((b: any) => ({ ...b, startsAt: toDate(b.startsAt) })),
-        });
+        };
+        const callablePhones = await Promise.all((normalized.contacts ?? []).map(async (contact: any) => {
+          const detail = await apiGet<any>(`/contacts/${contact.id}`).catch(() => null);
+          if (!detail) return [contact.id as string, null] as const;
+          const phones = Array.isArray(detail?.phones) ? detail.phones : [];
+          const callablePhone = phones
+            .filter((phone: any) => !phone.doNotCallAt && typeof phone.number === "string" && phone.number.trim())
+            .toSorted((left: any, right: any) => Number(Boolean(right.primary)) - Number(Boolean(left.primary)))[0];
+          return [contact.id as string, callablePhone?.number ?? null] as const;
+        }));
+        setCallablePhoneByContactId(Object.fromEntries(callablePhones));
+        setData(normalized);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -50,6 +62,8 @@ export default function EventProfilePage() {
     <div className="mx-auto max-w-7xl">
       <EventProfileWorkspace
         profile={data}
+        assistedCallingEnabled={data.assistedCallingEnabled === true}
+        callablePhoneByContactId={callablePhoneByContactId}
         context={{ bookingId, followUpId, action, mode }}
       />
     </div>

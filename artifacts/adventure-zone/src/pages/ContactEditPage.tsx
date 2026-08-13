@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
-import { apiGet } from "@/lib/auth-token";
+import { apiGet, apiPut } from "@/lib/auth-token";
 import { ContactForm } from "@/components/contacts/contact-form";
-import { updateContactAction } from "@/actions/contacts";
 
 export default function ContactEditPage() {
   const { contactId } = useParams<{ contactId: string }>();
@@ -24,6 +23,8 @@ export default function ContactEditPage() {
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-8 text-3xl font-bold tracking-tight">Edit contact</h1>
       <ContactForm
+        initialPhones={data.phones ?? []}
+        phonesEditable
         initialValues={{
           firstName: data.contact.firstName,
           lastName: data.contact.lastName,
@@ -37,7 +38,13 @@ export default function ContactEditPage() {
           region: data.contact.region ?? "",
           postalCode: data.contact.postalCode ?? "",
         }}
-        onSubmit={(input) => updateContactAction(contactId!, input)}
+        onSubmit={async (contact, phones) => {
+          try {
+            return await apiPut(`/contacts/${contactId}`, { contact, phones: phones ?? [] });
+          } catch (error: any) {
+            return { ok: false, error: error.message ?? "Could not update contact." };
+          }
+        }}
         successPath={`/contacts/${contactId}`}
         variant="edit"
       />

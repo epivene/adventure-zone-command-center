@@ -9,6 +9,7 @@ import {
   listActivityRevisionsAction,
 } from "@/actions/activities";
 import type { ReactNode } from "react";
+import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
 
 function DetailSection({ children, title }: { children: ReactNode; title: string }) {
   return (
@@ -50,8 +51,10 @@ export default function ContactDetailPage() {
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading contact…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
-  const { contact, relatedBookings, timeline } = data;
+  const { contact, relatedBookings, timeline, phones = [] } = data;
   const fullName = `${contact.firstName} ${contact.lastName}`.trim();
+  const callSuppressed = phones.length > 0 && phones.every((phone: ContactPhoneRecord) => Boolean(phone.doNotCallAt));
+  const assistedCallingEnabled = data.assistedCallingEnabled === true;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -63,9 +66,17 @@ export default function ContactDetailPage() {
           </div>
           {contact.jobTitle && <p className="mt-1 text-slate-600">{contact.jobTitle}</p>}
         </div>
-        <Link className="button-primary text-center" href={`/contacts/${contactId}/edit`}>
-          Edit contact
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          {!assistedCallingEnabled ? (
+            <span className="self-center text-sm font-semibold text-slate-600">Assisted calling is not enabled.</span>
+          ) : callSuppressed ? (
+            <button className="button-primary" disabled type="button">Call</button>
+          ) : (
+            <Link className="button-primary text-center" href={`/calls/new?contactId=${contactId}`}>Call</Link>
+          )}
+          {assistedCallingEnabled ? <Link className="button-secondary text-center" href={`/calls/log?contactId=${contactId}`}>Log call</Link> : null}
+          <Link className="button-secondary text-center" href={`/contacts/${contactId}/edit`}>Edit contact</Link>
+        </div>
       </header>
 
       <div className="grid gap-5 lg:grid-cols-2">
@@ -73,7 +84,20 @@ export default function ContactDetailPage() {
           <DetailList
             items={[
               { label: "Email", value: contact.email ? <a className="link" href={`mailto:${contact.email}`}>{contact.email}</a> : null },
-              { label: "Phone", value: contact.phone ? <a className="link" href={`tel:${contact.phone}`}>{contact.phone}</a> : null },
+              { label: "Phone", value: phones.length ? (
+                <ul className="grid gap-2">
+                  {phones.map((phone: ContactPhoneRecord) => (
+                    <li key={phone.id} className="flex flex-wrap items-center gap-2">
+                      {phone.doNotCallAt
+                        ? <span>{phone.number}</span>
+                        : <a className="link" href={`tel:${phone.number}`}>{phone.number}</a>}
+                      <span className="text-sm text-slate-500">{phone.label ?? phone.type}{phone.extension ? ` ext. ${phone.extension}` : ""}</span>
+                      {phone.primary ? <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">Primary</span> : null}
+                      {phone.doNotCallAt ? <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">Do Not Call</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (contact.phone ? <a className="link" href={`tel:${contact.phone}`}>{contact.phone}</a> : null) },
               { label: "Location", value: [contact.city, contact.region].filter(Boolean).join(", ") },
             ]}
           />

@@ -6,6 +6,7 @@ import {
   bookingContacts,
   bookings,
   callSessions,
+  contactPhones,
   contacts,
   followUps,
   organizationContacts,
@@ -23,6 +24,9 @@ import type {
   CallContext,
   CallFollowUp,
   CallOrganization,
+  CallDirection,
+  CallMethod,
+  CallScriptKind,
   CompleteCallInput,
   PersistedCallDisposition,
 } from "@/features/calls/call-types";
@@ -35,6 +39,8 @@ export type ExistingCallSession = {
   resultingBookingStatus: BookingStatus | null;
 };
 
+export type CallPhoneSnapshot = { id: string; number: string; extension: string | null; };
+
 export type CallAuditEntry = {
   entityType: string;
   entityId: string;
@@ -46,6 +52,8 @@ export type CallAuditEntry = {
 export interface CallTransaction {
   lockRequest(requestKey: string): Promise<ExistingCallSession | null>;
   lockContext(input: CompleteCallInput): Promise<CallContext>;
+  lockContactPhone(phoneId: string, contactId: string): Promise<CallPhoneSnapshot | null>;
+  markPhoneDoNotCall(phoneId: string, reason: string, at: Date): Promise<void>;
   createActivity(input: {
     organizationId: string | null;
     contactId: string | null;
@@ -57,6 +65,12 @@ export interface CallTransaction {
     requestKey: string;
     organizationId: string | null;
     contactId: string | null;
+    phoneId: string | null;
+    direction: CallDirection;
+    method: CallMethod;
+    phoneNumberSnapshot: string | null;
+    phoneExtensionSnapshot: string | null;
+    scriptKind: CallScriptKind;
     bookingId: string | null;
     followUpId: string | null;
     nextFollowUpId: string | null;
@@ -318,6 +332,16 @@ class DrizzleCallTransaction implements CallTransaction {
       contactHasBookingRelationship:
         bookingId && contactId ? Boolean(bookingContact) : null,
     };
+  }
+
+  async lockContactPhone(phoneId: string, contactId: string): Promise<CallPhoneSnapshot | null> {
+    const [phone] = await this.database.select({ id: contactPhones.id, number: contactPhones.number, extension: contactPhones.extension }).from(contactPhones).where(and(eq(contactPhones.id, phoneId), eq(contactPhones.contactId, contactId))).limit(1).for("update");
+    return phone ?? null;
+  }
+
+  async markPhoneDoNotCall(phoneId: string, reason: string, at: Date): Promise<void> {
+    const [phone] = await this.database.update(contactPhones).set({ doNotCallAt: at, doNotCallReason: reason, updatedAt: at }).where(eq(contactPhones.id, phoneId)).returning({ id: contactPhones.id });
+    if (!phone) throw new Error("Contact phone is missing.");
   }
 
   async createActivity(input: Parameters<CallTransaction["createActivity"]>[0]) {

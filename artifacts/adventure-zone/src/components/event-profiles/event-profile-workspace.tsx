@@ -21,6 +21,7 @@ function callHref(
   profile: EventProfile,
   context: EventProfileWorkspaceContext = {},
   selectedContactId: string | null = profile.selectedContactId,
+  route = "/calls/new",
 ) {
   const query = new URLSearchParams({ organizationId: profile.id });
   if (selectedContactId) query.set("contactId", selectedContactId);
@@ -28,7 +29,7 @@ function callHref(
   if (context.followUpId) query.set("followUpId", context.followUpId);
   if (context.action) query.set("action", context.action);
   if (context.mode) query.set("mode", context.mode);
-  return `/calls/new?${query}`;
+  return `${route}?${query}`;
 }
 
 function titleCase(value: string) {
@@ -38,11 +39,17 @@ function titleCase(value: string) {
 export function EventProfileWorkspace({
   profile,
   context = {},
+  callablePhoneByContactId = {},
+  assistedCallingEnabled = false,
 }: {
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
+  callablePhoneByContactId?: Record<string, string | null>;
+  assistedCallingEnabled?: boolean;
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
+  const callablePhone = selectedContactId ? callablePhoneByContactId[selectedContactId] ?? null : null;
+  const callingSuppressed = Boolean(selectedContactId) && !callablePhone;
   const selectedContact = profile.contacts.find(({ id }) => id === selectedContactId) ?? null;
   const selectedBooking = context.bookingId
     ? profile.bookings.find(({ id }) => id === context.bookingId) ?? null
@@ -65,7 +72,14 @@ export function EventProfileWorkspace({
             {profile.place.phone ? <p className="mt-1 text-sm text-slate-600">{profile.place.phone}</p> : null}
           </div>
           <div className="flex flex-wrap gap-3">
-            <Link className="button-primary text-center" href={callHref(profile, context, selectedContactId)}>Record call outcome</Link>
+            {!assistedCallingEnabled ? (
+              <span className="self-center text-sm font-semibold text-slate-600">Assisted calling is not enabled.</span>
+            ) : callingSuppressed ? (
+              <button className="button-primary" disabled type="button">Call</button>
+            ) : (
+              <Link className="button-primary text-center" href={callHref(profile, context, selectedContactId)}>Call</Link>
+            )}
+            {assistedCallingEnabled ? <Link className="button-secondary text-center" href={callHref(profile, context, selectedContactId, "/calls/log")}>Log call</Link> : null}
             <Link className="button-secondary text-center" href="/event-profiles/new">New event</Link>
           </div>
         </div>
@@ -122,7 +136,7 @@ export function EventProfileWorkspace({
             {selectedContact ? <div className="mt-3 grid gap-3">
               <p aria-live="polite" className="font-semibold">Current caller: {selectedContact.name}</p>
               <div className="flex flex-wrap gap-2">
-                {selectedContact.phone ? <a className="button-primary text-center" href={`tel:${selectedContact.phone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">No phone recorded</span>}
+                {assistedCallingEnabled && callablePhone && !callingSuppressed ? <a className="button-primary text-center" href={`tel:${callablePhone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">{!assistedCallingEnabled ? "Assisted calling unavailable" : callingSuppressed ? "Calling unavailable" : "No phone recorded"}</span>}
                 {profile.contacts.length > 1 ? <button className="button-secondary" onClick={() => {
                   const index = profile.contacts.findIndex(({ id }) => id === selectedContactId);
                   setSelectedContactId(profile.contacts[(index + 1) % profile.contacts.length]!.id);

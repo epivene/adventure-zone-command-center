@@ -67,7 +67,7 @@ function toTimelineItem(
     bookingId: activity.bookingId,
     kind: activity.kind,
     body: activity.body,
-    occurredAt: activity.occurredAt,
+    occurredAt: activity.occurredAt ?? activity.timelineSortAt,
     createdAt: activity.createdAt,
     updatedAt: activity.updatedAt,
     revisionCount,
@@ -92,7 +92,7 @@ function activitySnapshot(activity: typeof activities.$inferSelect) {
     bookingId: activity.bookingId,
     kind: activity.kind,
     body: activity.body,
-    occurredAt: activity.occurredAt.toISOString(),
+    occurredAt: (activity.occurredAt ?? activity.timelineSortAt).toISOString(),
   };
 }
 
@@ -117,7 +117,7 @@ export class DrizzleActivityRepository
       .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
       .where(condition)
       .groupBy(activities.id)
-      .orderBy(desc(activities.occurredAt), desc(activities.createdAt), desc(activities.id))
+      .orderBy(desc(activities.timelineSortAt), desc(activities.createdAt), desc(activities.id))
       .limit(10);
 
     return records.map(({ activity, revisionCount }) =>
@@ -213,7 +213,12 @@ export class DrizzleActivityRepository
       const now = new Date();
       const [activity] = await transaction
         .insert(activities)
-        .values({ ...input, createdAt: now, updatedAt: now })
+        .values({
+          ...input,
+          timelineSortAt: input.occurredAt,
+          createdAt: now,
+          updatedAt: now,
+        })
         .returning();
       if (!activity) throw new Error("Could not create activity.");
 

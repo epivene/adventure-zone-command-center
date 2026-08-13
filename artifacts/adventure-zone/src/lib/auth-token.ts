@@ -92,6 +92,18 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function apiPut<T>(path: string, body: unknown): Promise<T> {
+  const res = await apiFetch(path, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as any;
+    throw new Error(err?.error ?? `API ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function apiDelete<T>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: "DELETE" });
   if (!res.ok) {

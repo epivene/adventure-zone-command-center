@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { FollowUpList } from "@/components/today/follow-up-list";
+import {
+  CallQueueWorkspace,
+} from "@/components/today/call-queue-workspace";
 import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
 import { SummaryCards } from "@/components/today/summary-cards";
 import { BookingOperations } from "@/components/today/booking-operations";
@@ -22,15 +25,45 @@ function todayHref(followUpsPage: number, planPage: number) {
   return s ? `/today?${s}` : "/today";
 }
 
+type CallingConfig = {
+  assistedCallingEnabled: boolean;
+  voicemailLauncherUrl: string | null;
+};
+
+const disabledCallingConfig: CallingConfig = {
+  assistedCallingEnabled: false,
+  voicemailLauncherUrl: null,
+};
+
+function coerceFollowUps(items: any[]) {
+  return (items ?? []).map((followUp) => ({
+    ...followUp,
+    dueAt: new Date(followUp.dueAt),
+    lastContactedAt: followUp.lastContactedAt
+      ? new Date(followUp.lastContactedAt)
+      : null,
+  }));
+}
+
 export default function TodayPage() {
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [callingConfig, setCallingConfig] = useState<CallingConfig>(
+    disabledCallingConfig,
+  );
   const now = new Date();
 
   useEffect(() => {
-    apiGet<any>("/today")
-      .then((d) => { setDashboard(d); setLoading(false); })
+    Promise.all([
+      apiGet<any>("/today"),
+      apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig),
+    ])
+      .then(([d, config]) => {
+        setDashboard(d);
+        setCallingConfig(config);
+        setLoading(false);
+      })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
@@ -56,11 +89,7 @@ export default function TodayPage() {
   }
 
   // Coerce date strings back to Date objects
-  const followUps = (dashboard.followUps ?? []).map((f: any) => ({
-    ...f,
-    dueAt: new Date(f.dueAt),
-    completedAt: f.completedAt ? new Date(f.completedAt) : null,
-  }));
+  const followUps = coerceFollowUps(dashboard.followUps ?? []);
 
   const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({
     ...e,
@@ -104,12 +133,29 @@ export default function TodayPage() {
         visibleRouteWarningCount={dashboard.visibleRouteWarningCount}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(19rem,1fr)] lg:items-start">
-        <div className="grid gap-3">
-          <FollowUpList followUps={followUps} now={now} />
+      {callingConfig.assistedCallingEnabled ? (
+        <CallQueueWorkspace
+          callingConfig={callingConfig}
+          followUps={followUps}
+          initialFollowUpId={dashboard.nextCall?.id}
+          refreshToday={async () => {
+            const refreshed = await apiGet<any>("/today");
+            setDashboard(refreshed);
+            return {
+              followUps: coerceFollowUps(refreshed.followUps ?? []),
+              followUpTotal: refreshed.followUpTotal ?? 0,
+            };
+          }}
+          remainingCount={dashboard.followUpTotal ?? followUps.length}
+        />
+      ) : (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(19rem,1fr)] lg:items-start">
+          <div className="grid gap-3">
+            <FollowUpList followUps={followUps} now={now} />
+          </div>
+          <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />
         </div>
-        <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />
-      </div>
+      )}
 
       {(dashboard.todayTrips ?? []).length ? (
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

@@ -36,6 +36,12 @@ services:
       # true window and must restore false before the final API restart/report.
       - key: ACT_MIGRATION_APPLY_ENABLED
         value: "false"
+      # Keep assisted calling off through migration and owner smoke testing.
+      - key: ASSISTED_CALLING_ENABLED
+        value: "false"
+      # Optional private launcher value; configure it in Render, not source.
+      - key: VOICEMAIL_LAUNCH_URL
+        sync: false
 
   # ── Vite static frontend ─────────────────────────────────────────────────────
   - type: web

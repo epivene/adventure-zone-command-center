@@ -336,6 +336,7 @@ export class DrizzleContactRepository {
         active: relationship.active,
       })),
       relatedBookings,
+      phones: [],
     };
   }
 
@@ -527,6 +528,7 @@ export class DrizzleContactRepository {
           kind: "note",
           body: note,
           occurredAt: now,
+          timelineSortAt: now,
           createdAt: now,
           updatedAt: now,
         })
@@ -543,7 +545,7 @@ export class DrizzleContactRepository {
           bookingId: activity.bookingId,
           kind: activity.kind,
           body: activity.body,
-          occurredAt: activity.occurredAt.toISOString(),
+          occurredAt: (activity.occurredAt ?? activity.timelineSortAt).toISOString(),
         },
       });
 

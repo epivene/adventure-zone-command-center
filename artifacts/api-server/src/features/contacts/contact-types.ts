@@ -1,3 +1,5 @@
+import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-repository";
+
 export const contactSyncStateValues = [
   "unlinked",
   "synced",
@@ -52,6 +54,7 @@ export type QuickCallerInput = {
   reason: string;
   eventDate: string | null;
   eventLocation: string | null;
+  continueCreating: boolean;
 };
 
 export type ContactListPage = {
@@ -87,4 +90,5 @@ export type ContactDetail = {
   };
   places: PersonPlace[];
   relatedBookings: ContactRelatedBooking[];
+  phones: ContactPhoneRecord[];
 };

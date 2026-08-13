@@ -178,6 +178,9 @@ export const callDispositionValues = [
   "booked",
   "declined",
   "last_resort",
+  "spoke_with_contact",
+  "wrong_number",
+  "do_not_call",
 ] as const;
 export const activityKindEnum = pgEnum("activity_kind", activityKindValues);
 export const callDispositionEnum = pgEnum(
@@ -249,6 +252,31 @@ export const contacts = pgTable("contacts", {
   uniqueIndex("contacts_quick_add_request_key_unique")
     .on(table.quickAddRequestKey)
     .where(sql`${table.quickAddRequestKey} is not null`),
+]);
+
+
+export const contactPhoneTypeValues = ["mobile", "office", "alternate", "unknown"] as const;
+export const contactPhoneTypeEnum = pgEnum("contact_phone_type", contactPhoneTypeValues);
+
+export const contactPhones = pgTable("contact_phones", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  normalizedNumber: text("normalized_number"),
+  type: contactPhoneTypeEnum("type").default("unknown").notNull(),
+  extension: text("extension"),
+  label: text("label"),
+  primary: boolean("primary").default(false).notNull(),
+  source: text("source").default("local").notNull(),
+  doNotCallAt: timestamp("do_not_call_at", { withTimezone: true }),
+  doNotCallReason: text("do_not_call_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("contact_phones_one_primary_per_contact").on(table.contactId).where(sql`${table.primary}`),
+  uniqueIndex("contact_phones_contact_normalized_number_unique").on(table.contactId, table.normalizedNumber).where(sql`${table.normalizedNumber} is not null`),
+  index("contact_phones_normalized_number_idx").on(table.normalizedNumber),
+  check("contact_phones_number_nonblank", sql`btrim(${table.number}) <> ''`),
 ]);
 
 export const travelLegs = pgTable(
@@ -759,6 +787,12 @@ export const callSessions = pgTable(
     requestKey: uuid("request_key"),
     organizationId: uuid("organization_id").references(() => organizations.id),
     contactId: uuid("contact_id").references(() => contacts.id),
+    phoneId: uuid("phone_id").references(() => contactPhones.id, { onDelete: "set null" }),
+    direction: text("direction").default("outgoing").notNull(),
+    method: text("method").default("standard_call").notNull(),
+    phoneNumberSnapshot: text("phone_number_snapshot"),
+    phoneExtensionSnapshot: text("phone_extension_snapshot"),
+    scriptKind: text("script_kind"),
     bookingId: uuid("booking_id").references(() => bookings.id),
     followUpId: uuid("follow_up_id").references(() => followUps.id),
     nextFollowUpId: uuid("next_follow_up_id").references(() => followUps.id),
@@ -776,6 +810,18 @@ export const callSessions = pgTable(
     check(
       "call_sessions_parent_required",
       sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null or ${table.followUpId} is not null`,
+    ),
+    check(
+      "call_sessions_direction_valid",
+      sql`${table.direction} in ('incoming', 'outgoing')`,
+    ),
+    check(
+      "call_sessions_method_valid",
+      sql`${table.method} in ('standard_call', 'office_call', 'individual_voicemail', 'mobile_log')`,
+    ),
+    check(
+      "call_sessions_script_kind_valid",
+      sql`${table.scriptKind} is null or ${table.scriptKind} in ('first_outreach', 'follow_up', 'contract_follow_up', 'incoming_inquiry')`,
     ),
     check(
       "call_sessions_ended_at_not_before_started",
@@ -2248,3 +2294,4 @@ export const routingCacheEntries = pgTable(
     ),
   ],
 );
+

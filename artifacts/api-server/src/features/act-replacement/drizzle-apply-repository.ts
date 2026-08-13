@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import type { ManifestOperation } from "./manifest-builder";
 import type { ApplyAttempt, ApplyBatchClaim, ApplyBatchRecord, ApplyOrigin, ApplyRepository, ApplyTarget, FillMissingResult, ReviewedOverwriteInput, StoredApproval, StoredOperation } from "./apply-repository";
+import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import { localValueFingerprint } from "./local-edit-policy";
 import { writableFieldAcceptsBlank, writablePhysicalColumn, writableTargetFieldColumns } from "./writable-target-fields";
 
@@ -13,6 +14,7 @@ const targetTypes = new Set(Object.keys(entityTables));
 const rows = (value: unknown): Row[] => Array.isArray((value as { rows?: unknown[] })?.rows) ? ((value as { rows: Row[] }).rows) : [];
 const asString = (value: unknown) => typeof value === "string" ? value : value == null ? "" : String(value);
 const asJson = <T>(value: unknown, fallback: T): T => value == null ? fallback : value as T;
+const normalizedContactPhone = (value: unknown) => typeof value === "string" ? normalizeNorthAmericanPhone(value) : null;
 
 /** Durable SQL adapter. It deliberately uses the normalized Phase-2 tables and only the
  * allow-listed local target tables. Unsupported target shapes fail closed instead of
@@ -170,7 +172,7 @@ export class DrizzleApplyRepository implements ApplyRepository {
   private targetColumns(entityType: string, value: Record<string, unknown>, sourceRecordId: string, sourceVersionId: string | undefined, actRecordId: string): Record<string, unknown> {
     const pick = (...keys: string[]) => { for (const key of keys) if (value[key] !== undefined && value[key] !== null && value[key] !== "") return value[key]; return null; };
     if (entityType === "organization") return { name: pick("name") ?? "Unnamed organization", act_record_id: actRecordId, phone: pick("phone"), website: pick("website"), act_industry: pick("industry", "act_industry"), address_1: pick("address1", "address_1"), address_2: pick("address2", "address_2"), city: pick("city"), region: pick("region"), postal_code: pick("postalCode", "postal_code") };
-    if (entityType === "contact") return { first_name: pick("firstName", "first_name") ?? "Unknown", last_name: pick("lastName", "last_name") ?? "Contact", email: pick("email"), phone: pick("phone"), act_record_id: actRecordId, job_title: pick("jobTitle", "job_title"), address_1: pick("address1", "address_1"), address_2: pick("address2", "address_2"), city: pick("city"), region: pick("region"), postal_code: pick("postalCode", "postal_code") };
+    if (entityType === "contact") { const phone = pick("phone"); return { first_name: pick("firstName", "first_name") ?? "Unknown", last_name: pick("lastName", "last_name") ?? "Contact", email: pick("email"), phone, normalized_phone: normalizedContactPhone(phone), act_record_id: actRecordId, job_title: pick("jobTitle", "job_title"), address_1: pick("address1", "address_1"), address_2: pick("address2", "address_2"), city: pick("city"), region: pick("region"), postal_code: pick("postalCode", "postal_code") }; }
     if (entityType === "booking") return { name: pick("name") ?? "Unnamed booking", city: pick("city") ?? "Unknown", region: pick("region") ?? "Unknown", act_record_id: actRecordId, venue_name: pick("venueName", "venue_name"), address_1: pick("address1", "address_1"), postal_code: pick("postalCode", "postal_code"), starts_at: pick("startsAt", "starts_at"), ends_at: pick("endsAt", "ends_at"), status: pick("localStatus", "status") ?? "new_lead", probability: pick("localProbability", "probability") ?? "possible", notes: pick("notes") };
     if (entityType === "calling_list") return { name: pick("name") ?? "Imported calling list", kind: "static" };
     return { kind: pick("category") ?? "act_history", subject: pick("subject"), status: pick("status"), body: String(pick("body", "text", "name") ?? "Imported activity"), occurred_at: pick("sourceOccurredAt", "occurredAt", "occurred_at"), timeline_sort_at: pick("timelineSortAt", "timeline_sort_at") ?? new Date(), date_is_import_fallback: pick("dateIsImportFallback", "date_is_import_fallback") ?? false, ends_at: pick("endsAt", "ends_at"), source_record_id: sourceRecordId, source_version_id: sourceVersionId ?? null, source_type: pick("sourceType", "source_type") ?? "activity" };
@@ -179,16 +181,22 @@ export class DrizzleApplyRepository implements ApplyRepository {
     const table = entityTables[target.entityType];
     const column = writablePhysicalColumn(target.entityType, field);
     if (!table || !column) throw Object.assign(new Error("unsupported_target_field"), { code: "unsupported_target_field" });
-    await this.withAttempt(attempt, async (executor) => { await executor.execute(sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${value}, updated_at = now() where id = ${target.id}`); });
+    const normalizedAssignment = target.entityType === "contact" && field === "phone"
+      ? sql`, normalized_phone = ${normalizedContactPhone(value)}`
+      : sql``;
+    await this.withAttempt(attempt, async (executor) => { await executor.execute(sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${value}${normalizedAssignment}, updated_at = now() where id = ${target.id}`); });
   }
   async applyReviewedOverwrite(input: ReviewedOverwriteInput, attempt: ApplyAttempt) {
     const table = entityTables[input.target.entityType];
     const column = writablePhysicalColumn(input.target.entityType, input.field);
     if (!table || !column) throw Object.assign(new Error("unsupported_target_field"), { code: "unsupported_target_field" });
     if (localValueFingerprint(input.expectedLocalValue) !== input.expectedLocalValueFingerprint) throw Object.assign(new Error("local_edit_detected"), { code: "local_edit_detected" });
+    const normalizedAssignment = input.target.entityType === "contact" && input.field === "phone"
+      ? sql`, normalized_phone = ${normalizedContactPhone(input.value)}`
+      : sql``;
     await this.withAttempt(attempt, async (executor) => {
       const applied = await this.query(sql`with overwritten as (
-        update ${sql.raw(table)} set ${sql.raw(column)} = ${input.value}, updated_at = now()
+        update ${sql.raw(table)} set ${sql.raw(column)} = ${input.value}${normalizedAssignment}, updated_at = now()
         where id = ${input.target.id} and ${sql.raw(column)} is not distinct from ${input.expectedLocalValue}
         returning id
       ), origin as (
@@ -211,7 +219,10 @@ export class DrizzleApplyRepository implements ApplyRepository {
     if (!table || !column) throw Object.assign(new Error("unsupported_target_field"), { code: "unsupported_target_field" });
     return this.withAttempt(attempt, async (executor) => {
       const blankCondition = writableFieldAcceptsBlank(target.entityType, field) ? sql` or ${sql.raw(column)} = ''` : sql``;
-      const updated = await this.query(sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${value}, updated_at = now() where id = ${target.id} and (${sql.raw(column)} is null${blankCondition}) returning ${sql.raw(column)} as value`, executor);
+      const normalizedAssignment = target.entityType === "contact" && field === "phone"
+        ? sql`, normalized_phone = ${normalizedContactPhone(value)}`
+        : sql``;
+      const updated = await this.query(sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${value}${normalizedAssignment}, updated_at = now() where id = ${target.id} and (${sql.raw(column)} is null${blankCondition}) returning ${sql.raw(column)} as value`, executor);
       if (updated.length === 1) return "applied";
       const current = await this.query(sql`select ${sql.raw(column)} as value, ${sql.raw(column)} is not distinct from ${value} as "sameValue" from ${sql.raw(table)} where id = ${target.id} limit 1`, executor);
       if (current.length !== 1) throw Object.assign(new Error("target_not_found"), { code: "target_not_found" });
