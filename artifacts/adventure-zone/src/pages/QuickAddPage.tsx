@@ -7,7 +7,7 @@ import { apiPost } from "@/lib/auth-token";
 type QuickAddResult =
   | { ok: true; contactId: string }
   | { ok: false; error: string }
-  | { ok: false; candidates: Array<{
+  | { ok: false; canContinueCreating: boolean; candidates: Array<{
       contactId: string;
       name: string;
       organizationName: string | null;
