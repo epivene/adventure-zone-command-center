@@ -22,6 +22,7 @@ import {
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
 import type { ContactInput } from "@/features/contacts/contact-input";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import {
@@ -287,7 +288,7 @@ export class DrizzleContactRepository {
       .limit(1);
     if (!record) return null;
 
-    const [placeRows, relatedBookings] = await Promise.all([
+    const [placeRows, relatedBookings, phones] = await Promise.all([
       this.database
         .select({
           relationship: organizationContacts,
@@ -318,6 +319,7 @@ export class DrizzleContactRepository {
       .innerJoin(bookings, eq(bookingContacts.bookingId, bookings.id))
       .where(eq(bookingContacts.contactId, contactId))
       .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
+      createContactPhoneRepository(this.database).listForContact(contactId),
     ]);
 
     return {
@@ -336,6 +338,7 @@ export class DrizzleContactRepository {
         active: relationship.active,
       })),
       relatedBookings,
+      phones,
     };
   }
 
