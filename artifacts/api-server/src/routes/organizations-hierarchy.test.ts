@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
 const hierarchy = vi.hoisted(() => ({
   setOrganizationParent: vi.fn(),
@@ -9,6 +10,21 @@ const hierarchy = vi.hoisted(() => ({
 }));
 
 vi.mock("@workspace/db", () => ({ db: {} }));
+
+vi.mock("@/features/organizations/last-resort-input", () => ({
+  organizationListQuerySchema: z.object({}).transform(() => ({
+    search: "",
+    lastResort: "all",
+    travelLegId: null,
+    page: 1,
+    pageSize: 50,
+  })),
+  setLastResortInputSchema: z.object({
+    organizationId: z.string().uuid(),
+    enabled: z.boolean(),
+    reason: z.string(),
+  }),
+}));
 
 vi.mock("@/features/organizations/organization-repository", () => ({
   DrizzleOrganizationRepository: class {},
