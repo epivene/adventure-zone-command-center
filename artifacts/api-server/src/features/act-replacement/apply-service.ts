@@ -16,10 +16,13 @@ export class ActApplyService {
     if (!this.enabled) fail("act_apply_disabled");
     if (this.repository.durableApply !== true) fail("durable_apply_unavailable");
     const replayFingerprint = fingerprintSourceContent({ digest: input.expectedManifestDigest, operationIds: [...input.approvedOperationIds].sort(), requestedBy: input.requestedBy ?? "" });
-    const existing = await this.repository.getBatch(input.runId, input.requestKey); if (existing) {
+    const existing = await this.repository.getBatch(input.runId, input.requestKey);
+    const reclaimingExpiredBatch = existing?.state === "applying"
+      && existing.leaseExpiresAt !== undefined
+      && existing.leaseExpiresAt <= Date.now();
+    if (existing) {
       if (existing.fingerprint && existing.fingerprint !== replayFingerprint) fail("request_replay_mismatch");
-      const expiredApplying = existing.state === "applying" && existing.leaseExpiresAt !== undefined && existing.leaseExpiresAt <= Date.now();
-      if (existing.state !== "queued" && !expiredApplying) return status(existing);
+      if (existing.state !== "queued" && !reclaimingExpiredBatch) return status(existing);
       if (existing.manifestDigest !== input.expectedManifestDigest || JSON.stringify([...existing.operationIds].sort()) !== JSON.stringify([...input.approvedOperationIds].sort())) fail("request_replay_mismatch");
     }
     const currentDigest = await this.repository.getManifestDigest(input.runId); if (!currentDigest || currentDigest !== input.expectedManifestDigest) fail("manifest_digest_mismatch");
@@ -48,7 +51,10 @@ export class ActApplyService {
           || approval.approvalModeVersion !== ACT_APPROVAL_MODE_VERSION
           || !hasReviewedOverwriteProof(operation);
       }
-      return !isAutomaticallyApprovedOperation(operation);
+      const approvalCandidate = reclaimingExpiredBatch && operation.status === "leased"
+        ? { ...operation, status: "pending" as const }
+        : operation;
+      return !isAutomaticallyApprovedOperation(approvalCandidate);
     })) fail("outcome_not_ready");
     if (operations.some((operation) => operation.latestSourceVersionId !== operation.sourceVersionId)) fail("source_version_changed");
     const keys = new Set(operations.map((operation) => operation.operationKey));
