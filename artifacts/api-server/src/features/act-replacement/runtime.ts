@@ -13,6 +13,27 @@ export interface ActExtractionRuntime {
   close(): Promise<void>;
 }
 
+type ExtractionLoop = ActExtractionRuntime;
+
+export const actExtractionWorkerConcurrency = 4;
+
+export function createActExtractionLoopPool(input: {
+  concurrency: number;
+  createLoop(index: number): ExtractionLoop;
+}): ActExtractionRuntime {
+  const loops = Array.from({ length: input.concurrency }, (_, index) =>
+    input.createLoop(index),
+  );
+  return {
+    start() {
+      for (const loop of loops) loop.start();
+    },
+    async close() {
+      await Promise.all(loops.map((loop) => loop.close()));
+    },
+  };
+}
+
 type ShutdownStage = "runtime" | "server" | "pool";
 
 export function createActServerShutdown(input: {
@@ -61,6 +82,7 @@ export function createActExtractionClientAdapter(
   };
   source: ActExtractionSourceClient;
 } {
+  let authorizationInFlight: Promise<void> | null = null;
   const transport: ActReadTransport = {
     get rateLimit() {
       return client.rateLimit;
@@ -71,7 +93,12 @@ export function createActExtractionClientAdapter(
   return {
     authorization: {
       isReady: (now) => client.hasValidAuthorization(now),
-      authorize: () => client.authorize(),
+      authorize: () => {
+        authorizationInFlight ??= client.authorize().finally(() => {
+          authorizationInFlight = null;
+        });
+        return authorizationInFlight;
+      },
     },
     source: {
       listRoot: (kind, request) => source.listRoot(kind, request),
@@ -100,7 +127,11 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     { DrizzleActSourceArchiveRepository },
     { DrizzleActRequestAuditRepository },
     { ActExtractionWorker },
-    { ActExtractionWorkerLoop, ActOrganizerWorkerLoop, systemWorkerLoopScheduler },
+    {
+      ActExtractionWorkerLoop,
+      ActOrganizerWorkerLoop,
+      systemWorkerLoopScheduler,
+    },
     { ProductionActOrganizer, ProductionActOrganizerRecoveryWorker },
     { DrizzleProductionOrganizerStore },
   ] = await Promise.all([
@@ -127,11 +158,15 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     authorization: clientAdapter.authorization,
     clock,
   });
-  const extractionLoop = new ActExtractionWorkerLoop({
-    worker,
-    workerId: `act-extraction-${process.pid}-${randomUUID()}`,
-    clock,
-    scheduler: systemWorkerLoopScheduler,
+  const extractionLoop = createActExtractionLoopPool({
+    concurrency: actExtractionWorkerConcurrency,
+    createLoop: (index) =>
+      new ActExtractionWorkerLoop({
+        worker,
+        workerId: `act-extraction-${process.pid}-${index}-${randomUUID()}`,
+        clock,
+        scheduler: systemWorkerLoopScheduler,
+      }),
   });
   const organizerStore = new DrizzleProductionOrganizerStore(db, {
     sourceDatabaseKey: environment.config.databaseName,

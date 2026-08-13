@@ -6,6 +6,7 @@ import type { ActReplacementCheckpointRepository } from "./checkpoint-repository
 import { ActExtractionWorker } from "./extraction-worker";
 import {
   createActExtractionClientAdapter,
+  createActExtractionLoopPool,
   createActServerShutdown,
 } from "./runtime";
 
@@ -72,6 +73,61 @@ describe("Act extraction server shutdown", () => {
 });
 
 describe("Act extraction runtime composition", () => {
+  it("starts and drains every extraction loop in the bounded pool", async () => {
+    const events: string[] = [];
+    const pool = createActExtractionLoopPool({
+      concurrency: 4,
+      createLoop(index) {
+        return {
+          start() {
+            events.push(`start:${index}`);
+          },
+          async close() {
+            events.push(`close:${index}`);
+          },
+        };
+      },
+    });
+
+    pool.start();
+    await pool.close();
+
+    expect(events).toEqual([
+      "start:0",
+      "start:1",
+      "start:2",
+      "start:3",
+      "close:0",
+      "close:1",
+      "close:2",
+      "close:3",
+    ]);
+  });
+
+  it("single-flights authorization shared by concurrent extraction loops", async () => {
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const authorize = vi.fn(() => pending);
+    const adapter = createActExtractionClientAdapter({
+      authorize,
+      hasValidAuthorization: () => false,
+      getJsonAuthorized: vi.fn(),
+      rateLimit: { limit: null, remaining: null, reset: null },
+    });
+
+    const first = adapter.authorization.authorize();
+    const second = adapter.authorization.authorize();
+    expect(authorize).toHaveBeenCalledTimes(1);
+
+    release();
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
   it("runs cold authorization and warm data as separate one-fetch worker steps", async () => {
     const fetcher = vi
       .fn<typeof fetch>()
