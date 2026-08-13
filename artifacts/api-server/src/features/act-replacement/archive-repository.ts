@@ -11,6 +11,7 @@ import {
 } from "@workspace/db/schema";
 import type {
   ActArchiveCompleteness,
+  ActCheckpointKind,
   ActExtractionCounters,
   ActQueryMode,
   ActReplacementStreamType,
@@ -84,6 +85,19 @@ const zeroCounters = (): ActExtractionCounters => ({
 
 function conflicts(): never {
   throw new ActArchiveConflictError();
+}
+
+export function archiveStreamAllowedForCheckpoint(
+  checkpointStream: ActReplacementStreamType,
+  checkpointKind: ActCheckpointKind,
+  itemStream: ActReplacementStreamType,
+): boolean {
+  return (
+    itemStream === checkpointStream ||
+    (checkpointStream === "note" &&
+      checkpointKind === "relationship" &&
+      itemStream === "note_contact")
+  );
 }
 
 export function archivePageAction(
@@ -244,7 +258,14 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
           conflicts();
         }
         if (
-          input.items.some((item) => item.streamType !== checkpoint.streamType)
+          input.items.some(
+            (item) =>
+              !archiveStreamAllowedForCheckpoint(
+                checkpoint.streamType as ActReplacementStreamType,
+                checkpoint.checkpointKind as ActCheckpointKind,
+                item.streamType,
+              ),
+          )
         ) {
           conflicts();
         }
