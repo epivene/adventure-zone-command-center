@@ -1,5 +1,10 @@
 import { normalizeMatchingText, normalizeWebsiteHost } from "@/features/act-migration/matching-normalization";
 import {
+  classifyOrganizationFamily,
+  type OrganizationFamilyClassification,
+  type OrganizationFamilyRecord,
+} from "@/features/organizations/organization-family-matcher";
+import {
   resolveContextClues,
   type ContextClueEvidence,
 } from "./context-clue-resolver";
@@ -28,6 +33,12 @@ export type OrganizationMatchSource = {
   externalLinks?: readonly (ExternalLink & { sourceRecordId?: string | null })[];
   manualAssignment?: ManualAssignment | null;
 };
+
+export function classifyOrganizationFamilyEvidence(
+  records: readonly OrganizationFamilyRecord[],
+): OrganizationFamilyClassification {
+  return classifyOrganizationFamily(records);
+}
 
 export type LocalOrganizationCandidate = {
   id: string;
