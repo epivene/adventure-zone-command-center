@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 
+import { HierarchyControls } from "@/components/organizations/hierarchy-controls";
 import { LocationsSection } from "@/components/organizations/locations-section";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
@@ -100,6 +101,11 @@ export function EventProfileWorkspace({
           </p>
         ) : null}
       </header>
+
+      <HierarchyControls
+        onRefresh={() => window.location.reload()}
+        profile={profile}
+      />
 
       <LocationsSection locations={profile.locations} rollups={profile.rollups} />
 
