@@ -1,13 +1,20 @@
 import express from "express";
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, beforeAll, afterAll, describe, expect, it, vi } from "vitest";
 
-const { submitQuickCaller } = vi.hoisted(() => ({ submitQuickCaller: vi.fn() }));
+const repository = vi.hoisted(() => ({
+  hasExactQuickCallerDuplicate: vi.fn(),
+  findQuickCallerDuplicates: vi.fn(),
+  createQuickCaller: vi.fn(),
+}));
 
 vi.mock("@workspace/db", () => ({ db: {} }));
-vi.mock("@/features/contacts/quick-caller-service", () => ({ submitQuickCaller }));
 vi.mock("@/features/contacts/contact-repository", () => ({
-  DrizzleContactRepository: class {},
+  DrizzleContactRepository: class {
+    hasExactQuickCallerDuplicate = repository.hasExactQuickCallerDuplicate;
+    findQuickCallerDuplicates = repository.findQuickCallerDuplicates;
+    createQuickCaller = repository.createQuickCaller;
+  },
 }));
 vi.mock("@/features/caller-finder/caller-finder-service", () => ({
   CallerFinderService: class { find = vi.fn(); },
@@ -27,6 +34,7 @@ vi.mock("@/features/calls/call-workspace-query", () => ({ loadCallWorkspace: vi.
 vi.mock("@/features/bookings/booking-operations-summary", () => ({ createBookingOperationsSummaryProvider: vi.fn() }));
 vi.mock("@/features/contact-phones/contact-phone-repository", () => ({ createContactPhoneRepository: vi.fn() }));
 
+import { issueToken, requireOwnerMiddleware } from "@/lib/auth";
 import callsRouter from "./calls";
 
 const input = {
@@ -41,72 +49,135 @@ const input = {
   continueCreating: false,
 };
 
+const originalSecret = process.env.SESSION_SECRET;
+let authorization = "";
+
 function app() {
   const instance = express();
   instance.use(express.json());
-  instance.use(callsRouter);
+  instance.use(requireOwnerMiddleware, callsRouter);
   return instance;
 }
 
-beforeEach(() => submitQuickCaller.mockReset());
+beforeAll(() => {
+  process.env.SESSION_SECRET = "task-7-route-test-secret";
+  const issued = issueToken();
+  if (!issued) throw new Error("Could not issue owner test token");
+  authorization = `Bearer ${issued.token}`;
+});
 
-describe("POST /calls/quick-caller", () => {
-  it("returns exact conflicts without creating even when bypass was requested", async () => {
-    submitQuickCaller.mockResolvedValue({
-      ok: false,
-      candidates: [{ contactId: "existing", kind: "exact", reasons: ["Exact phone"] }],
-    });
+afterAll(() => {
+  if (originalSecret === undefined) delete process.env.SESSION_SECRET;
+  else process.env.SESSION_SECRET = originalSecret;
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  repository.hasExactQuickCallerDuplicate.mockResolvedValue(false);
+  repository.findQuickCallerDuplicates.mockResolvedValue([]);
+  repository.createQuickCaller.mockResolvedValue({
+    kind: "created",
+    contactId: "created-contact",
+  });
+});
+
+describe("authenticated POST /calls/quick-caller", () => {
+  it("rejects requests without the production owner authorization boundary", async () => {
+    await request(app()).post("/calls/quick-caller").send(input).expect(401);
+    expect(repository.hasExactQuickCallerDuplicate).not.toHaveBeenCalled();
+  });
+
+  it("returns an authoritative no-continue gate when an exact conflict is hidden beyond eight likely candidates", async () => {
+    repository.hasExactQuickCallerDuplicate.mockResolvedValue(true);
+    repository.findQuickCallerDuplicates.mockResolvedValue(
+      Array.from({ length: 8 }, (_, index) => ({
+        contactId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        name: `Likely ${index}`,
+        organizationName: "Prairie Days",
+        city: "Minot",
+        region: "ND",
+        reasons: ["Name and organization"],
+        kind: "likely",
+      })),
+    );
 
     const response = await request(app())
       .post("/calls/quick-caller")
+      .set("Authorization", authorization)
       .send({ ...input, continueCreating: true })
       .expect(200);
 
     expect(response.body).toMatchObject({
       ok: false,
-      candidates: [{ contactId: "existing", kind: "exact" }],
+      canContinueCreating: false,
+      candidates: expect.arrayContaining([
+        expect.objectContaining({ kind: "likely" }),
+      ]),
     });
+    expect(repository.createQuickCaller).not.toHaveBeenCalled();
   });
 
-  it("returns likely candidates for explicit review", async () => {
-    submitQuickCaller.mockResolvedValue({
+  it("marks bounded likely candidates as explicitly continuable", async () => {
+    repository.findQuickCallerDuplicates.mockResolvedValue([{
+      contactId: "likely",
+      name: "Avery Lee",
+      organizationName: "Prairie Days",
+      city: "Minot",
+      region: "ND",
+      reasons: ["Name and organization"],
+      kind: "likely",
+    }]);
+
+    const response = await request(app())
+      .post("/calls/quick-caller")
+      .set("Authorization", authorization)
+      .send(input)
+      .expect(200);
+
+    expect(response.body).toMatchObject({
       ok: false,
-      candidates: [{ contactId: "likely", kind: "likely", reasons: ["Name and organization"] }],
+      canContinueCreating: true,
+      candidates: [{ contactId: "likely", kind: "likely" }],
     });
-
-    const response = await request(app()).post("/calls/quick-caller").send(input).expect(200);
-
-    expect(response.body.candidates[0]).toMatchObject({ contactId: "likely", kind: "likely" });
-    expect(submitQuickCaller).toHaveBeenCalledWith(
-      expect.objectContaining({ requestKey: input.requestKey, continueCreating: false }),
-      expect.anything(),
-    );
   });
 
-  it("forwards explicit continue creation using the same request key", async () => {
-    submitQuickCaller.mockResolvedValue({ ok: true, contactId: "created" });
+  it("creates only after the explicit continuation reaches the service", async () => {
+    repository.findQuickCallerDuplicates.mockResolvedValue([{
+      contactId: "likely",
+      name: "Avery Lee",
+      organizationName: "Prairie Days",
+      city: "Minot",
+      region: "ND",
+      reasons: ["Name and organization"],
+      kind: "likely",
+    }]);
 
     await request(app())
       .post("/calls/quick-caller")
+      .set("Authorization", authorization)
       .send({ ...input, continueCreating: true })
-      .expect(201, { ok: true, contactId: "created" });
+      .expect(201, { ok: true, contactId: "created-contact" });
 
-    expect(submitQuickCaller).toHaveBeenCalledWith(
-      expect.objectContaining({ requestKey: input.requestKey, continueCreating: true }),
-      expect.anything(),
+    expect(repository.createQuickCaller).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestKey: input.requestKey,
+        continueCreating: true,
+      }),
     );
   });
 
-  it("returns the same idempotent service result for a replayed request key", async () => {
-    submitQuickCaller.mockResolvedValue({ ok: true, contactId: "created-once" });
+  it("rejects an invalid body before any repository work", async () => {
+    const response = await request(app())
+      .post("/calls/quick-caller")
+      .set("Authorization", authorization)
+      .send({ ...input, name: "" })
+      .expect(400);
 
-    const first = await request(app()).post("/calls/quick-caller").send(input).expect(201);
-    const replay = await request(app()).post("/calls/quick-caller").send(input).expect(201);
-
-    expect(first.body).toEqual({ ok: true, contactId: "created-once" });
-    expect(replay.body).toEqual(first.body);
-    expect(submitQuickCaller.mock.calls[0]?.[0].requestKey).toBe(
-      submitQuickCaller.mock.calls[1]?.[0].requestKey,
-    );
+    expect(response.body).toEqual({
+      ok: false,
+      error: "Enter the caller's name.",
+    });
+    expect(repository.hasExactQuickCallerDuplicate).not.toHaveBeenCalled();
   });
 });
+
