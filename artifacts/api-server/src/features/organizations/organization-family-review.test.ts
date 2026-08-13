@@ -246,6 +246,37 @@ describe("organization family review", () => {
     ]);
   });
 
+  it.each([
+    {
+      label: "repeated complete locations",
+      records: [
+        { id: FIRST_ID, name: "Water Lantern Festival", address1: "100 Lake St", city: "Denver", region: "CO" },
+        { id: SECOND_ID, name: "Water Lantern Festival", address1: "200 Lake St", city: "Denver", region: "CO" },
+        { id: "44444444-4444-4444-8444-444444444444", name: "Water Lantern Festival", address1: "300 River Rd", city: "Austin", region: "TX" },
+      ],
+    },
+    {
+      label: "an incomplete member",
+      records: [
+        { id: FIRST_ID, name: "Water Lantern Festival", address1: "100 Lake St", city: "Denver", region: "CO" },
+        { id: SECOND_ID, name: "Water Lantern Festival", address1: "200 River Rd", city: "Austin", region: "TX" },
+        { id: "44444444-4444-4444-8444-444444444444", name: "Water Lantern Festival", address1: "300 Unknown Rd", city: "", region: "" },
+      ],
+    },
+  ])("protects the whole exact-name bucket with $label", ({ records }) => {
+    const groups = discoverOrganizationFamilyCandidates(records);
+    expect(groups).toEqual([
+      expect.objectContaining({
+        classification: "ambiguous_location_candidate",
+        candidateIds: [
+          FIRST_ID,
+          SECOND_ID,
+          "44444444-4444-4444-8444-444444444444",
+        ],
+      }),
+    ]);
+  });
+
   it("does not classify exact names when a location is blank or the complete location is the same", () => {
     expect(discoverOrganizationFamilyCandidates([
       { id: FIRST_ID, name: "Lantern Nights", city: "", region: "CO" },
