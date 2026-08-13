@@ -58,8 +58,8 @@ export function CallScriptCard({
       : callScriptPrompts[kind];
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="call-script-title">
-      <h2 className="text-xl font-bold" id="call-script-title">Call script</h2>
+    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="conversation-guide-title">
+      <h2 className="text-xl font-bold" id="conversation-guide-title">Conversation guide</h2>
       <label className="mt-3 grid gap-1.5 font-medium">
         Call script
         <select
