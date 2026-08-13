@@ -15,7 +15,7 @@ export type LegacyContactPhoneFields = {
   normalizedPhone: string | null;
 };
 
-type NewPhone = Omit<ContactPhoneRecord, "id" | "source" | "doNotCallAt" | "doNotCallReason">;
+type NewPhone = Omit<ContactPhoneRecord, "id" | "source" | "doNotCallAt" | "doNotCallReason"> & { createdAt: Date; updatedAt: Date };
 type PhoneUpdate = Pick<ContactPhoneInput, "number" | "type" | "extension" | "label" | "primary"> & {
   normalizedNumber: string | null;
   updatedAt: Date;
@@ -100,8 +100,8 @@ type DrizzleDatabase = typeof database;
 export class DrizzleContactPhoneStore implements ContactPhoneStore {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  transaction<T>(callback: (store: ContactPhoneStore) => Promise<T>) {
-    return this.database.transaction((transaction) => callback(new DrizzleContactPhoneStore(transaction as DrizzleDatabase)));
+  transaction<T>(callback: (store: ContactPhoneStore) => Promise<T>): Promise<T> {
+    return this.database.transaction((transaction) => callback(new DrizzleContactPhoneStore(transaction as unknown as DrizzleDatabase)));
   }
 
   async lockContact(id: string) {
