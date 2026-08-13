@@ -23,13 +23,13 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verification script tests
-        run: pnpm --filter @workspace/api-server exec vitest run --root ../.. scripts/verify-organization-location-hierarchy.test.ts
+        run: pnpm exec vitest run scripts/verify-organization-location-hierarchy.test.ts
       - name: API tests
         if: ${{ always() }}
         run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=15000
       - name: Frontend tests
         if: ${{ always() }}
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src
+        run: pnpm exec vitest run artifacts/adventure-zone/src
       - name: Database typecheck
         if: ${{ always() }}
         run: pnpm --filter @workspace/db build
