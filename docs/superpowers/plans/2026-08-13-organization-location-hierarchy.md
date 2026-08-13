@@ -757,5 +757,5 @@ git commit -m "test: verify organization location hierarchy"
 ## Plan self-review
 
 - Spec coverage: schema, one-level validation, parent/child information ownership, websites, parent and child screens, parent-first search, local discovery, ACT suggestions, manual grouping/moving/ungrouping, duplicate-review outcomes, server/client bulk protection, rollback behavior, rollups, provenance preservation, and representative-family verification are each assigned to a task.
-- Placeholder scan: no TBD, TODO, “implement later,” generic error-handling instruction, or undefined follow-on task remains.
+- Placeholder scan: every step names concrete behavior, commands, expected results, and interfaces; no unfinished markers or generic follow-on instructions remain.
 - Type consistency: `parentOrganizationId`, `OrganizationParentSummary`, `OrganizationLocationSummary`, `OrganizationHierarchyRollups`, `classification`, and hierarchy endpoint names are used consistently across producer and consumer tasks.
