@@ -40,6 +40,9 @@ invented.
 - RED: create-mode route assertion failed because **Create contact** linked back
   to finder mode.
 - GREEN: explicit `create=1` transition passed.
+- RED: a safe create CTA remained visible while a changed query was waiting for
+  its debounce/API result.
+- GREEN: changing the finder input now clears stale certainty immediately.
 - RED: quick-caller route suite failed 4/4 with `404 Not Found`.
 - GREEN: exact conflict, likely-candidate review, explicit continue, and replayed
   request-key route tests passed 4/4.
@@ -47,7 +50,7 @@ invented.
 ## Fresh verification
 
 - `pnpm --filter @workspace/adventure-zone exec vitest run src/components/calls/caller-finder.test.tsx src/components/contacts/quick-add-caller.test.tsx`
-  — PASS, 2 files and 7 tests.
+  — PASS, 2 files and 8 tests.
 - `pnpm --filter @workspace/adventure-zone typecheck`
   — PASS in the local compatibility checkout after importing the unchanged
   `a38b4798` contact type contracts.
