@@ -19,6 +19,12 @@ jobs:
       - id: focused_tests
         continue-on-error: true
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/calls/caller-finder.test.tsx src/components/contacts/quick-add-caller.test.tsx
+      - id: api_tests
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/calls-quick-caller.test.ts src/features/contacts/quick-caller-service.test.ts
+      - id: api_typecheck
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server typecheck
       - name: Confirm the known six-error web baseline
         run: |
           set +e
@@ -27,6 +33,9 @@ jobs:
           set -e
           test "$typecheck_status" -ne 0
           test "$(grep -c 'error TS' web-typecheck.log)" -eq 6
-      - name: Require focused tests
+      - name: Require focused tests and API checks
         if: always()
-        run: test "${{ steps.focused_tests.outcome }}" = "success"
+        run: |
+          test "${{ steps.focused_tests.outcome }}" = "success"
+          test "${{ steps.api_tests.outcome }}" = "success"
+          test "${{ steps.api_typecheck.outcome }}" = "success"
