@@ -1,12 +1,20 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 
 import {
   ActivityTimeline,
   type ActivityMutationResult,
   type ActivityRevisionResult,
 } from "@/components/activities/activity-timeline";
+import { CallContextRow } from "@/components/calls/call-context-row";
+import { CallScriptCard } from "@/components/calls/call-script-card";
+import { PhoneActions } from "@/components/calls/phone-actions";
 import type {
   ActivityParent,
   ActivityTimelineItem,
@@ -15,22 +23,39 @@ import type {
 } from "@/features/activities/activity-types";
 import type { BookingStatus } from "@/features/bookings/booking-types";
 import type { BookingOperationsSummary } from "@/features/bookings/booking-operations-summary";
-import type { CallDisposition, CompleteCallInput } from "@/features/calls/call-types";
+import {
+  buildCallDraftKey,
+  clearCallDraft,
+  loadCallDraft,
+  saveCallDraft,
+} from "@/features/calls/call-draft";
+import type {
+  CallDirection,
+  CallDisposition,
+  CallMethod,
+  CallScriptKind,
+  CompleteCallInput,
+} from "@/features/calls/call-types";
+import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
 import {
   BUSINESS_TIME_ZONE,
   parseBusinessDate,
 } from "@/lib/business-date";
 
 export type CompleteCallResult = { ok: true } | { ok: false; error: string };
+export type CallWorkspaceMode = "full" | "compact" | "mobile";
 
 const dispositionOptions: { value: CallDisposition; label: string }[] = [
   { value: "no_answer", label: "No answer" },
   { value: "left_voicemail", label: "Left voicemail" },
+  { value: "spoke_with_contact", label: "Spoke with contact" },
   { value: "follow_up_needed", label: "Follow-up needed" },
   { value: "interested", label: "Interested" },
   { value: "proposal_contract_sent", label: "Proposal or contract sent" },
   { value: "booked", label: "Booked" },
   { value: "declined", label: "Declined" },
+  { value: "wrong_number", label: "Wrong number" },
+  { value: "do_not_call", label: "Do Not Call" },
   { value: "move_to_last_resort", label: "Move to Last Resort" },
 ];
 
@@ -42,11 +67,61 @@ function formatDate(value: Date | null) {
   }).format(value);
 }
 
+type WorkspaceContact = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  city: string | null;
+  region: string | null;
+};
+
+type WorkspaceBooking = {
+  id: string;
+  name: string;
+  city: string;
+  region: string;
+  status: BookingStatus;
+  startsAt: Date | null;
+};
+
+type WorkspaceProps = {
+  mode?: CallWorkspaceMode;
+  organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
+  contact: WorkspaceContact | null;
+  booking: WorkspaceBooking | null;
+  followUp: { id: string; kind: string; dueAt: Date } | null;
+  phones?: ContactPhoneRecord[];
+  contextSummary?: {
+    bookingStatusLabel: string | null;
+    travelLeg: { name: string } | null;
+    lastContactedAt: Date | string | null;
+  } | null;
+  defaultScriptKind?: CallScriptKind;
+  scriptPrompts?: string[];
+  assistedCallingEnabled?: boolean;
+  voicemailLauncherUrl?: string | null;
+  timeline: ActivityTimelineItem[];
+  onComplete: (input: CompleteCallInput) => Promise<CompleteCallResult>;
+  activityParent?: ActivityParent;
+  createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
+  editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
+  loadRevisions?: (activityId: string, page?: number) => Promise<ActivityRevisionResult>;
+  operations?: BookingOperationsSummary | null;
+};
+
 export function CallWorkspace({
+  mode = "full",
   organization,
   contact,
   booking,
   followUp,
+  phones = [],
+  contextSummary = null,
+  defaultScriptKind = followUp ? "follow_up" : "first_outreach",
+  scriptPrompts = [],
+  assistedCallingEnabled = true,
+  voicemailLauncherUrl = null,
   timeline,
   onComplete,
   activityParent,
@@ -54,40 +129,108 @@ export function CallWorkspace({
   editActivity,
   loadRevisions = async () => ({ ok: true, revisions: [] }),
   operations = null,
-}: {
-  organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
-  contact: {
-    id: string;
-    name: string;
-    phone: string | null;
-    email: string | null;
-    city: string | null;
-    region: string | null;
-  } | null;
-  booking: { id: string; name: string; city: string; region: string; status: BookingStatus; startsAt: Date | null } | null;
-  followUp: { id: string; kind: string; dueAt: Date } | null;
-  timeline: ActivityTimelineItem[];
-  onComplete: (input: CompleteCallInput) => Promise<CompleteCallResult>;
-  activityParent?: ActivityParent;
-  createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
-  editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
-  loadRevisions?: (
-    activityId: string,
-    page?: number,
-  ) => Promise<ActivityRevisionResult>;
-  operations?: BookingOperationsSummary | null;
-}) {
+}: WorkspaceProps) {
+  const primaryPhone = phones.find((phone) => phone.primary) ?? phones[0] ?? null;
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [requestKey, setRequestKey] = useState<string | null>(null);
+  const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(primaryPhone?.id ?? null);
+  const [direction, setDirection] = useState<CallDirection>("outgoing");
+  const [method, setMethod] = useState<CallMethod>("mobile_log");
+  const [scriptKind, setScriptKind] = useState<CallScriptKind>(defaultScriptKind);
   const [note, setNote] = useState("");
   const [disposition, setDisposition] = useState<CallDisposition>("no_answer");
   const [nextActionKind, setNextActionKind] = useState("");
   const [nextActionDueAt, setNextActionDueAt] = useState("");
   const [lastResortReason, setLastResortReason] = useState("");
   const [lastResortConfirmed, setLastResortConfirmed] = useState(false);
+  const [doNotCallReason, setDoNotCallReason] = useState("");
+  const [doNotCallConfirmed, setDoNotCallConfirmed] = useState(false);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+
+  const draftKey = useMemo(() => buildCallDraftKey({
+    organizationId: organization?.id ?? null,
+    contactId: contact?.id ?? null,
+    bookingId: booking?.id ?? null,
+    followUpId: followUp?.id ?? null,
+  }), [organization?.id, contact?.id, booking?.id, followUp?.id]);
+
+  const selectedPhone =
+    phones.find((phone) => phone.id === selectedPhoneId) ?? primaryPhone;
+
+  useEffect(() => {
+    const draft = loadCallDraft(draftKey);
+    if (draft) {
+      setStartedAt(new Date());
+      setRequestKey(draft.requestKey);
+      setSelectedPhoneId(
+        phones.some((phone) => phone.id === draft.selectedPhoneId)
+          ? draft.selectedPhoneId
+          : primaryPhone?.id ?? null,
+      );
+      setDirection(draft.direction);
+      setMethod(draft.method);
+      setScriptKind(draft.scriptKind);
+      setNote(draft.note);
+      setDisposition(draft.disposition);
+      setNextActionKind(draft.nextActionKind);
+      setNextActionDueAt(draft.nextActionDate);
+      setLastResortConfirmed(draft.lastResortConfirmed);
+      setLastResortReason(draft.lastResortReason);
+      setDoNotCallConfirmed(draft.doNotCallConfirmed);
+      setDoNotCallReason(draft.doNotCallReason);
+      setDraftRestored(true);
+    }
+    setDraftReady(true);
+  }, [draftKey]);
+
+  useEffect(() => {
+    if (!draftReady || !startedAt || !requestKey || isSaved) return;
+    const timer = window.setTimeout(() => {
+      saveCallDraft(draftKey, {
+        version: 1,
+        savedAt: "",
+        requestKey,
+        selectedPhoneId,
+        direction,
+        method,
+        scriptKind,
+        note,
+        disposition,
+        nextActionKind,
+        nextActionDate: nextActionDueAt,
+        lastResortConfirmed,
+        lastResortReason,
+        doNotCallConfirmed,
+        doNotCallReason,
+      });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [
+    draftReady, startedAt, requestKey, isSaved, draftKey, selectedPhoneId,
+    direction, method, scriptKind, note, disposition, nextActionKind,
+    nextActionDueAt, lastResortConfirmed, lastResortReason,
+    doNotCallConfirmed, doNotCallReason,
+  ]);
+
+  function discardDraft() {
+    clearCallDraft(draftKey);
+    setStartedAt(null);
+    setRequestKey(null);
+    setNote("");
+    setDisposition("no_answer");
+    setNextActionKind("");
+    setNextActionDueAt("");
+    setLastResortReason("");
+    setLastResortConfirmed(false);
+    setDoNotCallReason("");
+    setDoNotCallConfirmed(false);
+    setDraftRestored(false);
+    setError("");
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,6 +245,14 @@ export function CallWorkspace({
     }
     if ((nextActionKind && !dueAt) || (!nextActionKind && dueAt)) {
       setError("Choose both a next action and date, or leave both blank.");
+      return;
+    }
+    if (disposition === "move_to_last_resort" && (!lastResortReason.trim() || !lastResortConfirmed)) {
+      setError("Add a reason and confirm moving this organization to Last Resort.");
+      return;
+    }
+    if (disposition === "do_not_call" && (!selectedPhone || !doNotCallReason.trim() || !doNotCallConfirmed)) {
+      setError("Select a phone, add a reason, and confirm Do Not Call.");
       return;
     }
 
@@ -120,19 +271,22 @@ export function CallWorkspace({
         startedAt,
         endedAt: new Date(),
         nextAction: nextActionKind && dueAt ? { kind: nextActionKind, dueAt } : null,
-        lastResortReason: lastResortReason || null,
+        lastResortReason: lastResortReason.trim() || null,
         lastResortConfirmed,
         approvedContactUpdates: null,
         approvedBookingUpdates: null,
-        direction: "outgoing",
-        method: "mobile_log",
-        phoneId: null,
-        scriptKind: followUp ? "follow_up" : "first_outreach",
-        doNotCallConfirmed: false,
-        doNotCallReason: null,
+        direction,
+        method,
+        phoneId: selectedPhone?.id ?? null,
+        scriptKind,
+        doNotCallConfirmed,
+        doNotCallReason: doNotCallReason.trim() || null,
       });
       if (!result.ok) setError(result.error);
-      else setIsSaved(true);
+      else {
+        clearCallDraft(draftKey);
+        setIsSaved(true);
+      }
     } catch {
       setError("Could not save this call note. Please try again.");
     } finally {
@@ -140,13 +294,31 @@ export function CallWorkspace({
     }
   }
 
+  const twoColumn = mode === "full"
+    ? "lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)]"
+    : "";
+
   return (
-    <div className="mx-auto grid max-w-7xl gap-6">
+    <div
+      className="mx-auto grid max-w-7xl gap-5"
+      data-mode={mode}
+      data-testid="call-workspace"
+    >
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Calls</p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Call Workspace</h1>
         <p className="mt-2 text-slate-600">Record this call and its next concrete action.</p>
       </header>
+
+      <CallContextRow
+        booking={booking}
+        bookingStatusLabel={contextSummary?.bookingStatusLabel}
+        contact={contact}
+        followUp={followUp}
+        lastContactedAt={contextSummary?.lastContactedAt}
+        organization={organization}
+        travelLeg={contextSummary?.travelLeg}
+      />
 
       {organization?.lastResort ? (
         <aside className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950" role="alert">
@@ -155,8 +327,41 @@ export function CallWorkspace({
         </aside>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)] lg:items-start">
+      <div className={`grid gap-5 ${twoColumn} lg:items-start`}>
         <div className="grid gap-5">
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="phone-actions-title">
+            <h2 className="text-xl font-bold" id="phone-actions-title">Phone</h2>
+            {phones.length ? (
+              <div className="mt-3 grid gap-3">
+                <label className="grid gap-1.5 font-medium">
+                  Phone number
+                  <select
+                    onChange={(event) => setSelectedPhoneId(event.target.value)}
+                    value={selectedPhone?.id ?? ""}
+                  >
+                    {phones.map((phone) => (
+                      <option key={phone.id} value={phone.id}>
+                        {phone.label ?? phone.type} · {phone.number}{phone.extension ? ` ext. ${phone.extension}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {selectedPhone ? (
+                  <PhoneActions
+                    assistedCallingEnabled={assistedCallingEnabled}
+                    onSelectMethod={setMethod}
+                    phone={selectedPhone}
+                    voicemailLauncherUrl={voicemailLauncherUrl}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-slate-600">
+                No phone is linked to this contact.
+              </p>
+            )}
+          </section>
+
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="call-details-title">
             <h2 className="text-xl font-bold" id="call-details-title">Record call</h2>
             {isSaved ? (
@@ -181,21 +386,40 @@ export function CallWorkspace({
               </div>
             ) : (
               <form className="mt-4 grid gap-4" onSubmit={submit}>
+                {draftRestored ? (
+                  <p className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm font-semibold text-blue-900" role="status">
+                    Draft restored.
+                  </p>
+                ) : null}
                 {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}
                 <label className="grid gap-1.5 font-medium" htmlFor="call-note">
                   Call note
                   <textarea className="min-h-32" id="call-note" onChange={(event) => setNote(event.target.value)} value={note} />
                 </label>
+                <fieldset className="grid gap-2 rounded-lg border border-slate-200 p-3">
+                  <legend className="px-1 font-semibold">Quick outcome</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {(["no_answer", "left_voicemail", "spoke_with_contact", "follow_up_needed"] as CallDisposition[]).map((value) => (
+                      <button
+                        className="button-secondary"
+                        key={value}
+                        onClick={() => setDisposition(value)}
+                        type="button"
+                      >
+                        {dispositionOptions.find((option) => option.value === value)!.label}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
                 <label className="grid gap-1.5 font-medium" htmlFor="call-disposition">
                   Call disposition
                   <select
                     id="call-disposition"
                     onChange={(event) => {
-                      const nextDisposition = event.target.value as CallDisposition;
-                      setDisposition(nextDisposition);
-                      if (nextDisposition !== "move_to_last_resort") {
-                        setLastResortConfirmed(false);
-                      }
+                      const value = event.target.value as CallDisposition;
+                      setDisposition(value);
+                      if (value !== "move_to_last_resort") setLastResortConfirmed(false);
+                      if (value !== "do_not_call") setDoNotCallConfirmed(false);
                     }}
                     value={disposition}
                   >
@@ -221,39 +445,42 @@ export function CallWorkspace({
                     <input id="next-action-date" onChange={(event) => setNextActionDueAt(event.target.value)} type="date" value={nextActionDueAt} />
                   </label>
                 </fieldset>
+                {disposition === "do_not_call" ? (
+                  <fieldset className="grid gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4">
+                    <legend className="px-1 font-semibold text-rose-950">Do Not Call</legend>
+                    <label className="grid gap-1.5 font-medium" htmlFor="do-not-call-reason">
+                      Do Not Call reason
+                      <textarea id="do-not-call-reason" onChange={(event) => setDoNotCallReason(event.target.value)} value={doNotCallReason} />
+                    </label>
+                    <label className="flex items-start gap-2 font-medium">
+                      <input checked={doNotCallConfirmed} className="mt-1" onChange={(event) => setDoNotCallConfirmed(event.target.checked)} type="checkbox" />
+                      <span>I confirm this selected number should be marked Do Not Call</span>
+                    </label>
+                  </fieldset>
+                ) : null}
                 {disposition === "move_to_last_resort" ? (
                   <fieldset className="grid gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4">
-                    <legend className="px-1 font-semibold text-rose-950">
-                      Move organization to Last Resort
-                    </legend>
+                    <legend className="px-1 font-semibold text-rose-950">Move organization to Last Resort</legend>
                     <label className="grid gap-1.5 font-medium" htmlFor="last-resort-reason">
                       Last Resort reason
-                      <textarea
-                        id="last-resort-reason"
-                        maxLength={2_000}
-                        onChange={(event) => setLastResortReason(event.target.value)}
-                        value={lastResortReason}
-                      />
+                      <textarea id="last-resort-reason" maxLength={2_000} onChange={(event) => setLastResortReason(event.target.value)} value={lastResortReason} />
                     </label>
-                    <label className="flex items-start gap-2 font-medium" htmlFor="last-resort-confirmed">
-                      <input
-                        checked={lastResortConfirmed}
-                        className="mt-1"
-                        id="last-resort-confirmed"
-                        onChange={(event) => setLastResortConfirmed(event.target.checked)}
-                        type="checkbox"
-                      />
+                    <label className="flex items-start gap-2 font-medium">
+                      <input checked={lastResortConfirmed} className="mt-1" onChange={(event) => setLastResortConfirmed(event.target.checked)} type="checkbox" />
                       <span>I confirm this organization should be moved to Last Resort</span>
                     </label>
                   </fieldset>
                 ) : null}
-                <div><button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving…" : "Save call note"}</button></div>
+                <div className="flex flex-wrap gap-3">
+                  <button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving…" : "Save call note"}</button>
+                  <button className="button-secondary" onClick={discardDraft} type="button">Discard draft</button>
+                </div>
               </form>
             )}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="recent-history-title">
-            <h2 className="text-xl font-bold" id="recent-history-title">Recent history</h2>
+          <details className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" open={mode !== "compact"}>
+            <summary className="cursor-pointer text-xl font-bold">Recent history</summary>
             <div className="mt-4">
               <ActivityTimeline
                 activities={timeline}
@@ -263,31 +490,26 @@ export function CallWorkspace({
                 parent={activityParent}
               />
             </div>
-          </section>
+          </details>
         </div>
 
         <aside className="grid gap-5">
+          <CallScriptCard
+            initialKind={defaultScriptKind}
+            initialPrompts={scriptPrompts}
+            kind={scriptKind}
+            onChange={setScriptKind}
+          />
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="caller-title">
             <h2 className="text-xl font-bold" id="caller-title">Caller</h2>
-            {contact ? <div className="mt-3 grid gap-1 text-sm"><p className="font-semibold text-base">{contact.name}</p><p>{contact.phone || "No phone recorded"}</p><p className="break-all">{contact.email || "No email recorded"}</p>{contact.city || contact.region ? <p>{[contact.city, contact.region].filter(Boolean).join(", ")}</p> : null}<a className="link mt-2" href={`/contacts/${contact.id}`}>Open full contact record</a></div> : <p className="mt-3 text-sm text-slate-600">No contact is linked to this call.</p>}
-            {organization ? (
+            {contact ? (
               <div className="mt-3 grid gap-1 text-sm">
-                <p className="font-semibold">{organization.name}</p>
-                <a className="link" href={`/organizations/${organization.id}`}>Open full organization record</a>
+                <p className="font-semibold text-base">{contact.name}</p>
+                <p>{contact.phone || "No phone recorded"}</p>
+                <p className="break-all">{contact.email || "No email recorded"}</p>
+                {contact.city || contact.region ? <p>{[contact.city, contact.region].filter(Boolean).join(", ")}</p> : null}
               </div>
-            ) : (
-              <p className="mt-3 text-sm text-slate-600">No organization is linked to this call. Last Resort is unavailable.</p>
-            )}
-          </section>
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="current-task-title">
-            <h2 className="text-xl font-bold" id="current-task-title">Current task</h2>
-            {followUp ? (
-              <p className="mt-3 text-sm capitalize">
-                {followUp.kind.replaceAll("_", " ")} · Due {formatDate(followUp.dueAt)}
-              </p>
-            ) : (
-              <p className="mt-3 text-sm text-slate-600">This is an ad-hoc call with no linked follow-up.</p>
-            )}
+            ) : <p className="mt-3 text-sm text-slate-600">No contact is linked to this call.</p>}
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="booking-snapshot-title">
             <h2 className="text-xl font-bold" id="booking-snapshot-title">Booking snapshot</h2>
@@ -295,48 +517,18 @@ export function CallWorkspace({
               <div className="mt-3 grid gap-1 text-sm">
                 <p className="font-semibold text-base">{booking.name}</p>
                 <p>{booking.city}, {booking.region}</p>
-                <p className="capitalize">{booking.status.replaceAll("_", " ")}</p>
+                <p>{contextSummary?.bookingStatusLabel ?? booking.status.replaceAll("_", " ")}</p>
                 <p>{formatDate(booking.startsAt)}</p>
                 {operations ? (
                   <div className="mt-2 grid gap-1 border-t border-slate-200 pt-2">
-                    <p className="font-semibold">
-                      {operations.packageNames.join(" + ") || "No packages"}
-                    </p>
-                    <p>
-                      {operations.packageNames.length}{" "}
-                      {operations.packageNames.length === 1 ? "package" : "packages"} ·{" "}
-                      {operations.sharedAttractionTotal ?? "No"} attractions
-                    </p>
-                    {operations.pendingRequestCount > 0 ? (
-                      <p className="font-semibold text-amber-800">
-                        {operations.pendingRequestCount} pending special{" "}
-                        {operations.pendingRequestCount === 1 ? "request" : "requests"}
-                      </p>
-                    ) : null}
-                    {operations.leg ? (
-                      <p>Travel leg: {operations.leg.name}</p>
-                    ) : null}
-                    {operations.warnings.length ? (
-                      <ul className="mt-1 grid gap-1">
-                        {operations.warnings.map((warning) => (
-                          <li key={warning.id}>
-                            <a
-                              className={
-                                warning.severity === "blocking"
-                                  ? "font-semibold text-rose-700"
-                                  : "font-semibold text-amber-800"
-                              }
-                              href={warning.href}
-                            >
-                              {warning.message}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+                    <p className="font-semibold">{operations.packageNames.join(" + ") || "No packages"}</p>
+                    {operations.pendingRequestCount > 0 ? <p className="font-semibold text-amber-800">{operations.pendingRequestCount} pending special {operations.pendingRequestCount === 1 ? "request" : "requests"}</p> : null}
+                    {operations.leg ? <p>Travel leg: {operations.leg.name}</p> : null}
+                    {operations.warnings.map((warning) => (
+                      <a className="font-semibold text-amber-800" href={warning.href} key={warning.id}>{warning.message}</a>
+                    ))}
                   </div>
                 ) : null}
-                <a className="link mt-2" href={`/bookings/${booking.id}`}>Open full booking record</a>
               </div>
             ) : <p className="mt-3 text-sm text-slate-600">No booking is linked to this call.</p>}
           </section>
