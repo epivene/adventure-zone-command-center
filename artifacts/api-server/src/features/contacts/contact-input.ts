@@ -17,6 +17,23 @@ export const nullableContactEmailSchema = z
   )
   .transform((value) => value || null);
 
+export const contactPhoneInputSchema = z.object({
+  id: z.uuid().nullable(),
+  number: z.string().trim().min(1),
+  type: z.enum(["mobile", "office", "alternate", "unknown"]),
+  extension: z.string().trim().max(20).transform(value => value || null),
+  label: z.string().trim().max(60).transform(value => value || null),
+  primary: z.boolean(),
+});
+
+export const replaceContactPhonesSchema = z.object({
+  phones: z.array(contactPhoneInputSchema).max(10),
+}).superRefine(({ phones }, context) => {
+  if (phones.length && phones.filter(phone => phone.primary).length !== 1) {
+    context.addIssue({ code: "custom", message: "Choose one primary phone number.", path: ["phones"] });
+  }
+});
+
 export const contactFormInputSchema = z.object({
   firstName: requiredContactTextSchema,
   lastName: z.string().trim(),
