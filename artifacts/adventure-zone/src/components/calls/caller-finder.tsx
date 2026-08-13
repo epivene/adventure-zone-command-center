@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 
 import { apiGet } from "@/lib/auth-token";
 
@@ -167,7 +168,7 @@ export function CallerFinder({
           </ul>
         </div>
       ) : result && !isLoading ? <p className="text-sm text-slate-600">No possible callers found.</p> : null}
-      {result?.canCreate ? <a className="button-primary w-fit" href={createHref}>Create contact</a> : null}
+      {result?.canCreate ? <Link className="button-primary w-fit" href={createHref}>Create contact</Link> : null}
     </section>
   );
 }
