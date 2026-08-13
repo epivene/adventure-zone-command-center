@@ -422,16 +422,39 @@ export async function assertOrganizationsMergeable(
     left.localeCompare(right, "en-US"),
   );
   const selectedIdSet = new Set(selectedIds);
-  const selectedOrganizations = await transaction
+
+  const proposedFamilies = await transaction
     .select({
-      id: organizations.id,
-      parentOrganizationId: organizations.parentOrganizationId,
+      groupKey: organizationFamilyReviews.groupKey,
+      candidateIds: organizationFamilyReviews.candidateIds,
     })
+    .from(organizationFamilyReviews)
+    .where(eq(organizationFamilyReviews.status, "proposed"))
+    .orderBy(asc(organizationFamilyReviews.groupKey))
+    .for("update");
+  const relevantProposals = proposedFamilies.filter((review) =>
+    review.candidateIds.some((candidateId) => selectedIdSet.has(candidateId)),
+  );
+  const lockedIds = [
+    ...new Set([
+      ...selectedIds,
+      ...relevantProposals.flatMap((review) => review.candidateIds),
+    ]),
+  ].sort((left, right) => left.localeCompare(right, "en-US"));
+
+  const lockedOrganizations = await transaction
+    .select()
     .from(organizations)
-    .where(inArray(organizations.id, selectedIds))
+    .where(inArray(organizations.id, lockedIds))
     .orderBy(asc(organizations.id))
     .for("update");
-
+  const organizationById = new Map(
+    lockedOrganizations.map((organization) => [organization.id, organization]),
+  );
+  const selectedOrganizations = selectedIds.flatMap((id) => {
+    const organization = organizationById.get(id);
+    return organization ? [organization] : [];
+  });
   if (selectedOrganizations.length !== selectedIds.length) {
     throw new HierarchyConflictError(
       "A selected organization profile no longer exists.",
@@ -448,33 +471,43 @@ export async function assertOrganizationsMergeable(
     .orderBy(asc(organizations.id))
     .for("update");
 
-  const proposedFamilies = await transaction
-    .select({
-      groupKey: organizationFamilyReviews.groupKey,
-      candidateIds: organizationFamilyReviews.candidateIds,
-    })
-    .from(organizationFamilyReviews)
-    .where(eq(organizationFamilyReviews.status, "proposed"))
-    .orderBy(asc(organizationFamilyReviews.groupKey))
-    .for("update");
-
-  const selectedBelongsToHierarchy = selectedOrganizations.some(
-    (organization) => organization.parentOrganizationId !== null,
-  );
-  const selectedOwnsLocations = ownedLocations.length > 0;
-  const selectedBelongsToProposal = proposedFamilies.some((review) =>
-    review.candidateIds.some((candidateId) => selectedIdSet.has(candidateId)),
-  );
-
   if (
-    selectedBelongsToHierarchy ||
-    selectedOwnsLocations ||
-    selectedBelongsToProposal
+    selectedOrganizations.some(
+      (organization) => organization.parentOrganizationId !== null,
+    ) ||
+    ownedLocations.length > 0
   ) {
     throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
   }
-}
 
+  for (const proposal of relevantProposals) {
+    const proposalRecords = proposal.candidateIds.flatMap((id) => {
+      const organization = organizationById.get(id);
+      return organization ? [organization] : [];
+    });
+    const currentGroups =
+      proposalRecords.length === proposal.candidateIds.length
+        ? await discoverOrganizationFamilyCandidatesFromDatabase(
+            transaction,
+            proposalRecords,
+          )
+        : [];
+    const isCurrent = currentGroups.some(
+      (group) =>
+        group.groupKey === proposal.groupKey &&
+        group.candidateIds.length === proposal.candidateIds.length &&
+        group.candidateIds.every(
+          (id, index) => id === proposal.candidateIds[index],
+        ),
+    );
+    if (isCurrent) {
+      throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+    }
+    await transaction
+      .delete(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, proposal.groupKey));
+  }
+}
 
 export async function persistProposedOrganizationFamilies(
   database: Pick<DrizzleDatabase, "transaction">,
