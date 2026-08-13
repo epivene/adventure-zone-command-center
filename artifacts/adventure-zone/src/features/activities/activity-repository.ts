@@ -117,7 +117,7 @@ export class DrizzleActivityRepository
       .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
       .where(condition)
       .groupBy(activities.id)
-      .orderBy(desc(activities.occurredAt), desc(activities.createdAt), desc(activities.id))
+      .orderBy(desc(activities.timelineSortAt), desc(activities.createdAt), desc(activities.id))
       .limit(10);
 
     return records.map(({ activity, revisionCount }) =>

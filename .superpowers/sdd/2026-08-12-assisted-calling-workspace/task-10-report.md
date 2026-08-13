@@ -199,3 +199,51 @@ Do not deploy or set `ASSISTED_CALLING_ENABLED=true` from this task. Manual
 desktop/mobile, accessibility, configured handler, clipboard, and private
 voicemail-launcher verification must be completed and recorded during the
 approved owner release window.
+
+## Fix round 1: canonical timeline ordering
+
+Both activity repositories mapped an imported activity with a null
+`occurredAt` to its non-null `timelineSortAt`, but selected the ten-row timeline
+using `occurred_at DESC`. PostgreSQL places nulls first for that descending
+order, so enough undated imported rows could exclude a newer dated call before
+mapping occurred.
+
+Strict TDD evidence:
+
+1. Added the same focused repository regression in the API and web packages.
+   Each fixture contains eleven older undated imported activities plus a newer
+   dated call and models PostgreSQL descending null ordering before the
+   ten-row limit.
+2. RED, API: 1 failed; first item was `imported-0`, expected `newer-call`.
+3. RED, web: 1 failed with the same observed and expected IDs.
+4. Changed only the primary order expression in both repositories from
+   `occurredAt` to `timelineSortAt`, retaining `createdAt` and ID tie-breakers.
+   This matches migration 007, which backfills `timeline_sort_at` from
+   `coalesce(occurred_at, created_at)` and then makes it non-null, and matches
+   the current non-null schema column.
+5. GREEN: API 1/1 and web 1/1 focused tests passed.
+
+Full-chain command, with the task-local XDG and pnpm paths prefixed to each
+pnpm invocation because the sandbox denies pnpm's default `/root/.local` path:
+
+```text
+pnpm --filter @workspace/api-server test &&
+pnpm --filter @workspace/adventure-zone exec vitest run &&
+pnpm run typecheck &&
+pnpm run build
+```
+
+Final full-chain result after this report update:
+
+```text
+API:       61 passed files, 3 skipped; 755 passed tests, 48 skipped (803 total)
+Web:       20 passed files; 131 passed tests
+Typecheck: library build plus API, web, and scripts exited 0
+Build:     API and web production builds exited 0
+Overall:   exit 0
+```
+
+The existing non-failing source-map and large-chunk advisories remained. Manual
+desktop/mobile/accessibility and configured-handler verification remains
+blocked exactly as recorded above. The feature flag remains false; no deploy,
+migration, or enablement was performed.
