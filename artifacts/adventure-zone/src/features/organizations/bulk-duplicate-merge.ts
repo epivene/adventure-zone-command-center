@@ -1,6 +1,6 @@
 export type BulkMergeGroup = {
   normalizedName: string;
-  classification: "duplicate" | "location_candidate";
+  classification: "duplicate" | "location_candidate" | "ambiguous_location_candidate";
   organizations: Array<{ id: string }>;
 };
 
