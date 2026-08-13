@@ -11,7 +11,7 @@ import { apiGet, apiPost } from "@/lib/auth-token";
 import { useToast } from "@/hooks/use-toast";
 
 type FamilyEvidence = {
-  family: "name" | "website" | "location" | "act_relationship";
+  family: "name" | "website" | "location" | "address" | "act_relationship";
   label: string;
 };
 
@@ -269,6 +269,7 @@ function evidenceLabel(evidence: FamilyEvidence) {
   if (evidence.family === "website") return "Same website domain";
   if (evidence.family === "location") return "Different cities or regions";
   if (evidence.family === "name") return "Organization names match after removing location suffixes";
+  if (evidence.family === "address") return "Street addresses repeat across different locations";
   return "ACT records connect these organizations";
 }
 
