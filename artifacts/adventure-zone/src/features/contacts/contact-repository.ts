@@ -336,6 +336,7 @@ export class DrizzleContactRepository {
         active: relationship.active,
       })),
       relatedBookings,
+      phones: [],
     };
   }
 
