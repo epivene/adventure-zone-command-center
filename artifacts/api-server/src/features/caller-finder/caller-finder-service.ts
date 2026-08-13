@@ -18,8 +18,19 @@ export type CallerCandidateQuery = {
   includeNotes: boolean;
 };
 
+export type CallerExactQuery = {
+  normalizedPhone: string | null;
+  normalizedEmail: string | null;
+};
+
+export type CallerExactMetadata = {
+  exactPhoneContactIds: string[];
+  hasExactEmail: boolean;
+};
+
 export interface CallerFinderRepository {
   findCallerCandidates(query: CallerCandidateQuery): Promise<CallerFinderCandidate[]>;
+  findCallerExactMetadata(query: CallerExactQuery): Promise<CallerExactMetadata>;
 }
 
 const scores: Record<CallerMatchReason, number> = {
@@ -76,8 +87,11 @@ function scoredSuggestion(
   }
   if (
     normalizedQuery &&
-    [candidate.organizationName, candidate.bookingName]
-      .some((value) => folded(value).includes(normalizedQuery))
+    (
+      candidate.matchedOrganizationOrEvent ||
+      [candidate.organizationName, candidate.bookingName]
+        .some((value) => folded(value).includes(normalizedQuery))
+    )
   ) {
     reasons.push("Organization or event");
   }
@@ -85,14 +99,20 @@ function scoredSuggestion(
   if (candidate.lastContactedAt) reasons.push("Recently contacted");
   if (
     normalizedQuery &&
-    [candidate.city, candidate.region]
-      .some((value) => folded(value).includes(normalizedQuery))
+    (
+      candidate.matchedLocation ||
+      [candidate.city, candidate.region]
+        .some((value) => folded(value).includes(normalizedQuery))
+    )
   ) {
     reasons.push("Location");
   }
   if (
     normalizedQuery &&
-    folded(candidate.routeLegName).includes(normalizedQuery)
+    (
+      candidate.matchedRouteLeg ||
+      folded(candidate.routeLegName).includes(normalizedQuery)
+    )
   ) {
     reasons.push("Route leg");
   }
@@ -135,22 +155,17 @@ export class CallerFinderService {
     const query = input.query.trim();
     const normalizedPhone = normalizeNorthAmericanPhone(input.phone);
     const includeNotes = query.length >= 3;
-    const candidates = await this.repository.findCallerCandidates({
-      normalizedPhone,
-      query,
-      includeNotes,
-    });
-    const exactPhoneIds = candidates
-      .filter((candidate) =>
-        Boolean(normalizedPhone) &&
-        candidate.normalizedPhones.includes(normalizedPhone!),
-      )
-      .map((candidate) => candidate.contactId);
-    const exactEmailIds = query
-      ? candidates
-          .filter((candidate) => folded(candidate.email) === folded(query))
-          .map((candidate) => candidate.contactId)
-      : [];
+    const [candidates, exactMetadata] = await Promise.all([
+      this.repository.findCallerCandidates({
+        normalizedPhone,
+        query,
+        includeNotes,
+      }),
+      this.repository.findCallerExactMetadata({
+        normalizedPhone,
+        normalizedEmail: query ? folded(query) : null,
+      }),
+    ]);
 
     const suggestions = candidates
       .map((candidate) =>
@@ -166,11 +181,13 @@ export class CallerFinderService {
       .slice(0, 8);
 
     return {
-      exact: exactPhoneIds.length === 1
-        ? { kind: "one", contactId: exactPhoneIds[0]! }
+      exact: exactMetadata.exactPhoneContactIds.length === 1
+        ? { kind: "one", contactId: exactMetadata.exactPhoneContactIds[0]! }
         : { kind: "none" },
       suggestions,
-      canCreate: exactPhoneIds.length === 0 && exactEmailIds.length === 0,
+      canCreate:
+        exactMetadata.exactPhoneContactIds.length === 0 &&
+        !exactMetadata.hasExactEmail,
     };
   }
 }
