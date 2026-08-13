@@ -7,7 +7,6 @@ import {
   bookingContacts,
   bookings,
   callSessions,
-  contactPhones,
   contacts,
   followUps,
   organizationContacts,
@@ -91,6 +90,14 @@ export function activityTimelineParent(context: CallWorkspaceContext): ActivityP
   if (context.booking) return { bookingId: context.booking.id };
   if (context.contact) return { contactId: context.contact.id };
   return context.organization ? { organizationId: context.organization.id } : {};
+}
+
+export function lastContactedParents(context: CallWorkspaceContext): ActivityParent[] {
+  return [
+    context.booking ? { bookingId: context.booking.id } : null,
+    context.contact ? { contactId: context.contact.id } : null,
+    context.organization ? { organizationId: context.organization.id } : null,
+  ].filter((parent): parent is ActivityParent => parent !== null);
 }
 
 export async function loadCallWorkspaceContext(
@@ -251,39 +258,45 @@ export class DrizzleCallWorkspaceContextRepository
   }
 
   async findLastContactedAt(context: CallWorkspaceContext): Promise<Date | null> {
-    const parent = activityTimelineParent(context);
-    const callCondition = parent.bookingId
-      ? eq(callSessions.bookingId, parent.bookingId)
-      : parent.contactId
-      ? eq(callSessions.contactId, parent.contactId)
-      : parent.organizationId
-      ? eq(callSessions.organizationId, parent.organizationId)
-      : undefined;
-    const activityCondition = parent.bookingId
-      ? eq(activities.bookingId, parent.bookingId)
-      : parent.contactId
-      ? eq(activities.contactId, parent.contactId)
-      : parent.organizationId
-      ? eq(activities.organizationId, parent.organizationId)
-      : undefined;
-    if (!callCondition || !activityCondition) return null;
+    const parents = lastContactedParents(context);
+    if (parents.length === 0) return null;
 
-    const [[call], [activity]] = await Promise.all([
-      this.database
-        .select({ endedAt: callSessions.endedAt })
-        .from(callSessions)
-        .where(and(callCondition, isNotNull(callSessions.endedAt)))
-        .orderBy(desc(callSessions.endedAt))
-        .limit(1),
-      this.database
-        .select({ occurredAt: activities.occurredAt })
-        .from(activities)
-        .where(and(activityCondition, isNotNull(activities.occurredAt)))
-        .orderBy(desc(activities.occurredAt))
-        .limit(1),
+    const [calls, activityRecords] = await Promise.all([
+      Promise.all(parents.map(async (parent) => {
+        const condition = parent.bookingId
+          ? eq(callSessions.bookingId, parent.bookingId)
+          : parent.contactId
+          ? eq(callSessions.contactId, parent.contactId)
+          : eq(callSessions.organizationId, parent.organizationId!);
+        const [call] = await this.database
+          .select({ endedAt: callSessions.endedAt })
+          .from(callSessions)
+          .where(and(condition, isNotNull(callSessions.endedAt)))
+          .orderBy(desc(callSessions.endedAt))
+          .limit(1);
+        return call;
+      })),
+      Promise.all(parents.map(async (parent) => {
+        const condition = parent.bookingId
+          ? eq(activities.bookingId, parent.bookingId)
+          : parent.contactId
+          ? eq(activities.contactId, parent.contactId)
+          : eq(activities.organizationId, parent.organizationId!);
+        const [activity] = await this.database
+          .select({ occurredAt: activities.occurredAt })
+          .from(activities)
+          .where(and(condition, isNotNull(activities.occurredAt)))
+          .orderBy(desc(activities.occurredAt))
+          .limit(1);
+        return activity;
+      })),
     ]);
-    const dates = [call?.endedAt, activity?.occurredAt]
-      .filter((value): value is Date => value !== null && value !== undefined);
-    return dates.length ? new Date(Math.max(...dates.map((value) => value.getTime()))) : null;
+    const dates = [
+      ...calls.map((call) => call?.endedAt),
+      ...activityRecords.map((activity) => activity?.occurredAt),
+    ].filter((value): value is Date => value !== null && value !== undefined);
+    return dates.length
+      ? new Date(Math.max(...dates.map((value) => value.getTime())))
+      : null;
   }
 }
