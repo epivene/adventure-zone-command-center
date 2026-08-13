@@ -15,7 +15,7 @@ type ClipboardTarget = {
 
 export function PhoneActions({
   phone,
-  assistedCallingEnabled = true,
+  assistedCallingEnabled = false,
   voicemailLauncherUrl,
   clipboard = navigator.clipboard,
   onSelectMethod,
