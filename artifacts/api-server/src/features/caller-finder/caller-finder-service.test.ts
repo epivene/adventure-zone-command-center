@@ -29,6 +29,7 @@ function candidate(
     noteText: null,
     matchedOrganizationOrEvent: false,
     matchedLocation: false,
+    matchedContactPostalCode: false,
     matchedRouteLeg: false,
     ...overrides,
   };
@@ -256,6 +257,7 @@ describe("caller finder safety and ranking", () => {
 
   it.each([
     ["58103", { matchedLocation: true }, "Location"],
+    ["58103", { matchedContactPostalCode: true }, "Location"],
     ["pending contract", { bookingStatus: "pending_contract" }, "Organization or event"],
   ] as const)("finds advertised %s input", async (query, overrides, reason) => {
     const result = await serviceWith([

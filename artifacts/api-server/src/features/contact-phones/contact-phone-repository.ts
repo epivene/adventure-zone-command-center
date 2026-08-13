@@ -74,6 +74,21 @@ export class ContactPhoneRepository {
       }
 
       const existing = await store.listForContact(contactId);
+      const normalizedInputs = inputs.map((input) => ({
+        input,
+        normalizedNumber: normalizeNorthAmericanPhone(input.number),
+      }));
+      const requestedNormalizedNumbers = normalizedInputs
+        .map(({ normalizedNumber }) => normalizedNumber)
+        .filter((value): value is string => value !== null);
+      const duplicatesAnotherRequestedRow = new Set(requestedNormalizedNumbers).size !== requestedNormalizedNumbers.length;
+      const duplicatesExistingRow = normalizedInputs.some(({ input, normalizedNumber }) =>
+        normalizedNumber !== null && existing.some((phone) =>
+          phone.id !== input.id && phone.normalizedNumber === normalizedNumber,
+        ));
+      if (duplicatesAnotherRequestedRow || duplicatesExistingRow) {
+        throw new Error("That normalized phone destination already exists for this contact; edit the existing phone instead.");
+      }
       const requestedIds = new Set(inputs.flatMap((input) => input.id ? [input.id] : []));
       if (existing.some((phone) => phone.doNotCallAt && !requestedIds.has(phone.id))) {
         throw new Error("A suppressed phone number cannot be removed; keep it to preserve suppression history.");
@@ -89,8 +104,7 @@ export class ContactPhoneRepository {
           normalizedNumber: phone.normalizedNumber, updatedAt: now,
         });
       }
-      for (const input of inputs) {
-        const normalizedNumber = normalizeNorthAmericanPhone(input.number);
+      for (const { input, normalizedNumber } of normalizedInputs) {
         if (input.id === null) {
           await store.insertPhone({ ...input, contactId, normalizedNumber, createdAt: now, updatedAt: now });
           continue;

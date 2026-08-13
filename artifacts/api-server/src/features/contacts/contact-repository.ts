@@ -601,6 +601,9 @@ export class DrizzleContactRepository implements CallerFinderRepository {
             )
         )`
       : sql<boolean>`false`;
+    const matchedContactPostalCode = input.query
+      ? sql<boolean>`coalesce(${contacts.postalCode} ilike ${pattern}, false)`
+      : sql<boolean>`false`;
     const matchedRouteLeg = input.query
       ? sql<boolean>`exists (
           select 1
@@ -690,6 +693,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
         routeLegName,
         matchedOrganizationOrEvent,
         matchedLocation,
+        matchedContactPostalCode,
         matchedRouteLeg,
         lastContactedAt,
         dueToday,
@@ -714,6 +718,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       routeLegName: row.routeLegName,
       matchedOrganizationOrEvent: row.matchedOrganizationOrEvent,
       matchedLocation: row.matchedLocation,
+      matchedContactPostalCode: row.matchedContactPostalCode,
       matchedRouteLeg: row.matchedRouteLeg,
       lastContactedAt: row.lastContactedAt,
       dueToday: row.dueToday,

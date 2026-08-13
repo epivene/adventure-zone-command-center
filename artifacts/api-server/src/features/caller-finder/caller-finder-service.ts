@@ -111,6 +111,7 @@ function scoredSuggestion(
     normalizedQuery &&
     (
       candidate.matchedLocation ||
+      candidate.matchedContactPostalCode ||
       [candidate.city, candidate.region]
         .some((value) => folded(value).includes(normalizedQuery))
     )

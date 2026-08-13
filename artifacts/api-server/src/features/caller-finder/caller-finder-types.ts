@@ -27,6 +27,7 @@ export type CallerFinderCandidate = {
   noteText: string | null;
   matchedOrganizationOrEvent: boolean;
   matchedLocation: boolean;
+  matchedContactPostalCode: boolean;
   matchedRouteLeg: boolean;
 };
 

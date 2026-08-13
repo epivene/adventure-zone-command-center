@@ -18,31 +18,54 @@ phone numbers, credentials, and call notes out of source control and tickets.
    /api/calls/config` reports `assistedCallingEnabled: false` before continuing.
 2. Run the registered database migrations through the normal migration runner.
    Confirm migrations `020_assisted_calling.sql`,
-   `021_call_session_metadata.sql`, and
-   `022_contact_phone_legacy_compatibility.sql` are recorded as applied. The
-   final migration installs the durable legacy-phone compatibility trigger used
+   `021_call_session_metadata.sql`,
+   `022_contact_phone_legacy_compatibility.sql`, and
+   `023_contact_phone_canonical_dnc.sql` are recorded as applied. The final
+   migration repairs canonical destinations, installs destination uniqueness,
+   and hardens the durable legacy-phone compatibility trigger used
    by normal create, quick create, ACT import/apply, and edits. Verify every legacy
    nonblank contact phone has exactly one primary `contact_phones` row and stop
    if this query returns any rows:
 
    ```sql
    SELECT c.id,
+          canonical.canonical_number,
+          c.normalized_phone,
           count(cp.id) FILTER (WHERE cp."primary") AS primary_phone_count,
           count(cp.id) FILTER (
             WHERE cp."primary"
               AND cp.number = c.phone
-              AND cp.normalized_number IS NOT DISTINCT FROM c.normalized_phone
+              AND canonical.canonical_number IS NOT NULL
+              AND c.normalized_phone = canonical.canonical_number
+              AND cp.normalized_number = canonical.canonical_number
           ) AS matching_legacy_primary_count
    FROM contacts c
+   CROSS JOIN LATERAL (
+     SELECT normalize_north_american_phone(c.phone) AS canonical_number
+   ) canonical
    LEFT JOIN contact_phones cp ON cp.contact_id = c.id
-   WHERE btrim(coalesce(c.phone, '')) <> ''
-   GROUP BY c.id
-   HAVING count(cp.id) FILTER (WHERE cp."primary") <> 1
-      OR count(cp.id) FILTER (
-           WHERE cp."primary"
-             AND cp.number = c.phone
-             AND cp.normalized_number IS NOT DISTINCT FROM c.normalized_phone
-         ) <> 1;
+   GROUP BY c.id, canonical.canonical_number
+   HAVING (
+     btrim(coalesce(c.phone, '')) = ''
+     AND (
+       c.normalized_phone IS NOT NULL
+       OR count(cp.id) FILTER (WHERE cp."primary") <> 0
+     )
+   ) OR (
+     btrim(coalesce(c.phone, '')) <> ''
+     AND (
+       canonical.canonical_number IS NULL
+       OR c.normalized_phone IS DISTINCT FROM canonical.canonical_number
+       OR count(cp.id) FILTER (WHERE cp."primary") <> 1
+       OR count(cp.id) FILTER (
+            WHERE cp."primary"
+              AND cp.number = c.phone
+              AND canonical.canonical_number IS NOT NULL
+              AND c.normalized_phone = canonical.canonical_number
+              AND cp.normalized_number = canonical.canonical_number
+          ) <> 1
+     )
+   );
    ```
 
    Also confirm `contact_phones` contains no blank numbers and no contact has

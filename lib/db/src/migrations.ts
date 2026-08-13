@@ -94,6 +94,22 @@ const migrationFiles = [
         AND NOT tgisinternal
     ) AS ready`,
   },
+  {
+    name: "023_contact_phone_canonical_dnc.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.contact_phones_contact_normalized_number_unique') IS NOT NULL
+      AND to_regprocedure(current_schema() || '.normalize_north_american_phone(text)') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'contacts_normalize_legacy_phone'
+          AND NOT tgisinternal
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_trigger
+        WHERE tgname = 'contacts_sync_primary_phone'
+          AND NOT tgisinternal
+      ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

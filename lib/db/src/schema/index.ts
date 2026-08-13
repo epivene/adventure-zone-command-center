@@ -274,6 +274,7 @@ export const contactPhones = pgTable("contact_phones", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("contact_phones_one_primary_per_contact").on(table.contactId).where(sql`${table.primary}`),
+  uniqueIndex("contact_phones_contact_normalized_number_unique").on(table.contactId, table.normalizedNumber).where(sql`${table.normalizedNumber} is not null`),
   index("contact_phones_normalized_number_idx").on(table.normalizedNumber),
   check("contact_phones_number_nonblank", sql`btrim(${table.number}) <> ''`),
 ]);

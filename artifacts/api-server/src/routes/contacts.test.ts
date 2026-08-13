@@ -163,6 +163,24 @@ describe("contact phone routes", () => {
     }).expect(400);
   });
 
+  it("returns an actionable 400 when a replacement duplicates a canonical destination", async () => {
+    phoneRepository.replaceForContact.mockRejectedValueOnce(
+      new Error("That normalized phone destination already exists for this contact; edit the existing phone instead."),
+    );
+
+    const response = await request(app).put(`/contacts/${contactId}/phones`).send({
+      phones: [
+        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+        { id: null, number: "(701) 555-0199", type: "alternate", extension: null, label: null, primary: false },
+      ],
+    }).expect(400);
+
+    expect(response.body).toEqual({
+      ok: false,
+      error: "That normalized phone destination already exists for this contact; edit the existing phone instead.",
+    });
+  });
+
   it("atomically accepts nullable phone metadata with the contact edit", async () => {
     await request(app).put(`/contacts/${contactId}`).send({
       contact: {
@@ -182,6 +200,8 @@ describe("contact phone routes", () => {
       [expect.objectContaining({ extension: null, label: null })],
       expect.any(Date),
     );
+    expect(phoneRepository.replaceForContact.mock.invocationCallOrder[0])
+      .toBeLessThan(updateContact.mock.invocationCallOrder[0]!);
   });
 
   it("returns 400 for suppressed-phone validation without committing contact fields", async () => {
@@ -198,7 +218,7 @@ describe("contact phone routes", () => {
     }).expect(400);
 
     expect(response.body.error).toMatch(/suppressed phone number cannot be removed/i);
-    expect(updateContact).toHaveBeenCalledOnce();
+    expect(updateContact).not.toHaveBeenCalled();
     expect(atomicContact.firstName).toBe("Ada");
   });
 

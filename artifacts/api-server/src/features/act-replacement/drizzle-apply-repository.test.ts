@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import { loadActReviewMigrations } from "@workspace/db/migrations";
+import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 import { DrizzleApplyRepository, createDrizzleApplyRepository } from "./drizzle-apply-repository";
 import { localValueFingerprint } from "./local-edit-policy";
 import type { ReviewedOverwriteInput } from "./apply-repository";
@@ -484,6 +488,207 @@ describe("DrizzleApplyRepository", () => {
     const insert = statements.find((statement) => statement.sql.startsWith("insert into organizations"));
     expect(insert?.params).toContain("ACT-COMPANY-1");
     expect(insert?.params).not.toContain("11111111-1111-1111-1111-111111111111");
+  });
+
+  it("creates an ACT contact with canonical legacy-phone normalization", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const dialect = new PgDialect();
+    const database = {
+      execute: async (query: TestQuery) => {
+        const rendered = dialect.sqlToQuery(query);
+        statements.push({ sql: rendered.sql, params: rendered.params });
+        if (rendered.sql.includes("from act_external_links") && rendered.sql.includes("source_record_id =")) return { rows: [] };
+        if (rendered.sql.includes("from act_source_records")) return { rows: [{ sourceDatabaseKey: "act-db", streamType: "contact", actRecordId: "ACT-CONTACT-1" }] };
+        if (rendered.sql.includes("from act_external_links") && rendered.sql.includes("source_record_id is null")) return { rows: [] };
+        if (rendered.sql.startsWith("select * from contacts")) return { rows: [] };
+        if (rendered.sql.startsWith("insert into contacts")) return { rows: [{ id: "contact-local", phone: "(701) 555-0199", normalized_phone: "+17015550199" }] };
+        throw new Error(`Unexpected SQL: ${rendered.sql}`);
+      },
+    } as never;
+
+    await new DrizzleApplyRepository(withSuccessfulFences(database) as never).createTarget(
+      "contact",
+      { firstName: "Ada", lastName: "Lovelace", phone: "(701) 555-0199" },
+      "11111111-1111-1111-1111-111111111111",
+      "22222222-2222-2222-2222-222222222222",
+      attempt,
+    );
+
+    const insert = statements.find((statement) => statement.sql.startsWith("insert into contacts"));
+    expect(insert?.sql).toContain("normalized_phone");
+    expect(insert?.params).toEqual(expect.arrayContaining(["(701) 555-0199", "+17015550199"]));
+  });
+
+  it("updates and clears ACT contact phone normalization in the same statement", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const dialect = new PgDialect();
+    const execute = async (query: TestQuery) => {
+      const rendered = dialect.sqlToQuery(query);
+      statements.push({ sql: rendered.sql, params: rendered.params });
+      if (rendered.sql.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
+      if (rendered.sql.startsWith("update contacts")) return { rows: [] };
+      throw new Error(`Unexpected SQL: ${rendered.sql}`);
+    };
+    const repository = new DrizzleApplyRepository({
+      execute,
+      transaction: async <T>(callback: (tx: { execute: typeof execute }) => Promise<T>) => callback({ execute }),
+    } as never);
+    const target = { id: "contact-local", entityType: "contact", values: { phone: null } };
+
+    await repository.writeTarget(target, "phone", "701.555.0199", attempt);
+    await repository.writeTarget(target, "phone", null, attempt);
+
+    const updates = statements.filter((statement) => statement.sql.startsWith("update contacts"));
+    expect(updates).toHaveLength(2);
+    expect(updates[0]?.sql).toContain("normalized_phone =");
+    expect(updates[0]?.params).toEqual(expect.arrayContaining(["701.555.0199", "+17015550199"]));
+    expect(updates[1]?.sql).toContain("normalized_phone =");
+    expect(updates[1]?.params).toEqual(expect.arrayContaining([null, null]));
+  });
+
+  it("canonically normalizes an ACT phone filled into a blank contact", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const dialect = new PgDialect();
+    const execute = async (query: TestQuery) => {
+      const rendered = dialect.sqlToQuery(query);
+      statements.push({ sql: rendered.sql, params: rendered.params });
+      if (rendered.sql.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
+      if (rendered.sql.startsWith("update contacts")) return { rows: [{ value: "701-555-0199" }] };
+      throw new Error(`Unexpected SQL: ${rendered.sql}`);
+    };
+    const database = { execute, transaction: async <T>(callback: (tx: { execute: typeof execute }) => Promise<T>) => callback({ execute }) } as never;
+
+    await expect(new DrizzleApplyRepository(database).fillMissingTarget(
+      { id: "contact-local", entityType: "contact", values: { phone: null } },
+      "phone",
+      "701-555-0199",
+      attempt,
+    )).resolves.toBe("applied");
+
+    const update = statements.find((statement) => statement.sql.startsWith("update contacts"));
+    expect(update?.sql).toContain("normalized_phone =");
+    expect(update?.params).toEqual(expect.arrayContaining(["701-555-0199", "+17015550199"]));
+  });
+
+  it("canonically normalizes a reviewed ACT contact phone overwrite", async () => {
+    const statements: Array<{ sql: string; params: unknown[] }> = [];
+    const dialect = new PgDialect();
+    const execute = async (query: TestQuery) => {
+      const rendered = dialect.sqlToQuery(query);
+      statements.push({ sql: rendered.sql, params: rendered.params });
+      if (rendered.sql.startsWith("update act_replacement_apply_batches")) return { rows: [{ id: attempt.batchId }] };
+      if (rendered.sql.startsWith("with overwritten as")) return { rows: [{ operationId: storedOperation.id }] };
+      throw new Error(`Unexpected SQL: ${rendered.sql}`);
+    };
+    const database = { execute, transaction: async <T>(callback: (tx: { execute: typeof execute }) => Promise<T>) => callback({ execute }) } as never;
+    const input = reviewedOverwriteInput();
+    input.target = { id: "contact-local", entityType: "contact", values: { phone: "701-555-0100" } };
+    input.value = "+1 701 555 0199";
+    input.expectedLocalValue = "701-555-0100";
+    input.expectedLocalValueFingerprint = localValueFingerprint("701-555-0100");
+    input.origin = { ...input.origin, entityType: "contact", entityId: "contact-local" };
+
+    await new DrizzleApplyRepository(database).applyReviewedOverwrite(input, attempt);
+
+    const update = statements.find((statement) => statement.sql.startsWith("with overwritten as"));
+    expect(update?.sql).toContain("normalized_phone =");
+    expect(update?.params).toEqual(expect.arrayContaining(["+1 701 555 0199", "+17015550199"]));
+  });
+
+  it("persists ACT phone create, update, and clear through exact lookup and destination constraints", async () => {
+    const client = new PGlite();
+    try {
+      await client.exec(`
+        CREATE TABLE contacts (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid,
+          first_name text NOT NULL, last_name text NOT NULL, email text, phone text,
+          normalized_phone text, act_record_id text UNIQUE, job_title text,
+          address_1 text, address_2 text, city text, region text, postal_code text,
+          created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE TABLE contact_phones (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(), contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+          number text NOT NULL, normalized_number text, type text NOT NULL DEFAULT 'unknown',
+          extension text, label text, "primary" boolean NOT NULL DEFAULT false,
+          source text NOT NULL DEFAULT 'local', do_not_call_at timestamptz, do_not_call_reason text,
+          created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+        );
+        CREATE UNIQUE INDEX contact_phones_one_primary_per_contact ON contact_phones(contact_id) WHERE "primary";
+        CREATE TABLE call_sessions (id uuid PRIMARY KEY, phone_id uuid REFERENCES contact_phones(id) ON DELETE SET NULL);
+        CREATE TABLE act_source_records (
+          id text PRIMARY KEY, source_database_key text NOT NULL, stream_type text NOT NULL, act_record_id text NOT NULL
+        );
+        CREATE TABLE act_external_links (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(), entity_type text NOT NULL, entity_id uuid NOT NULL,
+          source_entity_type text NOT NULL, act_record_id text NOT NULL, source_database_key text,
+          source_record_id text
+        );
+        CREATE TABLE act_replacement_apply_batches (
+          id text PRIMARY KEY, attempt_token text, state text NOT NULL,
+          lease_expires_at timestamptz, updated_at timestamptz NOT NULL DEFAULT now()
+        );
+      `);
+      const migration = (await loadActReviewMigrations()).find(({ name }) => name === "023_contact_phone_canonical_dnc.sql");
+      await client.exec(migration!.sql);
+      await client.exec(`
+        INSERT INTO act_source_records (id, source_database_key, stream_type, act_record_id)
+        VALUES ('source-1', 'act-db', 'contact', 'ACT-CONTACT-1');
+        INSERT INTO act_replacement_apply_batches (id, attempt_token, state, lease_expires_at)
+        VALUES ('${attempt.batchId}', '${attempt.attemptToken}', 'applying', now() + interval '5 minutes');
+      `);
+      const database = drizzle(client) as never;
+      const repository = new DrizzleApplyRepository(database);
+
+      const created = await repository.createTarget(
+        "contact",
+        { firstName: "Ada", lastName: "Lovelace", phone: "(701) 555-0199" },
+        "source-1",
+        "version-1",
+        attempt,
+      );
+      const contactId = created.target.id;
+
+      expect((await client.query(`
+        SELECT number, normalized_number, "primary" FROM contact_phones WHERE contact_id = '${contactId}'
+      `)).rows).toEqual([{ number: "(701) 555-0199", normalized_number: "+17015550199", primary: true }]);
+      await expect(new DrizzleContactRepository(database).findCallerExactMetadata({
+        normalizedPhone: "+17015550199",
+        normalizedEmail: null,
+      })).resolves.toEqual({ exactPhoneContactIds: [contactId], hasExactEmail: false });
+      await expect(new DrizzleContactRepository(database).hasExactQuickCallerDuplicate({
+        requestKey: "22222222-2222-4222-8222-222222222222",
+        firstName: "Grace",
+        lastName: "Hopper",
+        organizationName: "",
+        phone: "701.555.0199",
+        email: null,
+        reason: "New inquiry",
+        eventDate: null,
+        eventLocation: null,
+        continueCreating: false,
+      })).resolves.toBe(true);
+      await expect(client.query(`
+        INSERT INTO contact_phones (contact_id, number, normalized_number)
+        VALUES ('${contactId}', '+1 701 555 0199', '+17015550199')
+      `)).rejects.toMatchObject({ code: "23505" });
+
+      await repository.writeTarget(created.target, "phone", "701-555-0100", attempt);
+      expect((await client.query(`
+        SELECT number, normalized_number, "primary" FROM contact_phones
+        WHERE contact_id = '${contactId}' ORDER BY created_at, id
+      `)).rows).toEqual(expect.arrayContaining([
+        { number: "(701) 555-0199", normalized_number: "+17015550199", primary: false },
+        { number: "701-555-0100", normalized_number: "+17015550100", primary: true },
+      ]));
+
+      await repository.writeTarget(created.target, "phone", null, attempt);
+      expect((await client.query(`SELECT phone, normalized_phone FROM contacts WHERE id = '${contactId}'`)).rows)
+        .toEqual([{ phone: null, normalized_phone: null }]);
+      expect((await client.query(`SELECT count(*)::int AS count FROM contact_phones WHERE contact_id = '${contactId}' AND "primary"`)).rows)
+        .toEqual([{ count: 0 }]);
+    } finally {
+      await client.close();
+    }
   });
 
   it("creates a calling list and its source link in one idempotent SQL statement", async () => {

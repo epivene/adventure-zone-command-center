@@ -219,4 +219,74 @@ describe("ContactPhoneRepository", () => {
 
     expect(await repository.listForContact(contactId)).toHaveLength(2);
   });
+
+  it("rejects a new row whose canonical destination already belongs to the contact", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+    ], now);
+    const [existing] = await repository.listForContact(contactId);
+
+    await expect(repository.replaceForContact(contactId, [
+      { id: existing!.id, number: existing!.number, type: existing!.type, extension: null, label: null, primary: true },
+      { id: null, number: "701-555-0199", type: "alternate", extension: null, label: null, primary: false },
+    ], now)).rejects.toThrow("normalized phone destination already exists");
+
+    expect(await repository.listForContact(contactId)).toMatchObject([
+      { id: existing!.id, number: "701-555-0199", primary: true },
+    ]);
+  });
+
+  it("rejects formatting an edited row as another row's canonical destination", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+      { id: null, number: "701-555-0100", type: "office", extension: null, label: null, primary: false },
+    ], now);
+    const [mobile, office] = await repository.listForContact(contactId);
+
+    await expect(repository.replaceForContact(contactId, [
+      { id: mobile!.id, number: mobile!.number, type: mobile!.type, extension: null, label: null, primary: true },
+      { id: office!.id, number: "(701) 555-0199", type: office!.type, extension: null, label: null, primary: false },
+    ], now)).rejects.toThrow("normalized phone destination already exists");
+
+    expect(await repository.listForContact(contactId)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: mobile!.id, normalizedNumber: "+17015550199" }),
+      expect.objectContaining({ id: office!.id, normalizedNumber: "+17015550100" }),
+    ]));
+  });
+
+  it("cannot recreate a suppressed destination as a new unsuppressed row", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+    ], now);
+    const [suppressed] = await repository.listForContact(contactId);
+    await repository.markDoNotCall(suppressed!.id, "Requested", now);
+
+    await expect(repository.replaceForContact(contactId, [
+      { id: suppressed!.id, number: suppressed!.number, type: suppressed!.type, extension: null, label: null, primary: false },
+      { id: null, number: "+1 701 555 0199", type: "alternate", extension: null, label: null, primary: true },
+    ], now)).rejects.toThrow("normalized phone destination already exists");
+
+    expect(await repository.listForContact(contactId)).toMatchObject([
+      { id: suppressed!.id, normalizedNumber: "+17015550199", doNotCallAt: now, doNotCallReason: "Requested" },
+    ]);
+  });
+
+  it("continues to accept distinct canonical destinations", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+
+    await expect(repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+      { id: null, number: "+1 (701) 555-0100", type: "office", extension: null, label: null, primary: false },
+    ], now)).resolves.toMatchObject([
+      { normalizedNumber: "+17015550199", primary: true },
+      { normalizedNumber: "+17015550100", primary: false },
+    ]);
+  });
 });

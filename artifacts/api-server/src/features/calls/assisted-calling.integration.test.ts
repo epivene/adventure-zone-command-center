@@ -403,6 +403,7 @@ class AssistedCallingState implements
       noteText: this.activities.at(-1)?.body ?? null,
       matchedOrganizationOrEvent: false,
       matchedLocation: false,
+      matchedContactPostalCode: false,
       matchedRouteLeg: false,
     };
   }

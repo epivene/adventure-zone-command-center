@@ -16,6 +16,7 @@ const phoneValidationErrors = new Set([
   "Contact phone does not belong to this contact.",
   "A suppressed phone number cannot be changed; add a new number to preserve suppression history.",
   "A suppressed phone number cannot be removed; keep it to preserve suppression history.",
+  "That normalized phone destination already exists for this contact; edit the existing phone instead.",
 ]);
 
 function isPhoneValidationError(err: unknown): err is Error {
@@ -117,11 +118,13 @@ router.put("/contacts/:id", async (req, res): Promise<void> => {
   }
   try {
     const phones = await db.transaction(async (transaction) => {
-      const updated = await new DrizzleContactRepository(transaction as unknown as typeof db)
-        .updateContact(id, parsed.data.contact);
-      if (!updated) throw new Error("Contact is missing.");
-      return createContactPhoneRepository(transaction as unknown as typeof db)
+      const savedPhones = await createContactPhoneRepository(transaction as unknown as typeof db)
         .replaceForContact(id, parsed.data.phones, new Date());
+      const primaryPhone = savedPhones.find((phone) => phone.primary) ?? null;
+      const updated = await new DrizzleContactRepository(transaction as unknown as typeof db)
+        .updateContact(id, { ...parsed.data.contact, phone: primaryPhone?.number ?? null });
+      if (!updated) throw new Error("Contact is missing.");
+      return savedPhones;
     });
     res.json({ ok: true, phones });
   } catch (err) {
