@@ -45,7 +45,7 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
     const repo = new DrizzleEventProfileRepository(db);
     const profile = await repo.getEventProfile(id, contactId);
     if (!profile) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(profile);
+    res.json({ ...profile, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });

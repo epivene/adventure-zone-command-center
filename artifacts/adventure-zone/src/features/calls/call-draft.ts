@@ -31,6 +31,7 @@ export type CallDraft = {
   lastResortReason: string;
   doNotCallConfirmed: boolean;
   doNotCallReason: string;
+  doNotCallPhoneId: string | null;
 };
 
 function browserStorage(): Storage {
@@ -71,7 +72,8 @@ function safeDraft(value: unknown): CallDraft | null {
     typeof draft.lastResortConfirmed !== "boolean" ||
     typeof draft.lastResortReason !== "string" ||
     typeof draft.doNotCallConfirmed !== "boolean" ||
-    typeof draft.doNotCallReason !== "string"
+    typeof draft.doNotCallReason !== "string" ||
+    !(typeof draft.doNotCallPhoneId === "string" || draft.doNotCallPhoneId === null || draft.doNotCallPhoneId === undefined)
   ) return null;
 
   return {
@@ -90,6 +92,7 @@ function safeDraft(value: unknown): CallDraft | null {
     lastResortReason: draft.lastResortReason,
     doNotCallConfirmed: draft.doNotCallConfirmed,
     doNotCallReason: draft.doNotCallReason,
+    doNotCallPhoneId: typeof draft.doNotCallPhoneId === "string" ? draft.doNotCallPhoneId : null,
   };
 }
 

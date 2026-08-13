@@ -36,8 +36,29 @@ export class ContactPhoneRepository {
   constructor(private readonly store: ContactPhoneStore) {}
 
   async listForContact(contactId: string): Promise<ContactPhoneRecord[]> {
-    return (await this.store.listForContact(contactId))
-      .toSorted((left, right) => Number(right.primary) - Number(left.primary) || left.id.localeCompare(right.id));
+    return this.store.transaction(async (store) => {
+      let phones = await store.listForContact(contactId);
+      if (!phones.length) {
+        const contact = await store.lockContact(contactId);
+        phones = await store.listForContact(contactId);
+        if (!phones.length && contact?.phone?.trim()) {
+          const now = new Date();
+          await store.insertPhone({
+            contactId,
+            number: contact.phone,
+            normalizedNumber: contact.normalizedPhone,
+            type: "unknown",
+            extension: null,
+            label: null,
+            primary: true,
+            createdAt: now,
+            updatedAt: now,
+          });
+          phones = await store.listForContact(contactId);
+        }
+      }
+      return phones.toSorted((left, right) => Number(right.primary) - Number(left.primary) || left.id.localeCompare(right.id));
+    });
   }
 
   async replaceForContact(contactId: string, inputs: ContactPhoneInput[], now: Date): Promise<ContactPhoneRecord[]> {
@@ -53,6 +74,10 @@ export class ContactPhoneRepository {
       }
 
       const existing = await store.listForContact(contactId);
+      const requestedIds = new Set(inputs.flatMap((input) => input.id ? [input.id] : []));
+      if (existing.some((phone) => phone.doNotCallAt && !requestedIds.has(phone.id))) {
+        throw new Error("A suppressed phone number cannot be removed; keep it to preserve suppression history.");
+      }
       const existingById = new Map(existing.map((phone) => [phone.id, phone]));
       const retained = new Set<string>();
       // The partial unique index is immediate, so remove every current primary

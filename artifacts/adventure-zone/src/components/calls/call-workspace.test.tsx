@@ -72,8 +72,8 @@ describe("CallWorkspace shared phone actions", () => {
   it.each([
     {
       type: "mobile",
-      expected: ["Call", "Leave voicemail"],
-      absent: ["Call office", "Use extension", "Copy number"],
+      expected: ["Call", "Leave voicemail", "Copy number"],
+      absent: ["Call office", "Use extension"],
     },
     {
       type: "office",
@@ -97,8 +97,22 @@ describe("CallWorkspace shared phone actions", () => {
     renderWorkspace({ phones: [{ ...phoneBase, type: "unknown" }] });
     expect(screen.getByRole("button", { name: "Call" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Leave voicemail" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy number" })).toBeInTheDocument();
     expect(screen.getByText("May not work for office numbers.")).toBeInTheDocument();
   });
+
+  it.each(["mobile", "alternate", "unknown"] as const)(
+    "keeps Copy number available for a suppressed %s number",
+    (type) => {
+      renderWorkspace({ phones: [{
+        ...phoneBase, type, doNotCallAt: "2026-08-13T16:00:00.000Z",
+        doNotCallReason: "Requested",
+      }] });
+      expect(screen.getByRole("button", { name: "Copy number" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Call" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Leave voicemail" })).not.toBeInTheDocument();
+    },
+  );
 
   it("suppresses calling and voicemail actions for a Do Not Call number", () => {
     renderWorkspace({
@@ -376,6 +390,41 @@ describe("CallWorkspace fix round 1 safety", () => {
     expect(screen.queryByRole("button", { name: "Leave voicemail" })).not.toBeInTheDocument();
   });
 
+  it("clears Do Not Call confirmation when the selected phone changes", async () => {
+    const office = { ...phoneBase, id: "50000000-0000-4000-8000-000000000002", type: "office" as const, primary: false };
+    const first = renderWorkspace({ phones: [{ ...phoneBase, type: "mobile" }, office] });
+    fireEvent.click(screen.getByRole("button", { name: "Start call note" }));
+    fireEvent.change(screen.getByLabelText("Call note"), { target: { value: "Requested suppression." } });
+    fireEvent.change(screen.getByLabelText("Call disposition"), { target: { value: "do_not_call" } });
+    fireEvent.change(screen.getByLabelText("Do Not Call reason"), { target: { value: "Requested" } });
+    fireEvent.click(screen.getByLabelText("I confirm this selected number should be marked Do Not Call"));
+
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: office.id } });
+
+    expect(screen.getByLabelText("Do Not Call reason")).toHaveValue("");
+    expect(screen.getByLabelText("I confirm this selected number should be marked Do Not Call")).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/confirm Do Not Call/i);
+    expect(first.onComplete).not.toHaveBeenCalled();
+  });
+
+  it("derives untouched desktop method and selected-phone changes without mobile_log", async () => {
+    const office = { ...phoneBase, id: "50000000-0000-4000-8000-000000000002", type: "office" as const, primary: false };
+    const first = renderWorkspace({ phones: [{ ...phoneBase, type: "mobile" }, office] });
+    fireEvent.click(screen.getByRole("button", { name: "Start call note" }));
+    fireEvent.change(screen.getByLabelText("Call note"), { target: { value: "Desktop note." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+    await waitFor(() => expect(first.onComplete).toHaveBeenLastCalledWith(expect.objectContaining({ method: "standard_call", entryMode: "desktop" })));
+
+    first.unmount();
+    const second = renderWorkspace({ phones: [{ ...phoneBase, type: "mobile" }, office] });
+    fireEvent.click(screen.getByRole("button", { name: "Start call note" }));
+    fireEvent.change(screen.getByLabelText("Call note"), { target: { value: "Office note." } });
+    fireEvent.change(screen.getByLabelText("Phone number"), { target: { value: office.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+    await waitFor(() => expect(second.onComplete).toHaveBeenLastCalledWith(expect.objectContaining({ method: "office_call" })));
+  });
+
   it("does not submit stale Do Not Call fields after a quick outcome", async () => {
     vi.stubGlobal("crypto", { randomUUID: () => "70000000-0000-4000-8000-000000000001" });
     const { onComplete } = renderWorkspace();
@@ -423,7 +472,7 @@ describe("CallWorkspace fix round 1 safety", () => {
     await waitFor(() => expect(onComplete).toHaveBeenCalled());
     expect(onComplete).toHaveBeenLastCalledWith(expect.objectContaining({
       direction: "outgoing",
-      method: "mobile_log",
+      method: "standard_call",
       phoneId: phoneBase.id,
       scriptKind: "follow_up",
     }));

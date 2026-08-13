@@ -40,10 +40,12 @@ export function EventProfileWorkspace({
   profile,
   context = {},
   callablePhoneByContactId = {},
+  assistedCallingEnabled = false,
 }: {
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
   callablePhoneByContactId?: Record<string, string | null>;
+  assistedCallingEnabled?: boolean;
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
   const callablePhone = selectedContactId ? callablePhoneByContactId[selectedContactId] ?? null : null;
@@ -70,12 +72,14 @@ export function EventProfileWorkspace({
             {profile.place.phone ? <p className="mt-1 text-sm text-slate-600">{profile.place.phone}</p> : null}
           </div>
           <div className="flex flex-wrap gap-3">
-            {callingSuppressed ? (
+            {!assistedCallingEnabled ? (
+              <span className="self-center text-sm font-semibold text-slate-600">Assisted calling is not enabled.</span>
+            ) : callingSuppressed ? (
               <button className="button-primary" disabled type="button">Call</button>
             ) : (
               <Link className="button-primary text-center" href={callHref(profile, context, selectedContactId)}>Call</Link>
             )}
-            <Link className="button-secondary text-center" href={callHref(profile, context, selectedContactId, "/calls/log")}>Log call</Link>
+            {assistedCallingEnabled ? <Link className="button-secondary text-center" href={callHref(profile, context, selectedContactId, "/calls/log")}>Log call</Link> : null}
             <Link className="button-secondary text-center" href="/event-profiles/new">New event</Link>
           </div>
         </div>
@@ -132,7 +136,7 @@ export function EventProfileWorkspace({
             {selectedContact ? <div className="mt-3 grid gap-3">
               <p aria-live="polite" className="font-semibold">Current caller: {selectedContact.name}</p>
               <div className="flex flex-wrap gap-2">
-                {callablePhone && !callingSuppressed ? <a className="button-primary text-center" href={`tel:${callablePhone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">{callingSuppressed ? "Calling unavailable" : "No phone recorded"}</span>}
+                {assistedCallingEnabled && callablePhone && !callingSuppressed ? <a className="button-primary text-center" href={`tel:${callablePhone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">{!assistedCallingEnabled ? "Assisted calling unavailable" : callingSuppressed ? "Calling unavailable" : "No phone recorded"}</span>}
                 {profile.contacts.length > 1 ? <button className="button-secondary" onClick={() => {
                   const index = profile.contacts.findIndex(({ id }) => id === selectedContactId);
                   setSelectedContactId(profile.contacts[(index + 1) % profile.contacts.length]!.id);

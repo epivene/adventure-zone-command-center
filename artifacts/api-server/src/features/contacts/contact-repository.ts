@@ -582,7 +582,10 @@ export class DrizzleContactRepository implements CallerFinderRepository {
           from booking_contacts finder_bc
           join bookings finder_booking on finder_booking.id = finder_bc.booking_id
           where finder_bc.contact_id = ${contacts.id}
-            and finder_booking.name ilike ${pattern}
+            and (
+              finder_booking.name ilike ${pattern}
+              or replace(finder_booking.status::text, '_', ' ') ilike ${pattern}
+            )
         )`
       : sql<boolean>`false`;
     const matchedLocation = input.query
@@ -594,6 +597,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
             and (
               finder_booking.city ilike ${pattern}
               or finder_booking.region ilike ${pattern}
+              or finder_booking.postal_code ilike ${pattern}
             )
         )`
       : sql<boolean>`false`;
@@ -626,7 +630,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       : sql<string | null>`null`;
 
     const conditions = [
-      dueToday,
+      input.query ? undefined : dueToday,
       input.normalizedPhone
         ? sql`${input.normalizedPhone} = any(${phones})`
         : undefined,
@@ -649,6 +653,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
             ilike(organizations.name, pattern),
             ilike(contacts.city, pattern),
             ilike(contacts.region, pattern),
+            ilike(contacts.postalCode, pattern),
             matchedOrganizationOrEvent,
             matchedLocation,
             matchedRouteLeg,

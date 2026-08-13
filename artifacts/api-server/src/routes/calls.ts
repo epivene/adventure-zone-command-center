@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleCallRepository } from "@/features/calls/call-repository";
@@ -19,6 +19,14 @@ import { submitQuickCaller } from "@/features/contacts/quick-caller-service";
 
 const router: IRouter = Router();
 
+function requireAssistedCalling(_req: Request, res: Response, next: NextFunction): void {
+  if (process.env.ASSISTED_CALLING_ENABLED !== "true") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  next();
+}
+
 router.get("/calls/config", (_req, res): void => {
   res.json({
     assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true",
@@ -36,7 +44,7 @@ const callerFinderQuerySchema = z.object({
   q: z.string().max(120).optional().default(""),
 });
 
-router.get("/calls/caller-finder", async (req, res): Promise<void> => {
+router.get("/calls/caller-finder", requireAssistedCalling, async (req, res): Promise<void> => {
   const parsed = callerFinderQuerySchema.safeParse({
     phone: firstString(req.query.phone),
     q: firstString(req.query.q),
@@ -60,7 +68,7 @@ router.get("/calls/caller-finder", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/calls/quick-caller", async (req, res): Promise<void> => {
+router.post("/calls/quick-caller", requireAssistedCalling, async (req, res): Promise<void> => {
   try {
     const result = await submitQuickCaller(
       req.body,
@@ -77,7 +85,7 @@ router.post("/calls/quick-caller", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/calls/workspace", async (req, res): Promise<void> => {
+router.get("/calls/workspace", requireAssistedCalling, async (req, res): Promise<void> => {
   try {
     const result = await loadCallWorkspace(
       {
@@ -103,7 +111,7 @@ router.get("/calls/workspace", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/calls/complete", async (req, res): Promise<void> => {
+router.post("/calls/complete", requireAssistedCalling, async (req, res): Promise<void> => {
   const parsed = completeCallInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });

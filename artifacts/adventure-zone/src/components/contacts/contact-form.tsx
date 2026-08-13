@@ -39,7 +39,7 @@ export function ContactPhoneFields({
       <legend className="font-medium">Phone numbers</legend>
       {phones.map((phone, index) => (
         <div className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-6" key={phone.id ?? `new-${index}`}>
-          <input aria-label="Phone number" value={phone.number} onChange={(event) => update(index, { number: event.target.value })} type="tel" className="sm:col-span-2" />
+          <input aria-label="Phone number" readOnly={Boolean(phone.doNotCallAt)} value={phone.number} onChange={(event) => update(index, { number: event.target.value })} type="tel" className="sm:col-span-2" />
           <select aria-label="Phone type" value={phone.type} onChange={(event) => update(index, { type: event.target.value as ContactPhoneType })}>
             {phoneTypes.map((type) => <option key={type} value={type}>{type}</option>)}
           </select>
@@ -47,7 +47,7 @@ export function ContactPhoneFields({
           <input aria-label="Phone label" placeholder="Label" value={phone.label ?? ""} onChange={(event) => update(index, { label: event.target.value || null })} />
           <div className="flex items-center gap-3">
             <label className="flex items-center gap-1 text-sm"><input type="radio" name="primaryPhone" checked={phone.primary} onChange={() => onChange(phones.map((candidate, current) => ({ ...candidate, primary: current === index })))} />Primary</label>
-            <button className="text-sm text-rose-700" type="button" onClick={() => onChange(phones.filter((_, current) => current !== index))}>Remove</button>
+            <button className="text-sm text-rose-700" disabled={Boolean(phone.doNotCallAt)} type="button" onClick={() => onChange(phones.filter((_, current) => current !== index))}>{phone.doNotCallAt ? "Do Not Call — protected" : "Remove"}</button>
           </div>
         </div>
       ))}
@@ -61,13 +61,15 @@ export function ContactForm({
   initialPhones = [],
   onSubmit,
   onPhonesSubmit,
+  phonesEditable = false,
   successPath,
   variant = "create",
 }: {
   initialValues?: Partial<ContactFormInput>;
   initialPhones?: ContactPhoneInput[];
-  onSubmit: (input: ContactInput) => ContactSubmissionResult | Promise<ContactSubmissionResult>;
+  onSubmit: (input: ContactInput, phones?: ContactPhoneInput[]) => ContactSubmissionResult | Promise<ContactSubmissionResult>;
   onPhonesSubmit?: (phones: ContactPhoneInput[]) => PhoneSubmissionResult | Promise<PhoneSubmissionResult>;
+  phonesEditable?: boolean;
   successPath: string;
   variant?: "create" | "edit";
 }) {
@@ -105,11 +107,12 @@ export function ContactForm({
     setSubmissionError("");
     setIsSubmitting(true);
     try {
-      const result = await onSubmit(parsed.data);
+      const submittedPhones = phonesForSubmission(parsed.data.phone);
+      const result = await onSubmit(parsed.data, phonesEditable ? submittedPhones : undefined);
       if (!result) setSubmissionError("The server did not confirm this save.");
       else if (!result.ok) setSubmissionError(result.error);
       else {
-        const phoneResult = onPhonesSubmit ? await onPhonesSubmit(phonesForSubmission(parsed.data.phone)) : ({ ok: true } as const);
+        const phoneResult = onPhonesSubmit ? await onPhonesSubmit(submittedPhones) : ({ ok: true } as const);
         if (!phoneResult || !phoneResult.ok) setSubmissionError(phoneResult?.error ?? "The phone numbers could not be saved.");
         else navigate(variant === "create" && result.contactId ? `/contacts/${result.contactId}` : successPath);
       }
@@ -152,7 +155,7 @@ export function ContactForm({
             {errors[field.name] ? <span className="text-sm text-rose-700" role="alert">{errors[field.name]}</span> : null}
           </label>
         ))}
-        {onPhonesSubmit ? <ContactPhoneFields phones={phones} onChange={handlePhoneChange} /> : null}
+        {onPhonesSubmit || phonesEditable ? <ContactPhoneFields phones={phones} onChange={handlePhoneChange} /> : null}
       </div>
       <div><button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving…" : "Save contact"}</button></div>
     </form>

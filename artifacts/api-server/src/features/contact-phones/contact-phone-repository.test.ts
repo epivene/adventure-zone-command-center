@@ -187,4 +187,36 @@ describe("ContactPhoneRepository", () => {
     );
     expect(await store.loadOrganization(organizationId)).toMatchObject({ lastResort: false });
   });
+
+  it("self-heals a legacy-only phone into an idempotent primary row", async () => {
+    const store = new MemoryContactPhoneStore();
+    Object.assign(store.contact, {
+      phone: "701-555-0199",
+      normalizedPhone: "+17015550199",
+    });
+    const repository = new ContactPhoneRepository(store);
+
+    await expect(repository.listForContact(contactId)).resolves.toMatchObject([
+      { number: "701-555-0199", normalizedNumber: "+17015550199", primary: true, source: "local" },
+    ]);
+    await expect(repository.listForContact(contactId)).resolves.toHaveLength(1);
+  });
+
+  it("rejects omission of a suppressed phone without deleting any rows", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+      { id: null, number: "701-555-0100", type: "office", extension: "12", label: null, primary: false },
+    ], now);
+    const [mobile, office] = await repository.listForContact(contactId);
+    await repository.markDoNotCall(mobile!.id, "Requested", now);
+
+    await expect(repository.replaceForContact(contactId, [{
+      id: office!.id, number: office!.number, type: office!.type,
+      extension: office!.extension, label: office!.label, primary: true,
+    }], now)).rejects.toThrow("suppressed phone number cannot be removed");
+
+    expect(await repository.listForContact(contactId)).toHaveLength(2);
+  });
 });

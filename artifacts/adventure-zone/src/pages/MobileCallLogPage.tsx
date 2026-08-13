@@ -5,6 +5,7 @@ import { createActivityAction, editActivityAction, listActivityRevisionsAction }
 import { completeCallAction } from "@/actions/calls";
 import { CallWorkspace } from "@/components/calls/call-workspace";
 import { CallerFinder } from "@/components/calls/caller-finder";
+import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-unavailable";
 import { apiGet } from "@/lib/auth-token";
 
 type MobileCallLogPageProps = {
@@ -36,7 +37,8 @@ export default function MobileCallLogPage(props: MobileCallLogPageProps = {}) {
   const followUpId = props.followUpId ?? params.get("followUpId") ?? undefined;
   const [, setLocation] = useLocation();
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(Boolean(contactId));
+  const [assistedCallingEnabled, setAssistedCallingEnabled] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const selectCaller = useCallback((nextContactId: string) => {
     setContactId(nextContactId);
@@ -48,6 +50,19 @@ export default function MobileCallLogPage(props: MobileCallLogPageProps = {}) {
   }, [organizationId, bookingId, followUpId, setLocation]);
 
   useEffect(() => {
+    apiGet<{ assistedCallingEnabled: boolean }>("/calls/config")
+      .then((config) => {
+        setAssistedCallingEnabled(config.assistedCallingEnabled === true);
+        if (!config.assistedCallingEnabled) setLoading(false);
+      })
+      .catch(() => {
+        setAssistedCallingEnabled(false);
+        setLoading(false);
+      });
+  }, []);
+
+  useEffect(() => {
+    if (assistedCallingEnabled !== true) return;
     if (!contactId) {
       setData(null);
       setLoading(false);
@@ -70,8 +85,10 @@ export default function MobileCallLogPage(props: MobileCallLogPageProps = {}) {
         setError(reason.message);
         setLoading(false);
       });
-  }, [contactId, organizationId, bookingId, followUpId]);
+  }, [assistedCallingEnabled, contactId, organizationId, bookingId, followUpId]);
 
+  if (assistedCallingEnabled === false) return <AssistedCallingUnavailable width="max-w-xl" />;
+  if (assistedCallingEnabled === null) return <div className="mx-auto max-w-xl"><p className="mt-8 text-slate-500">Loading call log…</p></div>;
   if (!contactId) {
     return <div className="mx-auto max-w-xl"><CallerFinder onSelect={selectCaller} /></div>;
   }

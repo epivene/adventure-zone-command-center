@@ -90,7 +90,7 @@ export function PhoneActions({
             Leave voicemail
           </button>
         ) : null}
-        {phone.type === "office" ? (
+        {phone.number ? (
           <button
             className="button-secondary"
             onClick={() => void copy(phone.number, "Number copied.")}

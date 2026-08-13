@@ -30,6 +30,7 @@ const draft: CallDraft = {
   lastResortReason: "",
   doNotCallConfirmed: false,
   doNotCallReason: "",
+  doNotCallPhoneId: null,
 };
 
 describe("call draft storage", () => {

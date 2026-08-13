@@ -115,6 +115,8 @@ function validCall(overrides: Record<string, unknown> = {}) {
     scriptKind: "follow_up",
     doNotCallConfirmed: false,
     doNotCallReason: null,
+    doNotCallPhoneId: null,
+    entryMode: "desktop",
     ...overrides,
   } as CompleteCallInput;
 }
@@ -149,6 +151,7 @@ describe("CallService call metadata", () => {
       disposition: "do_not_call",
       doNotCallConfirmed: true,
       doNotCallReason: "Requested during call",
+      doNotCallPhoneId: phoneId,
     }));
 
     expect(repository.suppressedPhoneId).toBe(phoneId);

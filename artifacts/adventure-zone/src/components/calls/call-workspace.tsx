@@ -67,6 +67,16 @@ function formatDate(value: Date | null) {
   }).format(value);
 }
 
+function methodForPhone(isMobileLog: boolean, phone: ContactPhoneRecord | null): CallMethod {
+  if (isMobileLog) return "mobile_log";
+  return phone?.type === "office" ? "office_call" : "standard_call";
+}
+
+function scriptForDirection(direction: CallDirection, fallback: CallScriptKind): CallScriptKind {
+  if (direction === "incoming") return "incoming_inquiry";
+  return fallback === "incoming_inquiry" ? "first_outreach" : fallback;
+}
+
 type WorkspaceContact = {
   id: string;
   name: string;
@@ -136,8 +146,8 @@ export function CallWorkspace({
   const [requestKey, setRequestKey] = useState<string | null>(() => isMobileLog ? crypto.randomUUID() : null);
   const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(primaryPhone?.id ?? null);
   const [direction, setDirection] = useState<CallDirection>(isMobileLog ? "incoming" : "outgoing");
-  const [method, setMethod] = useState<CallMethod>("mobile_log");
-  const [scriptKind, setScriptKind] = useState<CallScriptKind>(defaultScriptKind);
+  const [method, setMethod] = useState<CallMethod>(() => methodForPhone(isMobileLog, primaryPhone));
+  const [scriptKind, setScriptKind] = useState<CallScriptKind>(() => scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
   const [note, setNote] = useState("");
   const [disposition, setDisposition] = useState<CallDisposition>("no_answer");
   const [nextActionKind, setNextActionKind] = useState("");
@@ -146,6 +156,7 @@ export function CallWorkspace({
   const [lastResortConfirmed, setLastResortConfirmed] = useState(false);
   const [doNotCallReason, setDoNotCallReason] = useState("");
   const [doNotCallConfirmed, setDoNotCallConfirmed] = useState(false);
+  const [doNotCallPhoneId, setDoNotCallPhoneId] = useState<string | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [activeDraftKey, setActiveDraftKey] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
@@ -178,8 +189,8 @@ export function CallWorkspace({
     setRequestKey(isMobileLog ? crypto.randomUUID() : null);
     setSelectedPhoneId(primaryPhone?.id ?? null);
     setDirection(isMobileLog ? "incoming" : "outgoing");
-    setMethod("mobile_log");
-    setScriptKind(defaultScriptKind);
+    setMethod(methodForPhone(isMobileLog, primaryPhone));
+    setScriptKind(scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
     setNote("");
     setDisposition("no_answer");
     setNextActionKind("");
@@ -188,6 +199,7 @@ export function CallWorkspace({
     setLastResortReason("");
     setDoNotCallConfirmed(false);
     setDoNotCallReason("");
+    setDoNotCallPhoneId(null);
     setDraftRestored(false);
     setLocallySuppressedPhoneIds(new Set());
     setError("");
@@ -198,11 +210,10 @@ export function CallWorkspace({
     if (draft) {
       setStartedAt(new Date());
       setRequestKey(draft.requestKey);
-      setSelectedPhoneId(
-        phones.some((phone) => phone.id === draft.selectedPhoneId)
-          ? draft.selectedPhoneId
-          : primaryPhone?.id ?? null,
-      );
+      const restoredPhoneId = phones.some((phone) => phone.id === draft.selectedPhoneId)
+        ? draft.selectedPhoneId
+        : primaryPhone?.id ?? null;
+      setSelectedPhoneId(restoredPhoneId);
       setDirection(draft.direction);
       setMethod(isMobileLog ? "mobile_log" : draft.method);
       setScriptKind(draft.scriptKind);
@@ -212,8 +223,10 @@ export function CallWorkspace({
       setNextActionDueAt(draft.nextActionDate);
       setLastResortConfirmed(draft.lastResortConfirmed);
       setLastResortReason(draft.lastResortReason);
-      setDoNotCallConfirmed(draft.doNotCallConfirmed);
-      setDoNotCallReason(draft.doNotCallReason);
+      const dncBoundToRestoredPhone = draft.doNotCallPhoneId !== null && draft.doNotCallPhoneId === restoredPhoneId;
+      setDoNotCallConfirmed(dncBoundToRestoredPhone && draft.doNotCallConfirmed);
+      setDoNotCallReason(dncBoundToRestoredPhone ? draft.doNotCallReason : "");
+      setDoNotCallPhoneId(dncBoundToRestoredPhone ? draft.doNotCallPhoneId : null);
       setDraftRestored(true);
     }
     setActiveDraftKey(draftKey);
@@ -239,6 +252,7 @@ export function CallWorkspace({
         lastResortReason,
         doNotCallConfirmed,
         doNotCallReason,
+        doNotCallPhoneId,
       });
     }, 300);
     return () => window.clearTimeout(timer);
@@ -246,7 +260,7 @@ export function CallWorkspace({
     draftReady, activeDraftKey, startedAt, requestKey, isSaved, draftKey, selectedPhoneId,
     direction, method, scriptKind, note, disposition, nextActionKind,
     nextActionDueAt, lastResortConfirmed, lastResortReason,
-    doNotCallConfirmed, doNotCallReason,
+    doNotCallConfirmed, doNotCallReason, doNotCallPhoneId,
   ]);
 
   function discardDraft() {
@@ -257,7 +271,7 @@ export function CallWorkspace({
       setSelectedPhoneId(primaryPhone?.id ?? null);
       setDirection("incoming");
       setMethod("mobile_log");
-      setScriptKind(defaultScriptKind);
+      setScriptKind(scriptForDirection("incoming", defaultScriptKind));
     }
     setNote("");
     setDisposition("no_answer");
@@ -267,6 +281,7 @@ export function CallWorkspace({
     setLastResortConfirmed(false);
     setDoNotCallReason("");
     setDoNotCallConfirmed(false);
+    setDoNotCallPhoneId(null);
     setDraftRestored(false);
     setError("");
   }
@@ -280,6 +295,7 @@ export function CallWorkspace({
     if (value !== "do_not_call") {
       setDoNotCallConfirmed(false);
       setDoNotCallReason("");
+      setDoNotCallPhoneId(null);
     }
   }
 
@@ -302,7 +318,7 @@ export function CallWorkspace({
       setError("Add a reason and confirm moving this organization to Last Resort.");
       return;
     }
-    if (disposition === "do_not_call" && (!selectedPhone || !doNotCallReason.trim() || !doNotCallConfirmed)) {
+    if (disposition === "do_not_call" && (!selectedPhone || !doNotCallReason.trim() || !doNotCallConfirmed || doNotCallPhoneId !== selectedPhone.id)) {
       setError("Select a phone, add a reason, and confirm Do Not Call.");
       return;
     }
@@ -340,6 +356,11 @@ export function CallWorkspace({
           disposition === "do_not_call"
             ? doNotCallReason.trim() || null
             : null,
+        doNotCallPhoneId:
+          disposition === "do_not_call" && doNotCallConfirmed
+            ? doNotCallPhoneId
+            : null,
+        entryMode: isMobileLog ? "mobile" : "desktop",
       });
       if (!result.ok) setError(result.error);
       else {
@@ -400,7 +421,15 @@ export function CallWorkspace({
                 <label className="grid gap-1.5 font-medium">
                   Phone number
                   <select
-                    onChange={(event) => setSelectedPhoneId(event.target.value)}
+                    onChange={(event) => {
+                      const nextPhoneId = event.target.value;
+                      const nextPhone = phones.find((phone) => phone.id === nextPhoneId) ?? null;
+                      setSelectedPhoneId(nextPhoneId);
+                      setDoNotCallConfirmed(false);
+                      setDoNotCallReason("");
+                      setDoNotCallPhoneId(null);
+                      setMethod(methodForPhone(isMobileLog, nextPhone));
+                    }}
                     value={selectedPhone?.id ?? ""}
                   >
                     {phones.map((phone) => (
@@ -463,7 +492,11 @@ export function CallWorkspace({
                     Direction
                     <select
                       id="call-direction"
-                      onChange={(event) => setDirection(event.target.value as CallDirection)}
+                      onChange={(event) => {
+                        const nextDirection = event.target.value as CallDirection;
+                        setDirection(nextDirection);
+                        setScriptKind(scriptForDirection(nextDirection, defaultScriptKind));
+                      }}
                       value={direction}
                     >
                       <option value="incoming">Incoming</option>
@@ -529,7 +562,15 @@ export function CallWorkspace({
                       <textarea id="do-not-call-reason" onChange={(event) => setDoNotCallReason(event.target.value)} value={doNotCallReason} />
                     </label>
                     <label className="flex items-start gap-2 font-medium">
-                      <input checked={doNotCallConfirmed} className="mt-1" onChange={(event) => setDoNotCallConfirmed(event.target.checked)} type="checkbox" />
+                      <input
+                        checked={doNotCallConfirmed}
+                        className="mt-1"
+                        onChange={(event) => {
+                          setDoNotCallConfirmed(event.target.checked);
+                          setDoNotCallPhoneId(event.target.checked ? selectedPhone?.id ?? null : null);
+                        }}
+                        type="checkbox"
+                      />
                       <span>I confirm this selected number should be marked Do Not Call</span>
                     </label>
                   </fieldset>

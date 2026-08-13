@@ -247,3 +247,61 @@ The existing non-failing source-map and large-chunk advisories remained. Manual
 desktop/mobile/accessibility and configured-handler verification remains
 blocked exactly as recorded above. The feature flag remains false; no deploy,
 migration, or enablement was performed.
+
+## Final whole-branch fix wave
+
+All Critical and Important final-review findings were addressed with focused
+regressions before the production changes. The transport schema now coerces
+and validates ISO JSON dates while retaining Date objects in the service
+contract, and the completion route test crosses the real Express JSON and owner
+authorization boundaries. Contact fields and phone rows now use one
+transactional endpoint; nullable extension/label values normalize safely, and
+suppressed-phone validation rolls the contact update back.
+
+Legacy phone compatibility is durable rather than one-time: migration 022 adds
+an idempotent contacts trigger so normal create, quick create, ACT/import/apply,
+and edits dual-write the primary phone row, while repository reads self-heal a
+legacy-only record under a contact row lock. Suppressed rows cannot be omitted,
+deleted, or changed in place. The editor protects their remove controls.
+
+Do Not Call confirmation is bound to the selected phone ID in drafts, client
+validation, and server validation. Changing or losing the selected phone clears
+the confirmation and reason. Desktop method defaults derive from the selected
+phone and never silently use `mobile_log`; mobile direction derives a canonical
+script, and the server rejects incompatible mode/method/direction/script
+metadata.
+
+Feature-off behavior is fail-closed. `/calls/new`, `/calls/log`, caller finder,
+quick caller, workspace, completion, contact actions, and event-profile actions
+do not expose assisted entry when the shared server flag is false or unavailable.
+No assisted workspace request occurs before the config response. The existing
+Today link remains the fallback.
+
+Finder query narrowing now excludes unrelated due-today candidates once a query
+is typed, preserving genuine matches beyond the former 64-row interference;
+ZIP and booking status participate in bounded matching. `Copy number` is
+available for mobile, office, alternate, and unknown phone types, including
+suppressed numbers, while call and voicemail actions remain unavailable for a
+suppressed number.
+
+Focused RED evidence included: HTTP completion 400 for valid ISO JSON; atomic
+route 404s before the endpoint existed; missing migration 022; finder returning
+unrelated due rows and missing status; five missing Copy fallbacks; two workspace
+failures for stale DNC/default mobile method; four feature-off pages rendering
+assisted UI and an API endpoint returning 200. Corresponding focused suites were
+green after each minimal implementation. The broader pre-merge runs were API
+768 passed/48 skipped and web 142 passed, with typecheck exit 0.
+
+Current `main` was verified unchanged at
+`470883df172c7bd8381086bd8f10ebf5323dba09`. Its four commits since merge-base
+`548a4aaae177de89070f9ab3e74982900b3e054c` change nine ACT-replacement/spec
+paths. Those exact main blobs were overlaid without assisted-calling conflicts;
+their local Git blob hashes matched the remote main blob SHAs before the merge.
+
+Manual release evidence remains separately blocked: the local browser remains
+unreachable, no OS phone handler or clipboard permission can be verified, and
+no private voicemail launcher is configured. This wave did not deploy, enable
+the flag, or run migrations. `ASSISTED_CALLING_ENABLED` remains default false.
+
+The final two-parent merge SHA, remote blob verification, and exact full-chain
+counts are appended after the final remote-tested commit is created.

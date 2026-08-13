@@ -29,6 +29,7 @@ const alternatePhoneId = "30000000-0000-4000-8000-000000000002";
 
 function workspace(contactName = "Sarah Miller") {
   return {
+    assistedCallingEnabled: true,
     context: {
       organization: { id: "organization-1", name: "Prairie Days", lastResort: false, lastResortReason: null },
       contact: {
@@ -89,6 +90,16 @@ afterEach(() => {
 });
 
 describe("MobileCallLogPage", () => {
+  it("shows a legacy fallback and never loads assisted entry when the flag is off", async () => {
+    apiGet.mockImplementation((path: string) => path === "/calls/config"
+      ? Promise.resolve({ assistedCallingEnabled: false, voicemailLauncherUrl: null })
+      : Promise.reject(new Error(`Unexpected assisted request: ${path}`)));
+    render(<MobileCallLogPage contactId={contactId} />);
+    expect(await screen.findByText("Assisted calling is not enabled.")).toBeInTheDocument();
+    expect(apiGet).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("heading", { name: "Log call" })).not.toBeInTheDocument();
+  });
+
   it("finds a caller and opens the mobile logging form", async () => {
     apiGet.mockImplementation((path: string) => {
       if (path.startsWith("/calls/caller-finder")) {
@@ -110,11 +121,12 @@ describe("MobileCallLogPage", () => {
         });
       }
       if (path.startsWith("/calls/workspace")) return Promise.resolve(workspace());
+      if (path === "/calls/config") return Promise.resolve({ assistedCallingEnabled: true, voicemailLauncherUrl: null });
       return Promise.reject(new Error(`Unexpected path: ${path}`));
     });
 
     render(<MobileCallLogPage />);
-    fireEvent.change(screen.getByLabelText("Find caller"), { target: { value: "Prairie Days" } });
+    fireEvent.change(await screen.findByLabelText("Find caller"), { target: { value: "Prairie Days" } });
     fireEvent.click(await screen.findByRole("button", { name: /Sarah Miller/i }));
 
     expect(await screen.findByRole("heading", { name: "Log call" })).toBeVisible();
@@ -142,11 +154,12 @@ describe("MobileCallLogPage", () => {
         });
       }
       if (path.startsWith("/calls/workspace")) return Promise.resolve(workspace());
+      if (path === "/calls/config") return Promise.resolve({ assistedCallingEnabled: true, voicemailLauncherUrl: null });
       return Promise.reject(new Error(`Unexpected path: ${path}`));
     });
 
     render(<MobileCallLogPage organizationId="organization-1" bookingId="booking-1" />);
-    fireEvent.change(screen.getByLabelText("Find caller"), { target: { value: "Prairie Days" } });
+    fireEvent.change(await screen.findByLabelText("Find caller"), { target: { value: "Prairie Days" } });
     fireEvent.click(await screen.findByRole("button", { name: /Sarah Miller/i }));
 
     expect(setLocation).toHaveBeenCalledWith(
@@ -177,10 +190,30 @@ describe("MobileCallLogPage", () => {
     expect(completeCallAction).toHaveBeenCalledWith(expect.objectContaining({
       contactId,
       direction: "outgoing",
+      entryMode: "mobile",
       method: "mobile_log",
+      scriptKind: "follow_up",
       note: "Returned Sarah's call.",
       requestKey: expect.any(String),
     }));
+  });
+
+  it("does not reuse a draft Do Not Call confirmation when its saved phone is missing", async () => {
+    apiGet.mockResolvedValue(workspace());
+    localStorage.setItem(
+      `assisted-call-draft:v1:organization-1:${contactId}:none:none`,
+      JSON.stringify({
+        version: 1, savedAt: new Date().toISOString(), requestKey: "restored-request-key",
+        selectedPhoneId: "missing-phone", direction: "incoming", method: "mobile_log",
+        scriptKind: "incoming_inquiry", note: "Suppression draft", disposition: "do_not_call",
+        nextActionKind: "", nextActionDate: "", lastResortConfirmed: false, lastResortReason: "",
+        doNotCallConfirmed: true, doNotCallReason: "Requested", doNotCallPhoneId: "missing-phone",
+      }),
+    );
+    render(<MobileCallLogPage contactId={contactId} />);
+    expect(await screen.findByLabelText("Phone number")).toHaveValue(primaryPhoneId);
+    expect(screen.getByLabelText("Do Not Call reason")).toHaveValue("");
+    expect(screen.getByLabelText("I confirm this selected number should be marked Do Not Call")).not.toBeChecked();
   });
 
   it("discards a mobile draft into a fresh immediately usable log", async () => {

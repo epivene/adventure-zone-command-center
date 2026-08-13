@@ -62,6 +62,7 @@ export default function EventProfilePage() {
     <div className="mx-auto max-w-7xl">
       <EventProfileWorkspace
         profile={data}
+        assistedCallingEnabled={data.assistedCallingEnabled === true}
         callablePhoneByContactId={callablePhoneByContactId}
         context={{ bookingId, followUpId, action, mode }}
       />

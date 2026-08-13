@@ -44,6 +44,8 @@ export type CompleteCallInput = {
   scriptKind: CallScriptKind;
   doNotCallConfirmed: boolean;
   doNotCallReason: string | null;
+  doNotCallPhoneId: string | null;
+  entryMode: "desktop" | "mobile";
 };
 
 export type CallOrganization = {

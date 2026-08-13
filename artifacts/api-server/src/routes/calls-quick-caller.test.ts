@@ -72,6 +72,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  process.env.ASSISTED_CALLING_ENABLED = "true";
   vi.clearAllMocks();
   repository.hasExactQuickCallerDuplicate.mockResolvedValue(false);
   repository.findQuickCallerDuplicates.mockResolvedValue([]);
@@ -180,4 +181,3 @@ describe("authenticated POST /calls/quick-caller", () => {
     expect(repository.hasExactQuickCallerDuplicate).not.toHaveBeenCalled();
   });
 });
-

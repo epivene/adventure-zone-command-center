@@ -236,4 +236,32 @@ describe("caller finder safety and ranking", () => {
       score: 150,
     });
   });
+
+  it("drops unrelated due-today candidates when a typed name has a genuine match", async () => {
+    const genuineId = "33333333-3333-4333-8333-333333333333";
+    const candidates = [
+      ...Array.from({ length: 65 }, (_, index) => candidate(
+        `40000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        { name: `Unrelated ${index}`, dueToday: true },
+      )),
+      candidate(genuineId, { name: "Genuine Match" }),
+    ];
+
+    const result = await serviceWith(candidates).find({ phone: "", query: "Genuine" });
+
+    expect(result.suggestions).toEqual([
+      expect.objectContaining({ contactId: genuineId, reasons: ["Name"] }),
+    ]);
+  });
+
+  it.each([
+    ["58103", { matchedLocation: true }, "Location"],
+    ["pending contract", { bookingStatus: "pending_contract" }, "Organization or event"],
+  ] as const)("finds advertised %s input", async (query, overrides, reason) => {
+    const result = await serviceWith([
+      candidate(dueTodayContactId, overrides),
+    ]).find({ phone: "", query });
+
+    expect(result.suggestions[0]).toMatchObject({ reasons: [reason] });
+  });
 });

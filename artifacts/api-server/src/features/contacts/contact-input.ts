@@ -21,8 +21,8 @@ export const contactPhoneInputSchema = z.object({
   id: z.string().uuid().nullable(),
   number: z.string().trim().min(1),
   type: z.enum(["mobile", "office", "alternate", "unknown"]),
-  extension: z.string().trim().max(20).transform(value => value || null),
-  label: z.string().trim().max(60).transform(value => value || null),
+  extension: z.union([z.string(), z.null()]).transform(value => value?.trim() || null).pipe(z.string().max(20).nullable()),
+  label: z.union([z.string(), z.null()]).transform(value => value?.trim() || null).pipe(z.string().max(60).nullable()),
   primary: z.boolean(),
 });
 
@@ -46,6 +46,15 @@ export const contactFormInputSchema = z.object({
   city: nullableContactTextSchema,
   region: nullableContactTextSchema,
   postalCode: nullableContactTextSchema,
+});
+
+export const atomicContactEditSchema = z.object({
+  contact: contactFormInputSchema,
+  phones: z.array(contactPhoneInputSchema).max(10),
+}).superRefine(({ phones }, context) => {
+  if (phones.length && phones.filter(phone => phone.primary).length !== 1) {
+    context.addIssue({ code: "custom", message: "Choose one primary phone number.", path: ["phones"] });
+  }
 });
 
 export type ContactFormInput = z.input<typeof contactFormInputSchema>;

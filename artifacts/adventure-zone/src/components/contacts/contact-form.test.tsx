@@ -61,4 +61,47 @@ describe("ContactForm phone submission", () => {
       ]);
     });
   });
+
+  it("submits contact fields and phones in one atomic callback", async () => {
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true });
+    render(
+      <ContactForm
+        initialValues={initialValues}
+        initialPhones={[{
+          id: "11111111-1111-4111-8111-111111111111", number: "701-555-0199",
+          type: "mobile", extension: null, label: null, primary: true,
+        }]}
+        onSubmit={onSubmit}
+        phonesEditable
+        successPath="/contacts/contact-1"
+        variant="edit"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ firstName: "Ada" }),
+      [expect.objectContaining({ number: "701-555-0199", extension: null, label: null })],
+    ));
+  });
+
+  it("prevents editing or removing a suppressed phone row", () => {
+    render(
+      <ContactForm
+        initialValues={initialValues}
+        initialPhones={[{
+          id: "11111111-1111-4111-8111-111111111111", number: "701-555-0199",
+          type: "mobile", extension: null, label: null, primary: true,
+          doNotCallAt: "2026-08-13T16:00:00.000Z", doNotCallReason: "Requested",
+        }]}
+        onSubmit={() => ({ ok: true })}
+        phonesEditable
+        successPath="/contacts/contact-1"
+      />,
+    );
+
+    expect(screen.getByLabelText("Phone number")).toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: "Do Not Call — protected" })).toBeDisabled();
+  });
 });

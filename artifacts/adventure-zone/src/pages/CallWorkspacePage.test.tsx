@@ -30,7 +30,7 @@ afterEach(() => {
 });
 
 describe("CallWorkspacePage configuration fallback", () => {
-  it("renders the required legacy workspace with assisted calling disabled when config loading fails", async () => {
+  it("fails closed without rendering assisted workspace when config loading fails", async () => {
     apiGet.mockImplementation((path: string) => {
       if (path === "/calls/config") return Promise.reject(new Error("config unavailable"));
       return Promise.resolve({
@@ -54,8 +54,16 @@ describe("CallWorkspacePage configuration fallback", () => {
     render(<CallWorkspacePage />);
 
     await waitFor(() => {
-      expect(screen.getByText("workspace:false:none")).toBeInTheDocument();
+      expect(screen.getByText("Assisted calling is not enabled.")).toBeInTheDocument();
     });
-    expect(screen.queryByText(/config unavailable/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^workspace:/)).not.toBeInTheDocument();
+  });
+
+  it("renders the workspace only when the shared server flag is enabled", async () => {
+    apiGet.mockImplementation((path: string) => path === "/calls/config"
+      ? Promise.resolve({ assistedCallingEnabled: true, voicemailLauncherUrl: null })
+      : Promise.resolve({ context: {}, timeline: [], phones: [] }));
+    render(<CallWorkspacePage />);
+    expect(await screen.findByText("workspace:true:none")).toBeInTheDocument();
   });
 });

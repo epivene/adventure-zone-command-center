@@ -16,6 +16,7 @@ vi.mock("wouter", () => ({
 import EventProfilePage from "./EventProfilePage";
 
 const profile = {
+  assistedCallingEnabled: true,
   id: organizationId,
   place: {
     id: organizationId,
@@ -74,6 +75,16 @@ afterEach(() => {
 });
 
 describe("EventProfilePage call actions", () => {
+  it("hides assisted profile entry points when the shared flag is off", async () => {
+    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
+      ? Promise.resolve({ ...profile, assistedCallingEnabled: false })
+      : Promise.resolve(contactDetail(null)));
+    render(<EventProfilePage />);
+    expect(await screen.findByText("Assisted calling is not enabled.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Log call" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Call$/ })).not.toBeInTheDocument();
+  });
+
   it("preserves the contact, organization, and booking IDs in Call and Log call URLs", async () => {
     apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
       ? Promise.resolve(profile)

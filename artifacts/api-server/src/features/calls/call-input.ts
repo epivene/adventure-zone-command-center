@@ -29,6 +29,10 @@ const nullableEmail = z
   .union([z.string(), z.null()])
   .transform((value) => value ?? "")
   .pipe(nullableContactEmailSchema);
+const transportDate = z.union([
+  z.date(),
+  z.string().datetime({ offset: true }).transform((value) => new Date(value)),
+]);
 
 const approvedContactUpdatesSchema = z.object({
   firstName: z.string().trim().min(1).optional(),
@@ -52,8 +56,8 @@ const approvedBookingUpdatesSchema = z.object({
   postalCode: nullableText.optional(),
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
-  startsAt: z.date().nullable().optional(),
-  endsAt: z.date().nullable().optional(),
+  startsAt: transportDate.nullable().optional(),
+  endsAt: transportDate.nullable().optional(),
   status: z.enum(bookingStatusValues).optional(),
   probability: z.enum(probabilityValues).optional(),
   travelLegId: z.string().uuid().nullable().optional(),
@@ -69,11 +73,11 @@ export const completeCallInputSchema = z.object({
   note: z.string().trim().min(1, "Add a call note."),
   disposition: callDispositionSchema,
   resultingBookingStatus: z.enum(bookingStatusValues).nullable(),
-  startedAt: z.date(),
-  endedAt: z.date(),
+  startedAt: transportDate,
+  endedAt: transportDate,
   nextAction: z.object({
     kind: z.string().trim().min(1, "Choose the next action"),
-    dueAt: z.date(),
+    dueAt: transportDate,
   }).nullable(),
   lastResortReason: z
     .union([z.string().trim().max(2_000), z.null()])
@@ -87,6 +91,8 @@ export const completeCallInputSchema = z.object({
   scriptKind: z.enum(["first_outreach", "follow_up", "contract_follow_up", "incoming_inquiry"]),
   doNotCallConfirmed: z.boolean(),
   doNotCallReason: z.union([z.string().trim().min(1), z.null()]),
+  doNotCallPhoneId: z.string().uuid().nullable(),
+  entryMode: z.enum(["desktop", "mobile"]),
 }).superRefine((value, context) => {
   if (value.endedAt.getTime() < value.startedAt.getTime()) {
     context.addIssue({
@@ -115,6 +121,11 @@ export const completeCallInputSchema = z.object({
   if (value.disposition === "do_not_call" && !value.phoneId) context.addIssue({ code: "custom", path: ["phoneId"], message: "Select the phone number to suppress." });
   if (value.disposition === "do_not_call" && !value.doNotCallConfirmed) context.addIssue({ code: "custom", path: ["doNotCallConfirmed"], message: "Confirm Do Not Call." });
   if (value.disposition === "do_not_call" && !value.doNotCallReason) context.addIssue({ code: "custom", path: ["doNotCallReason"], message: "Add a Do Not Call reason." });
+  if (value.disposition === "do_not_call" && value.doNotCallPhoneId !== value.phoneId) context.addIssue({ code: "custom", path: ["doNotCallPhoneId"], message: "Confirm Do Not Call for the selected phone." });
+  if (value.entryMode === "desktop" && value.method === "mobile_log") context.addIssue({ code: "custom", path: ["method"], message: "Desktop call entries cannot use the mobile log method." });
+  if (value.entryMode === "mobile" && value.method !== "mobile_log") context.addIssue({ code: "custom", path: ["method"], message: "Mobile call entries must use the mobile log method." });
+  if (value.direction === "incoming" && value.scriptKind !== "incoming_inquiry") context.addIssue({ code: "custom", path: ["scriptKind"], message: "Incoming calls must use the incoming inquiry script." });
+  if (value.direction === "outgoing" && value.scriptKind === "incoming_inquiry") context.addIssue({ code: "custom", path: ["scriptKind"], message: "Outgoing calls require an outgoing script." });
   if (!value.organizationId && !value.contactId && !value.bookingId && !value.followUpId) {
     context.addIssue({
       code: "custom",

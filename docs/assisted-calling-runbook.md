@@ -17,8 +17,11 @@ phone numbers, credentials, and call notes out of source control and tickets.
 1. Deploy the code with `ASSISTED_CALLING_ENABLED=false`. Confirm `GET
    /api/calls/config` reports `assistedCallingEnabled: false` before continuing.
 2. Run the registered database migrations through the normal migration runner.
-   Confirm migrations `020_assisted_calling.sql` and
-   `021_call_session_metadata.sql` are recorded as applied. Verify every legacy
+   Confirm migrations `020_assisted_calling.sql`,
+   `021_call_session_metadata.sql`, and
+   `022_contact_phone_legacy_compatibility.sql` are recorded as applied. The
+   final migration installs the durable legacy-phone compatibility trigger used
+   by normal create, quick create, ACT import/apply, and edits. Verify every legacy
    nonblank contact phone has exactly one primary `contact_phones` row and stop
    if this query returns any rows:
 

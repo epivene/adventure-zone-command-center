@@ -9,6 +9,8 @@ export type ContactPhoneInput = {
   extension: string | null;
   label: string | null;
   primary: boolean;
+  doNotCallAt?: string | null;
+  doNotCallReason?: string | null;
 };
 
 export type ContactPhoneRecord = ContactPhoneInput & {

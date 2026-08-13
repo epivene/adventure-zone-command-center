@@ -19,6 +19,15 @@ describe("runActReviewMigrations", () => {
     expect(metadata?.sql).toContain("phone_id uuid REFERENCES contact_phones(id) ON DELETE SET NULL");
   });
 
+  it("registers durable legacy-phone dual-write compatibility for every contact writer", async () => {
+    const migrations = await loadActReviewMigrations();
+    const compatibility = migrations.find((migration) => migration.name === "022_contact_phone_legacy_compatibility.sql");
+
+    expect(compatibility?.sql).toContain("CREATE TRIGGER contacts_sync_primary_phone");
+    expect(compatibility?.sql).toContain("AFTER INSERT OR UPDATE OF phone, normalized_phone ON contacts");
+    expect(compatibility?.sql).toContain("do_not_call_at");
+  });
+
   it("serializes schema repair and applies only migrations whose marker is missing", async () => {
     const queries: string[] = [];
     const client = {

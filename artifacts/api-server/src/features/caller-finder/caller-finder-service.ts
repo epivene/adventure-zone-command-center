@@ -47,6 +47,7 @@ const scores: Record<CallerMatchReason, number> = {
   "Same area code": 50,
   "Note text": 25,
 };
+const reasonOrder = Object.keys(scores) as CallerMatchReason[];
 
 function folded(value: string | null | undefined) {
   return value?.trim().toLocaleLowerCase("en-US") ?? "";
@@ -106,8 +107,6 @@ function scoredSuggestion(
   ) {
     reasons.push("Organization or event");
   }
-  if (candidate.dueToday) reasons.push("Due today");
-  if (candidate.lastContactedAt) reasons.push("Recently contacted");
   if (
     normalizedQuery &&
     (
@@ -128,6 +127,12 @@ function scoredSuggestion(
     reasons.push("Route leg");
   }
   if (
+    normalizedQuery &&
+    folded(candidate.bookingStatus).replaceAll("_", " ").includes(normalizedQuery)
+  ) {
+    if (!reasons.includes("Organization or event")) reasons.push("Organization or event");
+  }
+  if (
     normalizedPhone &&
     requestedAreaCode &&
     !candidatePhones.has(normalizedPhone) &&
@@ -140,7 +145,11 @@ function scoredSuggestion(
     normalizedQuery &&
     folded(candidate.noteText).includes(normalizedQuery);
   if (hasNoteMatch) reasons.push("Note text");
+  const hasRealMatch = reasons.length > 0;
+  if (candidate.dueToday && (!normalizedQuery || hasRealMatch)) reasons.push("Due today");
+  if (candidate.lastContactedAt && (!normalizedQuery || hasRealMatch)) reasons.push("Recently contacted");
   if (!reasons.length) return null;
+  reasons.sort((left, right) => reasonOrder.indexOf(left) - reasonOrder.indexOf(right));
 
   return {
     contactId: candidate.contactId,

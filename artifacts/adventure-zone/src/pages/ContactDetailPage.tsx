@@ -54,6 +54,7 @@ export default function ContactDetailPage() {
   const { contact, relatedBookings, timeline, phones = [] } = data;
   const fullName = `${contact.firstName} ${contact.lastName}`.trim();
   const callSuppressed = phones.length > 0 && phones.every((phone: ContactPhoneRecord) => Boolean(phone.doNotCallAt));
+  const assistedCallingEnabled = data.assistedCallingEnabled === true;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -66,12 +67,14 @@ export default function ContactDetailPage() {
           {contact.jobTitle && <p className="mt-1 text-slate-600">{contact.jobTitle}</p>}
         </div>
         <div className="flex flex-wrap gap-3">
-          {callSuppressed ? (
+          {!assistedCallingEnabled ? (
+            <span className="self-center text-sm font-semibold text-slate-600">Assisted calling is not enabled.</span>
+          ) : callSuppressed ? (
             <button className="button-primary" disabled type="button">Call</button>
           ) : (
             <Link className="button-primary text-center" href={`/calls/new?contactId=${contactId}`}>Call</Link>
           )}
-          <Link className="button-secondary text-center" href={`/calls/log?contactId=${contactId}`}>Log call</Link>
+          {assistedCallingEnabled ? <Link className="button-secondary text-center" href={`/calls/log?contactId=${contactId}`}>Log call</Link> : null}
           <Link className="button-secondary text-center" href={`/contacts/${contactId}/edit`}>Edit contact</Link>
         </div>
       </header>

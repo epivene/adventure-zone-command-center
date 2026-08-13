@@ -86,6 +86,14 @@ const migrationFiles = [
         AND table_name = 'call_sessions'
         AND column_name IN ('phone_id', 'direction', 'method', 'phone_number_snapshot', 'phone_extension_snapshot', 'script_kind')`,
   },
+  {
+    name: "022_contact_phone_legacy_compatibility.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgname = 'contacts_sync_primary_phone'
+        AND NOT tgisinternal
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

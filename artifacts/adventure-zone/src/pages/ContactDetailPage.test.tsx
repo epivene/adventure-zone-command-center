@@ -21,6 +21,7 @@ import ContactDetailPage from "./ContactDetailPage";
 
 function detail(doNotCallAt: string | null) {
   return {
+    assistedCallingEnabled: true,
     contact: { firstName: "Sarah", lastName: "Miller", syncState: "unlinked" },
     phones: [{
       id: "phone-1",
@@ -46,6 +47,14 @@ afterEach(() => {
 });
 
 describe("ContactDetailPage call actions", () => {
+  it("hides assisted Call and Log call entry points when the flag is off", async () => {
+    apiGet.mockResolvedValue({ ...detail(null), assistedCallingEnabled: false });
+    render(<ContactDetailPage />);
+    expect(await screen.findByText("Assisted calling is not enabled.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Call" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Log call" })).not.toBeInTheDocument();
+  });
+
   it("uses the contact ID for Call and Log call", async () => {
     apiGet.mockResolvedValue(detail(null));
     render(<ContactDetailPage />);

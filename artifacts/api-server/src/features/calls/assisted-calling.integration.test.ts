@@ -498,6 +498,8 @@ describe("assisted calling complete workflow", () => {
       scriptKind: "follow_up",
       doNotCallConfirmed: false,
       doNotCallReason: null,
+      doNotCallPhoneId: null,
+      entryMode: "desktop",
     });
     expect(result.ok).toBe(true);
 
