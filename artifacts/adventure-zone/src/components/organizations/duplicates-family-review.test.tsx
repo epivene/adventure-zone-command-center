@@ -86,12 +86,12 @@ describe("DuplicatesView family review", () => {
     toast.mockReset();
   });
 
-  it("shows the three review outcomes and explains the evidence and locations", () => {
+  it("shows safe family review outcomes without offering a destructive merge", () => {
     render(
       <DuplicatesView groups={[locationCandidate]} onRefresh={vi.fn().mockResolvedValue([])} />,
     );
 
-    expect(screen.getByRole("button", { name: "Merge duplicates" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Same organization—make locations" }),
     ).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("DuplicatesView family review", () => {
     ).toBeInTheDocument();
   });
 
-  it("isolates primary selection for same-name groups by stable group identity", () => {
+  it("never exposes destructive merge controls after selecting a family record", () => {
     const thirdId = "44444444-4444-4444-8444-444444444444";
     const fourthId = "55555555-5555-4555-8555-555555555555";
     const secondFamily: DuplicateGroup = {
@@ -146,9 +146,9 @@ describe("DuplicatesView family review", () => {
     fireEvent.click(first.getByRole("radio", { name: /denver/i }));
 
     expect(first.getByRole("radio", { name: /denver/i })).toBeChecked();
-    expect(first.getByRole("button", { name: "Merge duplicates" })).toBeEnabled();
+    expect(first.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
     expect(second.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
-    expect(second.getByRole("button", { name: "Merge duplicates" })).toBeDisabled();
+    expect(second.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
   });
 
   it("creates a parent for a reviewed family and refreshes server results", async () => {
