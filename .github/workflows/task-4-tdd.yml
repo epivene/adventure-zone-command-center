@@ -6,7 +6,7 @@ on:
       - agent/assisted-calling-workspace
 
 jobs:
-  red-green:
+  green:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,12 +16,6 @@ jobs:
       - run: corepack enable
       - run: corepack prepare pnpm@10.17.0 --activate
       - run: pnpm install --frozen-lockfile
-      - id: script
-        continue-on-error: true
-        run: pnpm --filter @workspace/api-server test -- src/features/calls/call-script.test.ts
-      - id: workspace
-        continue-on-error: true
-        run: pnpm --filter @workspace/api-server test -- src/features/calls/call-workspace-query.test.ts
-      - name: Require both RED tests to fail
-        if: steps.script.outcome != 'failure' || steps.workspace.outcome != 'failure'
-        run: exit 1
+      - run: pnpm --filter @workspace/api-server test -- src/features/calls/call-script.test.ts src/features/calls/call-workspace-query.test.ts
+      - run: pnpm run typecheck:libs
+      - run: pnpm --filter @workspace/api-server typecheck

@@ -11,6 +11,7 @@ import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { loadCallWorkspace } from "@/features/calls/call-workspace-query";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
+import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
 
 const router: IRouter = Router();
 
@@ -29,6 +30,7 @@ router.get("/calls/workspace", async (req, res): Promise<void> => {
         organizationId: firstString(req.query.organizationId),
       } as any,
       new DrizzleCallWorkspaceContextRepository(db),
+      createContactPhoneRepository(db),
       createBookingOperationsSummaryProvider(db),
     );
     if (!result.ok) {

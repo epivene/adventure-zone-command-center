@@ -1,10 +1,13 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 
 import type { db as database } from "@/db/client";
 import {
+  activities,
   bookingContacts,
   bookings,
+  callSessions,
+  contactPhones,
   contacts,
   followUps,
   organizationContacts,
@@ -68,6 +71,7 @@ export interface CallWorkspaceContextRepository {
     contactId: string,
   ): Promise<boolean>;
   hasBookingContact(bookingId: string, contactId: string): Promise<boolean>;
+  findLastContactedAt(context: CallWorkspaceContext): Promise<Date | null>;
 }
 
 export type CallWorkspaceQuery = {
@@ -79,7 +83,7 @@ export type CallWorkspaceQuery = {
 
 function validId(value: string | undefined) {
   if (!value) return null;
-  const parsed = z.uuid().safeParse(value);
+  const parsed = z.string().uuid().safeParse(value);
   return parsed.success ? parsed.data : undefined;
 }
 
@@ -244,5 +248,42 @@ export class DrizzleCallWorkspaceContextRepository
       ))
       .limit(1);
     return Boolean(record);
+  }
+
+  async findLastContactedAt(context: CallWorkspaceContext): Promise<Date | null> {
+    const parent = activityTimelineParent(context);
+    const callCondition = parent.bookingId
+      ? eq(callSessions.bookingId, parent.bookingId)
+      : parent.contactId
+      ? eq(callSessions.contactId, parent.contactId)
+      : parent.organizationId
+      ? eq(callSessions.organizationId, parent.organizationId)
+      : undefined;
+    const activityCondition = parent.bookingId
+      ? eq(activities.bookingId, parent.bookingId)
+      : parent.contactId
+      ? eq(activities.contactId, parent.contactId)
+      : parent.organizationId
+      ? eq(activities.organizationId, parent.organizationId)
+      : undefined;
+    if (!callCondition || !activityCondition) return null;
+
+    const [[call], [activity]] = await Promise.all([
+      this.database
+        .select({ endedAt: callSessions.endedAt })
+        .from(callSessions)
+        .where(and(callCondition, isNotNull(callSessions.endedAt)))
+        .orderBy(desc(callSessions.endedAt))
+        .limit(1),
+      this.database
+        .select({ occurredAt: activities.occurredAt })
+        .from(activities)
+        .where(and(activityCondition, isNotNull(activities.occurredAt)))
+        .orderBy(desc(activities.occurredAt))
+        .limit(1),
+    ]);
+    const dates = [call?.endedAt, activity?.occurredAt]
+      .filter((value): value is Date => value !== null && value !== undefined);
+    return dates.length ? new Date(Math.max(...dates.map((value) => value.getTime()))) : null;
   }
 }
