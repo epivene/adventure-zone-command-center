@@ -174,8 +174,7 @@ function safeDatabaseErrorMetadata(error: unknown) {
       return {
         errorName:
           typeof metadata.name === "string" ? metadata.name : "unknown",
-        pgCode:
-          typeof metadata.code === "string" ? metadata.code : "unknown",
+        pgCode: typeof metadata.code === "string" ? metadata.code : "unknown",
         constraint:
           typeof metadata.constraint === "string" ? metadata.constraint : null,
         table: typeof metadata.table === "string" ? metadata.table : null,
@@ -185,8 +184,7 @@ function safeDatabaseErrorMetadata(error: unknown) {
     current = metadata.cause;
   }
   return {
-    errorName:
-      error instanceof Error && error.name ? error.name : "unknown",
+    errorName: error instanceof Error && error.name ? error.name : "unknown",
     pgCode: "unknown",
     constraint: null,
     table: null,
@@ -306,8 +304,7 @@ export class DrizzleActSourceArchiveRepository implements ActSourceArchiveReposi
                 retryAfter: null,
                 retryable: true,
                 errorCode: null,
-                completedAt:
-                  transition.state === "complete" ? input.now : null,
+                completedAt: transition.state === "complete" ? input.now : null,
                 updatedAt: input.now,
               })
               .where(eq(actReplacementCheckpoints.id, input.checkpointId));
