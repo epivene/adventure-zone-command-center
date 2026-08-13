@@ -1,3 +1,5 @@
+import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
+
 export const contactSyncStateValues = [
   "unlinked",
   "synced",
@@ -87,4 +89,5 @@ export type ContactDetail = {
   };
   places: PersonPlace[];
   relatedBookings: ContactRelatedBooking[];
+  phones: ContactPhoneRecord[];
 };
