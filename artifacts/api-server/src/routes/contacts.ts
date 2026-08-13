@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
-import { contactFormInputSchema, contactListQuerySchema } from "@/features/contacts/contact-input";
+import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
+import { contactFormInputSchema, contactListQuerySchema, replaceContactPhonesSchema } from "@/features/contacts/contact-input";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 
@@ -50,6 +51,27 @@ router.get("/contacts/:id", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to get contact");
     res.status(500).json({ error: "Failed to get contact" });
+  }
+});
+
+
+router.put("/contacts/:id/phones", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = replaceContactPhonesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  try {
+    const phones = await createContactPhoneRepository(db).replaceForContact(id, parsed.data.phones, new Date());
+    res.json({ phones });
+  } catch (err) {
+    if (err instanceof Error && err.message === "Contact is missing.") {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    req.log.error({ err }, "Failed to replace contact phones");
+    res.status(500).json({ ok: false, error: "Could not replace contact phones" });
   }
 });
 
