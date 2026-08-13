@@ -6,7 +6,7 @@ const contactId = "11111111-1111-4111-8111-111111111111";
 const phoneRepository = vi.hoisted(() => {
   const fixtureContactId = "11111111-1111-4111-8111-111111111111";
   let phones = [{
-    id: "phone-1",
+    id: "33333333-3333-4333-8333-333333333333",
     contactId: fixtureContactId,
     number: "701-555-0199",
     type: "mobile" as const,
@@ -23,7 +23,7 @@ const phoneRepository = vi.hoisted(() => {
     listForContact: vi.fn(async (_contactId: string) => phones.map((phone) => ({ ...phone }))),
     replaceForContact: vi.fn(async (requestedContactId: string, next: typeof phones) => {
       if (requestedContactId !== fixtureContactId) throw new Error("Contact is missing.");
-      if (next.some((phone) => phone.number === "701-555-0100" && phone.id === "phone-1")) {
+      if (next.some((phone) => phone.number === "701-555-0100" && phone.id === "33333333-3333-4333-8333-333333333333")) {
         throw new Error("A suppressed phone number cannot be changed; add a new number to preserve suppression history.");
       }
       phones = next.map((phone) => ({ ...phone, id: phone.id ?? "phone-2", contactId: fixtureContactId }));
@@ -31,7 +31,7 @@ const phoneRepository = vi.hoisted(() => {
     }),
     reset() {
       phones = [{
-        id: "phone-1",
+        id: "33333333-3333-4333-8333-333333333333",
         contactId: fixtureContactId,
         number: "701-555-0199",
         type: "mobile",
@@ -127,7 +127,7 @@ describe("contact phone routes", () => {
     const response = await request(app).put(`/contacts/${contactId}/phones`).send({
       phones: [
         { id: null, number: "701-555-0100", type: "office", extension: "12", label: "Desk", primary: false },
-        { id: "phone-1", number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
       ],
     }).expect(200);
 
@@ -146,7 +146,7 @@ describe("contact phone routes", () => {
   it("returns 400 when a suppressed number is changed in place", async () => {
     await request(app).put(`/contacts/${contactId}/phones`).send({
       phones: [
-        { id: "phone-1", number: "701-555-0100", type: "mobile", extension: null, label: null, primary: true },
+        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0100", type: "mobile", extension: null, label: null, primary: true },
       ],
     }).expect(400);
   });
