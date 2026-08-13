@@ -45,12 +45,10 @@ function normalizedLocation(
   return city && region ? `${city}\u0000${region}` : null;
 }
 
-function normalizedAddress(
+function normalizedStreetAddress(
   record: OrganizationFamilyRecord,
 ): string | null {
-  const address1 = normalizeMatchingText(record.address1 ?? null);
-  const postalCode = normalizeMatchingText(record.postalCode ?? null);
-  return address1 && postalCode ? `${address1}\u0000${postalCode}` : null;
+  return normalizeMatchingText(record.address1 ?? null);
 }
 
 function relationshipsConnect(
@@ -112,7 +110,7 @@ export function classifyOrganizationFamily(
     return { kind: "insufficient" };
   }
 
-  const addresses = records.map(normalizedAddress).filter(
+  const addresses = records.map(normalizedStreetAddress).filter(
     (address): address is string => address !== null,
   );
   if (new Set(addresses).size !== addresses.length) {
