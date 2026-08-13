@@ -23,8 +23,14 @@ class MemoryContactPhoneStore implements ContactPhoneStore {
   private nextId = 1;
   private phones: ContactPhoneRecord[] = [];
 
-  transaction<T>(callback: (store: ContactPhoneStore) => Promise<T>) {
-    return callback(this);
+  async transaction<T>(callback: (store: ContactPhoneStore) => Promise<T>) {
+    const transaction = Object.create(this) as MemoryContactPhoneStore;
+    (transaction as { phones: ContactPhoneRecord[] }).phones = this.phones.map((phone) => ({ ...phone }));
+    (transaction as { contact: LegacyContactPhoneFields }).contact = { ...this.contact };
+    const result = await callback(transaction);
+    this.phones = (transaction as { phones: ContactPhoneRecord[] }).phones;
+    Object.assign(this.contact, (transaction as { contact: LegacyContactPhoneFields }).contact);
+    return result;
   }
 
   async lockContact(id: string) {
@@ -43,6 +49,9 @@ class MemoryContactPhoneStore implements ContactPhoneStore {
       doNotCallAt: null,
       doNotCallReason: null,
     };
+    if (phone.primary && this.phones.some((candidate) => candidate.contactId === phone.contactId && candidate.primary)) {
+      throw new Error("contact_phones_one_primary_per_contact");
+    }
     this.phones.push(phone);
     return { ...phone };
   }
@@ -53,8 +62,12 @@ class MemoryContactPhoneStore implements ContactPhoneStore {
   }) {
     const index = this.phones.findIndex((phone) => phone.id === id);
     if (index < 0) throw new Error("Contact phone is missing.");
-    this.phones[index] = { ...this.phones[index]!, ...input };
-    return { ...this.phones[index]! };
+    const next = { ...this.phones[index]!, ...input };
+    if (next.primary && this.phones.some((candidate) => candidate.id !== id && candidate.contactId === next.contactId && candidate.primary)) {
+      throw new Error("contact_phones_one_primary_per_contact");
+    }
+    this.phones[index] = next;
+    return { ...next };
   }
 
   async deletePhones(ids: string[]) {
@@ -105,6 +118,40 @@ describe("ContactPhoneRepository", () => {
       phone: "701-555-0199",
       normalizedPhone: "+17015550199",
     });
+  });
+
+  it("mirrors the primary read from the transaction rather than the outer store", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+    ], now);
+
+    expect(await store.loadLegacyContact(contactId)).toMatchObject({
+      phone: "701-555-0199",
+      normalizedPhone: "+17015550199",
+    });
+  });
+
+  it("stages a primary swap without transiently violating the one-primary constraint", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0100", type: "office", extension: null, label: null, primary: true },
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: false },
+    ], now);
+    const [office, mobile] = await repository.listForContact(contactId);
+
+    await repository.replaceForContact(contactId, [
+      { id: mobile!.id, number: mobile!.number, type: "mobile", extension: null, label: null, primary: true },
+      { id: office!.id, number: office!.number, type: "office", extension: null, label: null, primary: false },
+    ], now);
+
+    expect(await repository.listForContact(contactId)).toMatchObject([
+      { id: mobile!.id, primary: true },
+      { id: office!.id, primary: false },
+    ]);
   });
 
   it("records Do Not Call on one number without marking the organization Last Resort", async () => {
