@@ -6,7 +6,7 @@ import {
   eq,
   inArray,
   isNull,
-   type SQL,
+  type SQL,
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
