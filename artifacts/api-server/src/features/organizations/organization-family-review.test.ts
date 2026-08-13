@@ -10,6 +10,7 @@ const repository = vi.hoisted(() => ({
 }));
 const hierarchy = vi.hoisted(() => ({
   setOrganizationParent: vi.fn(),
+  setOrganizationParents: vi.fn(),
   createOrganizationParent: vi.fn(),
   ungroupOrganization: vi.fn(),
 }));
@@ -132,6 +133,7 @@ describe("organization family review", () => {
     repository.saveFamilyReview.mockResolvedValue(undefined);
     repository.deleteFamilyReview.mockResolvedValue(undefined);
     hierarchy.setOrganizationParent.mockResolvedValue(undefined);
+    hierarchy.setOrganizationParents.mockResolvedValue(undefined);
     hierarchy.createOrganizationParent.mockResolvedValue({ parentId: PARENT_ID });
   });
 
@@ -164,6 +166,63 @@ describe("organization family review", () => {
         evidence: expect.arrayContaining([
           { family: "website", label: "website domains agree" },
           { family: "location", label: "locations differ" },
+        ]),
+      }),
+    ]);
+  });
+
+  it("excludes an ordinary duplicate group when any member overlaps a family", () => {
+    const { organizations: _organizations, ...family } = candidate;
+    const groups = partitionOrganizationReviewGroups(
+      [{
+        normalized_name: "water lantern festival",
+        normalized_city: "austin",
+        normalized_region: "tx",
+        ids: [FIRST_ID, "44444444-4444-4444-8444-444444444444"],
+      }],
+      [family],
+      [],
+    );
+
+    expect(groups).toEqual([family]);
+  });
+
+  it("hydrates ACT relationship provenance for different-name family candidates", () => {
+    const groups = discoverOrganizationFamilyCandidates(
+      [
+        {
+          id: FIRST_ID,
+          name: "Lantern Nights",
+          website: "https://shared.example/austin",
+          address1: "100 Lake St",
+          city: "Austin",
+          region: "TX",
+        },
+        {
+          id: SECOND_ID,
+          name: "Glow Across America",
+          website: "https://shared.example/denver",
+          address1: "200 River Rd",
+          city: "Denver",
+          region: "CO",
+        },
+      ],
+      [{
+        sourceOrganizationId: FIRST_ID,
+        targetOrganizationId: SECOND_ID,
+        provenance: "act_relationship",
+      }],
+    );
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        classification: "location_candidate",
+        candidateIds: [FIRST_ID, SECOND_ID],
+        evidence: expect.arrayContaining([
+          {
+            family: "act_relationship",
+            label: "ACT organization relationships connect the records",
+          },
         ]),
       }),
     ]);
@@ -241,19 +300,16 @@ describe("organization family review", () => {
       });
 
     expect(response.status).toBe(200);
-    expect(hierarchy.setOrganizationParent).toHaveBeenCalledTimes(2);
-    expect(hierarchy.setOrganizationParent).toHaveBeenNthCalledWith(
-      1,
+    expect(hierarchy.setOrganizationParents).toHaveBeenCalledTimes(1);
+    expect(hierarchy.setOrganizationParents).toHaveBeenCalledWith(
       expect.anything(),
-      { childId: FIRST_ID, parentId: PARENT_ID },
+      {
+        childIds: [FIRST_ID, SECOND_ID],
+        parentId: PARENT_ID,
+      },
       expect.any(Date),
     );
-    expect(hierarchy.setOrganizationParent).toHaveBeenNthCalledWith(
-      2,
-      expect.anything(),
-      { childId: SECOND_ID, parentId: PARENT_ID },
-      expect.any(Date),
-    );
+    expect(hierarchy.setOrganizationParent).not.toHaveBeenCalled();
   });
 
   it("stores a stable not-related decision so the group does not reappear", async () => {
