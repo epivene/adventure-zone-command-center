@@ -15,6 +15,7 @@ import {
   createOrganizationParent,
   HierarchyConflictError,
   setOrganizationParent,
+  setOrganizationParents,
   ungroupOrganization,
 } from "./organization-hierarchy";
 
@@ -54,6 +55,8 @@ type TestState = {
   updateTargets: unknown[];
   lockedOrganizationIdBatches: string[][];
   nextOrganizationId: string;
+  failOrganizationUpdateAt: number | null;
+  organizationUpdateAttempts: number;
 };
 
 const parentId = "10000000-0000-4000-8000-000000000001";
@@ -194,6 +197,13 @@ class UpdateBuilder {
     );
 
     if (this.table === organizations) {
+      this.state.organizationUpdateAttempts += 1;
+      if (
+        this.state.failOrganizationUpdateAt ===
+        this.state.organizationUpdateAttempts
+      ) {
+        throw new Error("simulated second child update failure");
+      }
       for (const row of this.state.organizations) {
         if (ids.includes(row.id)) Object.assign(row, this.values);
       }
@@ -290,6 +300,8 @@ class TestDatabase {
       updateTargets: [],
       lockedOrganizationIdBatches: [],
       nextOrganizationId: createdParentId,
+      failOrganizationUpdateAt: null,
+      organizationUpdateAttempts: 0,
     };
   }
 
@@ -443,6 +455,28 @@ describe("organization hierarchy operations", () => {
         action: "organization_parent_created",
       }),
     ]);
+  });
+
+  it("attaches all existing-parent locations atomically and rolls back a second update failure", async () => {
+    const database = new TestDatabase([
+      organization(parentId, "Adventure Zone"),
+      organization(childId, "Adventure Zone - Austin"),
+      organization(secondChildId, "Adventure Zone - Denver"),
+    ]);
+    database.state.failOrganizationUpdateAt = 2;
+    const before = cloneState(database.state);
+
+    await expect(
+      setOrganizationParents(
+        database.asApplicationDatabase(),
+        { parentId, childIds: [childId, secondChildId] },
+        changedAt,
+      ),
+    ).rejects.toThrow("simulated second child update failure");
+
+    expect(database.state).toEqual(before);
+    expect(organizationById(database, childId)?.parentOrganizationId).toBeNull();
+    expect(organizationById(database, secondChildId)?.parentOrganizationId).toBeNull();
   });
 
   it("moves a child from one parent to another", async () => {
