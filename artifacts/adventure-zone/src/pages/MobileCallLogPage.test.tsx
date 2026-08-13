@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiGet = vi.hoisted(() => vi.fn());
 const completeCallAction = vi.hoisted(() => vi.fn());
+const setLocation = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/auth-token", () => ({ apiGet }));
 vi.mock("@/actions/calls", () => ({ completeCallAction }));
@@ -13,7 +14,11 @@ vi.mock("@/actions/activities", () => ({
 }));
 vi.mock("wouter", async () => {
   const actual = await vi.importActual<typeof import("wouter")>("wouter");
-  return { ...actual, useSearch: () => "" };
+  return {
+    ...actual,
+    useLocation: () => ["/calls/log", setLocation],
+    useSearch: () => "",
+  };
 });
 
 import MobileCallLogPage from "./MobileCallLogPage";
@@ -50,6 +55,7 @@ afterEach(() => {
   cleanup();
   apiGet.mockReset();
   completeCallAction.mockReset();
+  setLocation.mockReset();
   localStorage.clear();
 });
 
@@ -86,6 +92,40 @@ describe("MobileCallLogPage", () => {
     expect(screen.getByLabelText("Call note")).toBeVisible();
   });
 
+  it("persists a selected caller and existing context in the mobile log URL", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path.startsWith("/calls/caller-finder")) {
+        return Promise.resolve({
+          exact: { kind: "none" },
+          canCreate: false,
+          suggestions: [{
+            contactId,
+            name: "Sarah Miller",
+            organizationName: "Prairie Days",
+            city: "Denver",
+            region: "CO",
+            bookingStatus: null,
+            routeLegName: null,
+            lastContactedAt: null,
+            reasons: ["Organization or event"],
+            score: 100,
+          }],
+        });
+      }
+      if (path.startsWith("/calls/workspace")) return Promise.resolve(workspace());
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    render(<MobileCallLogPage organizationId="organization-1" bookingId="booking-1" />);
+    fireEvent.change(screen.getByLabelText("Find caller"), { target: { value: "Prairie Days" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Sarah Miller/i }));
+
+    expect(setLocation).toHaveBeenCalledWith(
+      `/calls/log?contactId=${contactId}&organizationId=organization-1&bookingId=booking-1`,
+      { replace: true },
+    );
+  });
+
   it("defaults a mobile log to incoming without attempting audio capture", async () => {
     apiGet.mockResolvedValue(workspace());
 
@@ -112,5 +152,27 @@ describe("MobileCallLogPage", () => {
       note: "Returned Sarah's call.",
       requestKey: expect.any(String),
     }));
+  });
+
+  it("discards a mobile draft into a fresh immediately usable log", async () => {
+    apiGet.mockResolvedValue(workspace());
+    completeCallAction.mockResolvedValue({ ok: true });
+    render(<MobileCallLogPage contactId={contactId} />);
+
+    fireEvent.change(await screen.findByLabelText("Call note"), { target: { value: "Discard this note." } });
+    const draftKey = await waitFor(() => {
+      const key = Object.keys(localStorage).find((candidate) => candidate.startsWith("assisted-call-draft:"));
+      expect(key).toBeTruthy();
+      return key!;
+    });
+    const discardedRequestKey = JSON.parse(localStorage.getItem(draftKey)!).requestKey;
+
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+
+    expect(screen.getByLabelText("Call note")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Start call note" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+    await waitFor(() => expect(completeCallAction).toHaveBeenCalledTimes(1));
+    expect(completeCallAction.mock.calls[0][0].requestKey).not.toBe(discardedRequestKey);
   });
 });

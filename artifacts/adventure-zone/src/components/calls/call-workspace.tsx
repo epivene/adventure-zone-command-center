@@ -251,8 +251,8 @@ export function CallWorkspace({
 
   function discardDraft() {
     clearCallDraft(draftKey);
-    setStartedAt(null);
-    setRequestKey(null);
+    setStartedAt(isMobileLog ? new Date() : null);
+    setRequestKey(isMobileLog ? crypto.randomUUID() : null);
     setNote("");
     setDisposition("no_answer");
     setNextActionKind("");

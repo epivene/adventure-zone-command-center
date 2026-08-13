@@ -39,14 +39,15 @@ function titleCase(value: string) {
 export function EventProfileWorkspace({
   profile,
   context = {},
-  suppressedContactIds = [],
+  callablePhoneByContactId = {},
 }: {
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
-  suppressedContactIds?: string[];
+  callablePhoneByContactId?: Record<string, string | null>;
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
-  const callingSuppressed = selectedContactId ? suppressedContactIds.includes(selectedContactId) : false;
+  const callablePhone = selectedContactId ? callablePhoneByContactId[selectedContactId] ?? null : null;
+  const callingSuppressed = Boolean(selectedContactId) && !callablePhone;
   const selectedContact = profile.contacts.find(({ id }) => id === selectedContactId) ?? null;
   const selectedBooking = context.bookingId
     ? profile.bookings.find(({ id }) => id === context.bookingId) ?? null
@@ -131,7 +132,7 @@ export function EventProfileWorkspace({
             {selectedContact ? <div className="mt-3 grid gap-3">
               <p aria-live="polite" className="font-semibold">Current caller: {selectedContact.name}</p>
               <div className="flex flex-wrap gap-2">
-                {selectedContact.phone && !callingSuppressed ? <a className="button-primary text-center" href={`tel:${selectedContact.phone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">{callingSuppressed ? "Calling unavailable — Do Not Call" : "No phone recorded"}</span>}
+                {callablePhone && !callingSuppressed ? <a className="button-primary text-center" href={`tel:${callablePhone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">{callingSuppressed ? "Calling unavailable" : "No phone recorded"}</span>}
                 {profile.contacts.length > 1 ? <button className="button-secondary" onClick={() => {
                   const index = profile.contacts.findIndex(({ id }) => id === selectedContactId);
                   setSelectedContactId(profile.contacts[(index + 1) % profile.contacts.length]!.id);

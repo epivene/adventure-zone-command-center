@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 
 import { createActivityAction, editActivityAction, listActivityRevisionsAction } from "@/actions/activities";
 import { completeCallAction } from "@/actions/calls";
@@ -34,10 +34,18 @@ export default function MobileCallLogPage(props: MobileCallLogPageProps = {}) {
   const organizationId = props.organizationId ?? params.get("organizationId") ?? undefined;
   const bookingId = props.bookingId ?? params.get("bookingId") ?? undefined;
   const followUpId = props.followUpId ?? params.get("followUpId") ?? undefined;
+  const [, setLocation] = useLocation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(Boolean(contactId));
   const [error, setError] = useState<string | null>(null);
-  const selectCaller = useCallback((nextContactId: string) => setContactId(nextContactId), []);
+  const selectCaller = useCallback((nextContactId: string) => {
+    setContactId(nextContactId);
+    const query = new URLSearchParams({ contactId: nextContactId });
+    if (organizationId) query.set("organizationId", organizationId);
+    if (bookingId) query.set("bookingId", bookingId);
+    if (followUpId) query.set("followUpId", followUpId);
+    setLocation(`/calls/log?${query.toString()}`, { replace: true });
+  }, [organizationId, bookingId, followUpId, setLocation]);
 
   useEffect(() => {
     if (!contactId) {

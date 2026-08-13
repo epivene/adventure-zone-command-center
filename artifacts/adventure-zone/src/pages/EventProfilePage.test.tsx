@@ -64,7 +64,7 @@ const profile = {
 
 function contactDetail(doNotCallAt: string | null) {
   return {
-    phones: [{ id: "phone-1", doNotCallAt }],
+    phones: [{ id: "phone-1", number: "303-555-0100", primary: true, doNotCallAt }],
   };
 }
 
@@ -115,6 +115,34 @@ describe("EventProfilePage call actions", () => {
     expect(await screen.findByRole("link", { name: "Call" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Blake North" }));
     expect(screen.getByRole("button", { name: "Call" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
+  });
+
+  it("calls the exact unsuppressed number when a contact has mixed phone suppression", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path.startsWith("/event-profiles/")) return Promise.resolve(profile);
+      return Promise.resolve({
+        phones: [
+          { id: "phone-1", number: "303-555-0100", primary: true, doNotCallAt: "2026-08-12T12:00:00.000Z" },
+          { id: "phone-2", number: "720-555-0199", primary: false, doNotCallAt: null },
+        ],
+      });
+    });
+    render(<EventProfilePage />);
+
+    expect(await screen.findByRole("link", { name: "Call" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Call Sarah Miller" })).toHaveAttribute("href", "tel:7205550199");
+    expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
+  });
+
+  it("fails closed for direct calling when authoritative phone details cannot load", async () => {
+    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
+      ? Promise.resolve(profile)
+      : Promise.reject(new Error("contact unavailable")));
+    render(<EventProfilePage />);
+
+    expect(await screen.findByRole("button", { name: "Call" })).toBeDisabled();
+    expect(screen.queryByRole("link", { name: "Call Sarah Miller" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
   });
 });

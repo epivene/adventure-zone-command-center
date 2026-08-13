@@ -9,7 +9,7 @@ export default function EventProfilePage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [suppressedContactIds, setSuppressedContactIds] = useState<string[]>([]);
+  const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
 
   const params = new URLSearchParams(search);
   const contactId = params.get("contactId") ?? undefined;
@@ -39,14 +39,16 @@ export default function EventProfilePage() {
           })),
           bookings: (d.bookings ?? []).map((b: any) => ({ ...b, startsAt: toDate(b.startsAt) })),
         };
-        const suppression = await Promise.all((normalized.contacts ?? []).map(async (contact: any) => {
+        const callablePhones = await Promise.all((normalized.contacts ?? []).map(async (contact: any) => {
           const detail = await apiGet<any>(`/contacts/${contact.id}`).catch(() => null);
+          if (!detail) return [contact.id as string, null] as const;
           const phones = Array.isArray(detail?.phones) ? detail.phones : [];
-          return phones.length > 0 && phones.every((phone: any) => Boolean(phone.doNotCallAt))
-            ? contact.id as string
-            : null;
+          const callablePhone = phones
+            .filter((phone: any) => !phone.doNotCallAt && typeof phone.number === "string" && phone.number.trim())
+            .toSorted((left: any, right: any) => Number(Boolean(right.primary)) - Number(Boolean(left.primary)))[0];
+          return [contact.id as string, callablePhone?.number ?? null] as const;
         }));
-        setSuppressedContactIds(suppression.filter((id): id is string => Boolean(id)));
+        setCallablePhoneByContactId(Object.fromEntries(callablePhones));
         setData(normalized);
         setLoading(false);
       })
@@ -60,7 +62,7 @@ export default function EventProfilePage() {
     <div className="mx-auto max-w-7xl">
       <EventProfileWorkspace
         profile={data}
-        suppressedContactIds={suppressedContactIds}
+        callablePhoneByContactId={callablePhoneByContactId}
         context={{ bookingId, followUpId, action, mode }}
       />
     </div>
