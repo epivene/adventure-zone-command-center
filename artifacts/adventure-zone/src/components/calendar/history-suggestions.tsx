@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { apiPost } from "@/lib/auth-token";
+import { apiFetch, apiPost } from "@/lib/auth-token";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 
@@ -168,13 +168,10 @@ export function HistorySuggestions() {
     abortRef.current = abort;
 
     try {
-      const token = localStorage.getItem("ownerToken");
-      const resp = await fetch("/api/ai-suggestions/analyze", {
+      // apiFetch reads the token from az_owner_token and resolves the API
+      // root (including VITE_API_BASE_URL for deployed configurations).
+      const resp = await apiFetch("/ai-suggestions/analyze", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
         signal: abort.signal,
       });
 

@@ -104,6 +104,24 @@ function parseConfidence(raw: unknown): "high" | "medium" | "low" {
   return "low";
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Returns true iff dateStr is a strict YYYY-MM-DD string representing a valid
+ * calendar date that falls strictly after today (UTC).  Rejects past dates and
+ * any non-ISO or non-existent dates the AI may hallucinate.
+ */
+export function isValidFutureDate(dateStr: unknown): dateStr is string {
+  if (typeof dateStr !== "string") return false;
+  if (!DATE_RE.test(dateStr)) return false;
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  if (isNaN(d.getTime())) return false;
+  // Reject dates JS silently rolls over (e.g. "2099-02-30" → Mar 2).
+  if (d.toISOString().slice(0, 10) !== dateStr) return false;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return dateStr > todayStr;
+}
+
 function parseSuggestionsFromResponse(text: string): RawSuggestion[] {
   // Claude may wrap the JSON in a code block; strip it
   const cleaned = text
@@ -131,14 +149,10 @@ function normalizeSuggestion(raw: RawSuggestion): HistorySuggestion | null {
 
   return {
     id: crypto.randomUUID(),
-    suggestedDate:
-      typeof raw.suggestedDate === "string" && raw.suggestedDate
-        ? raw.suggestedDate
-        : null,
-    suggestedDateEnd:
-      typeof raw.suggestedDateEnd === "string" && raw.suggestedDateEnd
-        ? raw.suggestedDateEnd
-        : null,
+    // Only accept dates that are valid ISO strings AND strictly in the future.
+    // The prompt instructs Claude to return future dates, but this enforces it.
+    suggestedDate: isValidFutureDate(raw.suggestedDate) ? raw.suggestedDate : null,
+    suggestedDateEnd: isValidFutureDate(raw.suggestedDateEnd) ? raw.suggestedDateEnd : null,
     clientName:
       typeof raw.clientName === "string" && raw.clientName.trim()
         ? raw.clientName.trim()
