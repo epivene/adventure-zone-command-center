@@ -16,6 +16,7 @@ import { HierarchyConflictError } from "./organization-hierarchy";
 import {
   assertOrganizationsMergeable,
   DrizzleOrganizationRepository,
+  persistProposedOrganizationFamilies,
 } from "./organization-repository";
 
 const PRIMARY_ID = "11111111-1111-4111-8111-111111111111";
@@ -38,6 +39,7 @@ type ProposalRow = {
 
 class GuardTransaction {
   readonly locks: string[] = [];
+  readonly insertedProposals: unknown[] = [];
   readonly mutations: Array<{
     kind: "execute" | "update" | "delete";
     table?: unknown;
@@ -69,6 +71,19 @@ class GuardTransaction {
       },
     };
     return builder;
+  }
+
+  insert(table: unknown) {
+    return {
+      values: (values: unknown[]) => ({
+        onConflictDoNothing: (_options: unknown) => {
+          if (table === organizationFamilyReviews) {
+            this.insertedProposals.push(...values);
+          }
+          return Promise.resolve();
+        },
+      }),
+    };
   }
 
   execute(_statement: unknown) {
@@ -216,4 +231,60 @@ describe("organization merge family guard", () => {
 
     expect(transaction.locks).toEqual(["update", "update", "update"]);
   });
+
+  it("serializes proposal persistence with merges through the same candidate locks", async () => {
+    const proposal = {
+      normalizedName: "lantern festival",
+      city: "",
+      region: "",
+      classification: "location_candidate" as const,
+      groupKey: `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}`,
+      candidateIds: [PRIMARY_ID, DUPLICATE_ID],
+      evidence: [
+        { family: "website" as const, label: "website domains agree" },
+      ],
+    };
+
+    // Proposal wins the candidate locks: it commits first, so the waiting merge
+    // observes the proposal and is rejected.
+    const proposalWinner = new GuardTransaction([
+      row(PRIMARY_ID),
+      row(DUPLICATE_ID),
+    ]);
+    await persistProposedOrganizationFamilies(
+      {
+        transaction: async (work: (tx: GuardTransaction) => Promise<void>) =>
+          work(proposalWinner),
+      } as never,
+      [proposal],
+    );
+    expect(proposalWinner.locks).toEqual(["update", "update"]);
+    expect(proposalWinner.insertedProposals).toEqual([
+      expect.objectContaining({
+        groupKey: proposal.groupKey,
+        candidateIds: [PRIMARY_ID, DUPLICATE_ID],
+        status: "proposed",
+      }),
+    ]);
+
+    const mergeAfterProposal = new GuardTransaction(
+      [row(PRIMARY_ID), row(DUPLICATE_ID)],
+      [],
+      [{ groupKey: proposal.groupKey, candidateIds: proposal.candidateIds }],
+    );
+    await expectConflict(mergeAfterProposal);
+
+    // Merge wins the same candidate locks: after its deletion commits, the
+    // proposal transaction sees a missing candidate and creates no stale row.
+    const proposalAfterMerge = new GuardTransaction([row(PRIMARY_ID)]);
+    await persistProposedOrganizationFamilies(
+      {
+        transaction: async (work: (tx: GuardTransaction) => Promise<void>) =>
+          work(proposalAfterMerge),
+      } as never,
+      [proposal],
+    );
+    expect(proposalAfterMerge.insertedProposals).toEqual([]);
+  });
+
 });
