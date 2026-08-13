@@ -92,6 +92,14 @@ class GuardTransaction {
         onConflictDoNothing: (_options: unknown) => {
           if (table === organizationFamilyReviews) {
             this.insertedProposals.push(...values);
+            for (const value of values as ProposalRow[]) {
+              if (!this.proposals.some((proposal) => proposal.groupKey === value.groupKey)) {
+                this.proposals.push({
+                  groupKey: value.groupKey,
+                  candidateIds: value.candidateIds,
+                });
+              }
+            }
           }
           return Promise.resolve();
         },
