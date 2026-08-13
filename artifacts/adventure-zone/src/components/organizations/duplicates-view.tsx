@@ -363,18 +363,19 @@ function DuplicateGroupCard({
 
 function initialPrimaryIds(groups: DuplicateGroup[]) {
   return Object.fromEntries(groups.map((group) => [
-    group.normalizedName,
+    identity(group),
     isLocationCandidate(group) ? "" : group.organizations[0]?.id ?? "",
   ]));
 }
 
 function reconcilePrimaryIds(current: Record<string, string>, groups: DuplicateGroup[]) {
   return Object.fromEntries(groups.map((group) => {
-    if (!(group.normalizedName in current)) {
-      return [group.normalizedName, isLocationCandidate(group) ? "" : group.organizations[0]?.id ?? ""];
+    const groupIdentity = identity(group);
+    if (!(groupIdentity in current)) {
+      return [groupIdentity, isLocationCandidate(group) ? "" : group.organizations[0]?.id ?? ""];
     }
-    const selected = current[group.normalizedName];
-    return [group.normalizedName, group.organizations.some((item) => item.id === selected) ? selected : ""];
+    const selected = current[groupIdentity];
+    return [groupIdentity, group.organizations.some((item) => item.id === selected) ? selected : ""];
   }));
 }
 
@@ -440,9 +441,15 @@ export function DuplicatesView({ groups, onRefresh }: {
     setBulkProgress({ completed: 0, total: pendingGroups.length });
     setBulkMerging(true);
     try {
+      const bulkPrimaryIds = Object.fromEntries(
+        pendingGroups.map((group) => [
+          group.normalizedName,
+          primaryIds[identity(group)] ?? "",
+        ]),
+      );
       await mergeDuplicateGroups(
         pendingGroups,
-        primaryIds,
+        bulkPrimaryIds,
         async (request) => { await apiPost("/organizations/merge", request); },
         (progress) => {
           setBulkProgress({ completed: progress.completed, total: progress.total });
@@ -464,7 +471,9 @@ export function DuplicatesView({ groups, onRefresh }: {
     }
   }
 
-  const missingPrimaryGroup = mergeableGroups.find((group) => !primaryIds[group.normalizedName]);
+  const missingPrimaryGroup = mergeableGroups.find(
+    (group) => !primaryIds[identity(group)],
+  );
 
   if (!localGroups.length && !bulkMerging) {
     return (
@@ -518,9 +527,9 @@ export function DuplicatesView({ groups, onRefresh }: {
           group={group}
           index={index}
           key={identity(group)}
-          onPrimaryChange={(primaryId) => setPrimaryIds((current) => ({ ...current, [group.normalizedName]: primaryId }))}
+          onPrimaryChange={(primaryId) => setPrimaryIds((current) => ({ ...current, [identity(group)]: primaryId }))}
           onResolved={() => resolved(group)}
-          primaryId={primaryIds[group.normalizedName] ?? ""}
+          primaryId={primaryIds[identity(group)] ?? ""}
         />
       ))}
     </div>
