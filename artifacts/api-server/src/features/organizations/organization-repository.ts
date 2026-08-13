@@ -4,8 +4,8 @@ import {
   count,
   desc,
   eq,
-  ilike,
   inArray,
+  isNull,
   type SQL,
   type SQLWrapper,
   sql,
@@ -152,6 +152,8 @@ export type OrganizationListRecord = Omit<
   city: string | null;
   region: string | null;
   primaryContactName: string | null;
+  parent: OrganizationParentSummary | null;
+  locationCount: number;
 };
 
 export type OrganizationListPage = {
@@ -558,9 +560,64 @@ export async function loadOrganizationHierarchySummary(
 export function buildOrganizationListCondition(
   query: OrganizationListQuery,
 ): SQL | undefined {
+  const pattern = `%${query.search}%`;
   const searchCondition = query.search
-    ? ilike(organizations.name, `%${query.search}%`)
-    : undefined;
+    ? sql`(
+        ${organizations.name} ilike ${pattern}
+        or ${organizations.city} ilike ${pattern}
+        or ${organizations.phone} ilike ${pattern}
+        or exists (
+          select 1
+          from ${organizations} as parent_organization
+          where parent_organization.id = ${organizations.parentOrganizationId}
+            and parent_organization.name ilike ${pattern}
+        )
+        or exists (
+          select 1
+          from ${organizationContacts} as association
+          inner join ${contacts} as person
+            on person.id = association.contact_id
+          where association.organization_id = ${organizations.id}
+            and association.active
+            and (
+              person.first_name ilike ${pattern}
+              or person.last_name ilike ${pattern}
+              or concat_ws(' ', person.first_name, person.last_name) ilike ${pattern}
+              or person.phone ilike ${pattern}
+              or person.email ilike ${pattern}
+            )
+        )
+        or exists (
+          select 1
+          from ${organizations} as child_location
+          where child_location.parent_organization_id = ${organizations.id}
+            and (
+              child_location.name ilike ${pattern}
+              or child_location.city ilike ${pattern}
+              or child_location.phone ilike ${pattern}
+              or exists (
+                select 1
+                from ${organizationContacts} as child_association
+                inner join ${contacts} as child_person
+                  on child_person.id = child_association.contact_id
+                where child_association.organization_id = child_location.id
+                  and child_association.active
+                  and (
+                    child_person.first_name ilike ${pattern}
+                    or child_person.last_name ilike ${pattern}
+                    or concat_ws(
+                      ' ',
+                      child_person.first_name,
+                      child_person.last_name
+                    ) ilike ${pattern}
+                    or child_person.phone ilike ${pattern}
+                    or child_person.email ilike ${pattern}
+                  )
+              )
+            )
+        )
+      )`
+    : isNull(organizations.parentOrganizationId);
   const lastResortCondition =
     query.lastResort === "only" ? eq(organizations.lastResort, true) : undefined;
   const travelLegCondition = query.travelLegId
@@ -568,6 +625,22 @@ export function buildOrganizationListCondition(
     : undefined;
 
   return and(searchCondition, lastResortCondition, travelLegCondition) ?? undefined;
+}
+
+export function buildOrganizationListOrderBy(
+  query: OrganizationListQuery,
+): SQL[] {
+  return query.search
+    ? [
+        sql`case
+          when lower(${organizations.name}) = lower(${query.search}) then 0
+          when ${organizations.parentOrganizationId} is null then 1
+          else 2
+        end`,
+        asc(organizations.name),
+        asc(organizations.id),
+      ]
+    : [asc(organizations.name), asc(organizations.id)];
 }
 
 /** Candidate groups are intentionally name-based; location gaps are common in imported profiles. */
@@ -740,7 +813,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .select()
       .from(organizations)
       .where(condition)
-      .orderBy(asc(organizations.name), asc(organizations.id))
+      .orderBy(...buildOrganizationListOrderBy(query))
       .limit(query.pageSize)
       .offset((page - 1) * query.pageSize);
     if (!organizationRecords.length) {
@@ -748,7 +821,20 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     }
 
     const organizationIds = organizationRecords.map((organization) => organization.id);
-    const [contactCounts, bookingCounts, primaryContacts] = await Promise.all([
+    const parentIds = [
+      ...new Set(
+        organizationRecords
+          .map((organization) => organization.parentOrganizationId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const [
+      contactCounts,
+      bookingCounts,
+      primaryContacts,
+      parentRecords,
+      locationCounts,
+    ] = await Promise.all([
       this.database
         .select({
           organizationId: organizationContacts.organizationId,
@@ -781,6 +867,24 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           eq(organizationContacts.active, true),
           eq(organizationContacts.isPrimary, true),
         )),
+      parentIds.length
+        ? this.database
+            .select({
+              id: organizations.id,
+              name: organizations.name,
+              website: organizations.website,
+            })
+            .from(organizations)
+            .where(inArray(organizations.id, parentIds))
+        : Promise.resolve([] as OrganizationParentSummary[]),
+      this.database
+        .select({
+          parentOrganizationId: organizations.parentOrganizationId,
+          value: count(),
+        })
+        .from(organizations)
+        .where(inArray(organizations.parentOrganizationId, organizationIds))
+        .groupBy(organizations.parentOrganizationId),
     ]);
     const contactCountByOrganization = new Map(
       contactCounts.map((record) => [record.organizationId, record.value]),
@@ -796,6 +900,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         `${record.firstName} ${record.lastName}`.trim(),
       ]),
     );
+    const parentById = new Map(
+      parentRecords.map((record) => [record.id, record]),
+    );
+    const locationCountByParent = new Map(
+      locationCounts
+        .filter((record) => record.parentOrganizationId !== null)
+        .map((record) => [record.parentOrganizationId!, record.value]),
+    );
 
     return {
       records: organizationRecords.map((organization) => ({
@@ -809,6 +921,10 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         contactCount: contactCountByOrganization.get(organization.id) ?? 0,
         bookingCount: bookingCountByOrganization.get(organization.id) ?? 0,
         primaryContactName: primaryContactByOrganization.get(organization.id) ?? null,
+        parent: organization.parentOrganizationId
+          ? parentById.get(organization.parentOrganizationId) ?? null
+          : null,
+        locationCount: locationCountByParent.get(organization.id) ?? 0,
       })),
       total,
       page,

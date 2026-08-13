@@ -3,7 +3,14 @@ import { Link } from "wouter";
 import type {
   OrganizationListQuery,
   OrganizationListPage,
+  OrganizationParentSummary,
 } from "@/features/organizations/organization-repository";
+
+type OrganizationHierarchyListRecord =
+  OrganizationListPage["records"][number] & {
+    parent: OrganizationParentSummary | null;
+    locationCount: number;
+  };
 
 function listHref(query: OrganizationListQuery) {
   const params = new URLSearchParams();
@@ -30,6 +37,9 @@ export function OrganizationList({
   query: OrganizationListQuery;
   travelLegs: { id: string; name: string; color: string }[];
 }) {
+  const organizationRecords =
+    organizations.records as OrganizationHierarchyListRecord[];
+
   return (
     <div className="grid gap-5">
       <form
@@ -42,7 +52,7 @@ export function OrganizationList({
           <input
             defaultValue={query.search}
             name="q"
-            placeholder="Place name"
+            placeholder="Name, city, contact, phone, or email"
             type="search"
           />
         </label>
@@ -80,7 +90,7 @@ export function OrganizationList({
 
       {organizations.records.length ? (
         <ul className="grid gap-3">
-          {organizations.records.map((organization) => (
+          {organizationRecords.map((organization) => (
             <li
               className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               key={organization.id}
@@ -106,6 +116,15 @@ export function OrganizationList({
                       <span className="ml-2 font-medium text-slate-700">· {organization.primaryContactName}</span>
                     ) : null}
                   </p>
+                  {organization.parent ? (
+                    <p className="mt-0.5 text-sm font-medium text-slate-600">
+                      Part of {organization.parent.name}
+                    </p>
+                  ) : organization.locationCount > 0 ? (
+                    <p className="mt-0.5 text-sm font-medium text-slate-600">
+                      {organization.locationCount} location{organization.locationCount !== 1 ? "s" : ""}
+                    </p>
+                  ) : null}
                   <p className="mt-0.5 text-sm text-slate-600">
                     {organization.contactCount} contacts · {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
                   </p>

@@ -56,15 +56,12 @@ const parentRecord = {
 };
 
 class ListQueryBuilder {
-  private table: unknown;
-
   constructor(
     private readonly database: TestDatabase,
     private readonly selection: Record<string, unknown> | undefined,
   ) {}
 
-  from(table: unknown) {
-    this.table = table;
+  from(_table: unknown) {
     return this;
   }
 
