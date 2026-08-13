@@ -9,6 +9,18 @@ import { DrizzleActivityRepository } from "@/features/activities/activity-reposi
 const router: IRouter = Router();
 function contactRepo() { return new DrizzleContactRepository(db); }
 
+const phoneValidationErrors = new Set([
+  "Contact phone numbers cannot be blank.",
+  "Contact phone IDs must be unique.",
+  "Exactly one contact phone must be primary.",
+  "Contact phone does not belong to this contact.",
+  "A suppressed phone number cannot be changed; add a new number to preserve suppression history.",
+]);
+
+function isPhoneValidationError(err: unknown): err is Error {
+  return err instanceof Error && phoneValidationErrors.has(err.message);
+}
+
 router.get("/contacts", async (req, res): Promise<void> => {
   const query = contactListQuerySchema.parse({
     q: req.query.q ?? undefined,
@@ -68,6 +80,10 @@ router.put("/contacts/:id/phones", async (req, res): Promise<void> => {
   } catch (err) {
     if (err instanceof Error && err.message === "Contact is missing.") {
       res.status(404).json({ error: "Not found" });
+      return;
+    }
+    if (isPhoneValidationError(err)) {
+      res.status(400).json({ ok: false, error: err.message });
       return;
     }
     req.log.error({ err }, "Failed to replace contact phones");
