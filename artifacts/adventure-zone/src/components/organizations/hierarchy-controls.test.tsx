@@ -317,4 +317,42 @@ describe("HierarchyControls", () => {
     );
     expect(onRefresh).not.toHaveBeenCalled();
   });
+
+  it("loads eligible parents from every organization page", async () => {
+    apiGet
+      .mockResolvedValueOnce({
+        organizations: {
+          records: [organization(PARENT_ID, "First Page Parent")],
+          total: 2,
+          page: 1,
+          pageSize: 1,
+          pageCount: 2,
+        },
+        travelLegs: [],
+      })
+      .mockResolvedValueOnce({
+        organizations: {
+          records: [organization(OTHER_PARENT_ID, "Second Page Parent")],
+          total: 2,
+          page: 2,
+          pageSize: 1,
+          pageCount: 2,
+        },
+        travelLegs: [],
+      });
+
+    render(<HierarchyControls profile={profile()} onRefresh={vi.fn()} />);
+
+    const select = await screen.findByRole("combobox", {
+      name: "Existing parent",
+    });
+    expect(
+      await within(select).findByRole("option", {
+        name: "Second Page Parent",
+      }),
+    ).toBeInTheDocument();
+    expect(apiGet).toHaveBeenNthCalledWith(1, "/organizations");
+    expect(apiGet).toHaveBeenNthCalledWith(2, "/organizations?page=2");
+  });
+
 });
