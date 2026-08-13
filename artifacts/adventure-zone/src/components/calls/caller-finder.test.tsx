@@ -138,4 +138,18 @@ describe("CallerFinder", () => {
       "/quick-add?create=1&q=Prairie%20Days",
     );
   });
+
+  it("hides a stale create action while a changed query is still pending", async () => {
+    const onSelect = vi.fn();
+    apiGet.mockResolvedValueOnce(result());
+    render(<CallerFinder initialPhone="7015559999" onSelect={onSelect} />);
+    expect(await screen.findByRole("link", { name: "Create contact" })).toBeVisible();
+
+    apiGet.mockImplementationOnce(() => new Promise(() => {}));
+    fireEvent.change(screen.getByLabelText("Find caller"), {
+      target: { value: "exact@example.com" },
+    });
+
+    expect(screen.queryByRole("link", { name: "Create contact" })).not.toBeInTheDocument();
+  });
 });
