@@ -1,7 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
+import {
+  DrizzleOrganizationRepository,
+  reviewOrganizationFamily,
+} from "@/features/organizations/organization-repository";
 import {
   organizationListQuerySchema,
   setLastResortInputSchema,
@@ -15,7 +18,6 @@ import {
   createOrganizationParent,
   HierarchyConflictError,
   setOrganizationParent,
-  setOrganizationParents,
   ungroupOrganization,
 } from "@/features/organizations/organization-hierarchy";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
@@ -145,54 +147,7 @@ router.post("/organizations/hierarchy/ungroup", async (req, res): Promise<void> 
 router.post("/organizations/family-review", async (req, res): Promise<void> => {
   try {
     const input = familyReviewInputSchema.parse(req.body);
-    const repository = orgRepo();
-    const groups = await repository.findDuplicates();
-    const candidate = groups.find(
-      (group) =>
-        group.classification !== "duplicate" &&
-        group.candidateIds.length === input.candidateIds.length &&
-        group.candidateIds.every((id, index) => id === input.candidateIds[index]),
-    );
-    if (!candidate?.groupKey) {
-      throw new HierarchyConflictError(
-        "This organization family changed. Refresh the review list and try again.",
-      );
-    }
-
-    const changedAt = new Date();
-    if (input.action === "not_related") {
-      await repository.saveFamilyReview({
-        groupKey: candidate.groupKey,
-        candidateIds: candidate.candidateIds,
-        evidence: candidate.evidence,
-        status: "not_related",
-      });
-      res.json({ ok: true });
-      return;
-    }
-
-    if (input.parent.kind === "new") {
-      await createOrganizationParent(
-        db,
-        {
-          name: input.parent.name,
-          ...(input.parent.website ? { website: input.parent.website } : {}),
-          ...(input.parent.phone ? { phone: input.parent.phone } : {}),
-          childIds: candidate.candidateIds,
-        },
-        changedAt,
-      );
-    } else {
-      await setOrganizationParents(
-        db,
-        {
-          childIds: candidate.candidateIds,
-          parentId: input.parent.parentId,
-        },
-        changedAt,
-      );
-    }
-    await repository.deleteFamilyReview(candidate.groupKey);
+    await reviewOrganizationFamily(db, input, new Date());
     res.json({ ok: true });
   } catch (err) {
     hierarchyError(req, res, err);
