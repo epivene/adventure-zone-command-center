@@ -286,7 +286,7 @@ export function partitionOrganizationReviewGroups(
     discoveredFamilies.flatMap((group) => group.candidateIds),
   );
   const duplicateGroups: OrganizationFamilyCandidateGroup[] = duplicateRows
-    .filter((row) => !row.ids.every((id) => allFamilyCandidateIds.has(id)))
+    .filter((row) => !row.ids.some((id) => allFamilyCandidateIds.has(id)))
     .map((row) => ({
       normalizedName: row.normalized_name,
       city: row.normalized_city,
