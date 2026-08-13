@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
 import { organizations } from "@/db/schema";
@@ -27,21 +27,30 @@ export class HierarchyConflictError extends Error {
   }
 }
 
-async function lockOrganization(
+async function lockOrganizations(
   transaction: HierarchyTransaction,
-  organizationId: string,
-): Promise<LockedOrganization> {
-  const [organization] = await transaction
+  organizationIds: string[],
+): Promise<LockedOrganization[]> {
+  const orderedIds = [...new Set(organizationIds)].sort();
+  if (!orderedIds.length) return [];
+
+  return transaction
     .select({
       id: organizations.id,
       name: organizations.name,
       parentOrganizationId: organizations.parentOrganizationId,
     })
     .from(organizations)
-    .where(eq(organizations.id, organizationId))
-    .limit(1)
+    .where(inArray(organizations.id, orderedIds))
+    .orderBy(asc(organizations.id))
     .for("update");
+}
 
+async function lockOrganization(
+  transaction: HierarchyTransaction,
+  organizationId: string,
+): Promise<LockedOrganization> {
+  const [organization] = await lockOrganizations(transaction, [organizationId]);
   if (!organization) {
     throw new HierarchyConflictError(
       "The selected organization profile no longer exists.",
@@ -59,7 +68,10 @@ async function lockOwnedLocations(
   return transaction
     .select({ parentOrganizationId: organizations.parentOrganizationId })
     .from(organizations)
-    .where(inArray(organizations.parentOrganizationId, parentIds))
+    .where(
+      inArray(organizations.parentOrganizationId, [...parentIds].sort()),
+    )
+    .orderBy(asc(organizations.id))
     .for("update");
 }
 
@@ -73,8 +85,23 @@ export async function setOrganizationParent(
       throw new HierarchyConflictError("A profile cannot be its own parent.");
     }
 
-    const parent = await lockOrganization(transaction, input.parentId);
-    const child = await lockOrganization(transaction, input.childId);
+    const involvedOrganizations = await lockOrganizations(transaction, [
+      input.childId,
+      input.parentId,
+    ]);
+    const organizationById = new Map(
+      involvedOrganizations.map((organization) => [
+        organization.id,
+        organization,
+      ]),
+    );
+    const parent = organizationById.get(input.parentId);
+    const child = organizationById.get(input.childId);
+    if (!parent || !child) {
+      throw new HierarchyConflictError(
+        "The selected organization profile no longer exists.",
+      );
+    }
 
     if (parent.parentOrganizationId) {
       throw new HierarchyConflictError(
@@ -147,7 +174,8 @@ export async function createOrganizationParent(
         parentOrganizationId: organizations.parentOrganizationId,
       })
       .from(organizations)
-      .where(inArray(organizations.id, childIds))
+      .where(inArray(organizations.id, [...childIds].sort()))
+      .orderBy(asc(organizations.id))
       .for("update");
 
     if (children.length !== childIds.length) {
