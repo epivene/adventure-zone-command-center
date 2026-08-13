@@ -194,6 +194,34 @@ export type OrganizationFamilyCandidateGroup = Omit<
   DuplicateOrganizationGroup,
   "organizations"
 >;
+export type OrganizationFamilyActRelationship = {
+  sourceOrganizationId: string;
+  targetOrganizationId: string;
+  provenance: "act_relationship";
+};
+
+export function organizationFamilyActRelationshipsQuery(): SQL {
+  return sql`
+    SELECT DISTINCT
+      source_link.entity_id AS "sourceOrganizationId",
+      target_link.entity_id AS "targetOrganizationId",
+      'act_relationship'::text AS provenance
+    FROM ${actMigrationRecords} AS relationship
+    INNER JOIN ${actExternalLinks} AS source_link
+      ON source_link.entity_type = 'organization'
+      AND source_link.source_entity_type = 'company'
+      AND source_link.act_record_id = relationship.source_id
+    INNER JOIN ${actExternalLinks} AS target_link
+      ON target_link.entity_type = 'organization'
+      AND target_link.source_entity_type = 'company'
+      AND target_link.act_record_id = relationship.target_source_id
+    WHERE relationship.source_id IS NOT NULL
+      AND relationship.target_source_id IS NOT NULL
+      AND source_link.entity_id <> target_link.entity_id
+    ORDER BY source_link.entity_id, target_link.entity_id
+  `;
+}
+
 
 export type OrganizationFamilyReviewRecord = {
   groupKey: string;
@@ -204,9 +232,35 @@ export type OrganizationFamilyReviewRecord = {
 
 export function discoverOrganizationFamilyCandidates(
   records: readonly OrganizationFamilyRecord[],
+  actRelationships: readonly OrganizationFamilyActRelationship[] = [],
 ): OrganizationFamilyCandidateGroup[] {
+  const relatedIds = new Map<string, Set<string>>(
+    records.map((record) => [
+      record.id,
+      new Set(record.actRelationshipIds ?? []),
+    ]),
+  );
+  for (const relationship of actRelationships) {
+    if (
+      !relatedIds.has(relationship.sourceOrganizationId) ||
+      !relatedIds.has(relationship.targetOrganizationId)
+    ) {
+      continue;
+    }
+    relatedIds
+      .get(relationship.sourceOrganizationId)
+      ?.add(relationship.targetOrganizationId);
+    relatedIds
+      .get(relationship.targetOrganizationId)
+      ?.add(relationship.sourceOrganizationId);
+  }
+  const hydratedRecords = records.map((record) => ({
+    ...record,
+    actRelationshipIds: [...(relatedIds.get(record.id) ?? [])].sort(),
+  }));
+
   const byWebsite = new Map<string, OrganizationFamilyRecord[]>();
-  for (const record of records) {
+  for (const record of hydratedRecords) {
     const website = normalizeWebsiteHost(record.website ?? null);
     if (!website) continue;
     const bucket = byWebsite.get(website) ?? [];
@@ -1069,7 +1123,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
   }
 
   async findDuplicates(): Promise<DuplicateOrganizationGroup[]> {
-    const [groupRows, familyRecords] = await Promise.all([
+    const [groupRows, familyRecords, actRelationships] = await Promise.all([
       this.database.execute<{
         normalized_name: string;
         normalized_city: string;
@@ -1088,9 +1142,15 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           )`,
         ))
         .orderBy(asc(organizations.id)),
+      this.database.execute<OrganizationFamilyActRelationship>(
+        organizationFamilyActRelationshipsQuery(),
+      ),
     ]);
 
-    const discoveredFamilies = discoverOrganizationFamilyCandidates(familyRecords);
+    const discoveredFamilies = discoverOrganizationFamilyCandidates(
+      familyRecords,
+      [...actRelationships.rows],
+    );
     const familyKeys = discoveredFamilies.flatMap((group) =>
       group.groupKey ? [group.groupKey] : [],
     );
