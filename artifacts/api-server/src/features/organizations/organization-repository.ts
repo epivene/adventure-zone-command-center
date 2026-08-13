@@ -190,7 +190,7 @@ export type DuplicateOrganizationGroup = {
   normalizedName: string;
   city: string;
   region: string;
-  classification: "duplicate" | "location_candidate";
+  classification: "duplicate" | "location_candidate" | "ambiguous_location_candidate";
   groupKey: string | null;
   candidateIds: string[];
   evidence: FamilyCandidateEvidence[];
@@ -1184,7 +1184,6 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .from(organizations)
         .where(and(
           isNull(organizations.parentOrganizationId),
-          sql`${organizations.website} is not null and trim(${organizations.website}) <> ''`,
           sql`not exists (
             select 1 from ${organizations} as confirmed_location
             where confirmed_location.parent_organization_id = ${organizations.id}
@@ -1214,7 +1213,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       reviews,
     );
     const visibleFamilies = reviewGroups.filter(
-      (group) => group.classification === "location_candidate",
+      (group) => group.classification !== "duplicate",
     );
     const proposedFamilies = visibleFamilies.filter(
       (group) => group.groupKey && !reviewByKey.has(group.groupKey),
