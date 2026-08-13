@@ -231,8 +231,12 @@ describe("MobileCallLogPage", () => {
 
     render(<MobileCallLogPage contactId={contactId} />);
 
-    expect(await screen.findByLabelText("Direction")).toHaveValue("outgoing");
-    expect(screen.getByLabelText("Phone number")).toHaveValue(alternatePhoneId);
+    await waitFor(() => {
+      expect(screen.getByLabelText("Direction")).toHaveValue("outgoing");
+      expect(screen.getByLabelText("Phone number")).toHaveValue(alternatePhoneId);
+    });
+    await new Promise((resolve) => window.setTimeout(resolve, 5));
+    const discardedAt = Date.now();
     fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
 
     expect(screen.getByLabelText("Direction")).toHaveValue("incoming");
@@ -246,6 +250,9 @@ describe("MobileCallLogPage", () => {
       method: "mobile_log",
       scriptKind: "incoming_inquiry",
       requestKey: expect.not.stringMatching("restored-request-key"),
+      startedAt: expect.any(Date),
     }));
+    expect(completeCallAction.mock.calls[0][0].startedAt.getTime())
+      .toBeGreaterThanOrEqual(discardedAt);
   });
 });

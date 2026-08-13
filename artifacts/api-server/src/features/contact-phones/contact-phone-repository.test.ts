@@ -27,8 +27,10 @@ class MemoryContactPhoneStore implements ContactPhoneStore {
     const transaction = Object.create(this) as MemoryContactPhoneStore;
     (transaction as unknown as { phones: ContactPhoneRecord[] }).phones = this.phones.map((phone) => ({ ...phone }));
     (transaction as unknown as { contact: LegacyContactPhoneFields }).contact = { ...this.contact };
+    (transaction as unknown as { nextId: number }).nextId = this.nextId;
     const result = await callback(transaction);
     this.phones = (transaction as unknown as { phones: ContactPhoneRecord[] }).phones;
+    this.nextId = (transaction as unknown as { nextId: number }).nextId;
     Object.assign(this.contact, (transaction as unknown as { contact: LegacyContactPhoneFields }).contact);
     return result;
   }
@@ -152,6 +154,22 @@ describe("ContactPhoneRepository", () => {
       { id: mobile!.id, primary: true },
       { id: office!.id, primary: false },
     ]);
+  });
+
+  it("keeps generated phone IDs unique across inserting transactions", async () => {
+    const store = new MemoryContactPhoneStore();
+    const repository = new ContactPhoneRepository(store);
+    await repository.replaceForContact(contactId, [
+      { id: null, number: "701-555-0100", type: "office", extension: null, label: null, primary: true },
+    ], now);
+    const [office] = await repository.listForContact(contactId);
+
+    await repository.replaceForContact(contactId, [
+      { id: office!.id, number: office!.number, type: office!.type, extension: null, label: null, primary: true },
+      { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: false },
+    ], now);
+
+    expect(new Set((await repository.listForContact(contactId)).map(({ id }) => id)).size).toBe(2);
   });
 
   it("records Do Not Call on one number without marking the organization Last Resort", async () => {

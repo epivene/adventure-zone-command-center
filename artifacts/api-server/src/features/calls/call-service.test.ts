@@ -172,15 +172,23 @@ describe("CallService call metadata", () => {
     if (!result.ok) expect(result.error.code).toBe("INVALID_CALL_INPUT");
   });
 
-  it("rejects Do Not Call without confirmation and a reason", async () => {
-    const result = await new CallService(new CallTestRepository() as never).complete(validCall({ disposition: "do_not_call", doNotCallConfirmed: false, doNotCallReason: null }));
+  it.each([
+    ["confirmation", { doNotCallConfirmed: false, doNotCallReason: "Requested" }],
+    ["a reason", { doNotCallConfirmed: true, doNotCallReason: null }],
+  ])("rejects Do Not Call without %s", async (_missing, overrides) => {
+    const result = await new CallService(new CallTestRepository() as never).complete(validCall({
+      disposition: "do_not_call",
+      ...overrides,
+    }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.code).toBe("INVALID_CALL_INPUT");
   });
 
   it("keeps wrong numbers unsuppressed while retaining their snapshot", async () => {
     const repository = new CallTestRepository();
-    const result = await new CallService(repository as never).complete(validCall({ disposition: "wrong_number" }));
+    const result = await new CallService(repository as never, {
+      now: () => new Date("2026-08-12T16:00:00.000Z"),
+    }).complete(validCall({ disposition: "wrong_number" }));
     expect(result.ok).toBe(true);
     expect(repository.suppressedPhoneId).toBeUndefined();
     expect(repository.createdSession).toMatchObject({ disposition: "wrong_number", phoneNumberSnapshot: "701-555-0100" });

@@ -82,6 +82,7 @@ describe("quick caller repository duplicate gate", () => {
 
     expect(result).toEqual({
       kind: "candidates",
+      canContinueCreating: false,
       candidates: store.likelyRows.map((row) => ({
         contactId: row.contactId,
         name: "Avery Lee",

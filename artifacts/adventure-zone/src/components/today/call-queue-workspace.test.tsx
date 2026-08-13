@@ -1,13 +1,28 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const createActivityAction = vi.hoisted(() => vi.fn());
+const editActivityAction = vi.hoisted(() => vi.fn());
+const listActivityRevisionsAction = vi.hoisted(() => vi.fn());
+
+vi.mock("@/actions/activities", () => ({
+  createActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+}));
 
 import {
   CallQueueWorkspace,
   type CallQueueItem,
 } from "@/components/today/call-queue-workspace";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  createActivityAction.mockReset();
+  editActivityAction.mockReset();
+  listActivityRevisionsAction.mockReset();
+});
 
 const followUps: CallQueueItem[] = [
   {
@@ -182,6 +197,49 @@ describe("CallQueueWorkspace", () => {
   });
 
   it("renders the real compact workspace with activity controls and history", async () => {
+    const activityId = "70000000-0000-4000-8000-000000000001";
+    createActivityAction.mockResolvedValue({
+      ok: true,
+      activity: {
+        id: "70000000-0000-4000-8000-000000000002",
+        organizationId: followUps[0].organizationId,
+        contactId: followUps[0].contactId,
+        bookingId: followUps[0].bookingId,
+        kind: "note",
+        body: "New queue note",
+        occurredAt: new Date("2026-08-12T16:00:00.000Z"),
+        createdAt: new Date("2026-08-12T16:00:00.000Z"),
+        updatedAt: new Date("2026-08-12T16:00:00.000Z"),
+        revisionCount: 0,
+      },
+    });
+    editActivityAction.mockResolvedValue({
+      ok: true,
+      activity: {
+        id: activityId,
+        organizationId: followUps[0].organizationId,
+        contactId: followUps[0].contactId,
+        bookingId: followUps[0].bookingId,
+        kind: "call",
+        body: "Corrected prior conversation",
+        occurredAt: new Date("2026-08-08T15:00:00.000Z"),
+        createdAt: new Date("2026-08-08T15:00:00.000Z"),
+        updatedAt: new Date("2026-08-12T16:00:00.000Z"),
+        revisionCount: 2,
+      },
+    });
+    listActivityRevisionsAction.mockResolvedValue({
+      ok: true,
+      revisions: [{
+        id: "revision-1",
+        activityId,
+        priorBody: "Earlier wording",
+        replacementBody: "Prior conversation",
+        reason: "Corrected wording",
+        createdAt: new Date("2026-08-09T15:00:00.000Z"),
+      }],
+      nextPage: null,
+    });
     render(
       <CallQueueWorkspace
         followUps={followUps}
@@ -227,7 +285,7 @@ describe("CallQueueWorkspace", () => {
           phones: [],
           scriptPrompts: ["Reference the previous conversation"],
           timeline: [{
-            id: "70000000-0000-4000-8000-000000000001",
+            id: activityId,
             kind: "call",
             body: "Prior conversation",
             occurredAt: "2026-08-08T15:00:00.000Z",
@@ -244,7 +302,35 @@ describe("CallQueueWorkspace", () => {
     expect(screen.getByRole("button", { name: "Add activity" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Edit activity" })).toBeVisible();
     expect(screen.getByText("Prior conversation")).toBeVisible();
-    expect(screen.getByRole("button", { name: "View edit history (1)" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "View edit history (1)" }));
+    await waitFor(() => expect(listActivityRevisionsAction).toHaveBeenCalledWith(activityId));
+    expect(await screen.findByText("Earlier wording")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit activity" }));
+    fireEvent.change(screen.getByLabelText("Edited activity text"), {
+      target: { value: "Corrected prior conversation" },
+    });
+    fireEvent.change(screen.getByLabelText("Reason for edit"), {
+      target: { value: "Corrected wording" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save activity edit" }));
+    await waitFor(() => expect(editActivityAction).toHaveBeenCalledWith({
+      activityId,
+      body: "Corrected prior conversation",
+      reason: "Corrected wording",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add activity" }));
+    fireEvent.change(screen.getByLabelText("Activity text"), {
+      target: { value: "New queue note" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save activity" }));
+    await waitFor(() => expect(createActivityAction).toHaveBeenCalledWith(expect.objectContaining({
+      bookingId: followUps[0].bookingId,
+      kind: "note",
+      body: "New queue note",
+      occurredAt: expect.any(Date),
+    })));
   });
 
   it("decrements a stale refreshed total when the completed follow-up is still returned", async () => {
