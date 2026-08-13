@@ -18,7 +18,11 @@ type DuplicateCandidate = {
 type QuickAddSubmission =
   | { ok: true; contactId: string }
   | { ok: false; error: string }
-  | { ok: false; candidates: DuplicateCandidate[] };
+  | {
+      ok: false;
+      candidates: DuplicateCandidate[];
+      canContinueCreating: boolean;
+    };
 
 type QuickAddCallerForm = {
   name: string;
@@ -60,6 +64,7 @@ export function QuickAddCaller({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resolvedMatch, setResolvedMatch] = useState(match);
   const [candidates, setCandidates] = useState<DuplicateCandidate[] | null>(null);
+  const [canContinueCreating, setCanContinueCreating] = useState(false);
   const [values, setValues] = useState<QuickAddCallerForm>({
     name: "",
     organizationName: "",
@@ -72,6 +77,7 @@ export function QuickAddCaller({
 
   function updateValue(name: keyof QuickAddCallerForm, value: string) {
     setCandidates(null);
+    setCanContinueCreating(false);
     setValues((current) => ({ ...current, [name]: value }));
   }
 
@@ -95,6 +101,7 @@ export function QuickAddCaller({
       if (!result.ok) {
         if ("candidates" in result) {
           setCandidates(result.candidates);
+          setCanContinueCreating(result.canContinueCreating);
           return;
         }
         setError(result.error);
@@ -153,9 +160,7 @@ export function QuickAddCaller({
     );
   }
 
-  const hasExactConflict = candidates !== null && (
-    candidates.length === 0 || candidates.some((candidate) => candidate.kind === "exact")
-  );
+  const hasExactConflict = candidates !== null && !canContinueCreating;
 
   return (
     <form className="grid gap-5" noValidate onSubmit={submit}>
