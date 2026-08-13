@@ -53,8 +53,8 @@ export type ActivityQueryRow = {
  *  - kind = "act_history" with actRecordId "act_activity:…" — activity-stream records
  *    from the older activity-import-service (not notes or history text entries)
  *
- * This mirrors the SQL WHERE clause and acts as a JS-level safety net / unit-testable
- * statement of intent.
+ * This mirrors the SQL WHERE clause and acts as a JS-level safety net /
+ * unit-testable statement of intent.
  */
 export function isCalendarEligibleRow(
   row: Pick<ActivityQueryRow, "kind" | "actRecordId">,
@@ -106,7 +106,8 @@ export function mapActivityRow(row: ActivityQueryRow): ActCalendarActivity {
   };
 }
 
-type DrizzleDatabase = Awaited<ReturnType<typeof import("@/db/client").then>>["db"];
+/** Minimal structural type accepted by getActCalendarActivities for test injection. */
+export type ActivityDb = { select: (...args: unknown[]) => unknown };
 
 /**
  * Query Act! activities that belong on the calendar.
@@ -118,10 +119,10 @@ type DrizzleDatabase = Awaited<ReturnType<typeof import("@/db/client").then>>["d
  * Notes and history text entries are intentionally excluded — they have dates but are
  * not scheduled events.
  *
- * @param db - optional injected database (defaults to production client, used in tests)
+ * @param db - optional injected database (defaults to production client; used in tests)
  */
 export async function getActCalendarActivities(
-  db?: DrizzleDatabase,
+  db?: ActivityDb,
 ): Promise<ActCalendarActivity[]> {
   const [resolvedDb, schema, orm] = await Promise.all([
     db ? Promise.resolve(db) : import("@/db/client").then((m) => m.db),
@@ -132,6 +133,7 @@ export async function getActCalendarActivities(
   const { activities, contacts, organizations } = schema;
   const { eq, or, and, like } = orm;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: ActivityQueryRow[] = await (resolvedDb as any)
     .select({
       id: activities.id,
@@ -162,7 +164,7 @@ export async function getActCalendarActivities(
     );
 
   // JS-level guard mirrors the SQL WHERE — provides defence-in-depth and
-  // makes the intent unit-testable.
+  // makes the intent unit-testable independent of the DB.
   return rows.filter(isCalendarEligibleRow).map(mapActivityRow);
 }
 
