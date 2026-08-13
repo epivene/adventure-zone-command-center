@@ -60,7 +60,7 @@ function testApp() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as typeof req & { log: { error: ReturnType<typeof vi.fn> } }).log = {
+    (req as unknown as { log: { error: (...args: unknown[]) => void } }).log = {
       error: vi.fn(),
     };
     next();
