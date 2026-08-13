@@ -106,6 +106,21 @@ function canResolveAutomaticReview(
   );
 }
 
+function needsReviewPlanRefresh(
+  phase: ActReplacementWorkflowStatus["phase"],
+) {
+  return phase === "complete" || phase === "complete_with_issues";
+}
+
+function isRefreshedReviewPhase(
+  phase: ActReplacementWorkflowStatus["phase"],
+) {
+  return phase === "ready_to_apply" || phase === "complete_with_issues";
+}
+
+const waitForReviewPlanPoll = () =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, 3_000));
+
 function activeStage(
   run: ActReplacementWorkflowStatus | null,
   applying: boolean,
@@ -768,10 +783,41 @@ export default function ActMigrationPage() {
       return;
     }
     const runId = run.runId;
-    const expectedManifestDigest = run.manifestDigest;
     const requestKey = crypto.randomUUID();
     setError(null);
     try {
+      let reviewRun = run;
+      if (needsReviewPlanRefresh(run.phase)) {
+        await organizeRun(runId);
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          reviewRun = await refreshRun(runId);
+          if (isRefreshedReviewPhase(reviewRun.phase)) break;
+          if (
+            reviewRun.phase === "failed" ||
+            reviewRun.phase === "superseded"
+          ) {
+            throw Object.assign(new Error("review_plan_refresh_failed"), {
+              code: "review_plan_refresh_failed",
+            });
+          }
+          if (attempt === 199) {
+            throw Object.assign(new Error("review_plan_refresh_timeout"), {
+              code: "review_plan_refresh_timeout",
+            });
+          }
+          await waitForReviewPlanPoll();
+        }
+      }
+      if (
+        !reviewRun.manifestDigest ||
+        !isRefreshedReviewPhase(reviewRun.phase) ||
+        !reviewRun.canReview
+      ) {
+        throw Object.assign(new Error("review_plan_not_ready"), {
+          code: "review_plan_not_ready",
+        });
+      }
+      const expectedManifestDigest = reviewRun.manifestDigest;
       const request = () =>
         resolveAutomaticReview(runId, {
           expectedManifestDigest,
