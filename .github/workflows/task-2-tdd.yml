@@ -5,7 +5,6 @@ on:
       - agent/assisted-calling-workspace
 jobs:
   tdd:
-    if: github.event.head_commit.message != 'chore: add task 2 TDD workflow'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
