@@ -121,7 +121,7 @@ export function EventProfileWorkspace({
         profile={profile}
       />
 
-      <LocationsSection locations={profile.locations} rollups={profile.rollups} />
+      <LocationsSection locations={profile.locations ?? []} rollups={profile.rollups} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)]">
         <div className="grid gap-5">

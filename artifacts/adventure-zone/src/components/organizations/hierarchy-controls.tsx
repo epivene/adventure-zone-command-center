@@ -89,8 +89,9 @@ export function HierarchyControls({
     [organizations, profile.id],
   );
 
-  const selectableLocations = profile.locations.length
-    ? profile.locations.map(({ id, name }) => ({ id, name }))
+  const locations = profile.locations ?? [];
+  const selectableLocations = locations.length
+    ? locations.map(({ id, name }) => ({ id, name }))
     : [{ id: profile.id, name: profile.place.name }];
 
   async function finish(result: { ok: boolean; error?: string }) {
@@ -165,7 +166,7 @@ export function HierarchyControls({
         </p>
       ) : null}
 
-      {profile.locations.length === 0 ? (
+      {locations.length === 0 ? (
         <form className="mt-5 grid gap-3" onSubmit={submitExistingParent}>
           <label className="grid gap-1 text-sm font-semibold">
             Existing parent
