@@ -176,8 +176,15 @@ export function HistorySuggestions() {
       });
 
       if (!resp.ok || !resp.body) {
-        const text = await resp.text().catch(() => "");
-        setState({ phase: "error", message: text || `HTTP ${resp.status}` });
+        // Try to parse a JSON { error } body (e.g. 503 when no AI key is set);
+        // fall back to raw text so the message is always readable.
+        const raw = await resp.text().catch(() => "");
+        let message = raw || `HTTP ${resp.status}`;
+        try {
+          const parsed = JSON.parse(raw) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch { /* not JSON */ }
+        setState({ phase: "error", message });
         return;
       }
 
