@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const contactId = "11111111-1111-4111-8111-111111111111";
 const phoneRepository = vi.hoisted(() => {
+  const fixtureContactId = "11111111-1111-4111-8111-111111111111";
   let phones = [{
     id: "phone-1",
-    contactId,
+    contactId: fixtureContactId,
     number: "701-555-0199",
     type: "mobile" as const,
     extension: null,
@@ -21,13 +22,13 @@ const phoneRepository = vi.hoisted(() => {
   return {
     listForContact: vi.fn(async () => phones.map((phone) => ({ ...phone }))),
     replaceForContact: vi.fn(async (_contactId: string, next: typeof phones) => {
-      phones = next.map((phone) => ({ ...phone, id: phone.id ?? "phone-2", contactId }));
+      phones = next.map((phone) => ({ ...phone, id: phone.id ?? "phone-2", contactId: fixtureContactId }));
       return phones.map((phone) => ({ ...phone }));
     }),
     reset() {
       phones = [{
         id: "phone-1",
-        contactId,
+        contactId: fixtureContactId,
         number: "701-555-0199",
         type: "mobile",
         extension: null,
