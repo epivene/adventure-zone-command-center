@@ -89,4 +89,5 @@ export type ContactDetail = {
   };
   places: PersonPlace[];
   relatedBookings: ContactRelatedBooking[];
+  phones: ContactPhoneRecord[];
 };
