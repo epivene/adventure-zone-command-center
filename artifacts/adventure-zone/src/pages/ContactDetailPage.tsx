@@ -73,7 +73,18 @@ export default function ContactDetailPage() {
           <DetailList
             items={[
               { label: "Email", value: contact.email ? <a className="link" href={`mailto:${contact.email}`}>{contact.email}</a> : null },
-              { label: "Phone", value: phones.length ? (\n                <ul className="grid gap-2">\n                  {phones.map((phone: any) => (\n                    <li key={phone.id} className="flex flex-wrap items-center gap-2">\n                      <a className="link" href={`tel:${phone.number}`}>{phone.number}</a>\n                      <span className="text-sm text-slate-500">{phone.label ?? phone.type}{phone.extension ? ` ext. ${phone.extension}` : ""}</span>\n                      {phone.primary ? <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">Primary</span> : null}\n                      {phone.doNotCallAt ? <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">Do Not Call</span> : null}\n                    </li>\n                  ))}\n                </ul>\n              ) : (contact.phone ? <a className="link" href={`tel:${contact.phone}`}>{contact.phone}</a> : null) },
+              { label: "Phone", value: phones.length ? (
+                <ul className="grid gap-2">
+                  {phones.map((phone: any) => (
+                    <li key={phone.id} className="flex flex-wrap items-center gap-2">
+                      <a className="link" href={`tel:${phone.number}`}>{phone.number}</a>
+                      <span className="text-sm text-slate-500">{phone.label ?? phone.type}{phone.extension ? ` ext. ${phone.extension}` : ""}</span>
+                      {phone.primary ? <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">Primary</span> : null}
+                      {phone.doNotCallAt ? <span className="rounded bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">Do Not Call</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (contact.phone ? <a className="link" href={`tel:${contact.phone}`}>{contact.phone}</a> : null) },
               { label: "Location", value: [contact.city, contact.region].filter(Boolean).join(", ") },
             ]}
           />
