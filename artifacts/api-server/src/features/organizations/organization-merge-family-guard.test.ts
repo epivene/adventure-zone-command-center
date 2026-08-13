@@ -324,10 +324,7 @@ describe("organization merge family guard", () => {
 
     // Proposal wins the candidate locks: it commits first, so the waiting merge
     // observes the proposal and is rejected.
-    const proposalWinner = new GuardTransaction([
-      row(PRIMARY_ID),
-      row(DUPLICATE_ID),
-    ]);
+    const proposalWinner = new GuardTransaction(currentFamilyRows());
     await persistProposedOrganizationFamilies(
       {
         transaction: async (work: (tx: GuardTransaction) => Promise<void>) =>
@@ -345,7 +342,7 @@ describe("organization merge family guard", () => {
     ]);
 
     const mergeAfterProposal = new GuardTransaction(
-      [row(PRIMARY_ID), row(DUPLICATE_ID)],
+      currentFamilyRows(),
       [],
       [{ groupKey: proposal.groupKey, candidateIds: proposal.candidateIds }],
     );
