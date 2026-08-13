@@ -127,7 +127,10 @@ class SelectBuilder implements PromiseLike<unknown[]> {
     );
 
     if (this.table === organizations) {
-      return this.database.organizations.filter((row) => ids.includes(row.id));
+      const matches = this.database.organizations.filter((row) => ids.includes(row.id));
+      return "placeType" in this.selection
+        ? matches
+        : matches.map(({ id, name, website }) => ({ id, name, website }));
     }
     if (this.table === organizationContacts) {
       return this.database.contacts.filter((row) => ids.includes(row.organizationId));
