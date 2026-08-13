@@ -21,9 +21,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=15000
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/organizations/organization-search-hierarchy.test.ts src/components/organizations/organization-list-hierarchy.test.tsx src/features/organizations/website-url.test.ts src/features/event-profiles/event-profile-hierarchy.test.ts src/components/event-profiles/event-profile-hierarchy.test.tsx src/components/organizations/hierarchy-controls.test.tsx
       - run: pnpm --filter @workspace/db build
       - run: pnpm --filter @workspace/api-server typecheck
-      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/organizations/organization-search-hierarchy.test.ts src/components/organizations/organization-list-hierarchy.test.tsx src/features/organizations/website-url.test.ts src/features/event-profiles/event-profile-hierarchy.test.ts src/components/event-profiles/event-profile-hierarchy.test.tsx src/components/organizations/hierarchy-controls.test.tsx
       - run: pnpm --filter @workspace/adventure-zone typecheck
       - run: pnpm run typecheck
       - run: pnpm run build
