@@ -1,6 +1,6 @@
 import express from "express";
 import request from "supertest";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const find = vi.hoisted(() => vi.fn());
 
@@ -38,9 +38,14 @@ vi.mock("@/features/contact-phones/contact-phone-repository", () => ({
 
 import callsRouter from "./calls";
 
-describe("caller finder route", () => {
+function callsApp() {
   const app = express();
   app.use(callsRouter);
+  return app;
+}
+
+describe("caller finder route", () => {
+  const app = callsApp();
 
   beforeEach(() => find.mockReset());
 
@@ -88,5 +93,42 @@ describe("caller finder route", () => {
       .expect(400);
 
     expect(find).not.toHaveBeenCalled();
+  });
+});
+
+describe("assisted calling configuration route", () => {
+  const app = callsApp();
+  const originalEnabled = process.env.ASSISTED_CALLING_ENABLED;
+  const originalLauncher = process.env.VOICEMAIL_LAUNCH_URL;
+
+  afterEach(() => {
+    if (originalEnabled === undefined) delete process.env.ASSISTED_CALLING_ENABLED;
+    else process.env.ASSISTED_CALLING_ENABLED = originalEnabled;
+    if (originalLauncher === undefined) delete process.env.VOICEMAIL_LAUNCH_URL;
+    else process.env.VOICEMAIL_LAUNCH_URL = originalLauncher;
+  });
+
+  it("returns only the enabled flag and configured voicemail launch target", async () => {
+    process.env.ASSISTED_CALLING_ENABLED = "true";
+    process.env.VOICEMAIL_LAUNCH_URL = "https://launcher.example.test/voicemail";
+
+    const response = await request(app).get("/calls/config").expect(200);
+
+    expect(response.body).toEqual({
+      assistedCallingEnabled: true,
+      voicemailLauncherUrl: "https://launcher.example.test/voicemail",
+    });
+  });
+
+  it("uses safe disabled defaults without implying voicemail delivery", async () => {
+    delete process.env.ASSISTED_CALLING_ENABLED;
+    delete process.env.VOICEMAIL_LAUNCH_URL;
+
+    const response = await request(app).get("/calls/config").expect(200);
+
+    expect(response.body).toEqual({
+      assistedCallingEnabled: false,
+      voicemailLauncherUrl: null,
+    });
   });
 });
