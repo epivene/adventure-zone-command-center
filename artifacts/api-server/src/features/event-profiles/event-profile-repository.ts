@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -16,6 +16,7 @@ import {
 import {
   activeOrganizationContactCondition,
   loadOrganizationHierarchySummary,
+  organizationOwnedRecordCondition,
   type OrganizationHierarchyRollups,
   type OrganizationHierarchySummary,
   type OrganizationLocationSummary,
@@ -311,16 +312,34 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
     const contactIds = profileContacts.map((contact) => contact.id);
-    const profileCondition = or(
+    const profileCondition = organizationOwnedRecordCondition(
+      {
+        organizationId: activities.organizationId,
+        bookingId: activities.bookingId,
+        contactId: activities.contactId,
+      },
       eq(activities.organizationId, profileId),
-      ...(bookingIds.length ? [inArray(activities.bookingId, bookingIds)] : []),
-      ...(contactIds.length ? [inArray(activities.contactId, contactIds)] : []),
-    )!;
-    const followUpCondition = or(
+      bookingIds.length
+        ? inArray(activities.bookingId, bookingIds)
+        : sql`false`,
+      contactIds.length
+        ? inArray(activities.contactId, contactIds)
+        : sql`false`,
+    );
+    const followUpCondition = organizationOwnedRecordCondition(
+      {
+        organizationId: followUps.organizationId,
+        bookingId: followUps.bookingId,
+        contactId: followUps.contactId,
+      },
       eq(followUps.organizationId, profileId),
-      ...(bookingIds.length ? [inArray(followUps.bookingId, bookingIds)] : []),
-      ...(contactIds.length ? [inArray(followUps.contactId, contactIds)] : []),
-    )!;
+      bookingIds.length
+        ? inArray(followUps.bookingId, bookingIds)
+        : sql`false`,
+      contactIds.length
+        ? inArray(followUps.contactId, contactIds)
+        : sql`false`,
+    );
     const [profileActivities, profileFollowUps, groupMemberships, migrationAudits] = await Promise.all([
       this.database.select({
         id: activities.id,

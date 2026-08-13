@@ -7,6 +7,7 @@ import {
   ilike,
   inArray,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 
@@ -21,6 +22,8 @@ import {
   travelLegs,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { bookingStatusValues } from "@/features/bookings/booking-types";
+import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
 import type { SetLastResortInput } from "@/features/organizations/last-resort-input";
 
 export type OrganizationPerson = {
@@ -277,6 +280,231 @@ export function assembleOrganizationHierarchy(
   };
 }
 
+
+const activeBookingStatuses = bookingStatusValues.filter(isActiveStatus);
+
+function activeBookingStatusCondition(status: SQLWrapper): SQL {
+  return sql`${status} in (${sql.join(
+    activeBookingStatuses.map((value) => sql`${value}`),
+    sql`, `,
+  )})`;
+}
+
+export function organizationOwnedRecordCondition(
+  columns: {
+    organizationId: SQLWrapper;
+    bookingId: SQLWrapper;
+    contactId: SQLWrapper;
+  },
+  matchesExplicitOrganization: SQL,
+  matchesBookingOrganization: SQL,
+  matchesContactAssociation: SQL,
+): SQL {
+  return sql`(
+    (${columns.organizationId} is not null and ${matchesExplicitOrganization})
+    or (
+      ${columns.organizationId} is null
+      and ${columns.bookingId} is not null
+      and ${matchesBookingOrganization}
+    )
+    or (
+      ${columns.organizationId} is null
+      and ${columns.bookingId} is null
+      and ${columns.contactId} is not null
+      and ${matchesContactAssociation}
+    )
+  )`;
+}
+
+export function organizationHierarchyLocationQuery(parentId: string): SQL {
+  return sql`
+    SELECT
+      child.id,
+      child.name,
+      child.address_1 AS "address1",
+      child.address_2 AS "address2",
+      child.city,
+      child.region,
+      child.postal_code AS "postalCode",
+      child.website,
+      next_booking.status::text AS "localStatus",
+      next_follow_up.id AS "nextFollowUpId",
+      next_follow_up.kind AS "nextFollowUpKind",
+      next_follow_up.due_at AS "nextFollowUpDueAt",
+      next_booking.id AS "nextBookingId",
+      next_booking.name AS "nextBookingName",
+      next_booking.starts_at AS "nextBookingStartsAt",
+      next_booking.status::text AS "nextBookingStatus",
+      next_leg.id AS "travelLegId",
+      next_leg.name AS "travelLegName",
+      next_leg.color AS "travelLegColor",
+      primary_contact.first_name AS "primaryContactFirstName",
+      primary_contact.last_name AS "primaryContactLastName"
+    FROM ${organizations} AS child
+    LEFT JOIN LATERAL (
+      SELECT
+        candidate.id,
+        candidate.kind,
+        candidate.due_at
+      FROM ${followUps} AS candidate
+      WHERE candidate.completed_at IS NULL
+        AND ${organizationOwnedRecordCondition(
+          {
+            organizationId: sql`candidate.organization_id`,
+            bookingId: sql`candidate.booking_id`,
+            contactId: sql`candidate.contact_id`,
+          },
+          sql`candidate.organization_id = child.id`,
+          sql`EXISTS (
+            SELECT 1
+            FROM ${bookings} AS related_booking
+            WHERE related_booking.organization_id = child.id
+              AND related_booking.id = candidate.booking_id
+          )`,
+          sql`EXISTS (
+            SELECT 1
+            FROM ${organizationContacts} AS association
+            WHERE association.organization_id = child.id
+              AND association.active
+              AND association.contact_id = candidate.contact_id
+          )`,
+        )}
+      ORDER BY candidate.due_at, candidate.id
+      LIMIT 1
+    ) AS next_follow_up ON true
+    LEFT JOIN LATERAL (
+      SELECT
+        candidate.id,
+        candidate.name,
+        candidate.starts_at,
+        candidate.status,
+        candidate.travel_leg_id
+      FROM ${bookings} AS candidate
+      WHERE candidate.organization_id = child.id
+        AND candidate.starts_at >= now()
+        AND ${activeBookingStatusCondition(sql`candidate.status`)}
+      ORDER BY candidate.starts_at, candidate.id
+      LIMIT 1
+    ) AS next_booking ON true
+    LEFT JOIN ${travelLegs} AS next_leg
+      ON next_leg.id = next_booking.travel_leg_id
+    LEFT JOIN LATERAL (
+      SELECT person.first_name, person.last_name
+      FROM ${organizationContacts} AS association
+      INNER JOIN ${contacts} AS person ON person.id = association.contact_id
+      WHERE association.organization_id = child.id
+        AND association.active
+        AND association.is_primary
+      ORDER BY association.updated_at DESC, association.id
+      LIMIT 1
+    ) AS primary_contact ON true
+    WHERE child.parent_organization_id = ${parentId}
+    ORDER BY child.name, child.id
+  `;
+}
+
+export function organizationHierarchyRollupQuery(parentId: string): SQL {
+  return sql`
+    SELECT
+      count(*)::int AS "locationCount",
+      (
+        SELECT count(*)::int
+        FROM ${bookings} AS candidate
+        INNER JOIN ${organizations} AS booking_location
+          ON booking_location.id = candidate.organization_id
+        WHERE booking_location.parent_organization_id = ${parentId}
+          AND candidate.starts_at >= now()
+          AND ${activeBookingStatusCondition(sql`candidate.status`)}
+      ) AS "upcomingBookingCount",
+      (
+        SELECT count(*)::int
+        FROM ${followUps} AS candidate
+        WHERE candidate.completed_at IS NULL
+          AND candidate.due_at < now()
+          AND ${organizationOwnedRecordCondition(
+            {
+              organizationId: sql`candidate.organization_id`,
+              bookingId: sql`candidate.booking_id`,
+              contactId: sql`candidate.contact_id`,
+            },
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizations} AS direct_location
+              WHERE direct_location.parent_organization_id = ${parentId}
+                AND direct_location.id = candidate.organization_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${bookings} AS related_booking
+              INNER JOIN ${organizations} AS booking_location
+                ON booking_location.id = related_booking.organization_id
+              WHERE booking_location.parent_organization_id = ${parentId}
+                AND related_booking.id = candidate.booking_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizationContacts} AS association
+              INNER JOIN ${organizations} AS contact_location
+                ON contact_location.id = association.organization_id
+              WHERE contact_location.parent_organization_id = ${parentId}
+                AND association.active
+                AND association.contact_id = candidate.contact_id
+            )`,
+          )}
+      ) AS "overdueFollowUpCount",
+      (
+        SELECT max(candidate.timeline_sort_at)
+        FROM ${activities} AS candidate
+        WHERE candidate.kind = 'call'
+          AND ${organizationOwnedRecordCondition(
+            {
+              organizationId: sql`candidate.organization_id`,
+              bookingId: sql`candidate.booking_id`,
+              contactId: sql`candidate.contact_id`,
+            },
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizations} AS direct_location
+              WHERE direct_location.parent_organization_id = ${parentId}
+                AND direct_location.id = candidate.organization_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${bookings} AS related_booking
+              INNER JOIN ${organizations} AS booking_location
+                ON booking_location.id = related_booking.organization_id
+              WHERE booking_location.parent_organization_id = ${parentId}
+                AND related_booking.id = candidate.booking_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizationContacts} AS association
+              INNER JOIN ${organizations} AS contact_location
+                ON contact_location.id = association.organization_id
+              WHERE contact_location.parent_organization_id = ${parentId}
+                AND association.active
+                AND association.contact_id = candidate.contact_id
+            )`,
+          )}
+      ) AS "mostRecentContactAt"
+    FROM ${organizations} AS child
+    WHERE child.parent_organization_id = ${parentId}
+  `;
+}
+
+export function organizationHierarchyTravelLegQuery(parentId: string): SQL {
+  return sql`
+    SELECT DISTINCT leg.id, leg.name, leg.color
+    FROM ${organizations} AS child
+    INNER JOIN ${bookings} AS child_booking
+      ON child_booking.organization_id = child.id
+    INNER JOIN ${travelLegs} AS leg
+      ON leg.id = child_booking.travel_leg_id
+    WHERE child.parent_organization_id = ${parentId}
+    ORDER BY leg.name, leg.id
+  `;
+}
+
 export async function loadOrganizationHierarchySummary(
   database: DrizzleDatabase,
   organization: { id: string; parentOrganizationId: string | null },
@@ -296,169 +524,15 @@ export async function loadOrganizationHierarchySummary(
   }
 
   const [locationResult, rollupResult, travelLegResult] = await Promise.all([
-    database.execute<OrganizationLocationAggregateRecord>(sql`
-      SELECT
-        child.id,
-        child.name,
-        child.address_1 AS "address1",
-        child.address_2 AS "address2",
-        child.city,
-        child.region,
-        child.postal_code AS "postalCode",
-        child.website,
-        next_booking.status::text AS "localStatus",
-        next_follow_up.id AS "nextFollowUpId",
-        next_follow_up.kind AS "nextFollowUpKind",
-        next_follow_up.due_at AS "nextFollowUpDueAt",
-        next_booking.id AS "nextBookingId",
-        next_booking.name AS "nextBookingName",
-        next_booking.starts_at AS "nextBookingStartsAt",
-        next_booking.status::text AS "nextBookingStatus",
-        next_leg.id AS "travelLegId",
-        next_leg.name AS "travelLegName",
-        next_leg.color AS "travelLegColor",
-        primary_contact.first_name AS "primaryContactFirstName",
-        primary_contact.last_name AS "primaryContactLastName"
-      FROM ${organizations} AS child
-      LEFT JOIN LATERAL (
-        SELECT
-          candidate.id,
-          candidate.kind,
-          candidate.due_at
-        FROM ${followUps} AS candidate
-        WHERE candidate.completed_at IS NULL
-          AND (
-            candidate.organization_id = child.id
-            OR EXISTS (
-              SELECT 1
-              FROM ${organizationContacts} AS association
-              WHERE association.organization_id = child.id
-                AND association.active
-                AND association.contact_id = candidate.contact_id
-            )
-            OR EXISTS (
-              SELECT 1
-              FROM ${bookings} AS related_booking
-              WHERE related_booking.organization_id = child.id
-                AND related_booking.id = candidate.booking_id
-            )
-          )
-        ORDER BY candidate.due_at, candidate.id
-        LIMIT 1
-      ) AS next_follow_up ON true
-      LEFT JOIN LATERAL (
-        SELECT
-          candidate.id,
-          candidate.name,
-          candidate.starts_at,
-          candidate.status,
-          candidate.travel_leg_id
-        FROM ${bookings} AS candidate
-        WHERE candidate.organization_id = child.id
-          AND candidate.starts_at >= now()
-        ORDER BY candidate.starts_at, candidate.id
-        LIMIT 1
-      ) AS next_booking ON true
-      LEFT JOIN ${travelLegs} AS next_leg
-        ON next_leg.id = next_booking.travel_leg_id
-      LEFT JOIN LATERAL (
-        SELECT person.first_name, person.last_name
-        FROM ${organizationContacts} AS association
-        INNER JOIN ${contacts} AS person ON person.id = association.contact_id
-        WHERE association.organization_id = child.id
-          AND association.active
-          AND association.is_primary
-        ORDER BY association.updated_at DESC, association.id
-        LIMIT 1
-      ) AS primary_contact ON true
-      WHERE child.parent_organization_id = ${organization.id}
-      ORDER BY child.name, child.id
-    `),
-    database.execute<Omit<OrganizationHierarchyRollups, "travelLegs">>(sql`
-      SELECT
-        count(*)::int AS "locationCount",
-        (
-          SELECT count(*)::int
-          FROM ${bookings} AS candidate
-          INNER JOIN ${organizations} AS booking_location
-            ON booking_location.id = candidate.organization_id
-          WHERE booking_location.parent_organization_id = ${organization.id}
-            AND candidate.starts_at >= now()
-        ) AS "upcomingBookingCount",
-        (
-          SELECT count(*)::int
-          FROM ${followUps} AS candidate
-          WHERE candidate.completed_at IS NULL
-            AND candidate.due_at < now()
-            AND (
-              EXISTS (
-                SELECT 1
-                FROM ${organizations} AS direct_location
-                WHERE direct_location.parent_organization_id = ${organization.id}
-                  AND direct_location.id = candidate.organization_id
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM ${organizationContacts} AS association
-                INNER JOIN ${organizations} AS contact_location
-                  ON contact_location.id = association.organization_id
-                WHERE contact_location.parent_organization_id = ${organization.id}
-                  AND association.active
-                  AND association.contact_id = candidate.contact_id
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM ${bookings} AS related_booking
-                INNER JOIN ${organizations} AS booking_location
-                  ON booking_location.id = related_booking.organization_id
-                WHERE booking_location.parent_organization_id = ${organization.id}
-                  AND related_booking.id = candidate.booking_id
-              )
-            )
-        ) AS "overdueFollowUpCount",
-        (
-          SELECT max(candidate.timeline_sort_at)
-          FROM ${activities} AS candidate
-          WHERE candidate.kind = 'call'
-            AND (
-              EXISTS (
-                SELECT 1
-                FROM ${organizations} AS direct_location
-                WHERE direct_location.parent_organization_id = ${organization.id}
-                  AND direct_location.id = candidate.organization_id
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM ${organizationContacts} AS association
-                INNER JOIN ${organizations} AS contact_location
-                  ON contact_location.id = association.organization_id
-                WHERE contact_location.parent_organization_id = ${organization.id}
-                  AND association.active
-                  AND association.contact_id = candidate.contact_id
-              )
-              OR EXISTS (
-                SELECT 1
-                FROM ${bookings} AS related_booking
-                INNER JOIN ${organizations} AS booking_location
-                  ON booking_location.id = related_booking.organization_id
-                WHERE booking_location.parent_organization_id = ${organization.id}
-                  AND related_booking.id = candidate.booking_id
-              )
-            )
-        ) AS "mostRecentContactAt"
-      FROM ${organizations} AS child
-      WHERE child.parent_organization_id = ${organization.id}
-    `),
-    database.execute<OrganizationHierarchyRollups["travelLegs"][number]>(sql`
-      SELECT DISTINCT leg.id, leg.name, leg.color
-      FROM ${organizations} AS child
-      INNER JOIN ${bookings} AS child_booking
-        ON child_booking.organization_id = child.id
-      INNER JOIN ${travelLegs} AS leg
-        ON leg.id = child_booking.travel_leg_id
-      WHERE child.parent_organization_id = ${organization.id}
-      ORDER BY leg.name, leg.id
-    `),
+    database.execute<OrganizationLocationAggregateRecord>(
+      organizationHierarchyLocationQuery(organization.id),
+    ),
+    database.execute<Omit<OrganizationHierarchyRollups, "travelLegs">>(
+      organizationHierarchyRollupQuery(organization.id),
+    ),
+    database.execute<OrganizationHierarchyRollups["travelLegs"][number]>(
+      organizationHierarchyTravelLegQuery(organization.id),
+    ),
   ]);
 
   return assembleOrganizationHierarchy(
