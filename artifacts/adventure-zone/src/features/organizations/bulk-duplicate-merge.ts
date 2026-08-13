@@ -1,5 +1,6 @@
 export type BulkMergeGroup = {
   normalizedName: string;
+  classification: "duplicate" | "location_candidate";
   organizations: Array<{ id: string }>;
 };
 
@@ -41,10 +42,13 @@ export async function mergeDuplicateGroups(
   merge: (request: MergeRequest) => Promise<void>,
   onProgress: (progress: BulkMergeProgress) => void,
 ): Promise<void> {
-  const total = groups.length;
+  const eligibleGroups = groups.filter(
+    (group) => group.classification === "duplicate",
+  );
+  const total = eligibleGroups.length;
 
-  for (let index = 0; index < groups.length; index += 1) {
-    const group = groups[index];
+  for (let index = 0; index < eligibleGroups.length; index += 1) {
+    const group = eligibleGroups[index];
     const primaryId = primaryIds[group.normalizedName];
 
     try {
