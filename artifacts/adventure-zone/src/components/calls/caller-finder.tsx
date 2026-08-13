@@ -118,7 +118,10 @@ export function CallerFinder({
         Find caller
         <input
           autoComplete="off"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            setResult(null);
+            setQuery(event.target.value);
+          }}
           placeholder="Phone, person, event, location, or note"
           type="search"
           value={query}
