@@ -18,7 +18,7 @@ export const nullableContactEmailSchema = z
   .transform((value) => value || null);
 
 export const contactPhoneInputSchema = z.object({
-  id: z.uuid().nullable(),
+  id: z.string().uuid().nullable(),
   number: z.string().trim().min(1),
   type: z.enum(["mobile", "office", "alternate", "unknown"]),
   extension: z.string().trim().max(20).transform(value => value || null),
