@@ -210,7 +210,7 @@ const automaticReviewReasonCodes = new Set([
 ]);
 
 function automaticReviewRecords(manifest: ActOrganizeManifest): AutomaticReviewRecord[] {
-  return manifest.outcomes.map((outcome) => {
+  return manifest.outcomes.flatMap((outcome) => {
     const issues = stableRelationshipIssues(outcome.sourceRecordId, outcome.sourceVersionId, outcome.issues)
       .filter((issue) => automaticReviewReasonCodes.has(issue.code))
       .map((issue) => ({
@@ -220,7 +220,8 @@ function automaticReviewRecords(manifest: ActOrganizeManifest): AutomaticReviewR
         ...(Array.isArray(issue.expectedParentTypes) ? { expectedParentTypes: [...issue.expectedParentTypes] } : {}),
         ...(issue.canImportStandalone === true ? { canImportStandalone: true } : {}),
       }));
-    return {
+    if (!issues.length) return [];
+    return [{
       sourceRecordId: outcome.sourceRecordId,
       sourceVersionId: outcome.sourceVersionId,
       issues,
@@ -230,8 +231,28 @@ function automaticReviewRecords(manifest: ActOrganizeManifest): AutomaticReviewR
       unsupportedFieldPaths: [...outcome.unsupportedFieldPaths],
       match: outcome.match as AutomaticReviewRecord["match"],
       unsupportedRecord: issues.some((issue) => issue.code === "unsupported_record"),
-    };
+    }];
   });
+}
+
+function automaticContextSourceIds(records: readonly AutomaticReviewRecord[]): string[] {
+  const ids = new Set<string>();
+  for (const record of records) {
+    const issues = record.issues ?? [];
+    const needsContext = issues.some((issue) =>
+      issue.code === "ambiguous_match"
+      || issue.code === "unassigned"
+      || issue.code === "field_conflict"
+      || issue.code === "relationship_unresolved");
+    if (needsContext) ids.add(record.sourceRecordId);
+    for (const issue of issues) {
+      const match = /^source:(?:organization|contact|booking|calling_list|activity):(.+)$/.exec(
+        issue.relationshipSlot?.trim() ?? "",
+      );
+      if (match?.[1]) ids.add(match[1]);
+    }
+  }
+  return [...ids].sort();
 }
 
 function automaticReviewDecisionCompare(left: AutomaticReviewDecisionInput, right: AutomaticReviewDecisionInput): number {
@@ -352,21 +373,41 @@ export function verifyProtectedManifestDigest(input: {
   protectedManifest: ActOrganizeManifest;
   protectedLegacyManifest?: ActOrganizeManifest;
 }): string {
-  if (input.durableManifest.digest !== input.protectedManifest.digest) manifestDigestMismatch();
+  const protectedLegacyDigest = input.protectedLegacyManifest
+    ? digestLegacyManifestRows(
+        input.protectedLegacyManifest.operations,
+        input.protectedLegacyManifest.outcomes,
+      )
+    : undefined;
+  if (protectedLegacyDigest && protectedLegacyDigest !== input.protectedLegacyManifest?.digest)
+    manifestDigestMismatch();
+  return verifyProtectedManifestDigests({
+    storedDigest: input.storedDigest,
+    digestVersion: input.digestVersion,
+    durableDigest: input.durableManifest.digest,
+    protectedDigest: input.protectedManifest.digest,
+    protectedLegacyDigest,
+  });
+}
+
+export function verifyProtectedManifestDigests(input: {
+  storedDigest: string;
+  digestVersion: string | null | undefined;
+  durableDigest: string;
+  protectedDigest: string;
+  protectedLegacyDigest?: string;
+}): string {
+  if (input.durableDigest !== input.protectedDigest) manifestDigestMismatch();
   if (input.digestVersion === null) {
-    const protectedLegacyManifest = input.protectedLegacyManifest ?? manifestDigestMismatch();
-    const protectedLegacyDigest = digestLegacyManifestRows(
-      protectedLegacyManifest.operations,
-      protectedLegacyManifest.outcomes,
-    );
-    if (protectedLegacyDigest !== protectedLegacyManifest.digest || protectedLegacyDigest !== input.storedDigest)
+    const protectedLegacyDigest = input.protectedLegacyDigest ?? manifestDigestMismatch();
+    if (protectedLegacyDigest !== input.storedDigest)
       manifestDigestMismatch();
   } else if (input.digestVersion === undefined || input.digestVersion === canonicalManifestDigestVersion) {
-    if (input.protectedManifest.digest !== input.storedDigest) manifestDigestMismatch();
+    if (input.protectedDigest !== input.storedDigest) manifestDigestMismatch();
   } else {
     manifestDigestMismatch();
   }
-  return input.protectedManifest.digest;
+  return input.protectedDigest;
 }
 
 export function approvalClosureFromDurableRow(
@@ -938,26 +979,27 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
       .innerJoin(actSourceRecordVersions, and(eq(actSourceRecordVersions.id, actReplacementObservations.versionId), eq(actSourceRecordVersions.sourceRecordId, actSourceRecords.id)))
       .where(and(eq(actReplacementObservations.runId, runId), eq(actReplacementObservations.sourceDatabaseKey, this.scope.sourceDatabaseKey)));
     const sourceIds = rows.map((row) => row.sourceRecordId);
-    const [assignments, decisions, localOrganizations, localContacts, localBookings, localOrganizationContacts, localBookingContacts, externalLinks] = await Promise.all([
-      sourceIds.length
+    const assignments = sourceIds.length
       ? await this.database
           .select()
           .from(actSourceAssignments)
           .where(and(inArray(actSourceAssignments.sourceRecordId, sourceIds), isNull(actSourceAssignments.supersededAt)))
-      : [],
-      sourceIds.length
+      : [];
+    const decisions = sourceIds.length
       ? await this.database
           .select()
           .from(actReplacementReviewDecisions)
           .where(and(inArray(actReplacementReviewDecisions.sourceRecordId, sourceIds), eq(actReplacementReviewDecisions.active, true)))
-      : [],
-      this.database.select({ id: organizations.id, name: organizations.name, phone: organizations.phone, website: organizations.website, industry: organizations.actIndustry, address1: organizations.address1, address2: organizations.address2, city: organizations.city, region: organizations.region, postalCode: organizations.postalCode }).from(organizations),
-      this.database.select({ id: contacts.id, organizationId: contacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, jobTitle: contacts.jobTitle, address1: contacts.address1, address2: contacts.address2, city: contacts.city, region: contacts.region, postalCode: contacts.postalCode }).from(contacts),
-      this.database.select({ id: bookings.id, name: bookings.name, organizationId: bookings.organizationId, venueName: bookings.venueName, address1: bookings.address1, city: bookings.city, region: bookings.region, postalCode: bookings.postalCode, startsAt: bookings.startsAt, endsAt: bookings.endsAt, localStatus: bookings.status, localProbability: bookings.probability, notes: bookings.notes }).from(bookings),
-      this.database.select({ organizationId: organizationContacts.organizationId, contactId: organizationContacts.contactId }).from(organizationContacts).where(eq(organizationContacts.active, true)),
-      this.database.select({ bookingId: bookingContacts.bookingId, contactId: bookingContacts.contactId }).from(bookingContacts),
-      this.database.select({ localId: actExternalLinks.entityId, entityType: actExternalLinks.entityType, sourceEntityType: actExternalLinks.sourceEntityType, actRecordId: actExternalLinks.actRecordId, sourceRecordId: actExternalLinks.sourceRecordId, sourceDatabaseKey: actExternalLinks.sourceDatabaseKey }).from(actExternalLinks),
-    ]);
+      : [];
+    // A transaction-backed node-postgres client may only execute one query at a
+    // time. Keeping these reads sequential also avoids buffering several large
+    // result sets concurrently while the archive snapshots remain resident.
+    const localOrganizations = await this.database.select({ id: organizations.id, name: organizations.name, phone: organizations.phone, website: organizations.website, industry: organizations.actIndustry, address1: organizations.address1, address2: organizations.address2, city: organizations.city, region: organizations.region, postalCode: organizations.postalCode }).from(organizations);
+    const localContacts = await this.database.select({ id: contacts.id, organizationId: contacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone, jobTitle: contacts.jobTitle, address1: contacts.address1, address2: contacts.address2, city: contacts.city, region: contacts.region, postalCode: contacts.postalCode }).from(contacts);
+    const localBookings = await this.database.select({ id: bookings.id, name: bookings.name, organizationId: bookings.organizationId, venueName: bookings.venueName, address1: bookings.address1, city: bookings.city, region: bookings.region, postalCode: bookings.postalCode, startsAt: bookings.startsAt, endsAt: bookings.endsAt, localStatus: bookings.status, localProbability: bookings.probability, notes: bookings.notes }).from(bookings);
+    const localOrganizationContacts = await this.database.select({ organizationId: organizationContacts.organizationId, contactId: organizationContacts.contactId }).from(organizationContacts).where(eq(organizationContacts.active, true));
+    const localBookingContacts = await this.database.select({ bookingId: bookingContacts.bookingId, contactId: bookingContacts.contactId }).from(bookingContacts);
+    const externalLinks = await this.database.select({ localId: actExternalLinks.entityId, entityType: actExternalLinks.entityType, sourceEntityType: actExternalLinks.sourceEntityType, actRecordId: actExternalLinks.actRecordId, sourceRecordId: actExternalLinks.sourceRecordId, sourceDatabaseKey: actExternalLinks.sourceDatabaseKey }).from(actExternalLinks);
     const organizationIdsByContact = new Map<string, Set<string>>();
     for (const relationship of localOrganizationContacts) {
       const organizationIds = organizationIdsByContact.get(relationship.contactId) ?? new Set<string>();
@@ -1363,6 +1405,19 @@ class DrizzleActReviewReaderBase implements ReviewReader {
     const sources = await new DrizzleProductionOrganizerStore(this.database, this.scope).loadSources(runId, excludedDecisionIds);
     return buildLegacyActOrganizeManifest({ runId, sources });
   }
+  async recomputeAutomaticReviewManifestDigest(runId: string, excludedDecisionIds: readonly string[] = []) {
+    return (excludedDecisionIds.length
+      ? await this.recomputeAutomaticReviewManifest(runId, excludedDecisionIds)
+      : await this.recomputeAutomaticReviewManifest(runId)).digest;
+  }
+  async recomputeLegacyAutomaticReviewManifestDigest(runId: string, excludedDecisionIds: readonly string[] = []) {
+    const manifest = excludedDecisionIds.length
+      ? await this.recomputeLegacyAutomaticReviewManifest(runId, excludedDecisionIds)
+      : await this.recomputeLegacyAutomaticReviewManifest(runId);
+    const digest = digestLegacyManifestRows(manifest.operations, manifest.outcomes);
+    if (digest !== manifest.digest) manifestDigestMismatch();
+    return digest;
+  }
   protected async protectedCurrentManifest(
     runId: string,
     storedDigest: string,
@@ -1376,6 +1431,21 @@ class DrizzleActReviewReaderBase implements ReviewReader {
       await this.database.execute(lockAutomaticReviewSourceRowsQuery(this.scope, runId)),
     );
     const lockedById = new Map(lockedSources.map((source) => [source.sourceRecordId, source]));
+    const lockedDigest = await this.getComputedManifestDigest(runId);
+    if (!lockedDigest)
+      throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
+    if (lockedDigest !== initialDigest) manifestDigestMismatch();
+    // Complete protected recomputation before retaining the durable manifest.
+    // On large archives this keeps two full manifests and all normalized source
+    // snapshots from being live at the same time.
+    const protectedDigest = excludedDecisionIds.length
+      ? await this.recomputeAutomaticReviewManifestDigest(runId, excludedDecisionIds)
+      : await this.recomputeAutomaticReviewManifestDigest(runId);
+    const protectedLegacyDigest = digestVersion === null
+      ? excludedDecisionIds.length
+        ? await this.recomputeLegacyAutomaticReviewManifestDigest(runId, excludedDecisionIds)
+        : await this.recomputeLegacyAutomaticReviewManifestDigest(runId)
+      : undefined;
     const currentManifest = await this.getComputedManifest(runId);
     if (!currentManifest)
       throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
@@ -1385,20 +1455,12 @@ class DrizzleActReviewReaderBase implements ReviewReader {
       if (!source || source.sourceVersionId !== outcome.sourceVersionId)
         throw Object.assign(new Error("stale_source_version"), { code: "stale_source_version", status: 409 });
     }
-    const protectedManifest = excludedDecisionIds.length
-      ? await this.recomputeAutomaticReviewManifest(runId, excludedDecisionIds)
-      : await this.recomputeAutomaticReviewManifest(runId);
-    const protectedLegacyManifest = digestVersion === null
-      ? excludedDecisionIds.length
-        ? await this.recomputeLegacyAutomaticReviewManifest(runId, excludedDecisionIds)
-        : await this.recomputeLegacyAutomaticReviewManifest(runId)
-      : undefined;
-    verifyProtectedManifestDigest({
+    verifyProtectedManifestDigests({
       storedDigest,
       digestVersion,
-      durableManifest: currentManifest,
-      protectedManifest,
-      protectedLegacyManifest,
+      durableDigest: currentManifest.digest,
+      protectedDigest,
+      protectedLegacyDigest,
     });
     return { manifest: currentManifest, lockedById };
   }
@@ -1415,14 +1477,19 @@ class DrizzleActReviewReaderBase implements ReviewReader {
       .limit(1);
     return Boolean(row);
   }
-  async listSources(runId: string): Promise<ReviewSourceRecord[]> {
+  async listSources(runId: string, sourceRecordIds?: readonly string[]): Promise<ReviewSourceRecord[]> {
     if (!(await this.ownsRun(runId))) return [];
+    const selectedIds = sourceRecordIds ? [...new Set(sourceRecordIds)].sort() : undefined;
+    if (selectedIds && !selectedIds.length) return [];
     const rows = await this.database
       .select({ source: actSourceRecords, version: actSourceRecordVersions })
       .from(actSourceRecords)
       .innerJoin(actReplacementOutcomes, and(eq(actReplacementOutcomes.sourceRecordId, actSourceRecords.id), eq(actReplacementOutcomes.runId, runId)))
       .leftJoin(actSourceRecordVersions, eq(actSourceRecordVersions.id, actSourceRecords.latestVersionId))
-      .where(eq(actSourceRecords.sourceDatabaseKey, this.scope.sourceDatabaseKey));
+      .where(and(
+        eq(actSourceRecords.sourceDatabaseKey, this.scope.sourceDatabaseKey),
+        selectedIds ? inArray(actSourceRecords.id, selectedIds) : undefined,
+      ));
     return rows.map(({ source, version }) => ({
       sourceRecordId: source.id,
       sourceVersionId: source.latestVersionId ?? version?.id ?? "",
@@ -2145,10 +2212,10 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
     manifest: ActOrganizeManifest,
     sources: readonly ReviewSourceRecord[],
   ): AutomaticReviewSourceProjection[] {
-    const sourceById = new Map(sources.map((source) => [source.sourceRecordId, source]));
-    const projections = manifest.outcomes.map((outcome) => {
-      const source = sourceById.get(outcome.sourceRecordId);
-      if (!source || source.sourceVersionId !== outcome.sourceVersionId)
+    const outcomeById = new Map(manifest.outcomes.map((outcome) => [outcome.sourceRecordId, outcome]));
+    const projections = sources.map((source) => {
+      const outcome = outcomeById.get(source.sourceRecordId);
+      if (!outcome || source.sourceVersionId !== outcome.sourceVersionId)
         throw Object.assign(new Error("stale_source_version"), { code: "stale_source_version", status: 409 });
       return {
         sourceRecordId: source.sourceRecordId,
@@ -2159,7 +2226,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
     });
     const projectionById = new Map(projections.map((source) => [source.sourceRecordId, source]));
     return projections.map((source) => {
-      const outcome = manifest.outcomes.find((candidate) => candidate.sourceRecordId === source.sourceRecordId)!;
+      const outcome = outcomeById.get(source.sourceRecordId)!;
       const labelsBySlot: Record<string, Partial<Record<AssignmentTargetEntityType, string>>> = {};
       for (const issue of stableRelationshipIssues(outcome.sourceRecordId, outcome.sourceVersionId, outcome.issues)) {
         const slot = issue.relationshipSlot?.trim() ?? "";
@@ -2303,10 +2370,14 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
     runId: string,
     manifest: ActOrganizeManifest,
   ): Promise<AutomaticReviewInput> {
-    const sourceRecords = this.automaticSourceProjections(manifest, await this.listSources(runId));
+    const records = automaticReviewRecords(manifest);
+    const sourceRecords = this.automaticSourceProjections(
+      manifest,
+      await this.listSources(runId, automaticContextSourceIds(records)),
+    );
     const targetsByEntityType = await this.lockedAutomaticTargets(await this.currentAutomaticTargetIds(manifest, sourceRecords));
     return {
-      records: automaticReviewRecords(manifest),
+      records,
       context: { sourceRecords, targetsByEntityType },
     };
   }

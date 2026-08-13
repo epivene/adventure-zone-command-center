@@ -440,6 +440,34 @@ describe("durable review adapter projections", () => {
     });
   });
 
+  it("reads organizer source context sequentially on a transaction client", async () => {
+    let activeReads = 0;
+    let maximumActiveReads = 0;
+    const select = () => {
+      const chain = {
+        from: () => chain,
+        innerJoin: () => chain,
+        where: () => chain,
+        then: (resolve: (rows: unknown[]) => unknown, reject: (error: unknown) => unknown) => {
+          activeReads += 1;
+          maximumActiveReads = Math.max(maximumActiveReads, activeReads);
+          return new Promise<unknown[]>((done) => setTimeout(() => done([]), 1))
+            .then((rows) => {
+              activeReads -= 1;
+              return resolve(rows);
+            }, reject);
+        },
+      };
+      return chain;
+    };
+    const database = { select } as never;
+
+    await new DrizzleProductionOrganizerStore(database, { sourceDatabaseKey: "act-db" })
+      .loadSources("run");
+
+    expect(maximumActiveReads).toBe(1);
+  });
+
   it("scopes manifest publication reads to both the source database and owner", async () => {
     let selectedTable: unknown;
     let runPredicate: unknown;
@@ -1217,7 +1245,7 @@ describe("durable review adapter projections", () => {
     });
     expect(transactionOptions).toEqual({ isolationLevel: "serializable" });
     expect(events).toEqual([
-      "transaction:start", "run:update", "request:check", "manifest:digest", "sources:lock", "manifest:load", "targets:search",
+      "transaction:start", "run:update", "request:check", "manifest:digest", "sources:lock", "manifest:digest", "manifest:load", "targets:search",
       "decision-key:check", "decision:duplicate_identity:keep_separate", "decision:unsupported_record:ignore_source",
       "request:save", "transaction:commit", "rebuild", "request:update",
     ]);
