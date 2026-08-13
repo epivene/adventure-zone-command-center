@@ -29,6 +29,37 @@ const mergeInputSchema = z.object({
   duplicateIds: z.array(z.string().uuid()).min(1),
 });
 
+const familyCandidateIdsSchema = z
+  .array(z.string().uuid())
+  .min(2)
+  .refine((ids) => new Set(ids).size === ids.length, {
+    message: "candidateIds must be unique",
+  })
+  .transform((ids) => [...ids].sort((left, right) => left.localeCompare(right, "en-US")));
+
+const familyReviewInputSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("make_locations"),
+    candidateIds: familyCandidateIdsSchema,
+    parent: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("existing"),
+        parentId: z.string().uuid(),
+      }),
+      z.object({
+        kind: z.literal("new"),
+        name: z.string().trim().min(1).max(240),
+        website: z.string().trim().max(2048).optional(),
+        phone: z.string().trim().max(80).optional(),
+      }),
+    ]),
+  }),
+  z.object({
+    action: z.literal("not_related"),
+    candidateIds: familyCandidateIdsSchema,
+  }),
+]);
+
 router.get("/organizations", async (req, res): Promise<void> => {
   const query = organizationListQuerySchema.parse({
     q: req.query.q ?? undefined,
@@ -104,6 +135,62 @@ router.post("/organizations/hierarchy/ungroup", async (req, res): Promise<void> 
   try {
     const input = ungroupOrganizationInputSchema.parse(req.body);
     await ungroupOrganization(db, input, new Date());
+    res.json({ ok: true });
+  } catch (err) {
+    hierarchyError(req, res, err);
+  }
+});
+
+router.post("/organizations/family-review", async (req, res): Promise<void> => {
+  try {
+    const input = familyReviewInputSchema.parse(req.body);
+    const repository = orgRepo();
+    const groups = await repository.findDuplicates();
+    const candidate = groups.find(
+      (group) =>
+        group.classification === "location_candidate" &&
+        group.candidateIds.length === input.candidateIds.length &&
+        group.candidateIds.every((id, index) => id === input.candidateIds[index]),
+    );
+    if (!candidate?.groupKey) {
+      throw new HierarchyConflictError(
+        "This organization family changed. Refresh the review list and try again.",
+      );
+    }
+
+    const changedAt = new Date();
+    if (input.action === "not_related") {
+      await repository.saveFamilyReview({
+        groupKey: candidate.groupKey,
+        candidateIds: candidate.candidateIds,
+        evidence: candidate.evidence,
+        status: "not_related",
+      });
+      res.json({ ok: true });
+      return;
+    }
+
+    if (input.parent.kind === "new") {
+      await createOrganizationParent(
+        db,
+        {
+          name: input.parent.name,
+          ...(input.parent.website ? { website: input.parent.website } : {}),
+          ...(input.parent.phone ? { phone: input.parent.phone } : {}),
+          childIds: candidate.candidateIds,
+        },
+        changedAt,
+      );
+    } else {
+      for (const childId of candidate.candidateIds) {
+        await setOrganizationParent(
+          db,
+          { childId, parentId: input.parent.parentId },
+          changedAt,
+        );
+      }
+    }
+    await repository.deleteFamilyReview(candidate.groupKey);
     res.json({ ok: true });
   } catch (err) {
     hierarchyError(req, res, err);
