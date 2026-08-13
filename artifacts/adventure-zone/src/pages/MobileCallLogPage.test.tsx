@@ -1,0 +1,116 @@
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const apiGet = vi.hoisted(() => vi.fn());
+const completeCallAction = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/auth-token", () => ({ apiGet }));
+vi.mock("@/actions/calls", () => ({ completeCallAction }));
+vi.mock("@/actions/activities", () => ({
+  createActivityAction: vi.fn(),
+  editActivityAction: vi.fn(),
+  listActivityRevisionsAction: vi.fn(),
+}));
+vi.mock("wouter", async () => {
+  const actual = await vi.importActual<typeof import("wouter")>("wouter");
+  return { ...actual, useSearch: () => "" };
+});
+
+import MobileCallLogPage from "./MobileCallLogPage";
+
+const contactId = "20000000-0000-4000-8000-000000000001";
+
+function workspace(contactName = "Sarah Miller") {
+  return {
+    context: {
+      organization: { id: "organization-1", name: "Prairie Days", lastResort: false, lastResortReason: null },
+      contact: {
+        id: contactId,
+        firstName: contactName.split(" ")[0],
+        lastName: contactName.split(" ")[1],
+        phone: "303-555-0100",
+        email: "sarah@example.com",
+        city: "Denver",
+        region: "CO",
+      },
+      booking: null,
+      followUp: null,
+    },
+    activityParent: { contactId },
+    contextSummary: null,
+    defaultScriptKind: "incoming_inquiry",
+    operations: null,
+    phones: [],
+    scriptPrompts: [],
+    timeline: [],
+  };
+}
+
+afterEach(() => {
+  cleanup();
+  apiGet.mockReset();
+  completeCallAction.mockReset();
+  localStorage.clear();
+});
+
+describe("MobileCallLogPage", () => {
+  it("finds a caller and opens the mobile logging form", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path.startsWith("/calls/caller-finder")) {
+        return Promise.resolve({
+          exact: { kind: "none" },
+          canCreate: false,
+          suggestions: [{
+            contactId,
+            name: "Sarah Miller",
+            organizationName: "Prairie Days",
+            city: "Denver",
+            region: "CO",
+            bookingStatus: null,
+            routeLegName: null,
+            lastContactedAt: null,
+            reasons: ["Organization or event"],
+            score: 100,
+          }],
+        });
+      }
+      if (path.startsWith("/calls/workspace")) return Promise.resolve(workspace());
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    render(<MobileCallLogPage />);
+    fireEvent.change(screen.getByLabelText("Find caller"), { target: { value: "Prairie Days" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Sarah Miller/i }));
+
+    expect(await screen.findByRole("heading", { name: "Log call" })).toBeVisible();
+    expect(screen.getByLabelText("Call note")).toBeVisible();
+  });
+
+  it("defaults a mobile log to incoming without attempting audio capture", async () => {
+    apiGet.mockResolvedValue(workspace());
+
+    render(<MobileCallLogPage contactId={contactId} />);
+
+    expect(await screen.findByLabelText("Direction")).toHaveValue("incoming");
+    expect(screen.queryByText(/record|transcrib/i)).not.toBeInTheDocument();
+  });
+
+  it("saves through the shared call API with a stable request key and mobile method", async () => {
+    apiGet.mockResolvedValue(workspace());
+    completeCallAction.mockResolvedValue({ ok: true });
+
+    render(<MobileCallLogPage contactId={contactId} />);
+    fireEvent.change(await screen.findByLabelText("Call note"), { target: { value: "Returned Sarah's call." } });
+    fireEvent.change(screen.getByLabelText("Direction"), { target: { value: "outgoing" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+
+    await waitFor(() => expect(completeCallAction).toHaveBeenCalledTimes(1));
+    expect(completeCallAction).toHaveBeenCalledWith(expect.objectContaining({
+      contactId,
+      direction: "outgoing",
+      method: "mobile_log",
+      note: "Returned Sarah's call.",
+      requestKey: expect.any(String),
+    }));
+  });
+});

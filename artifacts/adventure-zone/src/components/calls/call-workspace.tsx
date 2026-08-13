@@ -130,11 +130,12 @@ export function CallWorkspace({
   loadRevisions = async () => ({ ok: true, revisions: [] }),
   operations = null,
 }: WorkspaceProps) {
+  const isMobileLog = mode === "mobile";
   const primaryPhone = phones.find((phone) => phone.primary) ?? phones[0] ?? null;
-  const [startedAt, setStartedAt] = useState<Date | null>(null);
-  const [requestKey, setRequestKey] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<Date | null>(() => isMobileLog ? new Date() : null);
+  const [requestKey, setRequestKey] = useState<string | null>(() => isMobileLog ? crypto.randomUUID() : null);
   const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(primaryPhone?.id ?? null);
-  const [direction, setDirection] = useState<CallDirection>("outgoing");
+  const [direction, setDirection] = useState<CallDirection>(isMobileLog ? "incoming" : "outgoing");
   const [method, setMethod] = useState<CallMethod>("mobile_log");
   const [scriptKind, setScriptKind] = useState<CallScriptKind>(defaultScriptKind);
   const [note, setNote] = useState("");
@@ -173,10 +174,10 @@ export function CallWorkspace({
   useEffect(() => {
     setDraftReady(false);
     setActiveDraftKey(null);
-    setStartedAt(null);
-    setRequestKey(null);
+    setStartedAt(isMobileLog ? new Date() : null);
+    setRequestKey(isMobileLog ? crypto.randomUUID() : null);
     setSelectedPhoneId(primaryPhone?.id ?? null);
-    setDirection("outgoing");
+    setDirection(isMobileLog ? "incoming" : "outgoing");
     setMethod("mobile_log");
     setScriptKind(defaultScriptKind);
     setNote("");
@@ -203,7 +204,7 @@ export function CallWorkspace({
           : primaryPhone?.id ?? null,
       );
       setDirection(draft.direction);
-      setMethod(draft.method);
+      setMethod(isMobileLog ? "mobile_log" : draft.method);
       setScriptKind(draft.scriptKind);
       setNote(draft.note);
       setDisposition(draft.disposition);
@@ -217,7 +218,7 @@ export function CallWorkspace({
     }
     setActiveDraftKey(draftKey);
     setDraftReady(true);
-  }, [draftKey]);
+  }, [draftKey, isMobileLog]);
 
   useEffect(() => {
     if (!draftReady || activeDraftKey !== draftKey || !startedAt || !requestKey || isSaved) return;
@@ -361,8 +362,10 @@ export function CallWorkspace({
     >
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Calls</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Call Workspace</h1>
-        <p className="mt-2 text-slate-600">Record this call and its next concrete action.</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">{isMobileLog ? "Log call" : "Call Workspace"}</h1>
+        <p className="mt-2 text-slate-600">
+          {isMobileLog ? "Add a call note and its next concrete action." : "Record this call and its next concrete action."}
+        </p>
       </header>
 
       <CallContextRow
@@ -404,7 +407,7 @@ export function CallWorkspace({
                 {selectedPhone ? (
                   <PhoneActions
                     assistedCallingEnabled={assistedCallingEnabled}
-                    onSelectMethod={setMethod}
+                    onSelectMethod={isMobileLog ? undefined : setMethod}
                     phone={selectedPhone}
                     voicemailLauncherUrl={voicemailLauncherUrl}
                   />
@@ -418,11 +421,13 @@ export function CallWorkspace({
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="call-details-title">
-            <h2 className="text-xl font-bold" id="call-details-title">Record call</h2>
+            <h2 className="text-xl font-bold" id="call-details-title">{isMobileLog ? "Call details" : "Record call"}</h2>
             {isSaved ? (
               <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                 <p className="font-semibold text-emerald-950" role="status">Call note saved.</p>
-                <p className="mt-1 text-sm text-emerald-900">This call is complete and cannot be submitted again from this workspace.</p>
+                <p className="mt-1 text-sm text-emerald-900">
+                  {isMobileLog ? "This call log is complete and cannot be submitted again." : "This call is complete and cannot be submitted again from this workspace."}
+                </p>
                 <a className="link mt-3 inline-block" href="/today">Return to Today</a>
               </div>
             ) : !startedAt ? (
@@ -447,6 +452,19 @@ export function CallWorkspace({
                   </p>
                 ) : null}
                 {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}
+                {isMobileLog ? (
+                  <label className="grid gap-1.5 font-medium" htmlFor="call-direction">
+                    Direction
+                    <select
+                      id="call-direction"
+                      onChange={(event) => setDirection(event.target.value as CallDirection)}
+                      value={direction}
+                    >
+                      <option value="incoming">Incoming</option>
+                      <option value="outgoing">Outgoing</option>
+                    </select>
+                  </label>
+                ) : null}
                 <label className="grid gap-1.5 font-medium" htmlFor="call-note">
                   Call note
                   <textarea className="min-h-32" id="call-note" onChange={(event) => setNote(event.target.value)} value={note} />
@@ -531,7 +549,7 @@ export function CallWorkspace({
             )}
           </section>
 
-          <details className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" open={mode !== "compact"}>
+          {!isMobileLog ? <details className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" open={mode !== "compact"}>
             <summary className="cursor-pointer text-xl font-bold">Recent history</summary>
             <div className="mt-4">
               <ActivityTimeline
@@ -542,10 +560,10 @@ export function CallWorkspace({
                 parent={activityParent}
               />
             </div>
-          </details>
+          </details> : null}
         </div>
 
-        <aside className="grid gap-5">
+        {!isMobileLog ? <aside className="grid gap-5">
           <CallScriptCard
             initialKind={defaultScriptKind}
             initialPrompts={scriptPrompts}
@@ -594,7 +612,7 @@ export function CallWorkspace({
               </div>
             ) : <p className="mt-3 text-sm text-slate-600">No booking is linked to this call.</p>}
           </section>
-        </aside>
+        </aside> : null}
       </div>
     </div>
   );
