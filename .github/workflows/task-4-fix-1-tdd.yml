@@ -1,0 +1,24 @@
+name: Task 4 Fix 1 TDD
+
+on:
+  push:
+    branches:
+      - agent/assisted-calling-workspace
+
+jobs:
+  red:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.17.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - id: context
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/calls/call-workspace-context.test.ts
+      - name: Require RED test failure
+        if: steps.context.outcome != 'failure'
+        run: exit 1
