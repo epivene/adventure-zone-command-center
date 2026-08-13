@@ -157,7 +157,12 @@ describe("organization hierarchy reads", () => {
 function render(statement: SQL) {
   const query = new PgDialect().sqlToQuery(statement);
   return {
-    sql: query.sql.toLowerCase().replace(/\s+/g, " ").trim(),
+    sql: query.sql
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/\(\s+/g, "(")
+      .replace(/\s+\)/g, ")")
+      .trim(),
     params: query.params,
   };
 }
