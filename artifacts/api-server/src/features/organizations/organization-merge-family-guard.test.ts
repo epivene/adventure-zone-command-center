@@ -42,6 +42,7 @@ type OrganizationRow = {
 type ProposalRow = {
   groupKey: string;
   candidateIds: string[];
+  status?: "proposed" | "not_related";
 };
 
 class GuardTransaction {
@@ -97,6 +98,7 @@ class GuardTransaction {
                 this.proposals.push({
                   groupKey: value.groupKey,
                   candidateIds: value.candidateIds,
+                  status: "proposed",
                 });
               }
             }
