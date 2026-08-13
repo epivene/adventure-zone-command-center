@@ -9,6 +9,7 @@ import {
   listActivityRevisionsAction,
 } from "@/actions/activities";
 import type { ReactNode } from "react";
+import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
 
 function DetailSection({ children, title }: { children: ReactNode; title: string }) {
   return (
@@ -75,7 +76,7 @@ export default function ContactDetailPage() {
               { label: "Email", value: contact.email ? <a className="link" href={`mailto:${contact.email}`}>{contact.email}</a> : null },
               { label: "Phone", value: phones.length ? (
                 <ul className="grid gap-2">
-                  {phones.map((phone: any) => (
+                  {phones.map((phone: ContactPhoneRecord) => (
                     <li key={phone.id} className="flex flex-wrap items-center gap-2">
                       <a className="link" href={`tel:${phone.number}`}>{phone.number}</a>
                       <span className="text-sm text-slate-500">{phone.label ?? phone.type}{phone.extension ? ` ext. ${phone.extension}` : ""}</span>
