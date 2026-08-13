@@ -17,8 +17,12 @@ const baseInput = {
   eventLocation: "Fargo, ND",
 };
 
-function repositoryWith(candidates: DuplicateCandidate[]): QuickCallerRepository {
+function repositoryWith(
+  candidates: DuplicateCandidate[],
+  exactExists = candidates.some((candidate) => candidate.kind === "exact"),
+): QuickCallerRepository {
   return {
+    hasExactQuickCallerDuplicate: vi.fn(async () => exactExists),
     findQuickCallerDuplicates: vi.fn(async () => candidates),
     createQuickCaller: vi.fn(async () => ({
       kind: "created" as const,
@@ -72,5 +76,29 @@ describe("quick caller duplicate gate", () => {
       ok: true,
       contactId: "99999999-9999-4999-8999-999999999999",
     });
+  });
+
+  it("blocks a hidden exact duplicate behind eight likely candidates even with continuation", async () => {
+    const candidates: DuplicateCandidate[] = Array.from(
+      { length: 8 },
+      (_, index) => ({
+        contactId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        name: "Avery Lee",
+        organizationName: "North Star Events",
+        city: "Fargo",
+        region: "ND",
+        reasons: ["Name and organization"],
+        kind: "likely",
+      }),
+    );
+    const repository = repositoryWith(candidates, true);
+
+    const result = await submitQuickCaller(
+      { ...baseInput, continueCreating: true },
+      repository,
+    );
+
+    expect(result).toEqual({ ok: false, candidates });
+    expect(repository.createQuickCaller).not.toHaveBeenCalled();
   });
 });
