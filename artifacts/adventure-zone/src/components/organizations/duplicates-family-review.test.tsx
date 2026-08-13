@@ -173,6 +173,37 @@ describe("DuplicatesView family review", () => {
     expect(screen.getByRole("button", { name: "Merge all 1 group" })).toBeInTheDocument();
   });
 
+  it.each([
+    {
+      label: "Denver, Denver, and Austin",
+      cities: [["Denver", "CO"], ["Denver", "CO"], ["Austin", "TX"]],
+    },
+    {
+      label: "Denver, Austin, and an incomplete location",
+      cities: [["Denver", "CO"], ["Austin", "TX"], ["", ""]],
+    },
+  ])("keeps every member of $label out of destructive merge", ({ cities }) => {
+    const thirdId = "44444444-4444-4444-8444-444444444444";
+    const ambiguous: DuplicateGroup = {
+      ...locationCandidate,
+      classification: "ambiguous_location_candidate",
+      candidateIds: [FIRST_ID, SECOND_ID, thirdId],
+      organizations: [
+        organization(FIRST_ID, "Water Lantern Festival", cities[0]![0]!, cities[0]![1]!),
+        organization(SECOND_ID, "Water Lantern Festival", cities[1]![0]!, cities[1]![1]!),
+        organization(thirdId, "Water Lantern Festival", cities[2]![0]!, cities[2]![1]!),
+      ],
+    };
+    render(
+      <DuplicatesView groups={[ambiguous, duplicate]} onRefresh={vi.fn().mockResolvedValue([])} />,
+    );
+
+    const card = within(screen.getByTestId(`duplicate-group-${ambiguous.groupKey}`));
+    expect(card.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+    expect(card.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Merge all 1 group" })).toBeInTheDocument();
+  });
+
   it("creates a parent for a reviewed family and refreshes server results", async () => {
     const onRefresh = vi.fn().mockResolvedValue([]);
     render(<DuplicatesView groups={[locationCandidate]} onRefresh={onRefresh} />);
