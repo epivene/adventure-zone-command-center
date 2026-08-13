@@ -149,7 +149,7 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
     const groups = await repository.findDuplicates();
     const candidate = groups.find(
       (group) =>
-        group.classification === "location_candidate" &&
+        group.classification !== "duplicate" &&
         group.candidateIds.length === input.candidateIds.length &&
         group.candidateIds.every((id, index) => id === input.candidateIds[index]),
     );
