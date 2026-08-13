@@ -32,7 +32,7 @@ export type QuickCallerActionResult =
 
 export type QuickCallerRepository = Pick<
   DrizzleContactRepository,
-  "findQuickCallerDuplicates" | "createQuickCaller"
+  "hasExactQuickCallerDuplicate" | "findQuickCallerDuplicates" | "createQuickCaller"
 >;
 
 function splitName(name: string) {
@@ -57,8 +57,10 @@ export async function submitQuickCaller(
 
   const { name, ...fields } = parsed.data;
   const caller: QuickCallerInput = { ...splitName(name), ...fields };
-  const candidates = await repository.findQuickCallerDuplicates(caller);
-  const hasExact = candidates.some((candidate) => candidate.kind === "exact");
+  const [hasExact, candidates] = await Promise.all([
+    repository.hasExactQuickCallerDuplicate(caller),
+    repository.findQuickCallerDuplicates(caller),
+  ]);
   if (hasExact || (candidates.length > 0 && !caller.continueCreating)) {
     return { ok: false, candidates };
   }
