@@ -346,7 +346,7 @@ function DuplicateGroupCard({
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>Merge duplicates</button>
+            {!locationCandidate ? <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>Merge duplicates</button> : null}
             {locationCandidate ? (
               <>
                 <button className="button-primary text-sm" disabled={disabled || pending} onClick={() => setShowLocations(true)}>Same organization—make locations</button>
@@ -430,7 +430,9 @@ export function DuplicatesView({ groups, onRefresh }: {
     setReconciling(false);
   }
 
-  const mergeableGroups = localGroups.filter((group) => !isLocationCandidate(group));
+  const mergeableGroups = localGroups.filter(
+    (group) => group.classification === "duplicate",
+  );
 
   async function runBulkMerge() {
     const pendingGroups = [...mergeableGroups];
