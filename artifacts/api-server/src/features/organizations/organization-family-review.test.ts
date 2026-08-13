@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 const repository = vi.hoisted(() => ({
   findDuplicates: vi.fn(),
@@ -61,6 +62,7 @@ vi.mock("@/features/organizations/organization-hierarchy", async (importOriginal
 
 import {
   discoverOrganizationFamilyCandidates,
+  discoverOrganizationFamilyCandidatesFromDatabase,
   partitionOrganizationReviewGroups,
   type DuplicateOrganizationGroup,
 } from "./organization-repository";
@@ -187,8 +189,78 @@ describe("organization family review", () => {
     expect(groups).toEqual([family]);
   });
 
-  it("hydrates ACT relationship provenance for different-name family candidates", () => {
-    const groups = discoverOrganizationFamilyCandidates(
+  it("hydrates a credible shared-contact ACT connection through the production query", async () => {
+    const runId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const contactSourceId = "act-contact-shared";
+    const stagedRelationships = [
+      { runId, streamType: "company_contact", sourceId: "act-company-lantern", targetSourceId: contactSourceId },
+      { runId, streamType: "company_contact", sourceId: "act-company-glow", targetSourceId: contactSourceId },
+      { runId, streamType: "opportunity_company", sourceId: "act-opportunity-ignored", targetSourceId: "act-company-lantern" },
+    ];
+    const stagedLinks = [
+      {
+        migrationRunId: runId,
+        entityType: "organization",
+        sourceEntityType: "company",
+        entityId: FIRST_ID,
+        actRecordId: "act-company-lantern",
+      },
+      {
+        migrationRunId: runId,
+        entityType: "organization",
+        sourceEntityType: "company",
+        entityId: SECOND_ID,
+        actRecordId: "act-company-glow",
+      },
+    ];
+    let renderedSql = "";
+    const database = {
+      execute(statement: Parameters<PgDialect["sqlToQuery"]>[0]) {
+        const rendered = new PgDialect().sqlToQuery(statement);
+        renderedSql = rendered.sql.toLowerCase().replace(/\s+/g, " ");
+        const rows: Array<{
+          sourceOrganizationId: string;
+          targetOrganizationId: string;
+          provenance: "act_relationship";
+        }> = [];
+        for (let leftIndex = 0; leftIndex < stagedRelationships.length; leftIndex += 1) {
+          const left = stagedRelationships[leftIndex]!;
+          if (left.streamType !== "company_contact") continue;
+          for (let rightIndex = leftIndex + 1; rightIndex < stagedRelationships.length; rightIndex += 1) {
+            const right = stagedRelationships[rightIndex]!;
+            if (
+              right.streamType !== "company_contact" ||
+              right.runId !== left.runId ||
+              right.targetSourceId !== left.targetSourceId ||
+              right.sourceId === left.sourceId
+            ) continue;
+            const source = stagedLinks.find(
+              (link) =>
+                link.migrationRunId === left.runId &&
+                link.sourceEntityType === "company" &&
+                link.actRecordId === left.sourceId,
+            );
+            const target = stagedLinks.find(
+              (link) =>
+                link.migrationRunId === right.runId &&
+                link.sourceEntityType === "company" &&
+                link.actRecordId === right.sourceId,
+            );
+            if (source && target) {
+              rows.push({
+                sourceOrganizationId: source.entityId,
+                targetOrganizationId: target.entityId,
+                provenance: "act_relationship",
+              });
+            }
+          }
+        }
+        return Promise.resolve({ rows });
+      },
+    };
+
+    const groups = await discoverOrganizationFamilyCandidatesFromDatabase(
+      database as never,
       [
         {
           id: FIRST_ID,
@@ -207,13 +279,13 @@ describe("organization family review", () => {
           region: "CO",
         },
       ],
-      [{
-        sourceOrganizationId: FIRST_ID,
-        targetOrganizationId: SECOND_ID,
-        provenance: "act_relationship",
-      }],
     );
 
+    expect(renderedSql).toContain("left_relationship.stream_type = 'company_contact'");
+    expect(renderedSql).toContain("right_relationship.stream_type = 'company_contact'");
+    expect(renderedSql).toContain(
+      "right_relationship.target_source_id = left_relationship.target_source_id",
+    );
     expect(groups).toEqual([
       expect.objectContaining({
         classification: "location_candidate",
