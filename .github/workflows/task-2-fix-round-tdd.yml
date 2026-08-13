@@ -1,0 +1,26 @@
+name: Task 2 Fix Round TDD
+
+on:
+  push:
+    branches:
+      - agent/assisted-calling-workspace
+
+jobs:
+  tdd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.17.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: Run focused phone regressions
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server test -- src/routes/contacts.test.ts
+          api_status=$?
+          pnpm --filter @workspace/adventure-zone exec vitest run src/components/contacts/contact-form.test.tsx
+          web_status=$?
+          test $api_status -eq 0 -a $web_status -eq 0
