@@ -6,6 +6,8 @@ on:
       - codex/organization-location-hierarchy
   workflow_dispatch:
 
+# Verification marker: Task 7 family matcher
+
 jobs:
   verify:
     runs-on: ubuntu-latest
