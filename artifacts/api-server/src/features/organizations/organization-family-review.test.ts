@@ -60,6 +60,7 @@ vi.mock("@/features/organizations/organization-hierarchy", async (importOriginal
 
 import {
   discoverOrganizationFamilyCandidates,
+  partitionOrganizationReviewGroups,
   type DuplicateOrganizationGroup,
 } from "./organization-repository";
 import router from "../../routes/organizations";
@@ -166,6 +167,25 @@ describe("organization family review", () => {
         ]),
       }),
     ]);
+  });
+
+  it("keeps a not-related family out of both review classifications", () => {
+    const { organizations: _organizations, ...family } = candidate;
+    const groups = partitionOrganizationReviewGroups(
+      [{
+        normalized_name: "water lantern festival",
+        normalized_city: "austin",
+        normalized_region: "tx",
+        ids: [FIRST_ID, SECOND_ID],
+      }],
+      [family],
+      [{
+        groupKey: candidate.groupKey!,
+        status: "not_related",
+      }],
+    );
+
+    expect(groups).toEqual([]);
   });
 
   it("returns 409 when the submitted candidate IDs are stale", async () => {
