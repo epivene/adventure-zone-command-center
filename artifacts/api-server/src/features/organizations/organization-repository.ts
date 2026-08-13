@@ -206,31 +206,51 @@ export function organizationFamilyActRelationshipsQuery(): SQL {
       source_link.entity_id AS "sourceOrganizationId",
       target_link.entity_id AS "targetOrganizationId",
       'act_relationship'::text AS provenance
-    FROM ${actMigrationRecords} AS relationship
+    FROM ${actMigrationRecords} AS left_relationship
+    INNER JOIN ${actMigrationRecords} AS right_relationship
+      ON right_relationship.run_id = left_relationship.run_id
+      AND right_relationship.stream_type = 'company_contact'
+      AND right_relationship.target_source_id = left_relationship.target_source_id
+      AND right_relationship.source_id > left_relationship.source_id
     INNER JOIN ${actExternalLinks} AS source_link
       ON source_link.entity_type = 'organization'
       AND source_link.source_entity_type = 'company'
-      AND source_link.act_record_id = relationship.source_id
-      AND source_link.migration_run_id = relationship.run_id
+      AND source_link.act_record_id = left_relationship.source_id
+      AND source_link.migration_run_id = left_relationship.run_id
     INNER JOIN ${actExternalLinks} AS target_link
       ON target_link.entity_type = 'organization'
       AND target_link.source_entity_type = 'company'
-      AND target_link.act_record_id = relationship.target_source_id
-      AND target_link.migration_run_id = relationship.run_id
-    WHERE relationship.source_id IS NOT NULL
-      AND relationship.target_source_id IS NOT NULL
+      AND target_link.act_record_id = right_relationship.source_id
+      AND target_link.migration_run_id = right_relationship.run_id
+    WHERE left_relationship.stream_type = 'company_contact'
+      AND left_relationship.source_id IS NOT NULL
+      AND left_relationship.target_source_id IS NOT NULL
+      AND right_relationship.source_id IS NOT NULL
       AND source_link.entity_id <> target_link.entity_id
     ORDER BY source_link.entity_id, target_link.entity_id
   `;
 }
 
+type OrganizationFamilyActDatabase = Pick<DrizzleDatabase, "execute">;
 
-export type OrganizationFamilyReviewRecord = {
-  groupKey: string;
-  candidateIds: string[];
-  evidence: FamilyCandidateEvidence[];
-  status: "proposed" | "not_related";
-};
+export async function loadOrganizationFamilyActRelationships(
+  database: OrganizationFamilyActDatabase,
+): Promise<OrganizationFamilyActRelationship[]> {
+  const result = await database.execute<OrganizationFamilyActRelationship>(
+    organizationFamilyActRelationshipsQuery(),
+  );
+  return [...result.rows];
+}
+
+export async function discoverOrganizationFamilyCandidatesFromDatabase(
+  database: OrganizationFamilyActDatabase,
+  records: readonly OrganizationFamilyRecord[],
+): Promise<OrganizationFamilyCandidateGroup[]> {
+  return discoverOrganizationFamilyCandidates(
+    records,
+    await loadOrganizationFamilyActRelationships(database),
+  );
+}
 
 export function discoverOrganizationFamilyCandidates(
   records: readonly OrganizationFamilyRecord[],
@@ -1125,7 +1145,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
   }
 
   async findDuplicates(): Promise<DuplicateOrganizationGroup[]> {
-    const [groupRows, familyRecords, actRelationships] = await Promise.all([
+    const [groupRows, familyRecords] = await Promise.all([
       this.database.execute<{
         normalized_name: string;
         normalized_city: string;
@@ -1144,15 +1164,13 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           )`,
         ))
         .orderBy(asc(organizations.id)),
-      this.database.execute<OrganizationFamilyActRelationship>(
-        organizationFamilyActRelationshipsQuery(),
-      ),
     ]);
 
-    const discoveredFamilies = discoverOrganizationFamilyCandidates(
-      familyRecords,
-      [...actRelationships.rows],
-    );
+    const discoveredFamilies =
+      await discoverOrganizationFamilyCandidatesFromDatabase(
+        this.database,
+        familyRecords,
+      );
     const familyKeys = discoveredFamilies.flatMap((group) =>
       group.groupKey ? [group.groupKey] : [],
     );
