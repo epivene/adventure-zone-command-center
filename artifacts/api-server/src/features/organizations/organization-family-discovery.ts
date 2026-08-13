@@ -144,6 +144,14 @@ export function discoverOrganizationFamilyCandidates(
       .filter((address): address is string => address !== null);
     if (new Set(addresses).size !== addresses.length) continue;
 
+    const exactCandidateIds = new Set(candidateIds);
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      if (
+        candidates[index]!.candidateIds.some((id) => exactCandidateIds.has(id))
+      ) {
+        candidates.splice(index, 1);
+      }
+    }
     candidates.push({
       normalizedName: exactName,
       city: "",
