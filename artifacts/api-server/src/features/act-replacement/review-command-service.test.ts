@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { ActApplyService } from "./apply-service";
 import { InMemoryApplyRepository } from "./apply-repository";
 import { InMemoryApprovalRepository } from "./approval-service";
-import { InMemoryReviewCommandStore, ReviewCommandService } from "./review-command-service";
+import {
+  automaticReviewRequestFingerprint,
+  InMemoryReviewCommandStore,
+  ReviewCommandService,
+  type AutomaticReviewDecisionInput,
+  type SaveDecisionInput,
+} from "./review-command-service";
 import { buildActOrganizeManifest, type ActOrganizeManifest, type ManifestSourceInput } from "./manifest-builder";
 import { fingerprintSourceContent } from "./source-fingerprint";
 const manifest: ActOrganizeManifest = { digest: "d", diagnostics: [], outcomes: [{ sourceRecordId: "a", sourceVersionId: "v", state: "awaiting_review", issues: [{ code: "field_conflict", reason: "phone" }], candidates: [], match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [] }], operations: [{ operationKey: "organization:a", sourceRecordId: "a", sourceVersionId: "v", targetType: "organization", action: "create", payload: { normalized: { kind: "organization", name: "A" } }, dependencyOperationKeys: [], requiredForSourceOutcome: true, safeByDefault: true }] };
@@ -23,6 +29,297 @@ const reviewOutcome = (
   mappingWarnings: [],
   unsupportedFieldPaths: [],
   operationKeys: [],
+});
+
+const automaticOutcome = (
+  sourceRecordId: string,
+  sourceVersionId: string,
+  issues: ActOrganizeManifest["outcomes"][number]["issues"],
+  match: ActOrganizeManifest["outcomes"][number]["match"] = null,
+): ActOrganizeManifest["outcomes"][number] => ({
+  sourceRecordId,
+  sourceVersionId,
+  state: "awaiting_review",
+  issues,
+  candidates: [],
+  match,
+  mappingWarnings: [],
+  unsupportedFieldPaths: [],
+  operationKeys: [],
+});
+
+class AutomaticReviewTestStore extends InMemoryReviewCommandStore {
+  beforeNextValidation?: () => void;
+
+  protected override validatedDecision(runId: string, input: SaveDecisionInput): SaveDecisionInput {
+    const beforeValidation = this.beforeNextValidation;
+    this.beforeNextValidation = undefined;
+    beforeValidation?.();
+    return super.validatedDecision(runId, input);
+  }
+}
+
+function automaticService() {
+  const outcomes: ActOrganizeManifest["outcomes"] = [
+    automaticOutcome("linked", "v-linked", [{ code: "ambiguous_match", reason: "multiple_candidates" }]),
+    automaticOutcome("separate", "v-separate", [{ code: "ambiguous_match", reason: "multiple_candidates" }]),
+    automaticOutcome("assigned", "v-assigned", [
+      { code: "relationship_unresolved", reason: "missing_parent", relationshipSlot: "company-parent", expectedParentTypes: ["organization"], canImportStandalone: false },
+      { code: "relationship_unresolved", reason: "missing_secondary_parent", relationshipSlot: "secondary-parent", expectedParentTypes: ["organization"], canImportStandalone: false },
+    ]),
+    automaticOutcome("unlinked", "v-unlinked", [{ code: "relationship_unresolved", reason: "missing_parent", relationshipSlot: "optional-parent", expectedParentTypes: ["organization"], canImportStandalone: true }]),
+    automaticOutcome("fields", "v-fields", [
+      { code: "field_conflict", reason: "email" },
+      { code: "field_conflict", reason: "phone" },
+    ], {
+      kind: "exact",
+      localId: "local-fields",
+      reason: "exact_external_link",
+    }),
+    automaticOutcome("unsupported", "v-unsupported", [{ code: "unsupported_record", reason: "normalization_failed" }]),
+  ];
+  const currentManifest: ActOrganizeManifest = {
+    digest: "automatic-digest-1",
+    diagnostics: [],
+    outcomes,
+    operations: [{
+      operationKey: "contact:fields",
+      sourceRecordId: "fields",
+      sourceVersionId: "v-fields",
+      targetType: "contact",
+      action: "link_existing",
+      payload: { localId: "local-fields", normalized: { name: "Fields Person", email: "act@example.com", phone: "555-ACT" } },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: false,
+    }],
+  };
+  const approvals = new InMemoryApprovalRepository();
+  const applyRepo = new InMemoryApplyRepository({ unsafeForTests: true });
+  const store = new AutomaticReviewTestStore(approvals, new ActApplyService(applyRepo, false));
+  store.seed("automatic-run", currentManifest, {
+    linked: { sourceVersionId: "v-linked", streamType: "contact" },
+    separate: { sourceVersionId: "v-separate", streamType: "contact" },
+    assigned: { sourceVersionId: "v-assigned", streamType: "activity" },
+    unlinked: { sourceVersionId: "v-unlinked", streamType: "activity" },
+    fields: { sourceVersionId: "v-fields", streamType: "contact", localFields: { email: "local@example.com", phone: "555-LOCAL" } },
+    unsupported: { sourceVersionId: "v-unsupported", streamType: "unsupported" },
+  });
+  for (const [type, id] of [
+    ["contact", "local-linked"],
+    ["contact", "local-fields"],
+    ["organization", "local-parent"],
+    ["organization", "secondary-parent"],
+  ] as const) store.seedTarget(type, id);
+  store.seedAutomaticReview("automatic-run", {
+    records: [
+      { sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", unsupportedRecord: true },
+      { sourceRecordId: "fields", sourceVersionId: "v-fields", conflicts: [{ fieldName: "phone" }, { fieldName: "email" }], match: { kind: "exact", localId: "local-fields", reason: "exact_external_link" } },
+      { sourceRecordId: "unlinked", sourceVersionId: "v-unlinked", relationshipIssues: [outcomes[3]!.issues[0] as never] },
+      { sourceRecordId: "assigned", sourceVersionId: "v-assigned", relationshipIssues: outcomes[2]!.issues as never },
+      { sourceRecordId: "separate", sourceVersionId: "v-separate", targetEntityType: "contact", issues: [{ code: "ambiguous_match" }], match: { kind: "ambiguous", candidateIds: ["candidate-1", "candidate-2"], reason: "multiple_candidates" } },
+      { sourceRecordId: "linked", sourceVersionId: "v-linked", issues: [{ code: "ambiguous_match" }], match: { kind: "ambiguous", candidateIds: ["local-linked"], reason: "multiple_candidates" } },
+    ],
+    context: {
+      sourceRecords: [
+        { sourceRecordId: "linked", sourceVersionId: "v-linked", streamType: "contact", display: { fullName: "Linked Person" } },
+        { sourceRecordId: "separate", sourceVersionId: "v-separate", streamType: "contact", display: { fullName: "Separate Person" } },
+        { sourceRecordId: "assigned", sourceVersionId: "v-assigned", streamType: "activity", display: { subject: "Call" }, relationshipLabelsBySlot: { "company-parent": { organization: "Parent Org" }, "secondary-parent": { organization: "Secondary Parent" } } },
+        { sourceRecordId: "unlinked", sourceVersionId: "v-unlinked", streamType: "activity", display: { subject: "Email" } },
+        { sourceRecordId: "fields", sourceVersionId: "v-fields", streamType: "contact", display: { fullName: "Fields Person" } },
+      ],
+      targetsByEntityType: {
+        contact: [
+          { id: "local-linked", entityType: "contact", label: "Linked Person", detail: null, fields: {} },
+          { id: "local-fields", entityType: "contact", label: "Fields Person", detail: null, fields: {} },
+        ],
+        organization: [
+          { id: "local-parent", entityType: "organization", label: "Parent Org", detail: null, fields: {} },
+          { id: "secondary-parent", entityType: "organization", label: "Secondary Parent", detail: null, fields: {} },
+        ],
+      },
+    },
+  });
+  let rebuilds = 0;
+  store.rebuildAfterReviewChange = async () => {
+    rebuilds += 1;
+    store.manifests.set("automatic-run", { ...currentManifest, digest: "automatic-digest-2" });
+    return { status: "ready_to_apply" };
+  };
+  return { commands: new ReviewCommandService(store), store, rebuilds: () => rebuilds };
+}
+
+const automaticEnvelope = { runId: "automatic-run", expectedManifestDigest: "automatic-digest-1", requestKey: "automatic-request", requestedBy: "owner" };
+
+describe("automatic heterogeneous review decisions", () => {
+  it("persists a proof-bound mixed batch in deterministic decision order and rebuilds once", async () => {
+    const { commands, rebuilds } = automaticService();
+    const result = await commands.resolveAutomatically(automaticEnvelope);
+    expect(result.decisions.map(({ sourceRecordId, scope, decision, fieldName, relationshipSlot }) => ({ sourceRecordId, scope, decision, fieldName, relationshipSlot }))).toEqual([
+      { sourceRecordId: "assigned", scope: "relationship", decision: "assign_parent", fieldName: null, relationshipSlot: "company-parent" },
+      { sourceRecordId: "assigned", scope: "relationship", decision: "assign_parent", fieldName: null, relationshipSlot: "secondary-parent" },
+      { sourceRecordId: "fields", scope: "field_conflict", decision: "use_source", fieldName: "email", relationshipSlot: null },
+      { sourceRecordId: "fields", scope: "field_conflict", decision: "use_source", fieldName: "phone", relationshipSlot: null },
+      { sourceRecordId: "linked", scope: "duplicate_identity", decision: "link_existing", fieldName: null, relationshipSlot: null },
+      { sourceRecordId: "separate", scope: "duplicate_identity", decision: "keep_separate", fieldName: null, relationshipSlot: null },
+      { sourceRecordId: "unlinked", scope: "relationship", decision: "keep_unlinked", fieldName: null, relationshipSlot: "optional-parent" },
+      { sourceRecordId: "unsupported", scope: "unsupported_record", decision: "ignore_source", fieldName: null, relationshipSlot: null },
+    ]);
+    expect(result.decisions.filter((decision) => decision.decision === "use_source")).toEqual([
+      expect.objectContaining({ fieldName: "email", reviewedSourceValue: "act@example.com", reviewedLocalValue: "local@example.com" }),
+      expect.objectContaining({ fieldName: "phone", reviewedSourceValue: "555-ACT", reviewedLocalValue: "555-LOCAL" }),
+    ]);
+    expect(result.summary).toMatchObject({ linkedExisting: 1, importedNew: 1, relationshipsAssigned: 2, relationshipsOmitted: 1, actValuesSelected: 2, unsupportedIgnored: 1, manualReview: 0, decisionsCreatedOrReplayed: 8 });
+    expect(rebuilds()).toBe(1);
+  });
+
+  it("fingerprints reordered heterogeneous decisions identically and binds the full envelope", () => {
+    const decisions: AutomaticReviewDecisionInput[] = [
+      { sourceRecordId: "b", sourceVersionId: "v-b", scope: "field_conflict", decision: "use_source", fieldName: "phone", relationshipSlot: null, targetEntityType: "contact", targetEntityId: "local-b" },
+      { sourceRecordId: "a", sourceVersionId: "v-a", scope: "relationship", decision: "assign_parent", fieldName: null, relationshipSlot: "parent", targetEntityType: "organization", targetEntityId: "local-a" },
+    ];
+    const input = { runId: "run", expectedManifestDigest: "digest", actor: "owner", policyVersion: "policy-1", decisions };
+    expect(automaticReviewRequestFingerprint(input)).toBe(automaticReviewRequestFingerprint({ ...input, decisions: [...decisions].reverse() }));
+    expect(automaticReviewRequestFingerprint(input)).not.toBe(automaticReviewRequestFingerprint({ ...input, actor: "other" }));
+    expect(automaticReviewRequestFingerprint(input)).not.toBe(automaticReviewRequestFingerprint({ ...input, expectedManifestDigest: "other" }));
+    expect(automaticReviewRequestFingerprint(input)).not.toBe(automaticReviewRequestFingerprint({ ...input, policyVersion: "policy-2" }));
+  });
+
+  it("fingerprints reversed null, empty, and Unicode-distinct selections identically", () => {
+    const decisions: AutomaticReviewDecisionInput[] = [
+      { sourceRecordId: "same", sourceVersionId: "v", scope: "relationship", decision: "keep_unlinked", fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null },
+      { sourceRecordId: "same", sourceVersionId: "v", scope: "relationship", decision: "keep_unlinked", fieldName: "", relationshipSlot: "", targetEntityType: "", targetEntityId: "" },
+      { sourceRecordId: "unicode", sourceVersionId: "v", scope: "field_conflict", decision: "use_source", fieldName: "e\u0301", relationshipSlot: null, targetEntityType: "contact", targetEntityId: "local" },
+      { sourceRecordId: "unicode", sourceVersionId: "v", scope: "field_conflict", decision: "use_source", fieldName: "é", relationshipSlot: null, targetEntityType: "contact", targetEntityId: "local" },
+    ];
+    const input = { runId: "run", expectedManifestDigest: "digest", actor: "owner", policyVersion: "policy", decisions };
+
+    expect(automaticReviewRequestFingerprint(input)).toBe(automaticReviewRequestFingerprint({ ...input, decisions: [...decisions].reverse() }));
+  });
+
+  it("returns an exact replay without rebuilding or replacing the audit actor", async () => {
+    const { commands, rebuilds } = automaticService();
+    const first = await commands.resolveAutomatically(automaticEnvelope);
+    const replay = await commands.resolveAutomatically(automaticEnvelope);
+    expect(replay).toEqual(first);
+    expect(replay.decisions.every((decision) => decision.decidedBy === "owner")).toBe(true);
+    expect(rebuilds()).toBe(1);
+  });
+
+  it("keeps colon-containing run and request tuple identities distinct", async () => {
+    const approvals = new InMemoryApprovalRepository();
+    const applyRepo = new InMemoryApplyRepository({ unsafeForTests: true });
+    const store = new InMemoryReviewCommandStore(approvals, new ActApplyService(applyRepo, false));
+    const emptyManifest = (digest: string): ActOrganizeManifest => ({ digest, diagnostics: [], outcomes: [], operations: [] });
+    store.seed("a:b", emptyManifest("digest-ab"), {}, "owner");
+    store.seedAutomaticReview("a:b", { records: [] });
+    store.seed("a", emptyManifest("digest-a"), {}, "owner");
+    store.seedAutomaticReview("a", { records: [] });
+    const commands = new ReviewCommandService(store);
+    await expect(commands.resolveAutomatically({ runId: "a:b", expectedManifestDigest: "digest-ab", requestKey: "c", requestedBy: "owner" })).resolves.toMatchObject({ manifestDigest: "digest-ab", decisions: [] });
+    await expect(commands.resolveAutomatically({ runId: "a", expectedManifestDigest: "digest-a", requestKey: "b:c", requestedBy: "owner" })).resolves.toMatchObject({ manifestDigest: "digest-a", decisions: [] });
+  });
+
+  it("rejects a same-tuple replay when the recomputed request fingerprint changes", async () => {
+    const { commands, store, rebuilds } = automaticService();
+    const first = await commands.resolveAutomatically(automaticEnvelope);
+    store.seedAutomaticReview("automatic-run", { records: [] });
+    await expect(commands.resolveAutomatically(automaticEnvelope)).rejects.toMatchObject({ code: "request_replay_mismatch", status: 409 });
+    expect(first.decisions).toHaveLength(8);
+    expect(rebuilds()).toBe(1);
+  });
+
+  it("rejects stale manifest and source state before writing any automatic decision", async () => {
+    const staleManifest = automaticService();
+    await expect(staleManifest.commands.resolveAutomatically({ ...automaticEnvelope, expectedManifestDigest: "stale" })).rejects.toMatchObject({ code: "manifest_digest_mismatch", status: 409 });
+    expect(staleManifest.rebuilds()).toBe(0);
+    const staleSource = automaticService();
+    staleSource.store.seedAutomaticReview("automatic-run", {
+      records: [{ sourceRecordId: "linked", sourceVersionId: "stale", issues: [{ code: "ambiguous_match" }], match: { kind: "ambiguous", candidateIds: ["local-linked"], reason: "multiple_candidates" } }],
+      context: { sourceRecords: [{ sourceRecordId: "linked", sourceVersionId: "stale", streamType: "contact", display: { fullName: "Linked Person" } }], targetsByEntityType: { contact: [{ id: "local-linked", entityType: "contact", label: "Linked Person", detail: null, fields: {} }] } },
+    });
+    await expect(staleSource.commands.resolveAutomatically(automaticEnvelope)).rejects.toMatchObject({ code: "stale_source_version", status: 409 });
+    expect(await staleSource.commands.decisions("linked")).toEqual([]);
+    expect(staleSource.rebuilds()).toBe(0);
+  });
+
+  it("leaves duplicate exact targets for manual review and writes no unsafe identity decision", async () => {
+    const { commands, store, rebuilds } = automaticService();
+    store.seedAutomaticReview("automatic-run", {
+      records: [{ sourceRecordId: "linked", sourceVersionId: "v-linked", issues: [{ code: "ambiguous_match" }], match: { kind: "ambiguous", candidateIds: ["local-linked"], reason: "multiple_candidates" } }],
+      context: { sourceRecords: [{ sourceRecordId: "linked", sourceVersionId: "v-linked", streamType: "contact", display: { fullName: "Linked Person" } }], targetsByEntityType: { contact: [{ id: "local-linked", entityType: "contact", label: "Linked Person", detail: null, fields: {} }, { id: "duplicate-linked", entityType: "contact", label: "Linked Person", detail: null, fields: {} }] } },
+    });
+    const result = await commands.resolveAutomatically(automaticEnvelope);
+    expect(result.decisions).toEqual([]);
+    expect(result.summary.manualReview).toBe(1);
+    expect(rebuilds()).toBe(0);
+  });
+
+  it("rejects a local field change between proof capture and decision validation", async () => {
+    const { commands, store, rebuilds } = automaticService();
+    store.beforeNextValidation = () => {
+      store.seed("automatic-run", store.manifests.get("automatic-run")!, { fields: { sourceVersionId: "v-fields", streamType: "contact", localFields: { email: "concurrent@example.com", phone: "555-LOCAL" } } });
+    };
+    await expect(commands.resolveAutomatically(automaticEnvelope)).rejects.toMatchObject({ code: "stale_review_token", status: 409 });
+    expect(await commands.decisions("fields")).toEqual([]);
+    expect(rebuilds()).toBe(0);
+  });
+
+  it("reruns automatic cleanup to replace only a field decision made stale by a local edit", async () => {
+    const { commands, store } = automaticService();
+    const first = await commands.resolveAutomatically(automaticEnvelope);
+    const oldPhone = first.decisions.find((decision) => decision.sourceRecordId === "fields" && decision.fieldName === "phone")!;
+    const current = store.manifests.get("automatic-run")!;
+    store.seed("automatic-run", {
+      ...current,
+      digest: "automatic-digest-2",
+      outcomes: [automaticOutcome("fields", "v-fields", [{ code: "field_conflict", reason: "phone" }], {
+        kind: "exact", localId: "local-fields", reason: "exact_external_link",
+      })],
+      operations: current.operations,
+    }, {
+      fields: { sourceVersionId: "v-fields", streamType: "contact", localFields: { email: "local@example.com", phone: "555-CONCURRENT" } },
+    });
+    store.seedAutomaticReview("automatic-run", {
+      records: [{
+        sourceRecordId: "fields", sourceVersionId: "v-fields",
+        conflicts: [{ fieldName: "phone" }],
+        match: { kind: "exact", localId: "local-fields", reason: "exact_external_link" },
+      }],
+      context: {
+        sourceRecords: [{ sourceRecordId: "fields", sourceVersionId: "v-fields", streamType: "contact", display: { fullName: "Fields Person" } }],
+        targetsByEntityType: { contact: [{ id: "local-fields", entityType: "contact", label: "Fields Person", detail: null, fields: {} }] },
+      },
+    });
+
+    const rerun = await commands.resolveAutomatically({
+      ...automaticEnvelope,
+      expectedManifestDigest: "automatic-digest-2",
+      requestKey: "automatic-rerun",
+    });
+
+    expect(rerun.decisions).toEqual([
+      expect.objectContaining({ fieldName: "phone", decision: "use_source", reviewedLocalValue: "555-CONCURRENT", active: true }),
+    ]);
+    expect(store.decisions.get("fields")).toEqual([
+      expect.objectContaining({ fieldName: "email", active: true }),
+      expect.objectContaining({ id: oldPhone.id, fieldName: "phone", active: false, reviewedLocalValue: "555-LOCAL" }),
+      expect.objectContaining({ id: rerun.decisions[0]!.id, fieldName: "phone", active: true, reviewedLocalValue: "555-CONCURRENT" }),
+    ]);
+  });
+
+  it("accepts an empty no-op run without rebuilding and validates the service envelope", async () => {
+    const { commands, store, rebuilds } = automaticService();
+    store.seedAutomaticReview("automatic-run", { records: [] });
+    await expect(commands.resolveAutomatically(automaticEnvelope)).resolves.toMatchObject({ decisions: [], manifestDigest: "automatic-digest-1", summary: { decisionsCreatedOrReplayed: 0, manualReview: 0 } });
+    expect(rebuilds()).toBe(0);
+    for (const input of [
+      { ...automaticEnvelope, runId: " " },
+      { ...automaticEnvelope, expectedManifestDigest: " " },
+      { ...automaticEnvelope, requestKey: " " },
+      { ...automaticEnvelope, requestedBy: " " },
+    ]) await expect(commands.resolveAutomatically(input)).rejects.toMatchObject({ code: "invalid_automatic_review", status: 400 });
+  });
 });
 
 function bulkService(input: {
@@ -127,6 +424,59 @@ describe("Act review command service", () => {
     await expect(s.decide({ runId: "r", sourceRecordId: "a", sourceVersionId: "v", scope: "field_conflict", decision: "ignore_source", fieldName: "phone", requestKey: "wrong-field", decidedBy: "owner" })).rejects.toMatchObject({ code: "invalid_decision" });
     await expect(s.decide({ runId: "r", sourceRecordId: "a", sourceVersionId: "v", scope: "unsupported_record", decision: "keep_local", requestKey: "wrong-unsupported", decidedBy: "owner" })).rejects.toMatchObject({ code: "invalid_decision" });
     await expect(s.decide({ runId: "r", sourceRecordId: "a", sourceVersionId: "v", scope: "relationship", decision: "keep_unlinked", requestKey: "relationship", decidedBy: "owner" })).rejects.toMatchObject({ code: "relationship_issue_not_found" });
+  });
+  it("supersedes only a proof-stale field decision when saving its fresh replacement", async () => {
+    const { commands, store } = fieldBulkService();
+    const first = await commands.decide({
+      runId: "run", sourceRecordId: "a", sourceVersionId: "v-a", scope: "field_conflict",
+      decision: "use_source", fieldName: "phone", requestKey: "automatic-field", decidedBy: "owner",
+      reviewToken: conflictToken("a"),
+    });
+    store.seed("run", store.manifests.get("run")!, {
+      a: { sourceVersionId: "v-a", streamType: "company", localFields: { phone: "555-CONCURRENT" } },
+    });
+
+    const replacement = await commands.decide({
+      runId: "run", sourceRecordId: "a", sourceVersionId: "v-a", scope: "field_conflict",
+      decision: "use_source", fieldName: "phone", requestKey: "manual-replacement", decidedBy: "owner",
+      reviewToken: conflictToken("a", "555-CONCURRENT"),
+    });
+
+    expect(replacement).toMatchObject({ decision: "use_source", reviewedLocalValue: "555-CONCURRENT", active: true });
+    expect(await commands.decisions("a")).toEqual([expect.objectContaining({ id: replacement.id, active: true })]);
+    expect(store.decisions.get("a")).toEqual([
+      expect.objectContaining({ id: first.id, active: false, reviewedLocalValue: "555-LOCAL-A" }),
+      expect.objectContaining({ id: replacement.id, active: true, reviewedLocalValue: "555-CONCURRENT" }),
+    ]);
+  });
+  it("does not supersede a still-valid or conflicting active field decision", async () => {
+    const valid = fieldBulkService();
+    await valid.commands.decide({
+      runId: "run", sourceRecordId: "a", sourceVersionId: "v-a", scope: "field_conflict",
+      decision: "use_source", fieldName: "phone", requestKey: "valid-first", decidedBy: "owner",
+      reviewToken: conflictToken("a"),
+    });
+    await expect(valid.commands.decide({
+      runId: "run", sourceRecordId: "a", sourceVersionId: "v-a", scope: "field_conflict",
+      decision: "use_source", fieldName: "phone", requestKey: "valid-second", decidedBy: "owner",
+      reviewToken: conflictToken("a"),
+    })).rejects.toMatchObject({ code: "decision_already_active", status: 409 });
+    expect(valid.store.decisions.get("a")).toHaveLength(1);
+    expect(valid.store.decisions.get("a")?.[0]).toMatchObject({ active: true, reviewedLocalValue: "555-LOCAL-A" });
+
+    const conflicting = fieldBulkService();
+    await conflicting.commands.decide({
+      runId: "run", sourceRecordId: "a", sourceVersionId: "v-a", scope: "field_conflict",
+      decision: "keep_local", fieldName: "phone", requestKey: "keep-local-first", decidedBy: "owner",
+    });
+    await expect(conflicting.commands.decide({
+      runId: "run", sourceRecordId: "a", sourceVersionId: "v-a", scope: "field_conflict",
+      decision: "use_source", fieldName: "phone", requestKey: "use-source-second", decidedBy: "owner",
+      reviewToken: conflictToken("a"),
+    })).rejects.toMatchObject({ code: "decision_already_active", status: 409 });
+    expect(conflicting.store.decisions.get("a")).toEqual([
+      expect.objectContaining({ decision: "keep_local", active: true }),
+    ]);
   });
   it("rejects a changed individual decision under the same request key", async () => {
     const s = service();

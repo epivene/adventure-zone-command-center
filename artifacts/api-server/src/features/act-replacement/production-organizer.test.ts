@@ -102,7 +102,7 @@ describe("ProductionActOrganizer", () => {
       },
       async loadSources() { return loading; },
       async renew() { return true; },
-      async persistManifest() {},
+      async persistManifest() { completed = true; },
       async complete() { completed = true; },
       async release() {},
     };
@@ -116,20 +116,20 @@ describe("ProductionActOrganizer", () => {
     expect(completed).toBe(true);
   });
 
-  it("renews the durable lease immediately before manifest persistence", async () => {
+  it("renews the durable lease immediately before the atomic manifest publication", async () => {
     const events: string[] = [];
     const store: ProductionOrganizerStore = {
       async claim(runId) { return { runId, phase: "organizing", claimToken: "renew-token" }; },
       async loadSources() { events.push("load"); return [companySource]; },
       async renew(_runId, claimToken) { events.push(`renew:${claimToken}`); return true; },
-      async persistManifest() { events.push("persist"); },
+      async persistManifest() { events.push("publish"); },
       async complete() { events.push("complete"); },
       async release() {},
     };
 
     await new ProductionActOrganizer(store).organize("run-renew");
 
-    expect(events).toEqual(["load", "renew:renew-token", "persist", "complete"]);
+    expect(events).toEqual(["load", "renew:renew-token", "publish"]);
   });
 
   it("uses the final renewal as authority after a transient heartbeat error", async () => {
@@ -277,7 +277,11 @@ describe("ProductionActOrganizer", () => {
       },
       async loadSources() { return [companySource]; },
       async renew() { return true; },
-      async persistManifest(_runId, claimToken) { expect(claimToken).toBe("exclusive-token"); },
+      async persistManifest(_runId, claimToken) {
+        expect(claimToken).toBe("exclusive-token");
+        completedToken = claimToken;
+        active = false;
+      },
       async complete(_runId, claimToken) { completedToken = claimToken; active = false; },
       async release() { active = false; },
     };

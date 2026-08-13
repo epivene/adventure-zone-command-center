@@ -97,6 +97,22 @@ describe("buildActOrganizeManifest", () => {
     expect(result.digest).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("orders each outcome's operation keys exactly like its source-filtered global operations", () => {
+    const result = buildActOrganizeManifest({ runId: "run", sources: [source({
+      match: { kind: "exact", localId: "organization-1", reason: "reliable_identity" },
+      normalized: { kind: "organization", name: "Acme", phone: "555-ACT", website: "https://act.example" },
+      localFields: { name: "Acme", phone: null, website: null },
+    })] });
+    const outcome = result.outcomes[0]!;
+
+    expect(outcome.operationKeys).toEqual(
+      result.operations
+        .filter((operation) => operation.sourceRecordId === outcome.sourceRecordId)
+        .map((operation) => operation.operationKey),
+    );
+    expect(outcome.operationKeys.length).toBeGreaterThan(2);
+  });
+
   it("is permutation independent and does not auto-apply ambiguous matches", () => {
     const inputs = [source(), source({ sourceRecordId: "s-2", sourceVersionId: "v-2", match: { kind: "ambiguous", candidateIds: ["z", "a"], reason: "name_only" } })];
     const first = buildActOrganizeManifest({ runId: "run", sources: inputs });
@@ -125,7 +141,7 @@ describe("buildActOrganizeManifest", () => {
       action: "record_provenance",
       payload: expect.objectContaining({ unsupportedFieldPaths: ["secret.value"] }),
     }));
-    expect(result.digest).toBe(createHash("sha256").update(JSON.stringify({ operations: result.operations, outcomes: result.outcomes })).digest("hex"));
+    expect(result.digest).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("persists sorted context evidence and records only sanitized clue provenance", () => {
@@ -333,8 +349,8 @@ describe("buildActOrganizeManifest", () => {
 
   it("materializes an explicit Act overwrite with immutable proof", () => {
     const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
-      localFields: { phone: "555-CHANGED-AFTER-REVIEW" },
-      normalized: { kind: "organization", name: "Acme", phone: "555-CHANGED-ACT", website: null },
+      localFields: { phone: "555-LOCAL" },
+      normalized: { kind: "organization", name: "Acme", phone: "555-ACT", website: null },
       match: { kind: "exact", localId: "organization-1", reason: "exact_external_link" },
       reviewDecisions: [{
         ...reviewDecision,
@@ -367,6 +383,31 @@ describe("buildActOrganizeManifest", () => {
           sourceValue: "555-ACT",
         }),
       }),
+    }));
+  });
+
+  it("keeps a concurrent local edit reviewable instead of rebuilding a stale overwrite proof", () => {
+    const manifest = buildActOrganizeManifest({ runId: "run", sources: [source({
+      localFields: { phone: "555-CONCURRENT-EDIT" },
+      normalized: { kind: "organization", name: "Acme", phone: "555-ACT", website: null },
+      match: { kind: "exact", localId: "organization-1", reason: "manual_review" },
+      reviewDecisions: [{
+        ...reviewDecision,
+        decisionId: "decision-stale-local-proof",
+        decision: "use_source",
+        reviewedSourceValue: "555-ACT",
+        reviewedSourceValueFingerprint: createHash("sha256").update('{"value":"555-ACT"}').digest("hex"),
+        reviewedLocalValue: "555-LOCAL-BEFORE-REVIEW",
+        reviewedLocalValueFingerprint: createHash("sha256").update('{"value":"555-LOCAL-BEFORE-REVIEW"}').digest("hex"),
+      }],
+    })] });
+
+    expect(manifest.outcomes[0]).toMatchObject({
+      state: "awaiting_review",
+      issues: [{ code: "field_conflict", reason: "phone" }],
+    });
+    expect(manifest.operations).not.toContainEqual(expect.objectContaining({
+      action: "overwrite_reviewed",
     }));
   });
 

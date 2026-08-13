@@ -21,11 +21,21 @@ import {
   InMemoryReviewCommandStore,
   ReviewCommandService,
 } from "./review-command-service";
-import type {
-  ActOrganizeManifest,
-  ManifestOperation,
-  ManifestOutcome,
+import {
+  buildActOrganizeManifest,
+  type ActOrganizeManifest,
+  type ManifestOperation,
+  type ManifestOutcome,
 } from "./manifest-builder";
+import {
+  InMemoryReviewReader,
+  readReview,
+} from "./review-reader";
+import {
+  proposeAutomaticReview,
+  type AutomaticReviewRecord,
+  type AutomaticReviewReason,
+} from "./automatic-review-resolver";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import {
   manifestFromRows,
@@ -1225,6 +1235,488 @@ describe("durable production workflow projection", () => {
       failedOperationCount: 1,
       operations: [expect.objectContaining({ heldForReview: false })],
     });
+  });
+
+  it("approves and applies only the rebuilt safe closure from complete-with-issues", async () => {
+    const runId = "automatic-complete-with-issues";
+    const digest = "e".repeat(64);
+    const safeOrganization: ManifestOperation = {
+      operationKey: "organization:safe-boundary",
+      sourceRecordId: "safe-boundary-organization",
+      sourceVersionId: "safe-boundary-organization-version",
+      targetType: "organization",
+      action: "create",
+      payload: {
+        normalized: { kind: "organization", name: "Safe Boundary" },
+        automaticReview: automaticProof(),
+      },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const safeContact: ManifestOperation = {
+      operationKey: "contact:safe-boundary",
+      sourceRecordId: "safe-boundary-contact",
+      sourceVersionId: "safe-boundary-contact-version",
+      targetType: "contact",
+      action: "create",
+      payload: {
+        normalized: { kind: "contact", firstName: "Safe", lastName: "Boundary" },
+        automaticReview: automaticProof(),
+      },
+      dependencyOperationKeys: [safeOrganization.operationKey],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const unsafeProof = automaticProof(
+      "archived_only",
+      "not_automatically_safe",
+      false,
+    );
+    const unsafeOperations: ManifestOperation[] = [
+      {
+        operationKey: "contact:duplicate-exact-name",
+        sourceRecordId: "duplicate-exact-name",
+        sourceVersionId: "duplicate-exact-name-version",
+        targetType: "contact",
+        action: "create",
+        payload: { automaticReview: unsafeProof },
+        dependencyOperationKeys: [],
+        requiredForSourceOutcome: true,
+        safeByDefault: true,
+      },
+      {
+        operationKey: "contact:conflicting-evidence",
+        sourceRecordId: "conflicting-evidence",
+        sourceVersionId: "conflicting-evidence-version",
+        targetType: "contact",
+        action: "link_existing",
+        payload: { localId: "conflicting-local", automaticReview: unsafeProof },
+        dependencyOperationKeys: [],
+        requiredForSourceOutcome: true,
+        safeByDefault: true,
+      },
+      {
+        operationKey: "contact:stale-field-proof",
+        sourceRecordId: "stale-field-proof",
+        sourceVersionId: "stale-field-proof-version",
+        targetType: "contact",
+        action: "overwrite_reviewed",
+        payload: {
+          entityId: "stale-local",
+          fieldName: "phone",
+          value: "555-ACT",
+          automaticReview: unsafeProof,
+        },
+        dependencyOperationKeys: [],
+        requiredForSourceOutcome: true,
+        safeByDefault: false,
+      },
+      {
+        operationKey: "organization:required-unresolved",
+        sourceRecordId: "required-unresolved-relationship",
+        sourceVersionId: "required-unresolved-version",
+        targetType: "organization",
+        action: "create",
+        payload: {
+          automaticReview: automaticProof(),
+        },
+        dependencyOperationKeys: ["organization_contact:required-unresolved"],
+        requiredForSourceOutcome: true,
+        safeByDefault: true,
+      },
+      {
+        operationKey: "organization_contact:required-unresolved",
+        sourceRecordId: "required-unresolved-relationship",
+        sourceVersionId: "required-unresolved-version",
+        targetType: "organization_contact",
+        action: "create_relationship",
+        payload: { automaticReview: unsafeProof },
+        dependencyOperationKeys: [],
+        requiredForSourceOutcome: true,
+        safeByDefault: true,
+      },
+    ];
+    const outcome = (
+      sourceRecordId: string,
+      sourceVersionId: string,
+      issues: ManifestOutcome["issues"],
+      operationKeys: string[],
+    ): ManifestOutcome => ({
+      sourceRecordId,
+      sourceVersionId,
+      state: "awaiting_review",
+      issues,
+      candidates: [],
+      match: null,
+      mappingWarnings: [],
+      unsupportedFieldPaths: [],
+      operationKeys,
+    });
+    const manifest: ActOrganizeManifest = {
+      digest,
+      diagnostics: [],
+      outcomes: [
+        outcome("safe-boundary-organization", "safe-boundary-organization-version", [], [safeOrganization.operationKey]),
+        outcome("safe-boundary-contact", "safe-boundary-contact-version", [], [safeContact.operationKey]),
+        outcome("duplicate-exact-name", "duplicate-exact-name-version", [{ code: "ambiguous_match", reason: "multiple_candidates" }], ["contact:duplicate-exact-name"]),
+        outcome("conflicting-evidence", "conflicting-evidence-version", [{ code: "ambiguous_match", reason: "conflicting_contact_fields" }], ["contact:conflicting-evidence"]),
+        outcome("stale-field-proof", "stale-field-proof-version", [{ code: "field_conflict", reason: "phone" }], ["contact:stale-field-proof"]),
+        outcome("required-unresolved-relationship", "required-unresolved-version", [{ code: "relationship_unresolved", reason: "source_relationship_conflict", relationshipSlot: "required", expectedParentTypes: [], canImportStandalone: false }], ["organization:required-unresolved", "organization_contact:required-unresolved"]),
+      ],
+      operations: [safeOrganization, safeContact, ...unsafeOperations],
+    };
+
+    const workflow = projectImportWorkflow({
+      phase: "complete_with_issues",
+      summary: { manifestDigest: digest },
+      outcomes: manifest.outcomes,
+      operations: manifest.operations.map((operation) => ({
+        ...operation,
+        status: "pending",
+        automaticReview: operation.payload.automaticReview,
+      })),
+      batches: [],
+    });
+    expect(workflow).toMatchObject({
+      safeOperationCount: 2,
+      canReview: true,
+      canApplySafe: true,
+    });
+    expect(new Set(workflow.operations.filter((operation) => operation.heldForReview)
+      .map((operation) => manifest.operations.find((candidate) => candidate.operationKey === operation.operationKey)!.sourceRecordId)))
+      .toEqual(new Set([
+        "duplicate-exact-name",
+        "conflicting-evidence",
+        "stale-field-proof",
+        "required-unresolved-relationship",
+      ]));
+
+    const approvals = new InMemoryApprovalRepository();
+    approvals.seed(runId, manifest);
+    const approval = await new ActApprovalService(approvals).approveSafeDefaults({
+      runId,
+      expectedManifestDigest: digest,
+      requestKey: "approve-rebuilt-safe-closure",
+      requestedBy: "owner",
+    });
+    expect(approval.approvedOperationIds).toEqual([
+      safeOrganization.operationKey,
+      safeContact.operationKey,
+    ]);
+    expect(new Set(approval.rejectedOperationIds)).toEqual(
+      new Set(unsafeOperations.map((operation) => operation.operationKey)),
+    );
+
+    const applyRepository = new InMemoryApplyRepository({ unsafeForTests: true });
+    applyRepository.seedManifest(runId, digest);
+    applyRepository.seedOperations(manifest.operations);
+    applyRepository.seedApproval(
+      runId,
+      "approve-rebuilt-safe-closure",
+      approval.approvedOperationIds,
+      digest,
+    );
+    expect(applyRepository.targets.size).toBe(0);
+    const coordinator = new ActApplyCoordinator(
+      new ActApplyService(applyRepository, true),
+      applyRepository,
+    );
+    await coordinator.applyNext({
+      runId,
+      approvalRequestKey: "approve-rebuilt-safe-closure",
+      expectedManifestDigest: digest,
+      requestedBy: "owner",
+      batchSize: 25,
+    });
+    expect(applyRepository.targets.size).toBe(2);
+    expect([...applyRepository.targets.values()].map((target) => target.entityType).sort())
+      .toEqual(["contact", "organization"]);
+  });
+
+  it("applies safe and reviewed operations through one explicit dependency-closed approval", async () => {
+    const runId = "combined-explicit-approval";
+    const digest = "f".repeat(64);
+    const link: ManifestOperation = {
+      operationKey: "organization:existing:identity:local-existing",
+      sourceRecordId: "existing-source",
+      sourceVersionId: "existing-version",
+      targetType: "organization",
+      action: "link_existing",
+      payload: {
+        localId: "local-existing",
+        normalized: { kind: "organization", name: "Existing", phone: "555-ACT" },
+        automaticReview: automaticProof("safe_ready", "trusted_exact_match"),
+      },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const create: ManifestOperation = {
+      operationKey: "organization:new-source",
+      sourceRecordId: "new-source",
+      sourceVersionId: "new-version",
+      targetType: "organization",
+      action: "create",
+      payload: {
+        normalized: { kind: "organization", name: "New Safe" },
+        automaticReview: automaticProof(),
+      },
+      dependencyOperationKeys: [],
+      requiredForSourceOutcome: true,
+      safeByDefault: true,
+    };
+    const overwrite: ManifestOperation = {
+      operationKey: "organization:existing:field:phone:decision:reviewed",
+      sourceRecordId: "existing-source",
+      sourceVersionId: "existing-version",
+      targetType: "organization",
+      action: "overwrite_reviewed",
+      payload: {
+        entityId: "local-existing",
+        fieldName: "phone",
+        value: "555-ACT",
+        proof: {
+          entityType: "organization",
+          entityId: "local-existing",
+          fieldName: "phone",
+          sourceVersionId: "existing-version",
+          expectedLocalValueFingerprint: fingerprintSourceContent({ value: "555-LOCAL" }),
+          decisionId: "decision-reviewed",
+          decision: "use_source",
+          localValue: "555-LOCAL",
+          sourceValue: "555-ACT",
+        },
+        decision: {
+          id: "decision-reviewed",
+          sourceVersionId: "existing-version",
+          scope: "field_conflict",
+          decision: "use_source",
+          fieldName: "phone",
+          targetEntityType: "organization",
+          targetEntityId: "local-existing",
+        },
+      },
+      dependencyOperationKeys: [link.operationKey],
+      requiredForSourceOutcome: true,
+      safeByDefault: false,
+    };
+    const manifest: ActOrganizeManifest = {
+      digest,
+      diagnostics: [],
+      outcomes: [],
+      operations: [link, create, overwrite],
+    };
+    const approvals = new InMemoryApprovalRepository();
+    approvals.seed(runId, manifest);
+    const approvalService = new ActApprovalService(approvals);
+    const combinedApproval = await approvalService.approve({
+      runId,
+      operationIds: [create.operationKey, overwrite.operationKey],
+      includeDependencies: true,
+      expectedManifestDigest: digest,
+      requestKey: "combined-explicit",
+      requestedBy: "owner",
+    });
+    expect(new Set(combinedApproval.approvedOperationIds)).toEqual(new Set([
+      link.operationKey,
+      create.operationKey,
+      overwrite.operationKey,
+    ]));
+    const repository = new InMemoryApplyRepository({ unsafeForTests: true });
+    repository.seedManifest(runId, digest);
+    repository.seedOperations(manifest.operations);
+    repository.targets.set("organization:local-existing", {
+      id: "local-existing",
+      entityType: "organization",
+      values: { name: "Existing", phone: "555-LOCAL" },
+      sourceIds: new Set(["existing-source"]),
+    });
+    repository.seedApproval(runId, "combined-explicit", combinedApproval.approvedOperationIds, digest, "explicit_manual");
+    const coordinator = new ActApplyCoordinator(new ActApplyService(repository, true), repository);
+
+    const first = await coordinator.applyNext({
+      runId, approvalRequestKey: "combined-explicit", expectedManifestDigest: digest,
+      requestedBy: "owner", batchSize: 25,
+    });
+    expect(first).toMatchObject({ hasMore: false, requiresReview: false });
+    const appliedOnce = [...repository.targets.values()].map((target) => ({
+      id: target.id,
+      entityType: target.entityType,
+      values: { ...target.values },
+      sourceIds: [...(target.sourceIds ?? [])].sort(),
+    })).sort((left, right) => left.id.localeCompare(right.id));
+    expect(repository.targets.get("organization:local-existing")?.values.phone).toBe("555-ACT");
+    expect(repository.runPhases.get(runId)).toBe("complete");
+
+    const replay = await coordinator.applyNext({
+      runId, approvalRequestKey: "combined-explicit", expectedManifestDigest: digest,
+      requestedBy: "owner", batchSize: 25,
+    });
+    expect(replay).toEqual(first);
+    expect([...repository.targets.values()].map((target) => ({
+      id: target.id,
+      entityType: target.entityType,
+      values: { ...target.values },
+      sourceIds: [...(target.sourceIds ?? [])].sort(),
+    })).sort((left, right) => left.id.localeCompare(right.id))).toEqual(appliedOnce);
+  });
+
+  it("rebuilds the exact real unsafe remainder after a concurrent local edit stales field proof", async () => {
+    const fetchedAt = new Date("2026-08-12T12:00:00.000Z");
+    const archived = (
+      sourceRecordId: string,
+      streamType: string,
+      rawSnapshot: Record<string, unknown>,
+      actRecordId: string | null = `${sourceRecordId}-act`,
+      relationshipEvidence: Record<string, unknown> = {},
+    ): ArchivedOrganizerSourceRow => ({
+      sourceRecordId,
+      sourceVersionId: `${sourceRecordId}-version`,
+      latestSourceVersionId: `${sourceRecordId}-version`,
+      streamType,
+      actRecordId,
+      archiveCompleteness: "complete",
+      rawSnapshot,
+      fetchedAt,
+      relationshipEvidence,
+    });
+    const rows = [
+      archived("duplicate-exact-name", "contact", { FirstName: "Dana", LastName: "Duplicate" }),
+      archived("conflicting-evidence", "contact", {
+        FirstName: "Casey", LastName: "Conflict",
+        EmailAddress: "casey-source@example.com", BusinessPhone: "555-333-4444",
+      }),
+      archived("stale-field-proof", "contact", {
+        FirstName: "Natalie", LastName: "Proof",
+        EmailAddress: "natalie-proof@example.com", JobTitle: "ACT Director",
+      }),
+      archived("required-unresolved-relationship", "company", { Name: "Required Company" }),
+      archived("required-relationship-evidence", "company_contact", {}, null, {
+        source: "endpoint",
+        parentKind: "company",
+        parentActRecordId: "required-unresolved-relationship-act",
+        targetKind: "contact",
+        targetActRecordId: "missing-required-contact-act",
+      }),
+    ];
+    const localContacts = [
+      { id: "duplicate-a", firstName: "Dana", lastName: "Duplicate", email: null, phone: null },
+      { id: "duplicate-b", firstName: "Dana", lastName: "Duplicate", email: null, phone: null },
+      { id: "conflict-email", firstName: "Casey", lastName: "Conflict", email: "casey-source@example.com", phone: "555-000-0000" },
+      { id: "conflict-phone", firstName: "Different", lastName: "Person", email: "different@example.com", phone: "555-333-4444" },
+      { id: "stale-target", firstName: "Natalie", lastName: "Proof", email: "natalie-proof@example.com", phone: null, jobTitle: "Local Director" },
+    ];
+    const initialSources = manifestSourcesFromArchiveRows({
+      rows,
+      localCandidates: { contacts: localContacts },
+    });
+    const displayBySourceId: Record<string, Record<string, string>> = {
+      "duplicate-exact-name": { firstName: "Dana", lastName: "Duplicate" },
+      "conflicting-evidence": { firstName: "Casey", lastName: "Conflict", email: "casey-source@example.com", phone: "555-333-4444" },
+      "stale-field-proof": { firstName: "Natalie", lastName: "Proof", email: "natalie-proof@example.com", jobTitle: "ACT Director" },
+      "required-unresolved-relationship": { name: "Required Company" },
+    };
+    const initialManifest = buildActOrganizeManifest({ runId: "unsafe-remainder", sources: initialSources });
+    const records: AutomaticReviewRecord[] = initialManifest.outcomes.map((outcome) => ({
+      sourceRecordId: outcome.sourceRecordId,
+      sourceVersionId: outcome.sourceVersionId,
+      issues: outcome.issues.flatMap((issue) => [
+        "ambiguous_match", "field_conflict", "relationship_unresolved", "unassigned",
+        "unsupported_record", "unsupported_field",
+      ].includes(issue.code) ? [{ ...issue, code: issue.code as AutomaticReviewReason }] : []),
+      conflicts: outcome.issues.flatMap((issue) => issue.code === "field_conflict" && issue.reason ? [{ fieldName: issue.reason }] : []),
+      match: outcome.match as AutomaticReviewRecord["match"],
+      unsupportedRecord: outcome.state === "unsupported",
+    }));
+    const targetProjections = localContacts.map((contact) => ({
+      id: contact.id,
+      entityType: "contact",
+      label: `${contact.firstName} ${contact.lastName}`,
+      detail: null,
+      fields: {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email: contact.email,
+        phone: contact.phone,
+        jobTitle: contact.jobTitle ?? null,
+      },
+    }));
+    const resolution = proposeAutomaticReview({
+      records,
+      context: {
+        sourceRecords: initialSources.map((source) => ({
+          sourceRecordId: source.sourceRecordId,
+          sourceVersionId: source.sourceVersionId,
+          streamType: source.streamType,
+          display: displayBySourceId[source.sourceRecordId] ?? {},
+        })),
+        targetsByEntityType: { contact: targetProjections },
+      },
+    });
+    expect(resolution.proposals.filter((proposal) => proposal.kind === "manual_review").map((proposal) => proposal.sourceRecordId).sort())
+      .toEqual(["conflicting-evidence", "duplicate-exact-name", "required-unresolved-relationship"]);
+    const decisions = resolution.proposals.flatMap((proposal, index) => {
+      if (proposal.kind !== "decision") return [];
+      const fieldProof = proposal.scope === "field_conflict" && proposal.decision === "use_source"
+        ? {
+            reviewedSourceValue: "ACT Director",
+            reviewedSourceValueFingerprint: fingerprintSourceContent({ value: "ACT Director" }),
+            reviewedLocalValue: "Local Director",
+            reviewedLocalValueFingerprint: fingerprintSourceContent({ value: "Local Director" }),
+          }
+        : {};
+      return [{
+        id: `automatic-decision-${index}`,
+        ...proposal,
+        fieldName: proposal.fieldName,
+        relationshipSlot: proposal.relationshipSlot,
+        ...fieldProof,
+        decidedBy: "owner",
+        active: true,
+        createdAt: fetchedAt,
+      }];
+    });
+    expect(decisions.map(({ sourceRecordId, scope, decision }) => ({ sourceRecordId, scope, decision })))
+      .toEqual([
+        { sourceRecordId: "stale-field-proof", scope: "field_conflict", decision: "use_source" },
+      ]);
+
+    const rebuiltSources = manifestSourcesFromArchiveRows({
+      rows,
+      decisions,
+      localCandidates: {
+        contacts: localContacts.map((contact) => contact.id === "stale-target"
+          ? { ...contact, jobTitle: "Concurrent Local Edit" }
+          : contact),
+      },
+    });
+    const rebuilt = buildActOrganizeManifest({ runId: "unsafe-remainder", sources: rebuiltSources });
+    const reader = new InMemoryReviewReader();
+    reader.seed("unsafe-remainder", rebuilt, rebuiltSources.map((source) => ({
+      sourceRecordId: source.sourceRecordId,
+      sourceVersionId: source.sourceVersionId,
+      streamType: source.streamType,
+      display: displayBySourceId[source.sourceRecordId] ?? {},
+    })), targetProjections.map((target) => target.id === "stale-target"
+      ? { ...target, fields: { ...target.fields, jobTitle: "Concurrent Local Edit" } }
+      : target));
+    const page = await readReview(reader, { runId: "unsafe-remainder", state: "needs_review", pageSize: 25 });
+
+    expect(page.rows.map((row) => ({
+      sourceRecordId: row.sourceRecordId,
+      issues: row.issues.map((issue) => `${issue.code}:${issue.reason}`).sort(),
+      relationshipRequired: row.relationshipIssues.map((issue) => !issue.canImportStandalone),
+    }))).toEqual([
+      { sourceRecordId: "conflicting-evidence", issues: ["ambiguous_match:conflicting_contact_identity"], relationshipRequired: [] },
+      { sourceRecordId: "duplicate-exact-name", issues: ["ambiguous_match:insufficient_independent_context_clues"], relationshipRequired: [] },
+      { sourceRecordId: "required-unresolved-relationship", issues: ["relationship_unresolved:unresolved_exact_relationship"], relationshipRequired: [true] },
+      { sourceRecordId: "stale-field-proof", issues: ["field_conflict:jobTitle"], relationshipRequired: [] },
+    ]);
+    expect(rebuilt.operations).not.toContainEqual(expect.objectContaining({
+      sourceRecordId: "stale-field-proof",
+      action: "overwrite_reviewed",
+    }));
   });
 
   it("keeps remaining review work actionable after applying one safe subset and applies the rebuilt subset", async () => {

@@ -239,6 +239,44 @@ describe("Act organize/apply schema contract", () => {
     expect(migration).not.toMatch(/UPDATE\s+act_replacement_approval_requests/i);
   });
 
+  it("registers durable automatic-review recovery ownership state", async () => {
+    const migration = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/020_act_automatic_review_recovery.sql", import.meta.url)),
+      "utf8",
+    );
+    const registry = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/src/migrations.ts", import.meta.url)),
+      "utf8",
+    );
+
+    expect(registry).toContain('name: "020_act_automatic_review_recovery.sql"');
+    expect(registry).toContain("'expected_manifest_digest', 'automatic_summary', 'rebuild_state'");
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS rebuild_token uuid");
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS rebuild_lease_expires_at timestamptz");
+    expect(migration).toContain("rebuild_state IN ('pending', 'rebuilding', 'complete')");
+    expect(migration).toContain("rebuild_state = 'rebuilding'");
+    expect(migration).toContain("rebuild_token IS NOT NULL");
+  });
+
+  it("registers a nullable canonical manifest digest version without relabeling legacy runs", async () => {
+    const migration = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/021_act_manifest_digest_version.sql", import.meta.url)),
+      "utf8",
+    );
+    const registry = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/src/migrations.ts", import.meta.url)),
+      "utf8",
+    );
+    const runs = getTableColumns(table("actReplacementRuns"));
+
+    expect(registry).toContain('name: "021_act_manifest_digest_version.sql"');
+    expect(runs.manifestDigestVersion.notNull).toBe(false);
+    expect(runs.manifestDigestVersion.hasDefault).toBe(false);
+    expect(migration).toContain("ADD COLUMN IF NOT EXISTS manifest_digest_version text");
+    expect(migration).toContain("manifest_digest_version = 'canonical-json-v1'");
+    expect(migration).not.toMatch(/UPDATE\s+act_replacement_runs/i);
+  });
+
   const postgresOnly = process.env.TEST_DATABASE_URL ? describe : describe.skip;
   postgresOnly("PostgreSQL constraint behavior", () => {
     it("allows terminal batches sequentially but only one queued/applying batch", async () => {
