@@ -1,0 +1,36 @@
+name: Codex hierarchy fix wave 3
+on:
+  push:
+    branches: [codex/organization-location-hierarchy]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused frontend regressions
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/organizations/duplicates-family-review.test.tsx
+      - name: Focused API regressions
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/organizations/organization-family-review.test.ts src/features/organizations/organization-family-discovery-race.test.ts src/features/organizations/organization-merge-family-guard.test.ts
+      - name: Full API tests
+        run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=20000
+      - name: Full frontend tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run
+      - name: Build and typecheck shared packages
+        run: pnpm run typecheck:libs
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Frontend build
+        run: pnpm --filter @workspace/adventure-zone build
