@@ -28,7 +28,11 @@ export type QuickCallerFormInput = z.input<typeof quickCallerSchema>;
 export type QuickCallerActionResult =
   | { ok: true; contactId: string }
   | { ok: false; error: string }
-  | { ok: false; candidates: DuplicateCandidate[] };
+  | {
+      ok: false;
+      candidates: DuplicateCandidate[];
+      canContinueCreating: boolean;
+    };
 
 export type QuickCallerRepository = Pick<
   DrizzleContactRepository,
@@ -61,12 +65,19 @@ export async function submitQuickCaller(
     repository.hasExactQuickCallerDuplicate(caller),
     repository.findQuickCallerDuplicates(caller),
   ]);
-  if (hasExact || (candidates.length > 0 && !caller.continueCreating)) {
-    return { ok: false, candidates };
+  if (hasExact) {
+    return { ok: false, candidates, canContinueCreating: false };
+  }
+  if (candidates.length > 0 && !caller.continueCreating) {
+    return { ok: false, candidates, canContinueCreating: true };
   }
 
   const result = await repository.createQuickCaller(caller);
   return result.kind === "created"
     ? { ok: true, contactId: result.contactId }
-    : { ok: false, candidates: result.candidates };
+    : {
+        ok: false,
+        candidates: result.candidates,
+        canContinueCreating: result.canContinueCreating,
+      };
 }
