@@ -6,9 +6,15 @@ import {
 
 import { completeCallAction } from "@/actions/calls";
 import {
+  createActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+} from "@/actions/activities";
+import {
   CallWorkspace,
   type CompleteCallResult,
 } from "@/components/calls/call-workspace";
+import { callWorkspaceHref } from "@/components/today/next-call-card";
 import { apiGet } from "@/lib/auth-token";
 
 export type CallQueueItem = {
@@ -59,11 +65,6 @@ const defaultCallingConfig: CallingConfig = {
   assistedCallingEnabled: true,
   voicemailLauncherUrl: null,
 };
-
-function standaloneWorkspaceHref(followUp: CallQueueItem) {
-  const query = new URLSearchParams({ followUpId: followUp.id });
-  return `/calls/workspace?${query.toString()}`;
-}
 
 function formatStatus(value: string) {
   return value.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
@@ -119,8 +120,11 @@ function defaultRenderWorkspace(
       booking={booking}
       contact={contact}
       contextSummary={data.contextSummary ?? null}
+      createActivity={createActivityAction}
       defaultScriptKind={data.defaultScriptKind}
+      editActivity={editActivityAction}
       followUp={followUp}
+      loadRevisions={listActivityRevisionsAction}
       mode="compact"
       onComplete={onComplete}
       operations={data.operations ?? null}
@@ -214,8 +218,14 @@ export function CallQueueWorkspace({
     let nextTotal = Math.max(0, total - 1);
     try {
       const refreshed = await refreshToday();
+      const completedFollowUpWasStale = refreshed.followUps.some(
+        ({ id }) => id === completedId,
+      );
       nextQueue = refreshed.followUps.filter(({ id }) => id !== completedId);
-      nextTotal = refreshed.followUpTotal;
+      nextTotal = Math.max(
+        0,
+        refreshed.followUpTotal - (completedFollowUpWasStale ? 1 : 0),
+      );
     } catch {
       // Completion already succeeded; keep the responsive local queue state.
     }
@@ -312,7 +322,7 @@ export function CallQueueWorkspace({
               <button className="button-primary" onClick={() => setRetryKey((value) => value + 1)} type="button">
                 Try again
               </button>
-              <a className="button-secondary" href={standaloneWorkspaceHref(selected)}>
+              <a className="button-secondary" href={callWorkspaceHref(selected as any)}>
                 Open standalone workspace
               </a>
             </div>

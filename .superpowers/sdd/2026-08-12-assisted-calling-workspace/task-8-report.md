@@ -58,3 +58,48 @@ typecheck passed. GitHub Actions had not scheduled for the preceding
 connector-authored Task 7 head, so Task 8 uses the exact local evidence permitted
 by the brief rather than adding another temporary workflow that the connector
 cannot dispatch.
+
+## Fix round 1 — fallback route, activity composition, and stale totals
+
+Review found that the error fallback linked to the JSON API endpoint rather than
+the standalone workspace page, and that the inline composition omitted the
+activity mutations/revision loader used by the standalone page. It also found a
+remaining-count edge case when a refetch briefly returned the completed item.
+
+The fallback now delegates to the existing `callWorkspaceHref`, producing
+`/calls/new` with contact, booking, and follow-up IDs. The compact workspace now
+receives `createActivityAction`, `editActivityAction`, and
+`listActivityRevisionsAction`, exactly matching `CallWorkspacePage`. If a
+refetched queue still contains the completed follow-up, the component filters it
+and decrements the returned total before rendering the remaining badge.
+
+### Fix-round TDD evidence
+
+- RED: the exact-link regression received
+  `/calls/workspace?followUpId=...` instead of the expected `/calls/new` URL and
+  complete identifier query.
+- RED: the real synchronized Task 6 composition did not expose **Add activity**
+  or **Edit activity** from the compact history section because the actions were
+  not passed.
+- RED: a stale three-item refetch filtered the completed caller but continued to
+  display **3 remaining**.
+- GREEN: the focused suite passes 7/7 tests. The integration regression renders
+  the real compact `CallWorkspace`, expands **Recent history**, and verifies
+  activity creation/edit controls, existing history content, and the revision
+  history control.
+
+### Fix-round verification
+
+Fresh verification in the synchronized runnable checkout:
+
+```sh
+artifacts/adventure-zone/node_modules/.bin/vitest run \
+  src/components/today/call-queue-workspace.test.tsx
+
+node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit
+# run from artifacts/adventure-zone and artifacts/api-server
+```
+
+Result: web component suite 1 file / 7 tests passed; web and API typechecks
+passed. Compatibility-only synchronized Task 6 files and type shims were not
+included in the remote fix diff.

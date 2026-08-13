@@ -152,7 +152,7 @@ describe("CallQueueWorkspace", () => {
     expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Open standalone workspace" })).toHaveAttribute(
       "href",
-      expect.stringContaining(`followUpId=${followUps[0].id}`),
+      `/calls/new?contactId=${followUps[0].contactId}&bookingId=${followUps[0].bookingId}&followUpId=${followUps[0].id}`,
     );
     expect(screen.getByRole("button", { name: /Tom Erickson/i })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -179,5 +179,92 @@ describe("CallQueueWorkspace", () => {
     expect(refreshToday).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
     expect(screen.getByText("2 remaining")).toBeVisible();
+  });
+
+  it("renders the real compact workspace with activity controls and history", async () => {
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        loadWorkspace={() => Promise.resolve({
+          activityParent: { bookingId: followUps[0].bookingId },
+          context: {
+            organization: {
+              id: followUps[0].organizationId,
+              name: "Miller Events",
+              lastResort: false,
+              lastResortReason: null,
+            },
+            contact: {
+              id: followUps[0].contactId,
+              firstName: "Sarah",
+              lastName: "Miller",
+              phone: null,
+              email: "sarah@example.test",
+              city: "Fargo",
+              region: "ND",
+            },
+            booking: {
+              id: followUps[0].bookingId,
+              name: "Sarah's Spring Event",
+              city: "Fargo",
+              region: "ND",
+              status: "pending_contract",
+              startsAt: null,
+            },
+            followUp: {
+              id: followUps[0].id,
+              kind: "call",
+              dueAt: followUps[0].dueAt,
+            },
+          },
+          contextSummary: {
+            bookingStatusLabel: "Pending contract",
+            travelLeg: followUps[0].routeLeg,
+            lastContactedAt: followUps[0].lastContactedAt,
+          },
+          defaultScriptKind: "follow_up",
+          operations: null,
+          phones: [],
+          scriptPrompts: ["Reference the previous conversation"],
+          timeline: [{
+            id: "70000000-0000-4000-8000-000000000001",
+            kind: "call",
+            body: "Prior conversation",
+            occurredAt: "2026-08-08T15:00:00.000Z",
+            createdAt: "2026-08-08T15:00:00.000Z",
+            updatedAt: "2026-08-08T15:00:00.000Z",
+            revisionCount: 1,
+          }],
+        })}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Call Workspace" })).toBeVisible();
+    fireEvent.click(screen.getByText("Recent history"));
+    expect(screen.getByRole("button", { name: "Add activity" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit activity" })).toBeVisible();
+    expect(screen.getByText("Prior conversation")).toBeVisible();
+    expect(screen.getByRole("button", { name: "View edit history (1)" })).toBeVisible();
+  });
+
+  it("decrements a stale refreshed total when the completed follow-up is still returned", async () => {
+    const refreshToday = vi.fn().mockResolvedValue({
+      followUps,
+      followUpTotal: 3,
+    });
+    render(
+      <CallQueueWorkspace
+        completeCall={vi.fn().mockResolvedValue({ ok: true })}
+        followUps={followUps}
+        loadWorkspace={(followUp) => Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName))}
+        refreshToday={refreshToday}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
+
+    expect(await screen.findByText("2 remaining")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
   });
 });
