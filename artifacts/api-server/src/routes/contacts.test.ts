@@ -21,7 +21,11 @@ const phoneRepository = vi.hoisted(() => {
 
   return {
     listForContact: vi.fn(async (_contactId: string) => phones.map((phone) => ({ ...phone }))),
-    replaceForContact: vi.fn(async (_contactId: string, next: typeof phones) => {
+    replaceForContact: vi.fn(async (requestedContactId: string, next: typeof phones) => {
+      if (requestedContactId !== fixtureContactId) throw new Error("Contact is missing.");
+      if (next.some((phone) => phone.number === "701-555-0100" && phone.id === "phone-1")) {
+        throw new Error("A suppressed phone number cannot be changed; add a new number to preserve suppression history.");
+      }
       phones = next.map((phone) => ({ ...phone, id: phone.id ?? "phone-2", contactId: fixtureContactId }));
       return phones.map((phone) => ({ ...phone }));
     }),
@@ -119,4 +123,32 @@ describe("contact phone routes", () => {
     expect(await phoneRepository.listForContact(contactId)).toHaveLength(1);
     expect(phoneRepository.replaceForContact).not.toHaveBeenCalled();
   });
+  it("replaces phones and returns the saved rows", async () => {
+    const response = await request(app).put(`/contacts/${contactId}/phones`).send({
+      phones: [
+        { id: null, number: "701-555-0100", type: "office", extension: "12", label: "Desk", primary: false },
+        { id: "phone-1", number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+      ],
+    }).expect(200);
+
+    expect(response.body.phones).toEqual([
+      expect.objectContaining({ number: "701-555-0100", type: "office", label: "Desk", primary: false }),
+      expect.objectContaining({ number: "701-555-0199", type: "mobile", primary: true }),
+    ]);
+  });
+
+  it("returns 404 when replacing phones for a missing contact", async () => {
+    await request(app).put("/contacts/99999999-9999-4999-8999-999999999999/phones").send({
+      phones: [],
+    }).expect(404);
+  });
+
+  it("returns 400 when a suppressed number is changed in place", async () => {
+    await request(app).put(`/contacts/${contactId}/phones`).send({
+      phones: [
+        { id: "phone-1", number: "701-555-0100", type: "mobile", extension: null, label: null, primary: true },
+      ],
+    }).expect(400);
+  });
+
 });
