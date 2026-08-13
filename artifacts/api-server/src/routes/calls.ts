@@ -15,6 +15,7 @@ import { createBookingOperationsSummaryProvider } from "@/features/bookings/book
 import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
 import { CallerFinderService } from "@/features/caller-finder/caller-finder-service";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
+import { submitQuickCaller } from "@/features/contacts/quick-caller-service";
 
 const router: IRouter = Router();
 
@@ -56,6 +57,23 @@ router.get("/calls/caller-finder", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to find caller");
     res.status(500).json({ error: "Failed to find caller" });
+  }
+});
+
+router.post("/calls/quick-caller", async (req, res): Promise<void> => {
+  try {
+    const result = await submitQuickCaller(
+      req.body,
+      new DrizzleContactRepository(db),
+    );
+    if (!result.ok && "error" in result) {
+      res.status(400).json(result);
+      return;
+    }
+    res.status(result.ok ? 201 : 200).json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to create quick caller");
+    res.status(500).json({ ok: false, error: "Could not create caller" });
   }
 });
 
