@@ -15,6 +15,7 @@ import {
   createOrganizationParent,
   HierarchyConflictError,
   setOrganizationParent,
+  setOrganizationParents,
   ungroupOrganization,
 } from "@/features/organizations/organization-hierarchy";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
@@ -182,13 +183,14 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
         changedAt,
       );
     } else {
-      for (const childId of candidate.candidateIds) {
-        await setOrganizationParent(
-          db,
-          { childId, parentId: input.parent.parentId },
-          changedAt,
-        );
-      }
+      await setOrganizationParents(
+        db,
+        {
+          childIds: candidate.candidateIds,
+          parentId: input.parent.parentId,
+        },
+        changedAt,
+      );
     }
     await repository.deleteFamilyReview(candidate.groupKey);
     res.json({ ok: true });
