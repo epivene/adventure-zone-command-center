@@ -30,6 +30,7 @@ describe("QuickAddCaller duplicate confirmation", () => {
     vi.stubGlobal("crypto", { randomUUID: () => requestKey });
     const onSubmit = vi.fn().mockResolvedValue({
       ok: false,
+      canContinueCreating: false,
       candidates: [{
         contactId: existingId,
         name: "Avery Lee",
@@ -60,6 +61,7 @@ describe("QuickAddCaller duplicate confirmation", () => {
     const onSubmit = vi.fn()
       .mockResolvedValueOnce({
         ok: false,
+        canContinueCreating: true,
         candidates: [{
           contactId: existingId,
           name: "Avery Lee",
@@ -96,7 +98,11 @@ describe("QuickAddCaller duplicate confirmation", () => {
 
   it("does not offer a bypass when the server reports an unlisted exact conflict", async () => {
     vi.stubGlobal("crypto", { randomUUID: () => requestKey });
-    const onSubmit = vi.fn().mockResolvedValue({ ok: false, candidates: [] });
+    const onSubmit = vi.fn().mockResolvedValue({
+      ok: false,
+      candidates: [],
+      canContinueCreating: false,
+    });
     render(<QuickAddCaller onSubmit={onSubmit} />);
     fillRequiredFields();
     fireEvent.click(screen.getByRole("button", { name: "Create caller" }));
@@ -120,5 +126,31 @@ describe("QuickAddCaller duplicate confirmation", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Enter the caller's name.",
     );
+  });
+
+  it("does not offer continuation when an exact conflict is hidden beyond bounded likely candidates", async () => {
+    vi.stubGlobal("crypto", { randomUUID: () => requestKey });
+    const onSubmit = vi.fn().mockResolvedValue({
+      ok: false,
+      canContinueCreating: false,
+      candidates: Array.from({ length: 8 }, (_, index) => ({
+        contactId: `likely-${index}`,
+        name: `Avery Lee ${index}`,
+        organizationName: "Prairie Days",
+        city: "Minot",
+        region: "ND",
+        reasons: ["Name and organization"],
+        kind: "likely",
+      })),
+    });
+    render(<QuickAddCaller onSubmit={onSubmit} />);
+    fillRequiredFields();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create caller" }));
+
+    expect(await screen.findByText("Avery Lee 7")).toBeVisible();
+    expect(screen.getByText(/exact phone or email conflict/i)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Create separate contact" }))
+      .not.toBeInTheDocument();
   });
 });
