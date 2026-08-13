@@ -7,7 +7,7 @@ export function normalizeExternalWebsite(value: string | null): string | null {
   if (!candidate) return null;
 
   try {
-    const url = new URL(schemePattern.test(candidate) ? candidate : `https://${candidate}`);
+    const hasScheme = schemePattern.test(candidate) && !hostWithPortPattern.test(candidate);\n    const url = new URL(hasScheme ? candidate : `https://${candidate}`);
     if (
       (url.protocol !== "http:" && url.protocol !== "https:")
       || (url.hostname !== "localhost" && !url.hostname.includes("."))
