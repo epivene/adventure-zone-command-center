@@ -170,6 +170,8 @@ class SelectBuilder implements PromiseLike<unknown[]> {
 }
 
 class HierarchyReadDatabase {
+  private executeCall = 0;
+
   readonly organizations: OrganizationRow[] = [
     {
       id: parentId,
@@ -293,7 +295,66 @@ class HierarchyReadDatabase {
   }
 
   execute() {
-    return Promise.resolve({ rows: [] });
+    const results = [
+      [
+        {
+          id: austinId,
+          name: "Adventure Zone - Austin",
+          address1: "100 Congress Ave",
+          address2: null,
+          city: "Austin",
+          region: "TX",
+          postalCode: "78701",
+          website: "https://example.com/austin",
+          localStatus: "confirmed",
+          nextFollowUpId: "follow-up-austin",
+          nextFollowUpKind: "email",
+          nextFollowUpDueAt: new Date("2099-08-14T15:00:00.000Z"),
+          nextBookingId: "booking-austin",
+          nextBookingName: "Austin Festival",
+          nextBookingStartsAt: new Date("2099-09-10T14:00:00.000Z"),
+          nextBookingStatus: "confirmed",
+          travelLegId: "leg-south",
+          travelLegName: "South",
+          travelLegColor: "#ff6600",
+          primaryContactFirstName: "Alex",
+          primaryContactLastName: "Austin",
+        },
+        {
+          id: denverId,
+          name: "Adventure Zone - Denver",
+          address1: "200 Market St",
+          address2: null,
+          city: "Denver",
+          region: "CO",
+          postalCode: "80202",
+          website: "https://example.com/denver",
+          localStatus: null,
+          nextFollowUpId: null,
+          nextFollowUpKind: null,
+          nextFollowUpDueAt: null,
+          nextBookingId: null,
+          nextBookingName: null,
+          nextBookingStartsAt: null,
+          nextBookingStatus: null,
+          travelLegId: null,
+          travelLegName: null,
+          travelLegColor: null,
+          primaryContactFirstName: null,
+          primaryContactLastName: null,
+        },
+      ],
+      [
+        {
+          locationCount: 2,
+          upcomingBookingCount: 1,
+          overdueFollowUpCount: 1,
+          mostRecentContactAt: new Date("2026-08-12T18:30:00.000Z"),
+        },
+      ],
+      [{ id: "leg-south", name: "South", color: "#ff6600" }],
+    ];
+    return Promise.resolve({ rows: results[this.executeCall++] ?? [] });
   }
 
   asApplicationDatabase() {
@@ -327,5 +388,20 @@ describe("event profile hierarchy reads", () => {
     expect(parent?.parent).toBeNull();
     expect(parent?.contacts.map(({ id }) => id)).toEqual(["contact-parent"]);
     expect(parent?.notes.map(({ id }) => id)).toEqual(["activity-parent"]);
+    expect(parent?.locations.map(({ id }) => id)).toEqual([austinId, denverId]);
+    expect(parent?.locations[0]).toMatchObject({
+      id: austinId,
+      nextBooking: { id: "booking-austin" },
+      nextFollowUp: { id: "follow-up-austin" },
+      travelLeg: { id: "leg-south" },
+      primaryContactName: "Alex Austin",
+    });
+    expect(parent?.rollups).toEqual({
+      locationCount: 2,
+      upcomingBookingCount: 1,
+      overdueFollowUpCount: 1,
+      travelLegs: [{ id: "leg-south", name: "South", color: "#ff6600" }],
+      mostRecentContactAt: new Date("2026-08-12T18:30:00.000Z"),
+    });
   });
 });
