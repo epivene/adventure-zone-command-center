@@ -18,6 +18,13 @@ import { DrizzleContactRepository } from "@/features/contacts/contact-repository
 
 const router: IRouter = Router();
 
+router.get("/calls/config", (_req, res): void => {
+  res.json({
+    assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true",
+    voicemailLauncherUrl: process.env.VOICEMAIL_LAUNCH_URL || null,
+  });
+});
+
 function firstString(value: unknown): string | undefined {
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
   return typeof value === "string" ? value : undefined;
