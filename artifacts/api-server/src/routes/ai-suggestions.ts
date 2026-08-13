@@ -82,8 +82,12 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       .leftJoin(contacts, eq(activities.contactId, contacts.id))
       .leftJoin(organizations, eq(activities.organizationId, organizations.id))
       .where(
+        // act_history only — raw Act! CRM notes and history entries.
+        // calendar entries are excluded: they represent Act! scheduled
+        // activities used for the calendar view and may include app-created
+        // events, which would create a feedback loop in the AI analysis.
         and(
-          or(eq(activities.kind, "act_history"), eq(activities.kind, "calendar")),
+          eq(activities.kind, "act_history"),
           gte(activities.timelineSortAt, twelveMonthsAgo),
         ),
       );
