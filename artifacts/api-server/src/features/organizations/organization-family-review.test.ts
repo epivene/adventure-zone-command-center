@@ -173,6 +173,50 @@ describe("organization family review", () => {
     ]);
   });
 
+  it("classifies exact-name records in distinct complete locations as ambiguous without a website", () => {
+    const groups = discoverOrganizationFamilyCandidates([
+      {
+        id: FIRST_ID,
+        name: "Water Lantern Festival",
+        website: null,
+        address1: "100 Lake St",
+        city: "Denver",
+        region: "CO",
+      },
+      {
+        id: SECOND_ID,
+        name: "Water Lantern Festival",
+        website: null,
+        address1: "200 River Rd",
+        city: "Austin",
+        region: "TX",
+      },
+    ]);
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        classification: "ambiguous_location_candidate",
+        candidateIds: [FIRST_ID, SECOND_ID],
+        evidence: expect.arrayContaining([
+          { family: "name", label: "exact organization names agree" },
+          { family: "location", label: "locations differ" },
+        ]),
+      }),
+    ]);
+  });
+
+  it("does not classify exact names when a location is blank or the complete location is the same", () => {
+    expect(discoverOrganizationFamilyCandidates([
+      { id: FIRST_ID, name: "Lantern Nights", city: "", region: "CO" },
+      { id: SECOND_ID, name: "Lantern Nights", city: "Austin", region: "TX" },
+    ])).toEqual([]);
+
+    expect(discoverOrganizationFamilyCandidates([
+      { id: FIRST_ID, name: "Lantern Nights", city: "Austin", region: "TX", address1: "100 Lake St" },
+      { id: SECOND_ID, name: "Lantern Nights", city: "Austin", region: "TX", address1: "200 River Rd" },
+    ])).toEqual([]);
+  });
+
   it("excludes an ordinary duplicate group when any member overlaps a family", () => {
     const { organizations: _organizations, ...family } = candidate;
     const groups = partitionOrganizationReviewGroups(
