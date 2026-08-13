@@ -1330,17 +1330,34 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     const familyKeys = discoveredFamilies.flatMap((group) =>
       group.groupKey ? [group.groupKey] : [],
     );
-    const reviews = familyKeys.length
-      ? await this.database
-          .select()
-          .from(organizationFamilyReviews)
-          .where(inArray(organizationFamilyReviews.groupKey, familyKeys))
-      : [];
-    const reviewByKey = new Map(reviews.map((review) => [review.groupKey, review]));
+    const reviews = await this.database
+      .select()
+      .from(organizationFamilyReviews);
+    const staleProposedKeys = reviews
+      .filter(
+        (review) =>
+          review.status === "proposed" && !familyKeys.includes(review.groupKey),
+      )
+      .map((review) => review.groupKey);
+    if (staleProposedKeys.length) {
+      await this.database
+        .delete(organizationFamilyReviews)
+        .where(and(
+          eq(organizationFamilyReviews.status, "proposed"),
+          inArray(organizationFamilyReviews.groupKey, staleProposedKeys),
+          familyKeys.length
+            ? notInArray(organizationFamilyReviews.groupKey, familyKeys)
+            : sql`true`,
+        ));
+    }
+    const currentReviews = reviews.filter(
+      (review) => !staleProposedKeys.includes(review.groupKey),
+    );
+    const reviewByKey = new Map(currentReviews.map((review) => [review.groupKey, review]));
     const reviewGroups = partitionOrganizationReviewGroups(
       groupRows.rows,
       discoveredFamilies,
-      reviews,
+      currentReviews,
     );
     const visibleFamilies = reviewGroups.filter(
       (group) => group.classification !== "duplicate",
