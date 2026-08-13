@@ -1,11 +1,21 @@
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   ActReplacementStatus,
+  ImportWorkflow,
   StartActReplacementRun,
 } from "@/features/act-replacement/import-types";
+import { ActApplyService } from "@/features/act-replacement/apply-service";
+import { InMemoryApplyRepository } from "@/features/act-replacement/apply-repository";
+import { InMemoryApprovalRepository } from "@/features/act-replacement/approval-service";
+import type { ActOrganizeManifest } from "@/features/act-replacement/manifest-builder";
+import { createProductionReview } from "@/features/act-replacement/production-review";
+import {
+  InMemoryReviewCommandStore,
+  ReviewCommandService,
+} from "@/features/act-replacement/review-command-service";
 import { issueToken, requireOwnerMiddleware } from "@/lib/auth";
 import {
   createActReplacementRouter,
@@ -26,6 +36,10 @@ vi.mock("@/lib/env", async (importOriginal) => {
     ...original,
     parseActEnvironment: () => ({ configured: true }),
   };
+});
+
+vi.mock("@/db/client", () => {
+  throw new Error("test lazy database initialization failure");
 });
 
 const DATABASE_KEY = "server-act-database";
@@ -245,6 +259,7 @@ function testApp(
   reportInternalError?: NonNullable<
     ActReplacementRouteDependencies["reportInternalError"]
   >,
+  rejectedHandler?: (error: unknown) => void,
 ): ReturnType<typeof express> {
   const app = express();
   app.use(express.json());
@@ -262,6 +277,14 @@ function testApp(
       ...(reportInternalError ? { reportInternalError } : {}),
     }),
   );
+  if (rejectedHandler) {
+    const captureError: ErrorRequestHandler = (error, _req, res, _next) => {
+      rejectedHandler(error);
+      if (!res.headersSent)
+        res.status(500).json({ code: "test_rejected_handler" });
+    };
+    app.use(captureError);
+  }
   return app;
 }
 
@@ -295,6 +318,46 @@ function workflowReview(overrides: Record<string, unknown> = {}) {
     },
     ...overrides,
   } as unknown as NonNullable<ActReplacementRouteDependencies["review"]>;
+}
+
+function automaticWorkflow(
+  manifestDigest = "b".repeat(64),
+): ImportWorkflow {
+  return {
+    safeOperationCount: 2,
+    autoResolvedCount: 4,
+    archivedOnlyCount: 1,
+    reviewRequiredCount: 1,
+    appliedOperationCount: 3,
+    alreadyPresentOperationCount: 2,
+    blockedOperationCount: 1,
+    failedOperationCount: 0,
+    manifestDigest,
+    nextApplyCursor: 5,
+    canOrganize: false,
+    canReview: true,
+    canApplySafe: true,
+    requiredStreams: ["contact"],
+    leaseSummary: { active: 0, expired: 0 },
+    operations: [
+      {
+        operationKey: "private-operation-key",
+        sourceVersionId: "private-source-version",
+        targetType: "contact",
+        status: "pending",
+        requiredForSourceOutcome: true,
+        heldForReview: false,
+        dependencyOperationKeys: ["private-dependency"],
+        safeByDefault: true,
+      },
+    ],
+    applyBatches: [{ state: "complete" }],
+    durableAdapters: {
+      reviewReader: true,
+      commandService: true,
+      applyRepository: true,
+    },
+  };
 }
 
 function ownerToken() {
@@ -1699,6 +1762,539 @@ describe("owner import workflow", () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ code: "invalid_request" });
     expect(applyNext).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/migration/act-replacement/runs/:runId/automatic-review", () => {
+  const rebuiltDigest = "b".repeat(64);
+  const endpoint = `/api/migration/act-replacement/runs/${RUN_ID}/automatic-review`;
+  const body = {
+    expectedManifestDigest: MANIFEST_DIGEST,
+    requestKey: "automatic-review-one",
+  };
+  const commandResult = {
+    decisions: [
+      {
+        id: "private-decision-id",
+        sourceRecordId: "private-source-id",
+        sourceVersionId: "private-source-version",
+        scope: "field_conflict" as const,
+        decision: "use_source" as const,
+        requestKey: "private-decision-request",
+        fieldName: "phone",
+        targetEntityType: "contact",
+        targetEntityId: "private-local-candidate",
+        reviewedSourceValue: "private ACT phone",
+        reviewedLocalValue: "private local phone",
+        decidedBy: "owner",
+        active: true,
+      },
+    ],
+    reviewedOperationIds: ["private-operation-id"],
+    manifestDigest: rebuiltDigest,
+    summary: {
+      linkedExisting: 2,
+      importedNew: 1,
+      relationshipsAssigned: 3,
+      relationshipsOmitted: 1,
+      actValuesSelected: 4,
+      unsupportedIgnored: 1,
+      manualReview: 2,
+      decisionsCreatedOrReplayed: 12,
+    },
+  };
+
+  function routeReview(input: {
+    commandDigest?: string;
+    remainingDigest?: string | null;
+    workflowDigest?: string | null;
+    publishedDigest?: string | null;
+    commandError?: unknown;
+    globalIssueCounts?: Record<string, number>;
+    filteredIssueCounts?: Record<string, number>;
+  } = {}) {
+    const resolveAutomatically = input.commandError
+      ? vi.fn().mockRejectedValue(input.commandError)
+      : vi.fn().mockResolvedValue({
+          ...commandResult,
+          manifestDigest: input.commandDigest ?? rebuiltDigest,
+        });
+    const readReviewPage = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          sourceRecordId: "must-not-leak",
+          sourceVersionId: "must-not-leak",
+          state: "awaiting_review",
+          issues: [{ code: "field_conflict", reason: "private-field" }],
+          conflicts: [],
+          candidates: [{ id: "private-candidate", label: "private-name" }],
+          relationshipIssues: [],
+          canImportStandalone: false,
+          operationKeys: ["private-operation"],
+        },
+      ],
+      page: 1,
+      pageSize: 25,
+      total: 2,
+      manifestDigest:
+        input.remainingDigest === undefined
+          ? rebuiltDigest
+          : input.remainingDigest,
+      summary: {
+        decisionRequired: 2,
+        archivedOnly: 0,
+        issueCounts: input.globalIssueCounts ?? {
+          field_conflict: 1,
+          relationship_unresolved: 1,
+        },
+        diagnosticCounts: { unsupported_field: 1 },
+      },
+      filteredIssueCounts: input.filteredIssueCounts ?? {
+        field_conflict: 1,
+        relationship_unresolved: 1,
+      },
+    });
+    const workflow = automaticWorkflow(
+      input.workflowDigest === undefined
+        ? rebuiltDigest
+        : input.workflowDigest ?? undefined,
+    );
+    if (input.workflowDigest === null) workflow.manifestDigest = null;
+    const summarize = vi.fn().mockResolvedValue(workflow);
+    const getManifest = vi.fn().mockResolvedValue(
+      (input.publishedDigest === undefined
+        ? rebuiltDigest
+        : input.publishedDigest) === null
+        ? null
+        : {
+            digest:
+              input.publishedDigest === undefined
+                ? rebuiltDigest
+                : input.publishedDigest,
+            diagnostics: [],
+            outcomes: [],
+            operations: [],
+            rawSnapshot: "must-not-leak",
+          },
+    );
+    return {
+      review: workflowReview({
+        reader: {
+          getManifest,
+          listSources: vi.fn().mockResolvedValue([]),
+          readReviewPage,
+        },
+        commands: { resolveAutomatically },
+        workflow: { summarize },
+      }),
+      resolveAutomatically,
+      readReviewPage,
+      summarize,
+      getManifest,
+    };
+  }
+
+  it("requires owner authentication", async () => {
+    const response = await request(testApp(new MemoryControlStore()))
+      .post(endpoint)
+      .send(body);
+
+    expect(response.status).toBe(401);
+    expect(response.body).toEqual({ error: "Unauthorized" });
+  });
+
+  it.each([
+    [
+      "invalid run UUID",
+      "/api/migration/act-replacement/runs/not-a-uuid/automatic-review",
+      body,
+      true,
+      "owner",
+      404,
+      { code: "run_not_found" },
+    ],
+    [
+      "malformed body",
+      endpoint,
+      { expectedManifestDigest: "not-a-digest", requestKey: "request" },
+      true,
+      "owner",
+      400,
+      { code: "invalid_request" },
+    ],
+    [
+      "unconfigured server",
+      endpoint,
+      body,
+      false,
+      "owner",
+      503,
+      { code: "not_configured" },
+    ],
+    [
+      "foreign run",
+      endpoint,
+      body,
+      true,
+      "other-owner",
+      404,
+      { code: "run_not_found" },
+    ],
+  ] as const)(
+    "keeps %s precedence stable when review is unavailable",
+    async (
+      _label,
+      path,
+      payload,
+      configured,
+      requestedBy,
+      expectedStatus,
+      expectedBody,
+    ) => {
+      const store = new MemoryControlStore();
+      addRun(store, { requestedBy });
+      const rejectedHandler = vi.fn();
+
+      const response = await request(
+        testApp(store, configured, undefined, undefined, rejectedHandler),
+      )
+        .post(path)
+        .set("Authorization", `Bearer ${ownerToken()}`)
+        .send(payload);
+
+      expect(response.status).toBe(expectedStatus);
+      expect(response.body).toEqual(expectedBody);
+      expect(rejectedHandler).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    {},
+    { expectedManifestDigest: MANIFEST_DIGEST },
+    { expectedManifestDigest: "not-a-digest", requestKey: "request" },
+    { expectedManifestDigest: MANIFEST_DIGEST, requestKey: "" },
+    { ...body, actor: "attacker" },
+    { ...body, requestedBy: "attacker" },
+    { ...body, sourceRecordIds: [SOURCE_RECORD_ID] },
+  ])("rejects a non-exact automatic-review payload %#", async (payload) => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const { review, resolveAutomatically } = routeReview();
+
+    const response = await request(testApp(store, true, review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(payload);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: "invalid_request" });
+    expect(resolveAutomatically).not.toHaveBeenCalled();
+  });
+
+  it("requires server configuration and owned-run lookup before the command", async () => {
+    const unconfiguredStore = new MemoryControlStore();
+    addRun(unconfiguredStore);
+    const unavailable = routeReview();
+    const unconfigured = await request(
+      testApp(unconfiguredStore, false, unavailable.review),
+    )
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    const foreignStore = new MemoryControlStore();
+    addRun(foreignStore, { requestedBy: "other-owner" });
+    const foreign = routeReview();
+    const notOwned = await request(testApp(foreignStore, true, foreign.review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(unconfigured.status).toBe(503);
+    expect(unconfigured.body).toEqual({ code: "not_configured" });
+    expect(unavailable.resolveAutomatically).not.toHaveBeenCalled();
+    expect(notOwned.status).toBe(404);
+    expect(notOwned.body).toEqual({ code: "run_not_found" });
+    expect(foreign.resolveAutomatically).not.toHaveBeenCalled();
+  });
+
+  it("derives the actor from context and returns only bounded counts and workflow status", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const ownership = vi.spyOn(store, "findOwnedRun");
+    const {
+      review,
+      resolveAutomatically,
+      readReviewPage,
+      summarize,
+      getManifest,
+    } = routeReview();
+
+    const response = await request(testApp(store, true, review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      summary: commandResult.summary,
+      remainingReview: {
+        count: 2,
+        reasons: {
+          field_conflict: 1,
+          relationship_unresolved: 1,
+        },
+      },
+      manifestDigest: rebuiltDigest,
+      workflow: {
+        safeOperationCount: 2,
+        autoResolvedCount: 4,
+        archivedOnlyCount: 1,
+        reviewRequiredCount: 1,
+        appliedOperationCount: 3,
+        alreadyPresentOperationCount: 2,
+        blockedOperationCount: 1,
+        failedOperationCount: 0,
+        nextApplyCursor: 5,
+        canOrganize: false,
+        canReview: true,
+        canApplySafe: true,
+      },
+    });
+    expect(resolveAutomatically).toHaveBeenCalledWith({
+      runId: RUN_ID,
+      expectedManifestDigest: MANIFEST_DIGEST,
+      requestKey: "automatic-review-one",
+      requestedBy: "owner",
+    });
+    expect(ownership.mock.invocationCallOrder[0]).toBeLessThan(
+      resolveAutomatically.mock.invocationCallOrder[0]!,
+    );
+    expect(readReviewPage).toHaveBeenCalledWith({
+      runId: RUN_ID,
+      state: "needs_review",
+      page: 1,
+      pageSize: 25,
+    });
+    expect(summarize).toHaveBeenCalledWith(RUN_ID);
+    expect(getManifest).toHaveBeenCalledWith(RUN_ID);
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /private|decisionId|sourceRecordId|sourceVersionId|candidate|snapshot|operationKey/i,
+    );
+  });
+
+  it("derives remaining reasons from the same needs-review filter as the count", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const { review } = routeReview({
+      globalIssueCounts: {
+        field_conflict: 1,
+        unsupported_record: 7,
+      },
+      filteredIssueCounts: { field_conflict: 1 },
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(response.status).toBe(200);
+    expect(response.body.remainingReview).toEqual({
+      count: 2,
+      reasons: { field_conflict: 1 },
+    });
+  });
+
+  it.each([
+    ["command result", { commandDigest: "c".repeat(64) }],
+    ["remaining review", { remainingDigest: "c".repeat(64) }],
+    ["workflow", { workflowDigest: "c".repeat(64) }],
+    ["published manifest", { publishedDigest: "c".repeat(64) }],
+    ["missing remaining review", { remainingDigest: null }],
+    ["missing workflow digest", { workflowDigest: null }],
+    ["missing published manifest", { publishedDigest: null }],
+  ] as const)(
+    "returns one bounded conflict when the %s generation differs",
+    async (_label, digests) => {
+      const store = new MemoryControlStore();
+      addRun(store);
+      const { review } = routeReview(digests);
+
+      const response = await request(testApp(store, true, review))
+        .post(endpoint)
+        .set("Authorization", `Bearer ${ownerToken()}`)
+        .send(body);
+
+      expect(response.status).toBe(409);
+      expect(response.body).toEqual({ code: "review_generation_changed" });
+      expect(JSON.stringify(response.body)).not.toMatch(
+        /private|manifestDigest|workflow|remainingReview|summary/i,
+      );
+    },
+  );
+
+  it("preserves the stale-manifest domain conflict", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const { review } = routeReview({
+      commandError: Object.assign(new Error("manifest_digest_mismatch"), {
+        code: "manifest_digest_mismatch",
+        status: 409,
+      }),
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(response.status).toBe(409);
+    expect(response.body).toEqual({ code: "manifest_digest_mismatch" });
+  });
+
+  it("returns the bounded unavailable code when review wiring or lazy initialization is unavailable", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const missing = await request(testApp(store))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+    const lazy = routeReview({
+      commandError: Object.assign(new Error("database import failed"), {
+        code: "review_unavailable",
+        status: 503,
+      }),
+    });
+    const failedInitialization = await request(testApp(store, true, lazy.review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(missing.status).toBe(503);
+    expect(missing.body).toEqual({ code: "review_unavailable" });
+    expect(failedInitialization.status).toBe(503);
+    expect(failedInitialization.body).toEqual({ code: "review_unavailable" });
+  });
+
+  it("maps a real production lazy-runtime initialization failure to review_unavailable", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const review = createProductionReview({
+      sourceDatabaseKey: "lazy-failure-database",
+      requestedBy: "owner",
+    });
+
+    const response = await request(testApp(store, true, review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ code: "review_unavailable" });
+  });
+
+  it("replays through the real in-memory command boundary without another decision or rebuild", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const initialManifest: ActOrganizeManifest = {
+      digest: MANIFEST_DIGEST,
+      diagnostics: [],
+      outcomes: [
+        {
+          sourceRecordId: SOURCE_RECORD_ID,
+          sourceVersionId: SOURCE_VERSION_ID,
+          state: "unsupported",
+          issues: [
+            { code: "unsupported_record", reason: "normalization_failed" },
+          ],
+          candidates: [],
+          match: null,
+          mappingWarnings: [],
+          unsupportedFieldPaths: [],
+          operationKeys: [],
+        },
+      ],
+      operations: [],
+    };
+    const approvals = new InMemoryApprovalRepository();
+    const applyRepository = new InMemoryApplyRepository({ unsafeForTests: true });
+    const commandStore = new InMemoryReviewCommandStore(
+      approvals,
+      new ActApplyService(applyRepository, false),
+    );
+    commandStore.seed(
+      RUN_ID,
+      initialManifest,
+      {
+        [SOURCE_RECORD_ID]: {
+          sourceVersionId: SOURCE_VERSION_ID,
+          streamType: "unsupported",
+        },
+      },
+      "owner",
+    );
+    commandStore.seedAutomaticReview(RUN_ID, {
+      records: [
+        {
+          sourceRecordId: SOURCE_RECORD_ID,
+          sourceVersionId: SOURCE_VERSION_ID,
+          unsupportedRecord: true,
+        },
+      ],
+    });
+    let rebuilds = 0;
+    commandStore.rebuildAfterReviewChange = async () => {
+      rebuilds += 1;
+      commandStore.manifests.set(RUN_ID, {
+        digest: rebuiltDigest,
+        diagnostics: [],
+        outcomes: [],
+        operations: [],
+      });
+      return { status: "ready_to_apply" };
+    };
+    const commands = new ReviewCommandService(commandStore);
+    const reader = {
+      getManifest: async (runId: string) =>
+        commandStore.manifests.get(runId) ?? null,
+      listSources: async () => [
+        {
+          sourceRecordId: SOURCE_RECORD_ID,
+          sourceVersionId: SOURCE_VERSION_ID,
+          streamType: "unsupported",
+          display: { secret: "never-return" },
+        },
+      ],
+    };
+    const review = workflowReview({
+      reader,
+      commands,
+      workflow: {
+        summarize: async () => automaticWorkflow(rebuiltDigest),
+      },
+    });
+    const app = testApp(store, true, review);
+    const authorization = `Bearer ${ownerToken()}`;
+
+    const first = await request(app)
+      .post(endpoint)
+      .set("Authorization", authorization)
+      .send(body);
+    const replay = await request(app)
+      .post(endpoint)
+      .set("Authorization", authorization)
+      .send(body);
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(replay.body).toEqual(first.body);
+    expect(rebuilds).toBe(1);
+    expect(
+      [...commandStore.decisions.values()].flat().filter((decision) =>
+        decision.active,
+      ),
+    ).toHaveLength(1);
   });
 });
 

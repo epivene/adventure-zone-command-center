@@ -70,7 +70,15 @@ export type ReviewRow = {
   streamType?: string;
   display?: Record<string, unknown>;
 };
-export type ReviewPage = { rows: ReviewRow[]; page: number; pageSize: number; total: number; manifestDigest: string | null; summary: ReviewSummary };
+export type ReviewPage = {
+  rows: ReviewRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+  manifestDigest: string | null;
+  summary: ReviewSummary;
+  filteredIssueCounts: Partial<Record<ReviewIssueCode, number>>;
+};
 
 export type ReviewReader = {
   getManifest(runId: string): Promise<ActOrganizeManifest | null>;
@@ -217,6 +225,11 @@ export function isAssignmentTargetEntityType(value: string): value is Assignment
 
 export function normalizeAssignmentTargetLabel(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function assignmentTargetLabelsEqual(left: string, right: string): boolean {
+  const normalizedLeft = normalizeAssignmentTargetLabel(left);
+  return Boolean(normalizedLeft) && normalizedLeft === normalizeAssignmentTargetLabel(right);
 }
 
 export function assignmentTargetLikePattern(value: string | undefined): string | null {
@@ -405,6 +418,7 @@ export async function readReview(reader: ReviewReader, input: ReviewReadInput): 
   const page = Math.max(1, Math.floor(input.page ?? 1));
   const pageSize = [25, 50, 100, 200].includes(input.pageSize ?? 50) ? (input.pageSize ?? 50) : 50;
   const pageOutcomes = outcomes.slice((page - 1) * pageSize, page * pageSize);
+  const filteredSummary = summarizeReviewOutcomes(outcomes);
   return {
     rows: pageOutcomes.map((outcome) => projectReviewRow({
       outcome,
@@ -417,6 +431,10 @@ export async function readReview(reader: ReviewReader, input: ReviewReadInput): 
     total: outcomes.length,
     manifestDigest: manifest.digest,
     summary: summarizeReviewOutcomes(manifest.outcomes),
+    filteredIssueCounts: {
+      ...filteredSummary.issueCounts,
+      ...filteredSummary.diagnosticCounts,
+    },
   };
 }
 

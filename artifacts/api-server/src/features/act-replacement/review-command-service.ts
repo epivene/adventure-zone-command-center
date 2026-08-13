@@ -3,9 +3,15 @@ import { ActApprovalService, type ApprovalClosure, type ApprovalRepository } fro
 import { stableRelationshipIssues, type ActOrganizeManifest, type ManifestReviewIssue } from "./manifest-builder";
 import type { ConflictReviewToken } from "./review-reader";
 import { fingerprintSourceContent } from "./source-fingerprint";
+import {
+  AUTOMATIC_REVIEW_POLICY_VERSION,
+  proposeAutomaticReview,
+  type AutomaticReviewInput,
+  type AutomaticReviewResolutionSummary,
+} from "./automatic-review-resolver";
 
 export type Assignment = { id: string; sourceRecordId: string; targetEntityType: string; targetEntityId: string; role: string; isPrimary: boolean; manualAuthority: true; assignedBy: string; sourceVersionId: string; active: boolean; supersededAt?: string };
-export type Decision = { id: string; sourceRecordId: string; sourceVersionId: string; scope: "duplicate_identity" | "field_conflict" | "relationship" | "unsupported_record"; decision: "link_existing" | "keep_separate" | "keep_local" | "use_source" | "assign_parent" | "keep_unlinked" | "ignore_source"; requestKey: string; fieldName: string | null; relationshipSlot?: string | null; targetEntityType: string | null; targetEntityId: string | null; reviewedSourceValue?: unknown; reviewedSourceValueFingerprint?: string | null; reviewedLocalValue?: unknown; reviewedLocalValueFingerprint?: string | null; decidedBy: string; active: boolean; };
+export type Decision = { id: string; sourceRecordId: string; sourceVersionId: string; scope: "duplicate_identity" | "field_conflict" | "relationship" | "unsupported_record"; decision: "link_existing" | "keep_separate" | "keep_local" | "use_source" | "assign_parent" | "keep_unlinked" | "ignore_source"; requestKey: string; fieldName: string | null; relationshipSlot?: string | null; targetEntityType: string | null; targetEntityId: string | null; reviewedSourceValue?: unknown; reviewedSourceValueFingerprint?: string | null; reviewedLocalValue?: unknown; reviewedLocalValueFingerprint?: string | null; decidedBy: string; active: boolean; supersededAt?: string; supersededBy?: string; };
 export type SaveAssignmentInput = Omit<Assignment, "id" | "active"> & { requestKey: string };
 export type SaveDecisionInput = Omit<Decision, "id" | "active"> & {
   runId?: string;
@@ -39,6 +45,36 @@ export type BulkReviewDecisionResult = {
 };
 export type SaveDecisionsAndRebuildResult = BulkReviewDecisionResult;
 export type BulkReviewRequestLookup = { owner: string; requestKey: string; requestFingerprint: string };
+export type AutomaticReviewDecisionInput = {
+  sourceRecordId: string;
+  sourceVersionId: string;
+  scope: Decision["scope"];
+  decision: Decision["decision"];
+  fieldName: string | null;
+  relationshipSlot: string | null;
+  targetEntityType: string | null;
+  targetEntityId: string | null;
+};
+export type ResolveAutomaticReviewCommandInput = {
+  expectedManifestDigest: string;
+  owner: string;
+  requestKey: string;
+  policyVersion: string;
+};
+export type ResolveAutomaticReviewAndRebuildInput = ResolveAutomaticReviewCommandInput & {
+  requestFingerprint: string;
+  decisions: readonly AutomaticReviewDecisionInput[];
+};
+export type AutomaticReviewRequestFingerprintInput = {
+  runId: string;
+  expectedManifestDigest: string;
+  actor: string;
+  policyVersion: string;
+  decisions: readonly AutomaticReviewDecisionInput[];
+};
+export type AutomaticReviewDecisionResult = BulkReviewDecisionResult & {
+  summary: AutomaticReviewResolutionSummary;
+};
 type ReviewSourceState = { sourceVersionId: string; streamType?: string; localFields?: Record<string, unknown> };
 export type ConflictReviewState = {
   sourceRecordId: string;
@@ -65,6 +101,7 @@ export type ReviewCommandStore = {
   saveDecisionAndRebuild(runId: string, input: SaveDecisionInput): Promise<Decision>;
   getBulkDecisionRequest(runId: string, input: BulkReviewRequestLookup): Promise<BulkReviewDecisionResult | null>;
   saveDecisionsAndRebuild(runId: string, input: SaveDecisionsAndRebuildInput): Promise<SaveDecisionsAndRebuildResult>;
+  resolveAutomaticReviewAndRebuild(runId: string, input: ResolveAutomaticReviewCommandInput): Promise<AutomaticReviewDecisionResult>;
   supersedeDecision(sourceRecordId: string, decisionId: string, actor: string, requestKey: string): Promise<Decision>;
   supersedeDecisionAndRebuild(runId: string, sourceRecordId: string, decisionId: string, actor: string, requestKey: string): Promise<Decision>;
   getApprovalRepository(): ApprovalRepository;
@@ -147,6 +184,28 @@ export function decisionWithReviewedProof(input: SaveDecisionInput, state: Confl
     reviewedLocalValueFingerprint: token.localValueFingerprint,
   };
 }
+
+export function hasCurrentReviewedFieldProof(
+  decision: Pick<Decision,
+    "sourceRecordId" | "sourceVersionId" | "scope" | "decision" | "fieldName" | "targetEntityType" | "targetEntityId"
+    | "reviewedSourceValue" | "reviewedSourceValueFingerprint" | "reviewedLocalValue" | "reviewedLocalValueFingerprint"
+  >,
+  state: ConflictReviewState,
+): boolean {
+  return decision.scope === "field_conflict"
+    && decision.decision === "use_source"
+    && decision.sourceRecordId === state.sourceRecordId
+    && decision.sourceVersionId === state.sourceVersionId
+    && decision.fieldName === state.fieldName
+    && decision.targetEntityType === state.targetEntityType
+    && decision.targetEntityId === state.targetEntityId
+    && typeof decision.reviewedSourceValueFingerprint === "string"
+    && decision.reviewedSourceValueFingerprint === fingerprintSourceContent({ value: decision.reviewedSourceValue })
+    && decision.reviewedSourceValueFingerprint === fingerprintSourceContent({ value: state.sourceValue })
+    && typeof decision.reviewedLocalValueFingerprint === "string"
+    && decision.reviewedLocalValueFingerprint === fingerprintSourceContent({ value: decision.reviewedLocalValue })
+    && decision.reviewedLocalValueFingerprint === fingerprintSourceContent({ value: state.localValue });
+}
 export function bulkReviewRequestFingerprint(input: Pick<BulkReviewDecisionInput, "scope" | "decision" | "fieldName" | "selections">): string {
   return fingerprintSourceContent({
     scope: input.scope,
@@ -155,6 +214,42 @@ export function bulkReviewRequestFingerprint(input: Pick<BulkReviewDecisionInput
     selections: [...input.selections]
       .map(({ sourceRecordId, sourceVersionId, reviewToken }) => ({ sourceRecordId, sourceVersionId, ...(reviewToken ? { reviewToken } : {}) }))
       .sort((left, right) => left.sourceRecordId.localeCompare(right.sourceRecordId) || left.sourceVersionId.localeCompare(right.sourceVersionId)),
+  });
+}
+const automaticDecisionSortKey = (decision: AutomaticReviewDecisionInput): string => JSON.stringify([
+  decision.sourceRecordId,
+  decision.scope,
+  decision.fieldName,
+  decision.relationshipSlot,
+  decision.targetEntityType,
+  decision.targetEntityId,
+  decision.decision,
+  decision.sourceVersionId,
+]);
+const automaticDecisionCompare = (left: AutomaticReviewDecisionInput, right: AutomaticReviewDecisionInput): number => {
+  const leftKey = automaticDecisionSortKey(left);
+  const rightKey = automaticDecisionSortKey(right);
+  return leftKey === rightKey ? 0 : leftKey < rightKey ? -1 : 1;
+};
+
+export function automaticReviewRequestFingerprint(input: AutomaticReviewRequestFingerprintInput): string {
+  return fingerprintSourceContent({
+    runId: input.runId,
+    expectedManifestDigest: input.expectedManifestDigest,
+    actor: clean(input.actor),
+    policyVersion: input.policyVersion,
+    decisions: [...input.decisions]
+      .map((decision) => ({
+        sourceRecordId: decision.sourceRecordId,
+        sourceVersionId: decision.sourceVersionId,
+        scope: decision.scope,
+        decision: decision.decision,
+        fieldName: decision.fieldName,
+        relationshipSlot: decision.relationshipSlot,
+        targetEntityType: decision.targetEntityType,
+        targetEntityId: decision.targetEntityId,
+      }))
+      .sort(automaticDecisionCompare),
   });
 }
 export function individualDecisionRequestFingerprint(input: Pick<SaveDecisionInput,
@@ -340,13 +435,22 @@ export function prepareBulkReviewDecisions(
 export class InMemoryReviewCommandStore implements ReviewCommandStore {
   manifests = new Map<string, ActOrganizeManifest>(); assignments = new Map<string, Assignment[]>(); decisions = new Map<string, Decision[]>();
   private bulkRequests = new Map<string, { requestFingerprint: string; owner: string; result: BulkReviewDecisionResult }>();
+  private automaticRequests = new Map<string, Map<string, {
+    expectedManifestDigest: string;
+    owner: string;
+    policyVersion: string;
+    requestFingerprint: string;
+    result: AutomaticReviewDecisionResult;
+  }>>();
   private decisionRequestFingerprints = new Map<string, string>();
   private decisionSupersessionRequests = new Map<string, { fingerprint: string; result: Decision }>();
   private targets = new Set<string>();
   private approvals: ApprovalRepository; private apply: ActApplyService; private sources = new Map<string, ReviewSourceState>(); private runOwners = new Map<string, string>();
+  private automaticReviewInputs = new Map<string, AutomaticReviewInput>();
   constructor(approvals: ApprovalRepository, apply: ActApplyService, private readonly testOptions: { unsafeForTests: true } = { unsafeForTests: true }) { this.approvals = approvals; this.apply = apply; }
   seed(runId: string, manifest: ActOrganizeManifest, sourceVersions: Record<string, string | ReviewSourceState> = {}, owner = "owner") { this.manifests.set(runId, manifest); this.runOwners.set(runId, owner); for (const [id, version] of Object.entries(sourceVersions)) this.sources.set(id, typeof version === "string" ? { sourceVersionId: version } : { ...version }); }
   seedTarget(entityType: string, entityId: string) { this.targets.add(`${entityType}\u0000${entityId}`); }
+  seedAutomaticReview(runId: string, input: AutomaticReviewInput) { this.automaticReviewInputs.set(runId, structuredClone(input)); }
   async getManifest(runId: string) { return this.manifests.get(runId) ?? null; }
   async organize(runId: string) { const manifest = this.manifests.get(runId); if (!manifest) fail("organize_unavailable", 409); return { status: "ready_to_apply" as const, manifest }; }
   async startOrganize(runId: string) { await this.organize(runId); return { status: "organizing" as const }; }
@@ -365,7 +469,10 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
         fail("request_replay_mismatch", 409);
       return replay;
     }
-    const prior = rows.find((row) => row.active && row.scope === input.scope && row.fieldName === input.fieldName);
+    const prior = rows.find((row) => row.active
+      && row.scope === input.scope
+      && row.fieldName === input.fieldName
+      && (row.relationshipSlot ?? null) === (input.relationshipSlot ?? null));
     if (prior) fail("decision_already_active", 409);
     const { reviewToken: _reviewToken, requestFingerprint: _requestFingerprint, runId: _runId, ...decision } = input;
     const row: Decision = { ...decision, id: `${input.sourceRecordId}:decision:${rows.length + 1}`, active: true };
@@ -409,7 +516,23 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
     if (!manifest || !source || !outcome || !root || !matchId || !outcome.issues.some((issue) => issue.code === "field_conflict" && issue.reason === fieldName) || !Object.hasOwn(normalized, fieldName) || !source.localFields || !Object.hasOwn(source.localFields, fieldName)) return null;
     return { sourceRecordId, sourceVersionId: source.sourceVersionId, fieldName, sourceValue: normalized[fieldName], targetEntityType: root.targetType, targetEntityId: matchId, localValue: source.localFields[fieldName] };
   }
-  private validatedDecision(runId: string, input: SaveDecisionInput): SaveDecisionInput {
+  private supersedeProofStaleFieldDecision(runId: string, input: SaveDecisionInput): void {
+    if (input.scope !== "field_conflict") return;
+    const rows = this.decisions.get(input.sourceRecordId) ?? [];
+    const prior = rows.find((row) => row.active && row.scope === "field_conflict" && row.fieldName === input.fieldName);
+    if (!prior) return;
+    const state = this.conflictState(runId, input.sourceRecordId, input.fieldName ?? "");
+    if (!state) fail("stale_review_token", 409);
+    if (!hasCurrentReviewedFieldProof(prior, state)) {
+      if (prior.decision !== "use_source") fail("decision_already_active", 409);
+      prior.active = false;
+      prior.supersededAt = new Date().toISOString();
+      prior.supersededBy = input.decidedBy;
+      return;
+    }
+    fail("decision_already_active", 409);
+  }
+  protected validatedDecision(runId: string, input: SaveDecisionInput): SaveDecisionInput {
     const manifest = this.manifests.get(runId);
     const source = this.sources.get(input.sourceRecordId);
     if (!manifest || !source) fail("source_not_found", 404);
@@ -436,7 +559,9 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
           fail("request_replay_mismatch", 409);
         return replay;
       }
-      const saved = await this.saveDecision(this.validatedDecision(runId, input));
+      const validated = this.validatedDecision(runId, input);
+      this.supersedeProofStaleFieldDecision(runId, validated);
+      const saved = await this.saveDecision(validated);
       await this.rebuildAfterReviewChange(runId);
       return saved;
     } catch (error) {
@@ -470,10 +595,12 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
       const saved: Decision[] = [];
       for (const decision of prepared) {
         const request = { ...decision, runId, requestKey: input.requestKey, decidedBy: input.owner };
-        saved.push(await this.saveDecision(this.validatedDecision(runId, {
+        const validated = this.validatedDecision(runId, {
           ...request,
           requestFingerprint: individualDecisionRequestFingerprint(request),
-        })));
+        });
+        this.supersedeProofStaleFieldDecision(runId, validated);
+        saved.push(await this.saveDecision(validated));
       }
       await this.rebuildAfterReviewChange(runId);
       const rebuilt = await this.getManifest(runId);
@@ -485,6 +612,98 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
       this.decisions = decisionsSnapshot;
       this.manifests = manifestsSnapshot;
       this.bulkRequests = requestsSnapshot;
+      this.decisionRequestFingerprints = fingerprintsSnapshot;
+      throw error;
+    }
+  }
+  async resolveAutomaticReviewAndRebuild(runId: string, input: ResolveAutomaticReviewCommandInput): Promise<AutomaticReviewDecisionResult> {
+    if (this.runOwners.get(runId) !== input.owner) fail("run_not_found", 404);
+    const resolution = proposeAutomaticReview(this.automaticReviewInputs.get(runId) ?? { records: [] });
+    const proposed = resolution.proposals
+      .filter((proposal): proposal is Extract<typeof proposal, { kind: "decision" }> => proposal.kind === "decision")
+      .map(({ kind: _kind, reason: _reason, ...decision }) => decision)
+      .sort(automaticDecisionCompare);
+    const requestFingerprint = automaticReviewRequestFingerprint({
+      runId,
+      expectedManifestDigest: input.expectedManifestDigest,
+      actor: input.owner,
+      policyVersion: input.policyVersion,
+      decisions: proposed,
+    });
+    const replay = this.automaticRequests.get(runId)?.get(input.requestKey);
+    if (replay) {
+      if (replay.requestFingerprint !== requestFingerprint) fail("request_replay_mismatch", 409);
+      return structuredClone(replay.result);
+    }
+
+    const decisionsSnapshot = structuredClone(this.decisions);
+    const manifestsSnapshot = structuredClone(this.manifests);
+    const requestsSnapshot = structuredClone(this.automaticRequests);
+    const fingerprintsSnapshot = structuredClone(this.decisionRequestFingerprints);
+    try {
+      const manifest = this.manifests.get(runId);
+      if (!manifest) fail("manifest_not_found", 404);
+      if (manifest.digest !== input.expectedManifestDigest) fail("manifest_digest_mismatch", 409);
+      const persistenceInput: ResolveAutomaticReviewAndRebuildInput = {
+        ...input,
+        requestFingerprint,
+        decisions: proposed,
+      };
+      const prepared = persistenceInput.decisions.map((decision, index): SaveDecisionInput => {
+        const request: SaveDecisionInput = {
+          ...decision,
+          runId,
+          requestKey: `${persistenceInput.requestKey}:${index + 1}`,
+          decidedBy: persistenceInput.owner,
+        };
+        if (decision.scope !== "field_conflict" || decision.decision !== "use_source") return request;
+        const state = this.conflictState(runId, decision.sourceRecordId, decision.fieldName ?? "");
+        if (!state) fail("stale_review_token", 409);
+        return {
+          ...request,
+          reviewToken: {
+            sourceRecordId: state.sourceRecordId,
+            sourceVersionId: state.sourceVersionId,
+            fieldName: state.fieldName,
+            sourceValueFingerprint: fingerprintSourceContent({ value: state.sourceValue }),
+            targetEntityType: state.targetEntityType,
+            targetEntityId: state.targetEntityId,
+            localValueFingerprint: fingerprintSourceContent({ value: state.localValue }),
+          },
+        };
+      });
+      const saved: Decision[] = [];
+      for (const request of prepared) {
+        const validated = this.validatedDecision(runId, request);
+        this.supersedeProofStaleFieldDecision(runId, validated);
+        saved.push(await this.saveDecision({
+          ...validated,
+          requestFingerprint: individualDecisionRequestFingerprint(request),
+        }));
+      }
+      if (saved.length) await this.rebuildAfterReviewChange(runId);
+      const rebuilt = this.manifests.get(runId);
+      if (!rebuilt) fail("manifest_not_found", 404);
+      const result: AutomaticReviewDecisionResult = {
+        decisions: saved,
+        manifestDigest: rebuilt.digest,
+        reviewedOperationIds: reviewedOperationIds(rebuilt, saved),
+        summary: resolution.summary,
+      };
+      const requestsForRun = this.automaticRequests.get(runId) ?? new Map();
+      requestsForRun.set(input.requestKey, {
+        expectedManifestDigest: input.expectedManifestDigest,
+        owner: input.owner,
+        policyVersion: input.policyVersion,
+        requestFingerprint,
+        result: structuredClone(result),
+      });
+      this.automaticRequests.set(runId, requestsForRun);
+      return result;
+    } catch (error) {
+      this.decisions = decisionsSnapshot;
+      this.manifests = manifestsSnapshot;
+      this.automaticRequests = requestsSnapshot;
       this.decisionRequestFingerprints = fingerprintsSnapshot;
       throw error;
     }
@@ -563,6 +782,16 @@ export class ReviewCommandService {
       decision: input.decision,
       fieldName: input.fieldName,
       selections: input.selections,
+    });
+  }
+  async resolveAutomatically(input: { runId: string; expectedManifestDigest: string; requestKey: string; requestedBy: string }): Promise<AutomaticReviewDecisionResult> {
+    if (!clean(input.runId) || !clean(input.expectedManifestDigest) || !clean(input.requestKey) || !clean(input.requestedBy))
+      fail("invalid_automatic_review");
+    return this.store.resolveAutomaticReviewAndRebuild(input.runId, {
+      expectedManifestDigest: input.expectedManifestDigest,
+      owner: input.requestedBy,
+      requestKey: input.requestKey,
+      policyVersion: AUTOMATIC_REVIEW_POLICY_VERSION,
     });
   }
   assignments(sourceRecordId: string) { return this.store.listAssignments(sourceRecordId); }

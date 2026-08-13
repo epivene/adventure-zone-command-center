@@ -74,6 +74,26 @@ const migrationFiles = [
         AND table_name = 'act_replacement_approval_requests'
         AND column_name IN ('approval_mode', 'approval_mode_version')`,
   },
+  {
+    name: "020_act_automatic_review_recovery.sql",
+    markerSql: `SELECT COUNT(*) = 5 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'act_replacement_bulk_review_requests'
+        AND column_name IN (
+          'expected_manifest_digest', 'automatic_summary', 'rebuild_state',
+          'rebuild_token', 'rebuild_lease_expires_at'
+        )`,
+  },
+  {
+    name: "021_act_manifest_digest_version.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'act_replacement_runs'
+        AND column_name = 'manifest_digest_version'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

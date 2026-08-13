@@ -485,31 +485,39 @@ class LazyReviewRuntime {
     const key = `${scope.sourceDatabaseKey}\u0000${scope.requestedBy}`;
     let current = this.runtimes.get(key);
     if (!current) {
-      current = import("@/db/client").then(({ db }) => {
-        const reader = new DrizzleActReviewReader(db, scope);
-        const applyRepository = createDrizzleApplyRepository(db, {
-          manifestDigest: async (runId) =>
-            (await reader.getManifest(runId))?.digest ?? null,
-        });
-        const applyService: ActApplyService = new ApplyService(
-          applyRepository,
-          process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
-        );
-        const store: ReviewCommandStore = new DrizzleActReviewCommandStore(
-          db,
-          scope,
-          applyService,
-        );
-        return {
-          reader,
-          commands: new ReviewCommandService(store),
-          applyCoordinator: new ActApplyCoordinator(
-            applyService,
+      current = import("@/db/client")
+        .then(({ db }) => {
+          const reader = new DrizzleActReviewReader(db, scope);
+          const applyRepository = createDrizzleApplyRepository(db, {
+            manifestDigest: async (runId) =>
+              (await reader.getManifest(runId))?.digest ?? null,
+          });
+          const applyService: ActApplyService = new ApplyService(
             applyRepository,
-          ),
-          workflow: new DrizzleWorkflowReader(db, scope),
-        };
-      });
+            process.env.ACT_MIGRATION_APPLY_ENABLED === "true",
+          );
+          const store: ReviewCommandStore = new DrizzleActReviewCommandStore(
+            db,
+            scope,
+            applyService,
+          );
+          return {
+            reader,
+            commands: new ReviewCommandService(store),
+            applyCoordinator: new ActApplyCoordinator(
+              applyService,
+              applyRepository,
+            ),
+            workflow: new DrizzleWorkflowReader(db, scope),
+          };
+        })
+        .catch((cause: unknown) => {
+          this.runtimes.delete(key);
+          throw Object.assign(new Error("review_unavailable", { cause }), {
+            code: "review_unavailable",
+            status: 503,
+          });
+        });
       this.runtimes.set(key, current);
     }
     return current;

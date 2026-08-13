@@ -1,5 +1,5 @@
 import type { ActApplyAction, ActApplyTargetType, ActReplacementStreamType } from "./import-types";
-import { digestManifestRows } from "./manifest-digest";
+import { digestLegacyManifestRows, digestManifestRows } from "./manifest-digest";
 import type { MatchResult } from "./matching/match-result";
 import { automaticReviewProof } from "./automatic-review-policy";
 import { fingerprintSourceContent } from "./source-fingerprint";
@@ -38,6 +38,13 @@ const rank: Record<string, number> = { organization: 10, contact: 20, calling_li
 const sorted = (values: readonly string[] | undefined) => [...new Set((values ?? []).filter((value) => value.trim()))].sort();
 const operationKey = (target: string, source: string, suffix = "") => `${target}:${source}${suffix ? `:${suffix}` : ""}`;
 const relationshipParentTypes = new Set(["organization", "contact", "booking"]);
+
+export function compareManifestOperations(left: ManifestOperation, right: ManifestOperation): number {
+  const order = (operation: ManifestOperation) => operation.operationKey.startsWith("provenance:")
+    ? rank.provenance
+    : rank[operation.targetType] ?? 999;
+  return order(left) - order(right) || left.operationKey.localeCompare(right.operationKey);
+}
 
 export function stableRelationshipIssues(
   sourceRecordId: string,
@@ -186,6 +193,8 @@ function hasImmutableOverwriteProof(
   targetType: ActApplyTargetType,
   targetEntityId: string,
   fieldName: string,
+  currentSourceValue: unknown,
+  currentLocalValue: unknown,
 ): boolean {
   return decision.decision === "use_source"
     && decision.fieldName === fieldName
@@ -193,12 +202,17 @@ function hasImmutableOverwriteProof(
     && decision.targetEntityId === targetEntityId
     && typeof decision.reviewedSourceValueFingerprint === "string"
     && decision.reviewedSourceValueFingerprint === fingerprintSourceContent({ value: decision.reviewedSourceValue })
+    && decision.reviewedSourceValueFingerprint === fingerprintSourceContent({ value: currentSourceValue })
     && typeof decision.reviewedLocalValueFingerprint === "string"
-    && decision.reviewedLocalValueFingerprint === fingerprintSourceContent({ value: decision.reviewedLocalValue });
+    && decision.reviewedLocalValueFingerprint === fingerprintSourceContent({ value: decision.reviewedLocalValue })
+    && decision.reviewedLocalValueFingerprint === fingerprintSourceContent({ value: currentLocalValue });
 }
 
 /** Pure, deterministic manifest construction. It never selects an ambiguous match. */
-export function buildActOrganizeManifest(input: { runId: string; sources: readonly ManifestSourceInput[] }): ActOrganizeManifest {
+function buildActOrganizeManifestRepresentation(
+  input: { runId: string; sources: readonly ManifestSourceInput[] },
+  digestRepresentation: "canonical" | "legacy",
+): ActOrganizeManifest {
   const sources = input.sources.map((source) => ({
     ...source,
     ...(source.match?.evidence
@@ -324,7 +338,7 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
           if (localValue !== null && localValue !== undefined && localValue !== "" && localValue !== value) {
             const fieldDecision = decisions.find((decision) => decision.scope === "field_conflict" && decision.fieldName === fieldName);
             if (fieldDecision?.decision === "keep_local") continue;
-            if (fieldDecision?.decision === "use_source" && source.match?.kind === "exact" && hasImmutableOverwriteProof(fieldDecision, targetType, source.match.localId, fieldName)) { sourceOps.push(reviewedOverwriteOperation(source, targetType, source.match.localId, fieldName, fieldDecision)); continue; }
+            if (fieldDecision?.decision === "use_source" && source.match?.kind === "exact" && hasImmutableOverwriteProof(fieldDecision, targetType, source.match.localId, fieldName, value, localValue)) { sourceOps.push(reviewedOverwriteOperation(source, targetType, source.match.localId, fieldName, fieldDecision)); continue; }
             issues.push({ code: "field_conflict", reason: fieldName }); diagnostics.push({ code: "field_conflict", sourceRecordId: source.sourceRecordId, path: fieldName }); continue;
           }
           if (localValue === null || localValue === undefined || localValue === "") {
@@ -356,6 +370,7 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     const matchEvidenceFamilies = [...new Set(source.match?.evidence?.map((item) => item.family) ?? [])].sort();
     const provenance = baseOperation(source, targetType, "record_provenance", { evidence: sorted(source.provenance), matchEvidenceFamilies, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, unsupportedNormalizedFields }, sourceOps.map((operation) => operation.operationKey), false, true);
     sourceOps.push(revisionedOperation(operationKey("provenance", source.sourceRecordId), provenance));
+    if (digestRepresentation === "canonical") sourceOps.sort(compareManifestOperations);
     const outcome: ManifestOutcome = { sourceRecordId: source.sourceRecordId, sourceVersionId: source.sourceVersionId, state: issues.some((issue) => issue.code === "relationship_unresolved" || issue.code === "field_conflict") ? "awaiting_review" : "ready", issues, candidates, match: source.match ? source.match as unknown as Record<string, unknown> : null, mappingWarnings: warnings, unsupportedFieldPaths: unsupported, operationKeys: sourceOps.map((operation) => operation.operationKey) };
     const policyOperations = sourceOps.map((operation) => ({
       ...operation,
@@ -374,9 +389,19 @@ export function buildActOrganizeManifest(input: { runId: string; sources: readon
     operations.push(...sourceOps);
     outcomes.push(outcome);
   }
-  const order = (operation: ManifestOperation) => operation.operationKey.startsWith("provenance:") ? rank.provenance : rank[operation.targetType] ?? 999;
-  operations.sort((a, b) => order(a) - order(b) || a.operationKey.localeCompare(b.operationKey));
+  operations.sort(compareManifestOperations);
   outcomes.sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId)); diagnostics.sort((a, b) => a.sourceRecordId.localeCompare(b.sourceRecordId) || (a.path ?? "").localeCompare(b.path ?? ""));
-  const digest = digestManifestRows(operations, outcomes);
+  const digest = digestRepresentation === "legacy"
+    ? digestLegacyManifestRows(operations, outcomes)
+    : digestManifestRows(operations, outcomes);
   return { operations, outcomes, diagnostics, digest };
+}
+
+export function buildActOrganizeManifest(input: { runId: string; sources: readonly ManifestSourceInput[] }): ActOrganizeManifest {
+  return buildActOrganizeManifestRepresentation(input, "canonical");
+}
+
+/** Reproduces the exact pre-canonical outcome operation order and digest. */
+export function buildLegacyActOrganizeManifest(input: { runId: string; sources: readonly ManifestSourceInput[] }): ActOrganizeManifest {
+  return buildActOrganizeManifestRepresentation(input, "legacy");
 }
