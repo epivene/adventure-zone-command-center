@@ -1,1 +1,0 @@
-Task 7 RED: component behavior is defined before implementation.
