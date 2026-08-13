@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyOrganizationFamilyEvidence,
+  matchOrganization,
+} from "../act-replacement/matching/organization-matcher";
+import {
   classifyOrganizationFamily,
   type OrganizationFamilyRecord,
 } from "./organization-family-matcher";
@@ -152,5 +156,54 @@ describe("classifyOrganizationFamily", () => {
         }),
       ]),
     ).toEqual({ kind: "insufficient" });
+  });
+
+  it("exports family evidence without changing exact ACT matching", () => {
+    const source = {
+      sourceRecordId: "act-water-lantern-reno",
+      name: "Water Lantern Festival - Reno, NV",
+      phone: "775-555-0100",
+      website: "waterlanternfestival.com/reno",
+      address1: "2500 E 2nd St",
+      city: "Reno",
+      region: "NV",
+      postalCode: "89595",
+    };
+    const locals = [
+      {
+        id: "location-reno",
+        name: "Water Lantern Festival - Reno, NV",
+        phone: "7755550100",
+        website: "https://www.waterlanternfestival.com",
+        address1: "2500 E 2nd St",
+        city: "Reno",
+        region: "NV",
+        postalCode: "89595",
+      },
+    ];
+    const exactBefore = matchOrganization(source, locals);
+
+    expect(
+      classifyOrganizationFamilyEvidence([
+        location(),
+        location({
+          id: "location-salt-lake-city",
+          name: "Water Lantern Festival (Salt Lake City) UT",
+          address1: "110 S 400 W",
+          city: "Salt Lake City",
+          region: "UT",
+          postalCode: "84101",
+        }),
+      ]),
+    ).toMatchObject({
+      kind: "location_family",
+      candidateIds: ["location-reno", "location-salt-lake-city"],
+    });
+    expect(matchOrganization(source, locals)).toEqual(exactBefore);
+    expect(exactBefore).toMatchObject({
+      kind: "exact",
+      localId: "location-reno",
+      reason: "two_independent_context_clues",
+    });
   });
 });
