@@ -152,4 +152,19 @@ describe("CallerFinder", () => {
 
     expect(screen.queryByRole("link", { name: "Create contact" })).not.toBeInTheDocument();
   });
+
+  it("routes a seven-digit numeric fragment through bounded phone search", async () => {
+    const onSelect = vi.fn();
+    apiGet.mockResolvedValue(result());
+    render(<CallerFinder onSelect={onSelect} />);
+
+    fireEvent.change(screen.getByLabelText("Find caller"), {
+      target: { value: "555-0199" },
+    });
+
+    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith(
+      "/calls/caller-finder?phone=555-0199",
+    ));
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });
