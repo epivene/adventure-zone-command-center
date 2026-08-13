@@ -51,7 +51,10 @@ export default function CallWorkspacePage() {
     setError(null);
     Promise.all([
       apiGet<any>(`/calls/workspace?${query.toString()}`),
-      apiGet<CallingConfig>("/calls/config"),
+      apiGet<CallingConfig>("/calls/config").catch(() => ({
+        assistedCallingEnabled: false,
+        voicemailLauncherUrl: null,
+      })),
     ])
       .then(([workspace, callingConfig]) => {
         setData(workspace);
