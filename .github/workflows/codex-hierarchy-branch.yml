@@ -21,5 +21,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=15000
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/organizations/organization-search-hierarchy.test.ts src/components/organizations/organization-list-hierarchy.test.tsx
       - run: pnpm run typecheck
       - run: pnpm run build
