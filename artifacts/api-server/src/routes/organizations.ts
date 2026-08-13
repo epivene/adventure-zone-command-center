@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
@@ -58,8 +58,8 @@ router.get("/organizations/duplicates", async (req, res): Promise<void> => {
 });
 
 function hierarchyError(
-  req: Parameters<IRouter["use"]>[0] extends (...args: infer Args) => unknown ? Args[0] : never,
-  res: Parameters<IRouter["use"]>[0] extends (...args: infer Args) => unknown ? Args[1] : never,
+  req: Request,
+  res: Response,
   err: unknown,
 ): void {
   if (err instanceof z.ZodError) {
