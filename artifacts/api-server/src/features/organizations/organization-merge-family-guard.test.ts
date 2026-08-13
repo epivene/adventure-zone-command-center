@@ -135,6 +135,10 @@ class GuardTransaction {
     return {
       where: (_condition: unknown) => {
         this.mutations.push({ kind: "delete", table });
+        if (table === organizationFamilyReviews) {
+          this.insertedProposals.splice(0);
+          this.proposals.splice(0);
+        }
         return Promise.resolve();
       },
     };
@@ -329,7 +333,7 @@ describe("organization merge family guard", () => {
       } as never,
       [proposal],
     );
-    expect(proposalWinner.locks).toEqual(["update", "update"]);
+    expect(proposalWinner.locks).toEqual(["update", "update", "update"]);
     expect(proposalWinner.insertedProposals).toEqual([
       expect.objectContaining({
         groupKey: proposal.groupKey,
