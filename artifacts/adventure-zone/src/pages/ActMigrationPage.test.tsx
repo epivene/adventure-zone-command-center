@@ -329,7 +329,7 @@ describe("ActMigrationPage", () => {
     );
   });
 
-  it("offers automatic cleanup only for an organized run with review-required outcomes", async () => {
+  it("offers automatic cleanup only for an organized run with archived records", async () => {
     client.getLatestRun.mockResolvedValue({ run: readyRun() });
 
     const first = render(<ActMigrationPage />);
@@ -351,11 +351,22 @@ describe("ActMigrationPage", () => {
 
     first.unmount();
     client.getLatestRun.mockResolvedValue({
-      run: readyRun({ reviewRequiredCount: 0 }),
+      run: readyRun({ reviewRequiredCount: 0, archivedOnlyCount: 3 }),
     });
     render(<ActMigrationPage />);
 
     await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByRole("button", { name: "Resolve obvious issues" }),
+    ).toBeInTheDocument();
+
+    cleanup();
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ reviewRequiredCount: 0, archivedOnlyCount: 0 }),
+    });
+    render(<ActMigrationPage />);
+
+    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(3));
     expect(
       screen.queryByRole("button", { name: "Resolve obvious issues" }),
     ).not.toBeInTheDocument();
@@ -366,7 +377,7 @@ describe("ActMigrationPage", () => {
     });
     render(<ActMigrationPage />);
 
-    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(4));
     expect(
       screen.queryByRole("button", { name: "Resolve obvious issues" }),
     ).not.toBeInTheDocument();
@@ -378,6 +389,30 @@ describe("ActMigrationPage", () => {
       reviewRequiredCount: 2,
       canReview: true,
       canApplySafe: true,
+    });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+
+    await waitFor(() =>
+      expect(client.resolveAutomaticReview).toHaveBeenCalledWith(
+        run.runId,
+        expect.objectContaining({ expectedManifestDigest: digest }),
+      ),
+    );
+  });
+
+  it("runs automatic cleanup after the safe import completes with archived records", async () => {
+    const run = readyRun({
+      phase: "complete",
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 12_476,
+      canReview: true,
+      canApplySafe: false,
     });
     client.getLatestRun.mockResolvedValue({ run });
     client.getRun.mockResolvedValue({ run });
@@ -496,7 +531,6 @@ describe("ActMigrationPage", () => {
     "extract_complete",
     "organizing",
     "applying",
-    "complete",
     "failed",
     "superseded",
   ] as const)("hides automatic cleanup in the excluded %s phase", async (phase) => {
