@@ -42,3 +42,27 @@ Commit tested: `81444097bfbf1470746c0121bd07713b0dbbc354`
 - Water Lantern production-data verification: not runnable because the branch runner had no `DATABASE_URL`; the workflow recorded this explicitly. No database credential was invented or bypassed.
 
 The temporary branch-only workflow was removed after this successful post-integration run.
+
+
+## Final main refresh
+
+A later refresh integrated feature head `aa51447cfc7483329b03e43f15e686dc2411d471` with current main `b7cf3cede4a8326f8a0c9357bdb7e565a5533f12` through true merge commit `f9d45673ab6e9a3e878c75295297ef3f647aa9ec`.
+
+The two new main commits add Render-compatible AI provider selection, API runtime dependencies/build externals, deployment documentation, and a screenshot asset. The only shared changed path was `pnpm-lock.yaml`; the resolution retains main's OpenAI/Anthropic dependency graph and the hierarchy branch's root Vitest dependency.
+
+Main's provider preflight exposed an existing suggestion-route test setup that had no configured provider. The tests now configure the already-mocked Replit Anthropic provider and restore the environment after the suite.
+
+Fresh GitHub Actions run: https://github.com/epivene/adventure-zone-command-center/actions/runs/31731456806
+
+Commit tested: `87e66ba0d4440eb3248d57618e15a9b535fb3a50`
+
+- Frozen lockfile install: passed.
+- Hierarchy verification tests: 13 passed.
+- Full API suite: 79 files passed, 2 skipped; 1,053 tests passed, 54 skipped.
+- Full frontend suite: 28 files; 197 tests passed.
+- Workspace library build/typecheck: passed.
+- API typecheck and production build: passed.
+- Frontend typecheck and production build: passed.
+- Production-data verification remained unavailable because branch CI had no `DATABASE_URL`; the workflow recorded that limitation explicitly.
+
+The temporary refresh workflow was removed after this successful run.
