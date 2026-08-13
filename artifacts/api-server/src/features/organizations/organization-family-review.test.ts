@@ -209,6 +209,43 @@ describe("organization family review", () => {
     ]);
   });
 
+  it("returns one ambiguous review when a strong subset overlaps a larger exact-name location group", () => {
+    const thirdId = "44444444-4444-4444-8444-444444444444";
+    const groups = discoverOrganizationFamilyCandidates([
+      {
+        id: FIRST_ID,
+        name: "Water Lantern Festival",
+        website: "https://lantern.example/denver",
+        address1: "100 Lake St",
+        city: "Denver",
+        region: "CO",
+      },
+      {
+        id: SECOND_ID,
+        name: "Water Lantern Festival",
+        website: "https://lantern.example/austin",
+        address1: "200 River Rd",
+        city: "Austin",
+        region: "TX",
+      },
+      {
+        id: thirdId,
+        name: "Water Lantern Festival",
+        website: null,
+        address1: "300 Harbor Rd",
+        city: "Boston",
+        region: "MA",
+      },
+    ]);
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        classification: "ambiguous_location_candidate",
+        candidateIds: [FIRST_ID, SECOND_ID, thirdId],
+      }),
+    ]);
+  });
+
   it("does not classify exact names when a location is blank or the complete location is the same", () => {
     expect(discoverOrganizationFamilyCandidates([
       { id: FIRST_ID, name: "Lantern Nights", city: "", region: "CO" },
