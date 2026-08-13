@@ -1034,19 +1034,73 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
   }
 
   async findDuplicates(): Promise<DuplicateOrganizationGroup[]> {
-    // This is a review list, not an automatic merge. Imported records often have
-    // no location even when an existing same-name profile does.
-    const groupRows = await this.database.execute<{
-      normalized_name: string;
-      normalized_city: string;
-      normalized_region: string;
-      ids: string[];
-    }>(duplicateOrganizationGroupsQuery());
+    const [groupRows, familyRecords] = await Promise.all([
+      this.database.execute<{
+        normalized_name: string;
+        normalized_city: string;
+        normalized_region: string;
+        ids: string[];
+      }>(duplicateOrganizationGroupsQuery()),
+      this.database
+        .select()
+        .from(organizations)
+        .where(and(
+          isNull(organizations.parentOrganizationId),
+          sql`${organizations.website} is not null and trim(${organizations.website}) <> ''`,
+          sql`not exists (
+            select 1 from ${organizations} as confirmed_location
+            where confirmed_location.parent_organization_id = ${organizations.id}
+          )`,
+        ))
+        .orderBy(asc(organizations.id)),
+    ]);
 
-    if (!groupRows.rows.length) return [];
+    const discoveredFamilies = discoverOrganizationFamilyCandidates(familyRecords);
+    const familyKeys = discoveredFamilies.flatMap((group) =>
+      group.groupKey ? [group.groupKey] : [],
+    );
+    const reviews = familyKeys.length
+      ? await this.database
+          .select()
+          .from(organizationFamilyReviews)
+          .where(inArray(organizationFamilyReviews.groupKey, familyKeys))
+      : [];
+    const reviewByKey = new Map(reviews.map((review) => [review.groupKey, review]));
+    const visibleFamilies = discoveredFamilies.filter(
+      (group) => group.groupKey && reviewByKey.get(group.groupKey)?.status !== "not_related",
+    );
 
-    // Collect all IDs across all groups
-    const allIds = groupRows.rows.flatMap((row) => row.ids);
+    const proposedFamilies = visibleFamilies.filter(
+      (group) => group.groupKey && !reviewByKey.has(group.groupKey),
+    );
+    if (proposedFamilies.length) {
+      await this.database
+        .insert(organizationFamilyReviews)
+        .values(proposedFamilies.map((group) => ({
+          groupKey: group.groupKey!,
+          candidateIds: group.candidateIds,
+          status: "proposed" as const,
+          evidence: group.evidence,
+        })))
+        .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+    }
+
+    const familyCandidateIds = new Set(
+      visibleFamilies.flatMap((group) => group.candidateIds),
+    );
+    const duplicateGroups: OrganizationFamilyCandidateGroup[] = groupRows.rows
+      .filter((row) => !row.ids.every((id) => familyCandidateIds.has(id)))
+      .map((row) => ({
+        normalizedName: row.normalized_name,
+        city: row.normalized_city,
+        region: row.normalized_region,
+        classification: "duplicate",
+        groupKey: null,
+        candidateIds: [...row.ids].sort((left, right) => left.localeCompare(right, "en-US")),
+        evidence: [],
+      }));
+    const reviewGroups = [...duplicateGroups, ...visibleFamilies];
+    const allIds = [...new Set(reviewGroups.flatMap((group) => group.candidateIds))];
     if (!allIds.length) return [];
 
     const orgRecords = await this.database
@@ -1054,118 +1108,125 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .from(organizations)
       .where(inArray(organizations.id, allIds))
       .orderBy(asc(organizations.name), asc(organizations.id));
+    const organizationIds = orgRecords.map((organization) => organization.id);
+    const parentIds = [...new Set(
+      orgRecords
+        .map((organization) => organization.parentOrganizationId)
+        .filter((id): id is string => id !== null),
+    )];
 
-    const organizationIds = orgRecords.map((o) => o.id);
-    const parentIds = [
-      ...new Set(
-        orgRecords
-          .map((organization) => organization.parentOrganizationId)
-          .filter((id): id is string => id !== null),
-      ),
-    ];
+    const [contactCounts, bookingCounts, primaryContacts, parentRecords, locationCounts] =
+      await Promise.all([
+        this.database
+          .select({ organizationId: organizationContacts.organizationId, value: count() })
+          .from(organizationContacts)
+          .where(and(
+            inArray(organizationContacts.organizationId, organizationIds),
+            eq(organizationContacts.active, true),
+          ))
+          .groupBy(organizationContacts.organizationId),
+        this.database
+          .select({ organizationId: bookings.organizationId, value: count() })
+          .from(bookings)
+          .where(inArray(bookings.organizationId, organizationIds))
+          .groupBy(bookings.organizationId),
+        this.database
+          .select({
+            organizationId: organizationContacts.organizationId,
+            firstName: contacts.firstName,
+            lastName: contacts.lastName,
+          })
+          .from(organizationContacts)
+          .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
+          .where(and(
+            inArray(organizationContacts.organizationId, organizationIds),
+            eq(organizationContacts.active, true),
+            eq(organizationContacts.isPrimary, true),
+          )),
+        parentIds.length
+          ? this.database
+              .select({ id: organizations.id, name: organizations.name, website: organizations.website })
+              .from(organizations)
+              .where(inArray(organizations.id, parentIds))
+          : Promise.resolve([] as OrganizationParentSummary[]),
+        this.database
+          .select({ parentOrganizationId: organizations.parentOrganizationId, value: count() })
+          .from(organizations)
+          .where(inArray(organizations.parentOrganizationId, organizationIds))
+          .groupBy(organizations.parentOrganizationId),
+      ]);
 
-    const [
-      contactCounts,
-      bookingCounts,
-      primaryContacts,
-      parentRecords,
-      locationCounts,
-    ] = await Promise.all([
-      this.database
-        .select({ organizationId: organizationContacts.organizationId, value: count() })
-        .from(organizationContacts)
-        .where(and(
-          inArray(organizationContacts.organizationId, organizationIds),
-          eq(organizationContacts.active, true),
-        ))
-        .groupBy(organizationContacts.organizationId),
-      this.database
-        .select({ organizationId: bookings.organizationId, value: count() })
-        .from(bookings)
-        .where(inArray(bookings.organizationId, organizationIds))
-        .groupBy(bookings.organizationId),
-      this.database
-        .select({
-          organizationId: organizationContacts.organizationId,
-          firstName: contacts.firstName,
-          lastName: contacts.lastName,
-        })
-        .from(organizationContacts)
-        .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
-        .where(and(
-          inArray(organizationContacts.organizationId, organizationIds),
-          eq(organizationContacts.active, true),
-          eq(organizationContacts.isPrimary, true),
-        )),
-      parentIds.length
-        ? this.database
-            .select({
-              id: organizations.id,
-              name: organizations.name,
-              website: organizations.website,
-            })
-            .from(organizations)
-            .where(inArray(organizations.id, parentIds))
-        : Promise.resolve([] as OrganizationParentSummary[]),
-      this.database
-        .select({
-          parentOrganizationId: organizations.parentOrganizationId,
-          value: count(),
-        })
-        .from(organizations)
-        .where(inArray(organizations.parentOrganizationId, organizationIds))
-        .groupBy(organizations.parentOrganizationId),
-    ]);
-
-    const contactCountByOrg = new Map(contactCounts.map((r) => [r.organizationId, r.value]));
+    const contactCountByOrg = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
     const bookingCountByOrg = new Map(
-      bookingCounts.filter((r) => r.organizationId !== null).map((r) => [r.organizationId!, r.value]),
+      bookingCounts.filter((record) => record.organizationId !== null)
+        .map((record) => [record.organizationId!, record.value]),
     );
     const primaryContactByOrg = new Map(
-      primaryContacts.map((r) => [r.organizationId, `${r.firstName} ${r.lastName}`.trim()]),
+      primaryContacts.map((record) => [
+        record.organizationId,
+        `${record.firstName} ${record.lastName}`.trim(),
+      ]),
     );
-    const parentById = new Map(
-      parentRecords.map((record) => [record.id, record]),
-    );
+    const parentById = new Map(parentRecords.map((record) => [record.id, record]));
     const locationCountByParent = new Map(
-      locationCounts
-        .filter((record) => record.parentOrganizationId !== null)
+      locationCounts.filter((record) => record.parentOrganizationId !== null)
         .map((record) => [record.parentOrganizationId!, record.value]),
     );
+    const orgById = new Map(orgRecords.map((organization) => [organization.id, organization]));
 
-    const orgById = new Map(orgRecords.map((o) => [o.id, o]));
-
-    return groupRows.rows.map((row) => {
-      const orgs: OrganizationListRecord[] = row.ids
-        .map((id) => {
-          const o = orgById.get(id);
-          if (!o) return null;
-          return {
-            id: o.id,
-            name: o.name,
-            city: o.city,
-            region: o.region,
-            lastResort: o.lastResort,
-            lastResortReason: o.lastResortReason,
-            lastResortChangedAt: o.lastResortChangedAt,
-            contactCount: contactCountByOrg.get(o.id) ?? 0,
-            bookingCount: bookingCountByOrg.get(o.id) ?? 0,
-            primaryContactName: primaryContactByOrg.get(o.id) ?? null,
-            parent: o.parentOrganizationId
-              ? parentById.get(o.parentOrganizationId) ?? null
+    return reviewGroups
+      .map((group) => ({
+        ...group,
+        organizations: group.candidateIds.flatMap((id) => {
+          const organization = orgById.get(id);
+          if (!organization) return [];
+          return [{
+            id: organization.id,
+            name: organization.name,
+            city: organization.city,
+            region: organization.region,
+            lastResort: organization.lastResort,
+            lastResortReason: organization.lastResortReason,
+            lastResortChangedAt: organization.lastResortChangedAt,
+            contactCount: contactCountByOrg.get(organization.id) ?? 0,
+            bookingCount: bookingCountByOrg.get(organization.id) ?? 0,
+            primaryContactName: primaryContactByOrg.get(organization.id) ?? null,
+            parent: organization.parentOrganizationId
+              ? parentById.get(organization.parentOrganizationId) ?? null
               : null,
-            locationCount: locationCountByParent.get(o.id) ?? 0,
-          } satisfies OrganizationListRecord;
-        })
-        .filter(Boolean) as OrganizationListRecord[];
+            locationCount: locationCountByParent.get(organization.id) ?? 0,
+          } satisfies OrganizationListRecord];
+        }),
+      }))
+      .filter((group) => group.organizations.length === group.candidateIds.length);
+  }
 
-      return {
-        normalizedName: row.normalized_name,
-        city: row.normalized_city,
-        region: row.normalized_region,
-        organizations: orgs,
-      };
-    });
+  async saveFamilyReview(review: OrganizationFamilyReviewRecord): Promise<void> {
+    const now = new Date();
+    await this.database
+      .insert(organizationFamilyReviews)
+      .values({
+        groupKey: review.groupKey,
+        candidateIds: review.candidateIds,
+        evidence: review.evidence,
+        status: review.status,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: organizationFamilyReviews.groupKey,
+        set: {
+          candidateIds: review.candidateIds,
+          evidence: review.evidence,
+          status: review.status,
+          updatedAt: now,
+        },
+      });
+  }
+
+  async deleteFamilyReview(groupKey: string): Promise<void> {
+    await this.database
+      .delete(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, groupKey));
   }
 
   async mergeOrganizations(primaryId: string, duplicateIds: string[]): Promise<void> {
