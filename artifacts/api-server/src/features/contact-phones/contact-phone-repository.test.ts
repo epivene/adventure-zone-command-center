@@ -25,8 +25,8 @@ class MemoryContactPhoneStore implements ContactPhoneStore {
 
   async transaction<T>(callback: (store: ContactPhoneStore) => Promise<T>) {
     const transaction = Object.create(this) as MemoryContactPhoneStore;
-    (transaction as { phones: ContactPhoneRecord[] }).phones = this.phones.map((phone) => ({ ...phone }));
-    (transaction as { contact: LegacyContactPhoneFields }).contact = { ...this.contact };
+    (transaction as unknown as { phones: ContactPhoneRecord[] }).phones = this.phones.map((phone) => ({ ...phone }));
+    (transaction as unknown as { contact: LegacyContactPhoneFields }).contact = { ...this.contact };
     const result = await callback(transaction);
     this.phones = (transaction as { phones: ContactPhoneRecord[] }).phones;
     Object.assign(this.contact, (transaction as { contact: LegacyContactPhoneFields }).contact);
