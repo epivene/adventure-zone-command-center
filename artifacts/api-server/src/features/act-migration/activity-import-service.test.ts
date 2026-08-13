@@ -70,6 +70,7 @@ function makeClient(overrides: Partial<ActMigrationSourceClient> = {}): ActMigra
     listOpportunities: noPage,
     listGroups: noPage,
     listCompaniesForContact: noPage,
+    listNotesForContact: noPage,
     listCompaniesForOpportunity: noPage,
     listContactsForOpportunity: noPage,
     listContactsForGroup: noPage,
