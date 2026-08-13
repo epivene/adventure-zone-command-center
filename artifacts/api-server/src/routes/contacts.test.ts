@@ -116,7 +116,7 @@ describe("contact phone routes", () => {
     await request(app).put(`/contacts/${contactId}/phones`).send({
       phones: [
         { id: null, number: "701-555-0100", type: "office", extension: "12", label: null, primary: true },
-        { id: null, number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+        { id: null, number: "701-555-0199", type: "mobile", extension: "", label: "", primary: true },
       ],
     }).expect(400);
 
@@ -127,7 +127,7 @@ describe("contact phone routes", () => {
     const response = await request(app).put(`/contacts/${contactId}/phones`).send({
       phones: [
         { id: null, number: "701-555-0100", type: "office", extension: "12", label: "Desk", primary: false },
-        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0199", type: "mobile", extension: null, label: null, primary: true },
+        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0199", type: "mobile", extension: "", label: "", primary: true },
       ],
     }).expect(200);
 
@@ -146,7 +146,7 @@ describe("contact phone routes", () => {
   it("returns 400 when a suppressed number is changed in place", async () => {
     await request(app).put(`/contacts/${contactId}/phones`).send({
       phones: [
-        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0100", type: "mobile", extension: null, label: null, primary: true },
+        { id: "33333333-3333-4333-8333-333333333333", number: "701-555-0100", type: "mobile", extension: "", label: "", primary: true },
       ],
     }).expect(400);
   });
