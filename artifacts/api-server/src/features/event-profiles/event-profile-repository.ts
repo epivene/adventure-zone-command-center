@@ -17,6 +17,7 @@ import {
   activeOrganizationContactCondition,
   loadOrganizationHierarchySummary,
   type OrganizationHierarchyRollups,
+  type OrganizationHierarchySummary,
   type OrganizationLocationSummary,
   type OrganizationParentSummary,
 } from "@/features/organizations/organization-repository";
@@ -194,7 +195,7 @@ export function buildEventProfile(
   migrationHistory: EventProfile["migrationHistory"] = {
     contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
   },
-  hierarchy = assembleEmptyEventProfileHierarchy(),
+  hierarchy: OrganizationHierarchySummary = assembleEmptyEventProfileHierarchy(),
 ): EventProfile {
   const contacts = records.contacts.toSorted(contactOrder).map((contact) => ({
     id: contact.id,
