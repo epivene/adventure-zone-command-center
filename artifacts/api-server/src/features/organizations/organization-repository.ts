@@ -211,10 +211,12 @@ export function organizationFamilyActRelationshipsQuery(): SQL {
       ON source_link.entity_type = 'organization'
       AND source_link.source_entity_type = 'company'
       AND source_link.act_record_id = relationship.source_id
+      AND source_link.migration_run_id = relationship.run_id
     INNER JOIN ${actExternalLinks} AS target_link
       ON target_link.entity_type = 'organization'
       AND target_link.source_entity_type = 'company'
       AND target_link.act_record_id = relationship.target_source_id
+      AND target_link.migration_run_id = relationship.run_id
     WHERE relationship.source_id IS NOT NULL
       AND relationship.target_source_id IS NOT NULL
       AND source_link.entity_id <> target_link.entity_id
