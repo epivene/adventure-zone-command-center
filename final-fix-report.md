@@ -52,3 +52,39 @@ on the hosted runner; it passed without product changes.
 
 The temporary branch-only verification workflow was removed after the green
 run.
+
+## Fix Wave 2
+
+A subsequent concurrency and classification review identified two additional
+edge cases. They were corrected after the first report:
+
+1. Exact-name protection now applies to the entire name bucket whenever at
+   least two distinct complete city/region pairs exist. Repeated complete
+   locations and blank/incomplete members remain in that single ambiguous
+   review, so no member can be preselected or sent through bulk merge.
+   Same-address buckets and buckets without geographic divergence remain
+   excluded.
+2. Proposal persistence, proposal decisions, and merge guards now acquire the
+   same transaction-scoped PostgreSQL advisory lock before reading or writing
+   review rows or locking organizations. This removes the absent-row race:
+   proposal-first makes merge wait and observe the proposal; merge-first makes
+   persistence wait, observe missing/moved candidates, and remove or skip the
+   proposal without deadlock.
+
+GitHub Actions run
+[31729994183](https://github.com/epivene/adventure-zone-command-center/actions/runs/31729994183)
+at product head `04ca4775cc4a34ed4fd5b532e373cedef95e1bb7`
+completed successfully:
+
+- Focused frontend ambiguity tests: 9 passed.
+- Focused API discovery/concurrency tests: 26 passed, 1 PostgreSQL integration
+  test skipped because CI does not provide `TEST_DATABASE_URL`.
+- Full API suite: 1,051 passed, 54 skipped.
+- Full frontend suite: 196 passed.
+- Shared declarations and API/frontend TypeScript checks: passed.
+- API and frontend production builds: passed.
+
+The gated PostgreSQL integration test uses two real pooled connections to prove
+both advisory-lock interleavings. It runs automatically when a disposable
+`TEST_DATABASE_URL` is available; always-on tests verify that both production
+flows acquire the advisory lock before review and organization row work.
