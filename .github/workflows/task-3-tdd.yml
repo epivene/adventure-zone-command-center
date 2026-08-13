@@ -17,4 +17,4 @@ jobs:
       - run: corepack prepare pnpm@10.17.0 --activate
       - run: pnpm install --frozen-lockfile
       - name: Run Task 3 call metadata service test
-        run: pnpm --filter @workspace/api-server test -- src/features/calls/call-service.test.ts
+        run: |\n          pnpm --filter @workspace/api-server test -- src/features/calls/call-service.test.ts\n          pnpm run typecheck:libs\n          pnpm --filter @workspace/api-server typecheck
