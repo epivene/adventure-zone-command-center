@@ -231,7 +231,7 @@ export const organizationFamilyReviews = pgTable(
   "organization_family_reviews",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    groupKey: text("group_key").notNull().unique(),
+    groupKey: text("group_key").notNull(),
     candidateIds: jsonb("candidate_ids").$type<string[]>().notNull(),
     status: text("status").$type<"proposed" | "not_related">().notNull(),
     evidence: jsonb("evidence").$type<unknown[]>().default(sql`'[]'::jsonb`).notNull(),
@@ -239,6 +239,7 @@ export const organizationFamilyReviews = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
+    unique("organization_family_reviews_group_key_unique").on(table.groupKey),
     check(
       "organization_family_reviews_status_valid",
       sql`${table.status} in ('proposed', 'not_related')`,
