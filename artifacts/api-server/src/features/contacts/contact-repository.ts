@@ -630,6 +630,12 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       input.normalizedPhone
         ? sql`${input.normalizedPhone} = any(${phones})`
         : undefined,
+      input.phoneFragment
+        ? sql`exists (
+            select 1 from unnest(${phones}) finder_phone
+            where regexp_replace(finder_phone, '\\D', '', 'g') like ${`%${input.phoneFragment}%`}
+          )`
+        : undefined,
       requestedAreaCode
         ? sql`exists (
             select 1 from unnest(${phones}) finder_phone
@@ -822,6 +828,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
         return {
           kind: "candidates" as const,
           candidates: duplicateCandidates,
+          canContinueCreating: !exactDuplicateExists,
         };
       }
 
