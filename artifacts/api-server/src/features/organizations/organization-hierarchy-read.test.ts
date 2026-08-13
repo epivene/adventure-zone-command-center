@@ -1,7 +1,16 @@
+import { sql, type SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
+
+import { bookingStatusValues } from "@/features/bookings/booking-types";
+import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
 
 import {
   assembleOrganizationHierarchy,
+  organizationHierarchyLocationQuery,
+  organizationHierarchyRollupQuery,
+  organizationHierarchyTravelLegQuery,
+  organizationOwnedRecordCondition,
   type OrganizationHierarchyRollups,
   type OrganizationLocationAggregateRecord,
   type OrganizationLocationSummary,
@@ -141,5 +150,88 @@ describe("organization hierarchy reads", () => {
       ...rollupRecord,
       travelLegs: representedTravelLegs,
     } satisfies OrganizationHierarchyRollups);
+  });
+});
+
+
+function render(statement: SQL) {
+  const query = new PgDialect().sqlToQuery(statement);
+  return {
+    sql: query.sql.toLowerCase().replace(/\s+/g, " ").trim(),
+    params: query.params,
+  };
+}
+
+describe("organization hierarchy aggregate SQL", () => {
+  it("gives explicit organization and booking ownership priority over a shared contact", () => {
+    const rendered = render(
+      organizationOwnedRecordCondition(
+        {
+          organizationId: sql.raw("record.organization_id"),
+          bookingId: sql.raw("record.booking_id"),
+          contactId: sql.raw("record.contact_id"),
+        },
+        sql.raw("record.organization_id = owner.id"),
+        sql.raw("booking.organization_id = owner.id"),
+        sql.raw("contact_association.organization_id = owner.id"),
+      ),
+    ).sql;
+
+    expect(rendered).toContain(
+      "(record.organization_id is not null and record.organization_id = owner.id)",
+    );
+    expect(rendered).toContain(
+      "(record.organization_id is null and record.booking_id is not null and booking.organization_id = owner.id)",
+    );
+    expect(rendered).toContain(
+      "(record.organization_id is null and record.booking_id is null and record.contact_id is not null and contact_association.organization_id = owner.id)",
+    );
+  });
+
+  it("renders bounded parent aggregates with canonical ownership and active bookings only", () => {
+    const location = render(organizationHierarchyLocationQuery(parentId));
+    const rollup = render(organizationHierarchyRollupQuery(parentId));
+    const travelLegs = render(organizationHierarchyTravelLegQuery(parentId));
+    const activeStatuses = bookingStatusValues.filter(isActiveStatus);
+    const terminalStatuses = bookingStatusValues.filter(
+      (status) => !isActiveStatus(status),
+    );
+
+    expect(location.sql).toContain("where child.parent_organization_id = $");
+    expect(location.params).toContain(parentId);
+    expect(location.sql.match(/left join lateral/g)).toHaveLength(3);
+    expect(location.sql.match(/limit 1/g)).toHaveLength(3);
+    expect(location.sql).toContain("candidate.organization_id is not null");
+    expect(location.sql).toContain(
+      "candidate.organization_id is null and candidate.booking_id is not null",
+    );
+    expect(location.sql).toContain(
+      "candidate.organization_id is null and candidate.booking_id is null",
+    );
+
+    expect(rollup.sql).toContain('"locationcount"');
+    expect(rollup.sql).toContain('"upcomingbookingcount"');
+    expect(rollup.sql).toContain('"overduefollowupcount"');
+    expect(rollup.sql).toContain('"mostrecentcontactat"');
+    expect(rollup.sql).toContain("booking_location.parent_organization_id = $");
+    expect(rollup.sql).toContain("candidate.organization_id is not null");
+    expect(rollup.sql).toContain(
+      "candidate.organization_id is null and candidate.booking_id is not null",
+    );
+    expect(rollup.sql).toContain(
+      "candidate.organization_id is null and candidate.booking_id is null",
+    );
+
+    for (const status of activeStatuses) {
+      expect(location.params).toContain(status);
+      expect(rollup.params).toContain(status);
+    }
+    for (const status of terminalStatuses) {
+      expect(location.params).not.toContain(status);
+      expect(rollup.params).not.toContain(status);
+    }
+
+    expect(travelLegs.sql).toContain("child.parent_organization_id = $");
+    expect(travelLegs.params).toContain(parentId);
   });
 });

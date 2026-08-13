@@ -1,3 +1,5 @@
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import type { db as ApplicationDatabase } from "@/db/client";
@@ -33,7 +35,7 @@ type OrganizationRow = {
 
 type ContactRow = {
   id: string;
-  organizationId: string;
+  organizationIds: string[];
   firstName: string;
   lastName: string;
   role: string | null;
@@ -61,7 +63,7 @@ type BookingRow = {
 
 type ActivityRow = {
   id: string;
-  organizationId: string;
+  organizationId: string | null;
   contactId: string | null;
   bookingId: string | null;
   kind: string;
@@ -71,7 +73,7 @@ type ActivityRow = {
 
 type FollowUpRow = {
   id: string;
-  organizationId: string;
+  organizationId: string | null;
   contactId: string | null;
   bookingId: string | null;
   kind: string;
@@ -133,24 +135,16 @@ class SelectBuilder implements PromiseLike<unknown[]> {
         : matches.map(({ id, name, website }) => ({ id, name, website }));
     }
     if (this.table === organizationContacts) {
-      return this.database.contacts.filter((row) => ids.includes(row.organizationId));
+      return this.database.contacts.filter((row) => row.organizationIds.some((id) => ids.includes(id)));
     }
     if (this.table === bookings) {
       return this.database.bookings.filter((row) => ids.includes(row.organizationId));
     }
     if (this.table === activities) {
-      return this.database.activities.filter((row) =>
-        ids.includes(row.organizationId)
-        || (row.contactId !== null && ids.includes(row.contactId))
-        || (row.bookingId !== null && ids.includes(row.bookingId)),
-      );
+      return this.ownedRows(this.database.activities, ids);
     }
     if (this.table === followUps) {
-      return this.database.followUps.filter((row) =>
-        ids.includes(row.organizationId)
-        || (row.contactId !== null && ids.includes(row.contactId))
-        || (row.bookingId !== null && ids.includes(row.bookingId)),
-      );
+      return this.ownedRows(this.database.followUps, ids);
     }
     if (
       this.table === callingListMemberships
@@ -159,6 +153,45 @@ class SelectBuilder implements PromiseLike<unknown[]> {
       || this.table === contacts
     ) return [];
     throw new Error(`Unexpected select: ${Object.keys(this.selection).join(",")}`);
+  }
+
+  private ownedRows<
+    Row extends {
+      organizationId: string | null;
+      bookingId: string | null;
+      contactId: string | null;
+    },
+  >(rows: Row[], ids: string[]) {
+    const profileId = ids.find((id) =>
+      this.database.organizations.some((organization) => organization.id === id),
+    );
+    const rendered = new PgDialect()
+      .sqlToQuery(this.condition as SQL)
+      .sql.toLowerCase();
+    const canonicalOwnership =
+      rendered.includes('organization_id" is null')
+      && rendered.includes('booking_id" is not null')
+      && rendered.includes('booking_id" is null');
+
+    return rows.filter((row) => {
+      if (!canonicalOwnership) {
+        return (
+          (row.organizationId !== null && ids.includes(row.organizationId))
+          || (row.bookingId !== null && ids.includes(row.bookingId))
+          || (row.contactId !== null && ids.includes(row.contactId))
+        );
+      }
+      if (!profileId) return false;
+      if (row.organizationId !== null) return row.organizationId === profileId;
+      if (row.bookingId !== null) {
+        return this.database.bookings.some(
+          (booking) =>
+            booking.id === row.bookingId
+            && booking.organizationId === profileId,
+        );
+      }
+      return row.contactId !== null && ids.includes(row.contactId);
+    });
   }
 
   then<TResult1 = unknown[], TResult2 = never>(
@@ -226,7 +259,7 @@ class HierarchyReadDatabase {
   readonly contacts: ContactRow[] = [
     {
       id: "contact-parent",
-      organizationId: parentId,
+      organizationIds: [parentId],
       firstName: "Pat",
       lastName: "Parent",
       role: "Corporate",
@@ -238,7 +271,7 @@ class HierarchyReadDatabase {
     },
     {
       id: "contact-austin",
-      organizationId: austinId,
+      organizationIds: [austinId],
       firstName: "Alex",
       lastName: "Austin",
       role: "Local",
@@ -247,6 +280,18 @@ class HierarchyReadDatabase {
       email: "austin@example.com",
       source: "act",
       actRecordId: "act-contact-austin",
+    },
+    {
+      id: "contact-shared",
+      organizationIds: [parentId, austinId],
+      firstName: "Sam",
+      lastName: "Shared",
+      role: "Shared",
+      isPrimary: false,
+      phone: null,
+      email: "shared@example.com",
+      source: "local",
+      actRecordId: null,
     },
   ];
 
@@ -264,6 +309,20 @@ class HierarchyReadDatabase {
       probability: "likely",
       notes: null,
       actRecordId: "act-booking-austin",
+    },
+    {
+      id: "booking-parent",
+      organizationId: parentId,
+      name: "Corporate Summit",
+      primaryContactId: "contact-shared",
+      city: "Chicago",
+      region: "IL",
+      startsAt: new Date("2099-10-10T14:00:00.000Z"),
+      endsAt: null,
+      status: "confirmed",
+      probability: "likely",
+      notes: null,
+      actRecordId: null,
     },
   ];
 
@@ -286,9 +345,64 @@ class HierarchyReadDatabase {
       body: "Austin-only activity",
       occurredAt: new Date("2026-08-12T18:30:00.000Z"),
     },
+    {
+      id: "activity-parent-shared",
+      organizationId: parentId,
+      contactId: "contact-shared",
+      bookingId: null,
+      kind: "call",
+      body: "Parent-owned shared-contact activity",
+      occurredAt: new Date("2026-08-13T10:00:00.000Z"),
+    },
+    {
+      id: "activity-austin-shared",
+      organizationId: austinId,
+      contactId: "contact-shared",
+      bookingId: null,
+      kind: "call",
+      body: "Austin-owned shared-contact activity",
+      occurredAt: new Date("2026-08-13T11:00:00.000Z"),
+    },
+    {
+      id: "activity-parent-booking-shared",
+      organizationId: null,
+      contactId: "contact-shared",
+      bookingId: "booking-parent",
+      kind: "call",
+      body: "Parent-booking-owned shared-contact activity",
+      occurredAt: new Date("2026-08-13T12:00:00.000Z"),
+    },
   ];
 
-  readonly followUps: FollowUpRow[] = [];
+  readonly followUps: FollowUpRow[] = [
+    {
+      id: "follow-up-parent-shared",
+      organizationId: parentId,
+      contactId: "contact-shared",
+      bookingId: null,
+      kind: "call",
+      dueAt: new Date("2099-08-14T10:00:00.000Z"),
+      completedAt: null,
+    },
+    {
+      id: "follow-up-austin-shared",
+      organizationId: austinId,
+      contactId: "contact-shared",
+      bookingId: null,
+      kind: "email",
+      dueAt: new Date("2099-08-15T10:00:00.000Z"),
+      completedAt: null,
+    },
+    {
+      id: "follow-up-parent-booking-shared",
+      organizationId: null,
+      contactId: "contact-shared",
+      bookingId: "booking-parent",
+      kind: "call",
+      dueAt: new Date("2099-08-16T10:00:00.000Z"),
+      completedAt: null,
+    },
+  ];
 
   select(selection: Record<string, unknown>) {
     return new SelectBuilder(this, selection);
@@ -377,8 +491,17 @@ describe("event profile hierarchy reads", () => {
       name: "Adventure Zone",
       website: "https://example.com",
     });
-    expect(child?.contacts.map(({ id }) => id)).toEqual(["contact-austin"]);
-    expect(child?.notes.map(({ id }) => id)).toEqual(["activity-austin"]);
+    expect(child?.contacts.map(({ id }) => id)).toEqual([
+      "contact-austin",
+      "contact-shared",
+    ]);
+    expect(child?.notes.map(({ id }) => id).toSorted()).toEqual([
+      "activity-austin",
+      "activity-austin-shared",
+    ]);
+    expect(child?.followUps.map(({ id }) => id)).toEqual([
+      "follow-up-austin-shared",
+    ]);
     expect(child?.sourceProvenance).toEqual(expect.arrayContaining([
       expect.objectContaining({ entityId: austinId, actRecordId: "act-austin" }),
       expect.objectContaining({ entityId: "booking-austin", actRecordId: "act-booking-austin" }),
@@ -386,8 +509,19 @@ describe("event profile hierarchy reads", () => {
     ]));
 
     expect(parent?.parent).toBeNull();
-    expect(parent?.contacts.map(({ id }) => id)).toEqual(["contact-parent"]);
-    expect(parent?.notes.map(({ id }) => id)).toEqual(["activity-parent"]);
+    expect(parent?.contacts.map(({ id }) => id)).toEqual([
+      "contact-parent",
+      "contact-shared",
+    ]);
+    expect(parent?.notes.map(({ id }) => id).toSorted()).toEqual([
+      "activity-parent",
+      "activity-parent-booking-shared",
+      "activity-parent-shared",
+    ]);
+    expect(parent?.followUps.map(({ id }) => id)).toEqual([
+      "follow-up-parent-shared",
+      "follow-up-parent-booking-shared",
+    ]);
     expect(parent?.locations.map(({ id }) => id)).toEqual([austinId, denverId]);
     expect(parent?.locations[0]).toMatchObject({
       id: austinId,
