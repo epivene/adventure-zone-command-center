@@ -27,13 +27,25 @@ function candidate(
     lastContactedAt: null,
     dueToday: false,
     noteText: null,
+    matchedOrganizationOrEvent: false,
+    matchedLocation: false,
+    matchedRouteLeg: false,
     ...overrides,
   };
 }
 
-function serviceWith(candidates: CallerFinderCandidate[]) {
+function serviceWith(
+  candidates: CallerFinderCandidate[],
+  exactMetadata = {
+    exactPhoneContactIds: candidates
+      .filter((candidate) => candidate.normalizedPhones.includes("+17015550199"))
+      .map((candidate) => candidate.contactId),
+    hasExactEmail: false,
+  },
+) {
   const repository: CallerFinderRepository = {
     findCallerCandidates: async () => candidates,
+    findCallerExactMetadata: async () => exactMetadata,
   };
   return new CallerFinderService(repository);
 }
@@ -115,5 +127,78 @@ describe("caller finder safety and ranking", () => {
       new Date("2026-08-11T12:00:00.000Z"),
     );
     expect(result.suggestions[0]?.noteSnippet?.length).toBeLessThanOrEqual(160);
+  });
+
+  it("does not auto-open when a second exact owner falls beyond the candidate query cap", async () => {
+    const visibleExactId = "00000000-0000-4000-8000-000000000000";
+    const hiddenExactId = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+    const candidates = Array.from({ length: 64 }, (_, index) =>
+      candidate(`00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, {
+        normalizedPhones: index === 0 ? ["+17015550199"] : [],
+        dueToday: index > 0,
+      }),
+    );
+    const service = serviceWith(candidates, {
+      exactPhoneContactIds: [visibleExactId, hiddenExactId],
+      hasExactEmail: false,
+    });
+
+    const result = await service.find({ phone: "701-555-0199", query: "" });
+
+    expect(result.exact).toEqual({ kind: "none" });
+    expect(result.suggestions).toHaveLength(8);
+  });
+
+  it("does not allow create when an exact email falls beyond bounded candidates", async () => {
+    const service = serviceWith(
+      Array.from({ length: 64 }, (_, index) =>
+        candidate(`00000000-0000-4000-8000-${String(index).padStart(12, "0")}`, {
+          dueToday: true,
+        }),
+      ),
+      { exactPhoneContactIds: [], hasExactEmail: true },
+    );
+
+    const result = await service.find({ phone: "", query: "hidden@example.com" });
+
+    expect(result.exact).toEqual({ kind: "none" });
+    expect(result.canCreate).toBe(false);
+  });
+
+  it("scores an older matching booking and route leg even when latest display fields differ", async () => {
+    const service = serviceWith([
+      candidate(dueTodayContactId, {
+        bookingName: "Newest Gala",
+        routeLegName: "South",
+        matchedOrganizationOrEvent: true,
+        matchedRouteLeg: true,
+      }),
+    ]);
+
+    const result = await service.find({ phone: "", query: "Harvest" });
+
+    expect(result.suggestions[0]).toMatchObject({
+      contactId: dueTodayContactId,
+      reasons: ["Organization or event", "Route leg"],
+      score: 850,
+    });
+  });
+
+  it("scores a matching older booking location independently of contact location", async () => {
+    const service = serviceWith([
+      candidate(dueTodayContactId, {
+        city: null,
+        region: null,
+        matchedLocation: true,
+      }),
+    ]);
+
+    const result = await service.find({ phone: "", query: "Minot" });
+
+    expect(result.suggestions[0]).toMatchObject({
+      contactId: dueTodayContactId,
+      reasons: ["Location"],
+      score: 150,
+    });
   });
 });
