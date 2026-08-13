@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import type { db as ApplicationDatabase } from "@/db/client";
-import { auditEntries, organizations } from "@/db/schema";
+import {
+  actExternalLinks,
+  activities,
+  auditEntries,
+  bookings,
+  callSessions,
+  contacts,
+  followUps,
+  organizations,
+} from "@/db/schema";
 import {
   createOrganizationParent,
   HierarchyConflictError,
@@ -42,6 +51,8 @@ type TestState = {
   callSessions: RelatedRow[];
   actExternalLinks: RelatedRow[];
   auditEntries: AuditEntry[];
+  updateTargets: unknown[];
+  lockedOrganizationIdBatches: string[][];
   nextOrganizationId: string;
 };
 
@@ -85,6 +96,10 @@ function cloneState(state: TestState): TestState {
       before: row.before ? { ...row.before } : null,
       after: row.after ? { ...row.after } : null,
     })),
+    updateTargets: [...state.updateTargets],
+    lockedOrganizationIdBatches: state.lockedOrganizationIdBatches.map(
+      (batch) => [...batch],
+    ),
   };
 }
 
@@ -115,6 +130,7 @@ function sqlParameters(value: unknown, seen = new Set<unknown>()): unknown[] {
 
 class SelectBuilder {
   private condition: unknown;
+  private ordered = false;
 
   constructor(
     private readonly state: TestState,
@@ -130,6 +146,11 @@ class SelectBuilder {
     return this;
   }
 
+  orderBy() {
+    this.ordered = true;
+    return this;
+  }
+
   limit() {
     return this;
   }
@@ -139,27 +160,30 @@ class SelectBuilder {
     const ids = sqlParameters(this.condition).filter(
       (value): value is string => typeof value === "string",
     );
-    if (this.selection && !("name" in this.selection)) {
-      return Promise.resolve(
-        this.state.organizations.filter(
-          (row) =>
-            row.parentOrganizationId !== null &&
-            ids.includes(row.parentOrganizationId),
-        ),
-      );
-    }
-    return Promise.resolve(
-      this.state.organizations.filter((row) => ids.includes(row.id)),
-    );
+    this.state.lockedOrganizationIdBatches.push([...ids]);
+
+    const rows =
+      this.selection && !("name" in this.selection)
+        ? this.state.organizations.filter(
+            (row) =>
+              row.parentOrganizationId !== null &&
+              ids.includes(row.parentOrganizationId),
+          )
+        : this.state.organizations.filter((row) => ids.includes(row.id));
+    if (this.ordered) rows.sort((left, right) => left.id.localeCompare(right.id));
+    return Promise.resolve(rows);
   }
 }
 
 class UpdateBuilder {
-  private values: Partial<Organization> = {};
+  private values: Record<string, unknown> = {};
 
-  constructor(private readonly state: TestState) {}
+  constructor(
+    private readonly state: TestState,
+    private readonly table: unknown,
+  ) {}
 
-  set(values: Partial<Organization>) {
+  set(values: Record<string, unknown>) {
     this.values = values;
     return this;
   }
@@ -168,8 +192,31 @@ class UpdateBuilder {
     const ids = sqlParameters(condition).filter(
       (value): value is string => typeof value === "string",
     );
-    for (const row of this.state.organizations) {
-      if (ids.includes(row.id)) Object.assign(row, this.values);
+
+    if (this.table === organizations) {
+      for (const row of this.state.organizations) {
+        if (ids.includes(row.id)) Object.assign(row, this.values);
+      }
+      return;
+    }
+
+    const relatedRows =
+      this.table === contacts
+        ? this.state.contacts
+        : this.table === activities
+          ? this.state.activities
+          : this.table === bookings
+            ? this.state.bookings
+            : this.table === followUps
+              ? this.state.followUps
+              : this.table === callSessions
+                ? this.state.callSessions
+                : this.table === actExternalLinks
+                  ? this.state.actExternalLinks
+                  : [];
+    for (const row of relatedRows) {
+      const relatedId = row.organizationId ?? row.entityId;
+      if (relatedId && ids.includes(relatedId)) Object.assign(row, this.values);
     }
   }
 }
@@ -240,6 +287,8 @@ class TestDatabase {
       callSessions: [],
       actExternalLinks: [],
       auditEntries: [],
+      updateTargets: [],
+      lockedOrganizationIdBatches: [],
       nextOrganizationId: createdParentId,
     };
   }
@@ -249,7 +298,10 @@ class TestDatabase {
     const transaction = {
       select: (selection?: Record<string, unknown>) =>
         new SelectBuilder(draft, selection),
-      update: () => new UpdateBuilder(draft),
+      update: (table: unknown) => {
+        draft.updateTargets.push(table);
+        return new UpdateBuilder(draft, table);
+      },
       insert: (table: unknown) => ({
         values: (value: Record<string, unknown>) =>
           new InsertBuilder(draft, table, value),
@@ -270,23 +322,45 @@ function organizationById(database: TestDatabase, id: string) {
   return database.state.organizations.find((row) => row.id === id);
 }
 
-function seedPreservedRows(database: TestDatabase, id: string) {
-  database.state.contacts.push({ id: "contact-1", organizationId: id });
-  database.state.activities.push({ id: "activity-1", organizationId: id });
-  database.state.bookings.push({ id: "booking-1", organizationId: id });
-  database.state.followUps.push({ id: "follow-up-1", organizationId: id });
-  database.state.callSessions.push({ id: "call-session-1", organizationId: id });
-  database.state.actExternalLinks.push({ id: "act-link-1", entityId: id });
+function seedPreservedRows(
+  database: TestDatabase,
+  id: string,
+  suffix = "1",
+) {
+  database.state.contacts.push({
+    id: `contact-${suffix}`,
+    organizationId: id,
+  });
+  database.state.activities.push({
+    id: `activity-${suffix}`,
+    organizationId: id,
+  });
+  database.state.bookings.push({
+    id: `booking-${suffix}`,
+    organizationId: id,
+  });
+  database.state.followUps.push({
+    id: `follow-up-${suffix}`,
+    organizationId: id,
+  });
+  database.state.callSessions.push({
+    id: `call-session-${suffix}`,
+    organizationId: id,
+  });
+  database.state.actExternalLinks.push({
+    id: `act-link-${suffix}`,
+    entityId: id,
+  });
 }
 
-function preservedRows(database: TestDatabase) {
+function preservedRows(state: TestState) {
   return {
-    contacts: database.state.contacts,
-    activities: database.state.activities,
-    bookings: database.state.bookings,
-    followUps: database.state.followUps,
-    callSessions: database.state.callSessions,
-    actExternalLinks: database.state.actExternalLinks,
+    contacts: state.contacts,
+    activities: state.activities,
+    bookings: state.bookings,
+    followUps: state.followUps,
+    callSessions: state.callSessions,
+    actExternalLinks: state.actExternalLinks,
   };
 }
 
@@ -312,7 +386,10 @@ describe("organization hierarchy operations", () => {
       createdAt: initialDate,
       updatedAt: changedAt,
     });
-    expect(preservedRows(database)).toEqual(preservedRows({ state: beforeRelationships } as TestDatabase));
+    expect(preservedRows(database.state)).toEqual(
+      preservedRows(beforeRelationships),
+    );
+    expect(database.state.updateTargets).toEqual([organizations]);
     expect(database.state.auditEntries).toEqual([
       expect.objectContaining({
         entityType: "organization",
@@ -327,6 +404,9 @@ describe("organization hierarchy operations", () => {
       organization(childId, "Adventure Zone - Austin"),
       organization(secondChildId, "Adventure Zone - Denver"),
     ]);
+    seedPreservedRows(database, childId);
+    seedPreservedRows(database, secondChildId, "2");
+    const beforeRelationships = cloneState(database.state);
 
     const result = await createOrganizationParent(
       database.asApplicationDatabase(),
@@ -350,6 +430,13 @@ describe("organization hierarchy operations", () => {
     });
     expect(organizationById(database, childId)?.parentOrganizationId).toBe(createdParentId);
     expect(organizationById(database, secondChildId)?.parentOrganizationId).toBe(createdParentId);
+    expect(preservedRows(database.state)).toEqual(
+      preservedRows(beforeRelationships),
+    );
+    expect(database.state.updateTargets).toEqual([
+      organizations,
+      organizations,
+    ]);
     expect(database.state.auditEntries).toEqual([
       expect.objectContaining({
         entityId: createdParentId,
@@ -364,6 +451,8 @@ describe("organization hierarchy operations", () => {
       organization(otherParentId, "Adventure Zone International"),
       organization(childId, "Adventure Zone - Austin", parentId),
     ]);
+    seedPreservedRows(database, childId);
+    const beforeRelationships = cloneState(database.state);
 
     await setOrganizationParent(
       database.asApplicationDatabase(),
@@ -372,6 +461,30 @@ describe("organization hierarchy operations", () => {
     );
 
     expect(organizationById(database, childId)?.parentOrganizationId).toBe(otherParentId);
+    expect(preservedRows(database.state)).toEqual(
+      preservedRows(beforeRelationships),
+    );
+    expect(database.state.updateTargets).toEqual([organizations]);
+  });
+
+  it("locks involved profiles in deterministic identifier order", async () => {
+    const lowerChildId = "05000000-0000-4000-8000-000000000001";
+    const higherParentId = "90000000-0000-4000-8000-000000000001";
+    const database = new TestDatabase([
+      organization(higherParentId, "Adventure Zone"),
+      organization(lowerChildId, "Adventure Zone - Austin"),
+    ]);
+
+    await setOrganizationParent(
+      database.asApplicationDatabase(),
+      { childId: lowerChildId, parentId: higherParentId },
+      changedAt,
+    );
+
+    expect(database.state.lockedOrganizationIdBatches[0]).toEqual([
+      lowerChildId,
+      higherParentId,
+    ]);
   });
 
   it("ungroups by clearing only parentOrganizationId", async () => {
@@ -395,7 +508,10 @@ describe("organization hierarchy operations", () => {
       createdAt: initialDate,
       updatedAt: changedAt,
     });
-    expect(preservedRows(database)).toEqual(preservedRows({ state: beforeRelationships } as TestDatabase));
+    expect(preservedRows(database.state)).toEqual(
+      preservedRows(beforeRelationships),
+    );
+    expect(database.state.updateTargets).toEqual([organizations]);
     expect(database.state.auditEntries).toEqual([
       expect.objectContaining({
         entityId: childId,
