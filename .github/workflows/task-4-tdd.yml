@@ -1,0 +1,27 @@
+name: Task 4 TDD
+
+on:
+  push:
+    branches:
+      - agent/assisted-calling-workspace
+
+jobs:
+  red-green:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.17.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - id: script
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server test -- src/features/calls/call-script.test.ts
+      - id: workspace
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server test -- src/features/calls/call-workspace-query.test.ts
+      - name: Require both RED tests to fail
+        if: steps.script.outcome != 'failure' || steps.workspace.outcome != 'failure'
+        run: exit 1
