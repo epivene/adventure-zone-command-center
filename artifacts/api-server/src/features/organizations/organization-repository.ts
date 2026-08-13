@@ -1086,7 +1086,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     }
 
     const familyCandidateIds = new Set(
-      discoveredFamilies.flatMap((group) => group.candidateIds),
+      visibleFamilies.flatMap((group) => group.candidateIds),
     );
     const duplicateGroups: OrganizationFamilyCandidateGroup[] = groupRows.rows
       .filter((row) => !row.ids.every((id) => familyCandidateIds.has(id)))
