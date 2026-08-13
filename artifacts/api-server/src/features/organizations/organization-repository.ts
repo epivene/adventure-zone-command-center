@@ -6,8 +6,7 @@ import {
   eq,
   inArray,
   isNull,
-  notInArray,
-  type SQL,
+   type SQL,
   type SQLWrapper,
   sql,
 } from "drizzle-orm";
@@ -1406,37 +1405,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         this.database,
         familyRecords,
       );
-    const familyKeys = discoveredFamilies.flatMap((group) =>
-      group.groupKey ? [group.groupKey] : [],
-    );
     const reviews = await this.database
       .select()
       .from(organizationFamilyReviews);
-    const staleProposedKeys = reviews
-      .filter(
-        (review) =>
-          review.status === "proposed" && !familyKeys.includes(review.groupKey),
-      )
-      .map((review) => review.groupKey);
-    if (staleProposedKeys.length) {
-      await this.database
-        .delete(organizationFamilyReviews)
-        .where(and(
-          eq(organizationFamilyReviews.status, "proposed"),
-          inArray(organizationFamilyReviews.groupKey, staleProposedKeys),
-          familyKeys.length
-            ? notInArray(organizationFamilyReviews.groupKey, familyKeys)
-            : sql`true`,
-        ));
-    }
-    const currentReviews = reviews.filter(
-      (review) => !staleProposedKeys.includes(review.groupKey),
-    );
-    const reviewByKey = new Map(currentReviews.map((review) => [review.groupKey, review]));
+    const reviewByKey = new Map(reviews.map((review) => [review.groupKey, review]));
     const reviewGroups = partitionOrganizationReviewGroups(
       groupRows.rows,
       discoveredFamilies,
-      currentReviews,
+      reviews,
     );
     const visibleFamilies = reviewGroups.filter(
       (group) => group.classification !== "duplicate",
