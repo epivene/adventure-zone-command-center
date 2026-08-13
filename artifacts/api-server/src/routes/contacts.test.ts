@@ -20,7 +20,7 @@ const phoneRepository = vi.hoisted(() => {
   }];
 
   return {
-    listForContact: vi.fn(async () => phones.map((phone) => ({ ...phone }))),
+    listForContact: vi.fn(async (_contactId: string) => phones.map((phone) => ({ ...phone }))),
     replaceForContact: vi.fn(async (_contactId: string, next: typeof phones) => {
       phones = next.map((phone) => ({ ...phone, id: phone.id ?? "phone-2", contactId: fixtureContactId }));
       return phones.map((phone) => ({ ...phone }));
