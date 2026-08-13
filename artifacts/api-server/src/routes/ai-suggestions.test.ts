@@ -201,6 +201,13 @@ describe("GET /ai-suggestions", () => {
 // ─── POST /ai-suggestions/analyze (SSE) ──────────────────────────────────────
 
 describe("POST /ai-suggestions/analyze", () => {
+  function parseSSEEvents(text: string): Record<string, unknown>[] {
+    return text
+      .split("\n")
+      .filter((l) => l.startsWith("data: "))
+      .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+  }
+
   it("returns SSE Content-Type and a done event when no records exist", async () => {
     activityRows.value = [];
 
@@ -211,11 +218,7 @@ describe("POST /ai-suggestions/analyze", () => {
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toMatch(/text\/event-stream/);
 
-    // Parse SSE lines
-    const events = res.text
-      .split("\n")
-      .filter((l) => l.startsWith("data: "))
-      .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+    const events = parseSSEEvents(res.text);
 
     const fetchedEvent = events.find((e) => e.type === "fetched");
     expect(fetchedEvent).toBeDefined();
@@ -225,10 +228,10 @@ describe("POST /ai-suggestions/analyze", () => {
     expect(doneEvent).toBeDefined();
     expect(doneEvent!.totalRecords).toBe(0);
     expect(doneEvent!.totalSuggestions).toBe(0);
+    expect(doneEvent!.hadErrors).toBe(false);
   });
 
-  it("streams a suggestion event when AI returns one", async () => {
-    // One activity record in the DB
+  it("streams a suggestion event when AI returns a future-dated suggestion", async () => {
     activityRows.value = [
       {
         id: "act-row-1",
@@ -243,7 +246,6 @@ describe("POST /ai-suggestions/analyze", () => {
       },
     ];
 
-    // AI returns one future suggestion
     const { anthropic } = await import("@workspace/integrations-anthropic-ai");
     vi.mocked(anthropic.messages.create).mockResolvedValueOnce({
       content: [
@@ -269,12 +271,7 @@ describe("POST /ai-suggestions/analyze", () => {
       .post("/api/ai-suggestions/analyze")
       .set("Authorization", authorization);
 
-    expect(res.status).toBe(200);
-
-    const events = res.text
-      .split("\n")
-      .filter((l) => l.startsWith("data: "))
-      .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+    const events = parseSSEEvents(res.text);
 
     const suggestionEvent = events.find((e) => e.type === "suggestion");
     expect(suggestionEvent).toBeDefined();
@@ -282,15 +279,20 @@ describe("POST /ai-suggestions/analyze", () => {
     expect(sugg.clientName).toBe("Smith Family");
     expect(sugg.confidence).toBe("high");
     expect(sugg.suggestedDate).toBe("2099-07-01");
+    // End date is after start — should be preserved
+    expect(sugg.suggestedDateEnd).toBe("2099-07-07");
 
     const doneEvent = events.find((e) => e.type === "done");
     expect(doneEvent!.totalSuggestions).toBe(1);
+    expect(doneEvent!.hadErrors).toBe(false);
   });
 
-  it("silently drops past dates returned by the AI", async () => {
+  it("discards entire suggestions when the AI returns a past or absent start date", async () => {
+    // This enforces the future-booking contract: a past start date means the
+    // whole suggestion is rejected, not kept with a null date.
     activityRows.value = [
       {
-        id: "act-row-2",
+        id: "act-row-past",
         body: "Booked for last year.",
         subject: "Old booking note",
         kind: "act_history",
@@ -310,8 +312,8 @@ describe("POST /ai-suggestions/analyze", () => {
           text: JSON.stringify([
             {
               clientName: "Acme Corp",
-              tripDescription: "Past trip that should be rejected",
-              suggestedDate: "2020-01-01", // past date
+              tripDescription: "Past trip — must be rejected entirely",
+              suggestedDate: "2020-01-01", // past — whole suggestion discarded
               suggestedDateEnd: "2020-01-07",
               location: null,
               confidence: "low",
@@ -327,19 +329,74 @@ describe("POST /ai-suggestions/analyze", () => {
       .post("/api/ai-suggestions/analyze")
       .set("Authorization", authorization);
 
+    const events = parseSSEEvents(res.text);
+
+    // No suggestion event — the past-dated suggestion is discarded entirely
+    expect(events.find((e) => e.type === "suggestion")).toBeUndefined();
+
+    const doneEvent = events.find((e) => e.type === "done");
+    expect(doneEvent!.totalSuggestions).toBe(0);
+    expect(doneEvent!.hadErrors).toBe(false);
+  });
+
+  it("also rejects a suggestion whose end date precedes its start date", async () => {
+    activityRows.value = [{ id: "r1", body: "trip", subject: null, kind: "act_history",
+      timelineSortAt: new Date(), actRecordId: "act_activity:r1",
+      contactFirstName: null, contactLastName: null, organizationName: null }];
+
+    const { anthropic } = await import("@workspace/integrations-anthropic-ai");
+    vi.mocked(anthropic.messages.create).mockResolvedValueOnce({
+      content: [{ type: "text", text: JSON.stringify([{
+        clientName: "Client",
+        tripDescription: "Trip with bad end date",
+        suggestedDate: "2099-08-10",
+        suggestedDateEnd: "2099-08-05", // before start — cleared to null
+        location: null, confidence: "medium",
+        sourceSnippet: "next year", actRecordId: "act_activity:r1",
+      }]) }],
+    } as any);
+
+    const res = await request(app)
+      .post("/api/ai-suggestions/analyze")
+      .set("Authorization", authorization);
+
+    const events = parseSSEEvents(res.text);
+    const sugg = events.find((e) => e.type === "suggestion")?.suggestion as Record<string, unknown> | undefined;
+    expect(sugg).toBeDefined();
+    expect(sugg!.suggestedDate).toBe("2099-08-10");
+    expect(sugg!.suggestedDateEnd).toBeNull(); // cleared because it precedes start
+  });
+
+  it("reports hadErrors=true in the done event when an AI batch fails", async () => {
+    activityRows.value = [
+      { id: "r2", body: "annual trip", subject: null, kind: "act_history",
+        timelineSortAt: new Date(), actRecordId: "act_activity:r2",
+        contactFirstName: null, contactLastName: null, organizationName: null },
+    ];
+
+    const { anthropic } = await import("@workspace/integrations-anthropic-ai");
+    vi.mocked(anthropic.messages.create).mockRejectedValueOnce(
+      new Error("Anthropic API unavailable"),
+    );
+
+    const res = await request(app)
+      .post("/api/ai-suggestions/analyze")
+      .set("Authorization", authorization);
+
     expect(res.status).toBe(200);
 
-    const events = res.text
-      .split("\n")
-      .filter((l) => l.startsWith("data: "))
-      .map((l) => JSON.parse(l.slice(6)) as Record<string, unknown>);
+    const events = parseSSEEvents(res.text);
 
-    // Suggestion is still emitted (AI returned it) but dates are null
-    const suggestionEvent = events.find((e) => e.type === "suggestion");
-    expect(suggestionEvent).toBeDefined();
-    const sugg = suggestionEvent!.suggestion as Record<string, unknown>;
-    expect(sugg.suggestedDate).toBeNull();
-    expect(sugg.suggestedDateEnd).toBeNull();
+    // An error event must be present for the failed batch
+    const errorEvent = events.find((e) => e.type === "error");
+    expect(errorEvent).toBeDefined();
+    expect((errorEvent!.message as string)).toContain("Anthropic API unavailable");
+
+    // The done event must reflect that errors occurred — not clean success
+    const doneEvent = events.find((e) => e.type === "done");
+    expect(doneEvent).toBeDefined();
+    expect(doneEvent!.hadErrors).toBe(true);
+    expect(doneEvent!.totalSuggestions).toBe(0);
   });
 });
 

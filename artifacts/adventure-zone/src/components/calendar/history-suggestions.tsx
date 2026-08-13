@@ -26,7 +26,7 @@ export type HistorySuggestion = {
 type AnalysisState =
   | { phase: "idle" }
   | { phase: "running"; recordsFetched: number; batchIndex: number; totalBatches: number; suggestionsFound: number }
-  | { phase: "done"; totalRecords: number; totalSuggestions: number }
+  | { phase: "done"; totalRecords: number; totalSuggestions: number; hadErrors: boolean; errors: string[] }
   | { phase: "error"; message: string };
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -222,6 +222,8 @@ export function HistorySuggestions() {
                 phase: "done",
                 totalRecords: (event.totalRecords as number) ?? 0,
                 totalSuggestions: (event.totalSuggestions as number) ?? 0,
+                hadErrors: (event.hadErrors as boolean) ?? false,
+                errors: Array.isArray(event.errors) ? (event.errors as string[]) : [],
               });
             } else if (event.type === "error") {
               setState({ phase: "error", message: (event.message as string) ?? "Unknown error" });
@@ -327,13 +329,28 @@ export function HistorySuggestions() {
       )}
 
       {/* Done / error summary */}
-      {state.phase === "done" && (
+      {state.phase === "done" && !state.hadErrors && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
           Analysis complete — scanned {state.totalRecords} records, found{" "}
           {state.totalSuggestions} suggestion{state.totalSuggestions !== 1 ? "s" : ""}.
           {pending > 0 && (
             <span className="ml-1 font-semibold">{pending} awaiting review.</span>
           )}
+        </div>
+      )}
+
+      {state.phase === "done" && state.hadErrors && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 space-y-1">
+          <p className="font-semibold">
+            Analysis finished with errors — results may be incomplete.
+          </p>
+          <p>
+            Scanned {state.totalRecords} records, found {state.totalSuggestions} suggestion
+            {state.totalSuggestions !== 1 ? "s" : ""}.
+            {state.errors.length > 0 && (
+              <span className="ml-1">Failed batches: {state.errors.join("; ")}</span>
+            )}
+          </p>
         </div>
       )}
 

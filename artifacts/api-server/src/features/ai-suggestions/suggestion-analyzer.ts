@@ -31,7 +31,15 @@ export type ProgressEvent =
       suggestionsFound: number;
     }
   | { type: "suggestion"; suggestion: HistorySuggestion }
-  | { type: "done"; totalRecords: number; totalSuggestions: number }
+  | {
+      type: "done";
+      totalRecords: number;
+      totalSuggestions: number;
+      /** True when at least one batch AI call failed; the analysis may be partial. */
+      hadErrors: boolean;
+      /** Human-readable descriptions of any batch errors. */
+      errors: string[];
+    }
   | { type: "error"; message: string };
 
 const BATCH_SIZE = 50;
@@ -147,12 +155,23 @@ function normalizeSuggestion(raw: RawSuggestion): HistorySuggestion | null {
       : null;
   if (!tripDescription) return null;
 
+  // A valid future start date is required — this feature is about future bookings.
+  // Suggestions with a past, absent, or malformed start date are not actionable
+  // and are discarded entirely rather than kept with a null date.
+  if (!isValidFutureDate(raw.suggestedDate)) return null;
+  const suggestedDate = raw.suggestedDate as string;
+
+  // End date must also be valid AND not earlier than the start date.
+  const rawEnd = raw.suggestedDateEnd;
+  const suggestedDateEnd =
+    isValidFutureDate(rawEnd) && (rawEnd as string) >= suggestedDate
+      ? (rawEnd as string)
+      : null;
+
   return {
     id: crypto.randomUUID(),
-    // Only accept dates that are valid ISO strings AND strictly in the future.
-    // The prompt instructs Claude to return future dates, but this enforces it.
-    suggestedDate: isValidFutureDate(raw.suggestedDate) ? raw.suggestedDate : null,
-    suggestedDateEnd: isValidFutureDate(raw.suggestedDateEnd) ? raw.suggestedDateEnd : null,
+    suggestedDate,
+    suggestedDateEnd,
     clientName:
       typeof raw.clientName === "string" && raw.clientName.trim()
         ? raw.clientName.trim()
@@ -189,7 +208,7 @@ export async function analyzeHistory(
   clearSuggestions();
 
   if (records.length === 0) {
-    onEvent({ type: "done", totalRecords: 0, totalSuggestions: 0 });
+    onEvent({ type: "done", totalRecords: 0, totalSuggestions: 0, hadErrors: false, errors: [] });
     return;
   }
 
@@ -203,6 +222,7 @@ export async function analyzeHistory(
 
   const analysisDateStr = new Date().toISOString().slice(0, 10);
   let totalSuggestions = 0;
+  const batchErrors: string[] = [];
 
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
     const batch = batches[batchIndex]!;
@@ -241,10 +261,13 @@ export async function analyzeHistory(
         }
       }
     } catch (err) {
-      const message =
+      const errMsg =
         err instanceof Error ? err.message : "AI analysis error";
-      onEvent({ type: "error", message: `Batch ${batchIndex + 1}: ${message}` });
-      // Continue with remaining batches
+      const batchLabel = `Batch ${batchIndex + 1} of ${batches.length}: ${errMsg}`;
+      batchErrors.push(batchLabel);
+      // Emit a per-batch error event so the client can show live feedback,
+      // but continue analysing the remaining batches.
+      onEvent({ type: "error", message: batchLabel });
     }
   }
 
@@ -252,5 +275,7 @@ export async function analyzeHistory(
     type: "done",
     totalRecords: records.length,
     totalSuggestions,
+    hadErrors: batchErrors.length > 0,
+    errors: batchErrors,
   });
 }
