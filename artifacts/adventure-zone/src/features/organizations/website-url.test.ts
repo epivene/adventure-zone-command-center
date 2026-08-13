@@ -7,7 +7,7 @@ describe("normalizeExternalWebsite", () => {
     ["waterlanternfestival.com", "https://waterlanternfestival.com/"],
     ["https://waterlanternfestival.com/reno", "https://waterlanternfestival.com/reno"],
     ["http://example.com", "http://example.com/"],
-    ["example.com:443/path", "https://example.com:443/path"],
+    ["example.com:443/path", "https://example.com/path"],
     ["localhost:3000", "https://localhost:3000/"],
     ["javascript:alert(1)", null],
     ["ftp://example.com", null],
