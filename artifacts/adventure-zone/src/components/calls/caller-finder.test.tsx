@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.fn();
+const { apiGet } = vi.hoisted(() => ({ apiGet: vi.fn() }));
 
 vi.mock("@/lib/auth-token", () => ({ apiGet }));
 
@@ -133,6 +133,9 @@ describe("CallerFinder", () => {
     await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith(
       "/calls/caller-finder?q=Prairie+Days",
     ));
-    expect(screen.getByRole("link", { name: "Create contact" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Create contact" })).toHaveAttribute(
+      "href",
+      "/quick-add?create=1&q=Prairie%20Days",
+    );
   });
 });
