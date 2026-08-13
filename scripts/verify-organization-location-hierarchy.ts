@@ -20,9 +20,13 @@ export type OrganizationHierarchyVerificationReport = {
   parentCount: number;
   locationCount: number;
   selfParentingCount: number;
+  selfParentingIds: string[];
   orphanedChildCount: number;
+  orphanedParentIds: string[];
   nestedHierarchyCount: number;
+  nestedHierarchyIds: string[];
   familyMergeRiskCount: number;
+  familyMergeRiskIds: string[];
   preservedBookingCount: number;
   preservedActLinkCount: number;
 };
@@ -98,6 +102,42 @@ export function verifyOrganizationLocationHierarchy(
     ),
   );
 
+  const selfParentingIds = relevantOrganizations
+    .filter(
+      (organization) => organization.parentOrganizationId === organization.id,
+    )
+    .map((organization) => organization.id)
+    .sort();
+  const orphanedParentIds = [
+    ...new Set(
+      relevantOrganizations.flatMap((organization) =>
+        organization.parentOrganizationId !== null &&
+        organization.parentOrganizationId !== organization.id &&
+        !organizationById.has(organization.parentOrganizationId)
+          ? [organization.parentOrganizationId]
+          : [],
+      ),
+    ),
+  ].sort();
+  const orphanedChildIds = relevantOrganizations
+    .filter(
+      (organization) =>
+        organization.parentOrganizationId !== null &&
+        organization.parentOrganizationId !== organization.id &&
+        !organizationById.has(organization.parentOrganizationId),
+    )
+    .map((organization) => organization.id);
+  const nestedHierarchyIds = relevantOrganizations
+    .filter(
+      (organization) =>
+        organization.parentOrganizationId !== null &&
+        organization.parentOrganizationId !== organization.id &&
+        (childrenByParent.get(organization.id)?.length ?? 0) > 0,
+    )
+    .map((organization) => organization.id)
+    .sort();
+  const familyMergeRiskIds = [...proposedMergeRiskIds].sort();
+
   const confirmedFamilyFound = familyParentIds.size > 0;
   return {
     organizationFilter: filter ?? null,
@@ -108,22 +148,14 @@ export function verifyOrganizationLocationHierarchy(
         : "Organization location hierarchy verification complete",
     parentCount: familyParentIds.size,
     locationCount: locationIds.size,
-    selfParentingCount: relevantOrganizations.filter(
-      (organization) => organization.parentOrganizationId === organization.id,
-    ).length,
-    orphanedChildCount: relevantOrganizations.filter(
-      (organization) =>
-        organization.parentOrganizationId !== null &&
-        organization.parentOrganizationId !== organization.id &&
-        !organizationById.has(organization.parentOrganizationId),
-    ).length,
-    nestedHierarchyCount: relevantOrganizations.filter(
-      (organization) =>
-        organization.parentOrganizationId !== null &&
-        organization.parentOrganizationId !== organization.id &&
-        (childrenByParent.get(organization.id)?.length ?? 0) > 0,
-    ).length,
-    familyMergeRiskCount: proposedMergeRiskIds.size,
+    selfParentingCount: selfParentingIds.length,
+    selfParentingIds,
+    orphanedChildCount: orphanedChildIds.length,
+    orphanedParentIds,
+    nestedHierarchyCount: nestedHierarchyIds.length,
+    nestedHierarchyIds,
+    familyMergeRiskCount: familyMergeRiskIds.length,
+    familyMergeRiskIds,
     preservedBookingCount: input.bookingOrganizationIds.filter((id) =>
       locationIds.has(id),
     ).length,
