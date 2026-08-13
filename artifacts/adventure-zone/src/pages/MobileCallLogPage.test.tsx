@@ -235,7 +235,6 @@ describe("MobileCallLogPage", () => {
       expect(screen.getByLabelText("Direction")).toHaveValue("outgoing");
       expect(screen.getByLabelText("Phone number")).toHaveValue(alternatePhoneId);
     });
-    await new Promise((resolve) => window.setTimeout(resolve, 5));
     const discardedAt = Date.now();
     fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
 

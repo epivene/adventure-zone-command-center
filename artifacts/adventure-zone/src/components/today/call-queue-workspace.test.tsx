@@ -351,6 +351,8 @@ describe("CallQueueWorkspace", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
 
     expect(await screen.findByText("2 remaining")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
+    });
   });
 });

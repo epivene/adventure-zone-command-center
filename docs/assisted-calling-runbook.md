@@ -24,12 +24,22 @@ phone numbers, credentials, and call notes out of source control and tickets.
 
    ```sql
    SELECT c.id,
-          count(cp.id) FILTER (WHERE cp."primary") AS primary_phone_count
+          count(cp.id) FILTER (WHERE cp."primary") AS primary_phone_count,
+          count(cp.id) FILTER (
+            WHERE cp."primary"
+              AND cp.number = c.phone
+              AND cp.normalized_number IS NOT DISTINCT FROM c.normalized_phone
+          ) AS matching_legacy_primary_count
    FROM contacts c
    LEFT JOIN contact_phones cp ON cp.contact_id = c.id
    WHERE btrim(coalesce(c.phone, '')) <> ''
    GROUP BY c.id
-   HAVING count(cp.id) FILTER (WHERE cp."primary") <> 1;
+   HAVING count(cp.id) FILTER (WHERE cp."primary") <> 1
+      OR count(cp.id) FILTER (
+           WHERE cp."primary"
+             AND cp.number = c.phone
+             AND cp.normalized_number IS NOT DISTINCT FROM c.normalized_phone
+         ) <> 1;
    ```
 
    Also confirm `contact_phones` contains no blank numbers and no contact has

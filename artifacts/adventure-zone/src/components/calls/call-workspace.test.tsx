@@ -115,6 +115,38 @@ describe("CallWorkspace shared phone actions", () => {
     expect(screen.queryByRole("button", { name: "Leave voicemail" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy number" })).toBeInTheDocument();
   });
+
+  it("suppresses a Do Not Call mobile number while keeping the office number callable", () => {
+    const mobilePhone = {
+      ...phoneBase,
+      type: "mobile" as const,
+      doNotCallAt: "2026-08-13T16:05:00.000Z",
+      doNotCallReason: "Requested no mobile calls",
+    };
+    const officePhone = {
+      ...phoneBase,
+      id: "50000000-0000-4000-8000-000000000002",
+      number: "701-555-0100",
+      normalizedNumber: "7015550100",
+      type: "office" as const,
+      extension: "12",
+      primary: false,
+    };
+    renderWorkspace({ phones: [mobilePhone, officePhone] });
+
+    expect(screen.getByText("Calling is unavailable for this number.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Call" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Leave voicemail" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Last Resort")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Phone number"), {
+      target: { value: officePhone.id },
+    });
+
+    expect(screen.getByRole("button", { name: "Call office" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Use extension" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy number" })).toBeInTheDocument();
+  });
 });
 
 describe("CallWorkspace scripts, modes, and drafts", () => {
