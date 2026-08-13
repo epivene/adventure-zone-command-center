@@ -478,6 +478,39 @@ describe("durable review adapter projections", () => {
     );
   });
 
+  it("loads durable manifest row sets sequentially on a transaction client", async () => {
+    let activeRowReads = 0;
+    let maximumConcurrentRowReads = 0;
+    const database = {
+      select: () => {
+        let selectedTable: unknown;
+        const rows = () => selectedTable === actReplacementRuns
+          ? [{ summary: { manifestDigest: "digest-owned" } }]
+          : [];
+        const chain = {
+          from: (table: unknown) => { selectedTable = table; return chain; },
+          where: () => chain,
+          limit: async () => rows(),
+          then: async (resolve: (value: unknown[]) => unknown) => {
+            activeRowReads += 1;
+            maximumConcurrentRowReads = Math.max(maximumConcurrentRowReads, activeRowReads);
+            await Promise.resolve();
+            activeRowReads -= 1;
+            return resolve(rows());
+          },
+        };
+        return chain;
+      },
+    } as never;
+
+    await new DrizzleActReviewReader(database, {
+      sourceDatabaseKey: "act-db",
+      requestedBy: "owner",
+    }).getManifest("run");
+
+    expect(maximumConcurrentRowReads).toBe(1);
+  });
+
   it("aggregates globally, pages in SQL, and loads payloads only for page sources", async () => {
     const queries: unknown[] = [];
     const responses = [
@@ -1071,6 +1104,7 @@ describe("durable review adapter projections", () => {
 
   it("persists heterogeneous automatic decisions from one protected transaction and rebuilds once", async () => {
     const events: string[] = [];
+    const protectedDigest = "a".repeat(64);
     let selectNumber = 0;
     let transactionOptions: unknown;
     const transaction = {
@@ -1083,7 +1117,7 @@ describe("durable review adapter projections", () => {
           limit: () => chain,
           for: async (mode: string) => {
             events.push(`run:${mode}`);
-            return [{ summary: { manifestDigest: "digest-1" } }];
+            return [{ summary: { manifestDigest: protectedDigest }, manifestDigestVersion: "canonical-json-v1" }];
           },
           then: (resolve: (rows: unknown[]) => unknown) => {
             events.push(currentSelect === 2 ? "request:check" : "decision-key:check");
@@ -1121,7 +1155,7 @@ describe("durable review adapter projections", () => {
       execute: async () => { events.push("request:update"); return { rows: [{ id: "request" }] }; },
     } as never;
     const manifest = {
-      digest: "digest-1",
+      digest: protectedDigest,
       diagnostics: [],
       operations: [],
       outcomes: [
@@ -1142,6 +1176,13 @@ describe("durable review adapter projections", () => {
         events.push("manifest:load");
         return manifest;
       });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifestDigest")
+      .mockImplementation(async () => {
+        events.push("manifest:digest");
+        return manifest.digest;
+      });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest")
+      .mockResolvedValue(manifest);
     vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources")
       .mockResolvedValue([
         { sourceRecordId: "ambiguous", sourceVersionId: "v-ambiguous", streamType: "contact", display: { FirstName: "New", LastName: "Person" } },
@@ -1160,7 +1201,7 @@ describe("durable review adapter projections", () => {
 
     const result = await new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
       .resolveAutomaticReviewAndRebuild("run", {
-        expectedManifestDigest: "digest-1",
+        expectedManifestDigest: protectedDigest,
         owner: "owner",
         requestKey: "automatic-1",
         policyVersion: "2026-08-12",
@@ -1176,7 +1217,7 @@ describe("durable review adapter projections", () => {
     });
     expect(transactionOptions).toEqual({ isolationLevel: "serializable" });
     expect(events).toEqual([
-      "transaction:start", "run:update", "request:check", "manifest:load", "sources:lock", "manifest:load", "targets:search",
+      "transaction:start", "run:update", "request:check", "manifest:digest", "sources:lock", "manifest:load", "targets:search",
       "decision-key:check", "decision:duplicate_identity:keep_separate", "decision:unsupported_record:ignore_source",
       "request:save", "transaction:commit", "rebuild", "request:update",
     ]);

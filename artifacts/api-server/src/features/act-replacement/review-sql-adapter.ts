@@ -1331,7 +1331,14 @@ class DrizzleActReviewReaderBase implements ReviewReader {
       .where(this.ownedRunPredicate(runId))
       .limit(1);
     if (!run) return null;
-    const [operationRows, outcomeRows] = await Promise.all([this.database.select().from(actReplacementApplyOperations).where(eq(actReplacementApplyOperations.runId, runId)), this.database.select().from(actReplacementOutcomes).where(eq(actReplacementOutcomes.runId, runId))]);
+    const operationRows = await this.database
+      .select()
+      .from(actReplacementApplyOperations)
+      .where(eq(actReplacementApplyOperations.runId, runId));
+    const outcomeRows = await this.database
+      .select()
+      .from(actReplacementOutcomes)
+      .where(eq(actReplacementOutcomes.runId, runId));
     return manifestFromRows({
       operations: operationRows as unknown as Array<Record<string, unknown>>,
       outcomes: outcomeRows as unknown as Array<Record<string, unknown>>,
@@ -1344,6 +1351,9 @@ class DrizzleActReviewReaderBase implements ReviewReader {
       ...manifest,
       digest: digestManifestRows(manifest.operations, manifest.outcomes),
     };
+  }
+  async getComputedManifestDigest(runId: string) {
+    return (await this.getComputedManifest(runId))?.digest ?? null;
   }
   async recomputeAutomaticReviewManifest(runId: string, excludedDecisionIds: readonly string[] = []) {
     const sources = await new DrizzleProductionOrganizerStore(this.database, this.scope).loadSources(runId, excludedDecisionIds);
@@ -1359,20 +1369,17 @@ class DrizzleActReviewReaderBase implements ReviewReader {
     digestVersion: string | null | undefined,
     excludedDecisionIds: readonly string[] = [],
   ): Promise<{ manifest: ActOrganizeManifest; lockedById: Map<string, { sourceRecordId: string; sourceVersionId: string; streamType: string; relationshipEvidence?: unknown }> }> {
-    const initialManifest = await this.getComputedManifest(runId);
-    if (!initialManifest)
+    const initialDigest = await this.getComputedManifestDigest(runId);
+    if (!initialDigest)
       throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
-    const sourceIds = [...new Set(initialManifest.outcomes.map((outcome) => outcome.sourceRecordId))].sort();
     const lockedSources = resultRows<{ sourceRecordId: string; sourceVersionId: string; streamType: string; relationshipEvidence?: unknown }>(
       await this.database.execute(lockAutomaticReviewSourceRowsQuery(this.scope, runId)),
     );
     const lockedById = new Map(lockedSources.map((source) => [source.sourceRecordId, source]));
-    if (sourceIds.some((sourceId) => !lockedById.has(sourceId)))
-      throw Object.assign(new Error("run_not_found"), { code: "run_not_found", status: 404 });
     const currentManifest = await this.getComputedManifest(runId);
     if (!currentManifest)
       throw Object.assign(new Error("manifest_not_found"), { code: "manifest_not_found", status: 404 });
-    if (currentManifest.digest !== initialManifest.digest) manifestDigestMismatch();
+    if (currentManifest.digest !== initialDigest) manifestDigestMismatch();
     for (const outcome of currentManifest.outcomes) {
       const source = lockedById.get(outcome.sourceRecordId);
       if (!source || source.sourceVersionId !== outcome.sourceVersionId)
