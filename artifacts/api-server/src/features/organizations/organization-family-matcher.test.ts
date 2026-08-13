@@ -107,6 +107,34 @@ describe("classifyOrganizationFamily", () => {
     ).toEqual({ kind: "insufficient" });
   });
 
+  it.each([
+    {
+      label: "missing postal codes",
+      firstPostalCode: null,
+      secondPostalCode: null,
+    },
+    {
+      label: "conflicting postal codes",
+      firstPostalCode: "89595",
+      secondPostalCode: "99999",
+    },
+  ])(
+    "does not suggest records at the same street address with $label",
+    ({ firstPostalCode, secondPostalCode }) => {
+      expect(
+        classifyOrganizationFamily([
+          location({ postalCode: firstPostalCode }),
+          location({
+            id: "location-sparks",
+            name: "Water Lantern Festival (Sparks) NV",
+            city: "Sparks",
+            postalCode: secondPostalCode,
+          }),
+        ]),
+      ).toEqual({ kind: "insufficient" });
+    },
+  );
+
   it("does not suggest conflicting website domains", () => {
     expect(
       classifyOrganizationFamily([
