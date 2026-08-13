@@ -13,7 +13,12 @@ import {
   organizationContacts,
   organizations,
 } from "@/db/schema";
-import { activeOrganizationContactCondition } from "@/features/organizations/organization-repository";
+import {
+  activeOrganizationContactCondition,
+  type OrganizationHierarchyRollups,
+  type OrganizationLocationSummary,
+  type OrganizationParentSummary,
+} from "@/features/organizations/organization-repository";
 
 export type EventProfilePlace = {
   id: string;
@@ -117,6 +122,9 @@ export type EventProfile = {
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
+  parent: OrganizationParentSummary | null;
+  locations: OrganizationLocationSummary[];
+  rollups: OrganizationHierarchyRollups;
   migrationHistory?: {
     contactSourceIds: string[];
     phones: string[];
@@ -220,6 +228,15 @@ export function buildEventProfile(
     ),
     groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     sourceProvenance: stableSourceProvenance(records),
+    parent: null,
+    locations: [],
+    rollups: {
+      locationCount: 0,
+      upcomingBookingCount: 0,
+      overdueFollowUpCount: 0,
+      travelLegs: [],
+      mostRecentContactAt: null,
+    },
     migrationHistory,
   };
 }
