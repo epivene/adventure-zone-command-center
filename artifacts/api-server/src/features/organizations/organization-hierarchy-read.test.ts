@@ -167,6 +167,40 @@ function render(statement: SQL) {
   };
 }
 
+function scalarSubqueryForAlias(statement: string, alias: string): string {
+  const aliasMarker = `) as "${alias}"`;
+  const closingParenthesis = statement.indexOf(aliasMarker);
+  if (closingParenthesis < 0) {
+    throw new Error(`Missing scalar subquery alias "${alias}".`);
+  }
+
+  let depth = 0;
+  for (let index = closingParenthesis; index >= 0; index -= 1) {
+    if (statement[index] === ")") depth += 1;
+    if (statement[index] === "(") {
+      depth -= 1;
+      if (depth === 0) {
+        return statement.slice(index + 1, closingParenthesis);
+      }
+    }
+  }
+
+  throw new Error(`Could not isolate scalar subquery "${alias}".`);
+}
+
+function expectCanonicalChildOwnership(statement: string) {
+  expect(statement).toContain("candidate.organization_id is not null");
+  expect(statement).toContain(
+    "candidate.organization_id is null and candidate.booking_id is not null",
+  );
+  expect(statement).toContain(
+    "candidate.organization_id is null and candidate.booking_id is null",
+  );
+  expect(statement).toContain("direct_location.parent_organization_id = $");
+  expect(statement).toContain("booking_location.parent_organization_id = $");
+  expect(statement).toContain("contact_location.parent_organization_id = $");
+}
+
 describe("organization hierarchy aggregate SQL", () => {
   it("gives explicit organization and booking ownership priority over a shared contact", () => {
     const rendered = render(
@@ -218,13 +252,21 @@ describe("organization hierarchy aggregate SQL", () => {
     expect(rollup.sql).toContain('"upcomingbookingcount"');
     expect(rollup.sql).toContain('"overduefollowupcount"');
     expect(rollup.sql).toContain('"mostrecentcontactat"');
-    expect(rollup.sql).toContain("booking_location.parent_organization_id = $");
-    expect(rollup.sql).toContain("candidate.organization_id is not null");
-    expect(rollup.sql).toContain(
-      "candidate.organization_id is null and candidate.booking_id is not null",
+    expect(rollup.params).toContain(parentId);
+
+    const overdueFollowUps = scalarSubqueryForAlias(
+      rollup.sql,
+      "overduefollowupcount",
     );
-    expect(rollup.sql).toContain(
-      "candidate.organization_id is null and candidate.booking_id is null",
+    const mostRecentContact = scalarSubqueryForAlias(
+      rollup.sql,
+      "mostrecentcontactat",
+    );
+
+    expectCanonicalChildOwnership(overdueFollowUps);
+    expectCanonicalChildOwnership(mostRecentContact);
+    expect(rollup.sql).toMatch(
+      /\) as "mostrecentcontactat" from "organizations" as child where child\.parent_organization_id = \$\d+$/,
     );
 
     for (const status of activeStatuses) {
