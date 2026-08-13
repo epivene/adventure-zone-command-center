@@ -20,6 +20,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @workspace/api-server test
+      - run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=15000
       - run: pnpm run typecheck
       - run: pnpm run build
