@@ -1,3 +1,5 @@
+import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-repository";
+
 export const contactSyncStateValues = [
   "unlinked",
   "synced",
