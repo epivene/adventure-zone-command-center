@@ -5,7 +5,7 @@ ALTER TYPE call_disposition ADD VALUE IF NOT EXISTS 'wrong_number';
 ALTER TYPE call_disposition ADD VALUE IF NOT EXISTS 'do_not_call';
 
 ALTER TABLE call_sessions
-  ADD COLUMN IF NOT EXISTS phone_id uuid REFERENCES contact_phones(id),
+  ADD COLUMN IF NOT EXISTS phone_id uuid REFERENCES contact_phones(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS direction text NOT NULL DEFAULT 'outgoing',
   ADD COLUMN IF NOT EXISTS method text NOT NULL DEFAULT 'standard_call',
   ADD COLUMN IF NOT EXISTS phone_number_snapshot text,

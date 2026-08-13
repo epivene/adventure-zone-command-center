@@ -124,6 +124,12 @@ export function CallWorkspace({
         lastResortConfirmed,
         approvedContactUpdates: null,
         approvedBookingUpdates: null,
+        direction: "outgoing",
+        method: "mobile_log",
+        phoneId: null,
+        scriptKind: followUp ? "follow_up" : "first_outreach",
+        doNotCallConfirmed: false,
+        doNotCallReason: null,
       });
       if (!result.ok) setError(result.error);
       else setIsSaved(true);

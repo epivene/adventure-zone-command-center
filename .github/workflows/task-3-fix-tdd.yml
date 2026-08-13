@@ -20,3 +20,5 @@ jobs:
         run: |
           pnpm --filter @workspace/api-server test -- src/features/calls/call-service.test.ts src/db/act-review-migrations.test.ts
           pnpm --filter @workspace/adventure-zone exec vitest run src/components/calls/call-workspace.test.tsx
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck

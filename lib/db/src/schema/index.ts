@@ -786,7 +786,7 @@ export const callSessions = pgTable(
     requestKey: uuid("request_key"),
     organizationId: uuid("organization_id").references(() => organizations.id),
     contactId: uuid("contact_id").references(() => contacts.id),
-    phoneId: uuid("phone_id").references(() => contactPhones.id),
+    phoneId: uuid("phone_id").references(() => contactPhones.id, { onDelete: "set null" }),
     direction: text("direction").default("outgoing").notNull(),
     method: text("method").default("standard_call").notNull(),
     phoneNumberSnapshot: text("phone_number_snapshot"),
