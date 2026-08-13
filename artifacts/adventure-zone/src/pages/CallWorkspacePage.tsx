@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useSearch } from "wouter";
-import { apiGet } from "@/lib/auth-token";
-import { CallWorkspace } from "@/components/calls/call-workspace";
+
 import { createActivityAction, editActivityAction, listActivityRevisionsAction } from "@/actions/activities";
 import { completeCallAction } from "@/actions/calls";
+import { CallWorkspace } from "@/components/calls/call-workspace";
+import { apiGet } from "@/lib/auth-token";
 
 function toDate(value: unknown): Date | null {
   return value ? new Date(value as string) : null;
@@ -18,6 +19,11 @@ function coerceTimeline(items: any[]): any[] {
   }));
 }
 
+type CallingConfig = {
+  assistedCallingEnabled: boolean;
+  voicemailLauncherUrl: string | null;
+};
+
 export default function CallWorkspacePage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
@@ -27,19 +33,35 @@ export default function CallWorkspacePage() {
   const organizationId = params.get("organizationId") ?? undefined;
 
   const [data, setData] = useState<any>(null);
+  const [config, setConfig] = useState<CallingConfig>({
+    assistedCallingEnabled: false,
+    voicemailLauncherUrl: null,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const qs = new URLSearchParams();
-    if (followUpId) qs.set("followUpId", followUpId);
-    if (bookingId) qs.set("bookingId", bookingId);
-    if (contactId) qs.set("contactId", contactId);
-    if (organizationId) qs.set("organizationId", organizationId);
+    const query = new URLSearchParams();
+    if (followUpId) query.set("followUpId", followUpId);
+    if (bookingId) query.set("bookingId", bookingId);
+    if (contactId) query.set("contactId", contactId);
+    if (organizationId) query.set("organizationId", organizationId);
 
-    apiGet<any>(`/calls/workspace?${qs.toString()}`)
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      apiGet<any>(`/calls/workspace?${query.toString()}`),
+      apiGet<CallingConfig>("/calls/config"),
+    ])
+      .then(([workspace, callingConfig]) => {
+        setData(workspace);
+        setConfig(callingConfig);
+        setLoading(false);
+      })
+      .catch((reason) => {
+        setError(reason.message);
+        setLoading(false);
+      });
   }, [search]);
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading call workspace…</p></div>;
@@ -66,17 +88,24 @@ export default function CallWorkspacePage() {
   return (
     <div className="mx-auto max-w-7xl">
       <CallWorkspace
-        organization={context.organization ?? null}
-        contact={contact}
-        booking={booking}
-        followUp={followUp}
-        timeline={coerceTimeline(data.timeline)}
         activityParent={data.activityParent}
-        onComplete={completeCallAction}
+        assistedCallingEnabled={config.assistedCallingEnabled}
+        booking={booking}
+        contact={contact}
+        contextSummary={data.contextSummary ?? null}
         createActivity={createActivityAction}
+        defaultScriptKind={data.defaultScriptKind}
         editActivity={editActivityAction}
+        followUp={followUp}
         loadRevisions={listActivityRevisionsAction}
+        mode="full"
+        onComplete={completeCallAction}
         operations={data.operations ?? null}
+        organization={context.organization ?? null}
+        phones={data.phones ?? []}
+        scriptPrompts={data.scriptPrompts ?? []}
+        timeline={coerceTimeline(data.timeline)}
+        voicemailLauncherUrl={config.voicemailLauncherUrl}
       />
     </div>
   );
