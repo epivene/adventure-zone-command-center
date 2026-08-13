@@ -72,3 +72,68 @@ The known six-error web baseline at the required remote head was not changed by
 this task. The connector-only checkout prevented rerunning that exact branch
 locally; the task's new web files typecheck cleanly in the available compatibility
 checkout.
+
+## Fix round 1 — authoritative continuation and partial-phone search
+
+Review identified two safety gaps and one route-test weakness:
+
+- The quick-add UI inferred an exact conflict from the bounded eight-candidate
+  response. An exact match hidden after eight higher-ranked visible candidates
+  could therefore expose a misleading bypass action. Candidate results now carry
+  the service/repository's authoritative `canContinueCreating` decision. The UI
+  never derives bypass permission from the visible DTO. Uncapped exact-conflict
+  detection remains authoritative, including the transactional race-check result.
+- Seven- through nine-digit phone fragments were sent as `phone=` but could not
+  be normalized as full NANP numbers and were not searched as text. The finder
+  now performs bounded normalized digit-fragment matching for those inputs. Such
+  results use the `Phone number` reason and always remain click-only; only a
+  unique full normalized-phone match can auto-open.
+- The route suite now exercises the production auth-mounted router with a real
+  issued token and the real `submitQuickCaller` service, mocking only repository
+  and unrelated infrastructure boundaries. It covers unauthenticated access,
+  invalid-body rejection, hidden exact conflicts beyond the visible eight,
+  likely-candidate continuation, and explicit creation. The earlier mocked
+  identical-response route assertion was removed; it was not evidence of actual
+  request-key idempotency, which remains a service/repository responsibility.
+
+### Fix-round TDD evidence
+
+- RED: service tests failed because candidate results lacked the authoritative
+  continuation flag; the hidden-exact UI regression still rendered **Create
+  separate contact** when all eight visible candidates were merely likely.
+- GREEN: service, repository result contract, page typing, and UI now propagate
+  and consume the server decision; the hidden-exact regression passes.
+- RED: a seven-digit phone fragment produced no suggestion.
+- GREEN: table coverage for seven-, eight-, and nine-digit fragments returns
+  bounded click-only `Phone number` suggestions with no exact result.
+- GREEN: authenticated route coverage rejects missing auth and invalid input and
+  preserves the authoritative hidden-exact and explicit-continue behavior.
+
+### Fix-round fresh verification
+
+Executed in the runnable compatibility checkout
+`/workspace/scratch/2d7b4cca3992/repo-test` on 2026-08-12 after synchronizing
+the remote branch's current Task 5/6/7 contracts:
+
+```sh
+pnpm --filter @workspace/api-server exec vitest run \
+  src/features/caller-finder/caller-finder-service.test.ts \
+  src/features/contacts/quick-caller-service.test.ts \
+  src/routes/calls-quick-caller.test.ts \
+&& pnpm --filter @workspace/adventure-zone exec vitest run \
+  src/components/calls/caller-finder.test.tsx \
+  src/components/contacts/quick-add-caller.test.tsx \
+&& pnpm --filter @workspace/api-server typecheck \
+&& pnpm --filter @workspace/adventure-zone typecheck
+```
+
+Result: PASS — API 3 files / 20 tests, web 2 files / 11 tests, API typecheck,
+and web typecheck. The compatibility checkout contains manually synchronized
+unchanged Task 5/6 contracts needed to run the connector-only branch artifacts;
+those compatibility-only files were not added to the remote Task 7 diff.
+
+The broader pre-existing `src/routes/calls.test.ts` does not initialize in this
+checkout because its local Vitest dependency graph exposes a Zod v3/v4 API
+mismatch (`z.uuid`). The focused production-router Task 7 route suite and both
+package typechecks pass. GitHub Actions still did not schedule through the
+connector, and fix round 1 did not recreate the removed temporary workflow.
