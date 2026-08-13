@@ -194,6 +194,13 @@ export type OrganizationFamilyCandidateGroup = Omit<
   DuplicateOrganizationGroup,
   "organizations"
 >;
+export type OrganizationFamilyReviewRecord = {
+  groupKey: string;
+  candidateIds: string[];
+  evidence: FamilyCandidateEvidence[];
+  status: "proposed" | "not_related";
+};
+
 export type OrganizationFamilyActRelationship = {
   sourceOrganizationId: string;
   targetOrganizationId: string;
