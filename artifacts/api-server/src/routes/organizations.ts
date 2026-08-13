@@ -229,6 +229,10 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
     await orgRepo().mergeOrganizations(primaryId, duplicateIds);
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof HierarchyConflictError) {
+      res.status(409).json({ ok: false, error: err.message });
+      return;
+    }
     req.log.error({ err }, "Failed to merge organizations");
     res.status(500).json({ ok: false, error: "Failed to merge organizations" });
   }
