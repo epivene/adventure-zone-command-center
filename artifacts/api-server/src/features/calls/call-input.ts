@@ -19,6 +19,9 @@ const callDispositionSchema = z.enum([
   "booked",
   "declined",
   "move_to_last_resort",
+  "spoke_with_contact",
+  "wrong_number",
+  "do_not_call",
 ]);
 
 const nullableText = z.union([z.string(), z.null()]).transform((value) => value?.trim() || null);
@@ -53,16 +56,16 @@ const approvedBookingUpdatesSchema = z.object({
   endsAt: z.date().nullable().optional(),
   status: z.enum(bookingStatusValues).optional(),
   probability: z.enum(probabilityValues).optional(),
-  travelLegId: z.uuid().nullable().optional(),
+  travelLegId: z.string().uuid().nullable().optional(),
   notes: nullableText.optional(),
 }).strict();
 
 export const completeCallInputSchema = z.object({
-  requestKey: z.uuid(),
-  organizationId: z.uuid().nullable(),
-  contactId: z.uuid().nullable(),
-  bookingId: z.uuid().nullable(),
-  followUpId: z.uuid().nullable(),
+  requestKey: z.string().uuid(),
+  organizationId: z.string().uuid().nullable(),
+  contactId: z.string().uuid().nullable(),
+  bookingId: z.string().uuid().nullable(),
+  followUpId: z.string().uuid().nullable(),
   note: z.string().trim().min(1, "Add a call note."),
   disposition: callDispositionSchema,
   resultingBookingStatus: z.enum(bookingStatusValues).nullable(),
@@ -78,6 +81,12 @@ export const completeCallInputSchema = z.object({
   lastResortConfirmed: z.boolean(),
   approvedContactUpdates: approvedContactUpdatesSchema.nullable(),
   approvedBookingUpdates: approvedBookingUpdatesSchema.nullable(),
+  direction: z.enum(["incoming", "outgoing"]),
+  method: z.enum(["standard_call", "office_call", "individual_voicemail", "mobile_log"]),
+  phoneId: z.string().uuid().nullable(),
+  scriptKind: z.enum(["first_outreach", "follow_up", "contract_follow_up", "incoming_inquiry"]),
+  doNotCallConfirmed: z.boolean(),
+  doNotCallReason: z.union([z.string().trim().min(1), z.null()]),
 }).superRefine((value, context) => {
   if (value.endedAt.getTime() < value.startedAt.getTime()) {
     context.addIssue({
@@ -103,6 +112,9 @@ export const completeCallInputSchema = z.object({
       message: "Confirm moving this organization to Last Resort",
     });
   }
+  if (value.disposition === "do_not_call" && !value.phoneId) context.addIssue({ code: "custom", path: ["phoneId"], message: "Select the phone number to suppress." });
+  if (value.disposition === "do_not_call" && !value.doNotCallConfirmed) context.addIssue({ code: "custom", path: ["doNotCallConfirmed"], message: "Confirm Do Not Call." });
+  if (value.disposition === "do_not_call" && !value.doNotCallReason) context.addIssue({ code: "custom", path: ["doNotCallReason"], message: "Add a Do Not Call reason." });
   if (!value.organizationId && !value.contactId && !value.bookingId && !value.followUpId) {
     context.addIssue({
       code: "custom",

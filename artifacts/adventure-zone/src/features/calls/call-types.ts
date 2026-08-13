@@ -3,6 +3,10 @@ import type { BookingStatus } from "@/features/bookings/booking-types";
 import type { ContactFields } from "@/features/contacts/contact-types";
 import type { callDispositionValues } from "@/db/schema";
 
+export type CallDirection = "incoming" | "outgoing";
+export type CallMethod = "standard_call" | "office_call" | "individual_voicemail" | "mobile_log";
+export type CallScriptKind = "first_outreach" | "follow_up" | "contract_follow_up" | "incoming_inquiry";
+
 export type CallDisposition =
   | "no_answer"
   | "left_voicemail"
@@ -11,7 +15,10 @@ export type CallDisposition =
   | "proposal_contract_sent"
   | "booked"
   | "declined"
-  | "move_to_last_resort";
+  | "move_to_last_resort"
+  | "spoke_with_contact"
+  | "wrong_number"
+  | "do_not_call";
 
 export type PersistedCallDisposition = (typeof callDispositionValues)[number];
 
@@ -31,6 +38,12 @@ export type CompleteCallInput = {
   lastResortConfirmed: boolean;
   approvedContactUpdates: Partial<ContactFields> | null;
   approvedBookingUpdates: Partial<BookingEditInput> | null;
+  direction: CallDirection;
+  method: CallMethod;
+  phoneId: string | null;
+  scriptKind: CallScriptKind;
+  doNotCallConfirmed: boolean;
+  doNotCallReason: string | null;
 };
 
 export type CallOrganization = {
@@ -121,6 +134,9 @@ export const persistedCallDisposition: Record<
   booked: "booked",
   declined: "declined",
   move_to_last_resort: "last_resort",
+  spoke_with_contact: "spoke_with_contact",
+  wrong_number: "wrong_number",
+  do_not_call: "do_not_call",
 };
 
 export const publicCallDisposition: Record<
@@ -135,6 +151,9 @@ export const publicCallDisposition: Record<
   booked: "booked",
   declined: "declined",
   last_resort: "move_to_last_resort",
+  spoke_with_contact: "spoke_with_contact",
+  wrong_number: "wrong_number",
+  do_not_call: "do_not_call",
 };
 
 export const dispositionBookingStatus: Partial<

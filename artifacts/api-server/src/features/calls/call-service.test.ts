@@ -1,12 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@/features/calls/call-input", () => ({
-  completeCallInputSchema: { safeParse: (input: unknown) => ({ success: true, data: input }) },
-  approvedContactWrite: () => ({}),
-  approvedBookingWrite: () => ({}),
-  validateApprovedContactPatch: () => ({ success: true, data: {} }),
-  validateApprovedBookingPatch: () => ({ success: true, data: {} }),
-}));
+import { describe, expect, it } from "vitest";
 
 import { CallService } from "@/features/calls/call-service";
 import type { CompleteCallInput } from "@/features/calls/call-types";

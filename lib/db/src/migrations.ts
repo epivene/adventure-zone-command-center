@@ -78,6 +78,14 @@ const migrationFiles = [
     name: "020_assisted_calling.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
   },
+  {
+    name: "021_call_session_metadata.sql",
+    markerSql: `SELECT COUNT(*) = 6 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'call_sessions'
+        AND column_name IN ('phone_id', 'direction', 'method', 'phone_number_snapshot', 'phone_extension_snapshot', 'script_kind')`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

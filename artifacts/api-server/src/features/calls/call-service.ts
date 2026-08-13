@@ -178,6 +178,13 @@ export class CallService {
       const canonical = validateCanonicalContext(value, context);
       if (!canonical.ok) return canonical;
       const { organizationId, contactId, bookingId } = canonical.value;
+      let selectedPhone = null;
+      if (value.phoneId) {
+        if (!contactId) return err({ code: "INVALID_CALL_INPUT", message: "A selected phone must belong to the linked contact." });
+        selectedPhone = await transaction.lockContactPhone(value.phoneId, contactId);
+        if (!selectedPhone) return err({ code: "INVALID_CALL_INPUT", message: "Selected phone does not belong to the linked contact." });
+      }
+      if (value.disposition === "do_not_call" && (!value.doNotCallConfirmed || !value.doNotCallReason || !selectedPhone)) return err({ code: "INVALID_CALL_INPUT", message: "Confirm the selected phone and Do Not Call reason." });
       if (organizationId && !context.organization) {
         return err({ code: "ORGANIZATION_NOT_FOUND" });
       }
@@ -211,7 +218,8 @@ export class CallService {
       );
       const terminalDisposition =
         value.disposition === "declined" ||
-        value.disposition === "move_to_last_resort";
+        value.disposition === "move_to_last_resort" ||
+        value.disposition === "do_not_call";
       if (
         (value.nextAction && !hasFutureNextAction) ||
         (context.booking && needsFollowUpPlan(
@@ -258,6 +266,12 @@ export class CallService {
       const activity = await transaction.createActivity({
         organizationId,
         contactId,
+        phoneId: value.phoneId,
+        direction: value.direction,
+        method: value.method,
+        phoneNumberSnapshot: selectedPhone?.number ?? null,
+        phoneExtensionSnapshot: selectedPhone?.extension ?? null,
+        scriptKind: value.scriptKind,
         bookingId,
         body: value.note,
         occurredAt: value.endedAt,
@@ -343,6 +357,7 @@ export class CallService {
           after: updated,
         });
       }
+      if (value.disposition === "do_not_call") await transaction.markPhoneDoNotCall(value.phoneId!, value.doNotCallReason!, completedAt);
       if (value.disposition === "move_to_last_resort") {
         await transaction.setLastResort(context.organization!.id, value.lastResortReason!, completedAt);
         await transaction.createAuditEntry({
