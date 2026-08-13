@@ -19,7 +19,7 @@ export type DuplicateGroup = {
   normalizedName: string;
   city: string;
   region: string;
-  classification: "duplicate" | "location_candidate";
+  classification: "duplicate" | "location_candidate" | "ambiguous_location_candidate";
   groupKey?: string | null;
   candidateIds?: string[];
   evidence?: FamilyEvidence[];
@@ -27,7 +27,7 @@ export type DuplicateGroup = {
 };
 
 function isLocationCandidate(group: DuplicateGroup) {
-  return group.classification === "location_candidate";
+  return group.classification !== "duplicate";
 }
 
 function identity(group: DuplicateGroup) {
@@ -336,7 +336,11 @@ function DuplicateGroupCard({
             </p>
             {locationCandidate ? (
               <>
-                <p className="mt-1 text-sm text-sky-900">These may be locations of the same organization.</p>
+                <p className="mt-1 text-sm text-sky-900">
+                  {group.classification === "ambiguous_location_candidate"
+                    ? "Ambiguous location match — review these profiles manually."
+                    : "These may be locations of the same organization."}
+                </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {(group.evidence ?? []).map((item) => (
                     <li className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-sky-800" key={item.family}>{evidenceLabel(item)}</li>
