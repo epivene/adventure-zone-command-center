@@ -25,6 +25,8 @@ import { recordAuditEntry } from "@/features/audit/audit-service";
 import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
 import type {
   CallerCandidateQuery,
+  CallerExactMetadata,
+  CallerExactQuery,
   CallerFinderRepository,
 } from "@/features/caller-finder/caller-finder-service";
 import type {
@@ -69,6 +71,28 @@ function candidatePhonesSql() {
     ) phone
     where phone.normalized is not null
   )`;
+}
+
+async function queryQuickCallerExactExists(
+  writer: DrizzleDatabase,
+  input: QuickCallerInput,
+): Promise<boolean> {
+  const normalizedPhone = normalizeUsPhone(input.phone);
+  const normalizedEmail = normalizedText(input.email);
+  if (!normalizedPhone && !normalizedEmail) return false;
+
+  const phoneMatch = normalizedPhone
+    ? sql<boolean>`${normalizedPhone} = any(${candidatePhonesSql()})`
+    : sql<boolean>`false`;
+  const emailMatch = normalizedEmail
+    ? sql<boolean>`lower(btrim(${contacts.email})) = ${normalizedEmail}`
+    : sql<boolean>`false`;
+  const [row] = await writer
+    .select({ exactExists: sql<boolean>`count(*) > 0` })
+    .from(contacts)
+    .where(or(phoneMatch, emailMatch))
+    .limit(1);
+  return row?.exactExists ?? false;
 }
 
 async function queryQuickCallerDuplicates(
@@ -466,6 +490,34 @@ export class DrizzleContactRepository implements CallerFinderRepository {
     return phoneMatch(normalizedPhone, records.map(listRecord));
   }
 
+  async findCallerExactMetadata(
+    input: CallerExactQuery,
+  ): Promise<CallerExactMetadata> {
+    const phoneRows = input.normalizedPhone
+      ? await this.database
+          .select({ contactId: contacts.id })
+          .from(contacts)
+          .where(
+            sql`${input.normalizedPhone} = any(${candidatePhonesSql()})`,
+          )
+          .orderBy(asc(contacts.id))
+          .limit(2)
+      : [];
+    const emailRows = input.normalizedEmail
+      ? await this.database
+          .select({ contactId: contacts.id })
+          .from(contacts)
+          .where(
+            sql`lower(btrim(${contacts.email})) = ${input.normalizedEmail}`,
+          )
+          .limit(1)
+      : [];
+    return {
+      exactPhoneContactIds: phoneRows.map((row) => row.contactId),
+      hasExactEmail: emailRows.length > 0,
+    };
+  }
+
   async findCallerCandidates(
     input: CallerCandidateQuery,
   ): Promise<CallerFinderCandidate[]> {
@@ -524,6 +576,37 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       order by finder_booking.starts_at desc nulls last, finder_booking.id
       limit 1
     )`;
+    const matchedOrganizationOrEvent = input.query
+      ? sql<boolean>`exists (
+          select 1
+          from booking_contacts finder_bc
+          join bookings finder_booking on finder_booking.id = finder_bc.booking_id
+          where finder_bc.contact_id = ${contacts.id}
+            and finder_booking.name ilike ${pattern}
+        )`
+      : sql<boolean>`false`;
+    const matchedLocation = input.query
+      ? sql<boolean>`exists (
+          select 1
+          from booking_contacts finder_bc
+          join bookings finder_booking on finder_booking.id = finder_bc.booking_id
+          where finder_bc.contact_id = ${contacts.id}
+            and (
+              finder_booking.city ilike ${pattern}
+              or finder_booking.region ilike ${pattern}
+            )
+        )`
+      : sql<boolean>`false`;
+    const matchedRouteLeg = input.query
+      ? sql<boolean>`exists (
+          select 1
+          from booking_contacts finder_bc
+          join bookings finder_booking on finder_booking.id = finder_bc.booking_id
+          join travel_legs finder_leg on finder_leg.id = finder_booking.travel_leg_id
+          where finder_bc.contact_id = ${contacts.id}
+            and finder_leg.name ilike ${pattern}
+        )`
+      : sql<boolean>`false`;
     const noteText = input.includeNotes
       ? sql<string | null>`(
           select finder_note.body
@@ -560,19 +643,9 @@ export class DrizzleContactRepository implements CallerFinderRepository {
             ilike(organizations.name, pattern),
             ilike(contacts.city, pattern),
             ilike(contacts.region, pattern),
-            sql`exists (
-              select 1
-              from booking_contacts finder_bc
-              join bookings finder_booking on finder_booking.id = finder_bc.booking_id
-              left join travel_legs finder_leg on finder_leg.id = finder_booking.travel_leg_id
-              where finder_bc.contact_id = ${contacts.id}
-                and (
-                  finder_booking.name ilike ${pattern}
-                  or finder_booking.city ilike ${pattern}
-                  or finder_booking.region ilike ${pattern}
-                  or finder_leg.name ilike ${pattern}
-                )
-            )`,
+            matchedOrganizationOrEvent,
+            matchedLocation,
+            matchedRouteLeg,
             input.includeNotes
               ? sql`exists (
                   select 1 from activities finder_note
@@ -604,6 +677,9 @@ export class DrizzleContactRepository implements CallerFinderRepository {
         bookingName,
         bookingStatus,
         routeLegName,
+        matchedOrganizationOrEvent,
+        matchedLocation,
+        matchedRouteLeg,
         lastContactedAt,
         dueToday,
         noteText,
@@ -625,10 +701,17 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       bookingName: row.bookingName,
       bookingStatus: row.bookingStatus,
       routeLegName: row.routeLegName,
+      matchedOrganizationOrEvent: row.matchedOrganizationOrEvent,
+      matchedLocation: row.matchedLocation,
+      matchedRouteLeg: row.matchedRouteLeg,
       lastContactedAt: row.lastContactedAt,
       dueToday: row.dueToday,
       noteText: row.noteText,
     }));
+  }
+
+  hasExactQuickCallerDuplicate(input: QuickCallerInput): Promise<boolean> {
+    return queryQuickCallerExactExists(this.database, input);
   }
 
   findQuickCallerDuplicates(
@@ -724,12 +807,16 @@ export class DrizzleContactRepository implements CallerFinderRepository {
           sql`select pg_advisory_xact_lock(hashtextextended(${`quick-caller-duplicate:${key}`}, 0))`,
         );
       }
+      const exactDuplicateExists = await queryQuickCallerExactExists(
+        transaction as unknown as DrizzleDatabase,
+        input,
+      );
       const duplicateCandidates = await queryQuickCallerDuplicates(
         transaction as unknown as DrizzleDatabase,
         input,
       );
       if (
-        duplicateCandidates.some((candidate) => candidate.kind === "exact") ||
+        exactDuplicateExists ||
         (duplicateCandidates.length > 0 && !input.continueCreating)
       ) {
         return {
