@@ -70,6 +70,7 @@ vi.mock("@/features/contacts/contact-repository", () => ({
         },
         places: [],
         relatedBookings: [],
+        phones: await phoneRepository.listForContact(id),
       };
     }
   },
