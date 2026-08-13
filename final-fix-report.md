@@ -88,3 +88,34 @@ The gated PostgreSQL integration test uses two real pooled connections to prove
 both advisory-lock interleavings. It runs automatically when a disposable
 `TEST_DATABASE_URL` is available; always-on tests verify that both production
 flows acquire the advisory lock before review and organization row work.
+
+## Fix Wave 3
+
+A final review refined same-address ambiguity and discovery snapshot safety:
+
+1. Once an exact-name bucket contains at least two distinct complete
+   city/region pairs, the entire bucket is now an
+   `ambiguous_location_candidate` even when normalized street addresses
+   repeat. Repeated addresses are shown as manual-review evidence; they still
+   block the strong automatic family suggestion, but can never make the records
+   eligible for destructive merge.
+2. `findDuplicates` is now read-only with respect to existing family review
+   rows. It no longer attempts eager stale-proposal deletion from an unlocked
+   discovery snapshot. Authoritative stale-proposal cleanup remains in the
+   merge transaction after the shared advisory lock and current-data
+   revalidation.
+3. A production-path interleaving regression pauses `findDuplicates` after
+   its old duplicate snapshot, persists a proposal, resumes discovery, and
+   proves the newer proposal is not deleted.
+
+GitHub Actions run
+[31730635702](https://github.com/epivene/adventure-zone-command-center/actions/runs/31730635702)
+at verification head `4b916e45f881a99f77e1b1508eb48f80b037d5ee`
+completed successfully:
+
+- Focused frontend regressions: 10 passed.
+- Focused API regressions: 26 passed.
+- Full API suite: 1,053 passed, 54 skipped.
+- Full frontend suite: 197 passed.
+- Shared declarations and API/frontend TypeScript checks: passed.
+- API and frontend production builds: passed.
