@@ -127,10 +127,12 @@ If records in a duplicate group also contain evidence of distinct cities, the sy
 Users may:
 
 - create a new parent organization;
-- select an existing profile as the parent;
+- select an existing organization-wide profile as the parent;
 - attach one or more existing profiles as child locations;
 - move a child to another parent;
 - ungroup a child.
+
+An existing city/location profile should not become the parent merely because it is the best-known record. If every candidate is location-specific, the system creates a new organization-wide parent so each location keeps its own address and history.
 
 Ungrouping only clears the parent relationship. It does not delete or move the child's contacts, notes, bookings, follow-ups, activities, or ACT provenance.
 
