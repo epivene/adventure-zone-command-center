@@ -4,7 +4,7 @@ import {
 } from "../act-migration/matching-normalization";
 
 export type FamilyCandidateEvidence = {
-  family: "name" | "website" | "location" | "act_relationship";
+  family: "name" | "website" | "location" | "address" | "act_relationship";
   label: string;
 };
 
