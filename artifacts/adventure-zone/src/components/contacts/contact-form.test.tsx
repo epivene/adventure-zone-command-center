@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const navigate = vi.fn();
 vi.mock("wouter", () => ({
@@ -15,6 +15,7 @@ const initialValues = {
 };
 
 describe("ContactForm phone submission", () => {
+  afterEach(cleanup);
   it("keeps only the legacy phone field editable without a phone persistence callback", () => {
     render(
       <ContactForm
