@@ -28,6 +28,12 @@ import { recordAuditEntry } from "@/features/audit/audit-service";
 import { bookingStatusValues } from "@/features/bookings/booking-types";
 import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
 import type { SetLastResortInput } from "@/features/organizations/last-resort-input";
+import {
+  classifyOrganizationFamily,
+  type FamilyCandidateEvidence,
+  type OrganizationFamilyRecord,
+} from "@/features/organizations/organization-family-matcher";
+import { normalizeWebsiteHost } from "@/features/act-migration/matching-normalization";
 
 export type OrganizationPerson = {
   id: string;
@@ -176,8 +182,89 @@ export type DuplicateOrganizationGroup = {
   normalizedName: string;
   city: string;
   region: string;
+  classification: "duplicate" | "location_candidate";
+  groupKey: string | null;
+  candidateIds: string[];
+  evidence: FamilyCandidateEvidence[];
   organizations: OrganizationListRecord[];
 };
+
+export type OrganizationFamilyCandidateGroup = Omit<
+  DuplicateOrganizationGroup,
+  "organizations"
+>;
+
+export type OrganizationFamilyReviewRecord = {
+  groupKey: string;
+  candidateIds: string[];
+  evidence: FamilyCandidateEvidence[];
+  status: "proposed" | "not_related";
+};
+
+export function discoverOrganizationFamilyCandidates(
+  records: readonly OrganizationFamilyRecord[],
+): OrganizationFamilyCandidateGroup[] {
+  const byWebsite = new Map<string, OrganizationFamilyRecord[]>();
+  for (const record of records) {
+    const website = normalizeWebsiteHost(record.website ?? null);
+    if (!website) continue;
+    const bucket = byWebsite.get(website) ?? [];
+    bucket.push(record);
+    byWebsite.set(website, bucket);
+  }
+
+  const candidates: OrganizationFamilyCandidateGroup[] = [];
+  for (const bucket of byWebsite.values()) {
+    const adjacent = new Map(
+      bucket.map((record) => [record.id, new Set<string>()]),
+    );
+    for (let leftIndex = 0; leftIndex < bucket.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < bucket.length; rightIndex += 1) {
+        const left = bucket[leftIndex]!;
+        const right = bucket[rightIndex]!;
+        if (classifyOrganizationFamily([left, right]).kind !== "location_family") continue;
+        adjacent.get(left.id)?.add(right.id);
+        adjacent.get(right.id)?.add(left.id);
+      }
+    }
+
+    const recordById = new Map(bucket.map((record) => [record.id, record]));
+    const visited = new Set<string>();
+    for (const record of bucket) {
+      if (visited.has(record.id)) continue;
+      const componentIds: string[] = [];
+      const pending = [record.id];
+      visited.add(record.id);
+      while (pending.length) {
+        const id = pending.pop()!;
+        componentIds.push(id);
+        for (const relatedId of adjacent.get(id) ?? []) {
+          if (visited.has(relatedId)) continue;
+          visited.add(relatedId);
+          pending.push(relatedId);
+        }
+      }
+      if (componentIds.length < 2) continue;
+      const component = componentIds.map((id) => recordById.get(id)!);
+      const classification = classifyOrganizationFamily(component);
+      if (classification.kind !== "location_family") continue;
+      const first = component.toSorted((left, right) => left.id.localeCompare(right.id))[0]!;
+      candidates.push({
+        normalizedName: first.name.trim().toLocaleLowerCase("en-US"),
+        city: "",
+        region: "",
+        classification: "location_candidate",
+        groupKey: classification.groupKey,
+        candidateIds: classification.candidateIds,
+        evidence: classification.evidence,
+      });
+    }
+  }
+
+  return candidates.toSorted((left, right) =>
+    (left.groupKey ?? "").localeCompare(right.groupKey ?? "", "en-US"),
+  );
+}
 
 export interface OrganizationRepository {
   setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
@@ -651,7 +738,13 @@ export function duplicateOrganizationGroupsQuery() {
       min(lower(trim(coalesce(city, '')))) AS normalized_city,
       min(lower(trim(coalesce(region, '')))) AS normalized_region,
       array_agg(id ORDER BY created_at ASC) AS ids
-    FROM organizations
+    FROM organizations AS duplicate_candidate
+    WHERE parent_organization_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM organizations AS confirmed_location
+        WHERE confirmed_location.parent_organization_id = duplicate_candidate.id
+      )
     GROUP BY 1
     HAVING count(*) > 1
     ORDER BY lower(trim(name))
