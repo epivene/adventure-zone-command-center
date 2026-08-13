@@ -24,6 +24,9 @@ export type CallerFinderCandidate = {
   lastContactedAt: Date | null;
   dueToday: boolean;
   noteText: string | null;
+  matchedOrganizationOrEvent: boolean;
+  matchedLocation: boolean;
+  matchedRouteLeg: boolean;
 };
 
 export type CallerSuggestion = {
