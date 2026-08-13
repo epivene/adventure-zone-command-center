@@ -3,14 +3,7 @@ import { Link } from "wouter";
 import type {
   OrganizationListQuery,
   OrganizationListPage,
-  OrganizationParentSummary,
 } from "@/features/organizations/organization-repository";
-
-type OrganizationHierarchyListRecord =
-  OrganizationListPage["records"][number] & {
-    parent: OrganizationParentSummary | null;
-    locationCount: number;
-  };
 
 function listHref(query: OrganizationListQuery) {
   const params = new URLSearchParams();
@@ -37,9 +30,6 @@ export function OrganizationList({
   query: OrganizationListQuery;
   travelLegs: { id: string; name: string; color: string }[];
 }) {
-  const organizationRecords =
-    organizations.records as OrganizationHierarchyListRecord[];
-
   return (
     <div className="grid gap-5">
       <form
@@ -90,7 +80,7 @@ export function OrganizationList({
 
       {organizations.records.length ? (
         <ul className="grid gap-3">
-          {organizationRecords.map((organization) => (
+          {organizations.records.map((organization) => (
             <li
               className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
               key={organization.id}
