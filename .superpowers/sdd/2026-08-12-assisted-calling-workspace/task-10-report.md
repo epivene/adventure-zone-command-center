@@ -309,8 +309,13 @@ integration is the true two-parent merge
 `778720f68d1eba2b290726b72ddda76b283e10b5`, whose ordered parents are the
 fix commit and main `470883df172c7bd8381086bd8f10ebf5323dba09`.
 
-The exact final verification command, run from the final evidence tree with
-the task-local XDG and pnpm paths exported, was:
+The first final-tree invocation exported the task-local XDG and pnpm paths but
+did not set `CI=true`. Pnpm stopped before running tests with exit 1 and
+`ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`; it required non-interactive
+permission to refresh the local modules directory. No test, typecheck, or build
+had begun. The command was rerun with `CI=true` and the same task-local paths.
+
+The exact verification chain in both invocations was:
 
 ```text
 pnpm --filter @workspace/api-server test &&
