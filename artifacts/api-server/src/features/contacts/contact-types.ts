@@ -54,6 +54,7 @@ export type QuickCallerInput = {
   reason: string;
   eventDate: string | null;
   eventLocation: string | null;
+  continueCreating: boolean;
 };
 
 export type ContactListPage = {
