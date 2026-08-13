@@ -2,11 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DuplicatesView, type DuplicateGroup } from "./duplicates-view";
 
-const { apiPost, toast } = vi.hoisted(() => ({
+const { apiGet, apiPost, toast } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
   apiPost: vi.fn(),
   toast: vi.fn(),
 }));
-vi.mock("@/lib/auth-token", () => ({ apiPost }));
+vi.mock("@/lib/auth-token", () => ({ apiGet, apiPost }));
 vi.mock("@/hooks/use-toast", () => ({ useToast: () => ({ toast }) }));
 
 const FIRST_ID = "11111111-1111-4111-8111-111111111111";
@@ -63,6 +64,23 @@ const duplicate: DuplicateGroup = {
 describe("DuplicatesView family review", () => {
   afterEach(cleanup);
   beforeEach(() => {
+    apiGet.mockReset();
+    apiGet.mockResolvedValue({
+      organizations: {
+        records: [
+          organization(
+            "33333333-3333-4333-8333-333333333333",
+            "Water Lantern Festival",
+            "",
+            "",
+          ),
+        ],
+        page: 1,
+        pageCount: 1,
+        pageSize: 50,
+        total: 1,
+      },
+    });
     apiPost.mockReset();
     apiPost.mockResolvedValue({ ok: true });
     toast.mockReset();
@@ -133,7 +151,7 @@ describe("DuplicatesView family review", () => {
     );
     const dialog = screen.getByRole("dialog", { name: "Make organization locations" });
     fireEvent.click(within(dialog).getByRole("radio", { name: "Use an existing parent" }));
-    fireEvent.change(within(dialog).getByLabelText("Existing parent ID"), {
+    fireEvent.change(await within(dialog).findByLabelText("Existing parent"), {
       target: { value: "33333333-3333-4333-8333-333333333333" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Make locations" }));
