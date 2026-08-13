@@ -111,3 +111,31 @@ Remote application:
   - `EventProfilePage.test.tsx`: `65580f0bc583bac55527408a0fdaa99f671e13c6`
   - `call-workspace.tsx`: `599b18f92c9c539d55963b3ef03342b9a9e6a6bd`
   - `event-profile-workspace.tsx`: `13dfc643959e338a43f70ebcd8c5c83ccd300633`
+
+## Fix round 2: reset mobile draft choices
+
+TDD RED:
+
+- Added a mobile regression that restored an outgoing draft with an alternate phone, non-mobile method, and `first_outreach` script, then discarded it and asserted fresh mobile defaults in both the UI and completion payload.
+- `node_modules/.bin/vitest run src/pages/MobileCallLogPage.test.tsx`
+  - Result before implementation: `1 failed`, `5 passed`, exit 1. Direction remained `outgoing` after discard instead of resetting to `incoming`.
+
+TDD GREEN and regression verification:
+
+- `node_modules/.bin/vitest run src/pages/MobileCallLogPage.test.tsx`
+  - Result: `1 passed`, `6 passed`, exit 0.
+- `node_modules/.bin/vitest run src/components/calls/call-workspace.test.tsx src/pages/MobileCallLogPage.test.tsx src/pages/ContactDetailPage.test.tsx src/pages/EventProfilePage.test.tsx`
+  - Result: `4 passed`, `29 passed`, exit 0.
+- `node ../../node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit`
+  - Result: exit 2 with the same six baseline diagnostics in `activity-repository.ts` (3), `contact-repository.ts` (2), and `OrganizationsPage.tsx` (1). No Task 9 file produced a diagnostic.
+
+Implementation and remote evidence:
+
+- Mobile-only discard now restores direction `incoming`, the initial/primary selectable phone, method `mobile_log`, and the initial incoming script kind in addition to clearing fields and creating a fresh timestamp/request key. Desktop discard behavior is unchanged.
+- Fix-round starting head: `b3d058c9889c2bf564baba4d256fe6d5d72a2a56`.
+- Fix implementation commit: `c6a76f2be2521179c38516a9e99ca5f8a8c51555` (`fix: reset mobile call draft choices`).
+- Fix implementation tree: `c673dea73400f4beab5920fdf1d918485d2bd3e1`.
+- The branch ref was advanced through the GitHub connector with a non-forced fast-forward update; the dirty scratch checkout was not pushed.
+- Connector reads verified both remote blobs exactly matched the tested local content:
+  - `MobileCallLogPage.test.tsx`: `6ad2c2bcf471b6ce5306e18ffc27a5423cc6e2bb`
+  - `call-workspace.tsx`: `b8b268b92512f86b26d1bfc9ba17089a203fc407`
