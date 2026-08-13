@@ -44,22 +44,35 @@ export function HierarchyControls({
 
   useEffect(() => {
     let cancelled = false;
-    apiGet<OrganizationsResponse>("/organizations")
-      .then((response) => {
-        if (!cancelled) {
-          setOrganizations(response.organizations.records);
-          setLoadError(null);
-        }
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) {
-          setLoadError(
-            caught instanceof Error
-              ? caught.message
-              : "Could not load eligible parents.",
-          );
-        }
-      });
+
+    async function loadOrganizationPages() {
+      const records: OrganizationListRecord[] = [];
+      let page = 1;
+      let pageCount = 1;
+      do {
+        const path = page === 1 ? "/organizations" : `/organizations?page=${page}`;
+        const response = await apiGet<OrganizationsResponse>(path);
+        records.push(...response.organizations.records);
+        pageCount = response.organizations.pageCount;
+        page += 1;
+      } while (page <= pageCount);
+
+      if (!cancelled) {
+        setOrganizations(records);
+        setLoadError(null);
+      }
+    }
+
+    loadOrganizationPages().catch((caught: unknown) => {
+      if (!cancelled) {
+        setLoadError(
+          caught instanceof Error
+            ? caught.message
+            : "Could not load eligible parents.",
+        );
+      }
+    });
+
     return () => {
       cancelled = true;
     };
