@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   CallerFinderService,
@@ -94,6 +94,41 @@ describe("caller finder safety and ranking", () => {
       score: 350,
     });
   });
+
+  it.each(["5550199", "15550199", "701555019"])(
+    "keeps the %s phone fragment as a click-only phone suggestion",
+    async (fragment) => {
+    const findCallerCandidates = vi.fn(async () => [
+      candidate(exactContactId, {
+        normalizedPhones: ["+17015550199"],
+      }),
+    ]);
+    const repository: CallerFinderRepository = {
+      findCallerCandidates,
+      findCallerExactMetadata: async () => ({
+        exactPhoneContactIds: [],
+        hasExactEmail: false,
+      }),
+    };
+
+    const result = await new CallerFinderService(repository).find({
+      phone: fragment,
+      query: "",
+    });
+
+    expect(result.exact).toEqual({ kind: "none" });
+    expect(result.suggestions[0]).toMatchObject({
+      contactId: exactContactId,
+      reasons: ["Phone number"],
+    });
+    expect(findCallerCandidates).toHaveBeenCalledWith({
+      normalizedPhone: null,
+      phoneFragment: fragment,
+      query: "",
+      includeNotes: false,
+    });
+    },
+  );
 
   it("does not search note bodies for two-character input", async () => {
     const service = serviceWith([
