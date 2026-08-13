@@ -133,12 +133,10 @@ export function discoverOrganizationFamilyCandidates(
       const region = normalizeMatchingText(record.region ?? null);
       return city && region ? `${city}\u0000${region}` : null;
     });
-    if (
-      locations.some((location) => location === null) ||
-      new Set(locations).size !== bucket.length
-    ) {
-      continue;
-    }
+    const completeLocations = locations.filter(
+      (location): location is string => location !== null,
+    );
+    if (new Set(completeLocations).size < 2) continue;
     const addresses = bucket
       .map((record) => normalizeMatchingText(record.address1 ?? null))
       .filter((address): address is string => address !== null);
