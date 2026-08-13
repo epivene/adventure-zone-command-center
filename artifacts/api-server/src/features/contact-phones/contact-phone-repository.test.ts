@@ -28,8 +28,8 @@ class MemoryContactPhoneStore implements ContactPhoneStore {
     (transaction as unknown as { phones: ContactPhoneRecord[] }).phones = this.phones.map((phone) => ({ ...phone }));
     (transaction as unknown as { contact: LegacyContactPhoneFields }).contact = { ...this.contact };
     const result = await callback(transaction);
-    this.phones = (transaction as { phones: ContactPhoneRecord[] }).phones;
-    Object.assign(this.contact, (transaction as { contact: LegacyContactPhoneFields }).contact);
+    this.phones = (transaction as unknown as { phones: ContactPhoneRecord[] }).phones;
+    Object.assign(this.contact, (transaction as unknown as { contact: LegacyContactPhoneFields }).contact);
     return result;
   }
 
