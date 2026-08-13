@@ -151,6 +151,28 @@ describe("DuplicatesView family review", () => {
     expect(second.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
   });
 
+  it("shows ambiguous exact-name locations for manual review and excludes them from destructive bulk merge", () => {
+    const ambiguous: DuplicateGroup = {
+      ...locationCandidate,
+      classification: "ambiguous_location_candidate",
+      evidence: [
+        { family: "name", label: "exact organization names agree" },
+        { family: "location", label: "locations differ" },
+      ],
+    };
+    render(
+      <DuplicatesView groups={[ambiguous, duplicate]} onRefresh={vi.fn().mockResolvedValue([])} />,
+    );
+
+    const card = within(screen.getByTestId(`duplicate-group-${ambiguous.groupKey}`));
+    expect(card.getByText(/ambiguous location match/i)).toBeInTheDocument();
+    expect(card.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+    expect(card.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
+    expect(card.getByRole("button", { name: "Same organization—make locations" })).toBeInTheDocument();
+    expect(card.getByRole("button", { name: "Not related" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Merge all 1 group" })).toBeInTheDocument();
+  });
+
   it("creates a parent for a reviewed family and refreshes server results", async () => {
     const onRefresh = vi.fn().mockResolvedValue([]);
     render(<DuplicatesView groups={[locationCandidate]} onRefresh={onRefresh} />);
