@@ -253,6 +253,12 @@ export function CallWorkspace({
     clearCallDraft(draftKey);
     setStartedAt(isMobileLog ? new Date() : null);
     setRequestKey(isMobileLog ? crypto.randomUUID() : null);
+    if (isMobileLog) {
+      setSelectedPhoneId(primaryPhone?.id ?? null);
+      setDirection("incoming");
+      setMethod("mobile_log");
+      setScriptKind(defaultScriptKind);
+    }
     setNote("");
     setDisposition("no_answer");
     setNextActionKind("");

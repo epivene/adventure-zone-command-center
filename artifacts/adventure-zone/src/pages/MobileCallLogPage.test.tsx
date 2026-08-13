@@ -24,6 +24,8 @@ vi.mock("wouter", async () => {
 import MobileCallLogPage from "./MobileCallLogPage";
 
 const contactId = "20000000-0000-4000-8000-000000000001";
+const primaryPhoneId = "30000000-0000-4000-8000-000000000001";
+const alternatePhoneId = "30000000-0000-4000-8000-000000000002";
 
 function workspace(contactName = "Sarah Miller") {
   return {
@@ -45,7 +47,34 @@ function workspace(contactName = "Sarah Miller") {
     contextSummary: null,
     defaultScriptKind: "incoming_inquiry",
     operations: null,
-    phones: [],
+    phones: [
+      {
+        id: primaryPhoneId,
+        contactId,
+        number: "303-555-0100",
+        normalizedNumber: "+13035550100",
+        type: "mobile",
+        extension: null,
+        label: "Mobile",
+        primary: true,
+        source: "manual",
+        doNotCallAt: null,
+        doNotCallReason: null,
+      },
+      {
+        id: alternatePhoneId,
+        contactId,
+        number: "720-555-0199",
+        normalizedNumber: "+17205550199",
+        type: "alternate",
+        extension: null,
+        label: "Alternate",
+        primary: false,
+        source: "manual",
+        doNotCallAt: null,
+        doNotCallReason: null,
+      },
+    ],
     scriptPrompts: [],
     timeline: [],
   };
@@ -174,5 +203,49 @@ describe("MobileCallLogPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
     await waitFor(() => expect(completeCallAction).toHaveBeenCalledTimes(1));
     expect(completeCallAction.mock.calls[0][0].requestKey).not.toBe(discardedRequestKey);
+  });
+
+  it("resets every draft-controlled choice to fresh mobile defaults when discarded", async () => {
+    apiGet.mockResolvedValue(workspace());
+    completeCallAction.mockResolvedValue({ ok: true });
+    localStorage.setItem(
+      `assisted-call-draft:v1:organization-1:${contactId}:none:none`,
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        requestKey: "restored-request-key",
+        selectedPhoneId: alternatePhoneId,
+        direction: "outgoing",
+        method: "office_call",
+        scriptKind: "first_outreach",
+        note: "Discard restored choices.",
+        disposition: "no_answer",
+        nextActionKind: "",
+        nextActionDate: "",
+        lastResortConfirmed: false,
+        lastResortReason: "",
+        doNotCallConfirmed: false,
+        doNotCallReason: "",
+      }),
+    );
+
+    render(<MobileCallLogPage contactId={contactId} />);
+
+    expect(await screen.findByLabelText("Direction")).toHaveValue("outgoing");
+    expect(screen.getByLabelText("Phone number")).toHaveValue(alternatePhoneId);
+    fireEvent.click(screen.getByRole("button", { name: "Discard draft" }));
+
+    expect(screen.getByLabelText("Direction")).toHaveValue("incoming");
+    expect(screen.getByLabelText("Phone number")).toHaveValue(primaryPhoneId);
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+
+    await waitFor(() => expect(completeCallAction).toHaveBeenCalledTimes(1));
+    expect(completeCallAction).toHaveBeenCalledWith(expect.objectContaining({
+      direction: "incoming",
+      phoneId: primaryPhoneId,
+      method: "mobile_log",
+      scriptKind: "incoming_inquiry",
+      requestKey: expect.not.stringMatching("restored-request-key"),
+    }));
   });
 });
