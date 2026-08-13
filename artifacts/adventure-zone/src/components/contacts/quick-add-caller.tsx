@@ -101,8 +101,12 @@ export function QuickAddCaller({
         return;
       }
       navigate(`/calls/new?contactId=${result.contactId}`);
-    } catch {
-      setError("The caller could not be created. Try again.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The caller could not be created. Try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
