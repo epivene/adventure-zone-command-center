@@ -147,6 +147,76 @@ function safeErrorCode(value: string | null): ActSafeErrorCode | null {
       : "invalid_response";
 }
 
+type ReconciliationCheckpoint = ActExtractionCounters & {
+  streamType: string;
+};
+
+type ReconciliationObservation = {
+  streamType: string;
+  versionId: string | null;
+};
+
+function reconciliationStream(streamType: string): string {
+  return streamType === "note_contact" ? "note" : streamType;
+}
+
+export function archiveReconciliationMatches(input: {
+  checkpoints: readonly ReconciliationCheckpoint[];
+  observations: readonly ReconciliationObservation[];
+}): boolean {
+  const streamTypes = new Set([
+    ...input.checkpoints.map(({ streamType }) =>
+      reconciliationStream(streamType),
+    ),
+    ...input.observations.map(({ streamType }) =>
+      reconciliationStream(streamType),
+    ),
+  ]);
+  return [...streamTypes].every((streamType) => {
+    const counters = input.checkpoints
+      .filter(
+        (checkpoint) =>
+          reconciliationStream(checkpoint.streamType) === streamType,
+      )
+      .reduce<ActExtractionCounters>(
+        (total, checkpoint) => ({
+          responseRows: total.responseRows + checkpoint.responseRows,
+          observedIdentities:
+            total.observedIdentities + checkpoint.observedIdentities,
+          archivedIdentities:
+            total.archivedIdentities + checkpoint.archivedIdentities,
+          completeIdentities:
+            total.completeIdentities + checkpoint.completeIdentities,
+          partialIdentities:
+            total.partialIdentities + checkpoint.partialIdentities,
+          failedIdentities:
+            total.failedIdentities + checkpoint.failedIdentities,
+          snapshotVersionsInserted:
+            total.snapshotVersionsInserted +
+            checkpoint.snapshotVersionsInserted,
+        }),
+        zeroCounters(),
+      );
+    const observations = input.observations.filter(
+      (observation) =>
+        reconciliationStream(observation.streamType) === streamType,
+    );
+    const versioned = observations.filter(
+      ({ versionId }) => versionId !== null,
+    ).length;
+    return (
+      observations.length === versioned &&
+      counters.observedIdentities === observations.length &&
+      counters.archivedIdentities === versioned &&
+      counters.observedIdentities === counters.archivedIdentities &&
+      counters.observedIdentities ===
+        counters.completeIdentities +
+          counters.partialIdentities +
+          counters.failedIdentities
+    );
+  });
+}
+
 function rootRank(column: typeof actReplacementCheckpoints.streamType) {
   return sql<number>`case ${column}
     when 'company' then 0
@@ -1135,7 +1205,10 @@ export class DrizzleActReplacementCheckpointRepository implements ActReplacement
         failedIdentities: counters.failedIdentities,
       };
     });
-    const equationsHold = reconciliation.every(({ matches }) => matches);
+    const equationsHold = archiveReconciliationMatches({
+      checkpoints,
+      observations: observationRows,
+    });
     if (!equationsHold) {
       logFinalizationBlocker(run.id, "reconciliation_mismatch", {
         streams: reconciliation.filter(({ matches }) => !matches),
