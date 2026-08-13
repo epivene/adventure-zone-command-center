@@ -47,6 +47,7 @@ type ProposalRow = {
 
 class GuardTransaction {
   readonly locks: string[] = [];
+  readonly events: string[] = [];
   readonly insertedProposals: unknown[] = [];
   readonly mutations: Array<{
     kind: "execute" | "update" | "delete";
@@ -72,6 +73,7 @@ class GuardTransaction {
       orderBy: (..._columns: unknown[]) => builder,
       for: (lock: string) => {
         this.locks.push(lock);
+        this.events.push(`row:${lock}`);
         if (table === organizationFamilyReviews) {
           return Promise.resolve(this.proposals);
         }
@@ -112,6 +114,10 @@ class GuardTransaction {
   execute(statement: unknown) {
     try {
       const rendered = new PgDialect().sqlToQuery(statement as never).sql.toLowerCase();
+      if (rendered.includes("pg_advisory_xact_lock")) {
+        this.events.push("advisory");
+        return Promise.resolve({ rows: [] });
+      }
       if (rendered.includes("company_contact")) {
         return Promise.resolve({ rows: [] });
       }
@@ -295,6 +301,25 @@ describe("organization merge family guard", () => {
     });
   });
 
+  it("acquires the family advisory lock before merge proposal and organization rows", async () => {
+    const transaction = new GuardTransaction([
+      row(PRIMARY_ID),
+      row(DUPLICATE_ID),
+    ]);
+
+    await assertOrganizationsMergeable(
+      transaction as never,
+      [PRIMARY_ID, DUPLICATE_ID],
+    );
+
+    expect(transaction.events[0]).toBe("advisory");
+    expect(transaction.events.slice(1)).toEqual([
+      "row:update",
+      "row:update",
+      "row:update",
+    ]);
+  });
+
   it("locks all selected profiles before inspecting family state", async () => {
     const transaction = new GuardTransaction([
       row(PRIMARY_ID),
@@ -332,6 +357,7 @@ describe("organization merge family guard", () => {
       } as never,
       [proposal],
     );
+    expect(proposalWinner.events[0]).toBe("advisory");
     expect(proposalWinner.locks).toEqual(["update", "update", "update"]);
     expect(proposalWinner.insertedProposals).toEqual([
       expect.objectContaining({
