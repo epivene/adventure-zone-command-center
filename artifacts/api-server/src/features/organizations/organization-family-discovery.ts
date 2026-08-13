@@ -140,7 +140,7 @@ export function discoverOrganizationFamilyCandidates(
     const addresses = bucket
       .map((record) => normalizeMatchingText(record.address1 ?? null))
       .filter((address): address is string => address !== null);
-    if (new Set(addresses).size !== addresses.length) continue;
+    const hasRepeatedAddress = new Set(addresses).size !== addresses.length;
 
     const exactCandidateIds = new Set(candidateIds);
     for (let index = candidates.length - 1; index >= 0; index -= 1) {
@@ -160,6 +160,12 @@ export function discoverOrganizationFamilyCandidates(
       evidence: [
         { family: "name", label: "exact organization names agree" },
         { family: "location", label: "locations differ" },
+        ...(hasRepeatedAddress
+          ? [{
+              family: "address" as const,
+              label: "street addresses repeat across different locations",
+            }]
+          : []),
       ],
     });
   }
