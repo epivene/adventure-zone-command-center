@@ -6,6 +6,7 @@ import {
   eq,
   inArray,
   isNull,
+  notInArray,
   type SQL,
   type SQLWrapper,
   sql,
@@ -41,7 +42,11 @@ export {
   discoverOrganizationFamilyCandidates,
   partitionOrganizationReviewGroups,
 } from "@/features/organizations/organization-family-discovery";
-import { HierarchyConflictError } from "@/features/organizations/organization-hierarchy";
+import {
+  createOrganizationParentInTransaction,
+  HierarchyConflictError,
+  setOrganizationParentsInTransaction,
+} from "@/features/organizations/organization-hierarchy";
 
 export type OrganizationPerson = {
   id: string;
@@ -264,6 +269,131 @@ export async function discoverOrganizationFamilyCandidatesFromDatabase(
     records,
     await loadOrganizationFamilyActRelationships(database),
   );
+}
+
+export type OrganizationFamilyReviewInput =
+  | {
+      action: "make_locations";
+      candidateIds: string[];
+      parent:
+        | { kind: "existing"; parentId: string }
+        | { kind: "new"; name: string; website?: string; phone?: string };
+    }
+  | { action: "not_related"; candidateIds: string[] };
+
+function organizationFamilyGroupKey(candidateIds: readonly string[]): string {
+  return `organization-family:${[...candidateIds]
+    .sort((left, right) => left.localeCompare(right, "en-US"))
+    .join("|")}`;
+}
+
+export async function reviewOrganizationFamily(
+  database: Pick<DrizzleDatabase, "transaction">,
+  input: OrganizationFamilyReviewInput,
+  changedAt: Date,
+): Promise<void> {
+  const candidateIds = [...new Set(input.candidateIds)].sort((left, right) =>
+    left.localeCompare(right, "en-US"),
+  );
+  const groupKey = organizationFamilyGroupKey(candidateIds);
+
+  await database.transaction(async (transaction) => {
+    const [review] = await transaction
+      .select({
+        groupKey: organizationFamilyReviews.groupKey,
+        candidateIds: organizationFamilyReviews.candidateIds,
+        status: organizationFamilyReviews.status,
+      })
+      .from(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, groupKey))
+      .for("update");
+    if (
+      !review ||
+      review.status !== "proposed" ||
+      review.candidateIds.length !== candidateIds.length ||
+      !review.candidateIds.every((id, index) => id === candidateIds[index])
+    ) {
+      throw new HierarchyConflictError(
+        "This organization family changed. Refresh the review list and try again.",
+      );
+    }
+
+    const standaloneRecords = await transaction
+      .select()
+      .from(organizations)
+      .where(and(
+        isNull(organizations.parentOrganizationId),
+        sql`not exists (
+          select 1 from ${organizations} as confirmed_location
+          where confirmed_location.parent_organization_id = ${organizations.id}
+        )`,
+      ))
+      .orderBy(asc(organizations.id))
+      .for("update");
+    const candidatesById = new Map(
+      standaloneRecords.map((organization) => [organization.id, organization]),
+    );
+    if (!candidateIds.every((id) => candidatesById.has(id))) {
+      throw new HierarchyConflictError(
+        "This organization family changed. Refresh the review list and try again.",
+      );
+    }
+
+    const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
+      transaction,
+      standaloneRecords,
+    );
+    const current = currentGroups.find(
+      (group) =>
+        group.groupKey === groupKey &&
+        group.candidateIds.length === candidateIds.length &&
+        group.candidateIds.every((id, index) => id === candidateIds[index]),
+    );
+    if (!current) {
+      await transaction
+        .delete(organizationFamilyReviews)
+        .where(eq(organizationFamilyReviews.groupKey, groupKey));
+      throw new HierarchyConflictError(
+        "This organization family changed. Refresh the review list and try again.",
+      );
+    }
+
+    if (input.action === "not_related") {
+      await transaction
+        .update(organizationFamilyReviews)
+        .set({
+          candidateIds,
+          evidence: current.evidence,
+          status: "not_related",
+          updatedAt: changedAt,
+        })
+        .where(eq(organizationFamilyReviews.groupKey, groupKey));
+      return;
+    }
+
+    if (input.parent.kind === "new") {
+      await createOrganizationParentInTransaction(
+        transaction,
+        {
+          name: input.parent.name,
+          ...(input.parent.website ? { website: input.parent.website } : {}),
+          ...(input.parent.phone ? { phone: input.parent.phone } : {}),
+          childIds: candidateIds,
+        },
+        changedAt,
+      );
+    } else {
+      await setOrganizationParentsInTransaction(
+        transaction,
+        { parentId: input.parent.parentId, childIds: candidateIds },
+        changedAt,
+      );
+    }
+
+    await transaction
+      .delete(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, groupKey));
+  }, { isolationLevel: "serializable" });
 }
 
 export interface OrganizationRepository {
