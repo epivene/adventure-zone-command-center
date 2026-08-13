@@ -118,6 +118,39 @@ describe("DuplicatesView family review", () => {
     ).toBeInTheDocument();
   });
 
+  it("isolates primary selection for same-name groups by stable group identity", () => {
+    const thirdId = "44444444-4444-4444-8444-444444444444";
+    const fourthId = "55555555-5555-4555-8555-555555555555";
+    const secondFamily: DuplicateGroup = {
+      ...locationCandidate,
+      groupKey: `organization-family:${thirdId}|${fourthId}`,
+      candidateIds: [thirdId, fourthId],
+      organizations: [
+        organization(thirdId, "Water Lantern Festival - Boston, MA", "Boston", "MA"),
+        organization(fourthId, "Water Lantern Festival - Phoenix, AZ", "Phoenix", "AZ"),
+      ],
+    };
+    render(
+      <DuplicatesView
+        groups={[locationCandidate, secondFamily]}
+        onRefresh={vi.fn().mockResolvedValue([])}
+      />,
+    );
+
+    const first = within(
+      screen.getByTestId(`duplicate-group-${locationCandidate.groupKey}`),
+    );
+    const second = within(
+      screen.getByTestId(`duplicate-group-${secondFamily.groupKey}`),
+    );
+    fireEvent.click(first.getByRole("radio", { name: /denver/i }));
+
+    expect(first.getByRole("radio", { name: /denver/i })).toBeChecked();
+    expect(first.getByRole("button", { name: "Merge duplicates" })).toBeEnabled();
+    expect(second.queryByRole("radio", { checked: true })).not.toBeInTheDocument();
+    expect(second.getByRole("button", { name: "Merge duplicates" })).toBeDisabled();
+  });
+
   it("creates a parent for a reviewed family and refreshes server results", async () => {
     const onRefresh = vi.fn().mockResolvedValue([]);
     render(<DuplicatesView groups={[locationCandidate]} onRefresh={onRefresh} />);
