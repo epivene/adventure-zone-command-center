@@ -13,6 +13,7 @@ import eventProfilesRouter from "./event-profiles";
 import settingsRouter from "./settings";
 import actMigrationRouter from "./act-migration";
 import actReplacementRouter from "./act-replacement";
+import aiSuggestionsRouter from "./ai-suggestions";
 import authRouter from "./auth";
 import { requireOwnerMiddleware } from "../lib/auth";
 
@@ -38,5 +39,6 @@ router.use(eventProfilesRouter);
 router.use(settingsRouter);
 router.use(actReplacementRouter);
 router.use(actMigrationRouter);
+router.use(aiSuggestionsRouter);
 
 export default router;
