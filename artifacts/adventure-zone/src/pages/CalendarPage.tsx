@@ -1,24 +1,24 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
-import { EventCalendar } from "@/components/calendar/event-calendar";
+import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { businessDateKey } from "@/lib/business-date";
 
 export default function CalendarPage() {
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const now = new Date();
   const initialMonth = businessDateKey(now).slice(0, 7);
 
   useEffect(() => {
-    apiGet<any[]>("/calendar")
+    apiGet<CalendarEvent[]>("/calendar")
       .then((data) => {
         setEvents(
           (data ?? []).map((e) => ({
             ...e,
             startsAt: e.startsAt ? new Date(e.startsAt) : null,
             endsAt: e.endsAt ? new Date(e.endsAt) : null,
-          })),
+          })) as CalendarEvent[],
         );
         setLoading(false);
       })
@@ -33,7 +33,7 @@ export default function CalendarPage() {
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Calendar</h1>
         <p className="mt-2 max-w-2xl text-slate-600">
-          See confirmed and tentative event dates.
+          See confirmed and tentative event dates, plus imported Act! activities.
         </p>
       </header>
 
