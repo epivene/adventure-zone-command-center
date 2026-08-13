@@ -74,3 +74,40 @@ The two shared component edits are required to keep one save/draft implementatio
   - `MobileCallLogPage.test.tsx`: `73cb2275b00287b59a571d200ca651346fb4e316`
   - `ContactDetailPage.test.tsx`: `7f6bad4ee3471309afca3cc5b4329cdd6b9bd7de`
   - `EventProfilePage.test.tsx`: `0063b48b356114e49473c00597c9bdfb889acbad`
+
+## Fix round 1: phone-level suppression and mobile draft continuity
+
+TDD RED:
+
+- Added event-profile regressions for mixed phone-level DNC state and contact-detail load failure. The focused run failed because the direct action still used the profile phone (`tel:3035550100`) instead of the authoritative callable detail phone, and a failed detail fetch still exposed direct Call actions.
+- Added mobile regressions for persisting the selected caller/context in `/calls/log` and discarding a draft without returning to the Start gate. The focused run failed because selecting a caller did not update the URL and discard cleared `startedAt`/`requestKey`.
+- One draft fixture initially used an incorrect storage prefix; it was corrected to the existing `assisted-call-draft:` contract before changing production behavior.
+
+TDD GREEN and regression verification:
+
+- `node_modules/.bin/vitest run src/pages/MobileCallLogPage.test.tsx src/pages/EventProfilePage.test.tsx`
+  - Result: `2 passed`, `10 passed`, exit 0.
+- `node_modules/.bin/vitest run src/components/calls/call-workspace.test.tsx src/pages/MobileCallLogPage.test.tsx src/pages/ContactDetailPage.test.tsx src/pages/EventProfilePage.test.tsx`
+  - Result: `4 passed`, `28 passed`, exit 0.
+- `node ../../node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc -p tsconfig.json --noEmit`
+  - Result: exit 2 with the same six baseline diagnostics in `activity-repository.ts` (3), `contact-repository.ts` (2), and `OrganizationsPage.tsx` (1). No Task 9 file produced a diagnostic.
+
+Fix implementation:
+
+- Event profiles now resolve a callable number from authoritative phone details per selected contact, prefer the primary non-DNC number, gate the exact number, and fail closed for direct Call actions when detail loading fails. **Log call** remains available.
+- Caller selection now replaces the `/calls/log` URL with `contactId` and any organization, booking, or follow-up context so refresh restores the selected workspace.
+- Mobile-only draft discard immediately creates a fresh timestamp/request key and keeps the workspace usable; desktop behavior remains unchanged.
+
+Remote application:
+
+- Fix-round starting head: `364f29c2d642d52700220495757746a530108ed7`.
+- Fix implementation commit: `8697bd22f328dbbc25565213903293727c5ee802` (`fix: harden mobile call logging`).
+- Fix implementation tree: `d3069157b59672f3fe1dde4e5d335f509fe67676`.
+- The branch ref was advanced through the GitHub connector with a non-forced fast-forward update; the dirty scratch checkout was not pushed.
+- Connector reads verified the six remote implementation/test blobs exactly matched the tested local content:
+  - `MobileCallLogPage.tsx`: `f48395c564c7274ae76f42417ba3bc9f2fb7a91a`
+  - `MobileCallLogPage.test.tsx`: `e81f8d7d1fd2718674ffc985fb73d51c03fc6f8a`
+  - `EventProfilePage.tsx`: `810e1a1baa17c9a3de0bc29d7fd490344e56f959`
+  - `EventProfilePage.test.tsx`: `65580f0bc583bac55527408a0fdaa99f671e13c6`
+  - `call-workspace.tsx`: `599b18f92c9c539d55963b3ef03342b9a9e6a6bd`
+  - `event-profile-workspace.tsx`: `13dfc643959e338a43f70ebcd8c5c83ccd300633`
