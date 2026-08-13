@@ -251,6 +251,30 @@ export const contacts = pgTable("contacts", {
     .where(sql`${table.quickAddRequestKey} is not null`),
 ]);
 
+
+export const contactPhoneTypeValues = ["mobile", "office", "alternate", "unknown"] as const;
+export const contactPhoneTypeEnum = pgEnum("contact_phone_type", contactPhoneTypeValues);
+
+export const contactPhones = pgTable("contact_phones", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  normalizedNumber: text("normalized_number"),
+  type: contactPhoneTypeEnum("type").default("unknown").notNull(),
+  extension: text("extension"),
+  label: text("label"),
+  primary: boolean("primary").default(false).notNull(),
+  source: text("source").default("local").notNull(),
+  doNotCallAt: timestamp("do_not_call_at", { withTimezone: true }),
+  doNotCallReason: text("do_not_call_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("contact_phones_one_primary_per_contact").on(table.contactId).where(sql`${table.primary}`),
+  index("contact_phones_normalized_number_idx").on(table.normalizedNumber),
+  check("contact_phones_number_nonblank", sql`btrim(${table.number}) <> ''`),
+]);
+
 export const travelLegs = pgTable(
   "travel_legs",
   {

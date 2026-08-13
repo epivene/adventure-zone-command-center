@@ -74,6 +74,10 @@ const migrationFiles = [
         AND table_name = 'act_replacement_approval_requests'
         AND column_name IN ('approval_mode', 'approval_mode_version')`,
   },
+  {
+    name: "020_assisted_calling.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
