@@ -93,11 +93,11 @@ export function activityTimelineParent(context: CallWorkspaceContext): ActivityP
 }
 
 export function lastContactedParents(context: CallWorkspaceContext): ActivityParent[] {
-  return [
-    context.booking ? { bookingId: context.booking.id } : null,
-    context.contact ? { contactId: context.contact.id } : null,
-    context.organization ? { organizationId: context.organization.id } : null,
-  ].filter((parent): parent is ActivityParent => parent !== null);
+  const parents: ActivityParent[] = [];
+  if (context.booking) parents.push({ bookingId: context.booking.id });
+  if (context.contact) parents.push({ contactId: context.contact.id });
+  if (context.organization) parents.push({ organizationId: context.organization.id });
+  return parents;
 }
 
 export async function loadCallWorkspaceContext(
