@@ -17,13 +17,15 @@ class CallTestRepository {
   createdSession: Record<string, unknown> | undefined;
   suppressedPhoneId: string | undefined;
   updatedOrganization: Record<string, unknown> | undefined;
+  phoneExists = true;
+  replay: Record<string, unknown> | null = null;
 
   async transaction<T>(operation: (transaction: never) => Promise<T>): Promise<T> {
     return operation(this as never);
   }
 
   async lockRequest() {
-    return null;
+    return this.replay;
   }
 
   async lockContext() {
@@ -80,7 +82,7 @@ class CallTestRepository {
   }
   async createAuditEntry() {}
   async lockContactPhone() {
-    return this.phone;
+    return this.phoneExists ? this.phone : null;
   }
   async markPhoneDoNotCall(id: string) {
     this.suppressedPhoneId = id;
@@ -152,4 +154,36 @@ describe("CallService call metadata", () => {
     expect(repository.suppressedPhoneId).toBe(phoneId);
     expect(repository.updatedOrganization).toBeUndefined();
   });
+
+  it("replays without overwriting a session that already contains metadata", async () => {
+    const repository = new CallTestRepository();
+    repository.replay = { id: "50000000-0000-4000-8000-000000000001", noteActivityId: "40000000-0000-4000-8000-000000000001", disposition: "follow_up_needed", nextFollowUpId: null, resultingBookingStatus: null, phoneId, phoneNumberSnapshot: "701-555-0100", phoneExtensionSnapshot: "12" };
+    const result = await new CallService(repository as never).complete(validCall());
+    expect(result.ok).toBe(true);
+    expect(repository.createdSession).toBeUndefined();
+    expect(repository.replay).toMatchObject({ phoneId, phoneNumberSnapshot: "701-555-0100" });
+  });
+
+  it("rejects a selected phone that does not belong to the linked contact", async () => {
+    const repository = new CallTestRepository();
+    repository.phoneExists = false;
+    const result = await new CallService(repository as never).complete(validCall());
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("INVALID_CALL_INPUT");
+  });
+
+  it("rejects Do Not Call without confirmation and a reason", async () => {
+    const result = await new CallService(new CallTestRepository() as never).complete(validCall({ disposition: "do_not_call", doNotCallConfirmed: false, doNotCallReason: null }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe("INVALID_CALL_INPUT");
+  });
+
+  it("keeps wrong numbers unsuppressed while retaining their snapshot", async () => {
+    const repository = new CallTestRepository();
+    const result = await new CallService(repository as never).complete(validCall({ disposition: "wrong_number" }));
+    expect(result.ok).toBe(true);
+    expect(repository.suppressedPhoneId).toBeUndefined();
+    expect(repository.createdSession).toMatchObject({ disposition: "wrong_number", phoneNumberSnapshot: "701-555-0100" });
+  });
+
 });

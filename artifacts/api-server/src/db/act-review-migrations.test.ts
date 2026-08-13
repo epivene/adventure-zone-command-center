@@ -13,6 +13,12 @@ describe("runActReviewMigrations", () => {
     expect(provenance?.markerSql).toContain("approval_mode_version");
   });
 
+  it("keeps call phone snapshots when a referenced phone is replaced", async () => {
+    const migrations = await loadActReviewMigrations();
+    const metadata = migrations.find((migration) => migration.name === "021_call_session_metadata.sql");
+    expect(metadata?.sql).toContain("phone_id uuid REFERENCES contact_phones(id) ON DELETE SET NULL");
+  });
+
   it("serializes schema repair and applies only migrations whose marker is missing", async () => {
     const queries: string[] = [];
     const client = {
