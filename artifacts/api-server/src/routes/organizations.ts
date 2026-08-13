@@ -6,6 +6,17 @@ import {
   organizationListQuerySchema,
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
+import {
+  createOrganizationParentInputSchema,
+  setOrganizationParentInputSchema,
+  ungroupOrganizationInputSchema,
+} from "@/features/organizations/organization-hierarchy-input";
+import {
+  createOrganizationParent,
+  HierarchyConflictError,
+  setOrganizationParent,
+  ungroupOrganization,
+} from "@/features/organizations/organization-hierarchy";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
@@ -43,6 +54,59 @@ router.get("/organizations/duplicates", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to find duplicate organizations");
     res.status(500).json({ error: "Failed to find duplicate organizations" });
+  }
+});
+
+function hierarchyError(
+  req: Parameters<IRouter["use"]>[0] extends (...args: infer Args) => unknown ? Args[0] : never,
+  res: Parameters<IRouter["use"]>[0] extends (...args: infer Args) => unknown ? Args[1] : never,
+  err: unknown,
+): void {
+  if (err instanceof z.ZodError) {
+    res.status(400).json({
+      ok: false,
+      error: err.issues[0]?.message ?? "Invalid input",
+    });
+    return;
+  }
+  if (err instanceof HierarchyConflictError) {
+    res.status(409).json({ ok: false, error: err.message });
+    return;
+  }
+  req.log.error({ err }, "Failed to update organization hierarchy");
+  res.status(500).json({
+    ok: false,
+    error: "Could not update organization hierarchy",
+  });
+}
+
+router.post("/organizations/hierarchy/parent", async (req, res): Promise<void> => {
+  try {
+    const input = setOrganizationParentInputSchema.parse(req.body);
+    await setOrganizationParent(db, input, new Date());
+    res.json({ ok: true });
+  } catch (err) {
+    hierarchyError(req, res, err);
+  }
+});
+
+router.post("/organizations/hierarchy/create-parent", async (req, res): Promise<void> => {
+  try {
+    const input = createOrganizationParentInputSchema.parse(req.body);
+    const { parentId } = await createOrganizationParent(db, input, new Date());
+    res.json({ ok: true, parentId });
+  } catch (err) {
+    hierarchyError(req, res, err);
+  }
+});
+
+router.post("/organizations/hierarchy/ungroup", async (req, res): Promise<void> => {
+  try {
+    const input = ungroupOrganizationInputSchema.parse(req.body);
+    await ungroupOrganization(db, input, new Date());
+    res.json({ ok: true });
+  } catch (err) {
+    hierarchyError(req, res, err);
   }
 });
 
