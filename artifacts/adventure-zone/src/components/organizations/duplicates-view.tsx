@@ -19,7 +19,7 @@ export type DuplicateGroup = {
   normalizedName: string;
   city: string;
   region: string;
-  classification?: "duplicate" | "location_candidate";
+  classification: "duplicate" | "location_candidate";
   groupKey?: string | null;
   candidateIds?: string[];
   evidence?: FamilyEvidence[];
