@@ -49,7 +49,11 @@ describe("quick caller duplicate gate", () => {
       repository,
     );
 
-    expect(result).toEqual({ ok: false, candidates });
+    expect(result).toEqual({
+      ok: false,
+      candidates,
+      canContinueCreating: false,
+    });
     expect(repository.createQuickCaller).not.toHaveBeenCalled();
   });
 
@@ -66,7 +70,7 @@ describe("quick caller duplicate gate", () => {
     const repository = repositoryWith(candidates);
 
     expect(await submitQuickCaller(baseInput, repository))
-      .toEqual({ ok: false, candidates });
+      .toEqual({ ok: false, candidates, canContinueCreating: true });
     expect(repository.createQuickCaller).not.toHaveBeenCalled();
 
     await expect(submitQuickCaller(
@@ -98,7 +102,11 @@ describe("quick caller duplicate gate", () => {
       repository,
     );
 
-    expect(result).toEqual({ ok: false, candidates });
+    expect(result).toEqual({
+      ok: false,
+      candidates,
+      canContinueCreating: false,
+    });
     expect(repository.createQuickCaller).not.toHaveBeenCalled();
   });
 });
