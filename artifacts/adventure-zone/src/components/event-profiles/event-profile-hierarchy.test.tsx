@@ -116,7 +116,7 @@ describe("EventProfileWorkspace hierarchy rendering", () => {
 
     render(<EventProfileWorkspace profile={child} />);
 
-    expect(screen.getByText("Part of Adventure Zone")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Adventure Zone" }).closest("p")).toHaveTextContent("Part of Adventure Zone");
     expect(screen.getAllByText("javascript:alert(1)")).toHaveLength(2);
     expect(screen.queryByRole("link", { name: "Visit website" })).not.toBeInTheDocument();
   });
