@@ -131,6 +131,48 @@ function queryClient(options: { failAt?: number } = {}) {
 }
 
 describe("read-only production boundary", () => {
+  it("derives zero risk when a live proposed family overlaps a raw same-name group", async () => {
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("SELECT id, name, website")) return { rows: [
+          { id: "one", name: "Festival", website: "festival.test", address_1: "1 A St", city: "Austin", region: "TX", postal_code: "1", parent_organization_id: null },
+          { id: "two", name: "Festival", website: "festival.test", address_1: "2 B St", city: "Dallas", region: "TX", postal_code: "2", parent_organization_id: null },
+        ] };
+        if (sql.includes("FROM organization_family_reviews")) return { rows: [
+          { group_key: "organization-family:one|two", candidate_ids: ["one", "two"], status: "proposed" },
+        ] };
+        if (sql.includes("GROUP BY lower(trim(name))")) return { rows: [
+          { normalized_name: "festival", normalized_city: "austin", normalized_region: "tx", ids: ["one", "two"] },
+        ] };
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const input = await loadProductionInput(client, undefined);
+    expect(verifyOrganizationLocationHierarchy(input).familyMergeRiskCount).toBe(0);
+  });
+
+  it("exposes a stale non-discovered proposal that remains a destructive duplicate", async () => {
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("SELECT id, name, website")) return { rows: [
+          { id: "one", name: "Festival", website: null, address_1: "1 A St", city: "Austin", region: "TX", postal_code: "1", parent_organization_id: null },
+          { id: "two", name: "Festival", website: null, address_1: "2 B St", city: "Dallas", region: "TX", postal_code: "2", parent_organization_id: null },
+        ] };
+        if (sql.includes("FROM organization_family_reviews")) return { rows: [
+          { group_key: "organization-family:one|two", candidate_ids: ["one", "two"], status: "proposed" },
+        ] };
+        if (sql.includes("GROUP BY lower(trim(name))")) return { rows: [
+          { normalized_name: "festival", normalized_city: "austin", normalized_region: "tx", ids: ["one", "two"] },
+        ] };
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    const input = await loadProductionInput(client, undefined);
+    expect(verifyOrganizationLocationHierarchy(input).familyMergeRiskCount).toBe(2);
+  });
+
   it("uses a read-only transaction and SELECT-only data reads before commit/release", async () => {
     const client = queryClient();
     await loadProductionInput(client, "Water Lantern Festival");
