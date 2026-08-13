@@ -266,6 +266,40 @@ export function discoverOrganizationFamilyCandidates(
   );
 }
 
+export function partitionOrganizationReviewGroups(
+  duplicateRows: readonly {
+    normalized_name: string;
+    normalized_city: string;
+    normalized_region: string;
+    ids: string[];
+  }[],
+  discoveredFamilies: readonly OrganizationFamilyCandidateGroup[],
+  reviews: readonly { groupKey: string; status: "proposed" | "not_related" }[],
+): OrganizationFamilyCandidateGroup[] {
+  const reviewByKey = new Map(reviews.map((review) => [review.groupKey, review]));
+  const visibleFamilies = discoveredFamilies.filter(
+    (group) =>
+      group.groupKey && reviewByKey.get(group.groupKey)?.status !== "not_related",
+  );
+  const allFamilyCandidateIds = new Set(
+    discoveredFamilies.flatMap((group) => group.candidateIds),
+  );
+  const duplicateGroups: OrganizationFamilyCandidateGroup[] = duplicateRows
+    .filter((row) => !row.ids.every((id) => allFamilyCandidateIds.has(id)))
+    .map((row) => ({
+      normalizedName: row.normalized_name,
+      city: row.normalized_city,
+      region: row.normalized_region,
+      classification: "duplicate",
+      groupKey: null,
+      candidateIds: [...row.ids].sort((left, right) =>
+        left.localeCompare(right, "en-US"),
+      ),
+      evidence: [],
+    }));
+  return [...duplicateGroups, ...visibleFamilies];
+}
+
 export interface OrganizationRepository {
   setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
   getOrganizationSummary(
@@ -1066,10 +1100,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           .where(inArray(organizationFamilyReviews.groupKey, familyKeys))
       : [];
     const reviewByKey = new Map(reviews.map((review) => [review.groupKey, review]));
-    const visibleFamilies = discoveredFamilies.filter(
-      (group) => group.groupKey && reviewByKey.get(group.groupKey)?.status !== "not_related",
+    const reviewGroups = partitionOrganizationReviewGroups(
+      groupRows.rows,
+      discoveredFamilies,
+      reviews,
     );
-
+    const visibleFamilies = reviewGroups.filter(
+      (group) => group.classification === "location_candidate",
+    );
     const proposedFamilies = visibleFamilies.filter(
       (group) => group.groupKey && !reviewByKey.has(group.groupKey),
     );
@@ -1085,21 +1123,6 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
     }
 
-    const familyCandidateIds = new Set(
-      visibleFamilies.flatMap((group) => group.candidateIds),
-    );
-    const duplicateGroups: OrganizationFamilyCandidateGroup[] = groupRows.rows
-      .filter((row) => !row.ids.every((id) => familyCandidateIds.has(id)))
-      .map((row) => ({
-        normalizedName: row.normalized_name,
-        city: row.normalized_city,
-        region: row.normalized_region,
-        classification: "duplicate",
-        groupKey: null,
-        candidateIds: [...row.ids].sort((left, right) => left.localeCompare(right, "en-US")),
-        evidence: [],
-      }));
-    const reviewGroups = [...duplicateGroups, ...visibleFamilies];
     const allIds = [...new Set(reviewGroups.flatMap((group) => group.candidateIds))];
     if (!allIds.length) return [];
 
