@@ -1,7 +1,7 @@
 import {
   normalizeMatchingText,
   normalizeWebsiteHost,
-} from "@/features/act-migration/matching-normalization";
+} from "../act-migration/matching-normalization";
 
 export type FamilyCandidateEvidence = {
   family: "name" | "website" | "location" | "act_relationship";
