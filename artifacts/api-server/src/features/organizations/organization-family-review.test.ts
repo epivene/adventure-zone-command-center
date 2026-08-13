@@ -277,6 +277,38 @@ describe("organization family review", () => {
     ]);
   });
 
+  it("keeps a same-address cross-city exact-name bucket in manual review", () => {
+    const groups = discoverOrganizationFamilyCandidates([
+      {
+        id: FIRST_ID,
+        name: "Water Lantern Festival",
+        address1: "100 Lake St",
+        city: "Denver",
+        region: "CO",
+      },
+      {
+        id: SECOND_ID,
+        name: "Water Lantern Festival",
+        address1: "100 Lake St",
+        city: "Austin",
+        region: "TX",
+      },
+    ]);
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        classification: "ambiguous_location_candidate",
+        candidateIds: [FIRST_ID, SECOND_ID],
+        evidence: expect.arrayContaining([
+          {
+            family: "address",
+            label: "street addresses repeat across different locations",
+          },
+        ]),
+      }),
+    ]);
+  });
+
   it("does not classify exact names when a location is blank or the complete location is the same", () => {
     expect(discoverOrganizationFamilyCandidates([
       { id: FIRST_ID, name: "Lantern Nights", city: "", region: "CO" },
