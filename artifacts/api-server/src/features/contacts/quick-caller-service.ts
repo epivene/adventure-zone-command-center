@@ -7,12 +7,12 @@ import type { QuickCallerInput } from "@/features/contacts/contact-types";
 const optionalText = z.string().trim().transform((value) => value || null);
 
 const quickCallerSchema = z.object({
-  requestKey: z.uuid(),
+  requestKey: z.string().uuid(),
   name: z.string().trim().min(1, "Enter the caller's name."),
   organizationName: z.string().trim().min(1, "Enter an organization or event."),
   phone: optionalText,
   email: z.string().trim().toLowerCase().refine(
-    (value) => !value || z.email().safeParse(value).success,
+    (value) => !value || z.string().email().safeParse(value).success,
     "Enter a valid email address.",
   ).transform((value) => value || null),
   reason: z.string().trim().min(1, "Enter the reason for calling."),
