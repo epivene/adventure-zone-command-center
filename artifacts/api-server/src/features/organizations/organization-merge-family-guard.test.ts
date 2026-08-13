@@ -1,3 +1,4 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,6 +30,12 @@ const conflictMessage =
 
 type OrganizationRow = {
   id: string;
+  name: string;
+  website: string | null;
+  address1: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
   parentOrganizationId: string | null;
 };
 
@@ -45,7 +52,7 @@ class GuardTransaction {
     table?: unknown;
     values?: Record<string, unknown>;
   }> = [];
-  private selectIndex = 0;
+  private organizationSelectIndex = 0;
 
   constructor(
     private readonly selected: OrganizationRow[],
@@ -53,21 +60,27 @@ class GuardTransaction {
     private readonly proposals: ProposalRow[] = [],
   ) {}
 
-  select() {
-    const index = this.selectIndex++;
-    const rows =
-      index === 0
-        ? this.selected
-        : index === 1
-          ? this.ownedLocations
-          : this.proposals;
+  select(_selection?: Record<string, unknown>) {
+    let table: unknown;
     const builder = {
-      from: (_table: unknown) => builder,
+      from: (selectedTable: unknown) => {
+        table = selectedTable;
+        return builder;
+      },
       where: (_condition: unknown) => builder,
       orderBy: (..._columns: unknown[]) => builder,
       for: (lock: string) => {
         this.locks.push(lock);
-        return Promise.resolve(rows);
+        if (table === organizationFamilyReviews) {
+          return Promise.resolve(this.proposals);
+        }
+        if (table === organizations) {
+          const rows = this.organizationSelectIndex++ === 0
+            ? this.selected
+            : this.ownedLocations;
+          return Promise.resolve(rows);
+        }
+        return Promise.resolve([]);
       },
     };
     return builder;
@@ -86,7 +99,15 @@ class GuardTransaction {
     };
   }
 
-  execute(_statement: unknown) {
+  execute(statement: unknown) {
+    try {
+      const rendered = new PgDialect().sqlToQuery(statement as never).sql.toLowerCase();
+      if (rendered.includes("company_contact")) {
+        return Promise.resolve({ rows: [] });
+      }
+    } catch {
+      // Mutation SQL is recorded below.
+    }
     this.mutations.push({ kind: "execute" });
     return Promise.resolve({ rows: [] });
   }
@@ -112,8 +133,41 @@ class GuardTransaction {
   }
 }
 
-function row(id: string, parentOrganizationId: string | null = null): OrganizationRow {
-  return { id, parentOrganizationId };
+function row(
+  id: string,
+  parentOrganizationId: string | null = null,
+  overrides: Partial<OrganizationRow> = {},
+): OrganizationRow {
+  return {
+    id,
+    name: "Ordinary duplicate",
+    website: null,
+    address1: null,
+    city: "Denver",
+    region: "CO",
+    postalCode: null,
+    parentOrganizationId,
+    ...overrides,
+  };
+}
+
+function currentFamilyRows(): OrganizationRow[] {
+  return [
+    row(PRIMARY_ID, null, {
+      name: "Water Lantern Festival - Denver, CO",
+      website: "https://waterlanternfestival.com/denver",
+      address1: "100 Lake St",
+      city: "Denver",
+      region: "CO",
+    }),
+    row(DUPLICATE_ID, null, {
+      name: "Water Lantern Festival - Austin, TX",
+      website: "https://waterlanternfestival.com/austin",
+      address1: "200 River Rd",
+      city: "Austin",
+      region: "TX",
+    }),
+  ];
 }
 
 async function expectConflict(transaction: GuardTransaction) {
@@ -148,11 +202,20 @@ describe("organization merge family guard", () => {
   it("rejects any selected profile in a current proposed family review", async () => {
     await expectConflict(
       new GuardTransaction(
-        [row(PRIMARY_ID), row(DUPLICATE_ID)],
+        [
+          ...currentFamilyRows(),
+          row(OTHER_ID, null, {
+            name: "Water Lantern Festival - Boston, MA",
+            website: "https://waterlanternfestival.com/boston",
+            address1: "300 Harbor Rd",
+            city: "Boston",
+            region: "MA",
+          }),
+        ],
         [],
         [{
-          groupKey: "organization-family:proposal",
-          candidateIds: [OTHER_ID, DUPLICATE_ID],
+          groupKey: `organization-family:${DUPLICATE_ID}|${OTHER_ID}`,
+          candidateIds: [DUPLICATE_ID, OTHER_ID],
         }],
       ),
     );
@@ -285,6 +348,68 @@ describe("organization merge family guard", () => {
       [proposal],
     );
     expect(proposalAfterMerge.insertedProposals).toEqual([]);
+  });
+
+  it("deletes a stale website proposal and allows the ordinary merge", async () => {
+    const proposalKey = `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}`;
+    const transaction = new GuardTransaction(
+      [
+        row(PRIMARY_ID, null, {
+          name: "Lantern Denver",
+          website: "https://denver.example",
+          address1: "100 Lake St",
+          city: "Denver",
+          region: "CO",
+        }),
+        row(DUPLICATE_ID, null, {
+          name: "Lantern Austin",
+          website: "https://austin.example",
+          address1: "200 River Rd",
+          city: "Austin",
+          region: "TX",
+        }),
+      ],
+      [],
+      [{ groupKey: proposalKey, candidateIds: [PRIMARY_ID, DUPLICATE_ID] }],
+    );
+
+    await assertOrganizationsMergeable(
+      transaction as never,
+      [PRIMARY_ID, DUPLICATE_ID],
+    );
+
+    expect(transaction.mutations).toContainEqual({
+      kind: "delete",
+      table: organizationFamilyReviews,
+    });
+  });
+
+  it("deletes stale same-address and disconnected-ACT proposals before merge", async () => {
+    const proposalKey = `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}`;
+    for (const records of [
+      [
+        row(PRIMARY_ID, null, { name: "Lantern One", website: "https://shared.example", address1: "100 Lake St", city: "Denver", region: "CO" }),
+        row(DUPLICATE_ID, null, { name: "Lantern Two", website: "https://shared.example", address1: "100 Lake St", city: "Austin", region: "TX" }),
+      ],
+      [
+        row(PRIMARY_ID, null, { name: "Lantern One", website: "https://shared.example", address1: "100 Lake St", city: "Denver", region: "CO" }),
+        row(DUPLICATE_ID, null, { name: "Lantern Two", website: "https://shared.example", address1: "200 River Rd", city: "Austin", region: "TX" }),
+      ],
+    ]) {
+      const transaction = new GuardTransaction(
+        records,
+        [],
+        [{ groupKey: proposalKey, candidateIds: [PRIMARY_ID, DUPLICATE_ID] }],
+      );
+      await assertOrganizationsMergeable(
+        transaction as never,
+        [PRIMARY_ID, DUPLICATE_ID],
+      );
+      expect(transaction.mutations).toContainEqual({
+        kind: "delete",
+        table: organizationFamilyReviews,
+      });
+    }
   });
 
 });
