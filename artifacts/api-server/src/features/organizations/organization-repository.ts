@@ -37,6 +37,10 @@ import {
   discoverOrganizationFamilyCandidates,
   partitionOrganizationReviewGroups,
 } from "@/features/organizations/organization-family-discovery";
+export {
+  discoverOrganizationFamilyCandidates,
+  partitionOrganizationReviewGroups,
+} from "@/features/organizations/organization-family-discovery";
 import { HierarchyConflictError } from "@/features/organizations/organization-hierarchy";
 
 export type OrganizationPerson = {
