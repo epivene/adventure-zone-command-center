@@ -120,7 +120,7 @@ export function CallWorkspace({
   contextSummary = null,
   defaultScriptKind = followUp ? "follow_up" : "first_outreach",
   scriptPrompts = [],
-  assistedCallingEnabled = true,
+  assistedCallingEnabled = false,
   voicemailLauncherUrl = null,
   timeline,
   onComplete,
@@ -146,7 +146,9 @@ export function CallWorkspace({
   const [doNotCallReason, setDoNotCallReason] = useState("");
   const [doNotCallConfirmed, setDoNotCallConfirmed] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
+  const [activeDraftKey, setActiveDraftKey] = useState<string | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [locallySuppressedPhoneIds, setLocallySuppressedPhoneIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -158,10 +160,39 @@ export function CallWorkspace({
     followUpId: followUp?.id ?? null,
   }), [organization?.id, contact?.id, booking?.id, followUp?.id]);
 
-  const selectedPhone =
+  const selectedPhoneRecord =
     phones.find((phone) => phone.id === selectedPhoneId) ?? primaryPhone;
+  const selectedPhone = selectedPhoneRecord && locallySuppressedPhoneIds.has(selectedPhoneRecord.id)
+    ? {
+        ...selectedPhoneRecord,
+        doNotCallAt: new Date().toISOString(),
+        doNotCallReason: "Marked Do Not Call during this call.",
+      }
+    : selectedPhoneRecord;
 
   useEffect(() => {
+    setDraftReady(false);
+    setActiveDraftKey(null);
+    setStartedAt(null);
+    setRequestKey(null);
+    setSelectedPhoneId(primaryPhone?.id ?? null);
+    setDirection("outgoing");
+    setMethod("mobile_log");
+    setScriptKind(defaultScriptKind);
+    setNote("");
+    setDisposition("no_answer");
+    setNextActionKind("");
+    setNextActionDueAt("");
+    setLastResortConfirmed(false);
+    setLastResortReason("");
+    setDoNotCallConfirmed(false);
+    setDoNotCallReason("");
+    setDraftRestored(false);
+    setLocallySuppressedPhoneIds(new Set());
+    setError("");
+    setIsSubmitting(false);
+    setIsSaved(false);
+
     const draft = loadCallDraft(draftKey);
     if (draft) {
       setStartedAt(new Date());
@@ -184,11 +215,12 @@ export function CallWorkspace({
       setDoNotCallReason(draft.doNotCallReason);
       setDraftRestored(true);
     }
+    setActiveDraftKey(draftKey);
     setDraftReady(true);
   }, [draftKey]);
 
   useEffect(() => {
-    if (!draftReady || !startedAt || !requestKey || isSaved) return;
+    if (!draftReady || activeDraftKey !== draftKey || !startedAt || !requestKey || isSaved) return;
     const timer = window.setTimeout(() => {
       saveCallDraft(draftKey, {
         version: 1,
@@ -210,7 +242,7 @@ export function CallWorkspace({
     }, 300);
     return () => window.clearTimeout(timer);
   }, [
-    draftReady, startedAt, requestKey, isSaved, draftKey, selectedPhoneId,
+    draftReady, activeDraftKey, startedAt, requestKey, isSaved, draftKey, selectedPhoneId,
     direction, method, scriptKind, note, disposition, nextActionKind,
     nextActionDueAt, lastResortConfirmed, lastResortReason,
     doNotCallConfirmed, doNotCallReason,
@@ -230,6 +262,18 @@ export function CallWorkspace({
     setDoNotCallConfirmed(false);
     setDraftRestored(false);
     setError("");
+  }
+
+  function chooseDisposition(value: CallDisposition) {
+    setDisposition(value);
+    if (value !== "move_to_last_resort") {
+      setLastResortConfirmed(false);
+      setLastResortReason("");
+    }
+    if (value !== "do_not_call") {
+      setDoNotCallConfirmed(false);
+      setDoNotCallReason("");
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -271,20 +315,31 @@ export function CallWorkspace({
         startedAt,
         endedAt: new Date(),
         nextAction: nextActionKind && dueAt ? { kind: nextActionKind, dueAt } : null,
-        lastResortReason: lastResortReason.trim() || null,
-        lastResortConfirmed,
+        lastResortReason:
+          disposition === "move_to_last_resort"
+            ? lastResortReason.trim() || null
+            : null,
+        lastResortConfirmed:
+          disposition === "move_to_last_resort" && lastResortConfirmed,
         approvedContactUpdates: null,
         approvedBookingUpdates: null,
         direction,
         method,
         phoneId: selectedPhone?.id ?? null,
         scriptKind,
-        doNotCallConfirmed,
-        doNotCallReason: doNotCallReason.trim() || null,
+        doNotCallConfirmed:
+          disposition === "do_not_call" && doNotCallConfirmed,
+        doNotCallReason:
+          disposition === "do_not_call"
+            ? doNotCallReason.trim() || null
+            : null,
       });
       if (!result.ok) setError(result.error);
       else {
         clearCallDraft(draftKey);
+        if (disposition === "do_not_call" && selectedPhone) {
+          setLocallySuppressedPhoneIds((ids) => new Set(ids).add(selectedPhone.id));
+        }
         setIsSaved(true);
       }
     } catch {
@@ -403,7 +458,7 @@ export function CallWorkspace({
                       <button
                         className="button-secondary"
                         key={value}
-                        onClick={() => setDisposition(value)}
+                        onClick={() => chooseDisposition(value)}
                         type="button"
                       >
                         {dispositionOptions.find((option) => option.value === value)!.label}
@@ -416,10 +471,7 @@ export function CallWorkspace({
                   <select
                     id="call-disposition"
                     onChange={(event) => {
-                      const value = event.target.value as CallDisposition;
-                      setDisposition(value);
-                      if (value !== "move_to_last_resort") setLastResortConfirmed(false);
-                      if (value !== "do_not_call") setDoNotCallConfirmed(false);
+                      chooseDisposition(event.target.value as CallDisposition);
                     }}
                     value={disposition}
                   >
@@ -522,10 +574,20 @@ export function CallWorkspace({
                 {operations ? (
                   <div className="mt-2 grid gap-1 border-t border-slate-200 pt-2">
                     <p className="font-semibold">{operations.packageNames.join(" + ") || "No packages"}</p>
+                    <p>
+                      {operations.packageNames.length} {operations.packageNames.length === 1 ? "package" : "packages"} ·{" "}
+                      {operations.sharedAttractionTotal ?? "No"} attractions
+                    </p>
                     {operations.pendingRequestCount > 0 ? <p className="font-semibold text-amber-800">{operations.pendingRequestCount} pending special {operations.pendingRequestCount === 1 ? "request" : "requests"}</p> : null}
                     {operations.leg ? <p>Travel leg: {operations.leg.name}</p> : null}
                     {operations.warnings.map((warning) => (
-                      <a className="font-semibold text-amber-800" href={warning.href} key={warning.id}>{warning.message}</a>
+                      <a
+                        className={warning.severity === "blocking" ? "font-semibold text-rose-700" : "font-semibold text-amber-800"}
+                        href={warning.href}
+                        key={warning.id}
+                      >
+                        {warning.message}
+                      </a>
                     ))}
                   </div>
                 ) : null}
