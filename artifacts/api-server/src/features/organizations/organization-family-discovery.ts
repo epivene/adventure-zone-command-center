@@ -1,4 +1,7 @@
-import { normalizeWebsiteHost } from "../act-migration/matching-normalization";
+import {
+  normalizeMatchingText,
+  normalizeWebsiteHost,
+} from "../act-migration/matching-normalization";
 import {
   classifyOrganizationFamily,
   type FamilyCandidateEvidence,
@@ -9,7 +12,7 @@ export type OrganizationFamilyCandidateGroup = {
   normalizedName: string;
   city: string;
   region: string;
-  classification: "duplicate" | "location_candidate";
+  classification: "duplicate" | "location_candidate" | "ambiguous_location_candidate";
   groupKey: string | null;
   candidateIds: string[];
   evidence: FamilyCandidateEvidence[];
@@ -105,6 +108,54 @@ export function discoverOrganizationFamilyCandidates(
         evidence: classification.evidence,
       });
     }
+  }
+
+  const strongCandidateSets = new Set(
+    candidates.map((candidate) => candidate.candidateIds.join("|")),
+  );
+  const byExactName = new Map<string, OrganizationFamilyRecord[]>();
+  for (const record of hydratedRecords) {
+    const exactName = normalizeMatchingText(record.name);
+    if (!exactName) continue;
+    const bucket = byExactName.get(exactName) ?? [];
+    bucket.push(record);
+    byExactName.set(exactName, bucket);
+  }
+  for (const [exactName, bucket] of byExactName) {
+    if (bucket.length < 2) continue;
+    const candidateIds = bucket
+      .map((record) => record.id)
+      .sort((left, right) => left.localeCompare(right, "en-US"));
+    if (strongCandidateSets.has(candidateIds.join("|"))) continue;
+
+    const locations = bucket.map((record) => {
+      const city = normalizeMatchingText(record.city ?? null);
+      const region = normalizeMatchingText(record.region ?? null);
+      return city && region ? `${city}\u0000${region}` : null;
+    });
+    if (
+      locations.some((location) => location === null) ||
+      new Set(locations).size !== bucket.length
+    ) {
+      continue;
+    }
+    const addresses = bucket
+      .map((record) => normalizeMatchingText(record.address1 ?? null))
+      .filter((address): address is string => address !== null);
+    if (new Set(addresses).size !== addresses.length) continue;
+
+    candidates.push({
+      normalizedName: exactName,
+      city: "",
+      region: "",
+      classification: "ambiguous_location_candidate",
+      groupKey: `organization-family:${candidateIds.join("|")}`,
+      candidateIds,
+      evidence: [
+        { family: "name", label: "exact organization names agree" },
+        { family: "location", label: "locations differ" },
+      ],
+    });
   }
 
   return candidates.toSorted((left, right) =>
