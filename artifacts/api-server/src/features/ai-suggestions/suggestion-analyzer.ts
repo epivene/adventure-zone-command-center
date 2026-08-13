@@ -212,8 +212,10 @@ export async function analyzeHistory(
     return;
   }
 
-  // Lazy import to avoid startup failures if env vars aren't set
-  const { anthropic } = await import("@workspace/integrations-anthropic-ai");
+  // Resolve provider lazily — throws NOT_CONFIGURED_ERROR if unconfigured.
+  // The route catches that code before opening the SSE stream and returns 503.
+  const { createAiClient } = await import("./ai-client");
+  const aiClient = await createAiClient();
 
   const batches: ActivityRecord[][] = [];
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
@@ -236,20 +238,9 @@ export async function analyzeHistory(
     });
 
     try {
-      const message = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 8192,
-        messages: [
-          {
-            role: "user",
-            content: buildPrompt(batch, analysisDateStr),
-          },
-        ],
-      });
-
-      const block = message.content[0];
-      const responseText =
-        block?.type === "text" ? block.text : "[]";
+      const responseText = await aiClient.complete(
+        buildPrompt(batch, analysisDateStr),
+      );
 
       const rawSuggestions = parseSuggestionsFromResponse(responseText);
       for (const raw of rawSuggestions) {

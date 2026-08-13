@@ -8,6 +8,7 @@
  */
 
 import { Router, type IRouter } from "express";
+import { NOT_CONFIGURED_ERROR } from "@/features/ai-suggestions/ai-client";
 import { analyzeHistory, type ActivityRecord } from "@/features/ai-suggestions/suggestion-analyzer";
 import {
   getSuggestions,
@@ -22,6 +23,27 @@ const router: IRouter = Router();
 // sends them to Claude in batches, streams progress and suggestion events back.
 
 router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
+  // ── Pre-flight: check AI provider availability before opening the SSE stream.
+  // This lets us return a proper 503 JSON response (not an SSE error event)
+  // when no API key is configured — cleaner for the client to handle.
+  {
+    const { createAiClient } = await import("@/features/ai-suggestions/ai-client");
+    try {
+      await createAiClient();
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === NOT_CONFIGURED_ERROR) {
+        res.status(503).json({
+          error: (err as Error).message,
+        });
+        return;
+      }
+      // Any other unexpected startup error — still 503
+      res.status(503).json({ error: "AI provider could not be initialised" });
+      return;
+    }
+  }
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
