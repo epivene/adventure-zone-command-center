@@ -14,6 +14,7 @@ export interface ProductionOrganizerStore {
   claim(runId: string): Promise<OrganizerRun | null>;
   loadSources(runId: string): Promise<readonly ManifestSourceInput[]>;
   renew(runId: string, claimToken: string): Promise<boolean>;
+  /** Atomically persists the rows and publishes the run's ready digest. */
   persistManifest(runId: string, claimToken: string, manifest: ActOrganizeManifest): Promise<void>;
   complete(
     runId: string,
@@ -92,7 +93,6 @@ export class ProductionActOrganizer {
         throw codedError("organizer_claim_lost", 409);
       await this.store.persistManifest(run.runId, run.claimToken, manifest);
       const status = "ready_to_apply" as const;
-      await this.store.complete(run.runId, run.claimToken, status, manifest.digest);
       return { status, manifest };
     } catch (error) {
       stopHeartbeat();

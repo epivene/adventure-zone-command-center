@@ -213,6 +213,41 @@ export type SafeDefaultApproval = {
   manifestDigest: string;
 };
 
+export type AutomaticReviewResolutionSummary = {
+  linkedExisting: number;
+  importedNew: number;
+  relationshipsAssigned: number;
+  relationshipsOmitted: number;
+  actValuesSelected: number;
+  unsupportedIgnored: number;
+  manualReview: number;
+  decisionsCreatedOrReplayed: number;
+};
+
+export type AutomaticReviewResponse = {
+  summary: AutomaticReviewResolutionSummary;
+  remainingReview: {
+    count: number;
+    reasons: Partial<Record<ReviewIssueCode, number>>;
+  };
+  manifestDigest: string;
+  workflow: Pick<
+    ActReplacementWorkflowStatus,
+    | "safeOperationCount"
+    | "autoResolvedCount"
+    | "archivedOnlyCount"
+    | "reviewRequiredCount"
+    | "appliedOperationCount"
+    | "alreadyPresentOperationCount"
+    | "blockedOperationCount"
+    | "failedOperationCount"
+    | "nextApplyCursor"
+    | "canOrganize"
+    | "canReview"
+    | "canApplySafe"
+  >;
+};
+
 export type ApplyNextRequest = {
   expectedManifestDigest: string;
   approvalRequestKey: string;
@@ -386,6 +421,14 @@ export const organizeRun = (runId: string) =>
   request<OrganizeResponse>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/organize`,
     { method: "POST", body: "{}" },
+  );
+export const resolveAutomaticReview = (
+  runId: string,
+  body: { expectedManifestDigest: string; requestKey: string },
+) =>
+  request<AutomaticReviewResponse>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/automatic-review`,
+    { method: "POST", body: JSON.stringify(body) },
   );
 export const getReview = (
   runId: string,

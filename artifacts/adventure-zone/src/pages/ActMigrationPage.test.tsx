@@ -24,6 +24,7 @@ const client = vi.hoisted(() => ({
   bulkDecideReviewRecords: vi.fn(),
   approveSafeDefaults: vi.fn(),
   approveReadyOperations: vi.fn(),
+  resolveAutomaticReview: vi.fn(),
   getManifest: vi.fn(),
   applyNext: vi.fn(),
 }));
@@ -88,6 +89,41 @@ function readyRun(overrides: Record<string, unknown> = {}) {
 
 function reviewPage() {
   return { page: 1, pageSize: 25, total: 0, manifestDigest: digest, rows: [] };
+}
+
+function automaticReviewResult(overrides: Record<string, unknown> = {}) {
+  return {
+    summary: {
+      linkedExisting: 2,
+      importedNew: 3,
+      relationshipsAssigned: 4,
+      relationshipsOmitted: 1,
+      actValuesSelected: 5,
+      unsupportedIgnored: 6,
+      manualReview: 1,
+      decisionsCreatedOrReplayed: 21,
+    },
+    remainingReview: {
+      count: 1,
+      reasons: { relationship_unresolved: 1 },
+    },
+    manifestDigest: "b".repeat(64),
+    workflow: {
+      safeOperationCount: 18,
+      autoResolvedCount: 20,
+      archivedOnlyCount: 6,
+      reviewRequiredCount: 1,
+      appliedOperationCount: 0,
+      alreadyPresentOperationCount: 0,
+      blockedOperationCount: 0,
+      failedOperationCount: 0,
+      nextApplyCursor: 0,
+      canOrganize: false,
+      canReview: true,
+      canApplySafe: true,
+    },
+    ...overrides,
+  };
 }
 
 function approvalWithOperationIds(count: number) {
@@ -165,6 +201,7 @@ beforeEach(() => {
   });
   client.getReview.mockResolvedValue(reviewPage());
   client.getAssignmentTargets.mockResolvedValue({ targets: [] });
+  client.resolveAutomaticReview.mockResolvedValue(automaticReviewResult());
   client.getManifest.mockResolvedValue(manifestForApproval(100));
 });
 
@@ -290,6 +327,347 @@ describe("ActMigrationPage", () => {
         expect.objectContaining({ state: "needs_review" }),
       ),
     );
+  });
+
+  it("offers automatic cleanup only for an organized run with review-required outcomes", async () => {
+    client.getLatestRun.mockResolvedValue({ run: readyRun() });
+
+    const first = render(<ActMigrationPage />);
+
+    expect(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/links unique exact matches/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/creates new records.*remaining ambiguity/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/uses ACT values/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/unsupported.*skipped.*archive/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/uncertain.*manual review/i)).toBeInTheDocument();
+
+    first.unmount();
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ reviewRequiredCount: 0 }),
+    });
+    render(<ActMigrationPage />);
+
+    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(2));
+    expect(
+      screen.queryByRole("button", { name: "Resolve obvious issues" }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ phase: "extract_complete", reviewRequiredCount: 3 }),
+    });
+    render(<ActMigrationPage />);
+
+    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(3));
+    expect(
+      screen.queryByRole("button", { name: "Resolve obvious issues" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("runs automatic cleanup for a reviewable complete-with-issues run", async () => {
+    const run = readyRun({
+      phase: "complete_with_issues",
+      reviewRequiredCount: 2,
+      canReview: true,
+      canApplySafe: true,
+    });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+
+    await waitFor(() =>
+      expect(client.resolveAutomaticReview).toHaveBeenCalledWith(
+        run.runId,
+        expect.objectContaining({ expectedManifestDigest: digest }),
+      ),
+    );
+  });
+
+  it("continues from complete-with-issues through cleanup approval and safe apply", async () => {
+    const rebuiltDigest = "b".repeat(64);
+    const initial = readyRun({
+      phase: "complete_with_issues",
+      reviewRequiredCount: 7,
+      safeOperationCount: 0,
+      canReview: true,
+      canApplySafe: false,
+    });
+    const rebuilt = readyRun({
+      phase: "complete_with_issues",
+      manifestDigest: rebuiltDigest,
+      reviewRequiredCount: 4,
+      archivedOnlyCount: 4,
+      safeOperationCount: 2,
+      canReview: true,
+      canApplySafe: true,
+    });
+    const completed = readyRun({
+      ...rebuilt,
+      phase: "complete",
+      safeOperationCount: 0,
+      appliedOperationCount: 2,
+      canApplySafe: false,
+    });
+    client.getLatestRun.mockResolvedValue({ run: initial });
+    client.resolveAutomaticReview.mockResolvedValue(automaticReviewResult({
+      manifestDigest: rebuiltDigest,
+      remainingReview: {
+        count: 4,
+        reasons: {
+          ambiguous_match: 2,
+          field_conflict: 1,
+          relationship_unresolved: 1,
+        },
+      },
+      workflow: {
+        ...automaticReviewResult().workflow,
+        safeOperationCount: 2,
+        archivedOnlyCount: 4,
+        reviewRequiredCount: 4,
+      },
+    }));
+    client.getRun
+      .mockResolvedValueOnce({ run: rebuilt })
+      .mockResolvedValueOnce({ run: completed });
+    client.approveSafeDefaults.mockResolvedValue({
+      approvedOperationCount: 2,
+      manifestDigest: rebuiltDigest,
+    });
+    client.applyNext.mockResolvedValue({
+      ...batchResult(2, false, { operationCount: 2, completedCount: 2 }),
+      batch: {
+        ...batchResult(2, false, { operationCount: 2, completedCount: 2 }).batch,
+        manifestDigest: rebuiltDigest,
+      },
+    });
+    const uuid = vi.spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-4000-8000-000000000103");
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+    await screen.findByRole("status", { name: "Automatically resolved" });
+    await waitFor(() => expect(client.getRun).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Import safe records" }));
+    await screen.findByRole("dialog");
+    fireEvent.click(
+      screen.getByRole("button", { name: "Yes, import safe records" }),
+    );
+
+    await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
+    expect(client.resolveAutomaticReview).toHaveBeenCalledWith(initial.runId, {
+      expectedManifestDigest: digest,
+      requestKey: "00000000-0000-4000-8000-000000000103",
+    });
+    expect(client.approveSafeDefaults).toHaveBeenCalledWith(
+      initial.runId,
+      rebuiltDigest,
+      `act-safe-${initial.runId}-${rebuiltDigest}-apply`,
+    );
+    expect(client.applyNext).toHaveBeenCalledWith(initial.runId, {
+      expectedManifestDigest: rebuiltDigest,
+      approvalRequestKey: `act-safe-${initial.runId}-${rebuiltDigest}-apply`,
+      batchSize: 10,
+    });
+    expect(client.resolveAutomaticReview.mock.invocationCallOrder[0])
+      .toBeLessThan(client.approveSafeDefaults.mock.invocationCallOrder[0]!);
+    expect(client.approveSafeDefaults.mock.invocationCallOrder[0])
+      .toBeLessThan(client.applyNext.mock.invocationCallOrder[0]!);
+    expect(client.getManifest).not.toHaveBeenCalled();
+    uuid.mockRestore();
+  });
+
+  it.each([
+    "extracting",
+    "extract_complete",
+    "organizing",
+    "applying",
+    "complete",
+    "failed",
+    "superseded",
+  ] as const)("hides automatic cleanup in the excluded %s phase", async (phase) => {
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ phase, reviewRequiredCount: 3, canReview: true }),
+    });
+
+    render(<ActMigrationPage />);
+
+    await screen.findByLabelText("Act extraction progress");
+    expect(
+      screen.queryByRole("button", { name: "Resolve obvious issues" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("prevents overlapping cleanup clicks and refreshes status and the paged queue", async () => {
+    const run = readyRun({ reviewRequiredCount: 2 });
+    const refreshedRun = readyRun({
+      manifestDigest: "b".repeat(64),
+      reviewRequiredCount: 1,
+      safeOperationCount: 18,
+    });
+    let finishResolution!: (
+      value: ReturnType<typeof automaticReviewResult>,
+    ) => void;
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run: refreshedRun });
+    client.resolveAutomaticReview.mockReturnValue(
+      new Promise((resolve) => {
+        finishResolution = resolve;
+      }),
+    );
+    const resolvedRow = {
+      sourceRecordId: "resolved-source",
+      sourceVersionId: "resolved-version",
+      state: "awaiting_review" as const,
+      issueCodes: ["ambiguous_match"] as const,
+      issues: [{ code: "ambiguous_match" as const }],
+      conflicts: [],
+      candidates: [],
+      canImportStandalone: true,
+      operationKeys: [],
+      streamType: "company",
+      display: { name: "Resolved Candidate" },
+    };
+    const manualRow = {
+      ...resolvedRow,
+      sourceRecordId: "manual-source",
+      sourceVersionId: "manual-version",
+      display: { name: "Manual Candidate" },
+    };
+    client.getReview
+      .mockResolvedValueOnce({ ...reviewPage(), total: 2, rows: [resolvedRow] })
+      .mockResolvedValue({
+        ...reviewPage(),
+        manifestDigest: refreshedRun.manifestDigest,
+        total: 1,
+        rows: [manualRow],
+      });
+    const uuid = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-4000-8000-000000000099");
+
+    render(<ActMigrationPage />);
+    const button = await screen.findByRole("button", {
+      name: "Resolve obvious issues",
+    });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(client.resolveAutomaticReview).toHaveBeenCalledWith(run.runId, {
+        expectedManifestDigest: digest,
+        requestKey: "00000000-0000-4000-8000-000000000099",
+      }),
+    );
+    expect(client.resolveAutomaticReview).toHaveBeenCalledTimes(1);
+    expect(button).toBeDisabled();
+
+    finishResolution(automaticReviewResult());
+
+    await waitFor(() => expect(client.getRun).toHaveBeenCalledWith(run.runId));
+    await waitFor(() => expect(client.getReview).toHaveBeenCalledTimes(2));
+    expect(client.getReview).toHaveBeenLastCalledWith(
+      run.runId,
+      expect.objectContaining({ page: 1, pageSize: 25, state: "needs_review" }),
+    );
+    const summary = await screen.findByRole("status", {
+      name: "Automatically resolved",
+    });
+    expect(summary).toHaveAttribute("aria-live", "polite");
+    expect(within(summary).getByText("2 linked to existing records")).toBeInTheDocument();
+    expect(within(summary).getByText("3 new records")).toBeInTheDocument();
+    expect(within(summary).getByText("4 relationships assigned")).toBeInTheDocument();
+    expect(within(summary).getByText("1 relationship omitted")).toBeInTheDocument();
+    expect(within(summary).getByText("5 ACT values selected")).toBeInTheDocument();
+    expect(within(summary).getByText("6 unsupported records skipped")).toBeInTheDocument();
+    expect(
+      within(summary).getByText(/1 record still needs manual review/i),
+    ).toBeInTheDocument();
+    expect(within(summary).queryByText(/all relationships/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Resolved Candidate")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Import as new record — Manual Candidate",
+      }),
+    ).toBeInTheDocument();
+    uuid.mockRestore();
+  });
+
+  it("reuses one request key when a click retries a transient failure", async () => {
+    const run = readyRun({ reviewRequiredCount: 2 });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run });
+    client.resolveAutomaticReview
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(automaticReviewResult());
+    const uuid = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-4000-8000-000000000100");
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+
+    await waitFor(() => expect(client.resolveAutomaticReview).toHaveBeenCalledTimes(2));
+    expect(client.resolveAutomaticReview.mock.calls).toEqual([
+      [
+        run.runId,
+        {
+          expectedManifestDigest: digest,
+          requestKey: "00000000-0000-4000-8000-000000000100",
+        },
+      ],
+      [
+        run.runId,
+        {
+          expectedManifestDigest: digest,
+          requestKey: "00000000-0000-4000-8000-000000000100",
+        },
+      ],
+    ]);
+    uuid.mockRestore();
+  });
+
+  it("uses a distinct request key for each completed explicit cleanup click", async () => {
+    const run = readyRun({ reviewRequiredCount: 2 });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getRun.mockResolvedValue({ run });
+    client.resolveAutomaticReview.mockResolvedValue(automaticReviewResult());
+    const uuid = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000101")
+      .mockReturnValueOnce("00000000-0000-4000-8000-000000000102");
+
+    render(<ActMigrationPage />);
+    const button = await screen.findByRole("button", {
+      name: "Resolve obvious issues",
+    });
+    fireEvent.click(button);
+    await waitFor(() => expect(client.resolveAutomaticReview).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(client.resolveAutomaticReview).toHaveBeenCalledTimes(2));
+
+    expect(client.resolveAutomaticReview.mock.calls.map((call) => call[1].requestKey)).toEqual([
+      "00000000-0000-4000-8000-000000000101",
+      "00000000-0000-4000-8000-000000000102",
+    ]);
+    uuid.mockRestore();
   });
 
   it("rebuilds an unapplied review manifest without refetching Act", async () => {

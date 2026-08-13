@@ -18,11 +18,13 @@ import {
   getReview,
   getRun,
   organizeRun,
+  resolveAutomaticReview,
   resumeRun,
   startRun,
   supersedeRun,
   type ActPageSize,
   type ActReplacementWorkflowStatus,
+  type AutomaticReviewResolutionSummary,
   type AssignmentTarget,
   type BulkReviewDecisionRequest,
   type BulkReviewSelection,
@@ -84,10 +86,22 @@ type ImportConfirmation = {
   retryFailed: boolean;
 };
 
+type AutomaticReviewResult = {
+  runId: string;
+  manifestDigest: string;
+  summary: AutomaticReviewResolutionSummary;
+};
+
 function isFinished(phase: ActReplacementWorkflowStatus["phase"]) {
   return ["complete", "complete_with_issues", "failed", "superseded"].includes(
     phase,
   );
+}
+
+function canResolveAutomaticReview(
+  phase: ActReplacementWorkflowStatus["phase"],
+) {
+  return ["ready_to_apply", "complete_with_issues"].includes(phase);
 }
 
 function activeStage(
@@ -143,6 +157,8 @@ export default function ActMigrationPage() {
   const [reviewSearch, setReviewSearch] = useState("");
   const [activeIssue, setActiveIssue] = useState<ReviewIssueCode | null>(null);
   const [reviewRefreshKey, setReviewRefreshKey] = useState(0);
+  const [automaticReviewResult, setAutomaticReviewResult] =
+    useState<AutomaticReviewResult | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [assignmentTargetsByRow, setAssignmentTargetsByRow] = useState<
     Record<string, AssignmentTarget[]>
@@ -739,9 +755,74 @@ export default function ActMigrationPage() {
     }
   };
 
+  const resolveObviousIssues = async () => {
+    if (
+      !run?.manifestDigest ||
+      !canResolveAutomaticReview(run.phase) ||
+      run.reviewRequiredCount <= 0 ||
+      !run.canReview ||
+      !beginBusy("review")
+    ) {
+      return;
+    }
+    const runId = run.runId;
+    const expectedManifestDigest = run.manifestDigest;
+    const requestKey = crypto.randomUUID();
+    setError(null);
+    try {
+      const request = () =>
+        resolveAutomaticReview(runId, {
+          expectedManifestDigest,
+          requestKey,
+        });
+      let result: Awaited<ReturnType<typeof resolveAutomaticReview>>;
+      try {
+        result = await request();
+      } catch (caught) {
+        if (!(caught instanceof TypeError)) throw caught;
+        result = await request();
+      }
+      setAutomaticReviewResult({
+        runId,
+        manifestDigest: result.manifestDigest,
+        summary: result.summary,
+      });
+      setRun((current) =>
+        current?.runId === runId
+          ? {
+              ...current,
+              ...result.workflow,
+              manifestDigest: result.manifestDigest,
+            }
+          : current,
+      );
+      await refreshRun(runId);
+      setReviewRefreshKey((current) => current + 1);
+    } catch (caught) {
+      setError(
+        staleReviewMessage(caught, "Could not resolve the obvious review issues"),
+      );
+    } finally {
+      endBusy();
+    }
+  };
+
   const stage = activeStage(run, busy === "apply");
   const canStart = !run || isFinished(run.phase);
   const showReview = Boolean(run?.manifestDigest);
+  const showAutomaticReviewAction = Boolean(
+    run &&
+      canResolveAutomaticReview(run.phase) &&
+      run.manifestDigest &&
+      run.reviewRequiredCount > 0 &&
+      run.canReview,
+  );
+  const visibleAutomaticReviewResult =
+    automaticReviewResult &&
+    automaticReviewResult.runId === run?.runId &&
+    automaticReviewResult.manifestDigest === run?.manifestDigest
+      ? automaticReviewResult
+      : null;
   const showSummary = Boolean(
     run?.manifestDigest &&
     (stage >= 3 ||
@@ -826,6 +907,57 @@ export default function ActMigrationPage() {
                 ? "Auto-review fetched archive"
                 : "Auto-review saved archive"}
           </button>
+        </section>
+      )}
+
+      {showAutomaticReviewAction && (
+        <section className="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-6">
+          <h2 className="text-xl font-semibold text-blue-950">
+            Resolve the clear review choices
+          </h2>
+          <p className="mt-2 text-sm text-blue-900">
+            This links unique exact matches, creates new records for remaining
+            ambiguity, and uses ACT values for clear field conflicts. Unsupported
+            records are skipped and kept in the archive. Uncertain cases stay
+            available for manual review.
+          </p>
+          <button
+            type="button"
+            disabled={busy !== null}
+            onClick={() => void resolveObviousIssues()}
+            className="mt-4 w-full rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            Resolve obvious issues
+          </button>
+        </section>
+      )}
+
+      {visibleAutomaticReviewResult && (
+        <section
+          role="status"
+          aria-live="polite"
+          aria-labelledby="automatic-review-result-heading"
+          className="mt-6 rounded-xl border border-green-200 bg-green-50 p-6"
+        >
+          <h2
+            id="automatic-review-result-heading"
+            className="text-xl font-semibold text-green-950"
+          >
+            Automatically resolved
+          </h2>
+          <ul className="mt-3 grid gap-2 text-sm text-green-900 sm:grid-cols-2">
+            <li>{visibleAutomaticReviewResult.summary.linkedExisting.toLocaleString()} linked to existing records</li>
+            <li>{visibleAutomaticReviewResult.summary.importedNew.toLocaleString()} new records</li>
+            <li>{visibleAutomaticReviewResult.summary.relationshipsAssigned.toLocaleString()} relationships assigned</li>
+            <li>{visibleAutomaticReviewResult.summary.relationshipsOmitted.toLocaleString()} {visibleAutomaticReviewResult.summary.relationshipsOmitted === 1 ? "relationship" : "relationships"} omitted</li>
+            <li>{visibleAutomaticReviewResult.summary.actValuesSelected.toLocaleString()} ACT values selected</li>
+            <li>{visibleAutomaticReviewResult.summary.unsupportedIgnored.toLocaleString()} unsupported records skipped</li>
+          </ul>
+          {visibleAutomaticReviewResult.summary.manualReview > 0 && (
+            <p className="mt-3 text-sm font-medium text-amber-900">
+              {visibleAutomaticReviewResult.summary.manualReview.toLocaleString()} {visibleAutomaticReviewResult.summary.manualReview === 1 ? "record still needs" : "records still need"} manual review. Use the review controls below for required or conflicting relationships and other uncertain cases.
+            </p>
+          )}
         </section>
       )}
 

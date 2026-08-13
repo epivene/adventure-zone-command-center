@@ -39,14 +39,15 @@ const pageSizeSchema = z.union([
   z.literal(100),
   z.literal(200),
 ]);
-const reviewIssueCodeSchema = z.enum([
+const reviewIssueCodes = [
   "ambiguous_match",
   "field_conflict",
   "relationship_unresolved",
   "unassigned",
   "unsupported_record",
   "unsupported_field",
-]);
+] as const;
+const reviewIssueCodeSchema = z.enum(reviewIssueCodes);
 const reviewStateSchema = z.enum([
   "ready",
   "already_present",
@@ -109,6 +110,12 @@ const safeApprovalSchema = z
   .object({
     expectedManifestDigest: digestSchema,
     requestKey: z.string().trim().min(1),
+  })
+  .strict();
+const automaticReviewSchema = z
+  .object({
+    expectedManifestDigest: digestSchema,
+    requestKey: requestKeySchema,
   })
   .strict();
 const bulkSelectionSchema = z
@@ -555,6 +562,50 @@ function safeAutomaticApproval(result: {
   };
 }
 
+function safeAutomaticReviewResult(
+  result: Awaited<ReturnType<ReviewCommandService["resolveAutomatically"]>>,
+  remaining: Awaited<ReturnType<typeof readReview>>,
+  workflow: ImportWorkflow,
+) {
+  const reasons: Partial<Record<(typeof reviewIssueCodes)[number], number>> = {};
+  for (const code of reviewIssueCodes) {
+    const count = remaining.filteredIssueCounts[code];
+    if (typeof count === "number" && Number.isSafeInteger(count) && count > 0)
+      reasons[code] = count;
+  }
+  return {
+    summary: {
+      linkedExisting: result.summary.linkedExisting,
+      importedNew: result.summary.importedNew,
+      relationshipsAssigned: result.summary.relationshipsAssigned,
+      relationshipsOmitted: result.summary.relationshipsOmitted,
+      actValuesSelected: result.summary.actValuesSelected,
+      unsupportedIgnored: result.summary.unsupportedIgnored,
+      manualReview: result.summary.manualReview,
+      decisionsCreatedOrReplayed: result.summary.decisionsCreatedOrReplayed,
+    },
+    remainingReview: {
+      count: remaining.total,
+      reasons,
+    },
+    manifestDigest: result.manifestDigest,
+    workflow: {
+      safeOperationCount: workflow.safeOperationCount,
+      autoResolvedCount: workflow.autoResolvedCount,
+      archivedOnlyCount: workflow.archivedOnlyCount,
+      reviewRequiredCount: workflow.reviewRequiredCount,
+      appliedOperationCount: workflow.appliedOperationCount,
+      alreadyPresentOperationCount: workflow.alreadyPresentOperationCount,
+      blockedOperationCount: workflow.blockedOperationCount,
+      failedOperationCount: workflow.failedOperationCount,
+      nextApplyCursor: workflow.nextApplyCursor,
+      canOrganize: workflow.canOrganize,
+      canReview: workflow.canReview,
+      canApplySafe: workflow.canApplySafe,
+    },
+  };
+}
+
 function safeReviewPage(page: Awaited<ReturnType<typeof readReview>>) {
   return {
     page: page.page,
@@ -994,6 +1045,53 @@ export function createActReplacementRouter(
           issue: filters.data.issue,
         });
         res.json(safeReviewPage(result));
+      } catch (error) {
+        handleRouteError(error, res);
+      }
+    },
+  );
+
+  router.post(
+    "/migration/act-replacement/runs/:runId/automatic-review",
+    async (req, res) => {
+      const runId = runIdSchema.safeParse(req.params.runId);
+      if (!runId.success) return runNotFound(res);
+      const body = automaticReviewSchema.safeParse(req.body);
+      if (!body.success) return invalidRequest(res);
+      const context = serverContext(dependencies, res);
+      if (!context) return;
+      try {
+        const owned = await dependencies.store.findOwnedRun({
+          runId: runId.data,
+          ...context,
+        });
+        if (!owned) return runNotFound(res);
+        const review = requireReview(res);
+        if (!review) return;
+        const result = await review.commands.resolveAutomatically({
+          runId: owned.runId,
+          expectedManifestDigest: body.data.expectedManifestDigest,
+          requestKey: body.data.requestKey,
+          requestedBy: context.requestedBy,
+        });
+        const remaining = await readReview(review.reader, {
+          runId: owned.runId,
+          state: "needs_review",
+          page: 1,
+          pageSize: 25,
+        });
+        const workflow = await review.workflow.summarize(owned.runId);
+        const published = await review.reader.getManifest(owned.runId);
+        if (
+          !digestSchema.safeParse(result.manifestDigest).success ||
+          remaining.manifestDigest !== result.manifestDigest ||
+          workflow.manifestDigest !== result.manifestDigest ||
+          published?.digest !== result.manifestDigest
+        ) {
+          res.status(409).json({ code: "review_generation_changed" });
+          return;
+        }
+        res.json(safeAutomaticReviewResult(result, remaining, workflow));
       } catch (error) {
         handleRouteError(error, res);
       }

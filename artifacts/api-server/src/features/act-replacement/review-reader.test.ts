@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { InMemoryReviewReader, projectReviewRow, readReview, safeSource } from "./review-reader";
+import {
+  assignmentTargetLabelsEqual,
+  InMemoryReviewReader,
+  projectReviewRow,
+  readReview,
+  safeSource,
+} from "./review-reader";
 import type { ActOrganizeManifest } from "./manifest-builder";
 
 const manifest: ActOrganizeManifest = { digest: "digest-1", operations: [], diagnostics: [], outcomes: [
@@ -9,6 +15,30 @@ const manifest: ActOrganizeManifest = { digest: "digest-1", operations: [], diag
   { sourceRecordId: "c", sourceVersionId: "v3", state: "unsupported", issues: [{ code: "unsupported_record" }], candidates: [], match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [] },
 ] };
 describe("Act review reader", () => {
+  it("counts filtered reasons from the same needs-review outcomes as total", async () => {
+    const reader = new InMemoryReviewReader();
+    reader.seed("filtered-reasons", manifest);
+
+    const page = await readReview(reader, {
+      runId: "filtered-reasons",
+      state: "needs_review",
+      pageSize: 25,
+    });
+
+    expect(page.total).toBe(2);
+    expect(page.filteredIssueCounts).toEqual({
+      unassigned: 1,
+      unsupported_record: 1,
+    });
+    expect(page.summary.diagnosticCounts).toEqual({ unsupported_field: 1 });
+  });
+
+  it("compares normalized assignment labels exactly without accepting substrings", () => {
+    expect(assignmentTargetLabelsEqual("  Natalie   Andelin ", "natalie andelin")).toBe(true);
+    expect(assignmentTargetLabelsEqual("Natalie Andelin", "Natalie Andelin Smith")).toBe(false);
+    expect(assignmentTargetLabelsEqual("Natalie", "Natalie Andelin")).toBe(false);
+  });
+
   it("projects a safe context recommendation without exposing raw evidence labels", () => {
     const row = projectReviewRow({
       outcome: {
@@ -237,6 +267,7 @@ describe("Act review reader", () => {
     const expected = {
       rows: [], page: 1, pageSize: 25, total: 0, manifestDigest: "digest-bounded",
       summary: { decisionRequired: 0, archivedOnly: 0, issueCounts: {}, diagnosticCounts: {} },
+      filteredIssueCounts: {},
     };
     const reader = {
       async getManifest() { throw new Error("full manifest must not be loaded"); },

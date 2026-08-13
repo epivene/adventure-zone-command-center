@@ -1,12 +1,18 @@
 import { sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { approvalClosureFromDurableRow, approvalManifestFromRows, approvalOperationSelection, approvalOutcomeSelection, DrizzleActReviewCommandStore, DrizzleActReviewReader, DrizzleProductionOrganizerStore, lockBulkSourceRowsQuery, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, operationSemanticsMatch, projectActReviewDisplay, staleNonterminalOperationPredicate } from "./review-sql-adapter";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { approvalClosureFromDurableRow, approvalManifestFromRows, approvalOperationSelection, approvalOutcomeSelection, automaticReviewSummaryFromDecisions, automaticTargetExactMatchQuery, DrizzleActReviewCommandStore, DrizzleActReviewReader, DrizzleProductionOrganizerStore, lockAutomaticReviewSourceRowsQuery, lockBulkSourceRowsQuery, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, operationSemanticsMatch, projectActReviewDisplay, staleNonterminalOperationPredicate } from "./review-sql-adapter";
 import { ProductionActOrganizer, type ProductionOrganizerStore } from "./production-organizer";
-import { individualDecisionRequestFingerprint } from "./review-command-service";
+import { automaticReviewRequestFingerprint, individualDecisionRequestFingerprint } from "./review-command-service";
+import { digestLegacyManifestRows } from "./manifest-digest";
 import { fingerprintSourceContent } from "./source-fingerprint";
 import { actReplacementApprovalRequests, actReplacementApplyOperations, actReplacementOutcomes, actReplacementReviewDecisions, actReplacementRuns, actSourceRecords } from "@workspace/db/schema";
+import { logger } from "@/lib/logger";
 
+beforeEach(() => {
+  vi.spyOn(logger, "info").mockImplementation(() => undefined);
+  vi.spyOn(logger, "error").mockImplementation(() => undefined);
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe("durable review adapter projections", () => {
@@ -31,6 +37,181 @@ describe("durable review adapter projections", () => {
       operationKeys: [],
     })),
   });
+  const pendingAutomaticRecoveryHarness = () => {
+    const input = {
+      expectedManifestDigest: "digest-before",
+      owner: "owner",
+      requestKey: "automatic-lease",
+      policyVersion: "2026-08-12",
+    };
+    const decision = {
+      id: "decision-1", sourceRecordId: "unsupported", sourceVersionId: "v-unsupported",
+      scope: "unsupported_record" as const, decision: "ignore_source" as const,
+      requestKey: "automatic-lease:1", requestFingerprint: "individual-fingerprint",
+      fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null,
+      reviewedSourceValue: null, reviewedSourceValueFingerprint: null,
+      reviewedLocalValue: null, reviewedLocalValueFingerprint: null,
+      decidedBy: "owner", active: true, supersededAt: null, supersededBy: null, createdAt: new Date(),
+    };
+    const request: Record<string, unknown> = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [decision],
+      }),
+      requestedBy: "owner", decisionIds: [decision.id], manifestDigest: "__pending_review_rebuild__",
+      expectedManifestDigest: input.expectedManifestDigest, reviewedOperationIds: [], rebuildState: "pending",
+      rebuildToken: null, rebuildLeaseExpiresAt: null,
+      automaticSummary: automaticReviewSummaryFromDecisions([decision as never]),
+    };
+    let cleanupAttempts = 0;
+    let renewals = 0;
+    let runDigest = "digest-before";
+    let runDigestVersion: string | undefined;
+    const execute = async (query: unknown) => {
+      const rendered = new PgDialect().sqlToQuery(query as never);
+      if (rendered.sql.includes("select expected_manifest_digest")) return { rows: [{
+        expectedManifestDigest: request.expectedManifestDigest,
+        automaticSummary: request.automaticSummary,
+        rebuildState: request.rebuildState,
+        rebuildToken: request.rebuildToken,
+        rebuildLeaseExpiresAt: request.rebuildLeaseExpiresAt,
+      }] };
+      if (rendered.sql.includes("select request_fingerprint")) return { rows: [request] };
+      const token = rendered.params.find((value) => typeof value === "string" && /^[0-9a-f-]{36}$/.test(value)) as string | undefined;
+      if (rendered.sql.includes("set rebuild_state") && rendered.sql.includes("rebuild_token = null")
+        && !rendered.sql.includes("set manifest_digest")) {
+        cleanupAttempts += 1;
+        if (token && request.rebuildToken === token) {
+          Object.assign(request, { rebuildState: "pending", rebuildToken: null, rebuildLeaseExpiresAt: null });
+          return { rows: [{ id: "request" }] };
+        }
+        return { rows: [] };
+      }
+      if (rendered.sql.includes("set rebuild_lease_expires_at") && !rendered.sql.includes("set rebuild_state")) {
+        renewals += 1;
+        if (token && request.rebuildToken === token) {
+          request.rebuildLeaseExpiresAt = rendered.params.find((value) => value instanceof Date) ?? null;
+          return { rows: [{ id: "request" }] };
+        }
+        return { rows: [] };
+      }
+      if (rendered.sql.includes("set manifest_digest")) {
+        if (!token || request.rebuildToken === token) {
+          Object.assign(request, {
+            manifestDigest: "digest-after", reviewedOperationIds: [], rebuildState: "complete",
+            rebuildToken: null, rebuildLeaseExpiresAt: null,
+          });
+          return { rows: [{ id: "request" }] };
+        }
+        return { rows: [] };
+      }
+      if (rendered.sql.includes("set rebuild_state") && rendered.sql.includes("rebuild_token =")) {
+        Object.assign(request, {
+          rebuildState: "rebuilding",
+          rebuildToken: token ?? null,
+          rebuildLeaseExpiresAt: rendered.params.find((value) => value instanceof Date) ?? null,
+        });
+        return { rows: [{ id: "request" }] };
+      }
+      return { rows: [] };
+    };
+    const rowsFor = (table: unknown) => table === actReplacementRuns
+      ? [{ summary: { manifestDigest: runDigest }, manifestDigestVersion: runDigestVersion, phase: "ready_to_apply" }]
+      : table === actReplacementReviewDecisions ? [decision] : [request];
+    const select = () => {
+      let table: unknown;
+      const chain = {
+        from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+        for: async () => rowsFor(table), then: (resolve: (rows: unknown[]) => unknown) => resolve(rowsFor(table)),
+      };
+      return chain;
+    };
+    const transaction = { select, execute };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      select,
+      execute,
+    } as never;
+    return {
+      input, request, database,
+      cleanupAttempts: () => cleanupAttempts,
+      renewals: () => renewals,
+      publishRunDigest: (digest: string) => {
+        runDigest = digest;
+        runDigestVersion = "canonical-json-v1";
+      },
+    };
+  };
+  const postRebuildRecoveryHarness = () => {
+    const input = {
+      expectedManifestDigest: "a".repeat(64), owner: "owner", requestKey: "post-rebuild", policyVersion: "2026-08-12",
+    };
+    const decision = {
+      id: "decision-1", sourceRecordId: "unsupported", sourceVersionId: "v-unsupported",
+      scope: "unsupported_record" as const, decision: "ignore_source" as const,
+      requestKey: "post-rebuild:1", requestFingerprint: "individual-fingerprint",
+      fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null,
+      reviewedSourceValue: null, reviewedSourceValueFingerprint: null,
+      reviewedLocalValue: null, reviewedLocalValueFingerprint: null,
+      decidedBy: "owner", active: true, supersededAt: null, supersededBy: null, createdAt: new Date(),
+    };
+    const manifest = manifestFromRows({
+      operations: [],
+      outcomes: [{
+        sourceRecordId: decision.sourceRecordId, sourceVersionId: decision.sourceVersionId, state: "ignored",
+        issues: [{ code: "unsupported_record", reason: "normalization_failed" }], candidates: [],
+        match: null, mappingWarnings: [], unsupportedFieldPaths: [],
+      }],
+    });
+    const request = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [decision],
+      }),
+      requestedBy: "owner", decisionIds: [decision.id], manifestDigest: "__pending_review_rebuild__",
+      expectedManifestDigest: input.expectedManifestDigest, reviewedOperationIds: [], rebuildState: "pending",
+      rebuildToken: null, rebuildLeaseExpiresAt: null,
+      automaticSummary: automaticReviewSummaryFromDecisions([decision as never]),
+    };
+    let sourceLocks = 0;
+    let finalizations = 0;
+    const rowsFor = (table: unknown) => table === actReplacementRuns
+      ? [{ summary: { manifestDigest: manifest.digest }, manifestDigestVersion: "canonical-json-v1", phase: "ready_to_apply" }]
+      : table === actReplacementReviewDecisions ? [decision] : [request];
+    const transaction = {
+      select: () => {
+        let table: unknown;
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+          for: async () => rowsFor(table), then: (resolve: (rows: unknown[]) => unknown) => resolve(rowsFor(table)),
+        };
+        return chain;
+      },
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("select expected_manifest_digest")) return { rows: [{
+          expectedManifestDigest: request.expectedManifestDigest, automaticSummary: request.automaticSummary,
+          rebuildState: request.rebuildState, rebuildToken: request.rebuildToken,
+          rebuildLeaseExpiresAt: request.rebuildLeaseExpiresAt,
+        }] };
+        if (rendered.includes("act_source_records") && rendered.includes("for update")) {
+          sourceLocks += 1;
+          return { rows: [{ sourceRecordId: decision.sourceRecordId, sourceVersionId: decision.sourceVersionId, streamType: "contact" }] };
+        }
+        if (rendered.includes("set manifest_digest")) {
+          finalizations += 1;
+          return { rows: [{ id: "request" }] };
+        }
+        return { rows: [] };
+      },
+    };
+    return {
+      input, decision, manifest,
+      database: { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction) } as never,
+      sourceLocks: () => sourceLocks,
+      finalizations: () => finalizations,
+    };
+  };
   it("bounds approval manifest reads and preserves operation status", () => {
     expect(Object.keys(approvalOutcomeSelection).sort()).toEqual([
       "sourceRecordId",
@@ -121,7 +302,7 @@ describe("durable review adapter projections", () => {
       safeByDefault: true,
       status: "pending",
     };
-    const request = {
+    const request: Record<string, unknown> = {
       selectedOperationIds: [operation.operationKey],
       dependencyClosedOperationIds: [operation.operationKey],
       selectedCount: 1,
@@ -214,6 +395,89 @@ describe("durable review adapter projections", () => {
       approvalModeVersion: 1,
     });
   });
+
+  it("publishes manifest rows, phase, digest, and digest version in the same organizer transaction", async () => {
+    let published: Record<string, unknown> | undefined;
+    let transactionCommitted = false;
+    const transaction = {
+      select: () => {
+        const chain = {
+          from: () => chain, where: () => chain, limit: () => chain,
+          for: async () => [{ id: "run" }],
+        };
+        return chain;
+      },
+      delete: () => ({ where: async () => {} }),
+      update: () => ({
+        set: (values: Record<string, unknown>) => ({
+          where: () => ({ returning: async () => {
+            expect(transactionCommitted).toBe(false);
+            published = values;
+            return [{ id: "run" }];
+          } }),
+        }),
+      }),
+    };
+    const database = {
+      transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+        const result = await callback(transaction);
+        transactionCommitted = true;
+        return result;
+      },
+    } as never;
+
+    await new DrizzleProductionOrganizerStore(database, { sourceDatabaseKey: "act-db" })
+      .persistManifest("run", "claim-token", {
+        digest: "a".repeat(64), operations: [], outcomes: [], diagnostics: [],
+      });
+
+    expect(transactionCommitted).toBe(true);
+    expect(published).toMatchObject({
+      phase: "ready_to_apply",
+      manifestDigestVersion: "canonical-json-v1",
+      organizerToken: null,
+      organizerLeaseExpiresAt: null,
+    });
+  });
+
+  it("scopes manifest publication reads to both the source database and owner", async () => {
+    let selectedTable: unknown;
+    let runPredicate: unknown;
+    const database = {
+      select: () => {
+        const rows = () =>
+          selectedTable === actReplacementRuns
+            ? [{ summary: { manifestDigest: "digest-owned" } }]
+            : [];
+        const chain = {
+          from: (table: unknown) => {
+            selectedTable = table;
+            return chain;
+          },
+          where: (predicate: unknown) => {
+            if (selectedTable === actReplacementRuns) runPredicate = predicate;
+            return chain;
+          },
+          limit: async () => rows(),
+          then: (resolve: (value: unknown[]) => unknown) => resolve(rows()),
+        };
+        return chain;
+      },
+    } as never;
+
+    await expect(
+      new DrizzleActReviewReader(database, {
+        sourceDatabaseKey: "act-db",
+        requestedBy: "owner",
+      }).getManifest("run"),
+    ).resolves.toMatchObject({ operations: [], outcomes: [] });
+
+    const rendered = new PgDialect().sqlToQuery(runPredicate as never);
+    expect(rendered.params).toEqual(
+      expect.arrayContaining(["run", "act-db", "owner"]),
+    );
+  });
+
   it("aggregates globally, pages in SQL, and loads payloads only for page sources", async () => {
     const queries: unknown[] = [];
     const responses = [
@@ -230,7 +494,7 @@ describe("durable review adapter projections", () => {
         },
         diagnosticCounts: { unsupported_field: 50 },
       }],
-      [{ total: 1 }],
+      [{ total: 1, filteredIssueCounts: { field_conflict: 1 } }],
       [{
         sourceRecordId: "source-on-page",
         sourceVersionId: "version-on-page",
@@ -268,7 +532,10 @@ describe("durable review adapter projections", () => {
       },
     } as never;
 
-    const page = await new DrizzleActReviewReader(database, { sourceDatabaseKey: "act-db" })
+    const page = await new DrizzleActReviewReader(database, {
+      sourceDatabaseKey: "act-db",
+      requestedBy: "owner",
+    })
       .readReviewPage({ runId: "run", issue: "field_conflict", page: 2, pageSize: 25 });
 
     expect(page).toMatchObject({
@@ -279,6 +546,7 @@ describe("durable review adapter projections", () => {
         archivedOnly: 5,
         diagnosticCounts: { unsupported_field: 50 },
       },
+      filteredIssueCounts: { field_conflict: 1 },
       rows: [{
         sourceRecordId: "source-on-page",
         display: { Name: "Acme" },
@@ -307,10 +575,13 @@ describe("durable review adapter projections", () => {
     expect(rendered[0]?.sql).toContain('0::int as "decisionRequired"');
     expect(rendered[0]?.sql).toContain('as "archivedOnly"');
     expect(rendered[0]?.params).toEqual(expect.arrayContaining(["awaiting_review", "unassigned", "unsupported"]));
+    expect(rendered[0]?.params).toContain("owner");
     expect(rendered[1]?.sql).toContain("count(*)");
+    expect(rendered[1]?.params).toContain("owner");
     expect(rendered[2]?.sql).toContain("limit");
     expect(rendered[2]?.sql).toContain("offset");
     expect(rendered[2]?.params).toEqual(expect.arrayContaining([25, 25]));
+    expect(rendered[2]?.params).toContain("owner");
     expect(rendered[3]?.params).toContain("source-on-page");
     expect(rendered[3]?.params).not.toContain("source-off-page");
   });
@@ -319,7 +590,7 @@ describe("durable review adapter projections", () => {
     const queries: unknown[] = [];
     const responses = [
       [{ manifestDigest: "digest-search", decisionRequired: 0, archivedOnly: 0, issueCounts: {}, diagnosticCounts: {} }],
-      [{ total: 0 }],
+      [{ total: 0, filteredIssueCounts: {} }],
       [],
     ];
     const database = {
@@ -329,7 +600,10 @@ describe("durable review adapter projections", () => {
       },
     } as never;
 
-    await new DrizzleActReviewReader(database, { sourceDatabaseKey: "act-db" })
+    await new DrizzleActReviewReader(database, {
+      sourceDatabaseKey: "act-db",
+      requestedBy: "owner",
+    })
       .readReviewPage({ runId: "run", search: "hidden-token", pageSize: 25 });
 
     const countQuery = new PgDialect().sqlToQuery(queries[1] as never);
@@ -352,7 +626,10 @@ describe("durable review adapter projections", () => {
         return { rows: [{ id: "contact-1", entityType: "contact", label: "Taako Taaco", detail: "taako@example.com" }] };
       },
     } as never;
-    const reader = new DrizzleActReviewReader(database, { sourceDatabaseKey: "act-db" });
+    const reader = new DrizzleActReviewReader(database, {
+      sourceDatabaseKey: "act-db",
+      requestedBy: "owner",
+    });
 
     await expect(reader.listAssignmentTargets({ search: "  TAAKO   TAACO ", entityType: "contact" }))
       .resolves.toEqual([{ id: "contact-1", entityType: "contact", label: "Taako Taaco", detail: "taako@example.com" }]);
@@ -562,8 +839,10 @@ describe("durable review adapter projections", () => {
   it("commits a review mutation before starting the memory-heavy manifest rebuild", async () => {
     const events: string[] = [];
     const transaction = {};
+    let transactionOptions: unknown;
     const database = {
-      transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+      transaction: async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => {
+        transactionOptions = options;
         events.push("transaction:start");
         const result = await callback(transaction);
         events.push("transaction:commit");
@@ -790,6 +1069,890 @@ describe("durable review adapter projections", () => {
     ]);
   });
 
+  it("persists heterogeneous automatic decisions from one protected transaction and rebuilds once", async () => {
+    const events: string[] = [];
+    let selectNumber = 0;
+    let transactionOptions: unknown;
+    const transaction = {
+      select: () => {
+        selectNumber += 1;
+        const currentSelect = selectNumber;
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: () => chain,
+          for: async (mode: string) => {
+            events.push(`run:${mode}`);
+            return [{ summary: { manifestDigest: "digest-1" } }];
+          },
+          then: (resolve: (rows: unknown[]) => unknown) => {
+            events.push(currentSelect === 2 ? "request:check" : "decision-key:check");
+            return resolve([]);
+          },
+        };
+        return chain;
+      },
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("act_replacement_bulk_review_requests")) return { rows: [] };
+        if (!rendered.includes("act_source_records")) {
+          events.push("targets:search");
+          return { rows: [] };
+        }
+        events.push("sources:lock");
+        return { rows: [
+          { sourceRecordId: "ambiguous", sourceVersionId: "v-ambiguous", streamType: "contact" },
+          { sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", streamType: "custom" },
+        ] };
+      },
+      insert: () => ({ values: async () => { events.push("request:save"); } }),
+    };
+    const database = {
+      transaction: async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => {
+        transactionOptions = options;
+        events.push("transaction:start");
+        const result = await callback(transaction);
+        events.push("transaction:commit");
+        return result;
+      },
+      update: () => ({
+        set: () => ({ where: async () => { events.push("request:update"); } }),
+      }),
+      execute: async () => { events.push("request:update"); return { rows: [{ id: "request" }] }; },
+    } as never;
+    const manifest = {
+      digest: "digest-1",
+      diagnostics: [],
+      operations: [],
+      outcomes: [
+        {
+          sourceRecordId: "ambiguous", sourceVersionId: "v-ambiguous", state: "awaiting_review" as const,
+          issues: [{ code: "ambiguous_match", reason: "multiple_candidates" }], candidates: [],
+          match: { kind: "ambiguous", candidateIds: [] }, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+        },
+        {
+          sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", state: "unsupported" as const,
+          issues: [{ code: "unsupported_record", reason: "normalization_failed" }], candidates: [],
+          match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+        },
+      ],
+    };
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest")
+      .mockImplementation(async () => {
+        events.push("manifest:load");
+        return manifest;
+      });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources")
+      .mockResolvedValue([
+        { sourceRecordId: "ambiguous", sourceVersionId: "v-ambiguous", streamType: "contact", display: { FirstName: "New", LastName: "Person" } },
+        { sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", streamType: "custom", display: { Name: "Legacy row" } },
+      ]);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveDecision")
+      .mockImplementation(async (input) => {
+        events.push(`decision:${input.scope}:${input.decision}`);
+        return { ...input, id: `decision-${input.sourceRecordId}`, active: true };
+      });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockImplementation(async () => {
+        events.push("rebuild");
+        return { status: "ready_to_apply", manifest: { ...manifest, digest: "digest-2" } };
+      });
+
+    const result = await new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", {
+        expectedManifestDigest: "digest-1",
+        owner: "owner",
+        requestKey: "automatic-1",
+        policyVersion: "2026-08-12",
+      });
+
+    expect(result).toMatchObject({
+      manifestDigest: "digest-2",
+      decisions: [
+        { scope: "duplicate_identity", decision: "keep_separate" },
+        { scope: "unsupported_record", decision: "ignore_source" },
+      ],
+      summary: { importedNew: 1, unsupportedIgnored: 1, decisionsCreatedOrReplayed: 2 },
+    });
+    expect(transactionOptions).toEqual({ isolationLevel: "serializable" });
+    expect(events).toEqual([
+      "transaction:start", "run:update", "request:check", "manifest:load", "sources:lock", "manifest:load", "targets:search",
+      "decision-key:check", "decision:duplicate_identity:keep_separate", "decision:unsupported_record:ignore_source",
+      "request:save", "transaction:commit", "rebuild", "request:update",
+    ]);
+  });
+
+  it("records an all-manual automatic replay without rebuilding an unchanged manifest", async () => {
+    let selectNumber = 0;
+    const transaction = {
+      select: () => {
+        selectNumber += 1;
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: () => chain,
+          for: async () => [{ summary: { manifestDigest: "digest-manual" } }],
+          then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+        };
+        return chain;
+      },
+      execute: async () => ({ rows: [{ sourceRecordId: "required", sourceVersionId: "v-required", streamType: "contact" }] }),
+      insert: () => ({ values: async () => {} }),
+    };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      update: () => ({ set: () => ({ where: async () => {} }) }),
+    } as never;
+    const manifest = {
+      digest: "digest-manual", diagnostics: [], operations: [],
+      outcomes: [{
+        sourceRecordId: "required", sourceVersionId: "v-required", state: "awaiting_review" as const,
+        issues: [{
+          code: "relationship_unresolved", reason: "required_parent_missing", relationshipSlot: "required-parent",
+          expectedParentTypes: ["organization"], canImportStandalone: false,
+        }],
+        candidates: [], match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+      }],
+    };
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(manifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources").mockResolvedValue([
+      { sourceRecordId: "required", sourceVersionId: "v-required", streamType: "contact", display: { FirstName: "Needs", LastName: "Parent" } },
+    ]);
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange");
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", {
+        expectedManifestDigest: "digest-manual", owner: "owner", requestKey: "manual-only", policyVersion: "2026-08-12",
+      })).resolves.toMatchObject({ decisions: [], manifestDigest: "digest-manual", reviewedOperationIds: [] });
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("recovers a pending automatic request from stored decisions without inserting duplicates", async () => {
+    const input = {
+      expectedManifestDigest: "digest-before", owner: "owner", requestKey: "automatic-recovery", policyVersion: "2026-08-12",
+    };
+    const decision = {
+      id: "decision-1", sourceRecordId: "unsupported", sourceVersionId: "v-unsupported",
+      scope: "unsupported_record" as const, decision: "ignore_source" as const,
+      requestKey: "automatic-recovery:1", requestFingerprint: "individual-fingerprint",
+      fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null,
+      reviewedSourceValue: null, reviewedSourceValueFingerprint: null,
+      reviewedLocalValue: null, reviewedLocalValueFingerprint: null,
+      decidedBy: "owner", active: true, supersededAt: null, supersededBy: null, createdAt: new Date(),
+    };
+    const request: Record<string, unknown> = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [decision],
+      }),
+      requestedBy: "owner", decisionIds: [decision.id],
+      manifestDigest: "__pending_review_rebuild__", reviewedOperationIds: [],
+    };
+    const transaction = {
+      select: () => {
+        let table: unknown;
+        const rows = () => table === actReplacementRuns
+          ? [{ summary: { manifestDigest: "digest-before" } }]
+          : table === actReplacementReviewDecisions
+            ? [decision]
+            : [request];
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; },
+          where: () => chain,
+          limit: () => chain,
+          for: async () => rows(),
+          then: (resolve: (value: unknown[]) => unknown) => resolve(rows()),
+        };
+        return chain;
+      },
+      update: () => ({
+        set: (values: Record<string, unknown>) => ({ where: async () => { Object.assign(request, values); } }),
+      }),
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("select expected_manifest_digest")) return { rows: [{
+          expectedManifestDigest: input.expectedManifestDigest, automaticSummary: automaticReviewSummaryFromDecisions([decision as never]),
+          rebuildState: request.rebuildState ?? "pending", rebuildToken: request.rebuildToken ?? null,
+          rebuildLeaseExpiresAt: request.rebuildLeaseExpiresAt ?? null,
+        }] };
+        Object.assign(request, { rebuildState: "rebuilding", rebuildToken: "lease", rebuildLeaseExpiresAt: new Date(Date.now() + 60_000) });
+        return { rows: [] };
+      },
+    };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      update: () => ({
+        set: (values: { manifestDigest: string; reviewedOperationIds: string[] }) => ({
+          where: async () => { Object.assign(request, values); },
+        }),
+      }),
+      execute: async () => {
+        Object.assign(request, { manifestDigest: "digest-after", reviewedOperationIds: [], rebuildState: "complete" });
+        return { rows: [{ id: "request" }] };
+      },
+    } as never;
+    const save = vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveDecision");
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockResolvedValue({
+      status: "ready_to_apply",
+      manifest: { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] },
+    });
+
+    const store = new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never);
+    const first = await store.resolveAutomaticReviewAndRebuild("run", input);
+    const replay = await store.resolveAutomaticReviewAndRebuild("run", input);
+    expect(first).toMatchObject({
+        decisions: [{ id: "decision-1" }], manifestDigest: "digest-after",
+        summary: { unsupportedIgnored: 1, decisionsCreatedOrReplayed: 1 },
+      });
+    expect(replay).toEqual(first);
+    expect(save).not.toHaveBeenCalled();
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+
+  it("allows only one concurrent pending recovery to rebuild while the other replays", async () => {
+    const input = {
+      expectedManifestDigest: "digest-before", owner: "owner", requestKey: "automatic-concurrent", policyVersion: "2026-08-12",
+    };
+    const decision = {
+      id: "decision-1", sourceRecordId: "unsupported", sourceVersionId: "v-unsupported",
+      scope: "unsupported_record" as const, decision: "ignore_source" as const,
+      requestKey: "automatic-concurrent:1", requestFingerprint: "individual-fingerprint",
+      fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null,
+      reviewedSourceValue: null, reviewedSourceValueFingerprint: null,
+      reviewedLocalValue: null, reviewedLocalValueFingerprint: null,
+      decidedBy: "owner", active: true, supersededAt: null, supersededBy: null, createdAt: new Date(),
+    };
+    const request: Record<string, unknown> = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [decision],
+      }),
+      requestedBy: "owner", decisionIds: [decision.id], manifestDigest: "__pending_review_rebuild__",
+      expectedManifestDigest: input.expectedManifestDigest, reviewedOperationIds: [], rebuildState: "pending",
+      rebuildToken: null, rebuildLeaseExpiresAt: null,
+      automaticSummary: { ...automaticReviewSummaryFromDecisions([decision as never]), manualReview: 0 },
+    };
+    const rowsFor = (table: unknown) => table === actReplacementRuns
+      ? [{ summary: { manifestDigest: "digest-before" } }]
+      : table === actReplacementReviewDecisions ? [decision] : [request];
+    const select = () => {
+      let table: unknown;
+      const chain = {
+        from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+        for: async () => rowsFor(table), then: (resolve: (rows: unknown[]) => unknown) => resolve(rowsFor(table)),
+      };
+      return chain;
+    };
+    const transaction = {
+      select,
+      update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { Object.assign(request, values); } }) }),
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("select expected_manifest_digest")) return { rows: [{
+          expectedManifestDigest: request.expectedManifestDigest, automaticSummary: request.automaticSummary,
+          rebuildState: request.rebuildState, rebuildToken: request.rebuildToken,
+          rebuildLeaseExpiresAt: request.rebuildLeaseExpiresAt,
+        }] };
+        Object.assign(request, { rebuildState: "rebuilding", rebuildToken: "lease", rebuildLeaseExpiresAt: new Date(Date.now() + 60_000) });
+        return { rows: [] };
+      },
+    };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      select,
+      update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { Object.assign(request, values); } }) }),
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("select request_fingerprint")) return { rows: [request] };
+        Object.assign(request, { manifestDigest: "digest-after", reviewedOperationIds: [], rebuildState: "complete" });
+        return { rows: [{ id: "request" }] };
+      },
+    } as never;
+    let releaseRebuild!: () => void;
+    const rebuildGate = new Promise<void>((resolve) => { releaseRebuild = resolve; });
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockImplementation(async () => {
+      await rebuildGate;
+      return { status: "ready_to_apply", manifest: { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] } };
+    });
+    const store = new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never);
+
+    const firstPromise = store.resolveAutomaticReviewAndRebuild("run", input);
+    await vi.waitFor(() => expect(rebuild).toHaveBeenCalledOnce());
+    const secondPromise = store.resolveAutomaticReviewAndRebuild("run", input);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(rebuild).toHaveBeenCalledOnce();
+    releaseRebuild();
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
+    expect(second).toEqual(first);
+  });
+
+  it("releases its rebuild lease after a known rejection so retry can reacquire immediately", async () => {
+    const harness = pendingAutomaticRecoveryHarness();
+    const failure = Object.assign(new Error("known_rebuild_failure"), { code: "known_rebuild_failure" });
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValue({
+        status: "ready_to_apply",
+        manifest: { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] },
+      });
+    const store = new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never);
+
+    await expect(store.resolveAutomaticReviewAndRebuild("run", harness.input)).rejects.toBe(failure);
+    expect(harness.request).toMatchObject({
+      rebuildState: "pending", rebuildToken: null, rebuildLeaseExpiresAt: null,
+    });
+    await expect(store.resolveAutomaticReviewAndRebuild("run", harness.input)).resolves.toMatchObject({
+      manifestDigest: "digest-after", decisions: [{ id: "decision-1" }],
+    });
+    expect(rebuild).toHaveBeenCalledTimes(2);
+  });
+
+  it("logs only bounded automatic-review recovery metadata on success", async () => {
+    const harness = pendingAutomaticRecoveryHarness();
+    const info = vi.spyOn(logger, "info").mockImplementation(() => undefined);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockResolvedValue({
+        status: "ready_to_apply",
+        manifest: { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] },
+      });
+
+    await new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", harness.input);
+
+    expect(info).toHaveBeenCalledWith({
+      runId: "run",
+      requestKey: "automatic-lease",
+      requestFingerprint: harness.request.requestFingerprint,
+      counts: {
+        linkedExisting: 0,
+        importedNew: 0,
+        relationshipsAssigned: 0,
+        relationshipsOmitted: 0,
+        actValuesSelected: 0,
+        unsupportedIgnored: 1,
+        manualReview: 0,
+        decisionsCreatedOrReplayed: 1,
+        reviewedOperations: 0,
+      },
+      status: "complete",
+    }, "Automatic review completed");
+  });
+
+  it("logs an automatic-review failure code without the raw error", async () => {
+    const harness = pendingAutomaticRecoveryHarness();
+    const failure = Object.assign(new Error("private@example.com 555-0100"), {
+      code: "manifest_rebuild_failed",
+    });
+    const error = vi.spyOn(logger, "error").mockImplementation(() => undefined);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockRejectedValue(failure);
+
+    await expect(new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", harness.input)).rejects.toBe(failure);
+
+    expect(error).toHaveBeenLastCalledWith({
+      runId: "run",
+      requestKey: "automatic-lease",
+      requestFingerprint: harness.request.requestFingerprint,
+      status: "failed",
+      errorCode: "manifest_rebuild_failed",
+    }, "Automatic review failed");
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/private@example|555-0100/);
+  });
+
+  it.each([
+    ["PII-bearing", "private@example.com_555-0100"],
+    ["oversized", "x".repeat(65)],
+  ])("replaces a %s automatic-review error code with a bounded fallback", async (_label, unsafeCode) => {
+    const harness = pendingAutomaticRecoveryHarness();
+    const failure = Object.assign(new Error("private@example.com 555-0100"), {
+      code: unsafeCode,
+    });
+    const error = vi.spyOn(logger, "error").mockImplementation(() => undefined);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockRejectedValue(failure);
+
+    await expect(new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", harness.input)).rejects.toBe(failure);
+
+    expect(error).toHaveBeenLastCalledWith({
+      runId: "run",
+      requestKey: "automatic-lease",
+      requestFingerprint: harness.request.requestFingerprint,
+      status: "failed",
+      errorCode: "automatic_review_failed",
+    }, "Automatic review failed");
+    expect(JSON.stringify(error.mock.calls)).not.toContain(unsafeCode);
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/private@example|555-0100/);
+  });
+
+  it("attempts rejection cleanup with its exact token without clearing a replacement lease", async () => {
+    const harness = pendingAutomaticRecoveryHarness();
+    const replacementExpiry = new Date(Date.now() + 60_000);
+    const failure = Object.assign(new Error("known_rebuild_failure"), { code: "known_rebuild_failure" });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockImplementation(async () => {
+      Object.assign(harness.request, {
+        rebuildState: "rebuilding", rebuildToken: "replacement-token", rebuildLeaseExpiresAt: replacementExpiry,
+      });
+      throw failure;
+    });
+
+    await expect(new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", harness.input)).rejects.toBe(failure);
+    expect(harness.cleanupAttempts()).toBe(1);
+    expect(harness.request).toMatchObject({
+      rebuildState: "rebuilding", rebuildToken: "replacement-token", rebuildLeaseExpiresAt: replacementExpiry,
+    });
+  });
+
+  it("renews an owned rebuild lease so a short-TTL long rebuild cannot start twice", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-12T12:00:00.000Z"));
+    const harness = pendingAutomaticRecoveryHarness();
+    let releaseRebuild!: () => void;
+    const rebuildGate = new Promise<void>((resolve) => { releaseRebuild = resolve; });
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockImplementation(async () => {
+      await rebuildGate;
+      return { status: "ready_to_apply", manifest: { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] } };
+    });
+    const store = new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never);
+    let first: Promise<unknown> | undefined;
+    let second: Promise<unknown> | undefined;
+    try {
+      first = store.resolveAutomaticReviewAndRebuild("run", harness.input);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(rebuild).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(31 * 60_000);
+      second = store.resolveAutomaticReviewAndRebuild("run", harness.input);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(rebuild).toHaveBeenCalledOnce();
+      expect(harness.renewals()).toBeGreaterThan(0);
+    } finally {
+      releaseRebuild();
+      await vi.advanceTimersByTimeAsync(100);
+      await Promise.allSettled([first, second].filter((value): value is Promise<unknown> => Boolean(value)));
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases only its owned lease when rebuild output is missing or not ready", async () => {
+    const invalidResults = [
+      { status: "complete_with_issues", manifest: { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] } },
+      { status: "ready_to_apply" },
+    ];
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange");
+    for (const invalid of invalidResults) {
+      const harness = pendingAutomaticRecoveryHarness();
+      rebuild.mockResolvedValueOnce(invalid as never);
+      await expect(new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+        .resolveAutomaticReviewAndRebuild("run", harness.input)).rejects.toMatchObject({
+          code: "manifest_rebuild_incomplete", status: 409,
+        });
+      expect(harness.cleanupAttempts()).toBe(1);
+      expect(harness.request).toMatchObject({ rebuildState: "pending", rebuildToken: null, rebuildLeaseExpiresAt: null });
+    }
+  });
+
+  it("atomically upgrades a verified zero-decision legacy run to the canonical digest", async () => {
+    const manifest = manifestFromRows({
+      operations: [
+        {
+          operationKey: "organization:required:field:a", sourceRecordId: "required", sourceVersionId: "v-required",
+          targetType: "organization", action: "fill_missing", payload: {}, dependencyOperationKeys: [],
+          requiredForSourceOutcome: true, safeByDefault: true,
+        },
+        {
+          operationKey: "organization:required:field:z", sourceRecordId: "required", sourceVersionId: "v-required",
+          targetType: "organization", action: "fill_missing", payload: {}, dependencyOperationKeys: [],
+          requiredForSourceOutcome: true, safeByDefault: true,
+        },
+      ],
+      outcomes: [{
+        sourceRecordId: "required", sourceVersionId: "v-required", state: "awaiting_review",
+        issues: [{
+          code: "relationship_unresolved", reason: "required_parent_missing", relationshipSlot: "required-parent",
+          expectedParentTypes: ["organization"], canImportStandalone: false,
+        }],
+        candidates: [], match: null, mappingWarnings: [], unsupportedFieldPaths: [],
+      }],
+    });
+    const legacyManifest = {
+      ...manifest,
+      outcomes: manifest.outcomes.map((outcome) => ({
+        ...outcome,
+        operationKeys: ["organization:required:field:z", "organization:required:field:a"],
+      })),
+    };
+    const legacyDigest = digestLegacyManifestRows(legacyManifest.operations, legacyManifest.outcomes);
+    let runUpdate: Record<string, unknown> | undefined;
+    let insertedRequest: Record<string, unknown> | undefined;
+    const transaction = {
+      select: () => {
+        let table: unknown;
+        const rows = () => table === actReplacementRuns
+          ? [{ summary: { manifestDigest: legacyDigest }, manifestDigestVersion: null, phase: "ready_to_apply" }]
+          : [];
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+          for: async () => rows(), then: (resolve: (rows: unknown[]) => unknown) => resolve(rows()),
+        };
+        return chain;
+      },
+      execute: async () => ({ rows: [{ sourceRecordId: "required", sourceVersionId: "v-required", streamType: "contact" }] }),
+      insert: () => ({ values: async (values: Record<string, unknown>) => { insertedRequest = values; } }),
+      update: (table: unknown) => ({
+        set: (values: Record<string, unknown>) => ({
+          where: () => ({ returning: async () => {
+            if (table === actReplacementRuns) runUpdate = values;
+            return [{ id: "run" }];
+          } }),
+        }),
+      }),
+    };
+    const database = { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction) } as never;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(manifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue(manifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeLegacyAutomaticReviewManifest")
+      .mockResolvedValue({ ...legacyManifest, digest: legacyDigest });
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources").mockResolvedValue([{
+      sourceRecordId: "required", sourceVersionId: "v-required", streamType: "contact", display: { FirstName: "Needs", LastName: "Parent" },
+    }]);
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange");
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", {
+        expectedManifestDigest: legacyDigest, owner: "owner", requestKey: "legacy-zero", policyVersion: "2026-08-12",
+      })).resolves.toMatchObject({ decisions: [], manifestDigest: manifest.digest });
+    expect(runUpdate).toMatchObject({ manifestDigestVersion: "canonical-json-v1" });
+    expect(insertedRequest).toMatchObject({ manifestDigest: manifest.digest, decisionIds: [] });
+    expect(legacyManifest.outcomes[0]?.operationKeys).not.toEqual(manifest.outcomes[0]?.operationKeys);
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("verifies a legacy stale marker without publishing a post-decision digest before rebuild", async () => {
+    const preDecision = manifestFromRows({
+      operations: [],
+      outcomes: [{
+        sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", state: "unsupported",
+        issues: [{ code: "unsupported_record", reason: "normalization_failed" }], candidates: [],
+        match: null, mappingWarnings: [], unsupportedFieldPaths: [],
+      }],
+    });
+    const legacyDigest = digestLegacyManifestRows(preDecision.operations, preDecision.outcomes);
+    const input = {
+      expectedManifestDigest: legacyDigest, owner: "owner", requestKey: "legacy-pending", policyVersion: "2026-08-12",
+    };
+    const decision = {
+      id: "decision-1", sourceRecordId: "unsupported", sourceVersionId: "v-unsupported",
+      scope: "unsupported_record" as const, decision: "ignore_source" as const,
+      requestKey: "legacy-pending:1", requestFingerprint: "individual-fingerprint",
+      fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null,
+      reviewedSourceValue: null, reviewedSourceValueFingerprint: null,
+      reviewedLocalValue: null, reviewedLocalValueFingerprint: null,
+      decidedBy: "owner", active: true, supersededAt: null, supersededBy: null, createdAt: new Date(),
+    };
+    const request = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [decision],
+      }),
+      requestedBy: "owner", decisionIds: [decision.id], manifestDigest: "__pending_review_rebuild__",
+      reviewedOperationIds: [], automaticSummary: automaticReviewSummaryFromDecisions([decision as never]),
+      rebuildState: "pending", rebuildToken: null, rebuildLeaseExpiresAt: null,
+    };
+    const run = { summary: { manifestDigest: legacyDigest }, manifestDigestVersion: null, phase: "ready_to_apply" };
+    let sourceLocks = 0;
+    const rowsFor = (table: unknown) => table === actReplacementRuns ? [run]
+      : table === actReplacementReviewDecisions ? [decision] : [request];
+    const transaction = {
+      select: () => {
+        let table: unknown;
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+          for: async () => rowsFor(table), then: (resolve: (rows: unknown[]) => unknown) => resolve(rowsFor(table)),
+        };
+        return chain;
+      },
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("select expected_manifest_digest")) return { rows: [{
+          expectedManifestDigest: null, automaticSummary: request.automaticSummary,
+          rebuildState: request.rebuildState, rebuildToken: request.rebuildToken,
+          rebuildLeaseExpiresAt: request.rebuildLeaseExpiresAt,
+        }] };
+        if (rendered.includes("act_source_records") && rendered.includes("for update")) {
+          sourceLocks += 1;
+          return { rows: [{ sourceRecordId: decision.sourceRecordId, sourceVersionId: decision.sourceVersionId, streamType: "contact" }] };
+        }
+        Object.assign(request, { rebuildState: "rebuilding", rebuildToken: "lease", rebuildLeaseExpiresAt: new Date(Date.now() + 60_000) });
+        return { rows: [{ id: "request" }] };
+      },
+    };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      execute: async () => ({ rows: [{ id: "request" }] }),
+    } as never;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(preDecision);
+    const recompute = vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue(preDecision);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeLegacyAutomaticReviewManifest")
+      .mockResolvedValue({ ...preDecision, digest: legacyDigest });
+    let preRebuildRun: unknown;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockImplementation(async () => {
+      preRebuildRun = { ...run, summary: { ...run.summary } };
+      return { status: "ready_to_apply", manifest: { digest: "f".repeat(64), diagnostics: [], operations: [], outcomes: [] } };
+    });
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", input)).resolves.toMatchObject({ decisions: [{ id: decision.id }] });
+    expect(sourceLocks).toBe(1);
+    expect(recompute).toHaveBeenCalledWith("run", [decision.id]);
+    expect(preRebuildRun).toMatchObject({ summary: { manifestDigest: legacyDigest }, manifestDigestVersion: null });
+  });
+
+  it("finalizes a genuine post-rebuild crash only after locking sources and recomputing with decisions", async () => {
+    const harness = postRebuildRecoveryHarness();
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(harness.manifest);
+    const recompute = vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue(harness.manifest);
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange");
+
+    await expect(new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", harness.input)).resolves.toMatchObject({
+        decisions: [{ id: harness.decision.id }], manifestDigest: harness.manifest.digest,
+      });
+    expect(harness.sourceLocks()).toBe(1);
+    expect(recompute).toHaveBeenCalledWith("run");
+    expect(harness.finalizations()).toBe(1);
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("recovers the same request immediately when the atomic manifest publication commits before the caller observes it", async () => {
+    const harness = pendingAutomaticRecoveryHarness();
+    const publishedManifest = {
+      digest: "digest-after", diagnostics: [], operations: [], outcomes: [],
+    };
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(publishedManifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue(publishedManifest);
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange")
+      .mockImplementationOnce(async () => {
+        harness.publishRunDigest(publishedManifest.digest);
+        throw new Error("connection_lost_after_atomic_manifest_publish");
+      });
+    const store = new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never);
+
+    await expect(store.resolveAutomaticReviewAndRebuild("run", harness.input))
+      .rejects.toThrow("connection_lost_after_atomic_manifest_publish");
+    await expect(store.resolveAutomaticReviewAndRebuild("run", harness.input)).resolves.toMatchObject({
+      manifestDigest: publishedManifest.digest,
+      decisions: [{ id: "decision-1" }],
+    });
+    expect(rebuild).toHaveBeenCalledOnce();
+    expect(harness.cleanupAttempts()).toBe(1);
+    expect(harness.request).toMatchObject({ manifestDigest: publishedManifest.digest, rebuildState: "complete" });
+  });
+
+  it("rejects post-rebuild durable tampering instead of accepting the stale marker", async () => {
+    const harness = postRebuildRecoveryHarness();
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(harness.manifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue({
+      ...harness.manifest, digest: "f".repeat(64),
+    });
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange");
+
+    await expect(new DrizzleActReviewCommandStore(harness.database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", harness.input)).rejects.toMatchObject({ code: "manifest_digest_mismatch", status: 409 });
+    expect(harness.sourceLocks()).toBe(1);
+    expect(harness.finalizations()).toBe(0);
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("finalizes already-rebuilt durable state after a crash boundary without rebuilding again", async () => {
+    const input = {
+      expectedManifestDigest: "digest-before", owner: "owner", requestKey: "automatic-crash", policyVersion: "2026-08-12",
+    };
+    const decision = {
+      id: "decision-1", sourceRecordId: "unsupported", sourceVersionId: "v-unsupported",
+      scope: "unsupported_record" as const, decision: "ignore_source" as const,
+      requestKey: "automatic-crash:1", requestFingerprint: "individual-fingerprint",
+      fieldName: null, relationshipSlot: null, targetEntityType: null, targetEntityId: null,
+      reviewedSourceValue: null, reviewedSourceValueFingerprint: null,
+      reviewedLocalValue: null, reviewedLocalValueFingerprint: null,
+      decidedBy: "owner", active: true, supersededAt: null, supersededBy: null, createdAt: new Date(),
+    };
+    const request: Record<string, unknown> = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [decision],
+      }),
+      requestedBy: "owner", decisionIds: [decision.id], manifestDigest: "__pending_review_rebuild__",
+      expectedManifestDigest: input.expectedManifestDigest, reviewedOperationIds: [], rebuildState: "pending",
+      rebuildToken: null, rebuildLeaseExpiresAt: null,
+      automaticSummary: automaticReviewSummaryFromDecisions([decision as never]),
+    };
+    let runDigest = "digest-before";
+    const rowsFor = (table: unknown) => table === actReplacementRuns
+      ? [{ summary: { manifestDigest: runDigest } }]
+      : table === actReplacementReviewDecisions ? [decision] : [request];
+    const transaction = {
+      select: () => {
+        let table: unknown;
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+          for: async () => rowsFor(table), then: (resolve: (rows: unknown[]) => unknown) => resolve(rowsFor(table)),
+        };
+        return chain;
+      },
+      update: () => ({ set: (values: Record<string, unknown>) => ({ where: async () => { Object.assign(request, values); } }) }),
+      execute: async (query: unknown) => {
+        const rendered = new PgDialect().sqlToQuery(query as never).sql;
+        if (rendered.includes("select expected_manifest_digest")) return { rows: [{
+          expectedManifestDigest: request.expectedManifestDigest, automaticSummary: request.automaticSummary,
+          rebuildState: request.rebuildState, rebuildToken: request.rebuildToken,
+          rebuildLeaseExpiresAt: request.rebuildLeaseExpiresAt,
+        }] };
+        if (rendered.includes("set manifest_digest")) {
+          Object.assign(request, { manifestDigest: "digest-after", reviewedOperationIds: [], rebuildState: "complete" });
+        } else {
+          Object.assign(request, { rebuildState: "rebuilding", rebuildToken: "lease", rebuildLeaseExpiresAt: new Date(Date.now() + 60_000) });
+        }
+        return { rows: [] };
+      },
+    };
+    let failFinalization = true;
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      update: () => ({ set: (values: Record<string, unknown>) => ({
+        where: async () => {
+          if (failFinalization) { failFinalization = false; throw new Error("connection_lost_after_rebuild"); }
+          Object.assign(request, values);
+        },
+      }) }),
+      execute: async () => {
+        if (failFinalization) { failFinalization = false; throw new Error("connection_lost_after_rebuild"); }
+        Object.assign(request, { manifestDigest: "digest-after", reviewedOperationIds: [], rebuildState: "complete" });
+        return { rows: [{ id: "request" }] };
+      },
+    } as never;
+    const rebuiltManifest = { digest: "digest-after", diagnostics: [], operations: [], outcomes: [] };
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(rebuiltManifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue(rebuiltManifest);
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockImplementation(async () => {
+      runDigest = "digest-after";
+      return { status: "ready_to_apply", manifest: rebuiltManifest };
+    });
+    const store = new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never);
+
+    await expect(store.resolveAutomaticReviewAndRebuild("run", input)).rejects.toThrow("connection_lost_after_rebuild");
+    await expect(store.resolveAutomaticReviewAndRebuild("run", input)).resolves.toMatchObject({
+      manifestDigest: "digest-after", decisions: [{ id: "decision-1" }],
+    });
+    expect(rebuild).toHaveBeenCalledOnce();
+  });
+
+  it("replays the persisted automatic manual-review count", async () => {
+    const input = {
+      expectedManifestDigest: "digest-before", owner: "owner", requestKey: "automatic-manual", policyVersion: "2026-08-12",
+    };
+    const request = {
+      requestFingerprint: automaticReviewRequestFingerprint({
+        runId: "run", expectedManifestDigest: input.expectedManifestDigest, actor: input.owner,
+        policyVersion: input.policyVersion, decisions: [],
+      }),
+      requestedBy: "owner", decisionIds: [], manifestDigest: "digest-before", reviewedOperationIds: [],
+      automaticSummary: { ...automaticReviewSummaryFromDecisions([]), manualReview: 1 },
+    };
+    const transaction = {
+      select: () => {
+        let table: unknown;
+        const rows = () => table === actReplacementRuns ? [{ summary: { manifestDigest: "digest-before" } }] : [request];
+        const chain = {
+          from: (value: unknown) => { table = value; return chain; }, where: () => chain, limit: () => chain,
+          for: async () => rows(), then: (resolve: (value: unknown[]) => unknown) => resolve(table === actReplacementReviewDecisions ? [] : rows()),
+        };
+        return chain;
+      },
+      execute: async () => ({ rows: [{
+        expectedManifestDigest: input.expectedManifestDigest,
+        automaticSummary: request.automaticSummary,
+        rebuildState: "complete", rebuildToken: null, rebuildLeaseExpiresAt: null,
+      }] }),
+    };
+    const database = { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction) } as never;
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", input)).resolves.toMatchObject({
+        decisions: [], summary: { manualReview: 1, decisionsCreatedOrReplayed: 0 },
+      });
+  });
+
+  it("reloads current owner-visible name matches so a new duplicate target remains manual", async () => {
+    const target = (id: string) => ({ id, entityType: "contact", label: "Natalie Andelin", detail: null, fields: {} });
+    let visibleTargetReads = 0;
+    const transaction = {
+      select: () => {
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: () => chain,
+          for: async () => [{ summary: { manifestDigest: "digest-1" } }],
+          then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+        };
+        return chain;
+      },
+      execute: async (query: unknown) => {
+        const renderedQuery = new PgDialect().sqlToQuery(query as never);
+        const rendered = renderedQuery.sql;
+        if (rendered.includes("act_source_records") && rendered.includes("for update")) {
+          return { rows: [{ sourceRecordId: "natalie", sourceVersionId: "v-natalie", streamType: "contact" }] };
+        }
+        if (rendered.includes("owner_visible_targets")) {
+          visibleTargetReads += 1;
+          return { rows: [target("target-1"), target("target-2")] };
+        }
+        if (rendered.includes("contacts") && rendered.includes("for update")) {
+          return { rows: [{ id: "target-1" }, { id: "target-2" }] };
+        }
+        return { rows: [] };
+      },
+      insert: () => ({ values: async () => {} }),
+    };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      update: () => ({ set: () => ({ where: async () => {} }) }),
+    } as never;
+    const manifest = {
+      digest: "digest-1", diagnostics: [], operations: [],
+      outcomes: [{
+        sourceRecordId: "natalie", sourceVersionId: "v-natalie", state: "awaiting_review" as const,
+        issues: [{ code: "ambiguous_match", reason: "insufficient_independent_context_clues" }],
+        candidates: [{ candidateId: "target-1" }],
+        match: { kind: "ambiguous", candidateIds: ["target-1"], reason: "insufficient_independent_context_clues" },
+        mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+      }],
+    };
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest").mockResolvedValue(manifest);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources").mockResolvedValue([
+      { sourceRecordId: "natalie", sourceVersionId: "v-natalie", streamType: "contact", display: { FirstName: "Natalie", LastName: "Andelin" } },
+    ]);
+    vi.spyOn(
+      DrizzleActReviewCommandStore.prototype as unknown as { lockedConflictTarget: (entityType: string, entityId: string) => Promise<unknown> },
+      "lockedConflictTarget",
+    ).mockResolvedValue(target("target-1"));
+    const save = vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveDecision").mockImplementation(async (input) => ({ ...input, id: "unsafe", active: true }));
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange").mockResolvedValue({
+      status: "ready_to_apply", manifest: { ...manifest, digest: "digest-2" },
+    });
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", {
+        expectedManifestDigest: "digest-1", owner: "owner", requestKey: "duplicate-refresh", policyVersion: "2026-08-12",
+      })).resolves.toMatchObject({ decisions: [], manifestDigest: "digest-1" });
+    expect(visibleTargetReads).toBeGreaterThan(0);
+    expect(save).not.toHaveBeenCalled();
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
   it("renders deterministic owner-scoped selected-source row locking", () => {
     const rendered = new PgDialect().sqlToQuery(lockBulkSourceRowsQuery(
       { sourceDatabaseKey: "act-db" }, ["source-b", "source-a"],
@@ -798,6 +1961,27 @@ describe("durable review adapter projections", () => {
     expect(rendered.sql).toContain("order by");
     expect(rendered.sql).toContain("for update");
     expect(rendered.params).toEqual(["act-db", "source-a", "source-b"]);
+  });
+
+  it("locks every observed source in stable order and reloads relationship evidence", () => {
+    const rendered = new PgDialect().sqlToQuery(lockAutomaticReviewSourceRowsQuery(
+      { sourceDatabaseKey: "act-db" }, "run-id",
+    ));
+
+    expect(rendered.sql).toContain("act_replacement_observations");
+    expect(rendered.sql).toContain("relationship_evidence");
+    expect(rendered.sql).toContain("order by");
+    expect(rendered.sql).toContain("for update of");
+    expect(rendered.params).toEqual(["act-db", "run-id", "act-db"]);
+  });
+
+  it("discovers automatic targets by exact normalized equality without a noisy 25-row window", () => {
+    const rendered = new PgDialect().sqlToQuery(automaticTargetExactMatchQuery("contact", "  Natalie   Andelin ")!);
+
+    expect(rendered.sql).toContain(" = ");
+    expect(rendered.sql).not.toContain(" like ");
+    expect(rendered.sql).toMatch(/limit \$\d+/);
+    expect(rendered.params.at(-1)).toBe(2);
   });
 
   it("validates every locked latest source version before the first decision insert", async () => {
@@ -971,6 +2155,8 @@ describe("durable review adapter projections", () => {
         FirstName: "Taako",
         LastName: "Taaco",
         Email: "taako@example.com",
+        EmailAddress: "act-taako@example.com",
+        BusinessPhone: "555-ACT",
         apiKey: "credential-one",
         credential: "credential-two",
         privateKey: "credential-three",
@@ -980,7 +2166,102 @@ describe("durable review adapter projections", () => {
       FirstName: "Taako",
       LastName: "Taaco",
       Email: "taako@example.com",
+      EmailAddress: "act-taako@example.com",
+      BusinessPhone: "555-ACT",
     });
+  });
+
+  it("rejects mutated durable manifest rows when the stored run summary is stale", async () => {
+    const original = manifestFromRows({
+      operations: [],
+      outcomes: [{
+        sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", state: "unsupported",
+        issues: [{ code: "unsupported_record", reason: "normalization_failed" }], candidates: [],
+        match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+      }],
+    });
+    const mutated = {
+      ...manifestFromRows({
+        operations: [],
+        outcomes: [{
+          sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", state: "unsupported",
+          issues: [{ code: "unsupported_record", reason: "mutated_after_summary" }], candidates: [],
+          match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+        }],
+      }),
+      digest: original.digest,
+    };
+    let manifestRead = 0;
+    const transaction = {
+      select: () => {
+        const chain = {
+          from: () => chain,
+          where: () => chain,
+          limit: () => chain,
+          for: async () => [{ summary: { manifestDigest: original.digest } }],
+          then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+        };
+        return chain;
+      },
+      execute: async () => ({ rows: [{ sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", streamType: "custom" }] }),
+      insert: () => ({ values: async () => {} }),
+    };
+    const database = {
+      transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction),
+      update: () => ({ set: () => ({ where: async () => {} }) }),
+    } as never;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getManifest")
+      .mockImplementation(async () => manifestRead++ === 0 ? original : mutated);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources").mockResolvedValue([{
+      sourceRecordId: "unsupported", sourceVersionId: "v-unsupported", streamType: "custom", display: { Name: "Legacy" },
+    }]);
+    const save = vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveDecision");
+    const rebuild = vi.spyOn(DrizzleActReviewCommandStore.prototype, "rebuildAfterReviewChange");
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", {
+        expectedManifestDigest: original.digest, owner: "owner", requestKey: "stale-summary", policyVersion: "2026-08-12",
+      })).rejects.toMatchObject({ code: "manifest_digest_mismatch", status: 409 });
+    expect(save).not.toHaveBeenCalled();
+    expect(rebuild).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when locked relationship evidence recomputes a different manifest", async () => {
+    const durable = manifestFromRows({
+      operations: [],
+      outcomes: [{
+        sourceRecordId: "contact", sourceVersionId: "v-contact", state: "awaiting_review",
+        issues: [{ code: "relationship_unresolved", reason: "missing_parent" }], candidates: [],
+        match: null, mappingWarnings: [], unsupportedFieldPaths: [], operationKeys: [],
+      }],
+    });
+    const transaction = {
+      select: () => {
+        const chain = {
+          from: () => chain, where: () => chain, limit: () => chain,
+          for: async () => [{ summary: { manifestDigest: durable.digest } }],
+          then: (resolve: (rows: unknown[]) => unknown) => resolve([]),
+        };
+        return chain;
+      },
+      execute: async () => ({ rows: [{
+        sourceRecordId: "contact", sourceVersionId: "v-contact", streamType: "contact",
+        relationshipEvidence: { targetActRecordId: "mutated-parent" },
+      }] }),
+    };
+    const database = { transaction: (callback: (tx: unknown) => Promise<unknown>) => callback(transaction) } as never;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getManifest").mockResolvedValue(durable);
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest").mockResolvedValue({
+      ...durable,
+      digest: "f".repeat(64),
+    });
+    const save = vi.spyOn(DrizzleActReviewCommandStore.prototype, "saveDecision");
+
+    await expect(new DrizzleActReviewCommandStore(database, { sourceDatabaseKey: "act-db" }, {} as never)
+      .resolveAutomaticReviewAndRebuild("run", {
+        expectedManifestDigest: durable.digest, owner: "owner", requestKey: "relationship-mutation", policyVersion: "2026-08-12",
+      })).rejects.toMatchObject({ code: "manifest_digest_mismatch", status: 409 });
+    expect(save).not.toHaveBeenCalled();
   });
 
   it("replays stable rejected operation IDs and count from the durable manifest", () => {

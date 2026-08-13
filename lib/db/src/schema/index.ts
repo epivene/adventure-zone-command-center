@@ -981,6 +981,7 @@ export const actReplacementRuns = pgTable(
     previewOnly: boolean("preview_only").default(true).notNull(),
     phase: text("phase").default("extracting").notNull(),
     summary: jsonb("summary").$type<Record<string, unknown>>(),
+    manifestDigestVersion: text("manifest_digest_version"),
     lastErrorCode: text("last_error_code"),
     organizerToken: uuid("organizer_token"),
     organizerLeaseExpiresAt: timestamp("organizer_lease_expires_at", {
@@ -1031,6 +1032,7 @@ export const actReplacementRuns = pgTable(
       "act_replacement_runs_page_size_valid",
       sql`${table.pageSize} in (25, 50, 100, 200)`,
     ),
+    check("act_replacement_runs_manifest_digest_version_valid", sql`${table.manifestDigestVersion} is null or ${table.manifestDigestVersion} = 'canonical-json-v1'`),
     check("act_replacement_runs_organizer_lease_consistency", sql`(${table.organizerToken} is null) = (${table.organizerLeaseExpiresAt} is null)`),
     check(
       "act_replacement_runs_phase_valid",
@@ -1993,6 +1995,11 @@ export const actReplacementBulkReviewRequests = pgTable("act_replacement_bulk_re
   requestFingerprint: text("request_fingerprint").notNull(),
   requestedBy: text("requested_by").notNull(),
   manifestDigest: text("manifest_digest").notNull(),
+  expectedManifestDigest: text("expected_manifest_digest"),
+  automaticSummary: jsonb("automatic_summary").$type<Record<string, number>>(),
+  rebuildState: text("rebuild_state").default("complete").notNull(),
+  rebuildToken: uuid("rebuild_token"),
+  rebuildLeaseExpiresAt: timestamp("rebuild_lease_expires_at", { withTimezone: true }),
   decisionIds: jsonb("decision_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
   reviewedOperationIds: jsonb("reviewed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -2002,6 +2009,9 @@ export const actReplacementBulkReviewRequests = pgTable("act_replacement_bulk_re
   check("act_replacement_bulk_review_requests_fingerprint_nonblank", sql`btrim(${table.requestFingerprint}) <> ''`),
   check("act_replacement_bulk_review_requests_actor_nonblank", sql`btrim(${table.requestedBy}) <> ''`),
   check("act_replacement_bulk_review_requests_digest_nonblank", sql`btrim(${table.manifestDigest}) <> ''`),
+  check("act_replacement_bulk_review_requests_expected_digest_nonblank", sql`${table.expectedManifestDigest} is null or btrim(${table.expectedManifestDigest}) <> ''`),
+  check("act_replacement_bulk_review_requests_rebuild_state_valid", sql`${table.rebuildState} in ('pending','rebuilding','complete')`),
+  check("act_replacement_bulk_review_requests_rebuild_lease_valid", sql`(${table.rebuildState} = 'rebuilding' and ${table.rebuildToken} is not null and ${table.rebuildLeaseExpiresAt} is not null) or (${table.rebuildState} <> 'rebuilding' and ${table.rebuildToken} is null and ${table.rebuildLeaseExpiresAt} is null)`),
   check("act_replacement_bulk_review_requests_decision_ids_array", sql`jsonb_typeof(${table.decisionIds}) = 'array'`),
   check("act_replacement_bulk_review_requests_operation_ids_array", sql`jsonb_typeof(${table.reviewedOperationIds}) = 'array'`),
 ]);
@@ -2284,3 +2294,4 @@ export const routingCacheEntries = pgTable(
     ),
   ],
 );
+
