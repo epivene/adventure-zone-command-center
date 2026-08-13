@@ -31,7 +31,7 @@ function isLocationCandidate(group: DuplicateGroup) {
 }
 
 function identity(group: DuplicateGroup) {
-  return group.groupKey ?? `${group.normalizedName}:${group.organizations.map((item) => item.id).join("|")}`;
+  return group.groupKey ?? `duplicate:${group.normalizedName}`;
 }
 
 type MergeDialogProps = {
