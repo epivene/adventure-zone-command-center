@@ -8,6 +8,7 @@ const repository = vi.hoisted(() => ({
   findDuplicates: vi.fn(),
   saveFamilyReview: vi.fn(),
   deleteFamilyReview: vi.fn(),
+  reviewOrganizationFamily: vi.fn(),
 }));
 const hierarchy = vi.hoisted(() => ({
   setOrganizationParent: vi.fn(),
@@ -42,6 +43,7 @@ vi.mock("@/features/organizations/organization-repository", async (importOrigina
       saveFamilyReview = repository.saveFamilyReview;
       deleteFamilyReview = repository.deleteFamilyReview;
     },
+    reviewOrganizationFamily: repository.reviewOrganizationFamily,
   };
 });
 vi.mock("@/features/routes/travel-leg-repository", () => ({
@@ -134,6 +136,7 @@ describe("organization family review", () => {
     repository.findDuplicates.mockResolvedValue([candidate]);
     repository.saveFamilyReview.mockResolvedValue(undefined);
     repository.deleteFamilyReview.mockResolvedValue(undefined);
+    repository.reviewOrganizationFamily.mockResolvedValue(undefined);
     hierarchy.setOrganizationParent.mockResolvedValue(undefined);
     hierarchy.setOrganizationParents.mockResolvedValue(undefined);
     hierarchy.createOrganizationParent.mockResolvedValue({ parentId: PARENT_ID });
@@ -363,8 +366,12 @@ describe("organization family review", () => {
     expect(groups).toEqual([]);
   });
 
-  it("returns 409 when the submitted candidate IDs are stale", async () => {
-    repository.findDuplicates.mockResolvedValue([]);
+  it("returns 409 when the atomic family review reports stale candidates", async () => {
+    repository.reviewOrganizationFamily.mockRejectedValue(
+      new hierarchy.HierarchyConflictError(
+        "This organization family changed. Refresh the review list and try again.",
+      ),
+    );
 
     const response = await request(testApp())
       .post("/api/organizations/family-review")
@@ -372,41 +379,38 @@ describe("organization family review", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.error).toMatch(/changed|refresh/i);
-    expect(repository.saveFamilyReview).not.toHaveBeenCalled();
   });
 
-  it("creates a parent through the transactional hierarchy service before clearing the proposal", async () => {
-    const payload = {
-      action: "make_locations",
-      candidateIds: [SECOND_ID, FIRST_ID],
-      parent: {
-        kind: "new",
-        name: "Water Lantern Festival",
-        website: "waterlanternfestival.com",
-      },
-    };
-
+  it("submits create-parent decisions to the atomic family review service", async () => {
     const response = await request(testApp())
       .post("/api/organizations/family-review")
-      .send(payload);
+      .send({
+        action: "make_locations",
+        candidateIds: [SECOND_ID, FIRST_ID],
+        parent: {
+          kind: "new",
+          name: "Water Lantern Festival",
+          website: "waterlanternfestival.com",
+        },
+      });
 
     expect(response.status).toBe(200);
-    expect(hierarchy.createOrganizationParent).toHaveBeenCalledWith(
+    expect(repository.reviewOrganizationFamily).toHaveBeenCalledWith(
       expect.anything(),
       {
-        name: "Water Lantern Festival",
-        website: "waterlanternfestival.com",
-        childIds: [FIRST_ID, SECOND_ID],
+        action: "make_locations",
+        candidateIds: [FIRST_ID, SECOND_ID],
+        parent: {
+          kind: "new",
+          name: "Water Lantern Festival",
+          website: "waterlanternfestival.com",
+        },
       },
       expect.any(Date),
     );
-    expect(repository.deleteFamilyReview).toHaveBeenCalledWith(candidate.groupKey);
-    expect(hierarchy.createOrganizationParent.mock.invocationCallOrder[0]).toBeLessThan(
-      repository.deleteFamilyReview.mock.invocationCallOrder[0],
-    );
   });
 
-  it("attaches every candidate to an existing parent through the hierarchy service", async () => {
+  it("submits existing-parent decisions to the atomic family review service", async () => {
     const response = await request(testApp())
       .post("/api/organizations/family-review")
       .send({
@@ -416,30 +420,30 @@ describe("organization family review", () => {
       });
 
     expect(response.status).toBe(200);
-    expect(hierarchy.setOrganizationParents).toHaveBeenCalledTimes(1);
-    expect(hierarchy.setOrganizationParents).toHaveBeenCalledWith(
+    expect(repository.reviewOrganizationFamily).toHaveBeenCalledWith(
       expect.anything(),
       {
-        childIds: [FIRST_ID, SECOND_ID],
-        parentId: PARENT_ID,
+        action: "make_locations",
+        candidateIds: [FIRST_ID, SECOND_ID],
+        parent: { kind: "existing", parentId: PARENT_ID },
       },
       expect.any(Date),
     );
-    expect(hierarchy.setOrganizationParent).not.toHaveBeenCalled();
   });
 
-  it("stores a stable not-related decision so the group does not reappear", async () => {
+  it("submits not-related decisions to the same atomic family review service", async () => {
     const response = await request(testApp())
       .post("/api/organizations/family-review")
       .send({ action: "not_related", candidateIds: [SECOND_ID, FIRST_ID] });
 
     expect(response.status).toBe(200);
-    expect(repository.saveFamilyReview).toHaveBeenCalledWith({
-      groupKey: candidate.groupKey,
-      candidateIds: [FIRST_ID, SECOND_ID],
-      evidence: candidate.evidence,
-      status: "not_related",
-    });
-    expect(repository.deleteFamilyReview).not.toHaveBeenCalled();
+    expect(repository.reviewOrganizationFamily).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        action: "not_related",
+        candidateIds: [FIRST_ID, SECOND_ID],
+      },
+      expect.any(Date),
+    );
   });
 });
