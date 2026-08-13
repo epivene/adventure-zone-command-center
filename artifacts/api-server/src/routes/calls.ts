@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleCallRepository } from "@/features/calls/call-repository";
 import { CallService } from "@/features/calls/call-service";
@@ -12,6 +13,8 @@ import { DrizzleActivityRepository } from "@/features/activities/activity-reposi
 import { loadCallWorkspace } from "@/features/calls/call-workspace-query";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
+import { CallerFinderService } from "@/features/caller-finder/caller-finder-service";
+import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 
 const router: IRouter = Router();
 
@@ -19,6 +22,35 @@ function firstString(value: unknown): string | undefined {
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
   return typeof value === "string" ? value : undefined;
 }
+
+const callerFinderQuerySchema = z.object({
+  phone: z.string().max(40).optional().default(""),
+  q: z.string().max(120).optional().default(""),
+});
+
+router.get("/calls/caller-finder", async (req, res): Promise<void> => {
+  const parsed = callerFinderQuerySchema.safeParse({
+    phone: firstString(req.query.phone),
+    q: firstString(req.query.q),
+  });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid caller finder query" });
+    return;
+  }
+
+  try {
+    const result = await new CallerFinderService(
+      new DrizzleContactRepository(db),
+    ).find({
+      phone: parsed.data.phone,
+      query: parsed.data.q,
+    });
+    res.json(result);
+  } catch (err) {
+    req.log.error({ err }, "Failed to find caller");
+    res.status(500).json({ error: "Failed to find caller" });
+  }
+});
 
 router.get("/calls/workspace", async (req, res): Promise<void> => {
   try {
