@@ -87,7 +87,7 @@ export function EventProfileWorkspace({
                   {parentWebsiteHref ? <a className="button-secondary text-center" href={parentWebsiteHref} rel="noreferrer noopener" target="_blank">Visit parent website</a> : null}
                 </div>
               ) : null}
-            </div
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             {!assistedCallingEnabled ? (
