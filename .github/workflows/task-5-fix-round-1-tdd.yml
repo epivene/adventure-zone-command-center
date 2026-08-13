@@ -1,0 +1,21 @@
+name: Task 5 Fix Round 1 TDD
+
+on:
+  push:
+    branches:
+      - agent/assisted-calling-workspace
+
+jobs:
+  task-5-fix-1:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.17.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/caller-finder/caller-finder-service.test.ts src/features/contacts/quick-caller-service.test.ts src/features/contacts/contact-repository.test.ts src/routes/calls.test.ts
+      - run: pnpm run typecheck:libs
+      - run: pnpm --filter @workspace/api-server typecheck
