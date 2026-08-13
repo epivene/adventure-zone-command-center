@@ -26,5 +26,6 @@ jobs:
       - run: pnpm exec tsc -p lib/api-zod/tsconfig.json
       - run: pnpm --filter @workspace/api-server typecheck
       - run: pnpm --filter @workspace/adventure-zone typecheck
+        if: ${{ always() }}
       - run: pnpm run typecheck
       - run: pnpm run build
