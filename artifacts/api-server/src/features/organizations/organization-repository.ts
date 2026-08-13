@@ -35,6 +35,7 @@ import {
   type OrganizationFamilyRecord,
 } from "@/features/organizations/organization-family-matcher";
 import { normalizeWebsiteHost } from "@/features/act-migration/matching-normalization";
+import { HierarchyConflictError } from "@/features/organizations/organization-hierarchy";
 
 export type OrganizationPerson = {
   id: string;
@@ -395,6 +396,74 @@ export interface OrganizationRepository {
 }
 
 type DrizzleDatabase = typeof database;
+type OrganizationMergeTransaction = Parameters<
+  Parameters<DrizzleDatabase["transaction"]>[0]
+>[0];
+
+const organizationMergeFamilyConflictMessage =
+  "These profiles may be locations of the same organization. Review the location group before merging.";
+
+export async function assertOrganizationsMergeable(
+  transaction: OrganizationMergeTransaction,
+  ids: string[],
+): Promise<void> {
+  const selectedIds = [...new Set(ids)].sort((left, right) =>
+    left.localeCompare(right, "en-US"),
+  );
+  const selectedIdSet = new Set(selectedIds);
+  const selectedOrganizations = await transaction
+    .select({
+      id: organizations.id,
+      parentOrganizationId: organizations.parentOrganizationId,
+    })
+    .from(organizations)
+    .where(inArray(organizations.id, selectedIds))
+    .orderBy(asc(organizations.id))
+    .for("update");
+
+  if (selectedOrganizations.length !== selectedIds.length) {
+    throw new HierarchyConflictError(
+      "A selected organization profile no longer exists.",
+    );
+  }
+
+  const ownedLocations = await transaction
+    .select({
+      id: organizations.id,
+      parentOrganizationId: organizations.parentOrganizationId,
+    })
+    .from(organizations)
+    .where(inArray(organizations.parentOrganizationId, selectedIds))
+    .orderBy(asc(organizations.id))
+    .for("update");
+
+  const proposedFamilies = await transaction
+    .select({
+      groupKey: organizationFamilyReviews.groupKey,
+      candidateIds: organizationFamilyReviews.candidateIds,
+    })
+    .from(organizationFamilyReviews)
+    .where(eq(organizationFamilyReviews.status, "proposed"))
+    .orderBy(asc(organizationFamilyReviews.groupKey))
+    .for("update");
+
+  const selectedBelongsToHierarchy = selectedOrganizations.some(
+    (organization) => organization.parentOrganizationId !== null,
+  );
+  const selectedOwnsLocations = ownedLocations.length > 0;
+  const selectedBelongsToProposal = proposedFamilies.some((review) =>
+    review.candidateIds.some((candidateId) => selectedIdSet.has(candidateId)),
+  );
+
+  if (
+    selectedBelongsToHierarchy ||
+    selectedOwnsLocations ||
+    selectedBelongsToProposal
+  ) {
+    throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+  }
+}
+
 
 function lastResortSnapshot(record: typeof organizations.$inferSelect) {
   return {
@@ -1344,6 +1413,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     if (!duplicateIds.length) return;
 
     await this.database.transaction(async (tx) => {
+      await assertOrganizationsMergeable(tx, [primaryId, ...duplicateIds]);
       const now = new Date();
 
       for (const dupId of duplicateIds) {
