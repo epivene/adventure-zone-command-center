@@ -11,6 +11,7 @@ import {
   ActArchiveConflictError,
   archivePageAction,
   archiveReceiptAction,
+  archiveStreamAllowedForCheckpoint,
   derivedCheckpointsAllowedByCapabilities,
   DrizzleActSourceArchiveRepository,
   replayedCheckpointTransition,
@@ -19,6 +20,32 @@ import {
 import type { DerivedCheckpointSpec } from "./import-types";
 
 describe("Act derived checkpoint capability filtering", () => {
+  it("allows a contact link emitted with a contact-note page", () => {
+    expect(
+      archiveStreamAllowedForCheckpoint("note", "relationship", "note"),
+    ).toBe(true);
+    expect(
+      archiveStreamAllowedForCheckpoint("note", "relationship", "note_contact"),
+    ).toBe(true);
+    expect(
+      archiveStreamAllowedForCheckpoint("note", "detail", "note_contact"),
+    ).toBe(false);
+    expect(
+      archiveStreamAllowedForCheckpoint(
+        "note",
+        "relationship",
+        "company_contact",
+      ),
+    ).toBe(false);
+    expect(
+      archiveStreamAllowedForCheckpoint(
+        "contact",
+        "relationship",
+        "note_contact",
+      ),
+    ).toBe(false);
+  });
+
   const detail = (
     streamType: "contact" | "company",
     partitionKey: string,
@@ -64,21 +91,25 @@ describe("Act derived checkpoint capability filtering", () => {
 
   it("accepts a replay when only volatile Act page metadata changed", () => {
     expect(
-      archiveReceiptAction("extracting", {
-        runId: "run-1",
-        streamType: "company_contact",
-        nextSkip: 100,
-        queryMode: "projected",
-        pageFingerprint: "first-response",
-        responseRows: 100,
-      }, {
-        runId: "run-1",
-        streamType: "company_contact",
-        nextSkip: null,
-        queryMode: "plain",
-        pageFingerprint: "reordered-replay",
-        responseRows: 99,
-      }),
+      archiveReceiptAction(
+        "extracting",
+        {
+          runId: "run-1",
+          streamType: "company_contact",
+          nextSkip: 100,
+          queryMode: "projected",
+          pageFingerprint: "first-response",
+          responseRows: 100,
+        },
+        {
+          runId: "run-1",
+          streamType: "company_contact",
+          nextSkip: null,
+          queryMode: "plain",
+          pageFingerprint: "reordered-replay",
+          responseRows: 99,
+        },
+      ),
     ).toBe("replay");
   });
 
