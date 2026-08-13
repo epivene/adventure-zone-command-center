@@ -1,0 +1,183 @@
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  CallQueueWorkspace,
+  type CallQueueItem,
+} from "@/components/today/call-queue-workspace";
+
+afterEach(cleanup);
+
+const followUps: CallQueueItem[] = [
+  {
+    id: "60000000-0000-4000-8000-000000000001",
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    contactId: "20000000-0000-4000-8000-000000000001",
+    bookingId: "30000000-0000-4000-8000-000000000001",
+    bookingName: "Sarah's Spring Event",
+    contactName: "Sarah Miller",
+    organizationName: "Miller Events",
+    bookingStatus: "pending_contract",
+    routeLeg: { id: "40000000-0000-4000-8000-000000000001", name: "North route", color: "#ea580c" },
+    lastContactedAt: new Date("2026-08-08T15:00:00.000Z"),
+    kind: "call",
+    dueAt: new Date("2026-08-12T15:00:00.000Z"),
+    status: "due",
+  },
+  {
+    id: "60000000-0000-4000-8000-000000000002",
+    organizationId: "10000000-0000-4000-8000-000000000002",
+    contactId: "20000000-0000-4000-8000-000000000002",
+    bookingId: "30000000-0000-4000-8000-000000000002",
+    bookingName: "Tom's Fall Festival",
+    contactName: "Tom Erickson",
+    organizationName: "Erickson Family Fun",
+    bookingStatus: "interested",
+    routeLeg: { id: "40000000-0000-4000-8000-000000000002", name: "West route", color: "#2563eb" },
+    lastContactedAt: null,
+    kind: "call",
+    dueAt: new Date("2026-08-13T15:00:00.000Z"),
+    status: "due",
+  },
+  {
+    id: "60000000-0000-4000-8000-000000000003",
+    organizationId: null,
+    contactId: "20000000-0000-4000-8000-000000000003",
+    bookingId: null,
+    bookingName: "Lee Carter",
+    contactName: "Lee Carter",
+    organizationName: null,
+    bookingStatus: null,
+    routeLeg: null,
+    lastContactedAt: null,
+    kind: "call",
+    dueAt: new Date("2026-08-14T15:00:00.000Z"),
+    status: "due",
+  },
+];
+
+function workspace(name: string) {
+  return {
+    context: {
+      contact: { id: "contact", firstName: name.split(" ")[0], lastName: name.split(" ")[1] },
+      organization: null,
+      booking: null,
+      followUp: null,
+    },
+  };
+}
+
+function workspaceRenderer(data: any, onComplete: (input: unknown) => Promise<any>): ReactNode {
+  const name = `${data.context.contact.firstName} ${data.context.contact.lastName}`;
+  return (
+    <section>
+      <h2>{name}</h2>
+      <button onClick={() => void onComplete({ followUpId: data.followUpId })} type="button">
+        Complete {name}
+      </button>
+    </section>
+  );
+}
+
+describe("CallQueueWorkspace", () => {
+  it("keeps the queue visible while loading the selected caller", async () => {
+    let resolveTom!: (value: any) => void;
+    const loadWorkspace = vi.fn((followUp: CallQueueItem) =>
+      followUp.contactName === "Tom Erickson"
+        ? new Promise((resolve) => { resolveTom = resolve; })
+        : Promise.resolve(workspace("Sarah Miller")),
+    );
+
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        initialFollowUpId={followUps[0].id}
+        loadWorkspace={loadWorkspace}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Calls to make" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /Tom Erickson/i }));
+    expect(screen.getByRole("button", { name: /Sarah Miller/i })).toBeVisible();
+    expect(screen.getByText("Loading caller…")).toBeVisible();
+    resolveTom(workspace("Tom Erickson"));
+    expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
+  });
+
+  it("stacks the selected workspace first on a narrow viewport", async () => {
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        loadWorkspace={(followUp) => Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName))}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    expect(screen.getByTestId("call-queue-layout")).toHaveClass("grid-cols-1");
+    expect(screen.getByTestId("selected-call-workspace")).toHaveClass("order-1");
+    expect(screen.getByTestId("call-queue-panel")).toHaveClass("order-2");
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+  });
+
+  it("shows caller context and the remaining queue count", () => {
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        loadWorkspace={() => new Promise(() => {})}
+        remainingCount={7}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    expect(screen.getByText("7 remaining")).toBeVisible();
+    expect(screen.getByText("Miller Events")).toBeVisible();
+    expect(screen.getByText("Pending contract")).toBeVisible();
+    expect(screen.getByText("North route")).toBeVisible();
+    expect(screen.getByText(/Last contacted/)).toBeVisible();
+  });
+
+  it("keeps the queue and offers retry plus the standalone workspace when loading fails", async () => {
+    const loadWorkspace = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(workspace("Sarah Miller"));
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        loadWorkspace={loadWorkspace}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open standalone workspace" })).toHaveAttribute(
+      "href",
+      expect.stringContaining(`followUpId=${followUps[0].id}`),
+    );
+    expect(screen.getByRole("button", { name: /Tom Erickson/i })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+  });
+
+  it("selects the original next caller after completion and a reordered refetch", async () => {
+    const refreshed = [followUps[2], followUps[1]];
+    const refreshToday = vi.fn().mockResolvedValue({ followUps: refreshed, followUpTotal: 2 });
+    render(
+      <CallQueueWorkspace
+        completeCall={vi.fn().mockResolvedValue({ ok: true })}
+        followUps={followUps}
+        initialFollowUpId={followUps[0].id}
+        loadWorkspace={(followUp) => Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName))}
+        refreshToday={refreshToday}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
+
+    expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
+    expect(refreshToday).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
+    expect(screen.getByText("2 remaining")).toBeVisible();
+  });
+});
