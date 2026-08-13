@@ -13,4 +13,4 @@ jobs:
       - run: corepack enable
       - run: corepack prepare pnpm@10.17.0 --activate
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @workspace/api-server test -- src/routes/contacts.test.ts && pnpm --filter @workspace/api-server typecheck && pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server test -- src/routes/contacts.test.ts && pnpm run typecheck:libs && pnpm --filter @workspace/api-server typecheck && pnpm --filter @workspace/adventure-zone typecheck
