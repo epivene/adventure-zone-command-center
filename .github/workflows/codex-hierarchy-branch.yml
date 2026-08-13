@@ -29,7 +29,7 @@ jobs:
         run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=15000
       - name: Frontend tests
         if: ${{ always() }}
-        run: pnpm exec vitest run artifacts/adventure-zone/src
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src
       - name: Database typecheck
         if: ${{ always() }}
         run: pnpm --filter @workspace/db build
