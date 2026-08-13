@@ -513,18 +513,54 @@ export async function persistProposedOrganizationFamilies(
   database: Pick<DrizzleDatabase, "transaction">,
   proposals: OrganizationFamilyCandidateGroup[],
 ): Promise<void> {
-  const eligibleProposals = proposals.filter(
-    (proposal) => proposal.groupKey && proposal.candidateIds.length >= 2,
-  );
+  const eligibleProposals = proposals
+    .filter((proposal) => proposal.groupKey && proposal.candidateIds.length >= 2)
+    .toSorted((left, right) =>
+      left.groupKey!.localeCompare(right.groupKey!, "en-US"),
+    );
   if (!eligibleProposals.length) return;
 
   await database.transaction(async (transaction) => {
-    const candidateIds = [
-      ...new Set(
-        eligibleProposals.flatMap((proposal) => proposal.candidateIds),
-      ),
-    ].sort((left, right) => left.localeCompare(right, "en-US"));
+    await transaction
+      .insert(organizationFamilyReviews)
+      .values(eligibleProposals.map((proposal) => ({
+        groupKey: proposal.groupKey!,
+        candidateIds: proposal.candidateIds,
+        status: "proposed" as const,
+        evidence: proposal.evidence,
+      })))
+      .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
 
+    const proposalKeys = eligibleProposals.map((proposal) => proposal.groupKey!);
+    const lockedReviews = await transaction
+      .select({
+        groupKey: organizationFamilyReviews.groupKey,
+        candidateIds: organizationFamilyReviews.candidateIds,
+        status: organizationFamilyReviews.status,
+      })
+      .from(organizationFamilyReviews)
+      .where(inArray(organizationFamilyReviews.groupKey, proposalKeys))
+      .orderBy(asc(organizationFamilyReviews.groupKey))
+      .for("update");
+    const proposalByKey = new Map(
+      eligibleProposals.map((proposal) => [proposal.groupKey!, proposal]),
+    );
+    const activeProposals = lockedReviews.flatMap((review) => {
+      const proposal = proposalByKey.get(review.groupKey);
+      return review.status === "proposed" &&
+        proposal &&
+        review.candidateIds.length === proposal.candidateIds.length &&
+        review.candidateIds.every(
+          (id, index) => id === proposal.candidateIds[index],
+        )
+        ? [proposal]
+        : [];
+    });
+    if (!activeProposals.length) return;
+
+    const candidateIds = [
+      ...new Set(activeProposals.flatMap((proposal) => proposal.candidateIds)),
+    ].sort((left, right) => left.localeCompare(right, "en-US"));
     const candidates = await transaction
       .select({
         id: organizations.id,
@@ -534,7 +570,6 @@ export async function persistProposedOrganizationFamilies(
       .where(inArray(organizations.id, candidateIds))
       .orderBy(asc(organizations.id))
       .for("update");
-
     const ownedLocations = await transaction
       .select({
         id: organizations.id,
@@ -555,29 +590,27 @@ export async function persistProposedOrganizationFamilies(
           : [],
       ),
     );
-    const proposalsStillEligible = eligibleProposals.filter((proposal) =>
-      proposal.candidateIds.every((candidateId) => {
-        const candidate = candidateById.get(candidateId);
-        return (
-          candidate?.parentOrganizationId === null &&
-          !parentsWithLocations.has(candidateId)
-        );
-      }),
-    );
-    if (!proposalsStillEligible.length) return;
-
-    await transaction
-      .insert(organizationFamilyReviews)
-      .values(proposalsStillEligible.map((proposal) => ({
-        groupKey: proposal.groupKey!,
-        candidateIds: proposal.candidateIds,
-        status: "proposed" as const,
-        evidence: proposal.evidence,
-      })))
-      .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+    const staleKeys = activeProposals
+      .filter((proposal) =>
+        !proposal.candidateIds.every((candidateId) => {
+          const candidate = candidateById.get(candidateId);
+          return (
+            candidate?.parentOrganizationId === null &&
+            !parentsWithLocations.has(candidateId)
+          );
+        }),
+      )
+      .map((proposal) => proposal.groupKey!);
+    if (staleKeys.length) {
+      await transaction
+        .delete(organizationFamilyReviews)
+        .where(and(
+          eq(organizationFamilyReviews.status, "proposed"),
+          inArray(organizationFamilyReviews.groupKey, staleKeys),
+        ));
+    }
   });
 }
-
 
 function lastResortSnapshot(record: typeof organizations.$inferSelect) {
   return {
