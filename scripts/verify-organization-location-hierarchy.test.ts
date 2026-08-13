@@ -88,6 +88,10 @@ describe("organization location hierarchy verifier", () => {
       orphanedChildCount: 1,
       nestedHierarchyCount: 1,
       familyMergeRiskCount: 2,
+      selfParentingIds: ["self"],
+      orphanedParentIds: ["missing"],
+      nestedHierarchyIds: ["child"],
+      familyMergeRiskIds: ["duplicate", "orphan"],
     });
   });
 
