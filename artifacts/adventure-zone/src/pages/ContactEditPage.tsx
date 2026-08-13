@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "wouter";
-import { apiGet } from "@/lib/auth-token";
+import { apiFetch, apiGet } from "@/lib/auth-token";
 import { ContactForm } from "@/components/contacts/contact-form";
 import { updateContactAction } from "@/actions/contacts";
 
@@ -24,6 +24,13 @@ export default function ContactEditPage() {
     <div className="mx-auto max-w-2xl">
       <h1 className="mb-8 text-3xl font-bold tracking-tight">Edit contact</h1>
       <ContactForm
+        initialPhones={data.phones ?? []}
+        onPhonesSubmit={async (phones) => {
+          const response = await apiFetch(`/contacts/${contactId}/phones`, { method: "PUT", body: JSON.stringify({ phones }) });
+          if (response.ok) return { ok: true };
+          const body = await response.json().catch(() => ({})) as { error?: string };
+          return { ok: false, error: body.error ?? "Could not update phone numbers." };
+        }}
         initialValues={{
           firstName: data.contact.firstName,
           lastName: data.contact.lastName,
