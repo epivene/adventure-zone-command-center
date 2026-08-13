@@ -57,12 +57,6 @@ export interface CallTransaction {
   createActivity(input: {
     organizationId: string | null;
     contactId: string | null;
-    phoneId: string | null;
-    direction: CallDirection;
-    method: CallMethod;
-    phoneNumberSnapshot: string | null;
-    phoneExtensionSnapshot: string | null;
-    scriptKind: CallScriptKind;
     bookingId: string | null;
     body: string;
     occurredAt: Date;
@@ -71,6 +65,12 @@ export interface CallTransaction {
     requestKey: string;
     organizationId: string | null;
     contactId: string | null;
+    phoneId: string | null;
+    direction: CallDirection;
+    method: CallMethod;
+    phoneNumberSnapshot: string | null;
+    phoneExtensionSnapshot: string | null;
+    scriptKind: CallScriptKind;
     bookingId: string | null;
     followUpId: string | null;
     nextFollowUpId: string | null;
