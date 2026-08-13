@@ -298,6 +298,7 @@ export async function reviewOrganizationFamily(
   const groupKey = organizationFamilyGroupKey(candidateIds);
 
   await database.transaction(async (transaction) => {
+    await lockOrganizationFamilyReviewDomain(transaction);
     const [review] = await transaction
       .select({
         groupKey: organizationFamilyReviews.groupKey,
@@ -414,6 +415,16 @@ type OrganizationMergeTransaction = Parameters<
 const organizationMergeFamilyConflictMessage =
   "These profiles may be locations of the same organization. Review the location group before merging.";
 
+const organizationFamilyReviewAdvisoryLockKey = 734_802_341;
+
+export async function lockOrganizationFamilyReviewDomain(
+  transaction: Pick<OrganizationMergeTransaction, "execute">,
+): Promise<void> {
+  await transaction.execute(
+    sql`select pg_advisory_xact_lock(${organizationFamilyReviewAdvisoryLockKey})`,
+  );
+}
+
 export async function assertOrganizationsMergeable(
   transaction: OrganizationMergeTransaction,
   ids: string[],
@@ -423,6 +434,7 @@ export async function assertOrganizationsMergeable(
   );
   const selectedIdSet = new Set(selectedIds);
 
+  await lockOrganizationFamilyReviewDomain(transaction);
   const proposedFamilies = await transaction
     .select({
       groupKey: organizationFamilyReviews.groupKey,
@@ -521,6 +533,7 @@ export async function persistProposedOrganizationFamilies(
   if (!eligibleProposals.length) return;
 
   await database.transaction(async (transaction) => {
+    await lockOrganizationFamilyReviewDomain(transaction);
     await transaction
       .insert(organizationFamilyReviews)
       .values(eligibleProposals.map((proposal) => ({
