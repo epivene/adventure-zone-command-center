@@ -74,7 +74,14 @@ class SelectBuilder implements PromiseLike<unknown[]> {
       return this.database.contacts.filter((row) => ids.includes(row.organizationId));
     }
     if (this.table === bookings) return [];
-    if (this.table === activities || this.table === followUps) return [];
+    if (this.table === activities || this.table === followUps) {
+      const rendered = new PgDialect().sqlToQuery(this.condition as SQL);
+      this.database.recordOwnershipCondition(
+        this.table === activities ? "activities" : "followUps",
+        rendered.sql.toLowerCase().replace(/\s+/g, " "),
+      );
+      return [];
+    }
     if (
       this.table === callingListMemberships
       || this.table === auditEntries
@@ -94,6 +101,14 @@ class SelectBuilder implements PromiseLike<unknown[]> {
 
 class HierarchyDatabase {
   private executeCall = 0;
+  readonly ownershipConditions: Record<"activities" | "followUps", string> = {
+    activities: "",
+    followUps: "",
+  };
+
+  recordOwnershipCondition(kind: "activities" | "followUps", condition: string) {
+    this.ownershipConditions[kind] = condition;
+  }
 
   readonly organizations = [
     {
@@ -230,8 +245,9 @@ describe("frontend event profile hierarchy reads", () => {
   });
 
   it("loads parent summaries and location rollups for real repository reads", async () => {
+    const database = new HierarchyDatabase();
     const repository = new DrizzleEventProfileRepository(
-      new HierarchyDatabase().asApplicationDatabase(),
+      database.asApplicationDatabase(),
     );
 
     const child = await repository.getEventProfile(childId);
@@ -253,5 +269,12 @@ describe("frontend event profile hierarchy reads", () => {
       upcomingBookingCount: 1,
       travelLegs: [{ id: "leg-id", name: "Northern Nevada", color: "#f97316" }],
     });
+    for (const condition of Object.values(database.ownershipConditions)) {
+      expect(condition).toContain('"organization_id" is not null');
+      expect(condition).toContain('"organization_id" is null');
+      expect(condition).toContain('"booking_id" is not null');
+      expect(condition).toContain('"booking_id" is null');
+      expect(condition).toContain('"contact_id" is not null');
+    }
   });
 });
