@@ -12,8 +12,10 @@ import {
 
 import type { db as database } from "@/db/client";
 import {
+  activities,
   bookings,
   contacts,
+  followUps,
   organizationContacts,
   organizations,
   travelLegs,
@@ -30,6 +32,72 @@ export type OrganizationPerson = {
   email: string | null;
 };
 export type OrganizationContact = OrganizationPerson;
+
+export type OrganizationParentSummary = {
+  id: string;
+  name: string;
+  website: string | null;
+};
+
+export type OrganizationLocationSummary = {
+  id: string;
+  name: string;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  website: string | null;
+  localStatus: string | null;
+  nextFollowUp: { id: string; kind: string; dueAt: Date } | null;
+  nextBooking: {
+    id: string;
+    name: string;
+    startsAt: Date | null;
+    status: string;
+  } | null;
+  travelLeg: { id: string; name: string; color: string } | null;
+  primaryContactName: string | null;
+};
+
+export type OrganizationHierarchyRollups = {
+  locationCount: number;
+  upcomingBookingCount: number;
+  overdueFollowUpCount: number;
+  travelLegs: Array<{ id: string; name: string; color: string }>;
+  mostRecentContactAt: Date | null;
+};
+
+export type OrganizationLocationAggregateRecord = {
+  id: string;
+  name: string;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  website: string | null;
+  localStatus: string | null;
+  nextFollowUpId: string | null;
+  nextFollowUpKind: string | null;
+  nextFollowUpDueAt: Date | null;
+  nextBookingId: string | null;
+  nextBookingName: string | null;
+  nextBookingStartsAt: Date | null;
+  nextBookingStatus: string | null;
+  travelLegId: string | null;
+  travelLegName: string | null;
+  travelLegColor: string | null;
+  primaryContactFirstName: string | null;
+  primaryContactLastName: string | null;
+};
+
+export type OrganizationHierarchySummary = {
+  parent: OrganizationParentSummary | null;
+  locations: OrganizationLocationSummary[];
+  rollups: OrganizationHierarchyRollups;
+};
+
 export type OrganizationBooking = {
   id: string;
   name: string;
@@ -42,6 +110,9 @@ export type OrganizationSummary = {
   lastResort: boolean;
   lastResortReason: string | null;
   lastResortChangedAt: Date | null;
+  parent: OrganizationParentSummary | null;
+  locations: OrganizationLocationSummary[];
+  rollups: OrganizationHierarchyRollups;
   contacts: OrganizationContact[];
   bookings: OrganizationBooking[];
   contactTotal?: number;
@@ -68,7 +139,7 @@ export type OrganizationListQuery = {
 
 export type OrganizationListRecord = Omit<
   OrganizationSummary,
-  "contacts" | "bookings"
+  "contacts" | "bookings" | "parent" | "locations" | "rollups"
 > & {
   contactCount: number;
   bookingCount: number;
@@ -126,6 +197,276 @@ function toOrganizationBooking(record: {
         }
       : null,
   };
+}
+
+
+
+const emptyHierarchyRollupRecord = {
+  locationCount: 0,
+  upcomingBookingCount: 0,
+  overdueFollowUpCount: 0,
+  mostRecentContactAt: null,
+};
+
+export function assembleOrganizationHierarchy(
+  parent: OrganizationParentSummary | null,
+  locationRecords: OrganizationLocationAggregateRecord[],
+  rollupRecord: Omit<OrganizationHierarchyRollups, "travelLegs"> = emptyHierarchyRollupRecord,
+  representedTravelLegs: OrganizationHierarchyRollups["travelLegs"] = [],
+): OrganizationHierarchySummary {
+  return {
+    parent,
+    locations: locationRecords
+      .map((record) => ({
+        id: record.id,
+        name: record.name,
+        address1: record.address1,
+        address2: record.address2,
+        city: record.city,
+        region: record.region,
+        postalCode: record.postalCode,
+        website: record.website,
+        localStatus: record.localStatus,
+        nextFollowUp:
+          record.nextFollowUpId &&
+          record.nextFollowUpKind &&
+          record.nextFollowUpDueAt
+            ? {
+                id: record.nextFollowUpId,
+                kind: record.nextFollowUpKind,
+                dueAt: record.nextFollowUpDueAt,
+              }
+            : null,
+        nextBooking:
+          record.nextBookingId &&
+          record.nextBookingName &&
+          record.nextBookingStatus
+            ? {
+                id: record.nextBookingId,
+                name: record.nextBookingName,
+                startsAt: record.nextBookingStartsAt,
+                status: record.nextBookingStatus,
+              }
+            : null,
+        travelLeg:
+          record.travelLegId &&
+          record.travelLegName &&
+          record.travelLegColor
+            ? {
+                id: record.travelLegId,
+                name: record.travelLegName,
+                color: record.travelLegColor,
+              }
+            : null,
+        primaryContactName:
+          record.primaryContactFirstName || record.primaryContactLastName
+            ? `${record.primaryContactFirstName ?? ""} ${record.primaryContactLastName ?? ""}`.trim()
+            : null,
+      }))
+      .toSorted(
+        (left, right) =>
+          left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+      ),
+    rollups: {
+      locationCount: Number(rollupRecord.locationCount),
+      upcomingBookingCount: Number(rollupRecord.upcomingBookingCount),
+      overdueFollowUpCount: Number(rollupRecord.overdueFollowUpCount),
+      travelLegs: representedTravelLegs,
+      mostRecentContactAt: rollupRecord.mostRecentContactAt,
+    },
+  };
+}
+
+export async function loadOrganizationHierarchySummary(
+  database: DrizzleDatabase,
+  organization: { id: string; parentOrganizationId: string | null },
+): Promise<OrganizationHierarchySummary> {
+  if (organization.parentOrganizationId) {
+    const [parent] = await database
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        website: organizations.website,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, organization.parentOrganizationId))
+      .limit(1);
+
+    return assembleOrganizationHierarchy(parent ?? null, []);
+  }
+
+  const [locationResult, rollupResult, travelLegResult] = await Promise.all([
+    database.execute<OrganizationLocationAggregateRecord>(sql`
+      SELECT
+        child.id,
+        child.name,
+        child.address_1 AS "address1",
+        child.address_2 AS "address2",
+        child.city,
+        child.region,
+        child.postal_code AS "postalCode",
+        child.website,
+        next_booking.status::text AS "localStatus",
+        next_follow_up.id AS "nextFollowUpId",
+        next_follow_up.kind AS "nextFollowUpKind",
+        next_follow_up.due_at AS "nextFollowUpDueAt",
+        next_booking.id AS "nextBookingId",
+        next_booking.name AS "nextBookingName",
+        next_booking.starts_at AS "nextBookingStartsAt",
+        next_booking.status::text AS "nextBookingStatus",
+        next_leg.id AS "travelLegId",
+        next_leg.name AS "travelLegName",
+        next_leg.color AS "travelLegColor",
+        primary_contact.first_name AS "primaryContactFirstName",
+        primary_contact.last_name AS "primaryContactLastName"
+      FROM ${organizations} AS child
+      LEFT JOIN LATERAL (
+        SELECT
+          candidate.id,
+          candidate.kind,
+          candidate.due_at
+        FROM ${followUps} AS candidate
+        WHERE candidate.completed_at IS NULL
+          AND (
+            candidate.organization_id = child.id
+            OR EXISTS (
+              SELECT 1
+              FROM ${organizationContacts} AS association
+              WHERE association.organization_id = child.id
+                AND association.active
+                AND association.contact_id = candidate.contact_id
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM ${bookings} AS related_booking
+              WHERE related_booking.organization_id = child.id
+                AND related_booking.id = candidate.booking_id
+            )
+          )
+        ORDER BY candidate.due_at, candidate.id
+        LIMIT 1
+      ) AS next_follow_up ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          candidate.id,
+          candidate.name,
+          candidate.starts_at,
+          candidate.status,
+          candidate.travel_leg_id
+        FROM ${bookings} AS candidate
+        WHERE candidate.organization_id = child.id
+          AND candidate.starts_at >= now()
+        ORDER BY candidate.starts_at, candidate.id
+        LIMIT 1
+      ) AS next_booking ON true
+      LEFT JOIN ${travelLegs} AS next_leg
+        ON next_leg.id = next_booking.travel_leg_id
+      LEFT JOIN LATERAL (
+        SELECT person.first_name, person.last_name
+        FROM ${organizationContacts} AS association
+        INNER JOIN ${contacts} AS person ON person.id = association.contact_id
+        WHERE association.organization_id = child.id
+          AND association.active
+          AND association.is_primary
+        ORDER BY association.updated_at DESC, association.id
+        LIMIT 1
+      ) AS primary_contact ON true
+      WHERE child.parent_organization_id = ${organization.id}
+      ORDER BY child.name, child.id
+    `),
+    database.execute<Omit<OrganizationHierarchyRollups, "travelLegs">>(sql`
+      SELECT
+        count(*)::int AS "locationCount",
+        (
+          SELECT count(*)::int
+          FROM ${bookings} AS candidate
+          INNER JOIN ${organizations} AS booking_location
+            ON booking_location.id = candidate.organization_id
+          WHERE booking_location.parent_organization_id = ${organization.id}
+            AND candidate.starts_at >= now()
+        ) AS "upcomingBookingCount",
+        (
+          SELECT count(*)::int
+          FROM ${followUps} AS candidate
+          WHERE candidate.completed_at IS NULL
+            AND candidate.due_at < now()
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM ${organizations} AS direct_location
+                WHERE direct_location.parent_organization_id = ${organization.id}
+                  AND direct_location.id = candidate.organization_id
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM ${organizationContacts} AS association
+                INNER JOIN ${organizations} AS contact_location
+                  ON contact_location.id = association.organization_id
+                WHERE contact_location.parent_organization_id = ${organization.id}
+                  AND association.active
+                  AND association.contact_id = candidate.contact_id
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM ${bookings} AS related_booking
+                INNER JOIN ${organizations} AS booking_location
+                  ON booking_location.id = related_booking.organization_id
+                WHERE booking_location.parent_organization_id = ${organization.id}
+                  AND related_booking.id = candidate.booking_id
+              )
+            )
+        ) AS "overdueFollowUpCount",
+        (
+          SELECT max(candidate.timeline_sort_at)
+          FROM ${activities} AS candidate
+          WHERE candidate.kind = 'call'
+            AND (
+              EXISTS (
+                SELECT 1
+                FROM ${organizations} AS direct_location
+                WHERE direct_location.parent_organization_id = ${organization.id}
+                  AND direct_location.id = candidate.organization_id
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM ${organizationContacts} AS association
+                INNER JOIN ${organizations} AS contact_location
+                  ON contact_location.id = association.organization_id
+                WHERE contact_location.parent_organization_id = ${organization.id}
+                  AND association.active
+                  AND association.contact_id = candidate.contact_id
+              )
+              OR EXISTS (
+                SELECT 1
+                FROM ${bookings} AS related_booking
+                INNER JOIN ${organizations} AS booking_location
+                  ON booking_location.id = related_booking.organization_id
+                WHERE booking_location.parent_organization_id = ${organization.id}
+                  AND related_booking.id = candidate.booking_id
+              )
+            )
+        ) AS "mostRecentContactAt"
+      FROM ${organizations} AS child
+      WHERE child.parent_organization_id = ${organization.id}
+    `),
+    database.execute<OrganizationHierarchyRollups["travelLegs"][number]>(sql`
+      SELECT DISTINCT leg.id, leg.name, leg.color
+      FROM ${organizations} AS child
+      INNER JOIN ${bookings} AS child_booking
+        ON child_booking.organization_id = child.id
+      INNER JOIN ${travelLegs} AS leg
+        ON leg.id = child_booking.travel_leg_id
+      WHERE child.parent_organization_id = ${organization.id}
+      ORDER BY leg.name, leg.id
+    `),
+  ]);
+
+  return assembleOrganizationHierarchy(
+    null,
+    [...locationResult.rows],
+    rollupResult.rows[0] ?? emptyHierarchyRollupRecord,
+    [...travelLegResult.rows],
+  );
 }
 
 export function buildOrganizationListCondition(
@@ -223,7 +564,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       bookingPageCount,
     );
 
-    const [organizationPeople, organizationBookings] = await Promise.all([
+    const [organizationPeople, organizationBookings, hierarchy] = await Promise.all([
       this.database
         .select({
           id: contacts.id,
@@ -257,6 +598,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id))
         .limit(query.pageSize)
         .offset((bookingPage - 1) * query.pageSize),
+      loadOrganizationHierarchySummary(this.database, organization),
     ]);
 
     return {
@@ -265,6 +607,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       lastResort: organization.lastResort,
       lastResortReason: organization.lastResortReason,
       lastResortChangedAt: organization.lastResortChangedAt,
+      ...hierarchy,
       contacts: organizationPeople.map((contact) => ({
         id: contact.id,
         name: `${contact.firstName} ${contact.lastName}`.trim(),

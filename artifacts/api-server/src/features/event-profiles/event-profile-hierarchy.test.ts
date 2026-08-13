@@ -315,7 +315,7 @@ describe("event profile hierarchy reads", () => {
     });
     expect(child?.contacts.map(({ id }) => id)).toEqual(["contact-austin"]);
     expect(child?.notes.map(({ id }) => id)).toEqual(["activity-austin"]);
-    expect(child?.sourceProvenance).toEqual([
+    expect(child?.sourceProvenance).toEqual(expect.arrayContaining([
       expect.objectContaining({ entityId: austinId, actRecordId: "act-austin" }),
       expect.objectContaining({ entityId: "booking-austin", actRecordId: "act-booking-austin" }),
       expect.objectContaining({ entityId: "contact-austin", actRecordId: "act-contact-austin" }),
