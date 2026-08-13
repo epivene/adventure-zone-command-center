@@ -963,8 +963,21 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .orderBy(asc(organizations.name), asc(organizations.id));
 
     const organizationIds = orgRecords.map((o) => o.id);
+    const parentIds = [
+      ...new Set(
+        orgRecords
+          .map((organization) => organization.parentOrganizationId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
 
-    const [contactCounts, bookingCounts, primaryContacts] = await Promise.all([
+    const [
+      contactCounts,
+      bookingCounts,
+      primaryContacts,
+      parentRecords,
+      locationCounts,
+    ] = await Promise.all([
       this.database
         .select({ organizationId: organizationContacts.organizationId, value: count() })
         .from(organizationContacts)
@@ -991,6 +1004,24 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           eq(organizationContacts.active, true),
           eq(organizationContacts.isPrimary, true),
         )),
+      parentIds.length
+        ? this.database
+            .select({
+              id: organizations.id,
+              name: organizations.name,
+              website: organizations.website,
+            })
+            .from(organizations)
+            .where(inArray(organizations.id, parentIds))
+        : Promise.resolve([] as OrganizationParentSummary[]),
+      this.database
+        .select({
+          parentOrganizationId: organizations.parentOrganizationId,
+          value: count(),
+        })
+        .from(organizations)
+        .where(inArray(organizations.parentOrganizationId, organizationIds))
+        .groupBy(organizations.parentOrganizationId),
     ]);
 
     const contactCountByOrg = new Map(contactCounts.map((r) => [r.organizationId, r.value]));
@@ -999,6 +1030,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     );
     const primaryContactByOrg = new Map(
       primaryContacts.map((r) => [r.organizationId, `${r.firstName} ${r.lastName}`.trim()]),
+    );
+    const parentById = new Map(
+      parentRecords.map((record) => [record.id, record]),
+    );
+    const locationCountByParent = new Map(
+      locationCounts
+        .filter((record) => record.parentOrganizationId !== null)
+        .map((record) => [record.parentOrganizationId!, record.value]),
     );
 
     const orgById = new Map(orgRecords.map((o) => [o.id, o]));
@@ -1019,6 +1058,10 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             contactCount: contactCountByOrg.get(o.id) ?? 0,
             bookingCount: bookingCountByOrg.get(o.id) ?? 0,
             primaryContactName: primaryContactByOrg.get(o.id) ?? null,
+            parent: o.parentOrganizationId
+              ? parentById.get(o.parentOrganizationId) ?? null
+              : null,
+            locationCount: locationCountByParent.get(o.id) ?? 0,
           } satisfies OrganizationListRecord;
         })
         .filter(Boolean) as OrganizationListRecord[];
