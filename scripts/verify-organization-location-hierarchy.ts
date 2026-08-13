@@ -265,7 +265,8 @@ async function main() {
     report.selfParentingCount > 0 ||
     report.orphanedChildCount > 0 ||
     report.nestedHierarchyCount > 0 ||
-    report.familyMergeRiskCount > 0
+    report.familyMergeRiskCount > 0 ||
+    (Boolean(organizationName) && !report.confirmedFamilyFound)
   ) {
     process.exitCode = 1;
   }
