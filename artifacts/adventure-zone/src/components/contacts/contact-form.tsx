@@ -15,6 +15,7 @@ type ContactSubmissionResult =
   | { ok: false; error: string }
   | void;
 
+type PhoneSubmissionResult = { ok: true } | { ok: false; error: string } | void;
 type ContactFormValues = Record<keyof ContactInput, string>;
 const phoneTypes: ContactPhoneType[] = ["mobile", "office", "alternate", "unknown"];
 
@@ -66,7 +67,7 @@ export function ContactForm({
   initialValues?: Partial<ContactFormInput>;
   initialPhones?: ContactPhoneInput[];
   onSubmit: (input: ContactInput) => ContactSubmissionResult | Promise<ContactSubmissionResult>;
-  onPhonesSubmit?: (phones: ContactPhoneInput[]) => ContactSubmissionResult | Promise<ContactSubmissionResult>;
+  onPhonesSubmit?: (phones: ContactPhoneInput[]) => PhoneSubmissionResult | Promise<PhoneSubmissionResult>;
   successPath: string;
   variant?: "create" | "edit";
 }) {
@@ -97,7 +98,7 @@ export function ContactForm({
       if (!result) setSubmissionError("The server did not confirm this save.");
       else if (!result.ok) setSubmissionError(result.error);
       else {
-        const phoneResult = onPhonesSubmit ? await onPhonesSubmit(phones) : { ok: true };
+        const phoneResult = onPhonesSubmit ? await onPhonesSubmit(phones) : ({ ok: true } as const);
         if (!phoneResult || !phoneResult.ok) setSubmissionError(phoneResult?.error ?? "The phone numbers could not be saved.");
         else navigate(variant === "create" && result.contactId ? `/contacts/${result.contactId}` : successPath);
       }
