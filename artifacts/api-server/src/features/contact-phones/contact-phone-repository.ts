@@ -55,6 +55,15 @@ export class ContactPhoneRepository {
       const existing = await store.listForContact(contactId);
       const existingById = new Map(existing.map((phone) => [phone.id, phone]));
       const retained = new Set<string>();
+      // The partial unique index is immediate, so remove every current primary
+      // before promoting either an existing or newly inserted replacement.
+      for (const phone of existing.filter((phone) => phone.primary)) {
+        await store.updatePhone(phone.id, {
+          number: phone.number, type: phone.type, extension: phone.extension,
+          label: phone.label, primary: false,
+          normalizedNumber: phone.normalizedNumber, updatedAt: now,
+        });
+      }
       for (const input of inputs) {
         const normalizedNumber = normalizeNorthAmericanPhone(input.number);
         if (input.id === null) {
@@ -69,10 +78,11 @@ export class ContactPhoneRepository {
         retained.add(input.id);
         await store.updatePhone(input.id, { ...input, normalizedNumber, updatedAt: now });
       }
-      const deleted = existing.filter((phone) => !retained.has(phone.id) && !inputs.some((input) => input.id === null && false)).map((phone) => phone.id);
+      const deleted = existing.filter((phone) => !retained.has(phone.id)).map((phone) => phone.id);
       if (deleted.length) await store.deletePhones(deleted);
 
-      const phones = await this.listForContact(contactId);
+      const phones = (await store.listForContact(contactId))
+        .toSorted((left, right) => Number(right.primary) - Number(left.primary) || left.id.localeCompare(right.id));
       const primary = phones.find((phone) => phone.primary) ?? null;
       await store.updateLegacyContact(contactId, primary?.number ?? null, primary?.normalizedNumber ?? null);
       return phones;
