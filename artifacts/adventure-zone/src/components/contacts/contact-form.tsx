@@ -77,6 +77,17 @@ export function ContactForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [phones, setPhones] = useState<ContactPhoneInput[]>(initialPhones);
   const values = { ...emptyValues, ...Object.fromEntries(Object.entries(initialValues).map(([key, value]) => [key, value ?? ""])) };
+  const [primaryPhone, setPrimaryPhone] = useState(values.phone);
+
+  function handlePhoneChange(nextPhones: ContactPhoneInput[]) {
+    setPhones(nextPhones);
+    const primary = nextPhones.find((phone) => phone.primary);
+    if (primary) setPrimaryPhone(primary.number);
+  }
+
+  function phonesForSubmission(phone: string | null): ContactPhoneInput[] {
+    return phones.map((item) => item.primary ? { ...item, number: phone ?? "" } : item);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -98,7 +109,7 @@ export function ContactForm({
       if (!result) setSubmissionError("The server did not confirm this save.");
       else if (!result.ok) setSubmissionError(result.error);
       else {
-        const phoneResult = onPhonesSubmit ? await onPhonesSubmit(phones) : ({ ok: true } as const);
+        const phoneResult = onPhonesSubmit ? await onPhonesSubmit(phonesForSubmission(parsed.data.phone)) : ({ ok: true } as const);
         if (!phoneResult || !phoneResult.ok) setSubmissionError(phoneResult?.error ?? "The phone numbers could not be saved.");
         else navigate(variant === "create" && result.contactId ? `/contacts/${result.contactId}` : successPath);
       }
@@ -130,11 +141,18 @@ export function ContactForm({
         {fields.map((field) => (
           <label className={`grid gap-1.5 font-medium ${field.name === "address1" || field.name === "address2" ? "sm:col-span-2" : ""}`} key={field.name}>
             {field.label}
-            <input autoComplete={field.autoComplete} defaultValue={values[field.name]} name={field.name} type={field.type ?? "text"} />
+            <input
+              autoComplete={field.autoComplete}
+              defaultValue={field.name === "phone" ? undefined : values[field.name]}
+              name={field.name}
+              onChange={field.name === "phone" ? (event) => setPrimaryPhone(event.target.value) : undefined}
+              type={field.type ?? "text"}
+              value={field.name === "phone" ? primaryPhone : undefined}
+            />
             {errors[field.name] ? <span className="text-sm text-rose-700" role="alert">{errors[field.name]}</span> : null}
           </label>
         ))}
-        <ContactPhoneFields phones={phones} onChange={setPhones} />
+        {onPhonesSubmit ? <ContactPhoneFields phones={phones} onChange={handlePhoneChange} /> : null}
       </div>
       <div><button className="button-primary" disabled={isSubmitting} type="submit">{isSubmitting ? "Saving…" : "Save contact"}</button></div>
     </form>
