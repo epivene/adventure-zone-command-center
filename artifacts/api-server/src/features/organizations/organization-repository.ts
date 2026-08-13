@@ -465,6 +465,76 @@ export async function assertOrganizationsMergeable(
 }
 
 
+export async function persistProposedOrganizationFamilies(
+  database: Pick<DrizzleDatabase, "transaction">,
+  proposals: OrganizationFamilyCandidateGroup[],
+): Promise<void> {
+  const eligibleProposals = proposals.filter(
+    (proposal) => proposal.groupKey && proposal.candidateIds.length >= 2,
+  );
+  if (!eligibleProposals.length) return;
+
+  await database.transaction(async (transaction) => {
+    const candidateIds = [
+      ...new Set(
+        eligibleProposals.flatMap((proposal) => proposal.candidateIds),
+      ),
+    ].sort((left, right) => left.localeCompare(right, "en-US"));
+
+    const candidates = await transaction
+      .select({
+        id: organizations.id,
+        parentOrganizationId: organizations.parentOrganizationId,
+      })
+      .from(organizations)
+      .where(inArray(organizations.id, candidateIds))
+      .orderBy(asc(organizations.id))
+      .for("update");
+
+    const ownedLocations = await transaction
+      .select({
+        id: organizations.id,
+        parentOrganizationId: organizations.parentOrganizationId,
+      })
+      .from(organizations)
+      .where(inArray(organizations.parentOrganizationId, candidateIds))
+      .orderBy(asc(organizations.id))
+      .for("update");
+
+    const candidateById = new Map(
+      candidates.map((candidate) => [candidate.id, candidate]),
+    );
+    const parentsWithLocations = new Set(
+      ownedLocations.flatMap((location) =>
+        location.parentOrganizationId
+          ? [location.parentOrganizationId]
+          : [],
+      ),
+    );
+    const proposalsStillEligible = eligibleProposals.filter((proposal) =>
+      proposal.candidateIds.every((candidateId) => {
+        const candidate = candidateById.get(candidateId);
+        return (
+          candidate?.parentOrganizationId === null &&
+          !parentsWithLocations.has(candidateId)
+        );
+      }),
+    );
+    if (!proposalsStillEligible.length) return;
+
+    await transaction
+      .insert(organizationFamilyReviews)
+      .values(proposalsStillEligible.map((proposal) => ({
+        groupKey: proposal.groupKey!,
+        candidateIds: proposal.candidateIds,
+        status: "proposed" as const,
+        evidence: proposal.evidence,
+      })))
+      .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+  });
+}
+
+
 function lastResortSnapshot(record: typeof organizations.$inferSelect) {
   return {
     lastResort: record.lastResort,
@@ -1269,15 +1339,10 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       (group) => group.groupKey && !reviewByKey.has(group.groupKey),
     );
     if (proposedFamilies.length) {
-      await this.database
-        .insert(organizationFamilyReviews)
-        .values(proposedFamilies.map((group) => ({
-          groupKey: group.groupKey!,
-          candidateIds: group.candidateIds,
-          status: "proposed" as const,
-          evidence: group.evidence,
-        })))
-        .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+      await persistProposedOrganizationFamilies(
+        this.database,
+        proposedFamilies,
+      );
     }
 
     const allIds = [...new Set(reviewGroups.flatMap((group) => group.candidateIds))];
