@@ -192,28 +192,10 @@ describe("MobileCallLogPage", () => {
       direction: "outgoing",
       entryMode: "mobile",
       method: "mobile_log",
-      scriptKind: "follow_up",
+      scriptKind: "first_outreach",
       note: "Returned Sarah's call.",
       requestKey: expect.any(String),
     }));
-  });
-
-  it("does not reuse a draft Do Not Call confirmation when its saved phone is missing", async () => {
-    apiGet.mockResolvedValue(workspace());
-    localStorage.setItem(
-      `assisted-call-draft:v1:organization-1:${contactId}:none:none`,
-      JSON.stringify({
-        version: 1, savedAt: new Date().toISOString(), requestKey: "restored-request-key",
-        selectedPhoneId: "missing-phone", direction: "incoming", method: "mobile_log",
-        scriptKind: "incoming_inquiry", note: "Suppression draft", disposition: "do_not_call",
-        nextActionKind: "", nextActionDate: "", lastResortConfirmed: false, lastResortReason: "",
-        doNotCallConfirmed: true, doNotCallReason: "Requested", doNotCallPhoneId: "missing-phone",
-      }),
-    );
-    render(<MobileCallLogPage contactId={contactId} />);
-    expect(await screen.findByLabelText("Phone number")).toHaveValue(primaryPhoneId);
-    expect(screen.getByLabelText("Do Not Call reason")).toHaveValue("");
-    expect(screen.getByLabelText("I confirm this selected number should be marked Do Not Call")).not.toBeChecked();
   });
 
   it("discards a mobile draft into a fresh immediately usable log", async () => {

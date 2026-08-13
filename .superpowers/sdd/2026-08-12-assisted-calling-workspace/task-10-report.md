@@ -303,5 +303,35 @@ unreachable, no OS phone handler or clipboard permission can be verified, and
 no private voicemail launcher is configured. This wave did not deploy, enable
 the flag, or run migrations. `ASSISTED_CALLING_ENABLED` remains default false.
 
-The final two-parent merge SHA, remote blob verification, and exact full-chain
-counts are appended after the final remote-tested commit is created.
+The assisted-calling fix commit is
+`54aaefe17224ee6373b10f8d82af9405e383a03a`. The conflict-free main
+integration is the true two-parent merge
+`778720f68d1eba2b290726b72ddda76b283e10b5`, whose ordered parents are the
+fix commit and main `470883df172c7bd8381086bd8f10ebf5323dba09`.
+
+The exact final verification command, run from the final evidence tree with
+the task-local XDG and pnpm paths exported, was:
+
+```text
+pnpm --filter @workspace/api-server test &&
+pnpm --filter @workspace/adventure-zone exec vitest run &&
+pnpm run typecheck &&
+pnpm run build
+```
+
+It exited 0 with these counts:
+
+```text
+API:       62 passed files, 2 skipped; 774 passed tests, 49 skipped (823 total)
+Web:       20 passed files; 144 passed tests
+Typecheck: library build plus API, web, and scripts exited 0
+Build:     API and web production builds exited 0
+Overall:   exit 0
+```
+
+The existing non-failing source-map warnings and web chunk-size advisory were
+the only diagnostics. Connector-created blobs for the final evidence changes
+matched local `git hash-object` values, and the final connector commit used the
+merge tree as its base. The branch ref was moved only after the full chain
+passed, without force. The final commit SHA and remote tree SHA are returned in
+the Task 10 handoff because a commit cannot embed its own content-derived SHA.

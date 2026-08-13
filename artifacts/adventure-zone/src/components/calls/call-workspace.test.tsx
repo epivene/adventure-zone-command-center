@@ -408,6 +408,24 @@ describe("CallWorkspace fix round 1 safety", () => {
     expect(first.onComplete).not.toHaveBeenCalled();
   });
 
+  it("does not reuse draft Do Not Call confirmation when the saved phone is missing", async () => {
+    const key = buildCallDraftKey({
+      organizationId: organization.id, contactId: contact.id, bookingId: null, followUpId: followUp.id,
+    });
+    localStorage.setItem(key, JSON.stringify({
+      version: 1, savedAt: new Date().toISOString(), requestKey: "restored-request-key",
+      selectedPhoneId: "missing-phone", direction: "outgoing", method: "standard_call",
+      scriptKind: "follow_up", note: "Suppression draft", disposition: "do_not_call",
+      nextActionKind: "", nextActionDate: "", lastResortConfirmed: false, lastResortReason: "",
+      doNotCallConfirmed: true, doNotCallReason: "Requested", doNotCallPhoneId: "missing-phone",
+    }));
+    renderWorkspace();
+    expect(await screen.findByLabelText("Call note")).toHaveValue("Suppression draft");
+    expect(screen.getByLabelText("Phone number")).toHaveValue(phoneBase.id);
+    expect(screen.getByLabelText("Do Not Call reason")).toHaveValue("");
+    expect(screen.getByLabelText("I confirm this selected number should be marked Do Not Call")).not.toBeChecked();
+  });
+
   it("derives untouched desktop method and selected-phone changes without mobile_log", async () => {
     const office = { ...phoneBase, id: "50000000-0000-4000-8000-000000000002", type: "office" as const, primary: false };
     const first = renderWorkspace({ phones: [{ ...phoneBase, type: "mobile" }, office] });
