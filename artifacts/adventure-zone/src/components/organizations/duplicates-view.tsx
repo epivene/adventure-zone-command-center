@@ -191,7 +191,7 @@ function MakeLocationsDialog({ group, onCancel, onComplete }: {
   }, [group]);
 
   async function submit() {
-    const candidateIds = [...(group.candidateIds ?? group.organizations.map((item) => item.id)]
+    const candidateIds = [...(group.candidateIds ?? group.organizations.map((item) => item.id))]
       .sort((left, right) => left.localeCompare(right, "en-US"));
     if (mode === "new" && !name.trim()) return;
     if (mode === "existing" && !parentId) return;
@@ -313,7 +313,7 @@ function DuplicateGroupCard({
     try {
       await apiPost("/organizations/family-review", {
         action: "not_related",
-        candidateIds: [...(group.candidateIds ?? group.organizations.map((item) => item.id)]
+        candidateIds: [...(group.candidateIds ?? group.organizations.map((item) => item.id))]
           .sort((left, right) => left.localeCompare(right, "en-US")),
       });
       toast({ title: "Organizations marked as not related" });
