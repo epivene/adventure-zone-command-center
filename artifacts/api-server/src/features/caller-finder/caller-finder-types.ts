@@ -7,6 +7,7 @@ export type CallerMatchReason =
   | "Recently contacted"
   | "Location"
   | "Route leg"
+  | "Phone number"
   | "Same area code"
   | "Note text";
 
