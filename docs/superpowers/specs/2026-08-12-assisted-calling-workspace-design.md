@@ -1,7 +1,7 @@
 # Assisted Calling Workspace Design
 
 **Date:** 2026-08-12  
-**Status:** Design approved; pending written-spec review
+**Status:** Approved
 
 ## Summary
 
