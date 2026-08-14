@@ -121,6 +121,9 @@ class GuardTransaction {
         this.events.push("advisory");
         return Promise.resolve({ rows: [] });
       }
+      if (rendered.includes("lock table")) {
+        return Promise.resolve({ rows: [] });
+      }
       if (rendered.includes("company_contact")) {
         return Promise.resolve({ rows: [] });
       }
