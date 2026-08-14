@@ -1,10 +1,11 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, inArray, or, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   actExternalLinks,
   auditEntries,
   activities,
+  activityAssociations,
   bookings,
   callingListMemberships,
   callingLists,
@@ -312,7 +313,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
     const contactIds = profileContacts.map((contact) => contact.id);
-    const profileCondition = organizationOwnedRecordCondition(
+    const directActivityCondition = organizationOwnedRecordCondition(
       {
         organizationId: activities.organizationId,
         bookingId: activities.bookingId,
@@ -326,6 +327,27 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         ? inArray(activities.contactId, contactIds)
         : sql`false`,
     );
+    // Imported Act! history is linked through activity_associations rather than
+    // the direct FK columns, so include entries associated with this place or
+    // any of its profile contacts.
+    const associationCondition = exists(
+      this.database
+        .select({ id: activityAssociations.id })
+        .from(activityAssociations)
+        .where(and(
+          eq(activityAssociations.activityId, activities.id),
+          or(
+            eq(activityAssociations.organizationId, profileId),
+            contactIds.length
+              ? inArray(activityAssociations.contactId, contactIds)
+              : sql`false`,
+            bookingIds.length
+              ? inArray(activityAssociations.bookingId, bookingIds)
+              : sql`false`,
+          ),
+        )),
+    );
+    const profileCondition = or(directActivityCondition, associationCondition);
     const followUpCondition = organizationOwnedRecordCondition(
       {
         organizationId: followUps.organizationId,

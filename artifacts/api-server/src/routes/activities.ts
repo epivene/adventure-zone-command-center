@@ -10,6 +10,31 @@ import {
 const router: IRouter = Router();
 function activityService() { return new ActivityService(new DrizzleActivityRepository(db)); }
 
+router.get("/activities/timeline", async (req, res): Promise<void> => {
+  const firstString = (value: unknown): string | undefined => {
+    if (Array.isArray(value)) value = value[0];
+    return typeof value === "string" && value ? value : undefined;
+  };
+  const parent = {
+    contactId: firstString(req.query.contactId),
+    organizationId: firstString(req.query.organizationId),
+    bookingId: firstString(req.query.bookingId),
+  };
+  if (!parent.contactId && !parent.organizationId && !parent.bookingId) {
+    res.status(400).json({ ok: false, error: "A contactId, organizationId, or bookingId is required" });
+    return;
+  }
+  const rawPage = Number(firstString(req.query.page) ?? "1");
+  const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
+  try {
+    const timelinePage = await activityService().listTimeline(parent, page);
+    res.json({ ok: true, items: timelinePage.items, nextPage: timelinePage.nextPage });
+  } catch (err) {
+    req.log.error({ err }, "Failed to list timeline page");
+    res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
 router.post("/activities", async (req, res): Promise<void> => {
   const parsed = createActivityInputSchema.safeParse(req.body);
   if (!parsed.success) {

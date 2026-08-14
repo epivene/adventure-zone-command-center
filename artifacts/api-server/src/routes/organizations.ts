@@ -159,10 +159,10 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
   try {
     const organization = await orgRepo().getOrganizationSummary(id);
     if (!organization) { res.status(404).json({ error: "Not found" }); return; }
-    const timeline = await new ActivityService(
+    const timelinePage = await new ActivityService(
       new DrizzleActivityRepository(db),
     ).listTimeline({ organizationId: id });
-    res.json({ organization, timeline });
+    res.json({ organization, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage });
   } catch (err) {
     req.log.error({ err }, "Failed to get organization");
     res.status(500).json({ error: "Failed to get organization" });

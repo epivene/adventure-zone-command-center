@@ -7,6 +7,7 @@ import {
   createActivityAction,
   editActivityAction,
   listActivityRevisionsAction,
+  loadTimelinePageAction,
 } from "@/actions/activities";
 import type { ReactNode } from "react";
 import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
@@ -44,7 +45,20 @@ export default function ContactDetailPage() {
   useEffect(() => {
     if (!contactId) return;
     apiGet<any>(`/contacts/${contactId}`)
-      .then((d) => { setData(d); setLoading(false); })
+      .then((d) => {
+        // JSON dates arrive as strings — the timeline formats Date objects.
+        const coerced = {
+          ...d,
+          timeline: (d.timeline ?? []).map((item: any) => ({
+            ...item,
+            occurredAt: item.occurredAt ? new Date(item.occurredAt) : item.occurredAt,
+            createdAt: item.createdAt ? new Date(item.createdAt) : item.createdAt,
+            updatedAt: item.updatedAt ? new Date(item.updatedAt) : item.updatedAt,
+          })),
+        };
+        setData(coerced);
+        setLoading(false);
+      })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [contactId]);
 
@@ -124,6 +138,8 @@ export default function ContactDetailPage() {
         createActivity={createActivityAction}
         editActivity={editActivityAction}
         loadRevisions={listActivityRevisionsAction}
+        initialNextPage={data.timelineNextPage ?? null}
+        loadPage={(page) => loadTimelinePageAction({ contactId: contactId! }, page)}
       />
     </div>
   );

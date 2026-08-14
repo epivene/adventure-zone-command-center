@@ -1,5 +1,6 @@
-import { apiPost, apiPatch } from "@/lib/auth-token";
+import { apiGet, apiPost, apiPatch } from "@/lib/auth-token";
 import type {
+  ActivityParent,
   CreateActivityInput,
   EditActivityInput,
   ActivityTimelineItem,
@@ -7,7 +8,34 @@ import type {
 import type {
   ActivityMutationResult,
   ActivityRevisionResult,
+  ActivityTimelinePageResult,
 } from "@/components/activities/activity-timeline";
+
+export async function loadTimelinePageAction(
+  parent: ActivityParent,
+  page: number,
+): Promise<ActivityTimelinePageResult> {
+  try {
+    const qs = new URLSearchParams();
+    if (parent.contactId) qs.set("contactId", parent.contactId);
+    if (parent.organizationId) qs.set("organizationId", parent.organizationId);
+    if (parent.bookingId) qs.set("bookingId", parent.bookingId);
+    qs.set("page", String(page));
+    const result = await apiGet<ActivityTimelinePageResult>(`/activities/timeline?${qs.toString()}`);
+    if (!result.ok) return result;
+    return {
+      ...result,
+      items: result.items.map((item: any) => ({
+        ...item,
+        occurredAt: new Date(item.occurredAt),
+        createdAt: new Date(item.createdAt),
+        updatedAt: new Date(item.updatedAt),
+      })),
+    };
+  } catch (e: any) {
+    return { ok: false, error: e.message };
+  }
+}
 
 export async function createActivityAction(
   input: CreateActivityInput,

@@ -42,6 +42,11 @@ export type ActivityRevision = {
   createdAt: Date;
 };
 
+export type ActivityTimelinePage = {
+  items: ActivityTimelineItem[];
+  nextPage: number | null;
+};
+
 export type ActivityRevisionPage = {
   revisions: ActivityRevision[];
   nextPage: number | null;

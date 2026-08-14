@@ -58,10 +58,10 @@ router.get("/contacts/:id", async (req, res): Promise<void> => {
   try {
     const detail = await contactRepo().getContactDetail(id);
     if (!detail) { res.status(404).json({ error: "Not found" }); return; }
-    const timeline = await new ActivityService(
+    const timelinePage = await new ActivityService(
       new DrizzleActivityRepository(db),
     ).listTimeline({ contactId: id });
-    res.json({ ...detail, timeline, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
+    res.json({ ...detail, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
     req.log.error({ err }, "Failed to get contact");
     res.status(500).json({ error: "Failed to get contact" });

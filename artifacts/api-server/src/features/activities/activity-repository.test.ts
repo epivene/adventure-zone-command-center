@@ -32,6 +32,11 @@ function databaseWithPostgresNullOrdering(rows: TimelineRow[]) {
       return this;
     },
     limit(limit: number) {
+      this.limitValue = limit;
+      return this;
+    },
+    limitValue: Number.POSITIVE_INFINITY,
+    offset(offsetValue: number) {
       const value = (row: TimelineRow) =>
         firstOrderColumn === "timeline_sort_at"
           ? row.activity.timelineSortAt
@@ -42,7 +47,7 @@ function databaseWithPostgresNullOrdering(rows: TimelineRow[]) {
         if (leftValue === null) return rightValue === null ? 0 : -1;
         if (rightValue === null) return 1;
         return rightValue.getTime() - leftValue.getTime();
-      }).slice(0, limit));
+      }).slice(offsetValue, offsetValue + this.limitValue));
     },
   };
   return { select: () => query };
@@ -96,7 +101,8 @@ describe("DrizzleActivityRepository timeline ordering", () => {
       organizationId: "10000000-0000-4000-8000-000000000001",
     });
 
-    expect(timeline).toHaveLength(10);
-    expect(timeline[0]).toMatchObject({ id: "newer-call" });
+    expect(timeline.items).toHaveLength(12);
+    expect(timeline.nextPage).toBeNull();
+    expect(timeline.items[0]).toMatchObject({ id: "newer-call" });
   });
 });

@@ -1,8 +1,9 @@
-import { and, count, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, exists, or } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
   activities,
+  activityAssociations,
   activityRevisions,
   bookingContacts,
   bookings,
@@ -23,18 +24,21 @@ import type {
   EditActivityInput,
 } from "@/features/activities/activity-types";
 
+import type { ActivityTimelinePage } from "@/features/activities/activity-types";
+
 export type {
   ActivityError,
   ActivityParent,
   ActivityRevision,
   ActivityRevisionPage,
   ActivityTimelineItem,
+  ActivityTimelinePage,
   CreateActivityInput,
   EditActivityInput,
 };
 
 export interface ActivityRepository {
-  listTimeline(parent: ActivityParent): Promise<ActivityTimelineItem[]>;
+  listTimeline(parent: ActivityParent, page?: number): Promise<ActivityTimelinePage>;
   create(input: CreateActivityInput): Promise<ActivityTimelineItem>;
   edit(input: EditActivityInput): Promise<Result<ActivityTimelineItem, ActivityError>>;
 }
@@ -48,6 +52,7 @@ export interface ActivityRevisionReader {
 
 type DrizzleDatabase = typeof database;
 const REVISION_PAGE_SIZE = 25;
+const TIMELINE_PAGE_SIZE = 25;
 
 export class ActivityParentValidationError extends Error {
   constructor() {
@@ -96,10 +101,35 @@ function activitySnapshot(activity: typeof activities.$inferSelect) {
   };
 }
 
-function timelineCondition(parent: ActivityParent) {
+function timelineCondition(database: DrizzleDatabase, parent: ActivityParent) {
   if (parent.bookingId) return eq(activities.bookingId, parent.bookingId);
-  if (parent.contactId) return eq(activities.contactId, parent.contactId);
-  return parent.organizationId ? eq(activities.organizationId, parent.organizationId) : undefined;
+  if (parent.contactId) {
+    return or(
+      eq(activities.contactId, parent.contactId),
+      exists(
+        database
+          .select({ id: activityAssociations.id })
+          .from(activityAssociations)
+          .where(and(
+            eq(activityAssociations.activityId, activities.id),
+            eq(activityAssociations.contactId, parent.contactId),
+          )),
+      ),
+    );
+  }
+  if (!parent.organizationId) return undefined;
+  return or(
+    eq(activities.organizationId, parent.organizationId),
+    exists(
+      database
+        .select({ id: activityAssociations.id })
+        .from(activityAssociations)
+        .where(and(
+          eq(activityAssociations.activityId, activities.id),
+          eq(activityAssociations.organizationId, parent.organizationId),
+        )),
+    ),
+  );
 }
 
 export class DrizzleActivityRepository
@@ -107,9 +137,9 @@ export class DrizzleActivityRepository
 {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  async listTimeline(parent: ActivityParent): Promise<ActivityTimelineItem[]> {
-    const condition = timelineCondition(parent);
-    if (!condition) return [];
+  async listTimeline(parent: ActivityParent, page = 1): Promise<ActivityTimelinePage> {
+    const condition = timelineCondition(this.database, parent);
+    if (!condition) return { items: [], nextPage: null };
 
     const records = await this.database
       .select({ activity: activities, revisionCount: count(activityRevisions.id) })
@@ -118,11 +148,15 @@ export class DrizzleActivityRepository
       .where(condition)
       .groupBy(activities.id)
       .orderBy(desc(activities.timelineSortAt), desc(activities.createdAt), desc(activities.id))
-      .limit(10);
+      .limit(TIMELINE_PAGE_SIZE + 1)
+      .offset((page - 1) * TIMELINE_PAGE_SIZE);
 
-    return records.map(({ activity, revisionCount }) =>
-      toTimelineItem(activity, Number(revisionCount)),
-    );
+    return {
+      items: records.slice(0, TIMELINE_PAGE_SIZE).map(({ activity, revisionCount }) =>
+        toTimelineItem(activity, Number(revisionCount)),
+      ),
+      nextPage: records.length > TIMELINE_PAGE_SIZE ? page + 1 : null,
+    };
   }
 
   async listRevisions(

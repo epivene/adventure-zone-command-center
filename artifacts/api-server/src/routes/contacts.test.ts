@@ -91,7 +91,7 @@ vi.mock("@/features/activities/activity-repository", () => ({
 }));
 vi.mock("@/features/activities/activity-service", () => ({
   ActivityService: class {
-    async listTimeline() { return []; }
+    async listTimeline() { return { items: [], nextPage: null }; }
   },
 }));
 vi.mock("@/features/contact-phones/contact-phone-repository", () => ({

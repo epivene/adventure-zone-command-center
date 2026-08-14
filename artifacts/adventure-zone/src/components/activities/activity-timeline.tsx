@@ -24,6 +24,10 @@ export type ActivityMutationResult =
   | { ok: true; activity: ActivityTimelineItem }
   | { ok: false; error: string };
 
+export type ActivityTimelinePageResult =
+  | { ok: true; items: ActivityTimelineItem[]; nextPage: number | null }
+  | { ok: false; error: string };
+
 type EditFormState = {
   open: boolean;
   body: string;
@@ -52,6 +56,8 @@ export function ActivityTimeline({
   createActivity,
   editActivity,
   loadRevisions,
+  initialNextPage = null,
+  loadPage,
 }: {
   activities: ActivityTimelineItem[];
   parent?: ActivityParent;
@@ -61,8 +67,13 @@ export function ActivityTimeline({
     activityId: string,
     page?: number,
   ) => Promise<ActivityRevisionResult>;
+  initialNextPage?: number | null;
+  loadPage?: (page: number) => Promise<ActivityTimelinePageResult>;
 }) {
   const [items, setItems] = useState(activities);
+  const [timelineNextPage, setTimelineNextPage] = useState<number | null>(initialNextPage);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [revisions, setRevisions] = useState<Record<string, ActivityRevision[]>>({});
   const [nextPages, setNextPages] = useState<Record<string, number | null>>({});
@@ -216,6 +227,28 @@ export function ActivityTimeline({
         saving: false,
         error: "The activity edit could not be saved. Please try again.",
       });
+    }
+  }
+
+  async function loadMore() {
+    if (!loadPage || !timelineNextPage || loadingMore) return;
+    setLoadingMore(true);
+    setLoadMoreError("");
+    try {
+      const result = await loadPage(timelineNextPage);
+      if (!result.ok) {
+        setLoadMoreError(result.error);
+        return;
+      }
+      setItems((current) => {
+        const seen = new Set(current.map((item) => item.id));
+        return [...current, ...result.items.filter((item) => !seen.has(item.id))];
+      });
+      setTimelineNextPage(result.nextPage ?? null);
+    } catch {
+      setLoadMoreError("Could not load more activity. Please try again.");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -424,6 +457,21 @@ export function ActivityTimeline({
           })}
         </ol>
       )}
+      {loadPage && timelineNextPage ? (
+        <div className="mt-4">
+          <button
+            className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            disabled={loadingMore}
+            onClick={() => void loadMore()}
+            type="button"
+          >
+            {loadingMore ? "Loading older activity…" : "Load older activity"}
+          </button>
+          {loadMoreError ? (
+            <p className="mt-2 text-sm text-rose-800" role="alert">{loadMoreError}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

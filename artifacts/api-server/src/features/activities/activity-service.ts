@@ -12,6 +12,7 @@ import type {
   ActivityParent,
   ActivityRevisionPage,
   ActivityTimelineItem,
+  ActivityTimelinePage,
   CreateActivityInput,
   EditActivityInput,
 } from "@/features/activities/activity-types";
@@ -22,8 +23,8 @@ export class ActivityService {
     private readonly repository: ActivityRepository & ActivityRevisionReader,
   ) {}
 
-  listTimeline(parent: ActivityParent): Promise<ActivityTimelineItem[]> {
-    return this.repository.listTimeline(parent);
+  listTimeline(parent: ActivityParent, page = 1): Promise<ActivityTimelinePage> {
+    return this.repository.listTimeline(parent, page);
   }
 
   listRevisions(

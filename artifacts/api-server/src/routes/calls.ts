@@ -103,8 +103,8 @@ router.get("/calls/workspace", requireAssistedCalling, async (req, res): Promise
       return;
     }
     const activityParent = activityTimelineParent(result.value.context);
-    const timeline = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline(activityParent);
-    res.json({ ...result.value, activityParent, timeline });
+    const timelinePage = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline(activityParent);
+    res.json({ ...result.value, activityParent, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage });
   } catch (err) {
     req.log.error({ err }, "Failed to load call workspace");
     res.status(500).json({ error: "Failed to load call workspace" });

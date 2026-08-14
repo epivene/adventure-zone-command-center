@@ -206,11 +206,11 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
     const activitySvc = new ActivityService(new DrizzleActivityRepository(db));
     // Include archived legs so a booking already assigned to one still renders it;
     // the picker filters archived legs out of the selectable options client-side.
-    const [allTravelLegs, timeline] = await Promise.all([
+    const [allTravelLegs, timelinePage] = await Promise.all([
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
       activitySvc.listTimeline({ bookingId: id }),
     ]);
-    res.json({ ...detail, allTravelLegs, timeline });
+    res.json({ ...detail, allTravelLegs, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage });
   } catch (err) {
     req.log.error({ err }, "Failed to get booking");
     res.status(500).json({ error: "Failed to get booking" });
