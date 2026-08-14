@@ -62,7 +62,7 @@ class GuardTransaction {
     private readonly proposals: ProposalRow[] = [],
   ) {}
 
-  select(_selection?: Record<string, unknown>) {
+  select(selection?: Record<string, unknown>) {
     let table: unknown;
     const builder = {
       from: (selectedTable: unknown) => {
@@ -78,6 +78,9 @@ class GuardTransaction {
           return Promise.resolve(this.proposals);
         }
         if (table === organizations) {
+          if (selection === undefined) {
+            return Promise.resolve([...this.selected, ...this.ownedLocations]);
+          }
           const rows = this.organizationSelectIndex++ === 0
             ? this.selected
             : this.ownedLocations;
@@ -276,7 +279,7 @@ describe("organization merge family guard", () => {
 
     await repository.mergeOrganizations(PRIMARY_ID, [DUPLICATE_ID]);
 
-    expect(transaction.locks).toEqual(["update", "update", "update"]);
+    expect(transaction.locks).toEqual(["update", "update"]);
     expect(transaction.mutations[0]).toEqual({ kind: "execute" });
     for (const table of [
       contacts,
@@ -316,7 +319,6 @@ describe("organization merge family guard", () => {
     expect(transaction.events.slice(1)).toEqual([
       "row:update",
       "row:update",
-      "row:update",
     ]);
   });
 
@@ -331,7 +333,7 @@ describe("organization merge family guard", () => {
       [DUPLICATE_ID, PRIMARY_ID, DUPLICATE_ID],
     );
 
-    expect(transaction.locks).toEqual(["update", "update", "update"]);
+    expect(transaction.locks).toEqual(["update", "update"]);
   });
 
   it("serializes proposal persistence with merges through the same candidate locks", async () => {
