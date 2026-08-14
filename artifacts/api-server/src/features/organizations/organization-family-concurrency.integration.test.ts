@@ -280,4 +280,181 @@ describe.sequential("organization family database serialization", () => {
     },
     20_000,
   );
+
+  it.skipIf(!process.env.TEST_DATABASE_URL)(
+    "serializes an ACT row-lock-first importer before a family merge without deadlocking",
+    async () => {
+      const pool = new Pool({
+        connectionString: process.env.TEST_DATABASE_URL,
+        max: 4,
+      });
+      const database = drizzle(pool);
+      const organizationId = crypto.randomUUID();
+      const runId = crypto.randomUUID();
+      const recordId = crypto.randomUUID();
+      const importerHasActRow = deferred();
+      const releaseImporterForOrganization = deferred();
+
+      await pool.query(
+        "insert into organizations (id, name) values ($1, 'ACT importer lock order test')",
+        [organizationId],
+      );
+      await pool.query(
+        `insert into act_migration_runs
+          (id, request_key, source_database_key, requested_by)
+         values ($1, $2, 'lock-order-test', 'vitest')`,
+        [runId, `lock-order-${runId}`],
+      );
+      await pool.query(
+        `insert into act_migration_records
+          (id, run_id, stream_type, source_key, source_id, raw_snapshot,
+           normalized_snapshot, fingerprint, matched_entity_type, matched_entity_id)
+         values ($1, $2, 'company', $3, $4, '{}'::jsonb, '{}'::jsonb,
+                 $5, 'organization', $6)`,
+        [
+          recordId,
+          runId,
+          `company:${recordId}`,
+          `act-company-${recordId}`,
+          `fingerprint-${recordId}`,
+          organizationId,
+        ],
+      );
+
+      try {
+        const importer = database.transaction(async (transaction) => {
+          await transaction.execute(sql`
+            select id from act_migration_records
+            where id = ${recordId}
+            for update
+          `);
+          importerHasActRow.resolve();
+          await releaseImporterForOrganization.promise;
+          await transaction.execute(sql`
+            select id from organizations
+            where id = ${organizationId}
+            for update
+          `);
+        });
+        await importerHasActRow.promise;
+
+        const familyMerge = database.transaction(async (transaction) => {
+          await lockOrganizationFamilyMutationSnapshot(transaction as never);
+          await transaction.execute(sql`
+            update act_migration_records
+            set updated_at = now()
+            where id = ${recordId}
+          `);
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        releaseImporterForOrganization.resolve();
+
+        const outcomes = await Promise.allSettled([importer, familyMerge]);
+        expect(outcomes).toEqual([
+          { status: "fulfilled", value: undefined },
+          { status: "fulfilled", value: undefined },
+        ]);
+      } finally {
+        releaseImporterForOrganization.resolve();
+        await pool.query("delete from act_migration_records where id = $1", [
+          recordId,
+        ]);
+        await pool.query("delete from act_migration_runs where id = $1", [runId]);
+        await pool.query("delete from organizations where id = $1", [
+          organizationId,
+        ]);
+        await pool.end();
+      }
+    },
+    20_000,
+  );
+
+  it.skipIf(!process.env.TEST_DATABASE_URL)(
+    "blocks new ACT row lockers when a family snapshot wins the lock race",
+    async () => {
+      const pool = new Pool({
+        connectionString: process.env.TEST_DATABASE_URL,
+        max: 4,
+      });
+      const database = drizzle(pool);
+      const organizationId = crypto.randomUUID();
+      const runId = crypto.randomUUID();
+      const recordId = crypto.randomUUID();
+      const familyHasSnapshot = deferred();
+      const releaseFamily = deferred();
+
+      await pool.query(
+        "insert into organizations (id, name) values ($1, 'Family lock order control')",
+        [organizationId],
+      );
+      await pool.query(
+        `insert into act_migration_runs
+          (id, request_key, source_database_key, requested_by)
+         values ($1, $2, 'lock-order-control', 'vitest')`,
+        [runId, `lock-order-control-${runId}`],
+      );
+      await pool.query(
+        `insert into act_migration_records
+          (id, run_id, stream_type, source_key, source_id, raw_snapshot,
+           normalized_snapshot, fingerprint, matched_entity_type, matched_entity_id)
+         values ($1, $2, 'company', $3, $4, '{}'::jsonb, '{}'::jsonb,
+                 $5, 'organization', $6)`,
+        [
+          recordId,
+          runId,
+          `company:${recordId}`,
+          `act-company-${recordId}`,
+          `fingerprint-${recordId}`,
+          organizationId,
+        ],
+      );
+
+      try {
+        const family = database.transaction(async (transaction) => {
+          await lockOrganizationFamilyMutationSnapshot(transaction as never);
+          familyHasSnapshot.resolve();
+          await releaseFamily.promise;
+        });
+        await familyHasSnapshot.promise;
+
+        let importerHasActRow = false;
+        const importer = database.transaction(async (transaction) => {
+          await transaction.execute(sql`
+            select id from act_migration_records
+            where id = ${recordId}
+            for update
+          `);
+          importerHasActRow = true;
+          await transaction.execute(sql`
+            select id from organizations
+            where id = ${organizationId}
+            for update
+          `);
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(importerHasActRow).toBe(false);
+
+        releaseFamily.resolve();
+        const outcomes = await Promise.allSettled([family, importer]);
+        expect(outcomes).toEqual([
+          { status: "fulfilled", value: undefined },
+          { status: "fulfilled", value: undefined },
+        ]);
+      } finally {
+        releaseFamily.resolve();
+        await pool.query("delete from act_migration_records where id = $1", [
+          recordId,
+        ]);
+        await pool.query("delete from act_migration_runs where id = $1", [runId]);
+        await pool.query("delete from organizations where id = $1", [
+          organizationId,
+        ]);
+        await pool.end();
+      }
+    },
+    20_000,
+  );
+
 });
