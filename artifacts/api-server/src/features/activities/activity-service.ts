@@ -1,5 +1,6 @@
 import {
   createActivityInputSchema,
+  deleteActivityInputSchema,
   editActivityInputSchema,
 } from "@/features/activities/activity-input";
 import {
@@ -68,5 +69,16 @@ export class ActivityService {
       });
     }
     return this.repository.edit(parsed.data);
+  }
+
+  async delete(activityId: string): Promise<Result<void, ActivityError>> {
+    const parsed = deleteActivityInputSchema.safeParse({ activityId });
+    if (!parsed.success) {
+      return err({
+        code: "INVALID_ACTIVITY_INPUT",
+        message: parsed.error.issues[0]?.message ?? "Review the activity.",
+      });
+    }
+    return this.repository.delete(parsed.data.activityId);
   }
 }
