@@ -157,3 +157,51 @@ completed successfully:
 
 The temporary branch-only verification workflow was removed after the green
 run.
+
+## Fix Round 5
+
+The final database-concurrency review found that row locks could only protect
+organizations already visible in an older snapshot. A concurrent third location
+could therefore be omitted, and hierarchy operations could take organization row
+locks before entering the family advisory domain.
+
+The correction establishes one documented lock order:
+
+1. Every hierarchy, family-review, proposal-persistence, and merge flow first
+   acquires the shared transaction advisory lock.
+2. Authoritative family flows then lock `organizations` in `EXCLUSIVE` mode,
+   preventing concurrent organization INSERT/UPDATE/DELETE and row locks while
+   the complete bucket is rebuilt.
+3. ACT migration records and external links are held in `SHARE` mode so the
+   relationship evidence used by the decision cannot change before commit.
+4. Review and organization rows are then read or locked in stable key order.
+
+Proposal persistence now rediscovers the full family only after those locks are
+held. An old A+B proposal is deleted or replaced by the current A+B+C proposal,
+rather than being persisted from an obsolete caller snapshot. Manual group,
+move, create-parent, and ungroup flows use the same advisory-first order, which
+removes hierarchy-versus-merge lock inversion.
+
+Authoritative review transactions use `READ COMMITTED`: after waiting for a
+concurrent writer to release the table lock, the next statement sees that
+writer's committed location or ACT evidence. A serializable snapshot established
+by the advisory-lock statement could otherwise remain older than the table-lock
+wait.
+
+GitHub Actions run
+[31765739854](https://github.com/epivene/adventure-zone-command-center/actions/runs/31765739854)
+at product head `0363b3b8d6ce206416e17ab86ac00465bbbac9d7`
+completed successfully:
+
+- PostgreSQL lock-order/concurrency regressions: 6 passed.
+- Full API suite: 1,059 passed, 57 skipped.
+- Focused frontend hierarchy suite: 41 passed.
+- Shared library, database, API, frontend, and root TypeScript checks: passed.
+- Full workspace production build: passed.
+
+The table locks are intentionally held only for the rare family review,
+proposal, or merge transaction. During that short transaction organization
+writes and ACT relationship writes wait; ordinary reads continue.
+
+The temporary branch-only verification workflow was removed after the green
+run.
