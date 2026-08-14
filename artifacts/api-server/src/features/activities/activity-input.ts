@@ -3,9 +3,9 @@ import { z } from "zod";
 import { activityKindValues } from "@/db/schema";
 
 const activityParentInputSchema = z.object({
-  organizationId: z.uuid().optional(),
-  contactId: z.uuid().optional(),
-  bookingId: z.uuid().optional(),
+  organizationId: z.string().uuid().optional(),
+  contactId: z.string().uuid().optional(),
+  bookingId: z.string().uuid().optional(),
 });
 
 const activityText = z.string().trim().min(1, "Add activity text.");
@@ -24,13 +24,13 @@ export const createActivityInputSchema = activityParentInputSchema
   );
 
 export const editActivityInputSchema = z.object({
-  activityId: z.uuid(),
+  activityId: z.string().uuid(),
   body: activityText,
   reason: z.string().trim().min(1, "Add a reason for the edit."),
 });
 
 export const deleteActivityInputSchema = z.object({
-  activityId: z.uuid(),
+  activityId: z.string().uuid(),
 });
 
 export type ActivityCreateInput = z.output<typeof createActivityInputSchema>;
