@@ -430,10 +430,10 @@ export async function lockOrganizationFamilyReviewDomain(
   );
 }
 
-export async function assertOrganizationsMergeable(
+async function revalidateOrganizationsMergeable(
   transaction: OrganizationMergeTransaction,
   ids: string[],
-): Promise<void> {
+): Promise<"mergeable" | "family_conflict"> {
   const selectedIds = [...new Set(ids)].sort((left, right) =>
     left.localeCompare(right, "en-US"),
   );
@@ -452,17 +452,13 @@ export async function assertOrganizationsMergeable(
   const relevantProposals = proposedFamilies.filter((review) =>
     review.candidateIds.some((candidateId) => selectedIdSet.has(candidateId)),
   );
-  const lockedIds = [
-    ...new Set([
-      ...selectedIds,
-      ...relevantProposals.flatMap((review) => review.candidateIds),
-    ]),
-  ].sort((left, right) => left.localeCompare(right, "en-US"));
 
+  // The whole organization set is locked in one deterministic order. Family
+  // proposals must be compared with the current complete discovery bucket, not
+  // only the IDs stored in an older proposal.
   const lockedOrganizations = await transaction
     .select()
     .from(organizations)
-    .where(inArray(organizations.id, lockedIds))
     .orderBy(asc(organizations.id))
     .for("update");
   const organizationById = new Map(
@@ -478,16 +474,18 @@ export async function assertOrganizationsMergeable(
     );
   }
 
-  const ownedLocations = await transaction
-    .select({
-      id: organizations.id,
-      parentOrganizationId: organizations.parentOrganizationId,
-    })
-    .from(organizations)
-    .where(inArray(organizations.parentOrganizationId, selectedIds))
-    .orderBy(asc(organizations.id))
-    .for("update");
-
+  const ownedParentIds = new Set(
+    lockedOrganizations.flatMap((organization) =>
+      organization.parentOrganizationId
+        ? [organization.parentOrganizationId]
+        : [],
+    ),
+  );
+  const ownedLocations = lockedOrganizations.filter(
+    (organization) =>
+      organization.parentOrganizationId !== null &&
+      selectedIdSet.has(organization.parentOrganizationId),
+  );
   if (
     selectedOrganizations.some(
       (organization) => organization.parentOrganizationId !== null,
@@ -497,18 +495,19 @@ export async function assertOrganizationsMergeable(
     throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
   }
 
+  if (!relevantProposals.length) return "mergeable";
+
+  const standaloneRecords = lockedOrganizations.filter(
+    (organization) =>
+      organization.parentOrganizationId === null &&
+      !ownedParentIds.has(organization.id),
+  );
+  const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
+    transaction,
+    standaloneRecords,
+  );
+
   for (const proposal of relevantProposals) {
-    const proposalRecords = proposal.candidateIds.flatMap((id) => {
-      const organization = organizationById.get(id);
-      return organization ? [organization] : [];
-    });
-    const currentGroups =
-      proposalRecords.length === proposal.candidateIds.length
-        ? await discoverOrganizationFamilyCandidatesFromDatabase(
-            transaction,
-            proposalRecords,
-          )
-        : [];
     const isCurrent = currentGroups.some(
       (group) =>
         group.groupKey === proposal.groupKey &&
@@ -517,12 +516,41 @@ export async function assertOrganizationsMergeable(
           (id, index) => id === proposal.candidateIds[index],
         ),
     );
-    if (isCurrent) {
-      throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
-    }
+    if (isCurrent) return "family_conflict";
+
     await transaction
       .delete(organizationFamilyReviews)
       .where(eq(organizationFamilyReviews.groupKey, proposal.groupKey));
+
+    const proposalIdSet = new Set(proposal.candidateIds);
+    const replacements = currentGroups.filter(
+      (group) =>
+        group.groupKey &&
+        group.candidateIds.some((id) => proposalIdSet.has(id)),
+    );
+    if (replacements.length) {
+      await transaction
+        .insert(organizationFamilyReviews)
+        .values(replacements.map((group) => ({
+          groupKey: group.groupKey!,
+          candidateIds: group.candidateIds,
+          status: "proposed" as const,
+          evidence: group.evidence,
+        })))
+        .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+      return "family_conflict";
+    }
+  }
+
+  return "mergeable";
+}
+
+export async function assertOrganizationsMergeable(
+  transaction: OrganizationMergeTransaction,
+  ids: string[],
+): Promise<void> {
+  if (await revalidateOrganizationsMergeable(transaction, ids) === "family_conflict") {
+    throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
   }
 }
 
@@ -1565,8 +1593,12 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
   async mergeOrganizations(primaryId: string, duplicateIds: string[]): Promise<void> {
     if (!duplicateIds.length) return;
 
-    await this.database.transaction(async (tx) => {
-      await assertOrganizationsMergeable(tx, [primaryId, ...duplicateIds]);
+    const outcome = await this.database.transaction(async (tx) => {
+      const guard = await revalidateOrganizationsMergeable(
+        tx,
+        [primaryId, ...duplicateIds],
+      );
+      if (guard === "family_conflict") return "family_conflict" as const;
       const now = new Date();
 
       for (const dupId of duplicateIds) {
@@ -1664,6 +1696,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         // Step 10: Delete the now-empty duplicate
         await tx.delete(organizations).where(eq(organizations.id, dupId));
       }
+      return "merged" as const;
     });
+
+    if (outcome === "family_conflict") {
+      throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+    }
   }
 }
