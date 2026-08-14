@@ -226,6 +226,7 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
 
 router.post("/ai-suggestions/:id/dismiss", async (req, res): Promise<void> => {
   const { id } = req.params;
+  try {
     const suggestion = await getSuggestion(id);
     if (!suggestion) {
       res.status(404).json({ error: "Suggestion not found" });
