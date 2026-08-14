@@ -702,6 +702,14 @@ describe("durable production workflow projection", () => {
     expect(projectImportWorkflow(state).canOrganize).toBe(false);
   });
 
+  it("requires an unversioned ready plan to be rebuilt even after a partial apply", () => {
+    const state = input();
+    state.operations[0]!.status = "applied";
+    (state as typeof state & { manifestGeneration: null }).manifestGeneration = null;
+
+    expect(projectImportWorkflow(state).canOrganize).toBe(true);
+  });
+
   it("projects a pending safe link from an awaiting-review source", () => {
     const state = input();
     state.outcomes = [

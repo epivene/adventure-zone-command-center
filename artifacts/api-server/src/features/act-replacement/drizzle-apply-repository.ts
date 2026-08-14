@@ -289,25 +289,31 @@ export class DrizzleApplyRepository implements ApplyRepository {
   }
   async finishBatch(batch: ApplyBatchRecord, attempt: ApplyAttempt) {
     await this.withAttempt(attempt, async (executor) => {
-      await executor.execute(sql`update act_replacement_outcomes outcomes
+      await executor.execute(sql`with current_operations as (
+        select operations.*
+        from act_replacement_apply_operations operations
+        inner join act_replacement_runs runs on runs.id = operations.run_id
+        where operations.run_id = ${batch.runId}
+          and operations.manifest_generation is not distinct from runs.manifest_generation
+      )
+      update act_replacement_outcomes outcomes
         set state = case
-          when exists (select 1 from act_replacement_apply_operations operations where operations.run_id = outcomes.run_id and operations.source_record_id = outcomes.source_record_id and operations.status = 'failed') then 'failed'
-          when exists (select 1 from act_replacement_apply_operations operations where operations.run_id = outcomes.run_id and operations.source_record_id = outcomes.source_record_id and operations.status = 'blocked') then 'awaiting_review'
-          when not exists (select 1 from act_replacement_apply_operations operations where operations.run_id = outcomes.run_id and operations.source_record_id = outcomes.source_record_id and operations.status not in ('applied','already_present'))
-            then case when exists (select 1 from act_replacement_apply_operations operations where operations.run_id = outcomes.run_id and operations.source_record_id = outcomes.source_record_id and operations.status = 'applied') then 'applied' else 'already_present' end
+          when exists (select 1 from current_operations operations where operations.source_record_id = outcomes.source_record_id and operations.status = 'failed') then 'failed'
+          when exists (select 1 from current_operations operations where operations.source_record_id = outcomes.source_record_id and operations.status = 'blocked') then 'awaiting_review'
+          when not exists (select 1 from current_operations operations where operations.source_record_id = outcomes.source_record_id and operations.status not in ('applied','already_present'))
+            then case when exists (select 1 from current_operations operations where operations.source_record_id = outcomes.source_record_id and operations.status = 'applied') then 'applied' else 'already_present' end
           else outcomes.state
         end,
         updated_at = now()
         where outcomes.run_id = ${batch.runId}
           and outcomes.source_record_id in (
             select distinct operations.source_record_id
-            from act_replacement_apply_operations operations
-            where operations.run_id = ${batch.runId}
-              and operations.operation_key in (select jsonb_array_elements_text(${JSON.stringify(batch.operationIds)}::jsonb))
+            from current_operations operations
+            where operations.operation_key in (select jsonb_array_elements_text(${JSON.stringify(batch.operationIds)}::jsonb))
           )
           and (
-            exists (select 1 from act_replacement_apply_operations operations where operations.run_id = outcomes.run_id and operations.source_record_id = outcomes.source_record_id and operations.status in ('blocked','failed'))
-            or not exists (select 1 from act_replacement_apply_operations operations where operations.run_id = outcomes.run_id and operations.source_record_id = outcomes.source_record_id and operations.status not in ('applied','already_present'))
+            exists (select 1 from current_operations operations where operations.source_record_id = outcomes.source_record_id and operations.status in ('blocked','failed'))
+            or not exists (select 1 from current_operations operations where operations.source_record_id = outcomes.source_record_id and operations.status not in ('applied','already_present'))
           )`);
       const finished = await this.query(sql`update act_replacement_apply_batches set state = ${batch.state}, lease_owner = null, lease_expires_at = null, attempt_token = null, last_error_code = ${batch.failed ? "apply_failed" : null}, completed_at = case when ${batch.state} in ('complete','complete_with_issues') then now() else completed_at end, updated_at = now() where id = ${attempt.batchId} and attempt_token = ${attempt.attemptToken} and state = 'applying' returning id`, executor);
       if (finished.length !== 1) this.lostAttempt();

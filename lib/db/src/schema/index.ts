@@ -982,6 +982,7 @@ export const actReplacementRuns = pgTable(
     phase: text("phase").default("extracting").notNull(),
     summary: jsonb("summary").$type<Record<string, unknown>>(),
     manifestDigestVersion: text("manifest_digest_version"),
+    manifestGeneration: uuid("manifest_generation"),
     lastErrorCode: text("last_error_code"),
     organizerToken: uuid("organizer_token"),
     organizerLeaseExpiresAt: timestamp("organizer_lease_expires_at", {
@@ -2018,9 +2019,18 @@ export const actReplacementBulkReviewRequests = pgTable("act_replacement_bulk_re
 
 export const actReplacementApplyOperations = pgTable("act_replacement_apply_operations", {
   id: uuid("id").defaultRandom().primaryKey(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id), sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
+  manifestGeneration: uuid("manifest_generation"),
   operationKey: text("operation_key").notNull(), targetType: text("target_type").notNull(), action: text("action").notNull(), payload: jsonb("payload").$type<Record<string, unknown>>().notNull(), dependencyOperationKeys: jsonb("dependency_operation_keys").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), requiredForSourceOutcome: boolean("required_for_source_outcome").default(false).notNull(), safeByDefault: boolean("safe_by_default").default(false).notNull(),
   batchId: uuid("batch_id"), status: text("status").default("pending").notNull(), approvedBy: text("approved_by"), approvedAt: timestamp("approved_at", { withTimezone: true }), leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), retryable: boolean("retryable").default(true).notNull(), retryAfter: timestamp("retry_after", { withTimezone: true }), executedAt: timestamp("executed_at", { withTimezone: true }), attemptCount: integer("attempt_count").default(0).notNull(), lastErrorCode: text("last_error_code"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-}, (table) => [unique("act_replacement_apply_operations_run_key_unique").on(table.runId, table.operationKey), check("act_replacement_apply_operations_status_valid", sql`${table.status} in ('pending','leased','applied','already_present','blocked','failed')`), check("act_replacement_apply_operations_approval_requires_actor", sql`${table.approvedAt} is null or ${table.approvedBy} is not null`), check("act_replacement_apply_operations_lease_consistency", sql`${table.status} = 'leased' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null or ${table.status} <> 'leased'`), check("act_replacement_apply_operations_action_valid", sql`${table.action} in ('create','link_existing','fill_missing','overwrite_reviewed','create_relationship','record_provenance')`), check("act_replacement_apply_operations_target_valid", sql`${table.targetType} in ('organization','contact','booking','calling_list','activity','organization_contact','booking_contact','calling_list_member','activity_association')`)]);
+}, (table) => [
+  unique("act_replacement_apply_operations_run_key_unique").on(table.runId, table.operationKey),
+  index("act_replacement_apply_operations_current_manifest_idx").on(table.runId, table.manifestGeneration),
+  check("act_replacement_apply_operations_status_valid", sql`${table.status} in ('pending','leased','applied','already_present','blocked','failed')`),
+  check("act_replacement_apply_operations_approval_requires_actor", sql`${table.approvedAt} is null or ${table.approvedBy} is not null`),
+  check("act_replacement_apply_operations_lease_consistency", sql`${table.status} = 'leased' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null or ${table.status} <> 'leased'`),
+  check("act_replacement_apply_operations_action_valid", sql`${table.action} in ('create','link_existing','fill_missing','overwrite_reviewed','create_relationship','record_provenance')`),
+  check("act_replacement_apply_operations_target_valid", sql`${table.targetType} in ('organization','contact','booking','calling_list','activity','organization_contact','booking_contact','calling_list_member','activity_association')`),
+]);
 
 export const actReplacementApprovalRequests = pgTable("act_replacement_approval_requests", {
   id: uuid("id").defaultRandom().primaryKey(), requestKey: text("request_key").notNull(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), manifestDigest: text("manifest_digest").notNull(), approvalMode: text("approval_mode"), approvalModeVersion: integer("approval_mode_version"), selectedOperationIds: jsonb("selected_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), dependencyClosedOperationIds: jsonb("dependency_closed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), selectedCount: integer("selected_count").default(0).notNull(), dependencyCount: integer("dependency_count").default(0).notNull(), rejectedCount: integer("rejected_count").default(0).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

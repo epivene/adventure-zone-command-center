@@ -107,9 +107,13 @@ function canResolveAutomaticReview(
 }
 
 function needsReviewPlanRefresh(
-  phase: ActReplacementWorkflowStatus["phase"],
+  run: Pick<ActReplacementWorkflowStatus, "phase" | "canOrganize">,
 ) {
-  return phase === "complete" || phase === "complete_with_issues";
+  return (
+    run.phase === "complete" ||
+    run.phase === "complete_with_issues" ||
+    (run.phase === "ready_to_apply" && run.canOrganize)
+  );
 }
 
 function isRefreshedReviewPhase(
@@ -787,7 +791,7 @@ export default function ActMigrationPage() {
     setError(null);
     try {
       let reviewRun = run;
-      if (needsReviewPlanRefresh(run.phase)) {
+      if (needsReviewPlanRefresh(run)) {
         await organizeRun(runId);
         for (let attempt = 0; attempt < 200; attempt += 1) {
           reviewRun = await refreshRun(runId);

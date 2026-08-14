@@ -453,6 +453,39 @@ describe("ActMigrationPage", () => {
       .toBeLessThan(client.resolveAutomaticReview.mock.invocationCallOrder[0]!);
   });
 
+  it("refreshes an unversioned ready plan before automatic cleanup", async () => {
+    const refreshedDigest = "d".repeat(64);
+    const run = readyRun({
+      phase: "ready_to_apply",
+      canOrganize: true,
+      reviewRequiredCount: 12_719,
+      archivedOnlyCount: 12_719,
+    });
+    const refreshed = readyRun({
+      phase: "ready_to_apply",
+      canOrganize: false,
+      manifestDigest: refreshedDigest,
+      reviewRequiredCount: 12_719,
+      archivedOnlyCount: 12_719,
+    });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.organizeRun.mockResolvedValue({ status: "organizing" });
+    client.getRun.mockResolvedValue({ run: refreshed });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+
+    await waitFor(() =>
+      expect(client.resolveAutomaticReview).toHaveBeenCalledWith(run.runId, {
+        expectedManifestDigest: refreshedDigest,
+        requestKey: expect.any(String),
+      }),
+    );
+    expect(client.organizeRun).toHaveBeenCalledWith(run.runId);
+  });
+
   it("continues from complete-with-issues through cleanup approval and safe apply", async () => {
     const organizedDigest = "c".repeat(64);
     const rebuiltDigest = "b".repeat(64);
