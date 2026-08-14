@@ -11,6 +11,26 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Act Apply Runner"
+
+[[workflows.workflow]]
+name = "Act Apply Runner"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd artifacts/api-server && APPROVAL_KEY=2a2e7121-a100-4bf5-94ad-e5d93711d294 ACT_MIGRATION_APPLY_ENABLED=true pnpm exec tsx src/run-apply-once.ts && sleep 3600"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true

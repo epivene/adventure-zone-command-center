@@ -44,6 +44,19 @@ const allowed = new Set([
   "EndDate",
   "endTime",
   "EndTime",
+  // Act! Web API field names observed in real payloads
+  "startTime",
+  "StartTime",
+  "created",
+  "Created",
+  "edited",
+  "Edited",
+  "displayDate",
+  "DisplayDate",
+  "noteText",
+  "NoteText",
+  "regarding",
+  "Regarding",
   "duration",
   "Duration",
   "status",
@@ -67,9 +80,12 @@ export const normalizeTimeline = (
     sourceType === "activity"
       ? [
           // Primary Act! field name, then alternate names returned by older
-          // or customized Act! API deployments
+          // or customized Act! API deployments. The Act! Web API returns
+          // "startTime" for activities.
           "scheduleDate",
           "ScheduleDate",
+          "startTime",
+          "StartTime",
           "startDate",
           "StartDate",
           "activityDate",
@@ -77,7 +93,13 @@ export const normalizeTimeline = (
           "date",
           "Date",
         ]
-      : ["createDate", "CreateDate"],
+      : sourceType === "note"
+        ? // Act! Web API notes carry the user-visible date in "displayDate";
+          // fall back to the record creation timestamp.
+          ["displayDate", "DisplayDate", "createDate", "CreateDate", "created", "Created"]
+        : // Act! Web API histories carry the event time in "startTime";
+          // fall back to the record creation timestamp.
+          ["startTime", "StartTime", "createDate", "CreateDate", "created", "Created"],
   );
   const occurred = validDate(date) ? date : null;
   if (!occurred) z.w.add("source_date_unavailable");
@@ -96,9 +118,16 @@ export const normalizeTimeline = (
     text(
       r,
       sourceType === "note"
-        ? ["body", "Body"]
+        ? // Act! Web API notes carry their content in "noteText"
+          ["noteText", "NoteText", "body", "Body"]
         : ["details", "Details", "body", "Body"],
     ) ?? "";
+  // Act! histories/activities frequently have an empty details field but a
+  // meaningful one-line summary in "regarding" (histories) or "subject"
+  // (activities). Treat that summary as the subject and accept it as the
+  // body when no long-form content exists, instead of rejecting the record.
+  const subject = text(r, ["subject", "Subject", "regarding", "Regarding"]);
+  const effectiveBody = body || subject || "";
   const category: Timeline["category"] =
     sourceType === "note"
       ? "note"
@@ -109,8 +138,8 @@ export const normalizeTimeline = (
     kind: "timeline" as const,
     category,
     sourceType,
-    subject: text(r, ["subject", "Subject"]),
-    body,
+    subject,
+    body: effectiveBody,
     sourceOccurredAt: occurred,
     timelineSortAt: occurred ?? capturedAt,
     dateIsImportFallback: !occurred,
@@ -124,5 +153,5 @@ export const normalizeTimeline = (
     z.p.add("duration");
   }
   if (!validDate(capturedAt)) return bad(v, "invalid_capture_timestamp", z);
-  return body ? ok(v, z) : bad(v, "missing_required_timeline_body", z);
+  return effectiveBody ? ok(v, z) : bad(v, "missing_required_timeline_body", z);
 };

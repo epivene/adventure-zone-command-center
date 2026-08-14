@@ -612,13 +612,60 @@ export function manifestSourcesFromArchiveRows(input: { rows: readonly ArchivedO
       .flatMap((row) => [text(row.relationshipEvidence.parentActRecordId), text(row.relationshipEvidence.targetActRecordId)])
       .filter(Boolean),
   );
+  // Act! Web API timeline records (histories, notes, activities) embed their
+  // linked contacts/companies/opportunities directly in the root snapshot.
+  // Extraction stores those snapshots verbatim without emitting separate
+  // relationship records, so derive the parent evidence here — otherwise
+  // timeline records with inline links would all land in "unassigned".
+  const knownRootActIds = new Set(
+    roots
+      .filter((row) => ["contact", "company", "opportunity"].includes(row.streamType))
+      .map((row) => (row.actRecordId ? `${row.streamType}:${row.actRecordId}` : null))
+      .filter(Boolean),
+  );
+  const inlineTimelineEvidence = (row: ArchivedOrganizerSourceRow): ActRelationshipEvidence[] => {
+    if (!["activity", "note", "history"].includes(row.streamType)) return [];
+    const evidence: ActRelationshipEvidence[] = [];
+    for (const [field, childStream] of [
+      ["contacts", "contact"],
+      ["companies", "company"],
+      ["opportunities", "opportunity"],
+    ] as const) {
+      const entries = row.rawSnapshot[field];
+      if (!Array.isArray(entries)) continue;
+      for (const entry of entries) {
+        const targetActRecordId = entry && typeof entry === "object" ? text((entry as Record<string, unknown>).id) : null;
+        if (!targetActRecordId) continue;
+        // Only emit evidence for targets that were actually extracted;
+        // links to records deleted in Act! would otherwise flood the
+        // review queue with unresolvable relationship diagnostics.
+        if (!knownRootActIds.has(`${childStream}:${targetActRecordId}`)) continue;
+        evidence.push({
+          parentStream: row.streamType as ActRelationshipEvidence["parentStream"],
+          childStream: childStream as ActRelationshipEvidence["childStream"],
+          parentSourceRecordId: row.sourceRecordId,
+          parentActRecordId: row.actRecordId,
+          childSourceRecordId: null,
+          childActRecordId: targetActRecordId,
+          evidenceKind: "inline",
+          relationshipSlot: `${row.sourceRecordId}:${field}:${targetActRecordId}`,
+          sourceRecordId: row.sourceRecordId,
+          sourceVersionId: row.sourceVersionId,
+        });
+      }
+    }
+    return evidence;
+  };
   const resolution = resolveActSourceGraph({
     records: roots.map((row) => ({
       sourceRecordId: row.sourceRecordId,
       streamType: row.streamType,
       actRecordId: row.actRecordId,
     })),
-    relationships: input.rows.map(relationshipFromArchiveRow).filter((row): row is ActRelationshipEvidence => Boolean(row)),
+    relationships: [
+      ...input.rows.map(relationshipFromArchiveRow).filter((row): row is ActRelationshipEvidence => Boolean(row)),
+      ...roots.flatMap(inlineTimelineEvidence),
+    ],
     assignments: input.assignments,
   });
   const relationshipIssues = new Map<string, ManifestReviewIssue[]>();
