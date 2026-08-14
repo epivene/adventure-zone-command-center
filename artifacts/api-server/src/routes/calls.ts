@@ -120,7 +120,15 @@ router.post("/calls/complete", requireAssistedCalling, async (req, res): Promise
   try {
     const result = await new CallService(new DrizzleCallRepository(db)).complete(parsed.data);
     if (!result.ok) {
-      res.status(400).json({ ok: false, error: "Could not complete call" });
+      const error =
+        result.error.code === "NEXT_ACTION_REQUIRED"
+          ? "Choose a next action and a future date before saving this call."
+          : result.error.code === "INVALID_CALL_INPUT"
+            ? result.error.message
+            : result.error.code === "ALREADY_COMPLETED"
+              ? "This call was already completed."
+              : "Could not complete call";
+      res.status(400).json({ ok: false, error });
       return;
     }
     res.json({ ok: true });
