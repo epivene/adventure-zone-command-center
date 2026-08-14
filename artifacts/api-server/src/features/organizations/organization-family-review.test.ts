@@ -100,6 +100,7 @@ const candidate: DuplicateOrganizationGroup = {
       lastResortChangedAt: null,
       parent: null,
       locationCount: 0,
+      matchedLocation: null,
     },
     {
       id: SECOND_ID,
@@ -114,6 +115,7 @@ const candidate: DuplicateOrganizationGroup = {
       lastResortChangedAt: null,
       parent: null,
       locationCount: 0,
+      matchedLocation: null,
     },
   ],
 };

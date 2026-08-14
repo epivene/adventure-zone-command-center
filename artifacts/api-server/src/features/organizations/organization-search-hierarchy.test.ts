@@ -16,6 +16,7 @@ function listQuery(search: string): OrganizationListQuery {
     search,
     lastResort: "all",
     travelLegId: null,
+    includeRetired: false,
     page: 1,
     pageSize: 50,
   };
