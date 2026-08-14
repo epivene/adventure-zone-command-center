@@ -9,6 +9,7 @@ import {
 } from "@/features/organizations/bulk-duplicate-merge";
 import { apiGet, apiPost } from "@/lib/auth-token";
 import { useToast } from "@/hooks/use-toast";
+import { ConsolidationDialog } from "./consolidation-dialog";
 
 type FamilyEvidence = {
   family: "name" | "website" | "location" | "address" | "act_relationship";
@@ -291,8 +292,12 @@ function DuplicateGroupCard({
   const locationCandidate = isLocationCandidate(group);
   const [showMerge, setShowMerge] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
+  const [showConsolidate, setShowConsolidate] = useState(false);
   const [pending, setPending] = useState(false);
   const { toast } = useToast();
+
+  const sourceOrgIds = group.candidateIds ?? group.organizations.map((item) => item.id);
+  const sourceOrgNames = group.organizations.map((item) => item.name);
 
   async function merge() {
     if (!primaryId) return;
@@ -329,6 +334,14 @@ function DuplicateGroupCard({
     <>
       {showMerge ? <MergeDialog group={group} merging={pending} onCancel={() => setShowMerge(false)} onConfirm={merge} primaryId={primaryId} /> : null}
       {showLocations ? <MakeLocationsDialog group={group} onCancel={() => setShowLocations(false)} onComplete={onResolved} /> : null}
+      {showConsolidate ? (
+        <ConsolidationDialog
+          onCancel={() => setShowConsolidate(false)}
+          onComplete={onResolved}
+          sourceOrgIds={sourceOrgIds}
+          sourceOrgNames={sourceOrgNames}
+        />
+      ) : null}
       <div className={`rounded-xl border p-4 ${locationCandidate ? "border-sky-200 bg-sky-50" : "border-amber-200 bg-amber-50"}`} data-testid={`duplicate-group-${group.groupKey ?? group.normalizedName}`}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -351,10 +364,24 @@ function DuplicateGroupCard({
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!locationCandidate ? <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>Merge duplicates</button> : null}
+            {!locationCandidate ? (
+              <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>
+                Merge duplicates
+              </button>
+            ) : null}
             {locationCandidate ? (
               <>
-                <button className="button-primary text-sm" disabled={disabled || pending} onClick={() => setShowLocations(true)}>Same organization—make locations</button>
+                <button
+                  className="button-primary text-sm"
+                  disabled={disabled || pending}
+                  onClick={() => setShowConsolidate(true)}
+                  title="Consolidate: keep each profile as a named location with its own history"
+                >
+                  Consolidate as locations
+                </button>
+                <button className="button-secondary text-sm" disabled={disabled || pending} onClick={() => setShowLocations(true)}>
+                  Same organization—make locations
+                </button>
                 <button className="button-secondary text-sm" disabled={disabled || pending} onClick={notRelated}>Not related</button>
               </>
             ) : null}

@@ -206,6 +206,13 @@ export const organizations = pgTable("organizations", {
     (): AnyPgColumn => organizations.id,
     { onDelete: "restrict" },
   ),
+  /** Set when this profile has been retired via the consolidation workflow. */
+  consolidatedIntoId: uuid("consolidated_into_id").references(
+    (): AnyPgColumn => organizations.id,
+    { onDelete: "restrict" },
+  ),
+  /** Timestamp when the consolidation was applied. */
+  consolidatedAt: timestamp("consolidated_at", { withTimezone: true }),
   lastResort: boolean("last_resort").default(false).notNull(),
   lastResortReason: text("last_resort_reason"),
   lastResortChangedAt: timestamp("last_resort_changed_at", {
@@ -277,12 +284,24 @@ export const organizationLocations = pgTable(
     lng: doublePrecision("lng"),
     actRecordId: text("act_record_id").unique(),
     actSourceLabel: text("act_source_label"),
+    /**
+     * Set when this location was created via the consolidation workflow.
+     * Identifies the retired source organization that contributed this location,
+     * enabling accurate redirect lookups.
+     */
+    consolidationSourceOrgId: uuid("consolidation_source_org_id").references(
+      (): AnyPgColumn => organizations.id,
+      { onDelete: "restrict" },
+    ),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("organization_locations_organization_id_idx").on(table.organizationId),
     index("organization_locations_normalized_phone_idx").on(table.normalizedPhone),
+    uniqueIndex("organization_locations_consolidation_source_org_unique")
+      .on(table.organizationId, table.consolidationSourceOrgId)
+      .where(sql`${table.consolidationSourceOrgId} is not null`),
   ],
 );
 

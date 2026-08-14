@@ -1049,11 +1049,15 @@ export function buildOrganizationListCondition(
 ): SQL | undefined {
   const pattern = `%${query.search}%`;
 
-  // Retired orgs are those absorbed into a parent (parentOrganizationId IS NOT NULL).
+  // Retired orgs are those absorbed into a parent (parentOrganizationId IS NOT NULL) or
+  // consolidated via the consolidation workflow (consolidatedIntoId IS NOT NULL).
   // By default these are excluded from all list results; pass includeRetired=true only for admin review.
   const notRetiredCondition = query.includeRetired
     ? undefined
-    : isNull(organizations.parentOrganizationId);
+    : and(
+        isNull(organizations.parentOrganizationId),
+        isNull(organizations.consolidatedIntoId),
+      );
 
   const searchCondition = query.search
     ? sql`(
@@ -1176,6 +1180,7 @@ export function duplicateOrganizationGroupsQuery() {
       array_agg(id ORDER BY created_at ASC) AS ids
     FROM organizations AS duplicate_candidate
     WHERE parent_organization_id IS NULL
+      AND consolidated_into_id IS NULL
       AND NOT EXISTS (
         SELECT 1
         FROM organizations AS confirmed_location
