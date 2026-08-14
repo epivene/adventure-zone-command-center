@@ -28,16 +28,21 @@ export async function lockOrganizationHierarchyMutationDomain(
 /**
  * Creates an authoritative family-decision snapshot.
  *
- * Organization families are discovered from the complete organization set, so
- * an EXCLUSIVE table lock is required to make concurrent INSERT/UPDATE/DELETE
- * wait until the rare review/merge transaction commits. ACT evidence is read
- * from the migration/link tables; SHARE locks keep those relationships stable
- * for the same transaction while still allowing ordinary readers.
+ * ACT importers lock migration rows before organization rows. The family flow
+ * therefore takes EXCLUSIVE table locks on the ACT evidence tables first. In
+ * PostgreSQL, EXCLUSIVE conflicts with the ROW SHARE lock taken by SELECT FOR
+ * UPDATE, so an importer that already owns an ACT row makes this flow wait
+ * before it can own the organization table. Conversely, a family flow that
+ * wins first blocks new ACT row lockers before they can own ACT rows.
+ *
+ * The organizations EXCLUSIVE lock then stabilizes the complete organization
+ * set against concurrent INSERT/UPDATE/DELETE while ordinary readers remain
+ * allowed on all three tables.
  *
  * Lock order is always:
  *   1. family advisory transaction lock
- *   2. organizations table
- *   3. ACT migration records, then ACT external links
+ *   2. ACT migration records, then ACT external links
+ *   3. organizations table
  *   4. review/organization row locks in deterministic key order
  */
 export async function lockOrganizationFamilyMutationSnapshot(
@@ -45,10 +50,10 @@ export async function lockOrganizationFamilyMutationSnapshot(
 ): Promise<void> {
   await lockOrganizationHierarchyMutationDomain(transaction);
   await transaction.execute(
-    sql`lock table ${organizations} in exclusive mode`,
+    sql`lock table ${actMigrationRecords}, ${actExternalLinks} in exclusive mode`,
   );
   await transaction.execute(
-    sql`lock table ${actMigrationRecords}, ${actExternalLinks} in share mode`,
+    sql`lock table ${organizations} in exclusive mode`,
   );
 }
 
