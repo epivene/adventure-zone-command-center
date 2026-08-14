@@ -7,6 +7,16 @@ import type { ActReadTransport } from "./act-read-transport";
 import { getActEnvironment } from "@/lib/env";
 import type { ActReplacementStreamType } from "./import-types";
 import type { ActExtractionSourceClient } from "./extraction-worker";
+import type { AiCompletionClient } from "../ai-suggestions/ai-client";
+import type { ArchiveProfileImportStore } from "./archive-profile-import-repository";
+import type { ActConfig } from "@/features/act-sync/act-types";
+import { logger } from "@/lib/logger";
+import { ArchiveProfileImportWorker } from "./archive-profile-import-worker";
+import {
+  ActOrganizerWorkerLoop,
+  systemWorkerLoopScheduler,
+  type WorkerLoopScheduler,
+} from "./worker-loop";
 
 export interface ActExtractionRuntime {
   start(): void;
@@ -65,10 +75,23 @@ export function createActServerShutdown(input: {
   };
 }
 
-const disabledRuntime: ActExtractionRuntime = {
-  start() {},
-  async close() {},
-};
+export function createArchiveProfileImportLoop(input: {
+  store: ArchiveProfileImportStore;
+  createAiClient(): Promise<AiCompletionClient>;
+  clock: { now(): Date };
+  scheduler?: WorkerLoopScheduler;
+}): ActExtractionRuntime {
+  return new ActOrganizerWorkerLoop({
+    worker: new ArchiveProfileImportWorker({
+      store: input.store,
+      createAiClient: input.createAiClient,
+      clock: input.clock,
+    }),
+    workerId: `act-archive-profile-import-${process.pid}-${randomUUID()}`,
+    clock: input.clock,
+    scheduler: input.scheduler ?? systemWorkerLoopScheduler,
+  });
+}
 
 export function createActExtractionClientAdapter(
   client: Pick<
@@ -116,12 +139,63 @@ export function createActExtractionClientAdapter(
   };
 }
 
-export async function createActExtractionRuntime(): Promise<ActExtractionRuntime> {
-  const environment = getActEnvironment();
-  if (!environment.configured) return disabledRuntime;
+type ActRuntimeEnvironment =
+  | { configured: false }
+  | { configured: true; config: ActConfig };
 
+export type ActExtractionRuntimeDependencies = {
+  getEnvironment(): ActRuntimeEnvironment;
+  createArchiveRuntime(): Promise<ActExtractionRuntime>;
+  createConfiguredRuntime(config: ActConfig): Promise<ActExtractionRuntime>;
+};
+
+export async function createActExtractionRuntime(
+  overrides: Partial<ActExtractionRuntimeDependencies> = {},
+): Promise<ActExtractionRuntime> {
+  const archiveRuntime = await (overrides.createArchiveRuntime ?? createProductionArchiveRuntime)();
+  let environment: ActRuntimeEnvironment;
+  try {
+    environment = (overrides.getEnvironment ?? getActEnvironment)();
+  } catch {
+    logger.warn(
+      { errorCode: "act_configuration_invalid" },
+      "ACT extraction disabled; archived profile import remains active",
+    );
+    return archiveRuntime;
+  }
+  if (!environment.configured) return archiveRuntime;
+  const configuredRuntime = await (
+    overrides.createConfiguredRuntime ?? createProductionConfiguredRuntime
+  )(environment.config);
+  return combineRuntimes(configuredRuntime, archiveRuntime);
+}
+
+async function createProductionArchiveRuntime(): Promise<ActExtractionRuntime> {
   const [
     { db },
+    { DrizzleArchiveProfileImportRepository },
+    { createAiClient },
+  ] = await Promise.all([
+    import("@/db/client"),
+    import("./archive-profile-import-repository"),
+    import("../ai-suggestions/ai-client"),
+  ]);
+  const clock = { now: () => new Date() };
+  const archiveProfileImportLoop = createArchiveProfileImportLoop({
+    store: new DrizzleArchiveProfileImportRepository(db),
+    createAiClient,
+    clock,
+  });
+  return archiveProfileImportLoop;
+}
+
+async function createProductionConfiguredRuntime(
+  config: ActConfig,
+): Promise<ActExtractionRuntime> {
+  const { db } = await import("@/db/client");
+  const clock = { now: () => new Date() };
+
+  const [
     { ActClient },
     { DrizzleActReplacementCheckpointRepository },
     { DrizzleActSourceArchiveRepository },
@@ -129,13 +203,10 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     { ActExtractionWorker },
     {
       ActExtractionWorkerLoop,
-      ActOrganizerWorkerLoop,
-      systemWorkerLoopScheduler,
     },
     { ProductionActOrganizer, ProductionActOrganizerRecoveryWorker },
     { DrizzleActReviewCommandStore, DrizzleProductionOrganizerStore },
   ] = await Promise.all([
-    import("@/db/client"),
     import("@/features/act-sync/act-client"),
     import("./checkpoint-repository"),
     import("./archive-repository"),
@@ -147,9 +218,8 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
   ]);
 
   const clientAdapter = createActExtractionClientAdapter(
-    new ActClient(environment.config),
+    new ActClient(config),
   );
-  const clock = { now: () => new Date() };
   const worker = new ActExtractionWorker({
     checkpoints: new DrizzleActReplacementCheckpointRepository(db),
     audits: new DrizzleActRequestAuditRepository(db),
@@ -169,7 +239,7 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
       }),
   });
   const organizerStore = new DrizzleProductionOrganizerStore(db, {
-    sourceDatabaseKey: environment.config.databaseName,
+    sourceDatabaseKey: config.databaseName,
   });
   const organizer = new ProductionActOrganizer(organizerStore);
   const organizerLoop = new ActOrganizerWorkerLoop({
@@ -183,7 +253,7 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
   });
   const automaticReviewStore = new DrizzleActReviewCommandStore(
     db,
-    { sourceDatabaseKey: environment.config.databaseName },
+    { sourceDatabaseKey: config.databaseName },
     {} as never,
   );
   await automaticReviewStore.releaseAbandonedAutomaticReviewClaims(clock.now());
@@ -207,6 +277,21 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
         organizerLoop.close(),
         extractionLoop.close(),
       ]);
+    },
+  };
+}
+
+function combineRuntimes(
+  configuredRuntime: ActExtractionRuntime,
+  archiveRuntime: ActExtractionRuntime,
+): ActExtractionRuntime {
+  return {
+    start() {
+      configuredRuntime.start();
+      archiveRuntime.start();
+    },
+    async close() {
+      await Promise.all([archiveRuntime.close(), configuredRuntime.close()]);
     },
   };
 }

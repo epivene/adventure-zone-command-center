@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ActReplacementApiError,
+  getArchivedProfileImport,
   resolveAutomaticReview,
+  startArchivedProfileImport,
 } from "./act-replacement-client";
 
 const apiFetch = vi.hoisted(() => vi.fn());
@@ -87,4 +89,85 @@ describe("resolveAutomaticReview", () => {
       new ActReplacementApiError("review_generation_changed", 409),
     );
   });
+});
+
+describe("archived profile import", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("posts one stable request key to an encoded run endpoint", async () => {
+    const status = {
+      jobId: "job-one",
+      runId: "run / one",
+      phase: "companies",
+      active: true,
+      eligibleCount: 120,
+      processedCount: 50,
+      createdCount: 31,
+      linkedCount: 7,
+      updatedCount: 3,
+      alreadyImportedCount: 4,
+      preservedCount: 3,
+      retryableFailureCount: 2,
+      lastErrorCode: null,
+    };
+    apiFetch.mockResolvedValue(
+      new Response(JSON.stringify(status), {
+        status: 202,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    await expect(
+      startArchivedProfileImport("run / one", "profile-import-click-one"),
+    ).resolves.toEqual(status);
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/migration/act-replacement/runs/run%20%2F%20one/import-archived-profiles",
+      {
+        method: "POST",
+        body: JSON.stringify({ requestKey: "profile-import-click-one" }),
+      },
+    );
+  });
+
+  it.each([
+    ["companies", true, 25, null],
+    ["contacts", true, 75, null],
+    ["complete", false, 100, null],
+    ["failed", false, 80, "archive_profile_batch_failed"],
+  ] as const)(
+    "reads the durable %s status from an encoded run endpoint",
+    async (phase, active, processedCount, lastErrorCode) => {
+      const status = {
+        jobId: "job-one",
+        runId: "run / one",
+        phase,
+        active,
+        eligibleCount: 100,
+        processedCount,
+        createdCount: 40,
+        linkedCount: 12,
+        updatedCount: 5,
+        alreadyImportedCount: 8,
+        preservedCount: 10,
+        retryableFailureCount: phase === "failed" ? 10 : 0,
+        lastErrorCode,
+      };
+      apiFetch.mockResolvedValue(
+        new Response(JSON.stringify(status), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+
+      await expect(getArchivedProfileImport("run / one")).resolves.toEqual(
+        status,
+      );
+      expect(apiFetch).toHaveBeenCalledWith(
+        "/migration/act-replacement/runs/run%20%2F%20one/import-archived-profiles",
+        undefined,
+      );
+    },
+  );
 });

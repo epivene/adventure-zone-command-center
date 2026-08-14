@@ -30,6 +30,8 @@ import { projectActReviewDisplay } from "@/features/act-replacement/review-displ
 import { ReviewCommandService, type AutomaticReviewDecisionResult } from "@/features/act-replacement/review-command-service";
 import { createProductionReview } from "@/features/act-replacement/production-review";
 import type { ActApplyCoordinator } from "@/features/act-replacement/apply-coordinator";
+import type { ArchiveProfileImportStore } from "@/features/act-replacement/archive-profile-import-repository";
+import type { ArchiveProfileImportStatus } from "@/features/act-replacement/archive-profile-import-types";
 import { logger } from "@/lib/logger";
 
 const ownerIdentity = "owner";
@@ -117,6 +119,9 @@ const automaticReviewSchema = z
     expectedManifestDigest: digestSchema,
     requestKey: requestKeySchema,
   })
+  .strict();
+const archiveProfileImportSchema = z
+  .object({ requestKey: requestKeySchema })
   .strict();
 const bulkSelectionSchema = z
   .object({
@@ -262,15 +267,25 @@ export type ActReplacementAuditRecord = {
 
 type OwnedRunLookup = {
   runId: string;
-  sourceDatabaseKey: string;
+  sourceDatabaseKey?: string;
   requestedBy: string;
 };
+
+type ScopedOwnedRunLookup = OwnedRunLookup & { sourceDatabaseKey: string };
+
+type ArchiveProfileImportRouteStore = Pick<
+  ArchiveProfileImportStore,
+  "createOrGetJob" | "getStatus"
+>;
 
 export interface ActReplacementControlStore {
   createRun(
     input: StartActReplacementRun,
   ): Promise<{ runId: string; created: boolean }>;
-  findOwnedRun(input: OwnedRunLookup): Promise<{ runId: string } | null>;
+  findOwnedRun(input: OwnedRunLookup): Promise<{
+    runId: string;
+    sourceDatabaseKey: string;
+  } | null>;
   findLatestOwnedRun(input: {
     sourceDatabaseKey: string;
     requestedBy: string;
@@ -286,7 +301,7 @@ export interface ActReplacementControlStore {
     now: Date;
   }): Promise<void>;
   listRequestAudits(
-    input: OwnedRunLookup,
+    input: ScopedOwnedRunLookup,
   ): Promise<readonly ActReplacementAuditRecord[]>;
 }
 
@@ -300,6 +315,7 @@ export type ActReplacementSummaryDiagnostic = {
 
 export type ActReplacementRouteDependencies = {
   store: ActReplacementControlStore;
+  archiveProfileImport: ArchiveProfileImportRouteStore;
   getActConfiguration():
     { configured: false } | { configured: true; databaseName: string };
   now(): Date;
@@ -339,13 +355,18 @@ class DatabaseActReplacementControlStore implements ActReplacementControlStore {
   async findOwnedRun(input: OwnedRunLookup) {
     const database = await this.database();
     const [run] = await database
-      .select({ runId: actReplacementRuns.id })
+      .select({
+        runId: actReplacementRuns.id,
+        sourceDatabaseKey: actReplacementRuns.sourceDatabaseKey,
+      })
       .from(actReplacementRuns)
       .where(
         and(
           eq(actReplacementRuns.id, input.runId),
-          eq(actReplacementRuns.sourceDatabaseKey, input.sourceDatabaseKey),
           eq(actReplacementRuns.requestedBy, input.requestedBy),
+          input.sourceDatabaseKey === undefined
+            ? undefined
+            : eq(actReplacementRuns.sourceDatabaseKey, input.sourceDatabaseKey),
         ),
       )
       .limit(1);
@@ -379,7 +400,7 @@ class DatabaseActReplacementControlStore implements ActReplacementControlStore {
     await (await this.checkpoints()).supersedeRun(input);
   }
 
-  async listRequestAudits(input: OwnedRunLookup) {
+  async listRequestAudits(input: ScopedOwnedRunLookup) {
     const database = await this.database();
     const rows = await database
       .select({
@@ -429,8 +450,32 @@ class DatabaseActReplacementControlStore implements ActReplacementControlStore {
   }
 }
 
+class DatabaseArchiveProfileImportRouteStore
+  implements ArchiveProfileImportRouteStore
+{
+  private async repository() {
+    const [{ db }, { DrizzleArchiveProfileImportRepository }] =
+      await Promise.all([
+        import("@/db/client"),
+        import("@/features/act-replacement/archive-profile-import-repository"),
+      ]);
+    return new DrizzleArchiveProfileImportRepository(db);
+  }
+
+  async createOrGetJob(
+    input: Parameters<ArchiveProfileImportStore["createOrGetJob"]>[0],
+  ) {
+    return (await this.repository()).createOrGetJob(input);
+  }
+
+  async getStatus(input: Parameters<ArchiveProfileImportStore["getStatus"]>[0]) {
+    return (await this.repository()).getStatus(input);
+  }
+}
+
 const productionDependencies: ActReplacementRouteDependencies = {
   store: new DatabaseActReplacementControlStore(),
+  archiveProfileImport: new DatabaseArchiveProfileImportRouteStore(),
   getActConfiguration() {
     const environment = getActEnvironment();
     return environment.configured
@@ -496,6 +541,26 @@ function safeAuditRecord(row: ActReplacementAuditRecord) {
     durationMs: row.durationMs,
     startedAt: row.startedAt,
     completedAt: row.completedAt,
+  };
+}
+
+function safeArchiveProfileImportStatus(
+  status: ArchiveProfileImportStatus,
+): ArchiveProfileImportStatus {
+  return {
+    jobId: status.jobId,
+    runId: status.runId,
+    phase: status.phase,
+    active: status.active,
+    eligibleCount: status.eligibleCount,
+    processedCount: status.processedCount,
+    createdCount: status.createdCount,
+    linkedCount: status.linkedCount,
+    updatedCount: status.updatedCount,
+    alreadyImportedCount: status.alreadyImportedCount,
+    preservedCount: status.preservedCount,
+    retryableFailureCount: status.retryableFailureCount,
+    lastErrorCode: status.lastErrorCode,
   };
 }
 
@@ -879,6 +944,62 @@ export function createActReplacementRouter(
       handleRouteError(error, res);
     }
   });
+
+  router.post(
+    "/migration/act-replacement/runs/:runId/import-archived-profiles",
+    async (req, res) => {
+      const runId = runIdSchema.safeParse(req.params.runId);
+      if (!runId.success) return runNotFound(res);
+      const body = archiveProfileImportSchema.safeParse(req.body);
+      if (!body.success) return invalidRequest(res);
+      try {
+        const owned = await dependencies.store.findOwnedRun({
+          runId: runId.data,
+          requestedBy: ownerIdentity,
+        });
+        if (!owned) return runNotFound(res);
+        const status = await dependencies.archiveProfileImport.createOrGetJob({
+          runId: owned.runId,
+          sourceDatabaseKey: owned.sourceDatabaseKey,
+          requestedBy: ownerIdentity,
+          requestKey: body.data.requestKey,
+          now: dependencies.now(),
+        });
+        res
+          .status(status.active ? 202 : 200)
+          .json(safeArchiveProfileImportStatus(status));
+      } catch (error) {
+        handleRouteError(error, res);
+      }
+    },
+  );
+
+  router.get(
+    "/migration/act-replacement/runs/:runId/import-archived-profiles",
+    async (req, res) => {
+      const runId = runIdSchema.safeParse(req.params.runId);
+      if (!runId.success) return runNotFound(res);
+      try {
+        const owned = await dependencies.store.findOwnedRun({
+          runId: runId.data,
+          requestedBy: ownerIdentity,
+        });
+        if (!owned) return runNotFound(res);
+        const status = await dependencies.archiveProfileImport.getStatus({
+          runId: owned.runId,
+          sourceDatabaseKey: owned.sourceDatabaseKey,
+          requestedBy: ownerIdentity,
+        });
+        if (!status)
+          return res
+            .status(404)
+            .json({ code: "archive_profile_import_not_found" });
+        res.json(safeArchiveProfileImportStatus(status));
+      } catch (error) {
+        handleRouteError(error, res);
+      }
+    },
+  );
 
   router.get(
     "/migration/act-replacement/runs/:runId/request-audit",

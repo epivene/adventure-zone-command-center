@@ -12,10 +12,14 @@ function terminal(phase: ActReplacementStatus["phase"]) {
 
 export function ExtractionProgress({
   status,
+  profileImportStarted = false,
+  allowStartOver = true,
   onResume,
   onStartOver,
 }: {
   status: ActReplacementStatus;
+  profileImportStarted?: boolean;
+  allowStartOver?: boolean;
   onResume: () => void;
   onStartOver: () => void;
 }) {
@@ -46,9 +50,11 @@ export function ExtractionProgress({
           </h2>
           <p className="text-sm text-slate-600">{label(status.phase)}</p>
         </div>
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-          Preview only
-        </span>
+        {!profileImportStarted && (
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+            Preview only
+          </span>
+        )}
       </header>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg bg-slate-50 p-4">
@@ -153,8 +159,9 @@ export function ExtractionProgress({
           </p>
         </div>
       )}
-      {status.phase === "complete" ||
-      status.phase === "complete_with_issues" ? (
+      {!profileImportStarted &&
+      (status.phase === "complete" ||
+        status.phase === "complete_with_issues") ? (
         <p className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
           Everything fetched so far is safely archived. Nothing has been added
           to profiles yet.
@@ -170,7 +177,7 @@ export function ExtractionProgress({
             Resume
           </button>
         )}
-        {status.canStartOver && (
+        {status.canStartOver && allowStartOver && (
           <button
             type="button"
             onClick={onStartOver}

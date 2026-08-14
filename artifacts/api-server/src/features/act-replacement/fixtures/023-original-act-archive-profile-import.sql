@@ -1,0 +1,65 @@
+CREATE TABLE IF NOT EXISTS act_archive_profile_import_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id uuid NOT NULL REFERENCES act_replacement_runs(id) ON DELETE CASCADE,
+  source_database_key text NOT NULL,
+  request_key text NOT NULL,
+  requested_by text NOT NULL,
+  phase text NOT NULL DEFAULT 'companies',
+  cursor_source_record_id uuid,
+  eligible_count integer NOT NULL DEFAULT 0,
+  processed_count integer NOT NULL DEFAULT 0,
+  created_count integer NOT NULL DEFAULT 0,
+  linked_count integer NOT NULL DEFAULT 0,
+  updated_count integer NOT NULL DEFAULT 0,
+  already_imported_count integer NOT NULL DEFAULT 0,
+  preserved_count integer NOT NULL DEFAULT 0,
+  retryable_failure_count integer NOT NULL DEFAULT 0,
+  retry_after timestamptz,
+  lease_owner text,
+  lease_token uuid,
+  lease_expires_at timestamptz,
+  last_error_code text,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (run_id),
+  UNIQUE (run_id, request_key),
+  FOREIGN KEY (run_id, source_database_key)
+    REFERENCES act_replacement_runs(id, source_database_key),
+  CHECK (phase IN ('companies','contacts','complete','failed')),
+  CHECK ((lease_token IS NULL) = (lease_expires_at IS NULL)),
+  CHECK ((lease_token IS NULL) = (lease_owner IS NULL)),
+  CHECK (btrim(request_key) <> '' AND btrim(requested_by) <> ''),
+  CHECK (eligible_count >= 0 AND processed_count >= 0),
+  CHECK (created_count >= 0 AND linked_count >= 0 AND updated_count >= 0),
+  CHECK (already_imported_count >= 0 AND preserved_count >= 0 AND retryable_failure_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS act_archive_profile_import_jobs_claim_idx
+  ON act_archive_profile_import_jobs (phase, lease_expires_at, updated_at)
+  WHERE phase IN ('companies','contacts');
+
+CREATE TABLE IF NOT EXISTS act_archive_profile_import_results (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id uuid NOT NULL REFERENCES act_archive_profile_import_jobs(id) ON DELETE CASCADE,
+  source_record_id uuid NOT NULL REFERENCES act_source_records(id) ON DELETE RESTRICT,
+  source_version_id uuid NOT NULL REFERENCES act_source_record_versions(id) ON DELETE RESTRICT,
+  status text NOT NULL,
+  target_entity_type text,
+  target_entity_id uuid,
+  reason_code text,
+  resolution_policy_version text NOT NULL,
+  ai_provider text,
+  ai_confidence text,
+  evidence_labels jsonb NOT NULL DEFAULT '[]'::jsonb,
+  attempt_count integer NOT NULL DEFAULT 0,
+  retry_after timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (job_id, source_record_id),
+  CHECK (status IN ('created','linked','updated','already_imported','preserved','retryable_failed')),
+  CHECK (target_entity_type IS NULL OR target_entity_type IN ('organization','contact')),
+  CHECK ((target_entity_type IS NULL) = (target_entity_id IS NULL)),
+  CHECK (ai_confidence IS NULL OR ai_confidence IN ('high','medium','low')),
+  CHECK (jsonb_typeof(evidence_labels) = 'array')
+);

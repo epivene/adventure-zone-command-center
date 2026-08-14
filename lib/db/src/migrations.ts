@@ -147,6 +147,172 @@ const migrationFiles = [
         )`,
   },
   {
+    name: "023_act_archive_profile_import.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.act_archive_profile_import_jobs') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_profile_import_sources') IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_external_links')
+          AND conname = 'act_external_links_contact_primary_sync_valid'
+          AND position('SOURCE_DATABASE_KEY IS NOT NULL' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('SOURCE_RECORD_ID IS NOT NULL' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_external_links')
+          AND conname = 'act_external_links_archive_source_scope_fk'
+      ) AS ready`,
+  },
+  {
+    name: "023a_act_archive_profile_import_membership.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.act_archive_profile_import_sources') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND indexname = 'act_archive_profile_import_sources_job_phase_source_idx'
+          AND position('(job_id, phase, source_record_id)' in lower(indexdef)) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_index indexes
+        WHERE indexes.indexrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources_job_phase_source_idx')
+          AND indexes.indisvalid
+          AND NOT indexes.indisunique
+          AND indexes.indpred IS NULL
+          AND indexes.indnatts = 3
+          AND pg_get_indexdef(indexes.indexrelid, 1, true) = 'job_id'
+          AND pg_get_indexdef(indexes.indexrelid, 2, true) = 'phase'
+          AND pg_get_indexdef(indexes.indexrelid, 3, true) = 'source_record_id'
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_jobs')
+          AND conname = 'act_archive_profile_import_jobs_id_database_unique'
+          AND contype = 'u'
+          AND position('UNIQUE (ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_pkey'
+          AND contype = 'p'
+          AND position('PRIMARY KEY (JOB_ID, SOURCE_RECORD_ID)' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_job_id_fk'
+          AND contype = 'f'
+          AND confdeltype = 'c'
+          AND position('FOREIGN KEY (JOB_ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_ARCHIVE_PROFILE_IMPORT_JOBS(ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('ON DELETE CASCADE' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_source_record_id_fk'
+          AND contype = 'f'
+          AND confdeltype = 'c'
+          AND position('FOREIGN KEY (SOURCE_RECORD_ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_SOURCE_RECORDS(ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('ON DELETE CASCADE' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_source_version_id_fk'
+          AND contype = 'f'
+          AND confdeltype = 'c'
+          AND position('FOREIGN KEY (SOURCE_VERSION_ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_SOURCE_RECORD_VERSIONS(ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('ON DELETE CASCADE' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_phase_valid'
+          AND contype = 'c'
+          AND regexp_replace(
+            lower(pg_get_expr(conbin, conrelid)), '[()[:space:]]', '', 'g'
+          ) = 'phase=anyarray[''companies''::text,''contacts''::text]'
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_job_database_fk'
+          AND contype = 'f'
+          AND confdeltype = 'a'
+          AND confupdtype = 'a'
+          AND position('FOREIGN KEY (JOB_ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_ARCHIVE_PROFILE_IMPORT_JOBS(ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_source_database_fk'
+          AND contype = 'f'
+          AND confdeltype = 'a'
+          AND confupdtype = 'a'
+          AND position('FOREIGN KEY (SOURCE_RECORD_ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
+          AND conname = 'act_archive_profile_import_sources_version_owner_fk'
+          AND contype = 'f'
+          AND confdeltype = 'a'
+          AND confupdtype = 'a'
+          AND position('FOREIGN KEY (SOURCE_VERSION_ID, SOURCE_RECORD_ID)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_SOURCE_RECORD_VERSIONS(ID, SOURCE_RECORD_ID)' in upper(pg_get_constraintdef(oid))) > 0
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_external_links')
+          AND conname = 'act_external_links_contact_primary_sync_valid'
+          AND contype = 'c'
+          AND regexp_replace(
+            lower(pg_get_expr(conbin, conrelid)), '[()[:space:]]', '', 'g'
+          ) = 'entity_type=''contact''::textandsource_entity_type=''contact''::textandis_primary=trueandsync_mode=''two_way''::textoris_primary=falseandsync_mode=''pull_only''::textoris_primary=trueandsync_mode=''pull_only''::textandsource_database_keyisnotnullandsource_record_idisnotnullorentity_type<>''contact''::textandsync_mode=''pull_only''::text'
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.act_external_links')
+          AND conname = 'act_external_links_archive_source_scope_fk'
+          AND contype = 'f'
+          AND confdeltype = 'a'
+          AND confupdtype = 'a'
+          AND position('FOREIGN KEY (SOURCE_RECORD_ID, SOURCE_DATABASE_KEY, SOURCE_ENTITY_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY, STREAM_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
+      ) AS ready`,
+  },
+  {
+    name: "024_act_archive_profile_import_recovery.sql",
+    markerSql: `SELECT
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'act_archive_profile_import_jobs'
+          AND column_name = 'membership_snapshot_version'
+          AND column_default IS NULL
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'act_archive_profile_import_jobs'
+          AND column_name = 'failure_attempt_count'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM act_archive_profile_import_jobs jobs
+        WHERE jobs.phase <> 'complete'
+          AND (to_jsonb(jobs)->>'membership_snapshot_version') IS NULL
+      ) AS ready`,
+  },
+  {
     name: "027_organization_locations.sql",
     markerSql:
       "SELECT to_regclass(current_schema() || '.organization_locations') IS NOT NULL AS ready",

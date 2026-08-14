@@ -19,6 +19,7 @@ import type { RemoteActContact } from "@/features/act-sync/act-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import { setContactPrimaryOrganization } from "@/features/relationships/relationship-writer";
+import { lockProfileLinkTransaction } from "@/features/act-migration/profile-link-transaction-lock";
 import {
   syncComparisonCategories,
   type LocalSyncContact,
@@ -1045,6 +1046,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
 
   async pullContact(row: SyncComparisonRow, remote: RemoteActContact) {
     return this.database.transaction(async (transaction) => {
+      await lockProfileLinkTransaction(transaction);
       if (!row.localContactId) {
         const [recovered] = await transaction
           .select({ entityId: actExternalLinks.entityId })
@@ -1135,6 +1137,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
   async completePush(row: SyncComparisonRow, remote: RemoteActContact) {
     if (!row.localContactId) throw new Error("Local contact is missing.");
     await this.database.transaction(async (transaction) => {
+      await lockProfileLinkTransaction(transaction);
       const locked = await this.lockPreviewedLocalContact(transaction, row);
       if (!locked) {
         throw new LocalContactChangedAfterPreviewError();
@@ -1319,6 +1322,7 @@ export class DrizzleSyncRepository implements SyncApplyRepository {
     remote: RemoteActContact,
   ) {
     await this.database.transaction(async (transaction) => {
+      await lockProfileLinkTransaction(transaction);
       const [current] = await transaction
         .select({ id: contacts.id })
         .from(contacts)

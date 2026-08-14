@@ -22,6 +22,33 @@ export type AiCompletionClient = {
   complete(prompt: string): Promise<string>;
 };
 
+type AnthropicMessage = { content: Array<{ type: string; text?: string }> };
+type AnthropicClient = {
+  messages: {
+    create(input: {
+      model: string;
+      max_tokens: number;
+      messages: Array<{ role: "user"; content: string }>;
+    }): Promise<AnthropicMessage>;
+  };
+};
+type AnthropicConstructor = new (input: {
+  apiKey: string;
+  baseURL?: string;
+}) => AnthropicClient;
+type OpenAiClient = {
+  chat: {
+    completions: {
+      create(input: {
+        model: string;
+        max_tokens: number;
+        messages: Array<{ role: "user"; content: string }>;
+      }): Promise<{ choices: Array<{ message: { content: string | null } }> }>;
+    };
+  };
+};
+type OpenAiConstructor = new (input: { apiKey: string }) => OpenAiClient;
+
 /**
  * Returns a ready-to-use client for the first configured AI provider.
  * All SDK imports are deferred so the server starts even when no keys are set.
@@ -37,7 +64,10 @@ export async function createAiClient(): Promise<AiCompletionClient> {
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL &&
     process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY
   ) {
-    const { anthropic } = await import("@workspace/integrations-anthropic-ai");
+    const anthropic = await createAnthropicSdkClient({
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+    });
     return {
       providerName: "Anthropic via Replit proxy (claude-sonnet-4-6)",
       async complete(prompt: string): Promise<string> {
@@ -47,17 +77,14 @@ export async function createAiClient(): Promise<AiCompletionClient> {
           messages: [{ role: "user", content: prompt }],
         });
         const block = msg.content[0];
-        return block?.type === "text" ? block.text : "[]";
+        return block?.type === "text" ? block.text ?? "[]" : "[]";
       },
     };
   }
 
   // ── Priority 2: Direct Anthropic API key ─────────────────────────────────
   if (process.env.ANTHROPIC_API_KEY) {
-    // Lazy import — @anthropic-ai/sdk is a transitive dep via
-    // @workspace/integrations-anthropic-ai, which api-server already depends on.
-    const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+    const client = await createAnthropicSdkClient({ apiKey: process.env.ANTHROPIC_API_KEY });
     return {
       providerName: "Anthropic direct (claude-3-5-haiku-20241022)",
       async complete(prompt: string): Promise<string> {
@@ -67,14 +94,15 @@ export async function createAiClient(): Promise<AiCompletionClient> {
           messages: [{ role: "user", content: prompt }],
         });
         const block = msg.content[0];
-        return block?.type === "text" ? block.text : "[]";
+        return block?.type === "text" ? block.text ?? "[]" : "[]";
       },
     };
   }
 
   // ── Priority 3: OpenAI API key ───────────────────────────────────────────
   if (process.env.OPENAI_API_KEY) {
-    const { default: OpenAI } = await import("openai");
+    const moduleName = "openai";
+    const { default: OpenAI } = await import(moduleName) as { default: OpenAiConstructor };
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     return {
       providerName: "OpenAI (gpt-4o-mini)",
@@ -95,4 +123,13 @@ export async function createAiClient(): Promise<AiCompletionClient> {
   );
   (err as NodeJS.ErrnoException).code = NOT_CONFIGURED_ERROR;
   throw err;
+}
+
+async function createAnthropicSdkClient(input: {
+  apiKey: string;
+  baseURL?: string;
+}): Promise<AnthropicClient> {
+  const moduleName = "@anthropic-ai/sdk";
+  const { default: Anthropic } = await import(moduleName) as { default: AnthropicConstructor };
+  return new Anthropic(input);
 }

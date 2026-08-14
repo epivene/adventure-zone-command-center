@@ -80,6 +80,22 @@ export type ActReplacementWorkflowStatus = ActReplacementStatus & {
   canApplySafe: boolean;
 };
 
+export type ArchiveProfileImportStatus = {
+  jobId: string;
+  runId: string;
+  phase: "companies" | "contacts" | "complete" | "failed";
+  active: boolean;
+  eligibleCount: number;
+  processedCount: number;
+  createdCount: number;
+  linkedCount: number;
+  updatedCount: number;
+  alreadyImportedCount: number;
+  preservedCount: number;
+  retryableFailureCount: number;
+  lastErrorCode: string | null;
+};
+
 export type ImportManifest = {
   digest: string;
   diagnostics?: Array<{ code: string; sourceRecordId: string; path?: string }>;
@@ -424,6 +440,18 @@ export const organizeRun = (runId: string) =>
   request<OrganizeResponse>(
     `/migration/act-replacement/runs/${encodeURIComponent(runId)}/organize`,
     { method: "POST", body: "{}" },
+  );
+export const startArchivedProfileImport = (
+  runId: string,
+  requestKey: string = crypto.randomUUID(),
+) =>
+  request<ArchiveProfileImportStatus>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/import-archived-profiles`,
+    { method: "POST", body: JSON.stringify({ requestKey }) },
+  );
+export const getArchivedProfileImport = (runId: string) =>
+  request<ArchiveProfileImportStatus>(
+    `/migration/act-replacement/runs/${encodeURIComponent(runId)}/import-archived-profiles`,
   );
 export const resolveAutomaticReview = (
   runId: string,

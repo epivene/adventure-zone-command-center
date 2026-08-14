@@ -7,6 +7,8 @@ import type {
   ImportWorkflow,
   StartActReplacementRun,
 } from "@/features/act-replacement/import-types";
+import type { ArchiveProfileImportStatus } from "@/features/act-replacement/archive-profile-import-types";
+import type { ArchiveProfileImportStore } from "@/features/act-replacement/archive-profile-import-repository";
 import { ActApplyService } from "@/features/act-replacement/apply-service";
 import { InMemoryApplyRepository } from "@/features/act-replacement/apply-repository";
 import { InMemoryApprovalRepository } from "@/features/act-replacement/approval-service";
@@ -45,6 +47,7 @@ vi.mock("@/db/client", () => {
 const DATABASE_KEY = "server-act-database";
 const RUN_ID = "10000000-0000-4000-8000-000000000001";
 const SECOND_RUN_ID = "10000000-0000-4000-8000-000000000002";
+const ARCHIVE_PROFILE_JOB_ID = "50000000-0000-4000-8000-000000000001";
 const SOURCE_RECORD_ID = "20000000-0000-4000-8000-000000000001";
 const SOURCE_VERSION_ID = "30000000-0000-4000-8000-000000000001";
 const TARGET_ENTITY_ID = "40000000-0000-4000-8000-000000000001";
@@ -185,16 +188,19 @@ class MemoryControlStore implements ActReplacementControlStore {
 
   async findOwnedRun(input: {
     runId: string;
-    sourceDatabaseKey: string;
+    sourceDatabaseKey?: string;
     requestedBy: string;
   }) {
     const run = this.runs.find(
       (candidate) =>
         candidate.runId === input.runId &&
-        candidate.sourceDatabaseKey === input.sourceDatabaseKey &&
+        (input.sourceDatabaseKey === undefined ||
+          candidate.sourceDatabaseKey === input.sourceDatabaseKey) &&
         candidate.requestedBy === input.requestedBy,
     );
-    return run ? { runId: run.runId } : null;
+    return run
+      ? { runId: run.runId, sourceDatabaseKey: run.sourceDatabaseKey }
+      : null;
   }
 
   async findLatestOwnedRun(input: {
@@ -252,6 +258,67 @@ function addRun(store: MemoryControlStore, input: Partial<StoredRun> = {}) {
   });
 }
 
+type ArchiveProfileImportRouteStore = Pick<
+  ArchiveProfileImportStore,
+  "createOrGetJob" | "getStatus"
+>;
+
+function archiveProfileStatus(
+  overrides: Partial<ArchiveProfileImportStatus> = {},
+): ArchiveProfileImportStatus {
+  return {
+    jobId: ARCHIVE_PROFILE_JOB_ID,
+    runId: RUN_ID,
+    phase: "companies",
+    active: true,
+    eligibleCount: 1_432,
+    processedCount: 50,
+    createdCount: 31,
+    linkedCount: 7,
+    updatedCount: 3,
+    alreadyImportedCount: 4,
+    preservedCount: 3,
+    retryableFailureCount: 2,
+    lastErrorCode: null,
+    ...overrides,
+  };
+}
+
+class MemoryArchiveProfileImportRouteStore
+  implements ArchiveProfileImportRouteStore
+{
+  status: ArchiveProfileImportStatus | null = null;
+  readonly createInputs: Parameters<
+    ArchiveProfileImportRouteStore["createOrGetJob"]
+  >[0][] = [];
+  readonly getInputs: Parameters<
+    ArchiveProfileImportRouteStore["getStatus"]
+  >[0][] = [];
+
+  async createOrGetJob(
+    input: Parameters<ArchiveProfileImportRouteStore["createOrGetJob"]>[0],
+  ) {
+    this.createInputs.push(structuredClone(input));
+    this.status ??= archiveProfileStatus();
+    if (this.status.phase === "failed") {
+      this.status = {
+        ...this.status,
+        phase: "companies",
+        active: true,
+        lastErrorCode: null,
+      };
+    }
+    return this.status;
+  }
+
+  async getStatus(
+    input: Parameters<ArchiveProfileImportRouteStore["getStatus"]>[0],
+  ) {
+    this.getInputs.push(structuredClone(input));
+    return this.status;
+  }
+}
+
 function testApp(
   store: MemoryControlStore,
   configured = true,
@@ -260,6 +327,8 @@ function testApp(
     ActReplacementRouteDependencies["reportInternalError"]
   >,
   rejectedHandler?: (error: unknown) => void,
+  archiveProfileImport: ArchiveProfileImportRouteStore =
+    new MemoryArchiveProfileImportRouteStore(),
 ): ReturnType<typeof express> {
   const app = express();
   app.use(express.json());
@@ -268,6 +337,7 @@ function testApp(
     requireOwnerMiddleware,
     createActReplacementRouter({
       store,
+      archiveProfileImport,
       getActConfiguration: () =>
         configured
           ? { configured: true, databaseName: DATABASE_KEY }
@@ -379,6 +449,8 @@ describe("Act replacement owner authorization", () => {
     ["get", `/api/migration/act-replacement/runs/${RUN_ID}/request-audit`],
     ["post", `/api/migration/act-replacement/runs/${RUN_ID}/resume`],
     ["post", `/api/migration/act-replacement/runs/${RUN_ID}/supersede`],
+    ["post", `/api/migration/act-replacement/runs/${RUN_ID}/import-archived-profiles`],
+    ["get", `/api/migration/act-replacement/runs/${RUN_ID}/import-archived-profiles`],
   ] as const)("rejects unauthenticated %s %s", async (method, path) => {
     const response = await request(testApp(new MemoryControlStore()))[method](
       path,
@@ -386,6 +458,188 @@ describe("Act replacement owner authorization", () => {
 
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ error: "Unauthorized" });
+  });
+});
+
+describe("archived profile import routes", () => {
+  const endpoint = (runId = RUN_ID) =>
+    `/api/migration/act-replacement/runs/${runId}/import-archived-profiles`;
+
+  it.each([
+    ["missing request key", {}],
+    ["blank request key", { requestKey: "   " }],
+    ["request key over 200 characters", { requestKey: "x".repeat(201) }],
+    ["extra source database key", { requestKey: "archive-one", sourceDatabaseKey: "browser-db" }],
+    ["extra requested-by value", { requestKey: "archive-one", requestedBy: "browser-owner" }],
+    ["unrecognized field", { requestKey: "archive-one", extra: true }],
+  ])("rejects a %s", async (_label, body) => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control);
+    const response = await request(testApp(control, true, undefined, undefined, undefined, archive))
+      .post(endpoint()).set("Authorization", `Bearer ${ownerToken()}`).send(body);
+    expect(response.status).toBe(400);
+    expect(response.body).toEqual({ code: "invalid_request" });
+    expect(archive.createInputs).toEqual([]);
+  });
+
+  it.each(["not-a-uuid", "10000000-0000-0000-0000-000000000001"])(
+    "hides an invalid run id %s as not found",
+    async (runId) => {
+      const control = new MemoryControlStore();
+      const archive = new MemoryArchiveProfileImportRouteStore();
+      const app = testApp(control, true, undefined, undefined, undefined, archive);
+      const post = await request(app).post(endpoint(runId))
+        .set("Authorization", `Bearer ${ownerToken()}`).send({ requestKey: "archive-one" });
+      const get = await request(app).get(endpoint(runId))
+        .set("Authorization", `Bearer ${ownerToken()}`);
+      expect(post.status).toBe(404);
+      expect(post.body).toEqual({ code: "run_not_found" });
+      expect(get.status).toBe(404);
+      expect(get.body).toEqual({ code: "run_not_found" });
+      expect(archive.createInputs).toEqual([]);
+      expect(archive.getInputs).toEqual([]);
+    },
+  );
+
+  it("checks owned-run access before touching the archive import store", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control, { requestedBy: "other-owner" });
+    const app = testApp(control, true, undefined, undefined, undefined, archive);
+    const authorization = `Bearer ${ownerToken()}`;
+    const post = await request(app).post(endpoint()).set("Authorization", authorization)
+      .send({ requestKey: "archive-one" });
+    const get = await request(app).get(endpoint()).set("Authorization", authorization);
+    expect(post.status).toBe(404);
+    expect(post.body).toEqual({ code: "run_not_found" });
+    expect(get.status).toBe(404);
+    expect(get.body).toEqual({ code: "run_not_found" });
+    expect(archive.createInputs).toEqual([]);
+    expect(archive.getInputs).toEqual([]);
+  });
+
+  it("starts an active job with server-owned context and returns only safe status", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control, { status: { ...status(), phase: "extracting" } });
+    archive.status = Object.assign(archiveProfileStatus(), {
+      sourceDatabaseKey: "private-database-key", requestedBy: "private-owner",
+      rawSnapshot: { name: "private ACT company" }, email: "private@example.com",
+      phone: "555-0100", manifestDigest: "private-manifest", canOrganize: false,
+      readyToApply: false,
+    });
+    const response = await request(testApp(control, true, undefined, undefined, undefined, archive))
+      .post(endpoint()).set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ requestKey: "x".repeat(200) });
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual(archiveProfileStatus());
+    expect(archive.createInputs).toEqual([{
+      runId: RUN_ID, sourceDatabaseKey: DATABASE_KEY, requestKey: "x".repeat(200),
+      requestedBy: "owner", now: new Date("2026-08-01T12:03:00.000Z"),
+    }]);
+    expect(JSON.stringify(response.body)).not.toMatch(
+      /sourceDatabaseKey|requestedBy|rawSnapshot|email|phone|manifestDigest|canOrganize|readyToApply|private/i,
+    );
+  });
+
+  it("starts from the owned archive when ACT is unavailable", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control);
+    const response = await request(testApp(control, false, undefined, undefined, undefined, archive))
+      .post(endpoint()).set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ requestKey: "archive-without-act" });
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual(archiveProfileStatus());
+    expect(archive.createInputs[0]).toMatchObject({
+      runId: RUN_ID,
+      sourceDatabaseKey: DATABASE_KEY,
+      requestedBy: "owner",
+    });
+  });
+
+  it("replays duplicate completed starts idempotently with 200", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control);
+    archive.status = archiveProfileStatus({
+      phase: "complete", active: false, processedCount: 1_432, retryableFailureCount: 0,
+    });
+    const app = testApp(control, true, undefined, undefined, undefined, archive);
+    const authorization = `Bearer ${ownerToken()}`;
+    const first = await request(app).post(endpoint()).set("Authorization", authorization)
+      .send({ requestKey: "same-click" });
+    const replay = await request(app).post(endpoint()).set("Authorization", authorization)
+      .send({ requestKey: "same-click" });
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(first.body).toEqual(archive.status);
+    expect(replay.body).toEqual(first.body);
+    expect(archive.createInputs).toHaveLength(2);
+  });
+
+  it("reactivates a failed durable job and preserves committed progress", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control);
+    archive.status = archiveProfileStatus({
+      phase: "failed",
+      active: false,
+      processedCount: 125,
+      createdCount: 80,
+      linkedCount: 20,
+      alreadyImportedCount: 10,
+      preservedCount: 12,
+      retryableFailureCount: 3,
+      lastErrorCode: "archive_profile_database_unavailable",
+    });
+    const app = testApp(control, true, undefined, undefined, undefined, archive);
+    const authorization = `Bearer ${ownerToken()}`;
+
+    const retry = await request(app).post(endpoint()).set("Authorization", authorization)
+      .send({ requestKey: "retry-click" });
+    const replay = await request(app).post(endpoint()).set("Authorization", authorization)
+      .send({ requestKey: "retry-click" });
+
+    expect(retry.status).toBe(202);
+    expect(retry.body).toEqual(archiveProfileStatus({
+      phase: "companies",
+      active: true,
+      processedCount: 125,
+      createdCount: 80,
+      linkedCount: 20,
+      alreadyImportedCount: 10,
+      preservedCount: 12,
+      retryableFailureCount: 3,
+      lastErrorCode: null,
+    }));
+    expect(replay.status).toBe(202);
+    expect(replay.body).toEqual(retry.body);
+  });
+
+  it("returns 404 when an owned run has no archived-profile job", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control);
+    const response = await request(testApp(control, true, undefined, undefined, undefined, archive))
+      .get(endpoint()).set("Authorization", `Bearer ${ownerToken()}`);
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ code: "archive_profile_import_not_found" });
+    expect(archive.getInputs).toEqual([{
+      runId: RUN_ID, sourceDatabaseKey: DATABASE_KEY, requestedBy: "owner",
+    }]);
+  });
+
+  it("gets an existing job without organizer or manifest readiness", async () => {
+    const control = new MemoryControlStore();
+    const archive = new MemoryArchiveProfileImportRouteStore();
+    addRun(control, { status: { ...status(), phase: "extracting" } });
+    archive.status = archiveProfileStatus({ phase: "contacts", processedCount: 900 });
+    const response = await request(testApp(control, true, undefined, undefined, undefined, archive))
+      .get(endpoint()).set("Authorization", `Bearer ${ownerToken()}`);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(archive.status);
   });
 });
 

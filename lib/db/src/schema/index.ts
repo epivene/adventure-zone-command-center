@@ -8,6 +8,7 @@ import {
   index,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -1348,6 +1349,213 @@ export const actSourceRecordVersions = pgTable(
   ],
 );
 
+export const actArchiveProfileImportJobs = pgTable(
+  "act_archive_profile_import_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => actReplacementRuns.id, { onDelete: "cascade" }),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    requestKey: text("request_key").notNull(),
+    requestedBy: text("requested_by").notNull(),
+    phase: text("phase").default("companies").notNull(),
+    cursorSourceRecordId: uuid("cursor_source_record_id"),
+    eligibleCount: integer("eligible_count").default(0).notNull(),
+    processedCount: integer("processed_count").default(0).notNull(),
+    createdCount: integer("created_count").default(0).notNull(),
+    linkedCount: integer("linked_count").default(0).notNull(),
+    updatedCount: integer("updated_count").default(0).notNull(),
+    alreadyImportedCount: integer("already_imported_count").default(0).notNull(),
+    preservedCount: integer("preserved_count").default(0).notNull(),
+    retryableFailureCount: integer("retryable_failure_count").default(0).notNull(),
+    membershipSnapshotVersion: integer("membership_snapshot_version"),
+    failureAttemptCount: integer("failure_attempt_count").default(0).notNull(),
+    retryAfter: timestamp("retry_after", { withTimezone: true }),
+    leaseOwner: text("lease_owner"),
+    leaseToken: uuid("lease_token"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("act_archive_profile_import_jobs_run_unique").on(table.runId),
+    unique("act_archive_profile_import_jobs_run_request_key_unique").on(
+      table.runId,
+      table.requestKey,
+    ),
+    unique("act_archive_profile_import_jobs_id_database_unique").on(
+      table.id,
+      table.sourceDatabaseKey,
+    ),
+    foreignKey({
+      columns: [table.runId, table.sourceDatabaseKey],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
+      name: "act_archive_profile_import_jobs_run_database_fk",
+    }),
+    index("act_archive_profile_import_jobs_claim_idx")
+      .on(table.phase, table.leaseExpiresAt, table.updatedAt)
+      .where(sql`${table.phase} in ('companies','contacts')`),
+    check(
+      "act_archive_profile_import_jobs_phase_valid",
+      sql`${table.phase} in ('companies','contacts','complete','failed')`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_lease_expiry_consistency",
+      sql`(${table.leaseToken} is null) = (${table.leaseExpiresAt} is null)`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_lease_owner_consistency",
+      sql`(${table.leaseToken} is null) = (${table.leaseOwner} is null)`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_request_actor_nonblank",
+      sql`btrim(${table.requestKey}) <> '' and btrim(${table.requestedBy}) <> ''`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_progress_counts_nonnegative",
+      sql`${table.eligibleCount} >= 0 and ${table.processedCount} >= 0`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_outcome_counts_nonnegative",
+      sql`${table.createdCount} >= 0 and ${table.linkedCount} >= 0 and ${table.updatedCount} >= 0`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_remaining_counts_nonnegative",
+      sql`${table.alreadyImportedCount} >= 0 and ${table.preservedCount} >= 0 and ${table.retryableFailureCount} >= 0`,
+    ),
+    check(
+      "act_archive_profile_import_jobs_failure_attempt_nonnegative",
+      sql`${table.failureAttemptCount} >= 0`,
+    ),
+  ],
+);
+
+export const actArchiveProfileImportSources = pgTable(
+  "act_archive_profile_import_sources",
+  {
+    jobId: uuid("job_id").notNull(),
+    sourceDatabaseKey: text("source_database_key").notNull(),
+    sourceRecordId: uuid("source_record_id").notNull(),
+    sourceVersionId: uuid("source_version_id").notNull(),
+    phase: text("phase").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.jobId, table.sourceRecordId],
+      name: "act_archive_profile_import_sources_pkey",
+    }),
+    foreignKey({
+      columns: [table.jobId],
+      foreignColumns: [actArchiveProfileImportJobs.id],
+      name: "act_archive_profile_import_sources_job_id_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sourceRecordId],
+      foreignColumns: [actSourceRecords.id],
+      name: "act_archive_profile_import_sources_source_record_id_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.sourceVersionId],
+      foreignColumns: [actSourceRecordVersions.id],
+      name: "act_archive_profile_import_sources_source_version_id_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.jobId, table.sourceDatabaseKey],
+      foreignColumns: [actArchiveProfileImportJobs.id, actArchiveProfileImportJobs.sourceDatabaseKey],
+      name: "act_archive_profile_import_sources_job_database_fk",
+    }),
+    foreignKey({
+      columns: [table.sourceRecordId, table.sourceDatabaseKey],
+      foreignColumns: [actSourceRecords.id, actSourceRecords.sourceDatabaseKey],
+      name: "act_archive_profile_import_sources_source_database_fk",
+    }),
+    foreignKey({
+      columns: [table.sourceVersionId, table.sourceRecordId],
+      foreignColumns: [actSourceRecordVersions.id, actSourceRecordVersions.sourceRecordId],
+      name: "act_archive_profile_import_sources_version_owner_fk",
+    }),
+    index("act_archive_profile_import_sources_job_phase_source_idx").on(
+      table.jobId,
+      table.phase,
+      table.sourceRecordId,
+    ),
+    check(
+      "act_archive_profile_import_sources_phase_valid",
+      sql`${table.phase} in ('companies','contacts')`,
+    ),
+  ],
+);
+
+export const actArchiveProfileImportResults = pgTable(
+  "act_archive_profile_import_results",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => actArchiveProfileImportJobs.id, { onDelete: "cascade" }),
+    sourceRecordId: uuid("source_record_id")
+      .notNull()
+      .references(() => actSourceRecords.id, { onDelete: "restrict" }),
+    sourceVersionId: uuid("source_version_id")
+      .notNull()
+      .references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
+    status: text("status").notNull(),
+    targetEntityType: text("target_entity_type"),
+    targetEntityId: uuid("target_entity_id"),
+    reasonCode: text("reason_code"),
+    resolutionPolicyVersion: text("resolution_policy_version").notNull(),
+    aiProvider: text("ai_provider"),
+    aiConfidence: text("ai_confidence"),
+    evidenceLabels: jsonb("evidence_labels")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    retryAfter: timestamp("retry_after", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("act_archive_profile_import_results_job_source_unique").on(
+      table.jobId,
+      table.sourceRecordId,
+    ),
+    check(
+      "act_archive_profile_import_results_status_valid",
+      sql`${table.status} in ('created','linked','updated','already_imported','preserved','retryable_failed')`,
+    ),
+    check(
+      "act_archive_profile_import_results_target_type_valid",
+      sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact')`,
+    ),
+    check(
+      "act_archive_profile_import_results_target_pair_valid",
+      sql`(${table.targetEntityType} is null) = (${table.targetEntityId} is null)`,
+    ),
+    check(
+      "act_archive_profile_import_results_ai_confidence_valid",
+      sql`${table.aiConfidence} is null or ${table.aiConfidence} in ('high','medium','low')`,
+    ),
+    check(
+      "act_archive_profile_import_results_evidence_labels_array",
+      sql`jsonb_typeof(${table.evidenceLabels}) = 'array'`,
+    ),
+  ],
+);
+
+
 export const actReplacementCheckpoints = pgTable(
   "act_replacement_checkpoints",
   {
@@ -1662,6 +1870,18 @@ export type ActSourceRecordVersion =
   typeof actSourceRecordVersions.$inferSelect;
 export type NewActSourceRecordVersion =
   typeof actSourceRecordVersions.$inferInsert;
+export type ActArchiveProfileImportJob =
+  typeof actArchiveProfileImportJobs.$inferSelect;
+export type NewActArchiveProfileImportJob =
+  typeof actArchiveProfileImportJobs.$inferInsert;
+export type ActArchiveProfileImportSource =
+  typeof actArchiveProfileImportSources.$inferSelect;
+export type NewActArchiveProfileImportSource =
+  typeof actArchiveProfileImportSources.$inferInsert;
+export type ActArchiveProfileImportResult =
+  typeof actArchiveProfileImportResults.$inferSelect;
+export type NewActArchiveProfileImportResult =
+  typeof actArchiveProfileImportResults.$inferInsert;
 export type ActReplacementObservation =
   typeof actReplacementObservations.$inferSelect;
 export type NewActReplacementObservation =
@@ -2041,6 +2261,15 @@ export const actExternalLinks = pgTable(
     uniqueIndex("act_external_links_one_primary_per_local_source")
       .on(table.entityType, table.entityId, table.sourceEntityType)
       .where(sql`${table.isPrimary} = true`),
+    foreignKey({
+      columns: [table.sourceRecordId, table.sourceDatabaseKey, table.sourceEntityType],
+      foreignColumns: [
+        actSourceRecords.id,
+        actSourceRecords.sourceDatabaseKey,
+        actSourceRecords.streamType,
+      ],
+      name: "act_external_links_archive_source_scope_fk",
+    }),
     check(
       "act_external_links_sync_mode_valid",
       sql`${table.syncMode} in ('two_way', 'pull_only')`,
@@ -2051,7 +2280,7 @@ export const actExternalLinks = pgTable(
     ),
     check(
       "act_external_links_contact_primary_sync_valid",
-      sql`(${table.entityType} = 'contact' and ${table.sourceEntityType} = 'contact' and ((${table.isPrimary} = true and ${table.syncMode} = 'two_way') or (${table.isPrimary} = false and ${table.syncMode} = 'pull_only'))) or (${table.entityType} <> 'contact' and ${table.syncMode} = 'pull_only')`,
+      sql`(${table.entityType} = 'contact' and ${table.sourceEntityType} = 'contact' and ((${table.isPrimary} = true and ${table.syncMode} = 'two_way') or (${table.isPrimary} = false and ${table.syncMode} = 'pull_only') or (${table.isPrimary} = true and ${table.syncMode} = 'pull_only' and ${table.sourceDatabaseKey} is not null and ${table.sourceRecordId} is not null))) or (${table.entityType} <> 'contact' and ${table.syncMode} = 'pull_only')`,
     ),
     check("act_external_links_source_database_key_nonblank", sql`${table.sourceDatabaseKey} is null or btrim(${table.sourceDatabaseKey}) <> ''`),
   ],

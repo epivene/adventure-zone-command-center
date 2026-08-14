@@ -5,6 +5,8 @@ import type { ActConfig } from "@/features/act-sync/act-types";
 import type { ActReplacementCheckpointRepository } from "./checkpoint-repository";
 import { ActExtractionWorker } from "./extraction-worker";
 import {
+  createArchiveProfileImportLoop,
+  createActExtractionRuntime,
   createActExtractionClientAdapter,
   createActExtractionLoopPool,
   createActServerShutdown,
@@ -73,6 +75,105 @@ describe("Act extraction server shutdown", () => {
 });
 
 describe("Act extraction runtime composition", () => {
+  it.each(["unconfigured", "configured"] as const)(
+    "starts and closes exactly one archive loop when ACT is %s",
+    async (mode) => {
+      const events: string[] = [];
+      const archive = {
+        start: vi.fn(() => events.push("archive:start")),
+        close: vi.fn(async () => { events.push("archive:close"); }),
+      };
+      const extraction = {
+        start: vi.fn(() => events.push("extraction:start")),
+        close: vi.fn(async () => { events.push("extraction:close"); }),
+      };
+      const createConfiguredRuntime = vi.fn(async () => extraction);
+      const runtime = await createActExtractionRuntime({
+        getEnvironment: () => mode === "configured"
+          ? { configured: true, config: actConfig }
+          : { configured: false },
+        createArchiveRuntime: vi.fn(async () => archive),
+        createConfiguredRuntime,
+      });
+
+      runtime.start();
+      await runtime.close();
+
+      expect(archive.start).toHaveBeenCalledTimes(1);
+      expect(archive.close).toHaveBeenCalledTimes(1);
+      expect(createConfiguredRuntime).toHaveBeenCalledTimes(mode === "configured" ? 1 : 0);
+      if (mode === "unconfigured") {
+        expect(events).toEqual(["archive:start", "archive:close"]);
+      } else {
+        expect(events).toEqual([
+          "extraction:start",
+          "archive:start",
+          "archive:close",
+          "extraction:close",
+        ]);
+      }
+    },
+  );
+
+  it("keeps archive-only processing available when ACT credentials are partial", async () => {
+    const archive = { start: vi.fn(), close: vi.fn(async () => undefined) };
+    const createConfiguredRuntime = vi.fn();
+    const runtime = await createActExtractionRuntime({
+      getEnvironment: () => { throw new Error("private ACT password validation detail"); },
+      createArchiveRuntime: vi.fn(async () => archive),
+      createConfiguredRuntime,
+    });
+
+    runtime.start();
+    await runtime.close();
+
+    expect(archive.start).toHaveBeenCalledTimes(1);
+    expect(archive.close).toHaveBeenCalledTimes(1);
+    expect(createConfiguredRuntime).not.toHaveBeenCalled();
+  });
+
+  it("starts and closes exactly one archived-profile loop with a unique worker ID", async () => {
+    const scheduled: Array<() => void> = [];
+    const cancelled: unknown[] = [];
+    const workerIds: string[] = [];
+    const runtime = createArchiveProfileImportLoop({
+      store: {
+        createOrGetJob: vi.fn(),
+        getStatus: vi.fn(),
+        async claimNext(input) {
+          workerIds.push(input.workerId);
+          return null;
+        },
+        loadBatch: vi.fn(),
+        commitBatch: vi.fn(),
+        failBatch: vi.fn(),
+      },
+      createAiClient: vi.fn(),
+      clock: { now: () => new Date("2026-08-14T12:00:00.000Z") },
+      scheduler: {
+        schedule(task) {
+          scheduled.push(task);
+          return task;
+        },
+        cancel(handle) {
+          cancelled.push(handle);
+        },
+      },
+    });
+
+    runtime.start();
+    runtime.start();
+    expect(scheduled).toHaveLength(1);
+
+    scheduled.shift()!();
+    await vi.waitFor(() => expect(workerIds).toHaveLength(1));
+    expect(workerIds[0]).toMatch(/^act-archive-profile-import-\d+-[0-9a-f-]{36}$/);
+    await vi.waitFor(() => expect(scheduled).toHaveLength(1));
+
+    await runtime.close();
+    expect(cancelled).toHaveLength(1);
+  });
+
   it("starts and drains every extraction loop in the bounded pool", async () => {
     const events: string[] = [];
     const pool = createActExtractionLoopPool({
