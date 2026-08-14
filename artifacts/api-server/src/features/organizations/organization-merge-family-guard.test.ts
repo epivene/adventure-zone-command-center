@@ -237,8 +237,8 @@ describe("organization merge family guard", () => {
         ],
         [],
         [{
-          groupKey: `organization-family:${DUPLICATE_ID}|${OTHER_ID}`,
-          candidateIds: [DUPLICATE_ID, OTHER_ID],
+          groupKey: `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}|${OTHER_ID}`,
+          candidateIds: [PRIMARY_ID, DUPLICATE_ID, OTHER_ID],
         }],
       ),
     );
