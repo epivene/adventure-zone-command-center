@@ -75,3 +75,25 @@ The temporary refresh workflow was removed after this successful run.
 - Preserved current-main ACT recovery and AI booking suggestion fixes while retaining hierarchy-specific AI route test configuration.
 - Renamed the hierarchy migration to `025_organization_location_hierarchy.sql` because current main owns `024_ai_booking_suggestions.sql`.
 - Temporary verification workflow is used only for evidence and is removed before handoff.
+
+
+### Final verification evidence
+
+- Tested product head: `2a4c119aaab3e3e473c99e8ff855aad466fee520`.
+- GitHub Actions run: [`31767678064`](https://github.com/epivene/adventure-zone-command-center/actions/runs/31767678064) — **success**.
+- PostgreSQL hierarchy concurrency: 8 passed.
+- Focused API hierarchy suite: 87 passed.
+- Focused frontend hierarchy suite: 41 passed.
+- Full API suite: 1,072 passed, 59 skipped.
+- Full frontend suite: 199 passed.
+- Hierarchy verifier suite: 13 passed; live verifier reported zero self-parent, orphan, nested-hierarchy, or family-merge-risk rows.
+- Library, database, API-Zod, API, frontend, scripts, and root typechecks all passed.
+- Database, API, frontend, and root builds all passed.
+- Current main's broad Drizzle `push` still emits its pre-existing indexed-composite-FK ordering diagnostic; it was not treated as a hierarchy gate. The required PostgreSQL concurrency tests and all migration-number checks passed.
+
+### Integration fix wave
+
+- Updated the AI route test setup for current main's `REPL_ID` provider guard.
+- Corrected AI suggestion acceptance so it persists `status: "accepted"` and the created `bookingId` (current main had been writing `dismissed`).
+- Removed the obsolete `024_organization_location_hierarchy.sql`; current main retains `024_ai_booking_suggestions.sql`, and hierarchy is `025_organization_location_hierarchy.sql`.
+- Removed the temporary verification workflow after the successful evidence run.
