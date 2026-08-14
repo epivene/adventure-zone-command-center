@@ -209,6 +209,49 @@ describe("organization family review", () => {
     ]);
   });
 
+
+  it("warns on the whole exact-name bucket even when every member shares a strong website", () => {
+    const thirdId = "44444444-4444-4444-8444-444444444444";
+    const groups = discoverOrganizationFamilyCandidates([
+      {
+        id: FIRST_ID,
+        name: "Water Lantern Festival",
+        website: "https://waterlanternfestival.example/denver",
+        address1: "100 Lake St",
+        city: "Denver",
+        region: "CO",
+      },
+      {
+        id: SECOND_ID,
+        name: "Water Lantern Festival",
+        website: "https://waterlanternfestival.example/austin",
+        address1: "200 River Rd",
+        city: "Austin",
+        region: "TX",
+      },
+      {
+        id: thirdId,
+        name: "Water Lantern Festival",
+        website: "https://waterlanternfestival.example/boston",
+        address1: "300 Harbor Rd",
+        city: "Boston",
+        region: "MA",
+      },
+    ]);
+
+    expect(groups).toEqual([
+      expect.objectContaining({
+        classification: "ambiguous_location_candidate",
+        candidateIds: [FIRST_ID, SECOND_ID, thirdId],
+        evidence: expect.arrayContaining([
+          { family: "name", label: "exact organization names agree" },
+          { family: "website", label: "website domains agree" },
+          { family: "location", label: "locations differ" },
+        ]),
+      }),
+    ]);
+  });
+
   it("returns one ambiguous review when a strong subset overlaps a larger exact-name location group", () => {
     const thirdId = "44444444-4444-4444-8444-444444444444";
     const groups = discoverOrganizationFamilyCandidates([
