@@ -213,7 +213,10 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
       })
       .returning();
 
-    const updated = await updateSuggestion(id, { status: "accepted" });
+    const updated = await updateSuggestion(id, {
+      status: "accepted",
+      bookingId: booking.id,
+    });
 
     res.json({ suggestion: updated, booking });
   } catch (err) {
