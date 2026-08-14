@@ -160,6 +160,24 @@ const migrationFiles = [
         AND column_name  = 'address1'
     ) AS ready`,
   },
+  {
+    name: "029_organization_consolidation.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name   = 'organizations'
+        AND column_name  = 'consolidated_into_id'
+    ) AS ready`,
+  },
+  {
+    name: "030_organization_location_source_org.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name   = 'organization_locations'
+        AND column_name  = 'consolidation_source_org_id'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

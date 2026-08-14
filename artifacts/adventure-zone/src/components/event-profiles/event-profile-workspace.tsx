@@ -5,6 +5,7 @@ import { Link } from "wouter";
 
 import { HierarchyControls } from "@/components/organizations/hierarchy-controls";
 import { LocationsSection } from "@/components/organizations/locations-section";
+import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
@@ -126,6 +127,8 @@ export function EventProfileWorkspace({
 
       <LocationsSection locations={profile.locations ?? []} rollups={profile.rollups} />
 
+      <PossibleLocationsSection orgId={profile.id} />
+
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)]">
         <div className="grid gap-5">
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-contacts-title">
@@ -140,7 +143,7 @@ export function EventProfileWorkspace({
                       {contact.isPrimary ? <span className="text-xs font-semibold text-slate-600">Primary</span> : null}
                     </div>
                     {contact.role ? <p className="text-sm text-slate-600">{contact.role}</p> : null}
-                    <p className="text-sm text-slate-600">{contact.phone || "No phone"} Â· {contact.email || "No email"}</p>
+                    <p className="text-sm text-slate-600">{contact.phone || "No phone"} · {contact.email || "No email"}</p>
                   </li>
                 ))}
               </ul>
@@ -153,7 +156,7 @@ export function EventProfileWorkspace({
               <>
                 <ul className="mt-4 grid gap-3">
                   {profile.notes.slice(0, visibleNoteCount).map((note) => <li className="rounded-lg border border-slate-100 p-3" key={note.id}>
-                    <p className="text-sm font-semibold capitalize">{titleCase(note.kind)} Â· {formatDate(note.occurredAt)}</p>
+                    <p className="text-sm font-semibold capitalize">{titleCase(note.kind)} · {formatDate(note.occurredAt)}</p>
                     <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
                   </li>)}
                 </ul>
@@ -204,7 +207,7 @@ export function EventProfileWorkspace({
               {profile.bookings.map((booking) => <li className="grid gap-1 text-sm" key={booking.id}>
                 <Link className="font-semibold hover:text-orange-700" href={`/bookings/${booking.id}`}>{booking.name}</Link>
                 {booking.id === context.bookingId ? <span className="w-fit rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-900">Selected booking context</span> : null}
-                <p className="capitalize text-slate-600">{titleCase(booking.status)} Â· {formatDate(booking.startsAt)}</p>
+                <p className="capitalize text-slate-600">{titleCase(booking.status)} · {formatDate(booking.startsAt)}</p>
                 <p className="text-slate-600">{booking.city}, {booking.region}</p>
                 {booking.notes ? <p className="mt-1 whitespace-pre-wrap text-slate-700">{booking.notes}</p> : null}
               </li>)}
@@ -213,12 +216,12 @@ export function EventProfileWorkspace({
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-groups-title">
             <h2 className="text-xl font-bold" id="event-groups-title">Calling lists</h2>
-            {profile.groups.length ? <ul className="mt-3 grid gap-2 text-sm">{profile.groups.map((group) => <li key={group.id}>{group.name} <span className="text-slate-600">Â· {group.sourceStatus}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-600">This event has no calling-list membership.</p>}
+            {profile.groups.length ? <ul className="mt-3 grid gap-2 text-sm">{profile.groups.map((group) => <li key={group.id}>{group.name} <span className="text-slate-600">· {group.sourceStatus}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-600">This event has no calling-list membership.</p>}
           </section>
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-sources-title">
             <h2 className="text-xl font-bold" id="event-sources-title">Source provenance</h2>
-            {profile.sourceProvenance.length ? <ul className="mt-3 grid gap-2 text-sm">{profile.sourceProvenance.map((source) => <li key={`${source.entityId}:${source.sourceEntityType}:${source.actRecordId}`}><span className="font-semibold">{source.actRecordId}</span> <span className="text-slate-600">Â· {source.sourceEntityType}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-600">No external source record is linked.</p>}
+            {profile.sourceProvenance.length ? <ul className="mt-3 grid gap-2 text-sm">{profile.sourceProvenance.map((source) => <li key={`${source.entityId}:${source.sourceEntityType}:${source.actRecordId}`}><span className="font-semibold">{source.actRecordId}</span> <span className="text-slate-600">· {source.sourceEntityType}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-600">No external source record is linked.</p>}
           </section>
         </aside>
       </div>
