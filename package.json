@@ -8,8 +8,7 @@
     "verify:act-preview": "pnpm --filter @workspace/scripts exec tsx verify-act-replacement-preview.ts",
     "report:act-import": "pnpm --filter @workspace/scripts exec tsx report-act-replacement-import.ts",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "verify:organization-hierarchy": "pnpm --filter @workspace/scripts exec tsx verify-organization-location-hierarchy.ts"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },
   "private": true,
   "dependencies": {

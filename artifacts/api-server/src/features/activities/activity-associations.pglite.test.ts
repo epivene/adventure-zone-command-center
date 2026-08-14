@@ -32,8 +32,7 @@ beforeAll(async () => {
       postal_code text, website text,
       last_resort boolean NOT NULL DEFAULT false,
       last_resort_reason text,
-      act_record_id text,
-      parent_organization_id uuid
+      act_record_id text
     );
     CREATE TABLE contacts (
       id uuid PRIMARY KEY,
@@ -75,8 +74,7 @@ beforeAll(async () => {
       source_record_id uuid, source_version_id uuid, source_type text,
       organization_location_id uuid,
       created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      deleted_at timestamptz
+      updated_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE activity_revisions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -124,10 +122,10 @@ beforeAll(async () => {
       created_at timestamptz NOT NULL DEFAULT now()
     );
 
-    INSERT INTO organizations (id, name, parent_organization_id)
-      VALUES ('${parentOrgId}', 'Parent Co', NULL),
-             ('${profileId}', 'Adventure Zone - Austin', '${parentOrgId}'),
-             ('${emptyProfileId}', 'Empty Place', '${parentOrgId}');
+    INSERT INTO organizations (id, name)
+      VALUES ('${parentOrgId}', 'Parent Co'),
+             ('${profileId}', 'Adventure Zone - Austin'),
+             ('${emptyProfileId}', 'Empty Place');
     INSERT INTO contacts (id, first_name, last_name) VALUES ('${contactId}', 'Ada', 'Lovelace');
     INSERT INTO organization_contacts (organization_id, contact_id, is_primary)
       VALUES ('${profileId}', '${contactId}', true);

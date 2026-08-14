@@ -7,7 +7,7 @@
  * Database-backed integration tests live in the sibling pglite test file.
  */
 import { describe, expect, it } from "vitest";
-import { normalizeWebsite } from "./location-repository";
+import { inferLocationTravelLegId, normalizeWebsite } from "./location-repository";
 
 describe("normalizeWebsite", () => {
   it("returns null for null input", () => {
@@ -53,5 +53,16 @@ describe("normalizeWebsite", () => {
   it("is case-insensitive for the protocol check", () => {
     expect(normalizeWebsite("HTTPS://example.com")).toBe("HTTPS://example.com");
     expect(normalizeWebsite("HTTP://example.com")).toBe("HTTP://example.com");
+  });
+});
+
+describe("inferLocationTravelLegId", () => {
+  it("uses a leg when all assigned bookings agree", () => {
+    expect(inferLocationTravelLegId([null, "north", "north"])).toBe("north");
+  });
+
+  it("leaves ambiguous and booking-less locations unassigned", () => {
+    expect(inferLocationTravelLegId(["north", "south"])).toBeNull();
+    expect(inferLocationTravelLegId([null, undefined])).toBeNull();
   });
 });

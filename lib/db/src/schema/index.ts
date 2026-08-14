@@ -16,6 +16,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+
 import { sql } from "drizzle-orm";
 
 // Inlined type constants (originally from features/)
@@ -188,7 +189,6 @@ export const callDispositionEnum = pgEnum(
   "call_disposition",
   callDispositionValues,
 );
-
 export const organizations = pgTable("organizations", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
@@ -203,10 +203,6 @@ export const organizations = pgTable("organizations", {
   region: text("region"),
   postalCode: text("postal_code"),
   website: text("website"),
-  parentOrganizationId: uuid("parent_organization_id").references(
-    (): AnyPgColumn => organizations.id,
-    { onDelete: "restrict" },
-  ),
   /** Set when this profile has been retired via the consolidation workflow. */
   consolidatedIntoId: uuid("consolidated_into_id").references(
     (): AnyPgColumn => organizations.id,
@@ -230,12 +226,7 @@ export const organizations = pgTable("organizations", {
     "organizations_last_resort_reason_required",
     sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
   ),
-  check(
-    "organizations_not_own_parent",
-    sql`${table.parentOrganizationId} is null or ${table.parentOrganizationId} <> ${table.id}`,
-  ),
   index("organizations_normalized_phone_idx").on(table.normalizedPhone),
-  index("organizations_parent_organization_idx").on(table.parentOrganizationId),
 ]);
 
 export const organizationFamilyReviews = pgTable(
@@ -281,6 +272,10 @@ export const organizationLocations = pgTable(
     normalizedPhone: text("normalized_phone"),
     email: text("email"),
     localStatus: text("local_status"),
+    travelLegId: uuid("travel_leg_id").references(
+      (): AnyPgColumn => travelLegs.id,
+      { onDelete: "set null" },
+    ),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
     actRecordId: text("act_record_id").unique(),
@@ -300,6 +295,7 @@ export const organizationLocations = pgTable(
   (table) => [
     index("organization_locations_organization_id_idx").on(table.organizationId),
     index("organization_locations_normalized_phone_idx").on(table.normalizedPhone),
+    index("organization_locations_travel_leg_id_idx").on(table.travelLegId),
     uniqueIndex("organization_locations_consolidation_source_org_unique")
       .on(table.organizationId, table.consolidationSourceOrgId)
       .where(sql`${table.consolidationSourceOrgId} is not null`),
@@ -828,7 +824,7 @@ export const activities = pgTable("activities", {
   timelineSortAt: timestamp("timeline_sort_at", { withTimezone: true }).notNull(),
   dateIsImportFallback: boolean("date_is_import_fallback").default(false).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true }),
-  /** Act! source record key (e.g. "act_note:{id}")  set only on imported items; used for idempotent re-import. */
+  /** Act! source record key (e.g. "act_note:{id}") -- set only on imported items; used for idempotent re-import. */
   actRecordId: text("act_record_id"),
   sourceRecordId: uuid("source_record_id").references(() => actSourceRecords.id, { onDelete: "restrict" }),
   sourceVersionId: uuid("source_version_id").references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
@@ -862,7 +858,7 @@ export const activities = pgTable("activities", {
     table.bookingId,
     table.occurredAt.desc(),
   ),
-  // Partial composite index for the calendar query  covers both
+  // Partial composite index for the calendar query   covers both
   // kind = 'calendar' and kind = 'act_history' predicates so PostgreSQL
   // jumps straight to the date window instead of scanning every row.
   index("activities_kind_timeline_sort_at_idx")
@@ -2646,7 +2642,7 @@ export const routingCacheEntries = pgTable(
 );
 
 
-//     AI booking suggestions                                                   
+//  AI booking suggestions
 // Persisted so suggestions survive server restarts/redeploys (Render spins the
 // server down on idle and restarts on every deploy).
 

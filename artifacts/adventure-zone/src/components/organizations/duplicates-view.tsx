@@ -57,7 +57,7 @@ function MergeDialog({ group, primaryId, onConfirm, onCancel, merging }: MergeDi
         </p>
         <div className="mt-6 flex gap-3">
           <button className="button-primary flex-1" disabled={merging} onClick={onConfirm}>
-            {merging ? "Merging&" : "Confirm"}
+            {merging ? "Merging…" : "Confirm"}
           </button>
           <button className="button-secondary flex-1" disabled={merging} onClick={onCancel}>
             Cancel
@@ -130,7 +130,7 @@ function LocationList({ group, primaryId, onPrimaryChange, disabled }: {
                     {[organization.city, organization.region].filter(Boolean).join(", ") || "Location not recorded"}
                   </p>
                   <p className="mt-0.5 text-sm text-slate-600">
-                    {organization.contactCount} contact{organization.contactCount !== 1 ? "s" : ""} �{" "}
+                    {organization.contactCount} contact{organization.contactCount !== 1 ? "s" : ""} ·{" "}
                     {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
                   </p>
                 </div>
@@ -141,128 +141,6 @@ function LocationList({ group, primaryId, onPrimaryChange, disabled }: {
         })}
       </ul>
     </fieldset>
-  );
-}
-
-type OrganizationsResponse = { organizations: OrganizationListPage };
-
-function MakeLocationsDialog({ group, onCancel, onComplete }: {
-  group: DuplicateGroup;
-  onCancel: () => void;
-  onComplete: () => void;
-}) {
-  const [mode, setMode] = useState<"new" | "existing">("new");
-  const [name, setName] = useState("");
-  const [website, setWebsite] = useState("");
-  const [phone, setPhone] = useState("");
-  const [parentId, setParentId] = useState("");
-  const [parents, setParents] = useState<OrganizationListRecord[]>([]);
-  const [loadingParents, setLoadingParents] = useState(true);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
-
-  useEffect(() => {
-    let cancelled = false;
-    async function loadParents() {
-      const records: OrganizationListRecord[] = [];
-      let page = 1;
-      let pageCount = 1;
-      do {
-        const response = await apiGet<OrganizationsResponse>(
-          page === 1 ? "/organizations" : `/organizations?page=${page}`,
-        );
-        records.push(...response.organizations.records);
-        pageCount = response.organizations.pageCount;
-        page += 1;
-      } while (page <= pageCount);
-      if (!cancelled) {
-        const candidateIds = new Set(group.candidateIds ?? group.organizations.map((item) => item.id));
-        setParents(records.filter((record) => record.parent === null && !candidateIds.has(record.id)));
-        setLoadingParents(false);
-      }
-    }
-    loadParents().catch((caught: unknown) => {
-      if (!cancelled) {
-        setError(caught instanceof Error ? caught.message : "Could not load parent organizations.");
-        setLoadingParents(false);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [group]);
-
-  async function submit() {
-    const candidateIds = [...(group.candidateIds ?? group.organizations.map((item) => item.id))]
-      .sort((left, right) => left.localeCompare(right, "en-US"));
-    if (mode === "new" && !name.trim()) return;
-    if (mode === "existing" && !parentId) return;
-    setPending(true);
-    setError(null);
-    try {
-      await apiPost("/organizations/family-review", mode === "new"
-        ? {
-            action: "make_locations",
-            candidateIds,
-            parent: {
-              kind: "new",
-              name: name.trim(),
-              ...(website.trim() ? { website: website.trim() } : {}),
-              ...(phone.trim() ? { phone: phone.trim() } : {}),
-            },
-          }
-        : {
-            action: "make_locations",
-            candidateIds,
-            parent: { kind: "existing", parentId },
-          });
-      toast({ title: "Organization locations saved" });
-      onComplete();
-    } catch (caught: unknown) {
-      setError(caught instanceof Error ? caught.message : "Could not make organization locations.");
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div aria-label="Make organization locations" aria-modal="true" className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-xl" role="dialog">
-        <h2 className="text-lg font-bold">Make organization locations</h2>
-        <p className="mt-2 text-sm text-slate-600">
-          Keep each location profile and its local history, then place them under one parent.
-        </p>
-        <div className="mt-4 flex gap-4 text-sm font-semibold">
-          <label><input checked={mode === "new"} className="mr-2" name="parent-mode" onChange={() => setMode("new")} type="radio" />Create a new parent</label>
-          <label><input checked={mode === "existing"} className="mr-2" name="parent-mode" onChange={() => setMode("existing")} type="radio" />Use an existing parent</label>
-        </div>
-        {mode === "new" ? (
-          <div className="mt-4 grid gap-3">
-            <label className="grid gap-1 text-sm font-semibold">Parent organization name
-              <input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setName(event.target.value)} value={name} />
-            </label>
-            <label className="grid gap-1 text-sm font-semibold">Website (optional)
-              <input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setWebsite(event.target.value)} value={website} />
-            </label>
-            <label className="grid gap-1 text-sm font-semibold">Phone (optional)
-              <input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setPhone(event.target.value)} value={phone} />
-            </label>
-          </div>
-        ) : (
-          <label className="mt-4 grid gap-1 text-sm font-semibold">Existing parent
-            <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" disabled={loadingParents} onChange={(event) => setParentId(event.target.value)} value={parentId}>
-              <option value="">{loadingParents ? "Loading parents&" : "Choose an eligible parent"}</option>
-              {parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.name}</option>)}
-            </select>
-          </label>
-        )}
-        {error ? <p className="mt-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
-        <div className="mt-6 flex gap-3">
-          <button className="button-primary flex-1" disabled={pending || (mode === "new" ? !name.trim() : !parentId)} onClick={submit}>
-            {mode === "new" ? "Create parent and make locations" : "Make locations"}
-          </button>
-          <button className="button-secondary flex-1" disabled={pending} onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -291,7 +169,6 @@ function DuplicateGroupCard({
 }) {
   const locationCandidate = isLocationCandidate(group);
   const [showMerge, setShowMerge] = useState(false);
-  const [showLocations, setShowLocations] = useState(false);
   const [showConsolidate, setShowConsolidate] = useState(false);
   const [pending, setPending] = useState(false);
   const { toast } = useToast();
@@ -333,7 +210,6 @@ function DuplicateGroupCard({
   return (
     <>
       {showMerge ? <MergeDialog group={group} merging={pending} onCancel={() => setShowMerge(false)} onConfirm={merge} primaryId={primaryId} /> : null}
-      {showLocations ? <MakeLocationsDialog group={group} onCancel={() => setShowLocations(false)} onComplete={onResolved} /> : null}
       {showConsolidate ? (
         <ConsolidationDialog
           onCancel={() => setShowConsolidate(false)}
@@ -346,13 +222,13 @@ function DuplicateGroupCard({
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className={`text-sm font-bold ${locationCandidate ? "text-sky-900" : "text-amber-800"}`}>
-              Group {index + 1}  {group.organizations.length} matching records
+              Group {index + 1} -- {group.organizations.length} matching records
             </p>
             {locationCandidate ? (
               <>
                 <p className="mt-1 text-sm text-sky-900">
                   {group.classification === "ambiguous_location_candidate"
-                    ? "Ambiguous location match  review these profiles manually."
+                    ? "Ambiguous location match -- review these profiles manually."
                     : "These may be locations of the same organization."}
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
@@ -378,9 +254,6 @@ function DuplicateGroupCard({
                   title="Consolidate: keep each profile as a named location with its own history"
                 >
                   Consolidate as locations
-                </button>
-                <button className="button-secondary text-sm" disabled={disabled || pending} onClick={() => setShowLocations(true)}>
-                  Same organizationmake locations
                 </button>
                 <button className="button-secondary text-sm" disabled={disabled || pending} onClick={notRelated}>Not related</button>
               </>
@@ -528,13 +401,13 @@ export function DuplicatesView({ groups, onRefresh }: {
             <p className="mt-0.5 text-sm text-slate-600">Location candidates are excluded until reviewed.</p>
           </div>
           {bulkMerging ? (
-            <p aria-live="polite" className="font-bold text-orange-700">{reconciling ? "Checking server status&" : `Merging ${bulkProgress.completed} of ${bulkProgress.total}`}</p>
+            <p aria-live="polite" className="font-bold text-orange-700">{reconciling ? "Checking server status…" : `Merging ${bulkProgress.completed} of ${bulkProgress.total}`}</p>
           ) : bulkError ? (
             reconciliationError ? (
               <button className="button-primary" onClick={reconcileAfterFailure}>Retry status refresh</button>
             ) : (
               <button className="button-primary" disabled={!canResume || Boolean(missingPrimaryGroup)} onClick={runBulkMerge}>
-                {reconciling ? "Checking server status&" : "Resume remaining merges"}
+                {reconciling ? "Checking server status…" : "Resume remaining merges"}
               </button>
             )
           ) : (
@@ -547,10 +420,10 @@ export function DuplicatesView({ groups, onRefresh }: {
 
       {bulkError && !bulkMerging ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4" role="alert">
-          <p className="font-semibold text-rose-800">Could not merge {bulkError.groupName}. {bulkError.completed} of {bulkError.total} completed.</p>
+          <p className="font-semibold text-rose-800">Could not merge “{bulkError.groupName}”. {bulkError.completed} of {bulkError.total} completed.</p>
           <p className="mt-1 text-sm text-rose-700">{bulkError.cause instanceof Error ? bulkError.cause.message : "Unknown error"}</p>
           {reconciliationError ? <p className="mt-2 text-sm font-semibold text-rose-800">{reconciliationError}</p> : missingPrimaryGroup ? (
-            <p className="mt-2 text-sm font-semibold text-rose-800">The previous Primary for {missingPrimaryGroup.normalizedName} is no longer available. Choose a Primary below before resuming.</p>
+            <p className="mt-2 text-sm font-semibold text-rose-800">The previous Primary for “{missingPrimaryGroup.normalizedName}” is no longer available. Choose a Primary below before resuming.</p>
           ) : null}
         </div>
       ) : null}

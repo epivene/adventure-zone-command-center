@@ -363,6 +363,22 @@ const migrationFiles = [
         AND column_name = 'deleted_at'
     ) AS ready`,
   },
+  {
+    name: "033_retire_organization_hierarchy.sql",
+    markerSql: `SELECT
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'organization_locations'
+          AND column_name = 'travel_leg_id'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'organizations'
+          AND column_name = 'parent_organization_id'
+      ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

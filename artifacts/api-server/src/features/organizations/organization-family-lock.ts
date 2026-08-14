@@ -13,11 +13,11 @@ type LockTransaction = {
 };
 
 /**
- * All hierarchy, family-review, proposal, and merge flows enter this advisory
+ * All consolidation, family-review, proposal, and merge flows enter this advisory
  * domain before taking organization row or table locks. Keeping this first
- * prevents hierarchy-vs-family lock inversion.
+ * prevents lock-order inversion.
  */
-export async function lockOrganizationHierarchyMutationDomain(
+export async function lockOrganizationMutationDomain(
   transaction: LockTransaction,
 ): Promise<void> {
   await transaction.execute(
@@ -48,7 +48,7 @@ export async function lockOrganizationHierarchyMutationDomain(
 export async function lockOrganizationFamilyMutationSnapshot(
   transaction: LockTransaction,
 ): Promise<void> {
-  await lockOrganizationHierarchyMutationDomain(transaction);
+  await lockOrganizationMutationDomain(transaction);
   await transaction.execute(
     sql`lock table ${actMigrationRecords}, ${actExternalLinks} in exclusive mode`,
   );
@@ -60,4 +60,4 @@ export async function lockOrganizationFamilyMutationSnapshot(
 // Compatibility name retained for existing callers/tests that only need to
 // serialize a synthetic critical section.
 export const lockOrganizationFamilyReviewDomain =
-  lockOrganizationHierarchyMutationDomain;
+  lockOrganizationMutationDomain;

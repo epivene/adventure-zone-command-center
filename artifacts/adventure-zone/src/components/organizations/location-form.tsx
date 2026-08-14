@@ -22,6 +22,7 @@ export type LocationFormFields = {
   phone: string;
   email: string;
   localStatus: string;
+  travelLegId: string;
   /** Decimal latitude string; empty string means "not set". */
   lat: string;
   /** Decimal longitude string; empty string means "not set". */
@@ -42,6 +43,7 @@ const EMPTY: LocationFormFields = {
   phone: "",
   email: "",
   localStatus: "",
+  travelLegId: "",
   lat: "",
   lng: "",
 };
@@ -69,6 +71,7 @@ function toBody(fields: LocationFormFields): Record<string, string | number | nu
     phone: fields.phone.trim() || null,
     email: fields.email.trim() || null,
     localStatus: fields.localStatus.trim() || null,
+    travelLegId: fields.travelLegId || null,
     lat,
     lng,
   };
@@ -90,11 +93,13 @@ export function LocationForm({
   initial,
   onClose,
   onSuccess,
+  travelLegs,
 }: {
   orgId: string;
   initial?: LocationFormInitial;
   onClose: () => void;
   onSuccess: () => void;
+  travelLegs: Array<{ id: string; name: string; color: string }>;
 }) {
   const isEdit = Boolean(initial?.id);
   const [fields, setFields] = useState<LocationFormFields>({
@@ -105,7 +110,7 @@ export function LocationForm({
   const [error, setError] = useState<string | null>(null);
 
   function set(key: keyof LocationFormFields) {
-    return (e: React.ChangeEvent<HTMLInputElement>) =>
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setFields((prev) => ({ ...prev, [key]: e.target.value }));
   }
 
@@ -237,7 +242,7 @@ export function LocationForm({
             </label>
           </div>
 
-          {/* Website  free-text; server normalizes to https:// on save */}
+          {/* Website -- free-text; server normalizes to https:// on save */}
           <label className="grid gap-1 text-sm font-semibold">
             Local website
             <input
@@ -286,11 +291,28 @@ export function LocationForm({
             />
           </label>
 
-          {/* Coordinates  both required or both empty */}
+          <label className="grid gap-1 text-sm font-semibold">
+            Travel leg
+            <select
+              className={inputCls}
+              value={fields.travelLegId}
+              onChange={set("travelLegId")}
+            >
+              <option value="">Unassigned</option>
+              {travelLegs.map((leg) => (
+                <option key={leg.id} value={leg.id}>{leg.name}</option>
+              ))}
+            </select>
+            <span className="text-xs font-normal text-slate-500">
+              Planning default for this location; existing bookings keep their own leg.
+            </span>
+          </label>
+
+          {/* Coordinates -- both required or both empty */}
           <fieldset className="grid gap-1">
             <legend className="text-sm font-semibold">
               Coordinates{" "}
-              <span className="font-normal text-slate-500">(optional  both or neither)</span>
+              <span className="font-normal text-slate-500">(optional -- both or neither)</span>
             </legend>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1 text-sm font-semibold">
@@ -336,7 +358,7 @@ export function LocationForm({
               disabled={saving}
               type="submit"
             >
-              {saving ? "Saving&" : isEdit ? "Save changes" : "Add location"}
+              {saving ? "Saving…" : isEdit ? "Save changes" : "Add location"}
             </button>
           </div>
         </form>

@@ -9,17 +9,7 @@ import {
   organizationListQuerySchema,
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
-import {
-  createOrganizationParentInputSchema,
-  setOrganizationParentInputSchema,
-  ungroupOrganizationInputSchema,
-} from "@/features/organizations/organization-hierarchy-input";
-import {
-  createOrganizationParent,
-  HierarchyConflictError,
-  setOrganizationParent,
-  ungroupOrganization,
-} from "@/features/organizations/organization-hierarchy";
+import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
@@ -29,7 +19,6 @@ import {
   applyConsolidation,
   buildConsolidationPreview,
   getConsolidationRedirect,
-  migrateExistingHierarchyToConsolidation,
   type ConsolidationApplyInput,
   type ConsolidationPreviewInput,
 } from "@/features/organizations/organization-consolidation";
@@ -51,22 +40,6 @@ const familyCandidateIdsSchema = z
   .transform((ids) => [...ids].sort((left, right) => left.localeCompare(right, "en-US")));
 
 const familyReviewInputSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("make_locations"),
-    candidateIds: familyCandidateIdsSchema,
-    parent: z.discriminatedUnion("kind", [
-      z.object({
-        kind: z.literal("existing"),
-        parentId: z.string().uuid(),
-      }),
-      z.object({
-        kind: z.literal("new"),
-        name: z.string().trim().min(1).max(240),
-        website: z.string().trim().max(2048).optional(),
-        phone: z.string().trim().max(80).optional(),
-      }),
-    ]),
-  }),
   z.object({
     action: z.literal("not_related"),
     candidateIds: familyCandidateIdsSchema,
@@ -102,7 +75,7 @@ router.get("/organizations/duplicates", async (req, res): Promise<void> => {
   }
 });
 
-function hierarchyError(
+function organizationReviewError(
   req: Request,
   res: Response,
   err: unknown,
@@ -114,46 +87,16 @@ function hierarchyError(
     });
     return;
   }
-  if (err instanceof HierarchyConflictError) {
+  if (err instanceof OrganizationConflictError) {
     res.status(409).json({ ok: false, error: err.message });
     return;
   }
-  req.log.error({ err }, "Failed to update organization hierarchy");
+  req.log.error({ err }, "Failed to update organization review");
   res.status(500).json({
     ok: false,
-    error: "Could not update organization hierarchy",
+    error: "Could not update organization review",
   });
 }
-
-router.post("/organizations/hierarchy/parent", async (req, res): Promise<void> => {
-  try {
-    const input = setOrganizationParentInputSchema.parse(req.body);
-    await setOrganizationParent(db, input, new Date());
-    res.json({ ok: true });
-  } catch (err) {
-    hierarchyError(req, res, err);
-  }
-});
-
-router.post("/organizations/hierarchy/create-parent", async (req, res): Promise<void> => {
-  try {
-    const input = createOrganizationParentInputSchema.parse(req.body);
-    const { parentId } = await createOrganizationParent(db, input, new Date());
-    res.json({ ok: true, parentId });
-  } catch (err) {
-    hierarchyError(req, res, err);
-  }
-});
-
-router.post("/organizations/hierarchy/ungroup", async (req, res): Promise<void> => {
-  try {
-    const input = ungroupOrganizationInputSchema.parse(req.body);
-    await ungroupOrganization(db, input, new Date());
-    res.json({ ok: true });
-  } catch (err) {
-    hierarchyError(req, res, err);
-  }
-});
 
 router.post("/organizations/family-review", async (req, res): Promise<void> => {
   try {
@@ -161,7 +104,7 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
     await reviewOrganizationFamily(db, input, new Date());
     res.json({ ok: true });
   } catch (err) {
-    hierarchyError(req, res, err);
+    organizationReviewError(req, res, err);
   }
 });
 
@@ -215,7 +158,7 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
     await orgRepo().mergeOrganizations(primaryId, duplicateIds);
     res.json({ ok: true });
   } catch (err) {
-    if (err instanceof HierarchyConflictError) {
+    if (err instanceof OrganizationConflictError) {
       res.status(409).json({ ok: false, error: err.message });
       return;
     }
@@ -239,7 +182,7 @@ router.post("/organizations/last-resort", async (req, res): Promise<void> => {
   }
 });
 
-//     Consolidation                                                             
+//  Consolidation
 
 const consolidationPreviewBodySchema = z.object({
   canonicalOrgId: z.string().uuid().nullable().default(null),
@@ -297,22 +240,12 @@ router.post("/organizations/consolidation-apply", async (req, res): Promise<void
     const result = await applyConsolidation(db, input, new Date());
     res.json({ ok: true, ...result });
   } catch (err) {
-    if (err instanceof HierarchyConflictError) {
+    if (err instanceof OrganizationConflictError) {
       res.status(409).json({ ok: false, error: err.message });
       return;
     }
     req.log.error({ err }, "Failed to apply consolidation");
     res.status(500).json({ ok: false, error: "Could not apply consolidation" });
-  }
-});
-
-router.post("/organizations/consolidation-migrate-hierarchy", async (req, res): Promise<void> => {
-  try {
-    const result = await migrateExistingHierarchyToConsolidation(db, new Date());
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    req.log.error({ err }, "Failed to migrate hierarchy to consolidation");
-    res.status(500).json({ ok: false, error: "Could not migrate hierarchy" });
   }
 });
 

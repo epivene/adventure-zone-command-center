@@ -15,12 +15,7 @@ import {
 } from "@/db/schema";
 import {
   activeOrganizationContactCondition,
-  loadOrganizationHierarchySummary,
   organizationOwnedRecordCondition,
-  type OrganizationHierarchyRollups,
-  type OrganizationHierarchySummary,
-  type OrganizationLocationSummary,
-  type OrganizationParentSummary,
 } from "@/features/organizations/organization-repository";
 
 export type EventProfilePlace = {
@@ -125,9 +120,6 @@ export type EventProfile = {
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
-  parent: OrganizationParentSummary | null;
-  locations: OrganizationLocationSummary[];
-  rollups: OrganizationHierarchyRollups;
   migrationHistory?: {
     contactSourceIds: string[];
     phones: string[];
@@ -196,7 +188,6 @@ export function buildEventProfile(
   migrationHistory: EventProfile["migrationHistory"] = {
     contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
   },
-  hierarchy: OrganizationHierarchySummary = assembleEmptyEventProfileHierarchy(),
 ): EventProfile {
   const contacts = records.contacts.toSorted(contactOrder).map((contact) => ({
     id: contact.id,
@@ -232,26 +223,11 @@ export function buildEventProfile(
     ),
     groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     sourceProvenance: stableSourceProvenance(records),
-    ...hierarchy,
     migrationHistory,
   };
 }
 
 type DrizzleDatabase = typeof database;
-
-function assembleEmptyEventProfileHierarchy(): OrganizationHierarchySummary {
-  return {
-    parent: null,
-    locations: [],
-    rollups: {
-      locationCount: 0,
-      upcomingBookingCount: 0,
-      overdueFollowUpCount: 0,
-      travelLegs: [],
-      mostRecentContactAt: null,
-    },
-  };
-}
 
 export class DrizzleEventProfileRepository implements EventProfileRepository {
   constructor(private readonly database: DrizzleDatabase) {}
@@ -271,11 +247,9 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       lastResort: organizations.lastResort,
       lastResortReason: organizations.lastResortReason,
       actRecordId: organizations.actRecordId,
-      parentOrganizationId: organizations.parentOrganizationId,
     }).from(organizations).where(eq(organizations.id, profileId)).limit(1);
     if (!place) return null;
 
-    const hierarchyPromise = loadOrganizationHierarchySummary(this.database, place);
     const [profileContacts, profileBookings] = await Promise.all([
       this.database.select({
         id: contacts.id,
@@ -411,6 +385,6 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       followUps: profileFollowUps,
       groups,
       externalLinks: externalLinks as EventProfileSourceReference[],
-    }, selectedContactId, history, await hierarchyPromise);
+    }, selectedContactId, history);
   }
 }

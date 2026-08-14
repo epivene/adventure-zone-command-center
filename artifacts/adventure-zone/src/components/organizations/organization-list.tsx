@@ -103,7 +103,7 @@ export function OrganizationList({
                   <p className="mt-1 text-sm text-slate-500">
                     {[organization.city, organization.region].filter(Boolean).join(", ")}
                     {organization.primaryContactName ? (
-                      <span className="ml-2 font-medium text-slate-700">· {organization.primaryContactName}</span>
+                      <span className="ml-2 font-medium text-slate-700">Â· {organization.primaryContactName}</span>
                     ) : null}
                   </p>
                   {organization.matchedLocation ? (
@@ -112,22 +112,18 @@ export function OrganizationList({
                       <span className="font-medium text-slate-700">
                         {organization.matchedLocation.label}
                         {organization.matchedLocation.city
-                          ? ` · ${[organization.matchedLocation.city, organization.matchedLocation.region].filter(Boolean).join(", ")}`
+                          ? ` Â· ${[organization.matchedLocation.city, organization.matchedLocation.region].filter(Boolean).join(", ")}`
                           : null}
                       </span>
                     </p>
                   ) : null}
-                  {organization.parent ? (
-                    <p className="mt-0.5 text-sm font-medium text-slate-600">
-                      Part of {organization.parent.name}
-                    </p>
-                  ) : organization.locationCount > 0 ? (
+                  {organization.locationCount > 0 ? (
                     <p className="mt-0.5 text-sm font-medium text-slate-600">
                       {organization.locationCount} location{organization.locationCount !== 1 ? "s" : ""}
                     </p>
                   ) : null}
                   <p className="mt-0.5 text-sm text-slate-600">
-                    {organization.contactCount} contacts · {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
+                    {organization.contactCount} contacts Â· {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
                   </p>
                   {organization.lastResortReason ? (
                     <p className="mt-2 text-sm text-rose-800">

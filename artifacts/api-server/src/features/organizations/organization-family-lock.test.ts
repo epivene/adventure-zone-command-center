@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   lockOrganizationFamilyMutationSnapshot,
-  lockOrganizationHierarchyMutationDomain,
+  lockOrganizationMutationDomain,
 } from "./organization-family-lock";
 
 function normalizedSql(query: unknown): string {
@@ -15,7 +15,7 @@ function normalizedSql(query: unknown): string {
     .toLowerCase();
 }
 
-describe("organization family lock order", () => {
+describe("organization mutation lock order", () => {
   it("locks the shared advisory domain before every authoritative family table", async () => {
     const statements: string[] = [];
     const transaction = {
@@ -35,9 +35,9 @@ describe("organization family lock order", () => {
     expect(statements[2]).toBe('lock table "organizations" in exclusive mode');
   });
 
-  it("makes hierarchy changes enter the advisory domain before taking row locks", async () => {
+  it("makes organization changes enter the advisory domain before taking row locks", async () => {
     const statements: string[] = [];
-    await lockOrganizationHierarchyMutationDomain({
+    await lockOrganizationMutationDomain({
       execute: async (query: unknown) => {
         statements.push(normalizedSql(query));
         return { rows: [] };

@@ -3,8 +3,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
 
-import { HierarchyControls } from "@/components/organizations/hierarchy-controls";
-import { LocationsSection } from "@/components/organizations/locations-section";
 import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
@@ -68,7 +66,6 @@ export function EventProfileWorkspace({
     .filter(Boolean)
     .join(", ");
   const websiteHref = normalizeExternalWebsite(profile.place.website);
-  const parentWebsiteHref = normalizeExternalWebsite(profile.parent?.website ?? null);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -84,13 +81,6 @@ export function EventProfileWorkspace({
                 <span>Website: {profile.place.website || "Not recorded"}</span>
                 {websiteHref ? <a className="button-secondary text-center" href={websiteHref} rel="noreferrer noopener" target="_blank">Visit website</a> : null}
               </div>
-              {profile.parent ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <p>Part of <Link className="font-semibold hover:text-orange-700" href={`/profiles/${profile.parent.id}`}>{profile.parent.name}</Link></p>
-                  <span>Parent website: {profile.parent.website || "Not recorded"}</span>
-                  {parentWebsiteHref ? <a className="button-secondary text-center" href={parentWebsiteHref} rel="noreferrer noopener" target="_blank">Visit parent website</a> : null}
-                </div>
-              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -120,13 +110,6 @@ export function EventProfileWorkspace({
           </p>
         ) : null}
       </header>
-
-      <HierarchyControls
-        onRefresh={() => window.location.reload()}
-        profile={profile}
-      />
-
-      <LocationsSection locations={profile.locations ?? []} rollups={profile.rollups} />
 
       <PossibleLocationsSection orgId={profile.id} />
 

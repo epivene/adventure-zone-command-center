@@ -43,10 +43,8 @@ export {
   partitionOrganizationReviewGroups,
 } from "@/features/organizations/organization-family-discovery";
 import {
-  createOrganizationParentInTransaction,
-  HierarchyConflictError,
-  setOrganizationParentsInTransaction,
-} from "@/features/organizations/organization-hierarchy";
+  OrganizationConflictError,
+} from "@/features/organizations/organization-conflict";
 import {
   lockOrganizationFamilyMutationSnapshot,
   lockOrganizationFamilyReviewDomain,
@@ -63,71 +61,6 @@ export type OrganizationPerson = {
 };
 export type OrganizationContact = OrganizationPerson;
 
-export type OrganizationParentSummary = {
-  id: string;
-  name: string;
-  website: string | null;
-};
-
-export type OrganizationLocationSummary = {
-  id: string;
-  name: string;
-  address1: string | null;
-  address2: string | null;
-  city: string | null;
-  region: string | null;
-  postalCode: string | null;
-  website: string | null;
-  localStatus: string | null;
-  nextFollowUp: { id: string; kind: string; dueAt: Date } | null;
-  nextBooking: {
-    id: string;
-    name: string;
-    startsAt: Date | null;
-    status: string;
-  } | null;
-  travelLeg: { id: string; name: string; color: string } | null;
-  primaryContactName: string | null;
-};
-
-export type OrganizationHierarchyRollups = {
-  locationCount: number;
-  upcomingBookingCount: number;
-  overdueFollowUpCount: number;
-  travelLegs: Array<{ id: string; name: string; color: string }>;
-  mostRecentContactAt: Date | null;
-};
-
-export type OrganizationLocationAggregateRecord = {
-  id: string;
-  name: string;
-  address1: string | null;
-  address2: string | null;
-  city: string | null;
-  region: string | null;
-  postalCode: string | null;
-  website: string | null;
-  localStatus: string | null;
-  nextFollowUpId: string | null;
-  nextFollowUpKind: string | null;
-  nextFollowUpDueAt: Date | null;
-  nextBookingId: string | null;
-  nextBookingName: string | null;
-  nextBookingStartsAt: Date | null;
-  nextBookingStatus: string | null;
-  travelLegId: string | null;
-  travelLegName: string | null;
-  travelLegColor: string | null;
-  primaryContactFirstName: string | null;
-  primaryContactLastName: string | null;
-};
-
-export type OrganizationHierarchySummary = {
-  parent: OrganizationParentSummary | null;
-  locations: OrganizationLocationSummary[];
-  rollups: OrganizationHierarchyRollups;
-};
-
 export type OrganizationBooking = {
   id: string;
   name: string;
@@ -140,9 +73,6 @@ export type OrganizationSummary = {
   lastResort: boolean;
   lastResortReason: string | null;
   lastResortChangedAt: Date | null;
-  parent: OrganizationParentSummary | null;
-  locations: OrganizationLocationSummary[];
-  rollups: OrganizationHierarchyRollups;
   contacts: OrganizationContact[];
   bookings: OrganizationBooking[];
   contactTotal?: number;
@@ -163,7 +93,7 @@ export type OrganizationListQuery = {
   search: string;
   lastResort: "all" | "only";
   travelLegId: string | null;
-  /** When true, child/consolidated organizations are included in results. Defaults to false. */
+  /** When true, consolidated source profiles are included in results. Defaults to false. */
   includeRetired: boolean;
   page: number;
   pageSize: number;
@@ -178,14 +108,13 @@ export type MatchedOrganizationLocation = {
 
 export type OrganizationListRecord = Omit<
   OrganizationSummary,
-  "contacts" | "bookings" | "parent" | "locations" | "rollups"
+  "contacts" | "bookings"
 > & {
   contactCount: number;
   bookingCount: number;
   city: string | null;
   region: string | null;
   primaryContactName: string | null;
-  parent: OrganizationParentSummary | null;
   locationCount: number;
   /** Present when the search matched via an organization_locations record rather than the org's top-level fields. */
   matchedLocation: MatchedOrganizationLocation | null;
@@ -287,15 +216,10 @@ export async function discoverOrganizationFamilyCandidatesFromDatabase(
   );
 }
 
-export type OrganizationFamilyReviewInput =
-  | {
-      action: "make_locations";
-      candidateIds: string[];
-      parent:
-        | { kind: "existing"; parentId: string }
-        | { kind: "new"; name: string; website?: string; phone?: string };
-    }
-  | { action: "not_related"; candidateIds: string[] };
+export type OrganizationFamilyReviewInput = {
+  action: "not_related";
+  candidateIds: string[];
+};
 
 function organizationFamilyGroupKey(candidateIds: readonly string[]): string {
   return `organization-family:${[...candidateIds]
@@ -330,7 +254,7 @@ export async function reviewOrganizationFamily(
       review.candidateIds.length !== candidateIds.length ||
       !review.candidateIds.every((id, index) => id === candidateIds[index])
     ) {
-      throw new HierarchyConflictError(
+      throw new OrganizationConflictError(
         "This organization family changed. Refresh the review list and try again.",
       );
     }
@@ -338,13 +262,7 @@ export async function reviewOrganizationFamily(
     const standaloneRecords = await transaction
       .select()
       .from(organizations)
-      .where(and(
-        isNull(organizations.parentOrganizationId),
-        sql`not exists (
-          select 1 from ${organizations} as confirmed_location
-          where confirmed_location.parent_organization_id = ${organizations.id}
-        )`,
-      ))
+      .where(isNull(organizations.consolidatedIntoId))
       .orderBy(asc(organizations.id))
       .for("update");
     const candidatesById = new Map(
@@ -374,46 +292,20 @@ export async function reviewOrganizationFamily(
       return "stale" as const;
     }
 
-    if (input.action === "not_related") {
-      await transaction
-        .update(organizationFamilyReviews)
-        .set({
-          candidateIds,
-          evidence: current.evidence,
-          status: "not_related",
-          updatedAt: changedAt,
-        })
-        .where(eq(organizationFamilyReviews.groupKey, groupKey));
-      return "applied" as const;
-    }
-
-    if (input.parent.kind === "new") {
-      await createOrganizationParentInTransaction(
-        transaction,
-        {
-          name: input.parent.name,
-          ...(input.parent.website ? { website: input.parent.website } : {}),
-          ...(input.parent.phone ? { phone: input.parent.phone } : {}),
-          childIds: candidateIds,
-        },
-        changedAt,
-      );
-    } else {
-      await setOrganizationParentsInTransaction(
-        transaction,
-        { parentId: input.parent.parentId, childIds: candidateIds },
-        changedAt,
-      );
-    }
-
     await transaction
-      .delete(organizationFamilyReviews)
+      .update(organizationFamilyReviews)
+      .set({
+        candidateIds,
+        evidence: current.evidence,
+        status: "not_related",
+        updatedAt: changedAt,
+      })
       .where(eq(organizationFamilyReviews.groupKey, groupKey));
     return "applied" as const;
   }, { isolationLevel: "read committed" });
 
   if (outcome === "stale") {
-    throw new HierarchyConflictError(
+    throw new OrganizationConflictError(
       "This organization family changed. Refresh the review list and try again.",
     );
   }
@@ -476,38 +368,19 @@ async function revalidateOrganizationsMergeable(
     return organization ? [organization] : [];
   });
   if (selectedOrganizations.length !== selectedIds.length) {
-    throw new HierarchyConflictError(
+    throw new OrganizationConflictError(
       "A selected organization profile no longer exists.",
     );
   }
 
-  const ownedParentIds = new Set(
-    lockedOrganizations.flatMap((organization) =>
-      organization.parentOrganizationId
-        ? [organization.parentOrganizationId]
-        : [],
-    ),
-  );
-  const ownedLocations = lockedOrganizations.filter(
-    (organization) =>
-      organization.parentOrganizationId !== null &&
-      selectedIdSet.has(organization.parentOrganizationId),
-  );
-  if (
-    selectedOrganizations.some(
-      (organization) => organization.parentOrganizationId !== null,
-    ) ||
-    ownedLocations.length > 0
-  ) {
-    throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+  if (selectedOrganizations.some((organization) => organization.consolidatedIntoId !== null)) {
+    throw new OrganizationConflictError(organizationMergeFamilyConflictMessage);
   }
 
   if (!relevantProposals.length) return "mergeable";
 
   const standaloneRecords = lockedOrganizations.filter(
-    (organization) =>
-      organization.parentOrganizationId === null &&
-      !ownedParentIds.has(organization.id),
+    (organization) => organization.consolidatedIntoId === null,
   );
   const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
     transaction,
@@ -557,7 +430,7 @@ export async function assertOrganizationsMergeable(
   ids: string[],
 ): Promise<void> {
   if (await revalidateOrganizationsMergeable(transaction, ids) === "family_conflict") {
-    throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+    throw new OrganizationConflictError(organizationMergeFamilyConflictMessage);
   }
 }
 
@@ -617,13 +490,7 @@ export async function persistProposedOrganizationFamilies(
     const standaloneRecords = await transaction
       .select()
       .from(organizations)
-      .where(and(
-        isNull(organizations.parentOrganizationId),
-        sql`not exists (
-          select 1 from ${organizations} as confirmed_location
-          where confirmed_location.parent_organization_id = ${organizations.id}
-        )`,
-      ))
+      .where(isNull(organizations.consolidatedIntoId))
       .orderBy(asc(organizations.id));
     const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
       transaction,
@@ -705,83 +572,6 @@ function toOrganizationBooking(record: {
 
 
 
-const emptyHierarchyRollupRecord = {
-  locationCount: 0,
-  upcomingBookingCount: 0,
-  overdueFollowUpCount: 0,
-  mostRecentContactAt: null,
-};
-
-export function assembleOrganizationHierarchy(
-  parent: OrganizationParentSummary | null,
-  locationRecords: OrganizationLocationAggregateRecord[],
-  rollupRecord: Omit<OrganizationHierarchyRollups, "travelLegs"> = emptyHierarchyRollupRecord,
-  representedTravelLegs: OrganizationHierarchyRollups["travelLegs"] = [],
-): OrganizationHierarchySummary {
-  return {
-    parent,
-    locations: locationRecords
-      .map((record) => ({
-        id: record.id,
-        name: record.name,
-        address1: record.address1,
-        address2: record.address2,
-        city: record.city,
-        region: record.region,
-        postalCode: record.postalCode,
-        website: record.website,
-        localStatus: record.localStatus,
-        nextFollowUp:
-          record.nextFollowUpId &&
-          record.nextFollowUpKind &&
-          record.nextFollowUpDueAt
-            ? {
-                id: record.nextFollowUpId,
-                kind: record.nextFollowUpKind,
-                dueAt: record.nextFollowUpDueAt,
-              }
-            : null,
-        nextBooking:
-          record.nextBookingId &&
-          record.nextBookingName &&
-          record.nextBookingStatus
-            ? {
-                id: record.nextBookingId,
-                name: record.nextBookingName,
-                startsAt: record.nextBookingStartsAt,
-                status: record.nextBookingStatus,
-              }
-            : null,
-        travelLeg:
-          record.travelLegId &&
-          record.travelLegName &&
-          record.travelLegColor
-            ? {
-                id: record.travelLegId,
-                name: record.travelLegName,
-                color: record.travelLegColor,
-              }
-            : null,
-        primaryContactName:
-          record.primaryContactFirstName || record.primaryContactLastName
-            ? `${record.primaryContactFirstName ?? ""} ${record.primaryContactLastName ?? ""}`.trim()
-            : null,
-      }))
-      .toSorted(
-        (left, right) =>
-          left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
-      ),
-    rollups: {
-      locationCount: Number(rollupRecord.locationCount),
-      upcomingBookingCount: Number(rollupRecord.upcomingBookingCount),
-      overdueFollowUpCount: Number(rollupRecord.overdueFollowUpCount),
-      travelLegs: representedTravelLegs,
-      mostRecentContactAt: rollupRecord.mostRecentContactAt,
-    },
-  };
-}
-
-
 const activeBookingStatuses = bookingStatusValues.filter(isActiveStatus);
 
 function activeBookingStatusCondition(status: SQLWrapper): SQL {
@@ -817,259 +607,21 @@ export function organizationOwnedRecordCondition(
   )`;
 }
 
-export function organizationHierarchyLocationQuery(parentId: string): SQL {
-  return sql`
-    SELECT
-      child.id,
-      child.name,
-      child.address_1 AS "address1",
-      child.address_2 AS "address2",
-      child.city,
-      child.region,
-      child.postal_code AS "postalCode",
-      child.website,
-      next_booking.status::text AS "localStatus",
-      next_follow_up.id AS "nextFollowUpId",
-      next_follow_up.kind AS "nextFollowUpKind",
-      next_follow_up.due_at AS "nextFollowUpDueAt",
-      next_booking.id AS "nextBookingId",
-      next_booking.name AS "nextBookingName",
-      next_booking.starts_at AS "nextBookingStartsAt",
-      next_booking.status::text AS "nextBookingStatus",
-      next_leg.id AS "travelLegId",
-      next_leg.name AS "travelLegName",
-      next_leg.color AS "travelLegColor",
-      primary_contact.first_name AS "primaryContactFirstName",
-      primary_contact.last_name AS "primaryContactLastName"
-    FROM ${organizations} AS child
-    LEFT JOIN LATERAL (
-      SELECT
-        candidate.id,
-        candidate.kind,
-        candidate.due_at
-      FROM ${followUps} AS candidate
-      WHERE candidate.completed_at IS NULL
-        AND ${organizationOwnedRecordCondition(
-          {
-            organizationId: sql`candidate.organization_id`,
-            bookingId: sql`candidate.booking_id`,
-            contactId: sql`candidate.contact_id`,
-          },
-          sql`candidate.organization_id = child.id`,
-          sql`EXISTS (
-            SELECT 1
-            FROM ${bookings} AS related_booking
-            WHERE related_booking.organization_id = child.id
-              AND related_booking.id = candidate.booking_id
-          )`,
-          sql`EXISTS (
-            SELECT 1
-            FROM ${organizationContacts} AS association
-            WHERE association.organization_id = child.id
-              AND association.active
-              AND association.contact_id = candidate.contact_id
-          )`,
-        )}
-      ORDER BY candidate.due_at, candidate.id
-      LIMIT 1
-    ) AS next_follow_up ON true
-    LEFT JOIN LATERAL (
-      SELECT
-        candidate.id,
-        candidate.name,
-        candidate.starts_at,
-        candidate.status,
-        candidate.travel_leg_id
-      FROM ${bookings} AS candidate
-      WHERE candidate.organization_id = child.id
-        AND candidate.starts_at >= now()
-        AND ${activeBookingStatusCondition(sql`candidate.status`)}
-      ORDER BY candidate.starts_at, candidate.id
-      LIMIT 1
-    ) AS next_booking ON true
-    LEFT JOIN ${travelLegs} AS next_leg
-      ON next_leg.id = next_booking.travel_leg_id
-    LEFT JOIN LATERAL (
-      SELECT person.first_name, person.last_name
-      FROM ${organizationContacts} AS association
-      INNER JOIN ${contacts} AS person ON person.id = association.contact_id
-      WHERE association.organization_id = child.id
-        AND association.active
-        AND association.is_primary
-      ORDER BY association.updated_at DESC, association.id
-      LIMIT 1
-    ) AS primary_contact ON true
-    WHERE child.parent_organization_id = ${parentId}
-    ORDER BY child.name, child.id
-  `;
-}
-
-export function organizationHierarchyRollupQuery(parentId: string): SQL {
-  return sql`
-    SELECT
-      count(*)::int AS "locationCount",
-      (
-        SELECT count(*)::int
-        FROM ${bookings} AS candidate
-        INNER JOIN ${organizations} AS booking_location
-          ON booking_location.id = candidate.organization_id
-        WHERE booking_location.parent_organization_id = ${parentId}
-          AND candidate.starts_at >= now()
-          AND ${activeBookingStatusCondition(sql`candidate.status`)}
-      ) AS "upcomingBookingCount",
-      (
-        SELECT count(*)::int
-        FROM ${followUps} AS candidate
-        WHERE candidate.completed_at IS NULL
-          AND candidate.due_at < now()
-          AND ${organizationOwnedRecordCondition(
-            {
-              organizationId: sql`candidate.organization_id`,
-              bookingId: sql`candidate.booking_id`,
-              contactId: sql`candidate.contact_id`,
-            },
-            sql`EXISTS (
-              SELECT 1
-              FROM ${organizations} AS direct_location
-              WHERE direct_location.parent_organization_id = ${parentId}
-                AND direct_location.id = candidate.organization_id
-            )`,
-            sql`EXISTS (
-              SELECT 1
-              FROM ${bookings} AS related_booking
-              INNER JOIN ${organizations} AS booking_location
-                ON booking_location.id = related_booking.organization_id
-              WHERE booking_location.parent_organization_id = ${parentId}
-                AND related_booking.id = candidate.booking_id
-            )`,
-            sql`EXISTS (
-              SELECT 1
-              FROM ${organizationContacts} AS association
-              INNER JOIN ${organizations} AS contact_location
-                ON contact_location.id = association.organization_id
-              WHERE contact_location.parent_organization_id = ${parentId}
-                AND association.active
-                AND association.contact_id = candidate.contact_id
-            )`,
-          )}
-      ) AS "overdueFollowUpCount",
-      (
-        SELECT max(candidate.timeline_sort_at)
-        FROM ${activities} AS candidate
-        WHERE candidate.kind = 'call'
-          AND ${organizationOwnedRecordCondition(
-            {
-              organizationId: sql`candidate.organization_id`,
-              bookingId: sql`candidate.booking_id`,
-              contactId: sql`candidate.contact_id`,
-            },
-            sql`EXISTS (
-              SELECT 1
-              FROM ${organizations} AS direct_location
-              WHERE direct_location.parent_organization_id = ${parentId}
-                AND direct_location.id = candidate.organization_id
-            )`,
-            sql`EXISTS (
-              SELECT 1
-              FROM ${bookings} AS related_booking
-              INNER JOIN ${organizations} AS booking_location
-                ON booking_location.id = related_booking.organization_id
-              WHERE booking_location.parent_organization_id = ${parentId}
-                AND related_booking.id = candidate.booking_id
-            )`,
-            sql`EXISTS (
-              SELECT 1
-              FROM ${organizationContacts} AS association
-              INNER JOIN ${organizations} AS contact_location
-                ON contact_location.id = association.organization_id
-              WHERE contact_location.parent_organization_id = ${parentId}
-                AND association.active
-                AND association.contact_id = candidate.contact_id
-            )`,
-          )}
-      ) AS "mostRecentContactAt"
-    FROM ${organizations} AS child
-    WHERE child.parent_organization_id = ${parentId}
-  `;
-}
-
-export function organizationHierarchyTravelLegQuery(parentId: string): SQL {
-  return sql`
-    SELECT DISTINCT leg.id, leg.name, leg.color
-    FROM ${organizations} AS child
-    INNER JOIN ${bookings} AS child_booking
-      ON child_booking.organization_id = child.id
-    INNER JOIN ${travelLegs} AS leg
-      ON leg.id = child_booking.travel_leg_id
-    WHERE child.parent_organization_id = ${parentId}
-    ORDER BY leg.name, leg.id
-  `;
-}
-
-export async function loadOrganizationHierarchySummary(
-  database: DrizzleDatabase,
-  organization: { id: string; parentOrganizationId: string | null },
-): Promise<OrganizationHierarchySummary> {
-  if (organization.parentOrganizationId) {
-    const [parent] = await database
-      .select({
-        id: organizations.id,
-        name: organizations.name,
-        website: organizations.website,
-      })
-      .from(organizations)
-      .where(eq(organizations.id, organization.parentOrganizationId))
-      .limit(1);
-
-    return assembleOrganizationHierarchy(parent ?? null, []);
-  }
-
-  const [locationResult, rollupResult, travelLegResult] = await Promise.all([
-    database.execute<OrganizationLocationAggregateRecord>(
-      organizationHierarchyLocationQuery(organization.id),
-    ),
-    database.execute<Omit<OrganizationHierarchyRollups, "travelLegs">>(
-      organizationHierarchyRollupQuery(organization.id),
-    ),
-    database.execute<OrganizationHierarchyRollups["travelLegs"][number]>(
-      organizationHierarchyTravelLegQuery(organization.id),
-    ),
-  ]);
-
-  return assembleOrganizationHierarchy(
-    null,
-    [...locationResult.rows],
-    rollupResult.rows[0] ?? emptyHierarchyRollupRecord,
-    [...travelLegResult.rows],
-  );
-}
-
 export function buildOrganizationListCondition(
   query: OrganizationListQuery,
 ): SQL | undefined {
   const pattern = `%${query.search}%`;
 
-  // Retired orgs are those absorbed into a parent (parentOrganizationId IS NOT NULL) or
-  // consolidated via the consolidation workflow (consolidatedIntoId IS NOT NULL).
-  // By default these are excluded from all list results; pass includeRetired=true only for admin review.
+  // Consolidated source profiles are hidden by default.
   const notRetiredCondition = query.includeRetired
     ? undefined
-    : and(
-        isNull(organizations.parentOrganizationId),
-        isNull(organizations.consolidatedIntoId),
-      );
+    : isNull(organizations.consolidatedIntoId);
 
   const searchCondition = query.search
     ? sql`(
         ${organizations.name} ilike ${pattern}
         or ${organizations.city} ilike ${pattern}
         or ${organizations.phone} ilike ${pattern}
-        or exists (
-          select 1
-          from ${organizations} as parent_organization
-          where parent_organization.id = ${organizations.parentOrganizationId}
-            and parent_organization.name ilike ${pattern}
-        )
         or exists (
           select 1
           from ${organizationContacts} as association
@@ -1083,35 +635,6 @@ export function buildOrganizationListCondition(
               or concat_ws(' ', person.first_name, person.last_name) ilike ${pattern}
               or person.phone ilike ${pattern}
               or person.email ilike ${pattern}
-            )
-        )
-        or exists (
-          select 1
-          from ${organizations} as child_location
-          where child_location.parent_organization_id = ${organizations.id}
-            and (
-              child_location.name ilike ${pattern}
-              or child_location.city ilike ${pattern}
-              or child_location.phone ilike ${pattern}
-              or exists (
-                select 1
-                from ${organizationContacts} as child_association
-                inner join ${contacts} as child_person
-                  on child_person.id = child_association.contact_id
-                where child_association.organization_id = child_location.id
-                  and child_association.active
-                  and (
-                    child_person.first_name ilike ${pattern}
-                    or child_person.last_name ilike ${pattern}
-                    or concat_ws(
-                      ' ',
-                      child_person.first_name,
-                      child_person.last_name
-                    ) ilike ${pattern}
-                    or child_person.phone ilike ${pattern}
-                    or child_person.email ilike ${pattern}
-                  )
-              )
             )
         )
         or exists (
@@ -1159,11 +682,7 @@ export function buildOrganizationListOrderBy(
 ): SQL[] {
   return query.search
     ? [
-        sql`case
-          when lower(${organizations.name}) = lower(${query.search}) then 0
-          when ${organizations.parentOrganizationId} is null then 1
-          else 2
-        end`,
+        sql`case when lower(${organizations.name}) = lower(${query.search}) then 0 else 1 end`,
         asc(organizations.name),
         asc(organizations.id),
       ]
@@ -1179,13 +698,7 @@ export function duplicateOrganizationGroupsQuery() {
       min(lower(trim(coalesce(region, '')))) AS normalized_region,
       array_agg(id ORDER BY created_at ASC) AS ids
     FROM organizations AS duplicate_candidate
-    WHERE parent_organization_id IS NULL
-      AND consolidated_into_id IS NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM organizations AS confirmed_location
-        WHERE confirmed_location.parent_organization_id = duplicate_candidate.id
-      )
+    WHERE consolidated_into_id IS NULL
     GROUP BY 1
     HAVING count(*) > 1
     ORDER BY lower(trim(name))
@@ -1272,7 +785,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       bookingPageCount,
     );
 
-    const [organizationPeople, organizationBookings, hierarchy] = await Promise.all([
+    const [organizationPeople, organizationBookings] = await Promise.all([
       this.database
         .select({
           id: contacts.id,
@@ -1306,7 +819,6 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id))
         .limit(query.pageSize)
         .offset((bookingPage - 1) * query.pageSize),
-      loadOrganizationHierarchySummary(this.database, organization),
     ]);
 
     return {
@@ -1315,7 +827,6 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       lastResort: organization.lastResort,
       lastResortReason: organization.lastResortReason,
       lastResortChangedAt: organization.lastResortChangedAt,
-      ...hierarchy,
       contacts: organizationPeople.map((contact) => ({
         id: contact.id,
         name: `${contact.firstName} ${contact.lastName}`.trim(),
@@ -1355,19 +866,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     }
 
     const organizationIds = organizationRecords.map((organization) => organization.id);
-    const parentIds = [
-      ...new Set(
-        organizationRecords
-          .map((organization) => organization.parentOrganizationId)
-          .filter((id): id is string => id !== null),
-      ),
-    ];
     const locationSearchPattern = query.search ? `%${query.search}%` : null;
     const [
       contactCounts,
       bookingCounts,
       primaryContacts,
-      parentRecords,
       locationCounts,
       matchedLocationRows,
     ] = await Promise.all([
@@ -1403,24 +906,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           eq(organizationContacts.active, true),
           eq(organizationContacts.isPrimary, true),
         )),
-      parentIds.length
-        ? this.database
-            .select({
-              id: organizations.id,
-              name: organizations.name,
-              website: organizations.website,
-            })
-            .from(organizations)
-            .where(inArray(organizations.id, parentIds))
-        : Promise.resolve([] as OrganizationParentSummary[]),
       this.database
         .select({
-          parentOrganizationId: organizations.parentOrganizationId,
+          organizationId: organizationLocations.organizationId,
           value: count(),
         })
-        .from(organizations)
-        .where(inArray(organizations.parentOrganizationId, organizationIds))
-        .groupBy(organizations.parentOrganizationId),
+        .from(organizationLocations)
+        .where(inArray(organizationLocations.organizationId, organizationIds))
+        .groupBy(organizationLocations.organizationId),
       // Find the first organization_location that matched the search term, per org.
       // This powers the "via [location]" context shown in search results.
       locationSearchPattern
@@ -1476,13 +969,8 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         `${record.firstName} ${record.lastName}`.trim(),
       ]),
     );
-    const parentById = new Map(
-      parentRecords.map((record) => [record.id, record]),
-    );
-    const locationCountByParent = new Map(
-      locationCounts
-        .filter((record) => record.parentOrganizationId !== null)
-        .map((record) => [record.parentOrganizationId!, record.value]),
+    const locationCountByOrganization = new Map(
+      locationCounts.map((record) => [record.organizationId, record.value]),
     );
     // Take the first matched location per organization (ORDER BY is not guaranteed, but any one is fine).
     const matchedLocationByOrganization = new Map<string, MatchedOrganizationLocation>();
@@ -1509,10 +997,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         contactCount: contactCountByOrganization.get(organization.id) ?? 0,
         bookingCount: bookingCountByOrganization.get(organization.id) ?? 0,
         primaryContactName: primaryContactByOrganization.get(organization.id) ?? null,
-        parent: organization.parentOrganizationId
-          ? parentById.get(organization.parentOrganizationId) ?? null
-          : null,
-        locationCount: locationCountByParent.get(organization.id) ?? 0,
+        locationCount: locationCountByOrganization.get(organization.id) ?? 0,
         matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,
       })),
       total,
@@ -1540,13 +1025,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       this.database
         .select()
         .from(organizations)
-        .where(and(
-          isNull(organizations.parentOrganizationId),
-          sql`not exists (
-            select 1 from ${organizations} as confirmed_location
-            where confirmed_location.parent_organization_id = ${organizations.id}
-          )`,
-        ))
+        .where(isNull(organizations.consolidatedIntoId))
         .orderBy(asc(organizations.id)),
     ]);
 
@@ -1586,13 +1065,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .where(inArray(organizations.id, allIds))
       .orderBy(asc(organizations.name), asc(organizations.id));
     const organizationIds = orgRecords.map((organization) => organization.id);
-    const parentIds = [...new Set(
-      orgRecords
-        .map((organization) => organization.parentOrganizationId)
-        .filter((id): id is string => id !== null),
-    )];
-
-    const [contactCounts, bookingCounts, primaryContacts, parentRecords, locationCounts] =
+    const [contactCounts, bookingCounts, primaryContacts, locationCounts] =
       await Promise.all([
         this.database
           .select({ organizationId: organizationContacts.organizationId, value: count() })
@@ -1620,17 +1093,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             eq(organizationContacts.active, true),
             eq(organizationContacts.isPrimary, true),
           )),
-        parentIds.length
-          ? this.database
-              .select({ id: organizations.id, name: organizations.name, website: organizations.website })
-              .from(organizations)
-              .where(inArray(organizations.id, parentIds))
-          : Promise.resolve([] as OrganizationParentSummary[]),
         this.database
-          .select({ parentOrganizationId: organizations.parentOrganizationId, value: count() })
-          .from(organizations)
-          .where(inArray(organizations.parentOrganizationId, organizationIds))
-          .groupBy(organizations.parentOrganizationId),
+          .select({ organizationId: organizationLocations.organizationId, value: count() })
+          .from(organizationLocations)
+          .where(inArray(organizationLocations.organizationId, organizationIds))
+          .groupBy(organizationLocations.organizationId),
       ]);
 
     const contactCountByOrg = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
@@ -1644,10 +1111,8 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         `${record.firstName} ${record.lastName}`.trim(),
       ]),
     );
-    const parentById = new Map(parentRecords.map((record) => [record.id, record]));
-    const locationCountByParent = new Map(
-      locationCounts.filter((record) => record.parentOrganizationId !== null)
-        .map((record) => [record.parentOrganizationId!, record.value]),
+    const locationCountByOrganization = new Map(
+      locationCounts.map((record) => [record.organizationId, record.value]),
     );
     const orgById = new Map(orgRecords.map((organization) => [organization.id, organization]));
 
@@ -1668,10 +1133,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             contactCount: contactCountByOrg.get(organization.id) ?? 0,
             bookingCount: bookingCountByOrg.get(organization.id) ?? 0,
             primaryContactName: primaryContactByOrg.get(organization.id) ?? null,
-            parent: organization.parentOrganizationId
-              ? parentById.get(organization.parentOrganizationId) ?? null
-              : null,
-            locationCount: locationCountByParent.get(organization.id) ?? 0,
+            locationCount: locationCountByOrganization.get(organization.id) ?? 0,
             matchedLocation: null,
           } satisfies OrganizationListRecord];
         }),
@@ -1722,7 +1184,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         // Step 1: Create organization_contacts entries on the primary for every
         // contact currently belonging to the duplicate. This MUST happen before
         // updating contacts.organization_id because the schema enforces a
-        // composite FK: contacts(organization_id, id) ’
+        // composite FK: contacts(organization_id, id) Â’
         // organization_contacts(organization_id, contact_id). Without a matching
         // row on the primary side the FK check would fail when we re-parent
         // contacts in step 2.
@@ -1748,7 +1210,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           ON CONFLICT (organization_id, contact_id) DO NOTHING
         `);
 
-        // Step 2: Re-parent contacts  now safe because every contact that had
+        // Step 2: Re-parent contacts -- now safe because every contact that had
         // organization_id = dupId has a matching organization_contacts row for
         // primaryId (inserted above or already present).
         await tx.update(contacts)
@@ -1817,7 +1279,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     });
 
     if (outcome === "family_conflict") {
-      throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+      throw new OrganizationConflictError(organizationMergeFamilyConflictMessage);
     }
   }
 }
