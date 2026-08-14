@@ -2305,3 +2305,61 @@ export const routingCacheEntries = pgTable(
   ],
 );
 
+
+// ─── AI booking suggestions ──────────────────────────────────────────────────
+// Persisted so suggestions survive server restarts/redeploys (Render spins the
+// server down on idle and restarts on every deploy).
+
+export const aiSuggestionConfidenceValues = ["high", "medium", "low"] as const;
+export type AiSuggestionConfidence =
+  (typeof aiSuggestionConfidenceValues)[number];
+
+export const aiSuggestionStatusValues = [
+  "pending",
+  "accepted",
+  "dismissed",
+] as const;
+export type AiSuggestionStatus = (typeof aiSuggestionStatusValues)[number];
+
+export const aiBookingSuggestions = pgTable(
+  "ai_booking_suggestions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    /** ISO date string (YYYY-MM-DD) for the suggested booking start, or null */
+    suggestedDate: text("suggested_date"),
+    suggestedDateEnd: text("suggested_date_end"),
+    clientName: text("client_name"),
+    tripDescription: text("trip_description").notNull(),
+    location: text("location"),
+    confidence: text("confidence")
+      .$type<AiSuggestionConfidence>()
+      .default("low")
+      .notNull(),
+    sourceSnippet: text("source_snippet").notNull(),
+    actRecordId: text("act_record_id"),
+    status: text("status")
+      .$type<AiSuggestionStatus>()
+      .default("pending")
+      .notNull(),
+    bookingId: uuid("booking_id").references(() => bookings.id),
+    /** Stable dedupe key: actRecordId+date, or client+date (see suggestion store) */
+    dedupeKey: text("dedupe_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("ai_booking_suggestions_dedupe_key_unique").on(table.dedupeKey),
+    check(
+      "ai_booking_suggestions_confidence_valid",
+      sql`${table.confidence} in (${sqlTextValues(aiSuggestionConfidenceValues)})`,
+    ),
+    check(
+      "ai_booking_suggestions_status_valid",
+      sql`${table.status} in (${sqlTextValues(aiSuggestionStatusValues)})`,
+    ),
+  ],
+);

@@ -18,46 +18,116 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 const activityRows = vi.hoisted(() => ({ value: [] as unknown[] }));
 const insertedBooking = vi.hoisted(() => ({ value: null as unknown }));
+// In-memory backing table for the DB-persisted suggestion store
+const suggestionRows = vi.hoisted(() => ({
+  value: [] as Array<Record<string, unknown>>,
+}));
 
 // ─── Module mocks (hoisted before any import of the route) ───────────────────
 
-// Stub the DB client — select().from().leftJoin()×2.where() → activityRows.value
-// insert().values().returning() → [insertedBooking.value]
+// Stub the DB client.
+// - Activities query (analyze route): select({...}).from().leftJoin()×2.where()
+//   → activityRows.value
+// - Bookings insert (accept route): insert().values().returning()
+//   → [insertedBooking.value]
+// - ai_booking_suggestions table (suggestion store): select/insert/update/delete
+//   operate on suggestionRows.value, emulating the dedupe_key unique index via
+//   onConflictDoNothing.
 vi.mock("@/db/client", () => ({
   db: {
     select: () => ({
-      from: function () { return this; },
-      leftJoin: function () { return this; },
-      where: () => Promise.resolve(activityRows.value),
+      from: (table: { __name?: string }) => {
+        if (table.__name === "aiBookingSuggestions") {
+          return {
+            orderBy: () => Promise.resolve([...suggestionRows.value]),
+            where: (cond: { __eq?: unknown }) =>
+              Promise.resolve(
+                suggestionRows.value.filter((r) => r.id === cond.__eq),
+              ),
+          };
+        }
+        return {
+          leftJoin: function () { return this; },
+          where: () => Promise.resolve(activityRows.value),
+        };
+      },
     }),
-    insert: () => ({
-      values: () => ({
-        returning: () => Promise.resolve([insertedBooking.value]),
+    insert: (table: { __name?: string }) => ({
+      values: (v: Record<string, unknown>) => {
+        if (table.__name === "aiBookingSuggestions") {
+          return {
+            onConflictDoNothing: () => ({
+              returning: () => {
+                if (
+                  suggestionRows.value.some(
+                    (r) => r.dedupeKey === v.dedupeKey,
+                  )
+                ) {
+                  return Promise.resolve([]);
+                }
+                suggestionRows.value.push({ ...v });
+                return Promise.resolve([{ id: v.id }]);
+              },
+            }),
+          };
+        }
+        return {
+          returning: () => Promise.resolve([insertedBooking.value]),
+        };
+      },
+    }),
+    update: () => ({
+      set: (patch: Record<string, unknown>) => ({
+        where: (cond: { __eq?: unknown }) => ({
+          returning: () => {
+            const idx = suggestionRows.value.findIndex(
+              (r) => r.id === cond.__eq,
+            );
+            if (idx === -1) return Promise.resolve([]);
+            suggestionRows.value[idx] = {
+              ...suggestionRows.value[idx],
+              ...patch,
+            };
+            return Promise.resolve([suggestionRows.value[idx]]);
+          },
+        }),
       }),
     }),
+    delete: () => {
+      suggestionRows.value = [];
+      return Promise.resolve();
+    },
   },
 }));
 
-// Stub schema — return opaque symbols so Drizzle column refs don't throw
+// Stub schema — opaque column symbols; each table carries a __name marker so
+// the db mock can route ai_booking_suggestions operations to suggestionRows.
 vi.mock("@/db/schema", () => {
-  const col = () => Symbol("col");
-  const table = new Proxy({}, { get: () => col() });
+  const makeTable = (name: string) =>
+    new Proxy(
+      {},
+      { get: (_t, key) => (key === "__name" ? name : Symbol(String(key))) },
+    );
   return {
-    activities: table,
-    contacts: table,
-    organizations: table,
-    bookings: table,
+    activities: makeTable("activities"),
+    contacts: makeTable("contacts"),
+    organizations: makeTable("organizations"),
+    bookings: makeTable("bookings"),
+    aiBookingSuggestions: makeTable("aiBookingSuggestions"),
   };
 });
 
-// Stub drizzle-orm operators — return opaque symbols
+// Stub drizzle-orm operators — eq() captures the compared value so the db mock
+// can filter suggestion rows by id; the rest return opaque symbols.
 vi.mock("drizzle-orm", () => ({
-  eq: () => Symbol("eq"),
+  eq: (_col: unknown, value: unknown) => ({ __eq: value }),
   or: () => Symbol("or"),
   and: () => Symbol("and"),
   gte: () => Symbol("gte"),
   like: () => Symbol("like"),
   inArray: () => Symbol("inArray"),
+  asc: () => Symbol("asc"),
+  desc: () => Symbol("desc"),
 }));
 
 // Stub Anthropic AI integration — returns controlled JSON responses
@@ -107,8 +177,8 @@ beforeAll(async () => {
   app.use("/api", router);
 });
 
-beforeEach(() => {
-  clearSuggestions();
+beforeEach(async () => {
+  await clearSuggestions();
   activityRows.value = [];
   insertedBooking.value = null;
 });
@@ -187,7 +257,7 @@ describe("GET /ai-suggestions", () => {
       status: "pending",
       bookingId: null,
     };
-    addSuggestion(suggestion);
+    await addSuggestion(suggestion);
 
     const res = await request(app)
       .get("/api/ai-suggestions")
@@ -461,7 +531,7 @@ describe("POST /ai-suggestions/:id/dismiss", () => {
       status: "pending",
       bookingId: null,
     };
-    addSuggestion(suggestion);
+    await addSuggestion(suggestion);
 
     const res = await request(app)
       .post("/api/ai-suggestions/dismiss-test/dismiss")
@@ -472,7 +542,7 @@ describe("POST /ai-suggestions/:id/dismiss", () => {
   });
 
   it("returns 409 for an already-dismissed suggestion", async () => {
-    addSuggestion({
+    await addSuggestion({
       id: "already-dismissed",
       suggestedDate: null,
       suggestedDateEnd: null,
@@ -506,7 +576,7 @@ describe("POST /ai-suggestions/:id/accept", () => {
   it("creates a booking and marks suggestion accepted", async () => {
     insertedBooking.value = { id: "new-booking-uuid", name: "Smith Family — River rafting" };
 
-    addSuggestion({
+    await addSuggestion({
       id: "accept-test",
       suggestedDate: "2099-07-01",
       suggestedDateEnd: "2099-07-07",
@@ -531,7 +601,7 @@ describe("POST /ai-suggestions/:id/accept", () => {
   });
 
   it("returns 409 for an already-accepted suggestion", async () => {
-    addSuggestion({
+    await addSuggestion({
       id: "already-accepted",
       suggestedDate: null,
       suggestedDateEnd: null,

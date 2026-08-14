@@ -131,6 +131,11 @@ const migrationFiles = [
       ) AS ready`,
   },
   {
+    name: "024_ai_booking_suggestions.sql",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.ai_booking_suggestions') IS NOT NULL AS ready",
+  },
+  {
     name: "022_act_manifest_generation.sql",
     markerSql: `SELECT COUNT(*) = 2 AS ready
       FROM information_schema.columns

@@ -4,11 +4,7 @@
  */
 
 import crypto from "crypto";
-import {
-  addSuggestion,
-  getSuggestions,
-  type HistorySuggestion,
-} from "./suggestion-store";
+import { addSuggestion, type HistorySuggestion } from "./suggestion-store";
 
 export type ActivityRecord = {
   id: string;
@@ -201,16 +197,6 @@ function normalizeSuggestion(raw: RawSuggestion): HistorySuggestion | null {
  * @param records - All activity records to analyze
  * @param onEvent - Callback called for each progress/suggestion/done event
  */
-/**
- * Deduplication key for a suggestion. Two suggestions are considered the same
- * when they point at the same source record (actRecordId) or, failing that,
- * the same client on the same suggested start date.
- */
-function suggestionKey(s: HistorySuggestion): string {
-  if (s.actRecordId) return `act:${s.actRecordId}|${s.suggestedDate}`;
-  return `client:${(s.clientName ?? s.tripDescription).toLowerCase()}|${s.suggestedDate}`;
-}
-
 export async function analyzeHistory(
   records: ActivityRecord[],
   onEvent: (event: ProgressEvent) => void,
@@ -220,7 +206,8 @@ export async function analyzeHistory(
   // found in the next, and losing it on re-analyze is confusing and can
   // discard something the owner intended to accept. Accepted/dismissed
   // suggestions are also preserved so their state isn't lost.
-  const existingKeys = new Set(getSuggestions().map(suggestionKey));
+  // Deduplication happens on insert: the store's dedupe_key unique index
+  // (same key logic as before) makes duplicate inserts no-ops.
 
   if (records.length === 0) {
     onEvent({ type: "done", totalRecords: 0, totalSuggestions: 0, hadErrors: false, errors: [] });
@@ -261,10 +248,8 @@ export async function analyzeHistory(
       for (const raw of rawSuggestions) {
         const suggestion = normalizeSuggestion(raw);
         if (suggestion) {
-          const key = suggestionKey(suggestion);
-          if (existingKeys.has(key)) continue; // already known from a prior run
-          existingKeys.add(key);
-          addSuggestion(suggestion);
+          const inserted = await addSuggestion(suggestion);
+          if (!inserted) continue; // already known from a prior run
           totalSuggestions++;
           onEvent({ type: "suggestion", suggestion });
         }

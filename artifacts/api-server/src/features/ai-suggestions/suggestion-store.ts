@@ -1,8 +1,12 @@
 /**
- * In-memory session store for AI-generated booking suggestions.
+ * DB-backed store for AI-generated booking suggestions.
  *
- * Single-owner app — one global store is sufficient; suggestions expire
- * when the server restarts.  No DB write is needed until the owner accepts.
+ * Suggestions are persisted to the `ai_booking_suggestions` table so they
+ * survive server restarts/redeploys (Render restarts on every deploy and
+ * spins down on idle). Accepted/dismissed state is preserved too.
+ *
+ * Deduplication happens on insert via a stable `dedupe_key` column with a
+ * unique index — the same key logic the analyzer previously used in memory.
  */
 
 export type HistorySuggestion = {
@@ -29,32 +33,96 @@ export type HistorySuggestion = {
   bookingId: string | null;
 };
 
-// Global store — keyed by suggestion id
-const store = new Map<string, HistorySuggestion>();
-
-export function clearSuggestions(): void {
-  store.clear();
+/**
+ * Deduplication key for a suggestion. Two suggestions are considered the same
+ * when they point at the same source record (actRecordId) or, failing that,
+ * the same client on the same suggested start date.
+ */
+export function suggestionKey(
+  s: Pick<
+    HistorySuggestion,
+    "actRecordId" | "suggestedDate" | "clientName" | "tripDescription"
+  >,
+): string {
+  if (s.actRecordId) return `act:${s.actRecordId}|${s.suggestedDate}`;
+  return `client:${(s.clientName ?? s.tripDescription).toLowerCase()}|${s.suggestedDate}`;
 }
 
-export function addSuggestion(suggestion: HistorySuggestion): void {
-  store.set(suggestion.id, suggestion);
+// DB access is imported lazily (same pattern as the routes) so importing this
+// module never initialises a database connection as a side effect.
+async function deps() {
+  const [{ db }, schema, orm] = await Promise.all([
+    import("@/db/client"),
+    import("@/db/schema"),
+    import("drizzle-orm"),
+  ]);
+  return { db: db as any, table: schema.aiBookingSuggestions, orm };
 }
 
-export function getSuggestions(): HistorySuggestion[] {
-  return [...store.values()];
+type SuggestionRow = HistorySuggestion & Record<string, unknown>;
+
+function toSuggestion(row: SuggestionRow): HistorySuggestion {
+  return {
+    id: row.id,
+    suggestedDate: row.suggestedDate,
+    suggestedDateEnd: row.suggestedDateEnd,
+    clientName: row.clientName,
+    tripDescription: row.tripDescription,
+    location: row.location,
+    confidence: row.confidence,
+    sourceSnippet: row.sourceSnippet,
+    actRecordId: row.actRecordId,
+    status: row.status,
+    bookingId: row.bookingId,
+  };
 }
 
-export function getSuggestion(id: string): HistorySuggestion | undefined {
-  return store.get(id);
+/** Removes all suggestions. Used by tests. */
+export async function clearSuggestions(): Promise<void> {
+  const { db, table } = await deps();
+  await db.delete(table);
 }
 
-export function updateSuggestion(
+/**
+ * Inserts a suggestion, deduplicating on the stable suggestion key.
+ * Returns true when the suggestion was inserted, false when an existing
+ * suggestion with the same key was already present (insert skipped).
+ */
+export async function addSuggestion(
+  suggestion: HistorySuggestion,
+): Promise<boolean> {
+  const { db, table } = await deps();
+  const inserted = await db
+    .insert(table)
+    .values({ ...suggestion, dedupeKey: suggestionKey(suggestion) })
+    .onConflictDoNothing({ target: table.dedupeKey })
+    .returning({ id: table.id });
+  return inserted.length > 0;
+}
+
+export async function getSuggestions(): Promise<HistorySuggestion[]> {
+  const { db, table, orm } = await deps();
+  const rows = await db.select().from(table).orderBy(orm.asc(table.createdAt));
+  return rows.map(toSuggestion);
+}
+
+export async function getSuggestion(
+  id: string,
+): Promise<HistorySuggestion | undefined> {
+  const { db, table, orm } = await deps();
+  const rows = await db.select().from(table).where(orm.eq(table.id, id));
+  return rows.length > 0 ? toSuggestion(rows[0]) : undefined;
+}
+
+export async function updateSuggestion(
   id: string,
   patch: Partial<HistorySuggestion>,
-): HistorySuggestion | null {
-  const existing = store.get(id);
-  if (!existing) return null;
-  const updated = { ...existing, ...patch };
-  store.set(id, updated);
-  return updated;
+): Promise<HistorySuggestion | null> {
+  const { db, table, orm } = await deps();
+  const rows = await db
+    .update(table)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(orm.eq(table.id, id))
+    .returning();
+  return rows.length > 0 ? toSuggestion(rows[0]) : null;
 }

@@ -138,8 +138,13 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
 
 // ─── GET /ai-suggestions ──────────────────────────────────────────────────────
 
-router.get("/ai-suggestions", (_req, res): void => {
-  res.json(getSuggestions());
+router.get("/ai-suggestions", async (req, res): Promise<void> => {
+  try {
+    res.json(await getSuggestions());
+  } catch (err) {
+    req.log.error({ err }, "Failed to load AI suggestions");
+    res.status(500).json({ error: "Failed to load suggestions" });
+  }
 });
 
 // ─── POST /ai-suggestions/:id/accept ─────────────────────────────────────────
@@ -147,7 +152,7 @@ router.get("/ai-suggestions", (_req, res): void => {
 
 router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
   const { id } = req.params;
-  const suggestion = getSuggestion(id);
+    const suggestion = await getSuggestion(id);
   if (!suggestion) {
     res.status(404).json({ error: "Suggestion not found" });
     return;
@@ -208,10 +213,7 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
       })
       .returning();
 
-    const updated = updateSuggestion(id, {
-      status: "accepted",
-      bookingId: booking.id,
-    });
+    const updated = await updateSuggestion(id, { status: "dismissed" });
 
     res.json({ suggestion: updated, booking });
   } catch (err) {
@@ -222,19 +224,23 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
 
 // ─── POST /ai-suggestions/:id/dismiss ────────────────────────────────────────
 
-router.post("/ai-suggestions/:id/dismiss", (req, res): void => {
+router.post("/ai-suggestions/:id/dismiss", async (req, res): Promise<void> => {
   const { id } = req.params;
-  const suggestion = getSuggestion(id);
-  if (!suggestion) {
-    res.status(404).json({ error: "Suggestion not found" });
-    return;
+    const suggestion = await getSuggestion(id);
+    if (!suggestion) {
+      res.status(404).json({ error: "Suggestion not found" });
+      return;
+    }
+    if (suggestion.status !== "pending") {
+      res.status(409).json({ error: `Suggestion already ${suggestion.status}` });
+      return;
+    }
+    const updated = await updateSuggestion(id, { status: "dismissed" });
+    res.json({ suggestion: updated });
+  } catch (err) {
+    req.log.error({ err }, "Failed to dismiss suggestion");
+    res.status(500).json({ error: "Failed to dismiss suggestion" });
   }
-  if (suggestion.status !== "pending") {
-    res.status(409).json({ error: `Suggestion already ${suggestion.status}` });
-    return;
-  }
-  const updated = updateSuggestion(id, { status: "dismissed" });
-  res.json({ suggestion: updated });
 });
 
 export default router;
