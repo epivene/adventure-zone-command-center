@@ -505,7 +505,7 @@ export function CallWorkspace({
                   </label>
                 ) : null}
                 <label className="grid gap-1.5 font-medium" htmlFor="call-note">
-                  Call note
+                  Call note (optional)
                   <textarea className="min-h-32" id="call-note" onChange={(event) => setNote(event.target.value)} value={note} />
                 </label>
                 <fieldset className="grid gap-2 rounded-lg border border-slate-200 p-3">
