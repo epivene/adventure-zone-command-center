@@ -188,6 +188,15 @@ const migrationFiles = [
         AND indexname  = 'activities_kind_timeline_sort_at_idx'
     ) AS ready`,
   },
+  {
+    name: "032_activity_soft_delete.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'activities'
+        AND column_name = 'deleted_at'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
