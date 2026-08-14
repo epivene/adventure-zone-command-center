@@ -61,7 +61,7 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
     ]);
 
     const { activities, contacts, organizations } = schema;
-    const { or, eq, and, gte } = orm;
+    const { inArray, eq, and, gte } = orm;
 
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
@@ -82,12 +82,14 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       .leftJoin(contacts, eq(activities.contactId, contacts.id))
       .leftJoin(organizations, eq(activities.organizationId, organizations.id))
       .where(
-        // act_history only — raw Act! CRM notes and history entries.
-        // calendar entries are excluded: they represent Act! scheduled
-        // activities used for the calendar view and may include app-created
-        // events, which would create a feedback loop in the AI analysis.
+        // Analyze all imported Act! timeline records: history entries, notes,
+        // and scheduled calendar activities. Calendar activities (past fairs,
+        // meetings) are often the strongest signal for recurring bookings.
+        // There is no feedback loop: accepted suggestions become bookings,
+        // never activity rows, so nothing AI-generated is ever re-scanned.
+        // "approved_suggestion" kind is deliberately not included.
         and(
-          eq(activities.kind, "act_history"),
+          inArray(activities.kind, ["act_history", "note", "calendar"]),
           gte(activities.timelineSortAt, twelveMonthsAgo),
         ),
       );

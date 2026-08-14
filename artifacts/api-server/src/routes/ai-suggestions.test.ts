@@ -57,6 +57,7 @@ vi.mock("drizzle-orm", () => ({
   and: () => Symbol("and"),
   gte: () => Symbol("gte"),
   like: () => Symbol("like"),
+  inArray: () => Symbol("inArray"),
 }));
 
 // Stub Anthropic AI integration — returns controlled JSON responses
