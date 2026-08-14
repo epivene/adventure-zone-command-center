@@ -33,6 +33,27 @@ const creationSchema = z.object({
   if (input.booking.enabled && (!input.booking.name.trim() || !parseBusinessDateInput(input.booking.nextActionDueAt))) context.addIssue({ code: "custom", message: "Enter a booking name and next follow-up date." });
 });
 
+const nullableProfileText = z
+  .union([z.string(), z.null()])
+  .transform((value) => value?.trim() || null);
+
+const editProfileSchema = z.object({
+  name: z.string().trim().min(1, "Add a profile name."),
+  phone: nullableProfileText,
+  address1: nullableProfileText,
+  address2: nullableProfileText,
+  city: nullableProfileText,
+  region: nullableProfileText,
+  postalCode: nullableProfileText,
+  website: nullableProfileText,
+}).strict();
+
+function normalizedPhone(value: string | null) {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits || null;
+}
+
 function splitName(name: string) {
   const [firstName, ...rest] = name.trim().split(/\s+/);
   return { firstName: firstName ?? "", lastName: rest.join(" ") };
@@ -49,6 +70,38 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });
+  }
+});
+
+router.patch("/event-profiles/:id", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!uuid.safeParse(id).success) {
+    res.status(400).json({ ok: false, error: "Invalid profile ID." });
+    return;
+  }
+  const parsed = editProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Review the profile details." });
+    return;
+  }
+  try {
+    const [updated] = await db
+      .update(organizations)
+      .set({
+        ...parsed.data,
+        normalizedPhone: normalizedPhone(parsed.data.phone),
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, id))
+      .returning({ id: organizations.id });
+    if (!updated) {
+      res.status(404).json({ ok: false, error: "Profile not found." });
+      return;
+    }
+    res.json({ ok: true, profileId: updated.id });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to update event profile");
+    res.status(500).json({ ok: false, error: "The profile could not be saved. Try again." });
   }
 });
 
