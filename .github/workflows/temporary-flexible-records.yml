@@ -1,0 +1,30 @@
+name: Temporary flexible records final verification
+
+on:
+  push:
+    branches:
+      - feature/edit-delete-flexible-records
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: corepack enable
+      - run: corepack prepare pnpm@10.15.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - name: API tests
+        run: pnpm --filter @workspace/api-server exec vitest run
+      - name: Web tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build
+        run: pnpm --filter @workspace/api-server build && pnpm --filter @workspace/adventure-zone build
