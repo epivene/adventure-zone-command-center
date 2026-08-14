@@ -71,11 +71,13 @@ class AtomicFamilyDatabase {
     },
   };
   failReviewDelete = false;
+  transactionConfig: unknown;
 
   async transaction<T>(
     work: (transaction: AtomicFamilyTransaction) => Promise<T>,
-    _config?: unknown,
+    config?: unknown,
   ): Promise<T> {
+    this.transactionConfig = config;
     const snapshot = structuredClone(this.state);
     try {
       return await work(new AtomicFamilyTransaction(this));
@@ -216,6 +218,7 @@ describe("atomic organization family review", () => {
     ).rejects.toBeInstanceOf(HierarchyConflictError);
 
     expect(database.state.review).toBeNull();
+    expect(database.transactionConfig).toEqual({ isolationLevel: "read committed" });
     expect(database.state.organizations).toHaveLength(2);
     expect(database.state.organizations.map((row) => row.parentOrganizationId)).toEqual([
       null,
