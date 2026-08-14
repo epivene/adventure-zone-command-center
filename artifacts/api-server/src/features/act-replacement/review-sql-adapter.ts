@@ -19,12 +19,12 @@ import { matchContact, type LocalContactCandidate } from "./matching/contact-mat
 import { matchBooking, type LocalBookingCandidate } from "./matching/booking-matcher";
 import { uniqueSorted, type ExternalLink, type MatchResult } from "./matching/match-result";
 import { buildActContextIndex } from "./context-index";
-import { automaticReviewRequestFingerprint, decisionSupersessionRequestFingerprint, decisionWithReviewedProof, hasCurrentReviewedFieldProof, individualDecisionRequestFingerprint, prepareBulkReviewDecisions, reviewedOperationIds, validateIndividualDecisionAgainstCurrentState, type Assignment, type AutomaticReviewDecisionInput, type AutomaticReviewDecisionResult, type BulkReviewDecisionResult, type BulkReviewRequestLookup, type ConflictReviewState, type Decision, type ResolveAutomaticReviewCommandInput, type ReviewCommandStore, type SaveAssignmentInput, type SaveDecisionInput, type SaveDecisionsAndRebuildInput, type SaveDecisionsAndRebuildResult } from "./review-command-service";
+import { automaticReviewRequestFingerprint, decisionSupersessionRequestFingerprint, decisionWithReviewedProof, hasCurrentReviewedFieldProof, individualDecisionRequestFingerprint, prepareBulkReviewDecisions, reviewedOperationIds, validateIndividualDecisionAgainstCurrentState, type Assignment, type AutomaticReviewCommandResult, type AutomaticReviewDecisionInput, type AutomaticReviewDecisionResult, type BulkReviewDecisionResult, type BulkReviewRequestLookup, type ConflictReviewState, type Decision, type ResolveAutomaticReviewCommandInput, type ReviewCommandStore, type SaveAssignmentInput, type SaveDecisionInput, type SaveDecisionsAndRebuildInput, type SaveDecisionsAndRebuildResult } from "./review-command-service";
 import { assignmentTargetEntityTypes, assignmentTargetLikePattern, isAssignmentTargetEntityType, projectReviewRow, type AssignmentTargetEntityType, type ReviewCandidate, type ReviewIssueCode, type ReviewPage, type ReviewReadInput, type ReviewReader, type ReviewSourceRecord, type ReviewTargetProjection } from "./review-reader";
 import { projectActReviewDisplay } from "./review-display";
 import { organizerErrorCode, ProductionActOrganizer, type OrganizerRun, type ProductionOrganizerStore } from "./production-organizer";
 import { fingerprintSourceContent } from "./source-fingerprint";
-import { proposeAutomaticReview, type AutomaticReviewContext, type AutomaticReviewIssue, type AutomaticReviewRecord, type AutomaticReviewResolution, type AutomaticReviewResolutionSummary, type AutomaticReviewSourceProjection } from "./automatic-review-resolver";
+import { AUTOMATIC_REVIEW_POLICY_VERSION, proposeAutomaticReview, type AutomaticReviewContext, type AutomaticReviewIssue, type AutomaticReviewRecord, type AutomaticReviewResolution, type AutomaticReviewResolutionSummary, type AutomaticReviewSourceProjection } from "./automatic-review-resolver";
 
 export { projectActReviewDisplay } from "./review-display";
 
@@ -2580,23 +2580,6 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
       if (rebuilt.status !== "ready_to_apply" || !("manifest" in rebuilt) || !rebuilt.manifest)
         throw Object.assign(new Error("manifest_rebuild_incomplete"), { code: "manifest_rebuild_incomplete", status: 409 });
       return rebuilt;
-    } catch (error) {
-      clearInterval(heartbeat);
-      await renewal;
-      try {
-        await this.releaseAutomaticReviewRebuildLease(
-          runId, input, requestFingerprint, rebuildToken,
-        );
-      } catch (cleanupError) {
-        logger.error({
-          runId,
-          requestKey: input.requestKey,
-          requestFingerprint,
-          status: "failed",
-          errorCode: automaticReviewErrorCode(cleanupError),
-        }, "Automatic review rebuild lease cleanup failed");
-      }
-      throw error;
     } finally {
       clearInterval(heartbeat);
       await renewal;
@@ -2846,9 +2829,10 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
   async resolveAutomaticReviewAndRebuild(
     runId: string,
     input: ResolveAutomaticReviewCommandInput,
-  ): Promise<AutomaticReviewDecisionResult> {
+  ): Promise<AutomaticReviewCommandResult> {
     try {
       const result = await this.resolveAutomaticReviewAndRebuildUnlogged(runId, input);
+      if (result.status === "processing") return result;
       const requestFingerprint = this.automaticRequestFingerprint(runId, input, result.decisions);
       logger.info({
         runId,
@@ -2883,7 +2867,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
   private async resolveAutomaticReviewAndRebuildUnlogged(
     runId: string,
     input: ResolveAutomaticReviewCommandInput,
-  ): Promise<AutomaticReviewDecisionResult> {
+  ): Promise<AutomaticReviewCommandResult> {
     const transactionResult = await this.database.transaction(async (transaction) => {
       const [run] = await transaction
         .select({
@@ -2915,11 +2899,9 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
           throw Object.assign(new Error("run_not_found"), { code: "run_not_found", status: 404 });
         const [recovery] = resultRows<{
           expectedManifestDigest: string | null; automaticSummary: unknown; rebuildState: string;
-          rebuildToken: string | null; rebuildLeaseExpiresAt: Date | string | null;
         }>(await transaction.execute(sql`
           select expected_manifest_digest as "expectedManifestDigest",
-            automatic_summary as "automaticSummary", rebuild_state as "rebuildState",
-            rebuild_token::text as "rebuildToken", rebuild_lease_expires_at as "rebuildLeaseExpiresAt"
+            automatic_summary as "automaticSummary", rebuild_state as "rebuildState"
           from ${actReplacementBulkReviewRequests}
           where run_id = ${runId} and request_key = ${input.requestKey}
           for update
@@ -2927,63 +2909,8 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
         const durableRequest = { ...priorRequest, ...recovery };
         const replay = await store.automaticRequestResult(runId, input, durableRequest);
         if (priorRequest.manifestDigest !== pendingReviewManifestDigest)
-          return { kind: "complete" as const, result: replay };
-        const expectedManifestDigest = durableRequest.expectedManifestDigest ?? input.expectedManifestDigest;
-        const lockedDigest = text(object(run.summary).manifestDigest);
-        if (lockedDigest !== expectedManifestDigest) {
-          if (run.phase !== undefined && run.phase !== "ready_to_apply") manifestDigestMismatch();
-          const { manifest: rebuiltManifest } = await store.protectedAutomaticManifest(
-            runId,
-            lockedDigest,
-            run.manifestDigestVersion,
-            run.manifestGeneration,
-          );
-          const recovered: AutomaticReviewDecisionResult = {
-            ...replay,
-            manifestDigest: rebuiltManifest.digest,
-            reviewedOperationIds: reviewedOperationIds(rebuiltManifest, replay.decisions),
-          };
-          await transaction.execute(sql`
-            update ${actReplacementBulkReviewRequests}
-            set manifest_digest = ${recovered.manifestDigest},
-              reviewed_operation_ids = ${JSON.stringify(recovered.reviewedOperationIds)}::jsonb,
-              rebuild_state = ${"complete"}, rebuild_token = null, rebuild_lease_expires_at = null
-            where run_id = ${runId} and request_key = ${input.requestKey}
-              and request_fingerprint = ${priorRequest.requestFingerprint}
-              and manifest_digest = ${pendingReviewManifestDigest}
-          `);
-          return { kind: "complete" as const, result: recovered };
-        }
-        if (run.manifestDigestVersion !== undefined) {
-          await store.protectedAutomaticManifest(
-            runId,
-            lockedDigest,
-            run.manifestDigestVersion,
-            run.manifestGeneration,
-            replay.decisions.map((decision) => decision.id),
-          );
-        }
-        const leaseExpiresAt = durableRequest.rebuildLeaseExpiresAt instanceof Date
-          ? durableRequest.rebuildLeaseExpiresAt
-          : durableRequest.rebuildLeaseExpiresAt ? new Date(durableRequest.rebuildLeaseExpiresAt) : null;
-        if (durableRequest.rebuildState === "rebuilding" && leaseExpiresAt && leaseExpiresAt.getTime() > Date.now())
-          return { kind: "wait" as const };
-        const rebuildToken = randomUUID();
-        await transaction.execute(sql`
-          update ${actReplacementBulkReviewRequests}
-          set rebuild_state = ${"rebuilding"}, rebuild_token = ${rebuildToken}::uuid,
-            rebuild_lease_expires_at = ${new Date(Date.now() + automaticReviewRebuildLeaseMs)}
-          where run_id = ${runId} and request_key = ${input.requestKey}
-            and request_fingerprint = ${priorRequest.requestFingerprint}
-            and manifest_digest = ${pendingReviewManifestDigest}
-        `);
-        return {
-          kind: "rebuild" as const,
-          decisions: replay.decisions,
-          requestFingerprint: priorRequest.requestFingerprint,
-          rebuildToken,
-          summary: replay.summary,
-        };
+          return { status: "complete" as const, ...replay };
+        return { status: "processing" as const };
       }
 
       const lockedDigest = text(object(run.summary).manifestDigest);
@@ -3057,7 +2984,6 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
           requestFingerprint: individualDecisionRequestFingerprint(prepared.fingerprintInput),
         }, true, true));
       }
-      const rebuildToken = decisions.length ? randomUUID() : null;
       if (!decisions.length && run.manifestDigestVersion === null) {
         const upgraded = await transaction
           .update(actReplacementRuns)
@@ -3089,9 +3015,9 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
         update ${actReplacementBulkReviewRequests}
         set expected_manifest_digest = ${input.expectedManifestDigest},
           automatic_summary = ${JSON.stringify(resolution.summary)}::jsonb,
-          rebuild_state = ${decisions.length ? "rebuilding" : "complete"},
-          rebuild_token = ${rebuildToken}::uuid,
-          rebuild_lease_expires_at = ${decisions.length ? new Date(Date.now() + automaticReviewRebuildLeaseMs) : null}
+          rebuild_state = ${decisions.length ? "pending" : "complete"},
+          rebuild_token = null,
+          rebuild_lease_expires_at = null
         where run_id = ${runId} and request_key = ${input.requestKey}
           and request_fingerprint = ${requestFingerprint}
       `);
@@ -3106,44 +3032,145 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
           },
         };
       }
-      return {
-        kind: "rebuild" as const,
-        decisions,
-        requestFingerprint,
-        rebuildToken: rebuildToken!,
-        summary: resolution.summary,
-      };
+      return { status: "processing" as const };
     }, { isolationLevel: "serializable" });
-    if (transactionResult.kind === "complete") return transactionResult.result;
-    if (transactionResult.kind === "wait") return this.waitForAutomaticReviewCompletion(runId, input);
+    if ("kind" in transactionResult && transactionResult.kind === "complete") {
+      return { status: "complete", ...transactionResult.result };
+    }
+    return transactionResult;
+  }
 
-    const rebuilt = await this.rebuildWithAutomaticReviewLease(
-      runId,
-      input,
-      transactionResult.requestFingerprint,
-      transactionResult.rebuildToken,
-    );
-    if (!("manifest" in rebuilt) || !rebuilt.manifest)
-      throw Object.assign(new Error("manifest_rebuild_incomplete"), { code: "manifest_rebuild_incomplete", status: 409 });
-    const result: AutomaticReviewDecisionResult = {
-      decisions: transactionResult.decisions,
-      manifestDigest: rebuilt.manifest.digest,
-      reviewedOperationIds: reviewedOperationIds(rebuilt.manifest, transactionResult.decisions),
-      summary: transactionResult.summary,
-    };
-    const finalized = resultRows<{ id: string }>(await this.database.execute(sql`
-      update ${actReplacementBulkReviewRequests}
-      set manifest_digest = ${result.manifestDigest},
-        reviewed_operation_ids = ${JSON.stringify(result.reviewedOperationIds)}::jsonb,
-        rebuild_state = ${"complete"}, rebuild_token = null, rebuild_lease_expires_at = null
-      where run_id = ${runId} and request_key = ${input.requestKey}
-        and request_fingerprint = ${transactionResult.requestFingerprint}
-        and manifest_digest = ${pendingReviewManifestDigest}
-        and rebuild_token = ${transactionResult.rebuildToken}::uuid
-      returning id::text as id
+  async releaseAbandonedAutomaticReviewClaims(now = new Date()): Promise<void> {
+    await this.database.transaction(async (transaction) => {
+      await transaction.execute(sql`
+        update ${actReplacementRuns} as runs
+        set organizer_lease_expires_at = ${now}, updated_at = ${now}
+        where runs.source_database_key = ${this.scope.sourceDatabaseKey}
+          and runs.phase = ${"organizing"}
+          and exists (
+            select 1 from ${actReplacementBulkReviewRequests} requests
+            where requests.run_id = runs.id
+              and requests.manifest_digest = ${pendingReviewManifestDigest}
+              and requests.rebuild_state = ${"rebuilding"}
+          )
+      `);
+      await transaction.execute(sql`
+        update ${actReplacementBulkReviewRequests} as requests
+        set rebuild_state = ${"pending"}, rebuild_token = null, rebuild_lease_expires_at = null
+        from ${actReplacementRuns} as runs
+        where requests.run_id = runs.id
+          and runs.source_database_key = ${this.scope.sourceDatabaseKey}
+          and requests.manifest_digest = ${pendingReviewManifestDigest}
+          and requests.rebuild_state = ${"rebuilding"}
+      `);
+    });
+  }
+
+  async recoverOneAutomaticReview(input: {
+    workerId: string;
+    now: Date;
+  }): Promise<{ kind: "idle" | "progress" }> {
+    const rebuildToken = randomUUID();
+    const leaseExpiresAt = new Date(input.now.getTime() + automaticReviewRebuildLeaseMs);
+    const [claimed] = resultRows<{
+      runId: string;
+      requestKey: string;
+      requestFingerprint: string;
+      requestedBy: string;
+      expectedManifestDigest: string;
+      automaticSummary: unknown;
+      decisionIds: string[];
+    }>(await this.database.execute(sql`
+      with candidate as (
+        select requests.id
+        from ${actReplacementBulkReviewRequests} requests
+        inner join ${actReplacementRuns} runs on runs.id = requests.run_id
+        where runs.source_database_key = ${this.scope.sourceDatabaseKey}
+          and requests.manifest_digest = ${pendingReviewManifestDigest}
+          and (
+            requests.rebuild_state = ${"pending"}
+            or requests.rebuild_state = ${"rebuilding"}
+              and requests.rebuild_lease_expires_at <= ${input.now}
+          )
+        order by requests.created_at, requests.id
+        for update of requests skip locked
+        limit 1
+      )
+      update ${actReplacementBulkReviewRequests} requests
+      set rebuild_state = ${"rebuilding"}, rebuild_token = ${rebuildToken}::uuid,
+        rebuild_lease_expires_at = ${leaseExpiresAt}
+      from candidate
+      where requests.id = candidate.id
+      returning requests.run_id::text as "runId", requests.request_key as "requestKey",
+        requests.request_fingerprint as "requestFingerprint", requests.requested_by as "requestedBy",
+        requests.expected_manifest_digest as "expectedManifestDigest",
+        requests.automatic_summary as "automaticSummary", requests.decision_ids as "decisionIds"
     `));
-    if (!finalized.length) return this.waitForAutomaticReviewCompletion(runId, input);
-    return result;
+    if (!claimed) return { kind: "idle" };
+    const commandInput: ResolveAutomaticReviewCommandInput = {
+      expectedManifestDigest: claimed.expectedManifestDigest,
+      owner: claimed.requestedBy,
+      requestKey: claimed.requestKey,
+      policyVersion: AUTOMATIC_REVIEW_POLICY_VERSION,
+    };
+    try {
+      const durable = await this.bulkRequestResult({
+        decisionIds: claimed.decisionIds,
+        manifestDigest: pendingReviewManifestDigest,
+        reviewedOperationIds: [],
+      });
+      const rebuilt = await this.rebuildWithAutomaticReviewLease(
+        claimed.runId,
+        commandInput,
+        claimed.requestFingerprint,
+        rebuildToken,
+      );
+      if (!("manifest" in rebuilt) || !rebuilt.manifest)
+        throw Object.assign(new Error("manifest_rebuild_incomplete"), { code: "manifest_rebuild_incomplete", status: 409 });
+      const reviewedIds = reviewedOperationIds(rebuilt.manifest, durable.decisions);
+      const finalized = resultRows<{ id: string }>(await this.database.execute(sql`
+        update ${actReplacementBulkReviewRequests}
+        set manifest_digest = ${rebuilt.manifest.digest},
+          reviewed_operation_ids = ${JSON.stringify(reviewedIds)}::jsonb,
+          rebuild_state = ${"complete"}, rebuild_token = null, rebuild_lease_expires_at = null
+        where run_id = ${claimed.runId} and request_key = ${claimed.requestKey}
+          and request_fingerprint = ${claimed.requestFingerprint}
+          and manifest_digest = ${pendingReviewManifestDigest}
+          and rebuild_state = ${"rebuilding"}
+          and rebuild_token = ${rebuildToken}::uuid
+        returning id::text as id
+      `));
+      if (finalized.length !== 1)
+        throw Object.assign(new Error("automatic_review_rebuild_claim_lost"), { code: "automatic_review_rebuild_claim_lost", status: 409 });
+      logger.info({
+        runId: claimed.runId,
+        requestKey: claimed.requestKey,
+        requestFingerprint: claimed.requestFingerprint,
+        workerId: input.workerId,
+        status: "complete",
+      }, "Automatic review recovery completed");
+      return { kind: "progress" };
+    } catch (error) {
+      try {
+        await this.releaseAutomaticReviewRebuildLease(
+          claimed.runId,
+          commandInput,
+          claimed.requestFingerprint,
+          rebuildToken,
+        );
+      } catch {
+        // The exact-token release is best effort; an expired claim is recoverable.
+      }
+      logger.error({
+        runId: claimed.runId,
+        requestKey: claimed.requestKey,
+        requestFingerprint: claimed.requestFingerprint,
+        workerId: input.workerId,
+        status: "failed",
+        errorCode: automaticReviewErrorCode(error),
+      }, "Automatic review recovery failed");
+      throw error;
+    }
   }
 }
 
