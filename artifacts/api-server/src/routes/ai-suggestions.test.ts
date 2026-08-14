@@ -29,8 +29,7 @@ const suggestionRows = vi.hoisted(() => ({
 // ─── Module mocks (hoisted before any import of the route) ───────────────────
 
 // Stub the DB client.
-// - Activities query (analyze route): selectDistinctOn({...}).from().leftJoin()×N.where()
-//   → activityRows.value
+// - Activities query (analyze route): db.execute(sql`...`) → { rows: activityRows.value }
 // - Bookings insert (accept route): insert().values().returning()
 //   → [insertedBooking.value]
 // - ai_booking_suggestions table (suggestion store): select/insert/update/delete
@@ -47,7 +46,7 @@ vi.mock("@/db/client", () => {
           ),
       };
     }
-    // activities query (analyze route) — leftJoin chains then where()
+    // Fallback chained select (shouldn't be reached for analyze route now)
     const chain = {
       leftJoin: function () { return this; },
       where: () => Promise.resolve(activityRows.value),
@@ -56,10 +55,10 @@ vi.mock("@/db/client", () => {
   };
 
   const db: Record<string, unknown> = {
+    // Raw SQL execute — used by analyze route for the activity query
+    execute: () => Promise.resolve({ rows: activityRows.value }),
     select: () => ({ from: makeSelectChain }),
-    // selectDistinctOn mirrors select for test purposes
     selectDistinctOn: () => ({ from: makeSelectChain }),
-    alias: (table: unknown) => table,
     insert: (table: { __name?: string }) => ({
       values: (v: Record<string, unknown>) => {
         if (table.__name === "aiBookingSuggestions") {

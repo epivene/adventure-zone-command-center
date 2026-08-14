@@ -57,6 +57,54 @@ type RawSuggestion = {
   actRecordId?: string | null;
 };
 
+/**
+ * Builds a lookup from a normalised body/subject text fragment to the source
+ * record. Used as a fallback when actRecordId matching fails (e.g. when the
+ * activities table has null act_record_id values).
+ *
+ * We index every 6-word window of each record's body so that a sourceSnippet
+ * that is a substring of the body can be found even when the AI slightly
+ * rephrases it.
+ */
+function buildSnippetIndex(
+  records: ActivityRecord[],
+): Map<string, ActivityRecord> {
+  const index = new Map<string, ActivityRecord>();
+  for (const record of records) {
+    const text = [record.subject, record.body].filter(Boolean).join(" ");
+    const words = text.toLowerCase().split(/\s+/);
+    // Index every 6-word window (short enough to be distinctive)
+    for (let i = 0; i <= words.length - 6; i++) {
+      const key = words.slice(i, i + 6).join(" ");
+      if (!index.has(key)) index.set(key, record);
+    }
+    // Also index the full text for shorter records
+    const fullKey = text.toLowerCase().slice(0, 80);
+    if (fullKey && !index.has(fullKey)) index.set(fullKey, record);
+  }
+  return index;
+}
+
+/**
+ * Looks up a source record by the suggestion's sourceSnippet using the
+ * pre-built snippet index. Returns the first record whose body contains any
+ * 6-word window from the snippet, or undefined if no match is found.
+ */
+function findBySnippet(
+  snippet: string,
+  index: Map<string, ActivityRecord>,
+): ActivityRecord | undefined {
+  const words = snippet.toLowerCase().split(/\s+/);
+  for (let i = 0; i <= words.length - 6; i++) {
+    const key = words.slice(i, i + 6).join(" ");
+    const record = index.get(key);
+    if (record) return record;
+  }
+  // Fallback: try the first 80 chars of the snippet
+  const shortKey = snippet.toLowerCase().slice(0, 80);
+  return index.get(shortKey);
+}
+
 function buildPrompt(
   records: ActivityRecord[],
   analysisDateStr: string,
@@ -149,6 +197,7 @@ function parseSuggestionsFromResponse(text: string): RawSuggestion[] {
 function normalizeSuggestion(
   raw: RawSuggestion,
   recordsByActId: Map<string, ActivityRecord>,
+  snippetIndex: Map<string, ActivityRecord>,
 ): HistorySuggestion | null {
   const tripDescription =
     typeof raw.tripDescription === "string" && raw.tripDescription.trim()
@@ -175,7 +224,16 @@ function normalizeSuggestion(
       : null;
   // Carry the source record's contact/organization IDs so the UI can link
   // the suggestion to the matching profile pages.
-  const source = actRecordId ? recordsByActId.get(actRecordId) : undefined;
+  // Primary: match by actRecordId. Fallback: match by sourceSnippet text
+  // (used when act_record_id is null in the DB, which is common for records
+  // imported via the replacement apply path).
+  const sourceSnippetStr =
+    typeof raw.sourceSnippet === "string" ? raw.sourceSnippet.trim() : "";
+  const source =
+    (actRecordId ? recordsByActId.get(actRecordId) : undefined) ??
+    (sourceSnippetStr.length >= 12
+      ? findBySnippet(sourceSnippetStr, snippetIndex)
+      : undefined);
 
   return {
     id: crypto.randomUUID(),
@@ -261,8 +319,12 @@ export async function analyzeHistory(
       for (const record of batch) {
         if (record.actRecordId) recordsByActId.set(record.actRecordId, record);
       }
+      // Fallback index: match suggestions to source records by snippet text
+      // when actRecordId is null (common for records imported via the
+      // replacement apply path, which does not populate act_record_id).
+      const snippetIndex = buildSnippetIndex(batch);
       for (const raw of rawSuggestions) {
-        const suggestion = normalizeSuggestion(raw, recordsByActId);
+        const suggestion = normalizeSuggestion(raw, recordsByActId, snippetIndex);
         if (suggestion) {
           const inserted = await addSuggestion(suggestion);
           if (!inserted) continue; // already known from a prior run

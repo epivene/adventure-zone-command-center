@@ -81,8 +81,7 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       import("drizzle-orm"),
     ]);
 
-    const { activities, contacts, organizations, activityAssociations } = schema;
-    const { inArray, eq, and, gte, isNull, isNotNull, alias } = orm;
+    const { sql: sqlTag } = orm;
 
     // Compute the lookback cutoff, or null for all history.
     let cutoff: Date | null = null;
@@ -91,74 +90,56 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       cutoff.setMonth(cutoff.getMonth() - rangeMonths);
     }
 
-    const kindFilter = cutoff
-      ? and(
-          inArray(activities.kind, ["act_history", "note", "calendar"]),
-          gte(activities.timelineSortAt, cutoff),
-        )
-      : inArray(activities.kind, ["act_history", "note", "calendar"]);
-
     // Many imported Act! records are linked via activity_associations (bridge
-    // table) rather than direct FK columns. We resolve contact/org IDs from
-    // both sources: direct FK wins, association falls back when FK is null.
-    // One activity can have multiple associations; we pick the first contact
-    // and first organization via a left join filtered by which ID column is
-    // non-null (the schema uses a "exactly one non-null" check constraint,
-    // so there is no associationType column).
-    const assocContact = alias(activityAssociations, "assoc_contact");
-    const assocOrg = alias(activityAssociations, "assoc_org");
-    const assocContactPerson = alias(contacts, "assoc_contact_person");
-    const assocOrgCompany = alias(organizations, "assoc_org_company");
+    // table) rather than direct FK columns on activities. We use raw SQL to
+    // resolve contact/org IDs from both sources in one query:
+    //   - direct FK wins when present
+    //   - association-linked ID falls back when direct FK is null
+    // DISTINCT ON ensures one row per activity even when multiple associations exist.
+    const cutoffClause = cutoff
+      ? sqlTag`AND a.timeline_sort_at >= ${cutoff}`
+      : sqlTag``;
 
-    const rows = await (db as any)
-      .selectDistinctOn([activities.id], {
-        id: activities.id,
-        body: activities.body,
-        subject: activities.subject,
-        kind: activities.kind,
-        timelineSortAt: activities.timelineSortAt,
-        actRecordId: activities.actRecordId,
-        // Prefer direct FK; fall back to association-linked ID
-        contactId: orm.sql`COALESCE(${activities.contactId}, ${assocContact.contactId})`,
-        organizationId: orm.sql`COALESCE(${activities.organizationId}, ${assocOrg.organizationId})`,
-        // Name from whichever contact source resolved first
-        contactFirstName: orm.sql`COALESCE(${contacts.firstName}, ${assocContactPerson.firstName})`,
-        contactLastName: orm.sql`COALESCE(${contacts.lastName}, ${assocContactPerson.lastName})`,
-        organizationName: orm.sql`COALESCE(${organizations.name}, ${assocOrgCompany.name})`,
-      })
-      .from(activities)
-      // Direct FK joins
-      .leftJoin(contacts, eq(activities.contactId, contacts.id))
-      .leftJoin(organizations, eq(activities.organizationId, organizations.id))
-      // Association-based contact fallback (only when direct FK is absent).
-      // activity_associations uses nullable ID columns with exactly-one-non-null
-      // constraint — there is no associationType column.
-      .leftJoin(
-        assocContact,
-        and(
-          eq(assocContact.activityId, activities.id),
-          isNotNull(assocContact.contactId),
-          isNull(activities.contactId),
-        ),
-      )
-      .leftJoin(
-        assocContactPerson,
-        eq(assocContactPerson.id, assocContact.contactId),
-      )
-      // Association-based organization fallback (only when direct FK is absent)
-      .leftJoin(
-        assocOrg,
-        and(
-          eq(assocOrg.activityId, activities.id),
-          isNotNull(assocOrg.organizationId),
-          isNull(activities.organizationId),
-        ),
-      )
-      .leftJoin(
-        assocOrgCompany,
-        eq(assocOrgCompany.id, assocOrg.organizationId),
-      )
-      .where(kindFilter);
+    const rows: ActivityRecord[] = (
+      await (db as any).execute(sqlTag`
+        SELECT DISTINCT ON (a.id)
+          a.id,
+          a.body,
+          a.subject,
+          a.kind,
+          a.timeline_sort_at      AS "timelineSortAt",
+          a.act_record_id         AS "actRecordId",
+          COALESCE(a.contact_id,      ac_assoc.contact_id)      AS "contactId",
+          COALESCE(a.organization_id, ao_assoc.organization_id) AS "organizationId",
+          COALESCE(c.first_name,  ac.first_name)  AS "contactFirstName",
+          COALESCE(c.last_name,   ac.last_name)   AS "contactLastName",
+          COALESCE(o.name,        ao.name)         AS "organizationName"
+        FROM activities a
+        -- Direct FK joins
+        LEFT JOIN contacts      c  ON c.id  = a.contact_id
+        LEFT JOIN organizations o  ON o.id  = a.organization_id
+        -- Association fallback: pick one contact link when direct FK is null
+        LEFT JOIN activity_associations ac_assoc
+               ON ac_assoc.activity_id = a.id
+              AND ac_assoc.contact_id IS NOT NULL
+              AND a.contact_id IS NULL
+        LEFT JOIN contacts ac ON ac.id = ac_assoc.contact_id
+        -- Association fallback: pick one organization link when direct FK is null
+        LEFT JOIN activity_associations ao_assoc
+               ON ao_assoc.activity_id = a.id
+              AND ao_assoc.organization_id IS NOT NULL
+              AND a.organization_id IS NULL
+        LEFT JOIN organizations ao ON ao.id = ao_assoc.organization_id
+        WHERE a.kind IN ('act_history', 'note', 'calendar')
+        ${cutoffClause}
+      `)
+    ).rows.map((r: Record<string, unknown>) => ({
+      ...r,
+      // Raw SQL returns timestamps as strings; analyzer expects Date objects.
+      timelineSortAt: r.timelineSortAt
+        ? new Date(r.timelineSortAt as string)
+        : null,
+    }));
 
     const records: ActivityRecord[] = rows;
 
