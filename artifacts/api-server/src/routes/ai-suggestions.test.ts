@@ -682,7 +682,7 @@ describe("POST /ai-suggestions/:id/accept", () => {
       .set("Authorization", authorization);
 
     expect(res.status).toBe(200);
-    expect(bookingInsertValues.value?.organizationId).toBe("org-uuid-1");
+    expect(bookingInsertValues.value).toMatchObject({ organizationId: "org-uuid-1" });
     expect(bookingContactValues.value).toMatchObject({
       bookingId: "linked-booking-uuid",
       contactId: "contact-uuid-1",
@@ -704,6 +704,8 @@ describe("POST /ai-suggestions/:id/accept", () => {
       actRecordId: null,
       status: "accepted",
       bookingId: "some-booking-id",
+      contactId: null,
+      organizationId: null,
     });
 
     const res = await request(app)
