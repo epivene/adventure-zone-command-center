@@ -178,6 +178,16 @@ const migrationFiles = [
         AND column_name  = 'consolidation_source_org_id'
     ) AS ready`,
   },
+  {
+    name: "031_activities_calendar_kind_idx.sql",
+    // Checks that the partial composite index used by the calendar query exists.
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND tablename  = 'activities'
+        AND indexname  = 'activities_kind_timeline_sort_at_idx'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
