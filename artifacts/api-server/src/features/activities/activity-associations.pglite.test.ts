@@ -75,7 +75,8 @@ beforeAll(async () => {
       source_record_id uuid, source_version_id uuid, source_type text,
       organization_location_id uuid,
       created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now()
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      deleted_at timestamptz
     );
     CREATE TABLE activity_revisions (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
