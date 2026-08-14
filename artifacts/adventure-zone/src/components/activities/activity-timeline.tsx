@@ -64,6 +64,7 @@ export function ActivityTimeline({
   parent?: ActivityParent;
   createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
   editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
+  deleteActivity?: (activityId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   loadRevisions: (
     activityId: string,
     page?: number,
