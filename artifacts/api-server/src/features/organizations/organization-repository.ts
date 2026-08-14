@@ -651,15 +651,17 @@ export async function persistProposedOrganizationFamilies(
           inArray(organizationFamilyReviews.groupKey, staleKeys),
         ));
 
-      await transaction
-        .insert(organizationFamilyReviews)
-        .values(currentRelevantGroups.map((group) => ({
-          groupKey: group.groupKey!,
-          candidateIds: group.candidateIds,
-          status: "proposed" as const,
-          evidence: group.evidence,
-        })))
-        .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+      if (currentRelevantGroups.length) {
+        await transaction
+          .insert(organizationFamilyReviews)
+          .values(currentRelevantGroups.map((group) => ({
+            groupKey: group.groupKey!,
+            candidateIds: group.candidateIds,
+            status: "proposed" as const,
+            evidence: group.evidence,
+          })))
+          .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+      }
     }
   });
 }
