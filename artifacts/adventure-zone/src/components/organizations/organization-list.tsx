@@ -106,6 +106,17 @@ export function OrganizationList({
                       <span className="ml-2 font-medium text-slate-700">· {organization.primaryContactName}</span>
                     ) : null}
                   </p>
+                  {organization.matchedLocation ? (
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      via{" "}
+                      <span className="font-medium text-slate-700">
+                        {organization.matchedLocation.label}
+                        {organization.matchedLocation.city
+                          ? ` · ${[organization.matchedLocation.city, organization.matchedLocation.region].filter(Boolean).join(", ")}`
+                          : null}
+                      </span>
+                    </p>
+                  ) : null}
                   {organization.parent ? (
                     <p className="mt-0.5 text-sm font-medium text-slate-600">
                       Part of {organization.parent.name}

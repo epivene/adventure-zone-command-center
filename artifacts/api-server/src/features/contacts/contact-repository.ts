@@ -19,6 +19,7 @@ import {
   bookings,
   contacts,
   organizationContacts,
+  organizationLocations,
   organizations,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
@@ -68,6 +69,13 @@ function candidatePhonesSql() {
       select contact_phones.normalized_number
       from contact_phones
       where contact_phones.contact_id = ${contacts.id}
+      union
+      -- Also include the phone of the org location this contact is associated with,
+      -- so that a call from a location's number surfaces contacts at that location.
+      select ol.normalized_phone
+      from ${organizationLocations} ol
+      where ol.id = ${contacts.organizationLocationId}
+        and ol.normalized_phone is not null
     ) phone
     where phone.normalized is not null
   )`;

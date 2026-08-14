@@ -68,6 +68,7 @@ router.get("/organizations", async (req, res): Promise<void> => {
     q: req.query.q ?? undefined,
     lastResort: req.query.lastResort ?? undefined,
     leg: req.query.leg ?? undefined,
+    includeRetired: req.query.includeRetired ?? undefined,
     page: req.query.page ?? undefined,
   });
   try {

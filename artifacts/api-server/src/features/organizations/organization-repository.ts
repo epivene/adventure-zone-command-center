@@ -22,6 +22,7 @@ import {
   followUps,
   organizationContacts,
   organizationFamilyReviews,
+  organizationLocations,
   organizations,
   travelLegs,
 } from "@/db/schema";
@@ -162,8 +163,17 @@ export type OrganizationListQuery = {
   search: string;
   lastResort: "all" | "only";
   travelLegId: string | null;
+  /** When true, child/consolidated organizations are included in results. Defaults to false. */
+  includeRetired: boolean;
   page: number;
   pageSize: number;
+};
+
+export type MatchedOrganizationLocation = {
+  id: string;
+  label: string;
+  city: string | null;
+  region: string | null;
 };
 
 export type OrganizationListRecord = Omit<
@@ -177,6 +187,8 @@ export type OrganizationListRecord = Omit<
   primaryContactName: string | null;
   parent: OrganizationParentSummary | null;
   locationCount: number;
+  /** Present when the search matched via an organization_locations record rather than the org's top-level fields. */
+  matchedLocation: MatchedOrganizationLocation | null;
 };
 
 export type OrganizationListPage = {
@@ -1036,6 +1048,13 @@ export function buildOrganizationListCondition(
   query: OrganizationListQuery,
 ): SQL | undefined {
   const pattern = `%${query.search}%`;
+
+  // Retired orgs are those absorbed into a parent (parentOrganizationId IS NOT NULL).
+  // By default these are excluded from all list results; pass includeRetired=true only for admin review.
+  const notRetiredCondition = query.includeRetired
+    ? undefined
+    : isNull(organizations.parentOrganizationId);
+
   const searchCondition = query.search
     ? sql`(
         ${organizations.name} ilike ${pattern}
@@ -1091,15 +1110,44 @@ export function buildOrganizationListCondition(
               )
             )
         )
+        or exists (
+          select 1
+          from ${organizationLocations} as loc
+          where loc.organization_id = ${organizations.id}
+            and (
+              loc.label ilike ${pattern}
+              or loc.venue_name ilike ${pattern}
+              or loc.city ilike ${pattern}
+              or loc.region ilike ${pattern}
+              or loc.postal_code ilike ${pattern}
+              or loc.address_1 ilike ${pattern}
+              or loc.website ilike ${pattern}
+              or loc.phone ilike ${pattern}
+              or loc.email ilike ${pattern}
+              or exists (
+                select 1
+                from ${contacts} as loc_contact
+                where loc_contact.organization_location_id = loc.id
+                  and (
+                    loc_contact.first_name ilike ${pattern}
+                    or loc_contact.last_name ilike ${pattern}
+                    or concat_ws(' ', loc_contact.first_name, loc_contact.last_name) ilike ${pattern}
+                    or loc_contact.phone ilike ${pattern}
+                    or loc_contact.email ilike ${pattern}
+                  )
+              )
+            )
+        )
       )`
-    : isNull(organizations.parentOrganizationId);
+    : undefined;
+
   const lastResortCondition =
     query.lastResort === "only" ? eq(organizations.lastResort, true) : undefined;
   const travelLegCondition = query.travelLegId
     ? sql`exists (select 1 from ${bookings} where ${bookings.organizationId} = ${organizations.id} and ${bookings.travelLegId} = ${query.travelLegId})`
     : undefined;
 
-  return and(searchCondition, lastResortCondition, travelLegCondition) ?? undefined;
+  return and(searchCondition, notRetiredCondition, lastResortCondition, travelLegCondition) ?? undefined;
 }
 
 export function buildOrganizationListOrderBy(
@@ -1309,12 +1357,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           .filter((id): id is string => id !== null),
       ),
     ];
+    const locationSearchPattern = query.search ? `%${query.search}%` : null;
     const [
       contactCounts,
       bookingCounts,
       primaryContacts,
       parentRecords,
       locationCounts,
+      matchedLocationRows,
     ] = await Promise.all([
       this.database
         .select({
@@ -1366,6 +1416,46 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .from(organizations)
         .where(inArray(organizations.parentOrganizationId, organizationIds))
         .groupBy(organizations.parentOrganizationId),
+      // Find the first organization_location that matched the search term, per org.
+      // This powers the "via [location]" context shown in search results.
+      locationSearchPattern
+        ? this.database
+            .select({
+              organizationId: organizationLocations.organizationId,
+              id: organizationLocations.id,
+              label: organizationLocations.label,
+              city: organizationLocations.city,
+              region: organizationLocations.region,
+            })
+            .from(organizationLocations)
+            .where(
+              and(
+                inArray(organizationLocations.organizationId, organizationIds),
+                sql`(
+                  ${organizationLocations.label} ilike ${locationSearchPattern}
+                  or ${organizationLocations.venueName} ilike ${locationSearchPattern}
+                  or ${organizationLocations.city} ilike ${locationSearchPattern}
+                  or ${organizationLocations.region} ilike ${locationSearchPattern}
+                  or ${organizationLocations.postalCode} ilike ${locationSearchPattern}
+                  or ${organizationLocations.address1} ilike ${locationSearchPattern}
+                  or ${organizationLocations.website} ilike ${locationSearchPattern}
+                  or ${organizationLocations.phone} ilike ${locationSearchPattern}
+                  or ${organizationLocations.email} ilike ${locationSearchPattern}
+                  or exists (
+                    select 1 from ${contacts} as loc_contact
+                    where loc_contact.organization_location_id = ${organizationLocations.id}
+                      and (
+                        loc_contact.first_name ilike ${locationSearchPattern}
+                        or loc_contact.last_name ilike ${locationSearchPattern}
+                        or concat_ws(' ', loc_contact.first_name, loc_contact.last_name) ilike ${locationSearchPattern}
+                        or loc_contact.phone ilike ${locationSearchPattern}
+                        or loc_contact.email ilike ${locationSearchPattern}
+                      )
+                  )
+                )`,
+              ),
+            )
+        : Promise.resolve([] as { organizationId: string; id: string; label: string; city: string | null; region: string | null }[]),
     ]);
     const contactCountByOrganization = new Map(
       contactCounts.map((record) => [record.organizationId, record.value]),
@@ -1389,6 +1479,18 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .filter((record) => record.parentOrganizationId !== null)
         .map((record) => [record.parentOrganizationId!, record.value]),
     );
+    // Take the first matched location per organization (ORDER BY is not guaranteed, but any one is fine).
+    const matchedLocationByOrganization = new Map<string, MatchedOrganizationLocation>();
+    for (const row of matchedLocationRows) {
+      if (!matchedLocationByOrganization.has(row.organizationId)) {
+        matchedLocationByOrganization.set(row.organizationId, {
+          id: row.id,
+          label: row.label,
+          city: row.city,
+          region: row.region,
+        });
+      }
+    }
 
     return {
       records: organizationRecords.map((organization) => ({
@@ -1406,6 +1508,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           ? parentById.get(organization.parentOrganizationId) ?? null
           : null,
         locationCount: locationCountByParent.get(organization.id) ?? 0,
+        matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,
       })),
       total,
       page,
@@ -1564,6 +1667,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
               ? parentById.get(organization.parentOrganizationId) ?? null
               : null,
             locationCount: locationCountByParent.get(organization.id) ?? 0,
+            matchedLocation: null,
           } satisfies OrganizationListRecord];
         }),
       }))

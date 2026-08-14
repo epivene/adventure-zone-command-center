@@ -136,8 +136,17 @@ export type OrganizationListQuery = {
   search: string;
   lastResort: "all" | "only";
   travelLegId: string | null;
+  /** When true, child/consolidated organizations are included in results. */
+  includeRetired?: boolean;
   page: number;
   pageSize: number;
+};
+
+export type MatchedOrganizationLocation = {
+  id: string;
+  label: string;
+  city: string | null;
+  region: string | null;
 };
 
 export type OrganizationListRecord = Omit<
@@ -151,6 +160,8 @@ export type OrganizationListRecord = Omit<
   primaryContactName: string | null;
   parent: OrganizationParentSummary | null;
   locationCount: number;
+  /** Present when the search matched via an organization_locations record. */
+  matchedLocation?: MatchedOrganizationLocation | null;
 };
 
 export type OrganizationListPage = {
