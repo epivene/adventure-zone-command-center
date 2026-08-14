@@ -23,6 +23,8 @@ import {
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
+import { DrizzleLocationRepository } from "@/features/organization-locations/location-repository";
+import locationRoutes from "@/routes/organization-locations";
 
 const router: IRouter = Router();
 function orgRepo() { return new DrizzleOrganizationRepository(db); }
@@ -155,15 +157,28 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
   }
 });
 
+// Location CRUD routes nested under /organizations/:id/locations.
+// Must be registered before /:id to prevent Express matching "locations" as a param.
+router.use("/organizations/:id/locations", locationRoutes);
+
 router.get("/organizations/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
-    const organization = await orgRepo().getOrganizationSummary(id);
+    const locRepo = new DrizzleLocationRepository(db);
+    const [organization, timelinePage, orgLocations, orgLocationRollup] = await Promise.all([
+      orgRepo().getOrganizationSummary(id),
+      new ActivityService(new DrizzleActivityRepository(db)).listTimeline({ organizationId: id }),
+      locRepo.findByOrganization(id),
+      locRepo.rollupForOrganization(id),
+    ]);
     if (!organization) { res.status(404).json({ error: "Not found" }); return; }
-    const timelinePage = await new ActivityService(
-      new DrizzleActivityRepository(db),
-    ).listTimeline({ organizationId: id });
-    res.json({ organization, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage });
+    res.json({
+      organization,
+      timeline: timelinePage.items,
+      timelineNextPage: timelinePage.nextPage,
+      orgLocations,
+      orgLocationRollup,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to get organization");
     res.status(500).json({ error: "Failed to get organization" });
