@@ -1810,12 +1810,16 @@ describe("POST /api/migration/act-replacement/runs/:runId/automatic-review", () 
     workflowDigest?: string | null;
     publishedDigest?: string | null;
     commandError?: unknown;
+    processing?: boolean;
     globalIssueCounts?: Record<string, number>;
     filteredIssueCounts?: Record<string, number>;
   } = {}) {
     const resolveAutomatically = input.commandError
       ? vi.fn().mockRejectedValue(input.commandError)
+      : input.processing
+        ? vi.fn().mockResolvedValue({ status: "processing" })
       : vi.fn().mockResolvedValue({
+          status: "complete",
           ...commandResult,
           manifestDigest: input.commandDigest ?? rebuiltDigest,
         });
@@ -1901,6 +1905,22 @@ describe("POST /api/migration/act-replacement/runs/:runId/automatic-review", () 
 
     expect(response.status).toBe(401);
     expect(response.body).toEqual({ error: "Unauthorized" });
+  });
+
+  it("returns accepted without reading a second full review while recovery is processing", async () => {
+    const store = new MemoryControlStore();
+    addRun(store);
+    const harness = routeReview({ processing: true });
+    const response = await request(testApp(store, true, harness.review))
+      .post(endpoint)
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send(body);
+
+    expect(response.status).toBe(202);
+    expect(response.body).toEqual({ status: "processing" });
+    expect(harness.readReviewPage).not.toHaveBeenCalled();
+    expect(harness.summarize).not.toHaveBeenCalled();
+    expect(harness.getManifest).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -2037,6 +2057,7 @@ describe("POST /api/migration/act-replacement/runs/:runId/automatic-review", () 
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
+      status: "complete",
       summary: commandResult.summary,
       remainingReview: {
         count: 2,
