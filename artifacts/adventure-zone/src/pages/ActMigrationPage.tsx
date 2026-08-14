@@ -827,13 +827,23 @@ export default function ActMigrationPage() {
           expectedManifestDigest,
           requestKey,
         });
-      let result: Awaited<ReturnType<typeof resolveAutomaticReview>>;
-      try {
-        result = await request();
-      } catch (caught) {
-        if (!(caught instanceof TypeError)) throw caught;
-        result = await request();
+      let response: Awaited<ReturnType<typeof resolveAutomaticReview>>;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          response = await request();
+        } catch (caught) {
+          if (!(caught instanceof TypeError)) throw caught;
+          response = await request();
+        }
+        if (response.status === "complete") break;
+        if (attempt >= 399) {
+          throw Object.assign(new Error("automatic_review_timeout"), {
+            code: "automatic_review_timeout",
+          });
+        }
+        await waitForReviewPlanPoll();
       }
+      const result = response;
       setAutomaticReviewResult({
         runId,
         manifestDigest: result.manifestDigest,

@@ -224,7 +224,10 @@ export type AutomaticReviewResolutionSummary = {
   decisionsCreatedOrReplayed: number;
 };
 
-export type AutomaticReviewResponse = {
+export type AutomaticReviewResponse =
+  | { status: "processing" }
+  | {
+  status: "complete";
   summary: AutomaticReviewResolutionSummary;
   remainingReview: {
     count: number;
@@ -246,7 +249,7 @@ export type AutomaticReviewResponse = {
     | "canReview"
     | "canApplySafe"
   >;
-};
+  };
 
 export type ApplyNextRequest = {
   expectedManifestDigest: string;

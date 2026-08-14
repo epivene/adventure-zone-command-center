@@ -93,6 +93,7 @@ function reviewPage() {
 
 function automaticReviewResult(overrides: Record<string, unknown> = {}) {
   return {
+    status: "complete",
     summary: {
       linkedExisting: 2,
       importedNew: 3,
