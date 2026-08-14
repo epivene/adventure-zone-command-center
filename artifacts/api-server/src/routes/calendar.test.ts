@@ -288,4 +288,49 @@ describe("GET /calendar", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
+
+  it("passes dateFrom and dateTo to getMapEvents when from/to params are provided", async () => {
+    await request(app).get("/api/calendar?from=2026-01-01&to=2026-07-31");
+    expect(vi.mocked(getMapEvents)).toHaveBeenCalledWith(
+      expect.objectContaining({ dateFrom: "2026-01-01", dateTo: "2026-07-31" }),
+    );
+  });
+
+  it("passes dateFrom: null and dateTo: null to getMapEvents when no params given", async () => {
+    await request(app).get("/api/calendar");
+    expect(vi.mocked(getMapEvents)).toHaveBeenCalledWith(
+      expect.objectContaining({ dateFrom: null, dateTo: null }),
+    );
+  });
+
+  it("filters out bookings whose startsAt falls outside the requested window", async () => {
+    // Return a mix of in-window and out-of-window booking events from the mock.
+    vi.mocked(getMapEvents).mockImplementation(async (filters) => {
+      const { filterMapEvents } = await import("@/features/routes/map-data");
+      const all: import("@/features/routes/map-data").MapEvent[] = [
+        { ...makeBookingEvent("inside"), startsAt: new Date("2026-06-15T00:00:00Z") },
+        { ...makeBookingEvent("outside-before"), startsAt: new Date("2025-11-01T00:00:00Z") },
+        { ...makeBookingEvent("outside-after"), startsAt: new Date("2027-03-01T00:00:00Z") },
+      ];
+      return filterMapEvents(all, filters);
+    });
+
+    const res = await request(app).get("/api/calendar?from=2026-01-01&to=2026-12-31");
+
+    expect(res.status).toBe(200);
+    const ids = (res.body as Array<{ id: string }>).map((i) => i.id);
+    expect(ids).toContain("inside");
+    expect(ids).not.toContain("outside-before");
+    expect(ids).not.toContain("outside-after");
+  });
+
+  it("ignores malformed from/to params and returns all bookings", async () => {
+    vi.mocked(getMapEvents).mockResolvedValue([makeBookingEvent("bk-any")]);
+    const res = await request(app).get("/api/calendar?from=not-a-date&to=also-bad");
+    expect(res.status).toBe(200);
+    // getMapEvents should have been called with null bounds
+    expect(vi.mocked(getMapEvents)).toHaveBeenCalledWith(
+      expect.objectContaining({ dateFrom: null, dateTo: null }),
+    );
+  });
 });

@@ -119,10 +119,14 @@ export type ActivityDb = { select: (...args: unknown[]) => unknown };
  * Notes and history text entries are intentionally excluded — they have dates but are
  * not scheduled events.
  *
- * @param db - optional injected database (defaults to production client; used in tests)
+ * @param db   - optional injected database (defaults to production client; used in tests)
+ * @param from - optional start of the date window (inclusive); filters on timelineSortAt
+ * @param to   - optional end of the date window (inclusive); filters on timelineSortAt
  */
 export async function getActCalendarActivities(
   db?: ActivityDb,
+  from?: Date,
+  to?: Date,
 ): Promise<ActCalendarActivity[]> {
   const [resolvedDb, schema, orm] = await Promise.all([
     db ? Promise.resolve(db) : import("@/db/client").then((m) => m.db),
@@ -131,7 +135,35 @@ export async function getActCalendarActivities(
   ]);
 
   const { activities, contacts, organizations } = schema;
-  const { eq, or, and, like } = orm;
+  const { eq, or, and, like, gte, lte, isNull } = orm;
+
+  // Build kind + record-id filter
+  const kindFilter = or(
+    eq(activities.kind, "calendar"),
+    and(
+      eq(activities.kind, "act_history"),
+      like(activities.actRecordId, "act_activity:%"),
+    ),
+  );
+
+  // Optionally narrow by date window.  Rows with null timelineSortAt are kept
+  // when a window is provided so they don't silently disappear.
+  const dateFilter =
+    from && to
+      ? or(
+          isNull(activities.timelineSortAt),
+          and(
+            gte(activities.timelineSortAt, from),
+            lte(activities.timelineSortAt, to),
+          ),
+        )
+      : from
+        ? or(isNull(activities.timelineSortAt), gte(activities.timelineSortAt, from))
+        : to
+          ? or(isNull(activities.timelineSortAt), lte(activities.timelineSortAt, to))
+          : undefined;
+
+  const whereClause = dateFilter ? and(kindFilter, dateFilter) : kindFilter;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: ActivityQueryRow[] = await (resolvedDb as any)
@@ -153,15 +185,7 @@ export async function getActCalendarActivities(
     .from(activities)
     .leftJoin(contacts, eq(activities.contactId, contacts.id))
     .leftJoin(organizations, eq(activities.organizationId, organizations.id))
-    .where(
-      or(
-        eq(activities.kind, "calendar"),
-        and(
-          eq(activities.kind, "act_history"),
-          like(activities.actRecordId, "act_activity:%"),
-        ),
-      ),
-    );
+    .where(whereClause);
 
   // JS-level guard mirrors the SQL WHERE — provides defence-in-depth and
   // makes the intent unit-testable independent of the DB.
@@ -220,9 +244,31 @@ router.get("/calendar/debug", async (req, res): Promise<void> => {
 
 router.get("/calendar", async (req, res): Promise<void> => {
   try {
+    // Parse optional date-window query params: ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    const fromParam = typeof req.query.from === "string" ? req.query.from : undefined;
+    const toParam = typeof req.query.to === "string" ? req.query.to : undefined;
+
+    const fromDate = fromParam ? new Date(fromParam) : undefined;
+    const toDate = toParam ? new Date(toParam) : undefined;
+
+    // Only use params that parse as valid dates; reject malformed strings.
+    const validFrom = fromDate && !isNaN(fromDate.getTime()) ? fromDate : undefined;
+    const validTo = toDate && !isNaN(toDate.getTime()) ? toDate : undefined;
+
+    // Advance to end-of-day so events occurring later in the boundary day are included.
+    if (validTo) validTo.setUTCHours(23, 59, 59, 999);
+
+    // Build booking filter. MapFilters uses business-date string comparison, so pass
+    // the raw date strings only when they are valid ISO dates.
+    const calendarFilters: MapFilters = {
+      ...allEvents,
+      dateFrom: validFrom ? (fromParam as string) : null,
+      dateTo: validTo ? (toParam as string) : null,
+    };
+
     const [bookingEvents, actActivities] = await Promise.all([
-      getMapEvents(allEvents),
-      getActCalendarActivities(),
+      getMapEvents(calendarFilters),
+      getActCalendarActivities(undefined, validFrom, validTo),
     ]);
 
     const bookingsWithSource = bookingEvents.map((e) => ({

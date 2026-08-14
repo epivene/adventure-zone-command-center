@@ -1,19 +1,34 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { HistorySuggestions } from "@/components/calendar/history-suggestions";
 import { businessDateKey } from "@/lib/business-date";
+
+/** Build the ±6-month ISO date strings around a "YYYY-MM" month key. */
+function buildDateWindow(monthKey: string): { from: string; to: string } {
+  const [year, month] = monthKey.split("-").map(Number);
+  const fromDate = new Date(Date.UTC((year ?? 0), (month ?? 1) - 1 - 6, 1));
+  // Last day of (activeMonth + 6)
+  const toDate = new Date(Date.UTC((year ?? 0), (month ?? 1) - 1 + 7, 0));
+  return {
+    from: fromDate.toISOString().slice(0, 10),
+    to: toDate.toISOString().slice(0, 10),
+  };
+}
 
 export default function CalendarPage() {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+
   const now = new Date();
   const initialMonth = businessDateKey(now).slice(0, 7);
+  const [activeMonth, setActiveMonth] = useState(initialMonth);
 
   useEffect(() => {
-    apiGet<CalendarEvent[]>("/calendar")
+    const { from, to } = buildDateWindow(activeMonth);
+    apiGet<CalendarEvent[]>(`/calendar?from=${from}&to=${to}`)
       .then((data) => {
         setEvents(
           (data ?? []).map((e) => ({
@@ -25,6 +40,10 @@ export default function CalendarPage() {
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
+  }, [activeMonth]);
+
+  const handleMonthChange = useCallback((month: string) => {
+    setActiveMonth(month);
   }, []);
 
   return (
@@ -61,7 +80,11 @@ export default function CalendarPage() {
           <p className="text-rose-700">{error}</p>
         </div>
       ) : (
-        <EventCalendar events={events} initialMonth={initialMonth} />
+        <EventCalendar
+          events={events}
+          initialMonth={initialMonth}
+          onMonthChange={handleMonthChange}
+        />
       )}
     </div>
   );

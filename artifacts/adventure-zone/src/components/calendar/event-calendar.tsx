@@ -263,9 +263,12 @@ function ActActivityPopover({
 export function EventCalendar({
   events,
   initialMonth = businessDateKey(new Date()).slice(0, 7),
+  onMonthChange,
 }: {
   events: CalendarEvent[];
   initialMonth?: string;
+  /** Called with "YYYY-MM" whenever the viewed month changes. */
+  onMonthChange?: (month: string) => void;
 }) {
   const [view, setView] = useState<CalendarView>("month");
   const [activeMonth, setActiveMonth] = useState(() => parseMonth(initialMonth));
@@ -339,10 +342,13 @@ export function EventCalendar({
   }, [allDatedEvents]);
 
   function moveMonth(change: number) {
-    setActiveMonth(
-      (current) =>
-        new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + change, 1)),
-    );
+    setActiveMonth((current) => {
+      const next = new Date(
+        Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + change, 1),
+      );
+      onMonthChange?.(next.toISOString().slice(0, 7));
+      return next;
+    });
   }
 
   return (
