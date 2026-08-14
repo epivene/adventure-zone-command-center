@@ -146,6 +146,20 @@ const migrationFiles = [
           (table_name = 'act_replacement_apply_operations' AND column_name = 'manifest_generation')
         )`,
   },
+  {
+    name: "027_organization_locations.sql",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.organization_locations') IS NOT NULL AS ready",
+  },
+  {
+    name: "028_organization_locations_address_fix.sql",
+    markerSql: `SELECT NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name   = 'organization_locations'
+        AND column_name  = 'address1'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

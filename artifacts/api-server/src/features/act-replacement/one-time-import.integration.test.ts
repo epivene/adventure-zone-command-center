@@ -119,6 +119,7 @@ async function installDisposableSchema(pool: TestPool) {
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid REFERENCES organizations(id),
       contact_id uuid REFERENCES contacts(id), booking_id uuid REFERENCES bookings(id),
       kind text NOT NULL, body text NOT NULL, occurred_at timestamptz NOT NULL DEFAULT now(),
+      organization_location_id uuid,
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
       CONSTRAINT activities_parent_required CHECK (
         organization_id IS NOT NULL OR contact_id IS NOT NULL OR booking_id IS NOT NULL

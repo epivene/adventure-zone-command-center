@@ -73,6 +73,7 @@ beforeAll(async () => {
       ends_at timestamptz,
       act_record_id text,
       source_record_id uuid, source_version_id uuid, source_type text,
+      organization_location_id uuid,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );

@@ -61,6 +61,7 @@ beforeAll(async () => {
     CREATE TABLE contacts (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       organization_id uuid REFERENCES organizations(id),
+      organization_location_id uuid,
       first_name text NOT NULL,
       last_name text NOT NULL,
       email text,
