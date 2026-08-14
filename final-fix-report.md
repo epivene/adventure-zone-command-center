@@ -119,3 +119,41 @@ completed successfully:
 - Full frontend suite: 197 passed.
 - Shared declarations and API/frontend TypeScript checks: passed.
 - API and frontend production builds: passed.
+
+
+## Fix Round 4
+
+The final re-review identified two remaining edge cases, both covered by
+regressions before the production changes:
+
+1. Stale family-review cleanup now commits before the API returns its refresh
+   conflict. The serializable transaction returns a stale outcome after deleting
+   the review row, then the service raises `HierarchyConflictError` outside the
+   committed cleanup boundary. Missing candidates and expanded buckets both use
+   this path, so a rolled-back exception can no longer resurrect the stale row.
+2. Merge revalidation now locks and evaluates the current complete standalone
+   organization snapshot. An old A+B proposal is stale when the current bucket
+   is A+B+C. Under the shared advisory lock, the old proposal is deleted and an
+   overlapping current proposal is inserted before the merge is blocked; the
+   merge transaction commits that replacement before returning the conflict, so
+   there is no unprotected merge window.
+3. Every exact-name bucket containing at least two distinct complete city/region
+   pairs is classified as `ambiguous_location_candidate`, even when the entire
+   bucket also passes the strong shared-website matcher. Strong website evidence
+   remains visible, while the whole bucket stays manual-only and excluded from
+   destructive bulk merge.
+
+GitHub Actions run
+[31763823038](https://github.com/epivene/adventure-zone-command-center/actions/runs/31763823038)
+at product/test head `80b518e13746a48124c4dd0f123f5c329c8a6d4c`
+completed successfully:
+
+- Focused frontend regressions: 11 passed.
+- Focused API family/transaction regressions: 32 passed.
+- Full API suite: 1,057 passed, 54 skipped.
+- Full frontend suite: 198 passed.
+- Shared declarations and API/frontend TypeScript checks: passed.
+- API and frontend production builds: passed.
+
+The temporary branch-only verification workflow was removed after the green
+run.
