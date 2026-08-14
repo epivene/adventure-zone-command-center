@@ -75,6 +75,9 @@ export type AutomaticReviewRequestFingerprintInput = {
 export type AutomaticReviewDecisionResult = BulkReviewDecisionResult & {
   summary: AutomaticReviewResolutionSummary;
 };
+export type AutomaticReviewCommandResult =
+  | { status: "processing" }
+  | ({ status: "complete" } & AutomaticReviewDecisionResult);
 type ReviewSourceState = { sourceVersionId: string; streamType?: string; localFields?: Record<string, unknown> };
 export type ConflictReviewState = {
   sourceRecordId: string;
@@ -101,7 +104,7 @@ export type ReviewCommandStore = {
   saveDecisionAndRebuild(runId: string, input: SaveDecisionInput): Promise<Decision>;
   getBulkDecisionRequest(runId: string, input: BulkReviewRequestLookup): Promise<BulkReviewDecisionResult | null>;
   saveDecisionsAndRebuild(runId: string, input: SaveDecisionsAndRebuildInput): Promise<SaveDecisionsAndRebuildResult>;
-  resolveAutomaticReviewAndRebuild(runId: string, input: ResolveAutomaticReviewCommandInput): Promise<AutomaticReviewDecisionResult>;
+  resolveAutomaticReviewAndRebuild(runId: string, input: ResolveAutomaticReviewCommandInput): Promise<AutomaticReviewCommandResult>;
   supersedeDecision(sourceRecordId: string, decisionId: string, actor: string, requestKey: string): Promise<Decision>;
   supersedeDecisionAndRebuild(runId: string, sourceRecordId: string, decisionId: string, actor: string, requestKey: string): Promise<Decision>;
   getApprovalRepository(): ApprovalRepository;
@@ -616,7 +619,7 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
       throw error;
     }
   }
-  async resolveAutomaticReviewAndRebuild(runId: string, input: ResolveAutomaticReviewCommandInput): Promise<AutomaticReviewDecisionResult> {
+  async resolveAutomaticReviewAndRebuild(runId: string, input: ResolveAutomaticReviewCommandInput): Promise<AutomaticReviewCommandResult> {
     if (this.runOwners.get(runId) !== input.owner) fail("run_not_found", 404);
     const resolution = proposeAutomaticReview(this.automaticReviewInputs.get(runId) ?? { records: [] });
     const proposed = resolution.proposals
@@ -633,7 +636,7 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
     const replay = this.automaticRequests.get(runId)?.get(input.requestKey);
     if (replay) {
       if (replay.requestFingerprint !== requestFingerprint) fail("request_replay_mismatch", 409);
-      return structuredClone(replay.result);
+      return { status: "complete", ...structuredClone(replay.result) };
     }
 
     const decisionsSnapshot = structuredClone(this.decisions);
@@ -699,7 +702,7 @@ export class InMemoryReviewCommandStore implements ReviewCommandStore {
         result: structuredClone(result),
       });
       this.automaticRequests.set(runId, requestsForRun);
-      return result;
+      return { status: "complete", ...result };
     } catch (error) {
       this.decisions = decisionsSnapshot;
       this.manifests = manifestsSnapshot;
@@ -784,7 +787,7 @@ export class ReviewCommandService {
       selections: input.selections,
     });
   }
-  async resolveAutomatically(input: { runId: string; expectedManifestDigest: string; requestKey: string; requestedBy: string }): Promise<AutomaticReviewDecisionResult> {
+  async resolveAutomatically(input: { runId: string; expectedManifestDigest: string; requestKey: string; requestedBy: string }): Promise<AutomaticReviewCommandResult> {
     if (!clean(input.runId) || !clean(input.expectedManifestDigest) || !clean(input.requestKey) || !clean(input.requestedBy))
       fail("invalid_automatic_review");
     return this.store.resolveAutomaticReviewAndRebuild(input.runId, {
