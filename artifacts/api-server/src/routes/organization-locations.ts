@@ -81,6 +81,19 @@ function extractId(param: string | string[] | undefined): string {
   return Array.isArray(param) ? (param[0] ?? "") : (param ?? "");
 }
 
+// ── Rollup counts ─────────────────────────────────────────────────────────────
+
+router.get("/rollup", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  try {
+    const rollup = await locationRepo().rollupForOrganization(organizationId);
+    res.json({ rollup });
+  } catch (err) {
+    req.log.error({ err }, "Failed to compute location rollup");
+    res.status(500).json({ error: "Failed to compute location rollup" });
+  }
+});
+
 // ── List summaries ────────────────────────────────────────────────────────────
 
 router.get("/", async (req: OrgLocationsRequest, res): Promise<void> => {
@@ -120,6 +133,21 @@ router.post("/", async (req: OrgLocationsRequest, res): Promise<void> => {
     }
     req.log.error({ err }, "Failed to create organization location");
     res.status(500).json({ ok: false, error: "Failed to create location" });
+  }
+});
+
+// ── Activities page (cursor-keyed) ────────────────────────────────────────────
+
+router.get("/:locationId/activities", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  const locationId = extractId(req.params.locationId);
+  const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
+  try {
+    const data = await locationRepo().findLocationActivities(organizationId, locationId, cursor);
+    res.json(data);
+  } catch (err) {
+    req.log.error({ err }, "Failed to list location activities");
+    res.status(500).json({ error: "Failed to list location activities" });
   }
 });
 

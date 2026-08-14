@@ -140,16 +140,23 @@ let repo: DrizzleLocationRepository;
 beforeAll(async () => {
   client = new PGlite();
 
-  // Apply the base schema, then migration 027 (adds organization_locations +
-  // organizationLocationId FK columns), then migration 028 (address fix).
-  const [migration027, migration028] = await Promise.all([
+  // Apply the base schema, then:
+  //  027 — adds organization_locations table + organizationLocationId FK columns
+  //  028 — fixes address column names
+  //  029 — adds consolidated_into_id / consolidated_at to organizations
+  //  030 — adds consolidation_source_org_id to organization_locations
+  const [migration027, migration028, migration029, migration030] = await Promise.all([
     readMigration("027_organization_locations.sql"),
     readMigration("028_organization_locations_address_fix.sql"),
+    readMigration("029_organization_consolidation.sql"),
+    readMigration("030_organization_location_source_org.sql"),
   ]);
 
   await client.exec(BASE_SCHEMA);
   await client.exec(migration027);
   await client.exec(migration028);
+  await client.exec(migration029);
+  await client.exec(migration030);
 
   // Seed two organizations.
   await client.exec(`
@@ -425,6 +432,133 @@ describe("remove", () => {
     expect(result).toBe("ok");
     const detail = await repo.findById(ORG_A, id);
     expect(detail).toBeNull();
+  });
+});
+
+describe("findLocationActivities", () => {
+  const ACT_LOC = "77777777-7777-4777-8777-777777777777";
+
+  beforeAll(async () => {
+    // Create an isolated location for these tests.
+    await client.exec(`
+      INSERT INTO organization_locations (id, organization_id, label)
+      VALUES ('${ACT_LOC}', '${ORG_A}', 'Activity Pagination Loc');
+    `);
+  });
+
+  it("returns empty when location has no activities", async () => {
+    const result = await repo.findLocationActivities(ORG_A, ACT_LOC);
+    expect(result.activities).toHaveLength(0);
+    expect(result.activitiesNextPage).toBeNull();
+  });
+
+  it("returns empty for a location belonging to a different org", async () => {
+    const result = await repo.findLocationActivities(ORG_B, ACT_LOC);
+    expect(result.activities).toHaveLength(0);
+    expect(result.activitiesNextPage).toBeNull();
+  });
+
+  it("returns empty for an unknown location", async () => {
+    const result = await repo.findLocationActivities(ORG_A, "00000000-0000-4000-8000-000000000000");
+    expect(result.activities).toHaveLength(0);
+    expect(result.activitiesNextPage).toBeNull();
+  });
+
+  it("returns first page and a cursor when more than 50 activities exist", async () => {
+    // Insert 55 activities with distinct timestamps so ordering is deterministic.
+    const inserts = Array.from({ length: 55 }, (_, i) => {
+      const ts = new Date(Date.UTC(2025, 0, i + 1)).toISOString();
+      const id = `aaaa${String(i).padStart(4, "0")}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`;
+      return `('${id}', '${ORG_A}', '${ACT_LOC}', 'note', 'Activity ${i}', '${ts}')`;
+    });
+    await client.exec(`
+      INSERT INTO activities (id, organization_id, organization_location_id, kind, body, timeline_sort_at)
+      VALUES ${inserts.join(",")};
+    `);
+
+    const result = await repo.findLocationActivities(ORG_A, ACT_LOC);
+    expect(result.activities).toHaveLength(50);
+    expect(result.activitiesNextPage).not.toBeNull();
+    // Activities returned in descending order (most recent first).
+    const first = result.activities[0];
+    const last = result.activities[49];
+    expect(new Date(first!.occurredAt).getTime()).toBeGreaterThan(
+      new Date(last!.occurredAt).getTime(),
+    );
+  });
+
+  it("returns the next page via cursor without duplicates", async () => {
+    // Fetch page 1 to get the cursor.
+    const page1 = await repo.findLocationActivities(ORG_A, ACT_LOC);
+    expect(page1.activitiesNextPage).not.toBeNull();
+
+    const page2 = await repo.findLocationActivities(ORG_A, ACT_LOC, page1.activitiesNextPage!);
+    expect(page2.activities.length).toBeGreaterThan(0);
+
+    // No overlap between page 1 and page 2 IDs.
+    const page1Ids = new Set(page1.activities.map((a) => a.id));
+    for (const a of page2.activities) {
+      expect(page1Ids.has(a.id)).toBe(false);
+    }
+
+    // Page 2 activities are older than any page 1 activity.
+    const oldestPage1 = Math.min(
+      ...page1.activities.map((a) => new Date(a.occurredAt).getTime()),
+    );
+    for (const a of page2.activities) {
+      expect(new Date(a.occurredAt).getTime()).toBeLessThanOrEqual(oldestPage1);
+    }
+  });
+
+  it("handles activities with equal timestamps using ID tiebreak", async () => {
+    // Ordering is DESC timeline_sort_at, DESC id.
+    // With equal timestamps: bbbb0003 (largest) → bbbb0002 → bbbb0001 (smallest).
+    // If cursor is bbbb0002, the next page must contain only entries with
+    // id < bbbb0002 at the same timestamp, i.e. bbbb0001.
+    const TS = "2026-06-15T00:00:00.000Z";
+    const tieIds = [
+      "bbbb0001-bbbb-4bbb-8bbb-bbbbbbbbbbbb", // smallest — comes last in DESC order
+      "bbbb0002-bbbb-4bbb-8bbb-bbbbbbbbbbbb", // middle — used as cursor
+      "bbbb0003-bbbb-4bbb-8bbb-bbbbbbbbbbbb", // largest — comes first in DESC order
+    ];
+    await client.exec(`
+      INSERT INTO activities (id, organization_id, organization_location_id, kind, body, timeline_sort_at)
+      VALUES
+        ('${tieIds[0]}', '${ORG_A}', '${ACT_LOC}', 'call', 'Tie A', '${TS}'),
+        ('${tieIds[1]}', '${ORG_A}', '${ACT_LOC}', 'call', 'Tie B', '${TS}'),
+        ('${tieIds[2]}', '${ORG_A}', '${ACT_LOC}', 'call', 'Tie C', '${TS}');
+    `);
+    // Use bbbb0002 as the cursor (appears second in a prior DESC page).
+    const cursorId = tieIds[1];
+    const result = await repo.findLocationActivities(ORG_A, ACT_LOC, cursorId);
+    const returnedIds = result.activities.map((a) => a.id);
+
+    // Cursor itself must not appear in the next page.
+    expect(returnedIds).not.toContain(tieIds[1]);
+    // bbbb0003 was already on the previous page (larger id → shown earlier).
+    expect(returnedIds).not.toContain(tieIds[2]);
+    // bbbb0001 must appear — it has a smaller id, so it follows the cursor.
+    expect(returnedIds).toContain(tieIds[0]);
+    // Confirm no duplicates.
+    expect(new Set(returnedIds).size).toBe(returnedIds.length);
+  });
+
+  it("returns empty for a non-existent cursor UUID", async () => {
+    // Valid UUID format but no matching activity — must return empty, not page 1.
+    const result = await repo.findLocationActivities(
+      ORG_A,
+      ACT_LOC,
+      "00000000-dead-4ead-8ead-000000000099",
+    );
+    expect(result.activities).toHaveLength(0);
+    expect(result.activitiesNextPage).toBeNull();
+  });
+
+  it("returns empty for a malformed cursor string", async () => {
+    // Non-UUID input must not reach Postgres — guard returns empty immediately.
+    const result = await repo.findLocationActivities(ORG_A, ACT_LOC, "not-a-uuid");
+    expect(result.activities).toHaveLength(0);
+    expect(result.activitiesNextPage).toBeNull();
   });
 });
 

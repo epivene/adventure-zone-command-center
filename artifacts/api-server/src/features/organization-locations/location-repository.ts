@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, lt, or, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   activities,
@@ -521,6 +521,107 @@ export class DrizzleLocationRepository {
         eq(organizationLocations.organizationId, organizationId),
       ));
     return "ok";
+  }
+
+  /**
+   * Fetch a cursor-keyed page of activities for a single location.
+   * Returns up to 50 activities ordered by (timelineSortAt DESC, id DESC).
+   * Pass `cursor` (an activity id) to start after the previous page's last item.
+   */
+  /**
+   * Simple UUID-v4 shape check so a malformed cursor doesn't cause a Postgres
+   * "invalid input syntax for type uuid" error before we can handle it cleanly.
+   */
+  private static isValidUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  async findLocationActivities(
+    organizationId: string,
+    locationId: string,
+    cursor?: string,
+  ): Promise<{ activities: OrgLocationActivityDetail[]; activitiesNextPage: string | null }> {
+    // Reject a malformed cursor immediately rather than letting Postgres error.
+    if (cursor !== undefined && !DrizzleLocationRepository.isValidUuid(cursor)) {
+      return { activities: [], activitiesNextPage: null };
+    }
+
+    // Verify the location belongs to this org.
+    const [loc] = await this.database
+      .select({ id: organizationLocations.id })
+      .from(organizationLocations)
+      .where(
+        and(
+          eq(organizationLocations.id, locationId),
+          eq(organizationLocations.organizationId, organizationId),
+        ),
+      )
+      .limit(1);
+    if (!loc) return { activities: [], activitiesNextPage: null };
+
+    // Resolve cursor to a (timelineSortAt, id) boundary.
+    let cursorSortAt: Date | null = null;
+    let cursorId: string | null = null;
+    if (cursor) {
+      const [row] = await this.database
+        .select({ sortAt: activities.timelineSortAt, id: activities.id })
+        .from(activities)
+        .where(
+          and(
+            eq(activities.id, cursor),
+            eq(activities.organizationLocationId, locationId),
+          ),
+        )
+        .limit(1);
+      // Unknown / deleted cursor — return empty rather than duplicating page 1.
+      if (!row) return { activities: [], activitiesNextPage: null };
+      cursorSortAt = row.sortAt;
+      cursorId = row.id;
+    }
+
+    // Keyset condition: rows that come after the cursor in descending order.
+    const cursorCondition =
+      cursorSortAt && cursorId
+        ? or(
+            lt(activities.timelineSortAt, cursorSortAt),
+            and(
+              eq(activities.timelineSortAt, cursorSortAt),
+              lt(activities.id, cursorId),
+            ),
+          )
+        : undefined;
+
+    const rows = await this.database
+      .select({
+        id: activities.id,
+        kind: activities.kind,
+        body: activities.body,
+        occurredAt: activities.timelineSortAt,
+        contactId: activities.contactId,
+        bookingId: activities.bookingId,
+      })
+      .from(activities)
+      .where(
+        and(eq(activities.organizationLocationId, locationId), cursorCondition),
+      )
+      .orderBy(desc(activities.timelineSortAt), desc(activities.id))
+      .limit(51);
+
+    const hasMore = rows.length > 50;
+    const page = rows.slice(0, 50);
+    const activitiesNextPage = hasMore ? (page[page.length - 1]?.id ?? null) : null;
+
+    return {
+      activities: page.map((r) => ({
+        id: r.id,
+        kind: r.kind,
+        body: r.body,
+        occurredAt: r.occurredAt,
+        contactId: r.contactId,
+        bookingId: r.bookingId,
+      })),
+      activitiesNextPage,
+    };
   }
 
   /**

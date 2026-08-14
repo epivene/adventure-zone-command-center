@@ -5,6 +5,7 @@ import { Link } from "wouter";
 
 import { HierarchyControls } from "@/components/organizations/hierarchy-controls";
 import { LocationsSection } from "@/components/organizations/locations-section";
+import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
@@ -125,6 +126,8 @@ export function EventProfileWorkspace({
       />
 
       <LocationsSection locations={profile.locations ?? []} rollups={profile.rollups} />
+
+      <PossibleLocationsSection orgId={profile.id} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)]">
         <div className="grid gap-5">
