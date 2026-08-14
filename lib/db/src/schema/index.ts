@@ -202,6 +202,10 @@ export const organizations = pgTable("organizations", {
   region: text("region"),
   postalCode: text("postal_code"),
   website: text("website"),
+  parentOrganizationId: uuid("parent_organization_id").references(
+    (): AnyPgColumn => organizations.id,
+    { onDelete: "restrict" },
+  ),
   lastResort: boolean("last_resort").default(false).notNull(),
   lastResortReason: text("last_resort_reason"),
   lastResortChangedAt: timestamp("last_resort_changed_at", {
@@ -218,8 +222,37 @@ export const organizations = pgTable("organizations", {
     "organizations_last_resort_reason_required",
     sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
   ),
+  check(
+    "organizations_not_own_parent",
+    sql`${table.parentOrganizationId} is null or ${table.parentOrganizationId} <> ${table.id}`,
+  ),
   index("organizations_normalized_phone_idx").on(table.normalizedPhone),
+  index("organizations_parent_organization_idx").on(table.parentOrganizationId),
 ]);
+
+export const organizationFamilyReviews = pgTable(
+  "organization_family_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    groupKey: text("group_key").notNull(),
+    candidateIds: jsonb("candidate_ids").$type<string[]>().notNull(),
+    status: text("status").$type<"proposed" | "not_related">().notNull(),
+    evidence: jsonb("evidence").$type<unknown[]>().default(sql`'[]'::jsonb`).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("organization_family_reviews_group_key_unique").on(table.groupKey),
+    check(
+      "organization_family_reviews_status_valid",
+      sql`${table.status} in ('proposed', 'not_related')`,
+    ),
+    check(
+      "organization_family_reviews_candidates_array",
+      sql`jsonb_typeof(${table.candidateIds}) = 'array'`,
+    ),
+  ],
+);
 
 export const contacts = pgTable("contacts", {
   id: uuid("id").defaultRandom().primaryKey(),

@@ -4,9 +4,10 @@ import {
   count,
   desc,
   eq,
-  ilike,
   inArray,
+  isNull,
   type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 
@@ -20,11 +21,36 @@ import {
   contacts,
   followUps,
   organizationContacts,
+  organizationFamilyReviews,
   organizations,
   travelLegs,
 } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { bookingStatusValues } from "@/features/bookings/booking-types";
+import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
 import type { SetLastResortInput } from "@/features/organizations/last-resort-input";
+import type {
+  FamilyCandidateEvidence,
+  OrganizationFamilyRecord,
+} from "@/features/organizations/organization-family-matcher";
+import {
+  discoverOrganizationFamilyCandidates,
+  partitionOrganizationReviewGroups,
+} from "@/features/organizations/organization-family-discovery";
+export {
+  discoverOrganizationFamilyCandidates,
+  partitionOrganizationReviewGroups,
+} from "@/features/organizations/organization-family-discovery";
+import {
+  createOrganizationParentInTransaction,
+  HierarchyConflictError,
+  setOrganizationParentsInTransaction,
+} from "@/features/organizations/organization-hierarchy";
+import {
+  lockOrganizationFamilyMutationSnapshot,
+  lockOrganizationFamilyReviewDomain,
+} from "@/features/organizations/organization-family-lock";
+export { lockOrganizationFamilyReviewDomain } from "@/features/organizations/organization-family-lock";
 
 export type OrganizationPerson = {
   id: string;
@@ -35,6 +61,72 @@ export type OrganizationPerson = {
   email: string | null;
 };
 export type OrganizationContact = OrganizationPerson;
+
+export type OrganizationParentSummary = {
+  id: string;
+  name: string;
+  website: string | null;
+};
+
+export type OrganizationLocationSummary = {
+  id: string;
+  name: string;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  website: string | null;
+  localStatus: string | null;
+  nextFollowUp: { id: string; kind: string; dueAt: Date } | null;
+  nextBooking: {
+    id: string;
+    name: string;
+    startsAt: Date | null;
+    status: string;
+  } | null;
+  travelLeg: { id: string; name: string; color: string } | null;
+  primaryContactName: string | null;
+};
+
+export type OrganizationHierarchyRollups = {
+  locationCount: number;
+  upcomingBookingCount: number;
+  overdueFollowUpCount: number;
+  travelLegs: Array<{ id: string; name: string; color: string }>;
+  mostRecentContactAt: Date | null;
+};
+
+export type OrganizationLocationAggregateRecord = {
+  id: string;
+  name: string;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  website: string | null;
+  localStatus: string | null;
+  nextFollowUpId: string | null;
+  nextFollowUpKind: string | null;
+  nextFollowUpDueAt: Date | null;
+  nextBookingId: string | null;
+  nextBookingName: string | null;
+  nextBookingStartsAt: Date | null;
+  nextBookingStatus: string | null;
+  travelLegId: string | null;
+  travelLegName: string | null;
+  travelLegColor: string | null;
+  primaryContactFirstName: string | null;
+  primaryContactLastName: string | null;
+};
+
+export type OrganizationHierarchySummary = {
+  parent: OrganizationParentSummary | null;
+  locations: OrganizationLocationSummary[];
+  rollups: OrganizationHierarchyRollups;
+};
+
 export type OrganizationBooking = {
   id: string;
   name: string;
@@ -47,6 +139,9 @@ export type OrganizationSummary = {
   lastResort: boolean;
   lastResortReason: string | null;
   lastResortChangedAt: Date | null;
+  parent: OrganizationParentSummary | null;
+  locations: OrganizationLocationSummary[];
+  rollups: OrganizationHierarchyRollups;
   contacts: OrganizationContact[];
   bookings: OrganizationBooking[];
   contactTotal?: number;
@@ -73,13 +168,15 @@ export type OrganizationListQuery = {
 
 export type OrganizationListRecord = Omit<
   OrganizationSummary,
-  "contacts" | "bookings"
+  "contacts" | "bookings" | "parent" | "locations" | "rollups"
 > & {
   contactCount: number;
   bookingCount: number;
   city: string | null;
   region: string | null;
   primaryContactName: string | null;
+  parent: OrganizationParentSummary | null;
+  locationCount: number;
 };
 
 export type OrganizationListPage = {
@@ -102,8 +199,213 @@ export type DuplicateOrganizationGroup = {
   normalizedName: string;
   city: string;
   region: string;
+  classification: "duplicate" | "location_candidate" | "ambiguous_location_candidate";
+  groupKey: string | null;
+  candidateIds: string[];
+  evidence: FamilyCandidateEvidence[];
   organizations: OrganizationListRecord[];
 };
+
+export type OrganizationFamilyCandidateGroup = Omit<
+  DuplicateOrganizationGroup,
+  "organizations"
+>;
+export type OrganizationFamilyReviewRecord = {
+  groupKey: string;
+  candidateIds: string[];
+  evidence: FamilyCandidateEvidence[];
+  status: "proposed" | "not_related";
+};
+
+export type OrganizationFamilyActRelationship = {
+  sourceOrganizationId: string;
+  targetOrganizationId: string;
+  provenance: "act_relationship";
+};
+
+export function organizationFamilyActRelationshipsQuery(): SQL {
+  return sql`
+    SELECT DISTINCT
+      source_link.entity_id AS "sourceOrganizationId",
+      target_link.entity_id AS "targetOrganizationId",
+      'act_relationship'::text AS provenance
+    FROM ${actMigrationRecords} AS left_relationship
+    INNER JOIN ${actMigrationRecords} AS right_relationship
+      ON right_relationship.run_id = left_relationship.run_id
+      AND right_relationship.stream_type = 'company_contact'
+      AND right_relationship.target_source_id = left_relationship.target_source_id
+      AND right_relationship.source_id > left_relationship.source_id
+    INNER JOIN ${actExternalLinks} AS source_link
+      ON source_link.entity_type = 'organization'
+      AND source_link.source_entity_type = 'company'
+      AND source_link.act_record_id = left_relationship.source_id
+      AND source_link.migration_run_id = left_relationship.run_id
+    INNER JOIN ${actExternalLinks} AS target_link
+      ON target_link.entity_type = 'organization'
+      AND target_link.source_entity_type = 'company'
+      AND target_link.act_record_id = right_relationship.source_id
+      AND target_link.migration_run_id = right_relationship.run_id
+    WHERE left_relationship.stream_type = 'company_contact'
+      AND left_relationship.source_id IS NOT NULL
+      AND left_relationship.target_source_id IS NOT NULL
+      AND right_relationship.source_id IS NOT NULL
+      AND source_link.entity_id <> target_link.entity_id
+    ORDER BY source_link.entity_id, target_link.entity_id
+  `;
+}
+
+type OrganizationFamilyActDatabase = Pick<DrizzleDatabase, "execute">;
+
+export async function loadOrganizationFamilyActRelationships(
+  database: OrganizationFamilyActDatabase,
+): Promise<OrganizationFamilyActRelationship[]> {
+  const result = await database.execute<OrganizationFamilyActRelationship>(
+    organizationFamilyActRelationshipsQuery(),
+  );
+  return [...result.rows];
+}
+
+export async function discoverOrganizationFamilyCandidatesFromDatabase(
+  database: OrganizationFamilyActDatabase,
+  records: readonly OrganizationFamilyRecord[],
+): Promise<OrganizationFamilyCandidateGroup[]> {
+  return discoverOrganizationFamilyCandidates(
+    records,
+    await loadOrganizationFamilyActRelationships(database),
+  );
+}
+
+export type OrganizationFamilyReviewInput =
+  | {
+      action: "make_locations";
+      candidateIds: string[];
+      parent:
+        | { kind: "existing"; parentId: string }
+        | { kind: "new"; name: string; website?: string; phone?: string };
+    }
+  | { action: "not_related"; candidateIds: string[] };
+
+function organizationFamilyGroupKey(candidateIds: readonly string[]): string {
+  return `organization-family:${[...candidateIds]
+    .sort((left, right) => left.localeCompare(right, "en-US"))
+    .join("|")}`;
+}
+
+export async function reviewOrganizationFamily(
+  database: Pick<DrizzleDatabase, "transaction">,
+  input: OrganizationFamilyReviewInput,
+  changedAt: Date,
+): Promise<void> {
+  const candidateIds = [...new Set(input.candidateIds)].sort((left, right) =>
+    left.localeCompare(right, "en-US"),
+  );
+  const groupKey = organizationFamilyGroupKey(candidateIds);
+
+  const outcome = await database.transaction(async (transaction) => {
+    await lockOrganizationFamilyMutationSnapshot(transaction);
+    const [review] = await transaction
+      .select({
+        groupKey: organizationFamilyReviews.groupKey,
+        candidateIds: organizationFamilyReviews.candidateIds,
+        status: organizationFamilyReviews.status,
+      })
+      .from(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, groupKey))
+      .for("update");
+    if (
+      !review ||
+      review.status !== "proposed" ||
+      review.candidateIds.length !== candidateIds.length ||
+      !review.candidateIds.every((id, index) => id === candidateIds[index])
+    ) {
+      throw new HierarchyConflictError(
+        "This organization family changed. Refresh the review list and try again.",
+      );
+    }
+
+    const standaloneRecords = await transaction
+      .select()
+      .from(organizations)
+      .where(and(
+        isNull(organizations.parentOrganizationId),
+        sql`not exists (
+          select 1 from ${organizations} as confirmed_location
+          where confirmed_location.parent_organization_id = ${organizations.id}
+        )`,
+      ))
+      .orderBy(asc(organizations.id))
+      .for("update");
+    const candidatesById = new Map(
+      standaloneRecords.map((organization) => [organization.id, organization]),
+    );
+    if (!candidateIds.every((id) => candidatesById.has(id))) {
+      await transaction
+        .delete(organizationFamilyReviews)
+        .where(eq(organizationFamilyReviews.groupKey, groupKey));
+      return "stale" as const;
+    }
+
+    const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
+      transaction,
+      standaloneRecords,
+    );
+    const current = currentGroups.find(
+      (group) =>
+        group.groupKey === groupKey &&
+        group.candidateIds.length === candidateIds.length &&
+        group.candidateIds.every((id, index) => id === candidateIds[index]),
+    );
+    if (!current) {
+      await transaction
+        .delete(organizationFamilyReviews)
+        .where(eq(organizationFamilyReviews.groupKey, groupKey));
+      return "stale" as const;
+    }
+
+    if (input.action === "not_related") {
+      await transaction
+        .update(organizationFamilyReviews)
+        .set({
+          candidateIds,
+          evidence: current.evidence,
+          status: "not_related",
+          updatedAt: changedAt,
+        })
+        .where(eq(organizationFamilyReviews.groupKey, groupKey));
+      return "applied" as const;
+    }
+
+    if (input.parent.kind === "new") {
+      await createOrganizationParentInTransaction(
+        transaction,
+        {
+          name: input.parent.name,
+          ...(input.parent.website ? { website: input.parent.website } : {}),
+          ...(input.parent.phone ? { phone: input.parent.phone } : {}),
+          childIds: candidateIds,
+        },
+        changedAt,
+      );
+    } else {
+      await setOrganizationParentsInTransaction(
+        transaction,
+        { parentId: input.parent.parentId, childIds: candidateIds },
+        changedAt,
+      );
+    }
+
+    await transaction
+      .delete(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, groupKey));
+    return "applied" as const;
+  }, { isolationLevel: "read committed" });
+
+  if (outcome === "stale") {
+    throw new HierarchyConflictError(
+      "This organization family changed. Refresh the review list and try again.",
+    );
+  }
+}
 
 export interface OrganizationRepository {
   setLastResort(input: SetLastResortInput, changedAt: Date): Promise<boolean>;
@@ -116,6 +418,253 @@ export interface OrganizationRepository {
 }
 
 type DrizzleDatabase = typeof database;
+type OrganizationMergeTransaction = Parameters<
+  Parameters<DrizzleDatabase["transaction"]>[0]
+>[0];
+
+const organizationMergeFamilyConflictMessage =
+  "These profiles may be locations of the same organization. Review the location group before merging.";
+
+async function revalidateOrganizationsMergeable(
+  transaction: OrganizationMergeTransaction,
+  ids: string[],
+): Promise<"mergeable" | "family_conflict"> {
+  const selectedIds = [...new Set(ids)].sort((left, right) =>
+    left.localeCompare(right, "en-US"),
+  );
+  const selectedIdSet = new Set(selectedIds);
+
+  await lockOrganizationFamilyMutationSnapshot(transaction);
+  const proposedFamilies = await transaction
+    .select({
+      groupKey: organizationFamilyReviews.groupKey,
+      candidateIds: organizationFamilyReviews.candidateIds,
+    })
+    .from(organizationFamilyReviews)
+    .where(eq(organizationFamilyReviews.status, "proposed"))
+    .orderBy(asc(organizationFamilyReviews.groupKey))
+    .for("update");
+  const relevantProposals = proposedFamilies.filter((review) =>
+    review.candidateIds.some((candidateId) => selectedIdSet.has(candidateId)),
+  );
+
+  // The whole organization set is locked in one deterministic order. Family
+  // proposals must be compared with the current complete discovery bucket, not
+  // only the IDs stored in an older proposal.
+  const lockedOrganizations = await transaction
+    .select()
+    .from(organizations)
+    .orderBy(asc(organizations.id))
+    .for("update");
+  const organizationById = new Map(
+    lockedOrganizations.map((organization) => [organization.id, organization]),
+  );
+  const selectedOrganizations = selectedIds.flatMap((id) => {
+    const organization = organizationById.get(id);
+    return organization ? [organization] : [];
+  });
+  if (selectedOrganizations.length !== selectedIds.length) {
+    throw new HierarchyConflictError(
+      "A selected organization profile no longer exists.",
+    );
+  }
+
+  const ownedParentIds = new Set(
+    lockedOrganizations.flatMap((organization) =>
+      organization.parentOrganizationId
+        ? [organization.parentOrganizationId]
+        : [],
+    ),
+  );
+  const ownedLocations = lockedOrganizations.filter(
+    (organization) =>
+      organization.parentOrganizationId !== null &&
+      selectedIdSet.has(organization.parentOrganizationId),
+  );
+  if (
+    selectedOrganizations.some(
+      (organization) => organization.parentOrganizationId !== null,
+    ) ||
+    ownedLocations.length > 0
+  ) {
+    throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+  }
+
+  if (!relevantProposals.length) return "mergeable";
+
+  const standaloneRecords = lockedOrganizations.filter(
+    (organization) =>
+      organization.parentOrganizationId === null &&
+      !ownedParentIds.has(organization.id),
+  );
+  const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
+    transaction,
+    standaloneRecords,
+  );
+
+  for (const proposal of relevantProposals) {
+    const isCurrent = currentGroups.some(
+      (group) =>
+        group.groupKey === proposal.groupKey &&
+        group.candidateIds.length === proposal.candidateIds.length &&
+        group.candidateIds.every(
+          (id, index) => id === proposal.candidateIds[index],
+        ),
+    );
+    if (isCurrent) return "family_conflict";
+
+    await transaction
+      .delete(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, proposal.groupKey));
+
+    const proposalIdSet = new Set(proposal.candidateIds);
+    const replacements = currentGroups.filter(
+      (group) =>
+        group.groupKey &&
+        group.candidateIds.some((id) => proposalIdSet.has(id)),
+    );
+    if (replacements.length) {
+      await transaction
+        .insert(organizationFamilyReviews)
+        .values(replacements.map((group) => ({
+          groupKey: group.groupKey!,
+          candidateIds: group.candidateIds,
+          status: "proposed" as const,
+          evidence: group.evidence,
+        })))
+        .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+      return "family_conflict";
+    }
+  }
+
+  return "mergeable";
+}
+
+export async function assertOrganizationsMergeable(
+  transaction: OrganizationMergeTransaction,
+  ids: string[],
+): Promise<void> {
+  if (await revalidateOrganizationsMergeable(transaction, ids) === "family_conflict") {
+    throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+  }
+}
+
+export async function persistProposedOrganizationFamilies(
+  database: Pick<DrizzleDatabase, "transaction">,
+  proposals: OrganizationFamilyCandidateGroup[],
+): Promise<void> {
+  const eligibleProposals = proposals
+    .filter((proposal) => proposal.groupKey && proposal.candidateIds.length >= 2)
+    .toSorted((left, right) =>
+      left.groupKey!.localeCompare(right.groupKey!, "en-US"),
+    );
+  if (!eligibleProposals.length) return;
+
+  await database.transaction(async (transaction) => {
+    await lockOrganizationFamilyMutationSnapshot(transaction);
+    await transaction
+      .insert(organizationFamilyReviews)
+      .values(eligibleProposals.map((proposal) => ({
+        groupKey: proposal.groupKey!,
+        candidateIds: proposal.candidateIds,
+        status: "proposed" as const,
+        evidence: proposal.evidence,
+      })))
+      .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+
+    const proposalKeys = eligibleProposals.map((proposal) => proposal.groupKey!);
+    const lockedReviews = await transaction
+      .select({
+        groupKey: organizationFamilyReviews.groupKey,
+        candidateIds: organizationFamilyReviews.candidateIds,
+        status: organizationFamilyReviews.status,
+      })
+      .from(organizationFamilyReviews)
+      .where(inArray(organizationFamilyReviews.groupKey, proposalKeys))
+      .orderBy(asc(organizationFamilyReviews.groupKey))
+      .for("update");
+    const proposalByKey = new Map(
+      eligibleProposals.map((proposal) => [proposal.groupKey!, proposal]),
+    );
+    const activeProposals = lockedReviews.flatMap((review) => {
+      const proposal = proposalByKey.get(review.groupKey);
+      return review.status === "proposed" &&
+        proposal &&
+        review.candidateIds.length === proposal.candidateIds.length &&
+        review.candidateIds.every(
+          (id, index) => id === proposal.candidateIds[index],
+        )
+        ? [proposal]
+        : [];
+    });
+    if (!activeProposals.length) return;
+
+    // Rebuild the complete discovery set only after the table/evidence locks are
+    // held. This closes the gap where a concurrent third location could be
+    // omitted from an older A/B proposal snapshot.
+    const standaloneRecords = await transaction
+      .select()
+      .from(organizations)
+      .where(and(
+        isNull(organizations.parentOrganizationId),
+        sql`not exists (
+          select 1 from ${organizations} as confirmed_location
+          where confirmed_location.parent_organization_id = ${organizations.id}
+        )`,
+      ))
+      .orderBy(asc(organizations.id));
+    const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
+      transaction,
+      standaloneRecords,
+    );
+    const activeCandidateIds = new Set(
+      activeProposals.flatMap((proposal) => proposal.candidateIds),
+    );
+    const currentRelevantGroups = currentGroups.filter(
+      (group) =>
+        group.groupKey &&
+        group.candidateIds.some((candidateId) =>
+          activeCandidateIds.has(candidateId),
+        ),
+    );
+    const currentByKey = new Map(
+      currentRelevantGroups.map((group) => [group.groupKey!, group]),
+    );
+    const staleKeys = activeProposals
+      .filter((proposal) => {
+        const current = currentByKey.get(proposal.groupKey!);
+        return (
+          !current ||
+          current.candidateIds.length !== proposal.candidateIds.length ||
+          !current.candidateIds.every(
+            (id, index) => id === proposal.candidateIds[index],
+          )
+        );
+      })
+      .map((proposal) => proposal.groupKey!);
+
+    if (staleKeys.length) {
+      await transaction
+        .delete(organizationFamilyReviews)
+        .where(and(
+          eq(organizationFamilyReviews.status, "proposed"),
+          inArray(organizationFamilyReviews.groupKey, staleKeys),
+        ));
+
+      if (currentRelevantGroups.length) {
+        await transaction
+          .insert(organizationFamilyReviews)
+          .values(currentRelevantGroups.map((group) => ({
+            groupKey: group.groupKey!,
+            candidateIds: group.candidateIds,
+            status: "proposed" as const,
+            evidence: group.evidence,
+          })))
+          .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
+      }
+    }
+  });
+}
 
 function lastResortSnapshot(record: typeof organizations.$inferSelect) {
   return {
@@ -142,12 +691,408 @@ function toOrganizationBooking(record: {
   };
 }
 
+
+
+const emptyHierarchyRollupRecord = {
+  locationCount: 0,
+  upcomingBookingCount: 0,
+  overdueFollowUpCount: 0,
+  mostRecentContactAt: null,
+};
+
+export function assembleOrganizationHierarchy(
+  parent: OrganizationParentSummary | null,
+  locationRecords: OrganizationLocationAggregateRecord[],
+  rollupRecord: Omit<OrganizationHierarchyRollups, "travelLegs"> = emptyHierarchyRollupRecord,
+  representedTravelLegs: OrganizationHierarchyRollups["travelLegs"] = [],
+): OrganizationHierarchySummary {
+  return {
+    parent,
+    locations: locationRecords
+      .map((record) => ({
+        id: record.id,
+        name: record.name,
+        address1: record.address1,
+        address2: record.address2,
+        city: record.city,
+        region: record.region,
+        postalCode: record.postalCode,
+        website: record.website,
+        localStatus: record.localStatus,
+        nextFollowUp:
+          record.nextFollowUpId &&
+          record.nextFollowUpKind &&
+          record.nextFollowUpDueAt
+            ? {
+                id: record.nextFollowUpId,
+                kind: record.nextFollowUpKind,
+                dueAt: record.nextFollowUpDueAt,
+              }
+            : null,
+        nextBooking:
+          record.nextBookingId &&
+          record.nextBookingName &&
+          record.nextBookingStatus
+            ? {
+                id: record.nextBookingId,
+                name: record.nextBookingName,
+                startsAt: record.nextBookingStartsAt,
+                status: record.nextBookingStatus,
+              }
+            : null,
+        travelLeg:
+          record.travelLegId &&
+          record.travelLegName &&
+          record.travelLegColor
+            ? {
+                id: record.travelLegId,
+                name: record.travelLegName,
+                color: record.travelLegColor,
+              }
+            : null,
+        primaryContactName:
+          record.primaryContactFirstName || record.primaryContactLastName
+            ? `${record.primaryContactFirstName ?? ""} ${record.primaryContactLastName ?? ""}`.trim()
+            : null,
+      }))
+      .toSorted(
+        (left, right) =>
+          left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+      ),
+    rollups: {
+      locationCount: Number(rollupRecord.locationCount),
+      upcomingBookingCount: Number(rollupRecord.upcomingBookingCount),
+      overdueFollowUpCount: Number(rollupRecord.overdueFollowUpCount),
+      travelLegs: representedTravelLegs,
+      mostRecentContactAt: rollupRecord.mostRecentContactAt,
+    },
+  };
+}
+
+
+const activeBookingStatuses = bookingStatusValues.filter(isActiveStatus);
+
+function activeBookingStatusCondition(status: SQLWrapper): SQL {
+  return sql`${status} in (${sql.join(
+    activeBookingStatuses.map((value) => sql`${value}`),
+    sql`, `,
+  )})`;
+}
+
+export function organizationOwnedRecordCondition(
+  columns: {
+    organizationId: SQLWrapper;
+    bookingId: SQLWrapper;
+    contactId: SQLWrapper;
+  },
+  matchesExplicitOrganization: SQL,
+  matchesBookingOrganization: SQL,
+  matchesContactAssociation: SQL,
+): SQL {
+  return sql`(
+    (${columns.organizationId} is not null and ${matchesExplicitOrganization})
+    or (
+      ${columns.organizationId} is null
+      and ${columns.bookingId} is not null
+      and ${matchesBookingOrganization}
+    )
+    or (
+      ${columns.organizationId} is null
+      and ${columns.bookingId} is null
+      and ${columns.contactId} is not null
+      and ${matchesContactAssociation}
+    )
+  )`;
+}
+
+export function organizationHierarchyLocationQuery(parentId: string): SQL {
+  return sql`
+    SELECT
+      child.id,
+      child.name,
+      child.address_1 AS "address1",
+      child.address_2 AS "address2",
+      child.city,
+      child.region,
+      child.postal_code AS "postalCode",
+      child.website,
+      next_booking.status::text AS "localStatus",
+      next_follow_up.id AS "nextFollowUpId",
+      next_follow_up.kind AS "nextFollowUpKind",
+      next_follow_up.due_at AS "nextFollowUpDueAt",
+      next_booking.id AS "nextBookingId",
+      next_booking.name AS "nextBookingName",
+      next_booking.starts_at AS "nextBookingStartsAt",
+      next_booking.status::text AS "nextBookingStatus",
+      next_leg.id AS "travelLegId",
+      next_leg.name AS "travelLegName",
+      next_leg.color AS "travelLegColor",
+      primary_contact.first_name AS "primaryContactFirstName",
+      primary_contact.last_name AS "primaryContactLastName"
+    FROM ${organizations} AS child
+    LEFT JOIN LATERAL (
+      SELECT
+        candidate.id,
+        candidate.kind,
+        candidate.due_at
+      FROM ${followUps} AS candidate
+      WHERE candidate.completed_at IS NULL
+        AND ${organizationOwnedRecordCondition(
+          {
+            organizationId: sql`candidate.organization_id`,
+            bookingId: sql`candidate.booking_id`,
+            contactId: sql`candidate.contact_id`,
+          },
+          sql`candidate.organization_id = child.id`,
+          sql`EXISTS (
+            SELECT 1
+            FROM ${bookings} AS related_booking
+            WHERE related_booking.organization_id = child.id
+              AND related_booking.id = candidate.booking_id
+          )`,
+          sql`EXISTS (
+            SELECT 1
+            FROM ${organizationContacts} AS association
+            WHERE association.organization_id = child.id
+              AND association.active
+              AND association.contact_id = candidate.contact_id
+          )`,
+        )}
+      ORDER BY candidate.due_at, candidate.id
+      LIMIT 1
+    ) AS next_follow_up ON true
+    LEFT JOIN LATERAL (
+      SELECT
+        candidate.id,
+        candidate.name,
+        candidate.starts_at,
+        candidate.status,
+        candidate.travel_leg_id
+      FROM ${bookings} AS candidate
+      WHERE candidate.organization_id = child.id
+        AND candidate.starts_at >= now()
+        AND ${activeBookingStatusCondition(sql`candidate.status`)}
+      ORDER BY candidate.starts_at, candidate.id
+      LIMIT 1
+    ) AS next_booking ON true
+    LEFT JOIN ${travelLegs} AS next_leg
+      ON next_leg.id = next_booking.travel_leg_id
+    LEFT JOIN LATERAL (
+      SELECT person.first_name, person.last_name
+      FROM ${organizationContacts} AS association
+      INNER JOIN ${contacts} AS person ON person.id = association.contact_id
+      WHERE association.organization_id = child.id
+        AND association.active
+        AND association.is_primary
+      ORDER BY association.updated_at DESC, association.id
+      LIMIT 1
+    ) AS primary_contact ON true
+    WHERE child.parent_organization_id = ${parentId}
+    ORDER BY child.name, child.id
+  `;
+}
+
+export function organizationHierarchyRollupQuery(parentId: string): SQL {
+  return sql`
+    SELECT
+      count(*)::int AS "locationCount",
+      (
+        SELECT count(*)::int
+        FROM ${bookings} AS candidate
+        INNER JOIN ${organizations} AS booking_location
+          ON booking_location.id = candidate.organization_id
+        WHERE booking_location.parent_organization_id = ${parentId}
+          AND candidate.starts_at >= now()
+          AND ${activeBookingStatusCondition(sql`candidate.status`)}
+      ) AS "upcomingBookingCount",
+      (
+        SELECT count(*)::int
+        FROM ${followUps} AS candidate
+        WHERE candidate.completed_at IS NULL
+          AND candidate.due_at < now()
+          AND ${organizationOwnedRecordCondition(
+            {
+              organizationId: sql`candidate.organization_id`,
+              bookingId: sql`candidate.booking_id`,
+              contactId: sql`candidate.contact_id`,
+            },
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizations} AS direct_location
+              WHERE direct_location.parent_organization_id = ${parentId}
+                AND direct_location.id = candidate.organization_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${bookings} AS related_booking
+              INNER JOIN ${organizations} AS booking_location
+                ON booking_location.id = related_booking.organization_id
+              WHERE booking_location.parent_organization_id = ${parentId}
+                AND related_booking.id = candidate.booking_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizationContacts} AS association
+              INNER JOIN ${organizations} AS contact_location
+                ON contact_location.id = association.organization_id
+              WHERE contact_location.parent_organization_id = ${parentId}
+                AND association.active
+                AND association.contact_id = candidate.contact_id
+            )`,
+          )}
+      ) AS "overdueFollowUpCount",
+      (
+        SELECT max(candidate.timeline_sort_at)
+        FROM ${activities} AS candidate
+        WHERE candidate.kind = 'call'
+          AND ${organizationOwnedRecordCondition(
+            {
+              organizationId: sql`candidate.organization_id`,
+              bookingId: sql`candidate.booking_id`,
+              contactId: sql`candidate.contact_id`,
+            },
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizations} AS direct_location
+              WHERE direct_location.parent_organization_id = ${parentId}
+                AND direct_location.id = candidate.organization_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${bookings} AS related_booking
+              INNER JOIN ${organizations} AS booking_location
+                ON booking_location.id = related_booking.organization_id
+              WHERE booking_location.parent_organization_id = ${parentId}
+                AND related_booking.id = candidate.booking_id
+            )`,
+            sql`EXISTS (
+              SELECT 1
+              FROM ${organizationContacts} AS association
+              INNER JOIN ${organizations} AS contact_location
+                ON contact_location.id = association.organization_id
+              WHERE contact_location.parent_organization_id = ${parentId}
+                AND association.active
+                AND association.contact_id = candidate.contact_id
+            )`,
+          )}
+      ) AS "mostRecentContactAt"
+    FROM ${organizations} AS child
+    WHERE child.parent_organization_id = ${parentId}
+  `;
+}
+
+export function organizationHierarchyTravelLegQuery(parentId: string): SQL {
+  return sql`
+    SELECT DISTINCT leg.id, leg.name, leg.color
+    FROM ${organizations} AS child
+    INNER JOIN ${bookings} AS child_booking
+      ON child_booking.organization_id = child.id
+    INNER JOIN ${travelLegs} AS leg
+      ON leg.id = child_booking.travel_leg_id
+    WHERE child.parent_organization_id = ${parentId}
+    ORDER BY leg.name, leg.id
+  `;
+}
+
+export async function loadOrganizationHierarchySummary(
+  database: DrizzleDatabase,
+  organization: { id: string; parentOrganizationId: string | null },
+): Promise<OrganizationHierarchySummary> {
+  if (organization.parentOrganizationId) {
+    const [parent] = await database
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        website: organizations.website,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, organization.parentOrganizationId))
+      .limit(1);
+
+    return assembleOrganizationHierarchy(parent ?? null, []);
+  }
+
+  const [locationResult, rollupResult, travelLegResult] = await Promise.all([
+    database.execute<OrganizationLocationAggregateRecord>(
+      organizationHierarchyLocationQuery(organization.id),
+    ),
+    database.execute<Omit<OrganizationHierarchyRollups, "travelLegs">>(
+      organizationHierarchyRollupQuery(organization.id),
+    ),
+    database.execute<OrganizationHierarchyRollups["travelLegs"][number]>(
+      organizationHierarchyTravelLegQuery(organization.id),
+    ),
+  ]);
+
+  return assembleOrganizationHierarchy(
+    null,
+    [...locationResult.rows],
+    rollupResult.rows[0] ?? emptyHierarchyRollupRecord,
+    [...travelLegResult.rows],
+  );
+}
+
 export function buildOrganizationListCondition(
   query: OrganizationListQuery,
 ): SQL | undefined {
+  const pattern = `%${query.search}%`;
   const searchCondition = query.search
-    ? ilike(organizations.name, `%${query.search}%`)
-    : undefined;
+    ? sql`(
+        ${organizations.name} ilike ${pattern}
+        or ${organizations.city} ilike ${pattern}
+        or ${organizations.phone} ilike ${pattern}
+        or exists (
+          select 1
+          from ${organizations} as parent_organization
+          where parent_organization.id = ${organizations.parentOrganizationId}
+            and parent_organization.name ilike ${pattern}
+        )
+        or exists (
+          select 1
+          from ${organizationContacts} as association
+          inner join ${contacts} as person
+            on person.id = association.contact_id
+          where association.organization_id = ${organizations.id}
+            and association.active
+            and (
+              person.first_name ilike ${pattern}
+              or person.last_name ilike ${pattern}
+              or concat_ws(' ', person.first_name, person.last_name) ilike ${pattern}
+              or person.phone ilike ${pattern}
+              or person.email ilike ${pattern}
+            )
+        )
+        or exists (
+          select 1
+          from ${organizations} as child_location
+          where child_location.parent_organization_id = ${organizations.id}
+            and (
+              child_location.name ilike ${pattern}
+              or child_location.city ilike ${pattern}
+              or child_location.phone ilike ${pattern}
+              or exists (
+                select 1
+                from ${organizationContacts} as child_association
+                inner join ${contacts} as child_person
+                  on child_person.id = child_association.contact_id
+                where child_association.organization_id = child_location.id
+                  and child_association.active
+                  and (
+                    child_person.first_name ilike ${pattern}
+                    or child_person.last_name ilike ${pattern}
+                    or concat_ws(
+                      ' ',
+                      child_person.first_name,
+                      child_person.last_name
+                    ) ilike ${pattern}
+                    or child_person.phone ilike ${pattern}
+                    or child_person.email ilike ${pattern}
+                  )
+              )
+            )
+        )
+      )`
+    : isNull(organizations.parentOrganizationId);
   const lastResortCondition =
     query.lastResort === "only" ? eq(organizations.lastResort, true) : undefined;
   const travelLegCondition = query.travelLegId
@@ -155,6 +1100,22 @@ export function buildOrganizationListCondition(
     : undefined;
 
   return and(searchCondition, lastResortCondition, travelLegCondition) ?? undefined;
+}
+
+export function buildOrganizationListOrderBy(
+  query: OrganizationListQuery,
+): SQL[] {
+  return query.search
+    ? [
+        sql`case
+          when lower(${organizations.name}) = lower(${query.search}) then 0
+          when ${organizations.parentOrganizationId} is null then 1
+          else 2
+        end`,
+        asc(organizations.name),
+        asc(organizations.id),
+      ]
+    : [asc(organizations.name), asc(organizations.id)];
 }
 
 /** Candidate groups are intentionally name-based; location gaps are common in imported profiles. */
@@ -165,7 +1126,13 @@ export function duplicateOrganizationGroupsQuery() {
       min(lower(trim(coalesce(city, '')))) AS normalized_city,
       min(lower(trim(coalesce(region, '')))) AS normalized_region,
       array_agg(id ORDER BY created_at ASC) AS ids
-    FROM organizations
+    FROM organizations AS duplicate_candidate
+    WHERE parent_organization_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM organizations AS confirmed_location
+        WHERE confirmed_location.parent_organization_id = duplicate_candidate.id
+      )
     GROUP BY 1
     HAVING count(*) > 1
     ORDER BY lower(trim(name))
@@ -252,7 +1219,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       bookingPageCount,
     );
 
-    const [organizationPeople, organizationBookings] = await Promise.all([
+    const [organizationPeople, organizationBookings, hierarchy] = await Promise.all([
       this.database
         .select({
           id: contacts.id,
@@ -286,6 +1253,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id))
         .limit(query.pageSize)
         .offset((bookingPage - 1) * query.pageSize),
+      loadOrganizationHierarchySummary(this.database, organization),
     ]);
 
     return {
@@ -294,6 +1262,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       lastResort: organization.lastResort,
       lastResortReason: organization.lastResortReason,
       lastResortChangedAt: organization.lastResortChangedAt,
+      ...hierarchy,
       contacts: organizationPeople.map((contact) => ({
         id: contact.id,
         name: `${contact.firstName} ${contact.lastName}`.trim(),
@@ -325,7 +1294,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .select()
       .from(organizations)
       .where(condition)
-      .orderBy(asc(organizations.name), asc(organizations.id))
+      .orderBy(...buildOrganizationListOrderBy(query))
       .limit(query.pageSize)
       .offset((page - 1) * query.pageSize);
     if (!organizationRecords.length) {
@@ -333,7 +1302,20 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     }
 
     const organizationIds = organizationRecords.map((organization) => organization.id);
-    const [contactCounts, bookingCounts, primaryContacts] = await Promise.all([
+    const parentIds = [
+      ...new Set(
+        organizationRecords
+          .map((organization) => organization.parentOrganizationId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const [
+      contactCounts,
+      bookingCounts,
+      primaryContacts,
+      parentRecords,
+      locationCounts,
+    ] = await Promise.all([
       this.database
         .select({
           organizationId: organizationContacts.organizationId,
@@ -366,6 +1348,24 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           eq(organizationContacts.active, true),
           eq(organizationContacts.isPrimary, true),
         )),
+      parentIds.length
+        ? this.database
+            .select({
+              id: organizations.id,
+              name: organizations.name,
+              website: organizations.website,
+            })
+            .from(organizations)
+            .where(inArray(organizations.id, parentIds))
+        : Promise.resolve([] as OrganizationParentSummary[]),
+      this.database
+        .select({
+          parentOrganizationId: organizations.parentOrganizationId,
+          value: count(),
+        })
+        .from(organizations)
+        .where(inArray(organizations.parentOrganizationId, organizationIds))
+        .groupBy(organizations.parentOrganizationId),
     ]);
     const contactCountByOrganization = new Map(
       contactCounts.map((record) => [record.organizationId, record.value]),
@@ -381,6 +1381,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         `${record.firstName} ${record.lastName}`.trim(),
       ]),
     );
+    const parentById = new Map(
+      parentRecords.map((record) => [record.id, record]),
+    );
+    const locationCountByParent = new Map(
+      locationCounts
+        .filter((record) => record.parentOrganizationId !== null)
+        .map((record) => [record.parentOrganizationId!, record.value]),
+    );
 
     return {
       records: organizationRecords.map((organization) => ({
@@ -394,6 +1402,10 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         contactCount: contactCountByOrganization.get(organization.id) ?? 0,
         bookingCount: bookingCountByOrganization.get(organization.id) ?? 0,
         primaryContactName: primaryContactByOrganization.get(organization.id) ?? null,
+        parent: organization.parentOrganizationId
+          ? parentById.get(organization.parentOrganizationId) ?? null
+          : null,
+        locationCount: locationCountByParent.get(organization.id) ?? 0,
       })),
       total,
       page,
@@ -410,19 +1422,54 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
   }
 
   async findDuplicates(): Promise<DuplicateOrganizationGroup[]> {
-    // This is a review list, not an automatic merge. Imported records often have
-    // no location even when an existing same-name profile does.
-    const groupRows = await this.database.execute<{
-      normalized_name: string;
-      normalized_city: string;
-      normalized_region: string;
-      ids: string[];
-    }>(duplicateOrganizationGroupsQuery());
+    const [groupRows, familyRecords] = await Promise.all([
+      this.database.execute<{
+        normalized_name: string;
+        normalized_city: string;
+        normalized_region: string;
+        ids: string[];
+      }>(duplicateOrganizationGroupsQuery()),
+      this.database
+        .select()
+        .from(organizations)
+        .where(and(
+          isNull(organizations.parentOrganizationId),
+          sql`not exists (
+            select 1 from ${organizations} as confirmed_location
+            where confirmed_location.parent_organization_id = ${organizations.id}
+          )`,
+        ))
+        .orderBy(asc(organizations.id)),
+    ]);
 
-    if (!groupRows.rows.length) return [];
+    const discoveredFamilies =
+      await discoverOrganizationFamilyCandidatesFromDatabase(
+        this.database,
+        familyRecords,
+      );
+    const reviews = await this.database
+      .select()
+      .from(organizationFamilyReviews);
+    const reviewByKey = new Map(reviews.map((review) => [review.groupKey, review]));
+    const reviewGroups = partitionOrganizationReviewGroups(
+      groupRows.rows,
+      discoveredFamilies,
+      reviews,
+    );
+    const visibleFamilies = reviewGroups.filter(
+      (group) => group.classification !== "duplicate",
+    );
+    const proposedFamilies = visibleFamilies.filter(
+      (group) => group.groupKey && !reviewByKey.has(group.groupKey),
+    );
+    if (proposedFamilies.length) {
+      await persistProposedOrganizationFamilies(
+        this.database,
+        proposedFamilies,
+      );
+    }
 
-    // Collect all IDs across all groups
-    const allIds = groupRows.rows.flatMap((row) => row.ids);
+    const allIds = [...new Set(reviewGroups.flatMap((group) => group.candidateIds))];
     if (!allIds.length) return [];
 
     const orgRecords = await this.database
@@ -430,81 +1477,136 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .from(organizations)
       .where(inArray(organizations.id, allIds))
       .orderBy(asc(organizations.name), asc(organizations.id));
+    const organizationIds = orgRecords.map((organization) => organization.id);
+    const parentIds = [...new Set(
+      orgRecords
+        .map((organization) => organization.parentOrganizationId)
+        .filter((id): id is string => id !== null),
+    )];
 
-    const organizationIds = orgRecords.map((o) => o.id);
+    const [contactCounts, bookingCounts, primaryContacts, parentRecords, locationCounts] =
+      await Promise.all([
+        this.database
+          .select({ organizationId: organizationContacts.organizationId, value: count() })
+          .from(organizationContacts)
+          .where(and(
+            inArray(organizationContacts.organizationId, organizationIds),
+            eq(organizationContacts.active, true),
+          ))
+          .groupBy(organizationContacts.organizationId),
+        this.database
+          .select({ organizationId: bookings.organizationId, value: count() })
+          .from(bookings)
+          .where(inArray(bookings.organizationId, organizationIds))
+          .groupBy(bookings.organizationId),
+        this.database
+          .select({
+            organizationId: organizationContacts.organizationId,
+            firstName: contacts.firstName,
+            lastName: contacts.lastName,
+          })
+          .from(organizationContacts)
+          .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
+          .where(and(
+            inArray(organizationContacts.organizationId, organizationIds),
+            eq(organizationContacts.active, true),
+            eq(organizationContacts.isPrimary, true),
+          )),
+        parentIds.length
+          ? this.database
+              .select({ id: organizations.id, name: organizations.name, website: organizations.website })
+              .from(organizations)
+              .where(inArray(organizations.id, parentIds))
+          : Promise.resolve([] as OrganizationParentSummary[]),
+        this.database
+          .select({ parentOrganizationId: organizations.parentOrganizationId, value: count() })
+          .from(organizations)
+          .where(inArray(organizations.parentOrganizationId, organizationIds))
+          .groupBy(organizations.parentOrganizationId),
+      ]);
 
-    const [contactCounts, bookingCounts, primaryContacts] = await Promise.all([
-      this.database
-        .select({ organizationId: organizationContacts.organizationId, value: count() })
-        .from(organizationContacts)
-        .where(and(
-          inArray(organizationContacts.organizationId, organizationIds),
-          eq(organizationContacts.active, true),
-        ))
-        .groupBy(organizationContacts.organizationId),
-      this.database
-        .select({ organizationId: bookings.organizationId, value: count() })
-        .from(bookings)
-        .where(inArray(bookings.organizationId, organizationIds))
-        .groupBy(bookings.organizationId),
-      this.database
-        .select({
-          organizationId: organizationContacts.organizationId,
-          firstName: contacts.firstName,
-          lastName: contacts.lastName,
-        })
-        .from(organizationContacts)
-        .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
-        .where(and(
-          inArray(organizationContacts.organizationId, organizationIds),
-          eq(organizationContacts.active, true),
-          eq(organizationContacts.isPrimary, true),
-        )),
-    ]);
-
-    const contactCountByOrg = new Map(contactCounts.map((r) => [r.organizationId, r.value]));
+    const contactCountByOrg = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
     const bookingCountByOrg = new Map(
-      bookingCounts.filter((r) => r.organizationId !== null).map((r) => [r.organizationId!, r.value]),
+      bookingCounts.filter((record) => record.organizationId !== null)
+        .map((record) => [record.organizationId!, record.value]),
     );
     const primaryContactByOrg = new Map(
-      primaryContacts.map((r) => [r.organizationId, `${r.firstName} ${r.lastName}`.trim()]),
+      primaryContacts.map((record) => [
+        record.organizationId,
+        `${record.firstName} ${record.lastName}`.trim(),
+      ]),
     );
+    const parentById = new Map(parentRecords.map((record) => [record.id, record]));
+    const locationCountByParent = new Map(
+      locationCounts.filter((record) => record.parentOrganizationId !== null)
+        .map((record) => [record.parentOrganizationId!, record.value]),
+    );
+    const orgById = new Map(orgRecords.map((organization) => [organization.id, organization]));
 
-    const orgById = new Map(orgRecords.map((o) => [o.id, o]));
+    return reviewGroups
+      .map((group) => ({
+        ...group,
+        organizations: group.candidateIds.flatMap((id) => {
+          const organization = orgById.get(id);
+          if (!organization) return [];
+          return [{
+            id: organization.id,
+            name: organization.name,
+            city: organization.city,
+            region: organization.region,
+            lastResort: organization.lastResort,
+            lastResortReason: organization.lastResortReason,
+            lastResortChangedAt: organization.lastResortChangedAt,
+            contactCount: contactCountByOrg.get(organization.id) ?? 0,
+            bookingCount: bookingCountByOrg.get(organization.id) ?? 0,
+            primaryContactName: primaryContactByOrg.get(organization.id) ?? null,
+            parent: organization.parentOrganizationId
+              ? parentById.get(organization.parentOrganizationId) ?? null
+              : null,
+            locationCount: locationCountByParent.get(organization.id) ?? 0,
+          } satisfies OrganizationListRecord];
+        }),
+      }))
+      .filter((group) => group.organizations.length === group.candidateIds.length);
+  }
 
-    return groupRows.rows.map((row) => {
-      const orgs: OrganizationListRecord[] = row.ids
-        .map((id) => {
-          const o = orgById.get(id);
-          if (!o) return null;
-          return {
-            id: o.id,
-            name: o.name,
-            city: o.city,
-            region: o.region,
-            lastResort: o.lastResort,
-            lastResortReason: o.lastResortReason,
-            lastResortChangedAt: o.lastResortChangedAt,
-            contactCount: contactCountByOrg.get(o.id) ?? 0,
-            bookingCount: bookingCountByOrg.get(o.id) ?? 0,
-            primaryContactName: primaryContactByOrg.get(o.id) ?? null,
-          } satisfies OrganizationListRecord;
-        })
-        .filter(Boolean) as OrganizationListRecord[];
+  async saveFamilyReview(review: OrganizationFamilyReviewRecord): Promise<void> {
+    const now = new Date();
+    await this.database
+      .insert(organizationFamilyReviews)
+      .values({
+        groupKey: review.groupKey,
+        candidateIds: review.candidateIds,
+        evidence: review.evidence,
+        status: review.status,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: organizationFamilyReviews.groupKey,
+        set: {
+          candidateIds: review.candidateIds,
+          evidence: review.evidence,
+          status: review.status,
+          updatedAt: now,
+        },
+      });
+  }
 
-      return {
-        normalizedName: row.normalized_name,
-        city: row.normalized_city,
-        region: row.normalized_region,
-        organizations: orgs,
-      };
-    });
+  async deleteFamilyReview(groupKey: string): Promise<void> {
+    await this.database
+      .delete(organizationFamilyReviews)
+      .where(eq(organizationFamilyReviews.groupKey, groupKey));
   }
 
   async mergeOrganizations(primaryId: string, duplicateIds: string[]): Promise<void> {
     if (!duplicateIds.length) return;
 
-    await this.database.transaction(async (tx) => {
+    const outcome = await this.database.transaction(async (tx) => {
+      const guard = await revalidateOrganizationsMergeable(
+        tx,
+        [primaryId, ...duplicateIds],
+      );
+      if (guard === "family_conflict") return "family_conflict" as const;
       const now = new Date();
 
       for (const dupId of duplicateIds) {
@@ -602,6 +1704,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         // Step 10: Delete the now-empty duplicate
         await tx.delete(organizations).where(eq(organizations.id, dupId));
       }
+      return "merged" as const;
     });
+
+    if (outcome === "family_conflict") {
+      throw new HierarchyConflictError(organizationMergeFamilyConflictMessage);
+    }
   }
 }

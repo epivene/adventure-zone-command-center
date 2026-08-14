@@ -18,10 +18,12 @@ function deferred() {
 const groups = [
   {
     normalizedName: "alpha",
+    classification: "duplicate" as const,
     organizations: [{ id: "primary-a" }, { id: "duplicate-a" }],
   },
   {
     normalizedName: "bravo",
+    classification: "duplicate" as const,
     organizations: [{ id: "primary-b" }, { id: "duplicate-b" }],
   },
 ];
@@ -74,6 +76,7 @@ describe("mergeDuplicateGroups", () => {
       .mockRejectedValueOnce(new Error("offline"));
     const thirdGroup = {
       normalizedName: "charlie",
+      classification: "duplicate" as const,
       organizations: [{ id: "primary-c" }, { id: "duplicate-c" }],
     };
 
@@ -93,5 +96,36 @@ describe("mergeDuplicateGroups", () => {
     } satisfies Partial<BulkDuplicateMergeError>);
 
     expect(merge).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips location candidates and counts progress only for eligible duplicate groups", async () => {
+    const locationCandidate = {
+      normalizedName: "lantern festival",
+      classification: "location_candidate" as const,
+      organizations: [
+        { id: "lantern-a" },
+        { id: "lantern-b" },
+      ],
+    };
+    const merge = vi.fn<(request: MergeRequest) => Promise<void>>().mockResolvedValue();
+    const onProgress = vi.fn();
+
+    await mergeDuplicateGroups(
+      [groups[0]!, locationCandidate],
+      { alpha: "primary-a", "lantern festival": "lantern-a" },
+      merge,
+      onProgress,
+    );
+
+    expect(merge).toHaveBeenCalledTimes(1);
+    expect(merge).toHaveBeenCalledWith({
+      primaryId: "primary-a",
+      duplicateIds: ["duplicate-a"],
+    });
+    expect(onProgress).toHaveBeenCalledWith({
+      completed: 1,
+      total: 1,
+      groupName: "alpha",
+    });
   });
 });

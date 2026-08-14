@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -13,7 +13,15 @@ import {
   organizationContacts,
   organizations,
 } from "@/db/schema";
-import { activeOrganizationContactCondition } from "@/features/organizations/organization-repository";
+import {
+  activeOrganizationContactCondition,
+  loadOrganizationHierarchySummary,
+  organizationOwnedRecordCondition,
+  type OrganizationHierarchyRollups,
+  type OrganizationHierarchySummary,
+  type OrganizationLocationSummary,
+  type OrganizationParentSummary,
+} from "@/features/organizations/organization-repository";
 
 export type EventProfilePlace = {
   id: string;
@@ -117,6 +125,9 @@ export type EventProfile = {
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
+  parent: OrganizationParentSummary | null;
+  locations: OrganizationLocationSummary[];
+  rollups: OrganizationHierarchyRollups;
   migrationHistory?: {
     contactSourceIds: string[];
     phones: string[];
@@ -185,6 +196,7 @@ export function buildEventProfile(
   migrationHistory: EventProfile["migrationHistory"] = {
     contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
   },
+  hierarchy: OrganizationHierarchySummary = assembleEmptyEventProfileHierarchy(),
 ): EventProfile {
   const contacts = records.contacts.toSorted(contactOrder).map((contact) => ({
     id: contact.id,
@@ -220,11 +232,30 @@ export function buildEventProfile(
     ),
     groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     sourceProvenance: stableSourceProvenance(records),
+    ...hierarchy,
     migrationHistory,
   };
 }
 
 type DrizzleDatabase = typeof database;
+
+function assembleEmptyEventProfileHierarchy() {
+  return {
+    parent: null,
+    locations: [],
+    rollups: {
+      locationCount: 0,
+      upcomingBookingCount: 0,
+      overdueFollowUpCount: 0,
+      travelLegs: [],
+      mostRecentContactAt: null,
+    },
+  } satisfies {
+    parent: OrganizationParentSummary | null;
+    locations: OrganizationLocationSummary[];
+    rollups: OrganizationHierarchyRollups;
+  };
+}
 
 export class DrizzleEventProfileRepository implements EventProfileRepository {
   constructor(private readonly database: DrizzleDatabase) {}
@@ -244,9 +275,11 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       lastResort: organizations.lastResort,
       lastResortReason: organizations.lastResortReason,
       actRecordId: organizations.actRecordId,
+      parentOrganizationId: organizations.parentOrganizationId,
     }).from(organizations).where(eq(organizations.id, profileId)).limit(1);
     if (!place) return null;
 
+    const hierarchyPromise = loadOrganizationHierarchySummary(this.database, place);
     const [profileContacts, profileBookings] = await Promise.all([
       this.database.select({
         id: contacts.id,
@@ -279,16 +312,34 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
     const contactIds = profileContacts.map((contact) => contact.id);
-    const profileCondition = or(
+    const profileCondition = organizationOwnedRecordCondition(
+      {
+        organizationId: activities.organizationId,
+        bookingId: activities.bookingId,
+        contactId: activities.contactId,
+      },
       eq(activities.organizationId, profileId),
-      ...(bookingIds.length ? [inArray(activities.bookingId, bookingIds)] : []),
-      ...(contactIds.length ? [inArray(activities.contactId, contactIds)] : []),
-    )!;
-    const followUpCondition = or(
+      bookingIds.length
+        ? inArray(activities.bookingId, bookingIds)
+        : sql`false`,
+      contactIds.length
+        ? inArray(activities.contactId, contactIds)
+        : sql`false`,
+    );
+    const followUpCondition = organizationOwnedRecordCondition(
+      {
+        organizationId: followUps.organizationId,
+        bookingId: followUps.bookingId,
+        contactId: followUps.contactId,
+      },
       eq(followUps.organizationId, profileId),
-      ...(bookingIds.length ? [inArray(followUps.bookingId, bookingIds)] : []),
-      ...(contactIds.length ? [inArray(followUps.contactId, contactIds)] : []),
-    )!;
+      bookingIds.length
+        ? inArray(followUps.bookingId, bookingIds)
+        : sql`false`,
+      contactIds.length
+        ? inArray(followUps.contactId, contactIds)
+        : sql`false`,
+    );
     const [profileActivities, profileFollowUps, groupMemberships, migrationAudits] = await Promise.all([
       this.database.select({
         id: activities.id,
@@ -364,6 +415,6 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       followUps: profileFollowUps,
       groups,
       externalLinks: externalLinks as EventProfileSourceReference[],
-    }, selectedContactId, history);
+    }, selectedContactId, history, await hierarchyPromise);
   }
 }

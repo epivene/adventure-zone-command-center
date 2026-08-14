@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { Link } from "wouter";
 
+import { HierarchyControls } from "@/components/organizations/hierarchy-controls";
+import { LocationsSection } from "@/components/organizations/locations-section";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
+import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
 function formatDate(value: Date | null) {
   if (!value) return "Not set";
@@ -60,6 +63,8 @@ export function EventProfileWorkspace({
   const placeLocation = [profile.place.address1, profile.place.city, profile.place.region, profile.place.postalCode]
     .filter(Boolean)
     .join(", ");
+  const websiteHref = normalizeExternalWebsite(profile.place.website);
+  const parentWebsiteHref = normalizeExternalWebsite(profile.parent?.website ?? null);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -70,6 +75,19 @@ export function EventProfileWorkspace({
             <h1 className="text-3xl font-bold tracking-tight">{profile.place.name}</h1>
             <p className="mt-2 text-slate-600">{placeLocation || "Location not recorded"}</p>
             {profile.place.phone ? <p className="mt-1 text-sm text-slate-600">{profile.place.phone}</p> : null}
+            <div className="mt-3 grid gap-2 text-sm text-slate-600">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>Website: {profile.place.website || "Not recorded"}</span>
+                {websiteHref ? <a className="button-secondary text-center" href={websiteHref} rel="noreferrer noopener" target="_blank">Visit website</a> : null}
+              </div>
+              {profile.parent ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p>Part of <Link className="font-semibold hover:text-orange-700" href={`/profiles/${profile.parent.id}`}>{profile.parent.name}</Link></p>
+                  <span>Parent website: {profile.parent.website || "Not recorded"}</span>
+                  {parentWebsiteHref ? <a className="button-secondary text-center" href={parentWebsiteHref} rel="noreferrer noopener" target="_blank">Visit parent website</a> : null}
+                </div>
+              ) : null}
+            </div>
           </div>
           <div className="flex flex-wrap gap-3">
             {!assistedCallingEnabled ? (
@@ -97,6 +115,13 @@ export function EventProfileWorkspace({
           </p>
         ) : null}
       </header>
+
+      <HierarchyControls
+        onRefresh={() => window.location.reload()}
+        profile={profile}
+      />
+
+      <LocationsSection locations={profile.locations ?? []} rollups={profile.rollups} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)]">
         <div className="grid gap-5">
