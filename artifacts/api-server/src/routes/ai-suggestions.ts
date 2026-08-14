@@ -99,6 +99,8 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
         kind: activities.kind,
         timelineSortAt: activities.timelineSortAt,
         actRecordId: activities.actRecordId,
+        contactId: activities.contactId,
+        organizationId: activities.organizationId,
         contactFirstName: contacts.firstName,
         contactLastName: contacts.lastName,
         organizationName: organizations.name,
@@ -163,12 +165,13 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
   }
 
   try {
-    const [{ db }, schema] = await Promise.all([
+    const [{ db }, schema, { eq: eqOp }] = await Promise.all([
       import("@/db/client"),
       import("@/db/schema"),
+      import("drizzle-orm"),
     ]);
 
-    const { bookings } = schema;
+    const { bookings, bookingContacts } = schema;
 
     // Parse city / region from the location string if provided
     const locationParts = suggestion.location
@@ -199,19 +202,42 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
       .filter(Boolean)
       .join("\n");
 
-    const [booking] = await (db as any)
-      .insert(bookings)
-      .values({
-        name,
-        city,
-        region,
-        status: "new_lead",
-        probability: "possible",
-        ...(startsAt ? { startsAt } : {}),
-        ...(endsAt ? { endsAt } : {}),
-        notes,
-      })
-      .returning();
+    // Create the booking and, when the suggestion carries a linked contact,
+    // the booking_contacts row required by the primary-contact FK — in one
+    // transaction so a failure can't leave a half-linked booking.
+    const booking = await (db as any).transaction(async (tx: any) => {
+      const [created] = await tx
+        .insert(bookings)
+        .values({
+          name,
+          city,
+          region,
+          status: "new_lead",
+          probability: "possible",
+          ...(startsAt ? { startsAt } : {}),
+          ...(endsAt ? { endsAt } : {}),
+          ...(suggestion.organizationId
+            ? { organizationId: suggestion.organizationId }
+            : {}),
+          notes,
+        })
+        .returning();
+
+      if (!suggestion.contactId) return created;
+
+      await tx.insert(bookingContacts).values({
+        bookingId: created.id,
+        contactId: suggestion.contactId,
+        isPrimary: true,
+        source: "ai_suggestion",
+      });
+      const [withContact] = await tx
+        .update(bookings)
+        .set({ primaryContactId: suggestion.contactId })
+        .where(eqOp(bookings.id, created.id))
+        .returning();
+      return withContact;
+    });
 
     const updated = await updateSuggestion(id, {
       status: "accepted",

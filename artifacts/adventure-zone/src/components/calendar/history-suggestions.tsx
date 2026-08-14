@@ -21,6 +21,10 @@ export type HistorySuggestion = {
   actRecordId: string | null;
   status: "pending" | "accepted" | "dismissed";
   bookingId: string | null;
+  /** Matched contact/organization from the analyzed record; null for older
+   *  stored suggestions or when no match was known. */
+  contactId?: string | null;
+  organizationId?: string | null;
 };
 
 type RangeOption = 12 | 24 | 36 | "all";
@@ -75,6 +79,14 @@ function SuggestionCard({
 }) {
   const [busy, setBusy] = useState<"accept" | "dismiss" | null>(null);
 
+  // Client links to the matched contact when known, otherwise to the matched
+  // place (event profile). Older stored suggestions without IDs stay plain text.
+  const clientHref = suggestion.contactId
+    ? `/contacts/${suggestion.contactId}`
+    : suggestion.organizationId
+      ? `/event-profiles/${suggestion.organizationId}`
+      : null;
+
   const dateRange =
     suggestion.suggestedDate && suggestion.suggestedDateEnd
       ? `${formatDate(suggestion.suggestedDate)} – ${formatDate(suggestion.suggestedDateEnd)}`
@@ -97,13 +109,39 @@ function SuggestionCard({
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-slate-900 leading-snug">
             {suggestion.clientName && (
-              <span className="text-orange-700">{suggestion.clientName} — </span>
+              <span className="text-orange-700">
+                {clientHref ? (
+                  <Link
+                    href={clientHref}
+                    className="underline decoration-orange-300 underline-offset-2 hover:decoration-orange-600"
+                  >
+                    {suggestion.clientName}
+                  </Link>
+                ) : (
+                  suggestion.clientName
+                )}
+                {" — "}
+              </span>
             )}
             {suggestion.tripDescription}
           </p>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-slate-500">
             {dateRange && <span>📅 {dateRange}</span>}
-            {suggestion.location && <span>📍 {suggestion.location}</span>}
+            {suggestion.location && (
+              <span>
+                📍{" "}
+                {suggestion.organizationId ? (
+                  <Link
+                    href={`/event-profiles/${suggestion.organizationId}`}
+                    className="underline decoration-slate-300 underline-offset-2 hover:text-slate-700 hover:decoration-slate-500"
+                  >
+                    {suggestion.location}
+                  </Link>
+                ) : (
+                  suggestion.location
+                )}
+              </span>
+            )}
           </div>
         </div>
         <span

@@ -2375,6 +2375,10 @@ export const aiBookingSuggestions = pgTable(
       .default("pending")
       .notNull(),
     bookingId: uuid("booking_id").references(() => bookings.id),
+    /** Matched source contact, when the analyzed record had one */
+    contactId: uuid("contact_id").references(() => contacts.id),
+    /** Matched source organization (event profile), when the record had one */
+    organizationId: uuid("organization_id").references(() => organizations.id),
     /** Stable dedupe key: actRecordId+date, or client+date (see suggestion store) */
     dedupeKey: text("dedupe_key").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })

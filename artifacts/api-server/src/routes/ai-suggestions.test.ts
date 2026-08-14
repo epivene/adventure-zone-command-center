@@ -18,6 +18,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 const activityRows = vi.hoisted(() => ({ value: [] as unknown[] }));
 const insertedBooking = vi.hoisted(() => ({ value: null as unknown }));
+// Captures values passed to bookings / booking_contacts inserts (accept route)
+const bookingInsertValues = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
+const bookingContactValues = vi.hoisted(() => ({ value: null as Record<string, unknown> | null }));
 // In-memory backing table for the DB-persisted suggestion store
 const suggestionRows = vi.hoisted(() => ({
   value: [] as Array<Record<string, unknown>>,
@@ -33,8 +36,8 @@ const suggestionRows = vi.hoisted(() => ({
 // - ai_booking_suggestions table (suggestion store): select/insert/update/delete
 //   operate on suggestionRows.value, emulating the dedupe_key unique index via
 //   onConflictDoNothing.
-vi.mock("@/db/client", () => ({
-  db: {
+vi.mock("@/db/client", () => {
+  const db: Record<string, unknown> = {
     select: () => ({
       from: (table: { __name?: string }) => {
         if (table.__name === "aiBookingSuggestions") {
@@ -71,15 +74,28 @@ vi.mock("@/db/client", () => ({
             }),
           };
         }
+        if (table.__name === "bookingContacts") {
+          bookingContactValues.value = { ...v };
+          return Promise.resolve();
+        }
+        bookingInsertValues.value = { ...v };
         return {
           returning: () => Promise.resolve([insertedBooking.value]),
         };
       },
     }),
-    update: () => ({
+    update: (table: { __name?: string }) => ({
       set: (patch: Record<string, unknown>) => ({
         where: (cond: { __eq?: unknown }) => ({
           returning: () => {
+            if (table.__name === "bookings") {
+              // Accept route: primary-contact linking updates the booking row.
+              insertedBooking.value = {
+                ...(insertedBooking.value as Record<string, unknown>),
+                ...patch,
+              };
+              return Promise.resolve([insertedBooking.value]);
+            }
             const idx = suggestionRows.value.findIndex(
               (r) => r.id === cond.__eq,
             );
@@ -97,8 +113,11 @@ vi.mock("@/db/client", () => ({
       suggestionRows.value = [];
       return Promise.resolve();
     },
-  },
-}));
+  };
+  // Transaction just runs the callback against the same mock db.
+  db.transaction = async (fn: (tx: unknown) => unknown) => fn(db);
+  return { db };
+});
 
 // Stub schema — opaque column symbols; each table carries a __name marker so
 // the db mock can route ai_booking_suggestions operations to suggestionRows.
@@ -113,6 +132,7 @@ vi.mock("@/db/schema", () => {
     contacts: makeTable("contacts"),
     organizations: makeTable("organizations"),
     bookings: makeTable("bookings"),
+    bookingContacts: makeTable("bookingContacts"),
     aiBookingSuggestions: makeTable("aiBookingSuggestions"),
   };
 });
@@ -268,6 +288,8 @@ describe("GET /ai-suggestions", () => {
       actRecordId: "act_activity:abc",
       status: "pending",
       bookingId: null,
+      contactId: null,
+      organizationId: null,
     };
     await addSuggestion(suggestion);
 
@@ -542,6 +564,8 @@ describe("POST /ai-suggestions/:id/dismiss", () => {
       actRecordId: null,
       status: "pending",
       bookingId: null,
+      contactId: null,
+      organizationId: null,
     };
     await addSuggestion(suggestion);
 
@@ -566,6 +590,8 @@ describe("POST /ai-suggestions/:id/dismiss", () => {
       actRecordId: null,
       status: "dismissed",
       bookingId: null,
+      contactId: null,
+      organizationId: null,
     });
 
     const res = await request(app)
@@ -600,6 +626,8 @@ describe("POST /ai-suggestions/:id/accept", () => {
       actRecordId: "act_activity:abc",
       status: "pending",
       bookingId: null,
+      contactId: null,
+      organizationId: null,
     });
 
     const res = await request(app)
@@ -610,6 +638,41 @@ describe("POST /ai-suggestions/:id/accept", () => {
     expect(res.body.suggestion.status).toBe("accepted");
     expect(res.body.suggestion.bookingId).toBe("new-booking-uuid");
     expect(res.body.booking.id).toBe("new-booking-uuid");
+  });
+
+  it("carries linked organization/contact onto the created booking", async () => {
+    insertedBooking.value = { id: "linked-booking-uuid", name: "Linked" };
+    bookingInsertValues.value = null;
+    bookingContactValues.value = null;
+
+    await addSuggestion({
+      id: "accept-linked",
+      suggestedDate: "2099-07-01",
+      suggestedDateEnd: null,
+      clientName: "Linked Client",
+      tripDescription: "Linked trip",
+      location: "Aspen, CO",
+      confidence: "high",
+      sourceSnippet: "snippet",
+      actRecordId: "act_activity:linked",
+      status: "pending",
+      bookingId: null,
+      contactId: "contact-uuid-1",
+      organizationId: "org-uuid-1",
+    });
+
+    const res = await request(app)
+      .post("/api/ai-suggestions/accept-linked/accept")
+      .set("Authorization", authorization);
+
+    expect(res.status).toBe(200);
+    expect(bookingInsertValues.value?.organizationId).toBe("org-uuid-1");
+    expect(bookingContactValues.value).toMatchObject({
+      bookingId: "linked-booking-uuid",
+      contactId: "contact-uuid-1",
+      isPrimary: true,
+    });
+    expect(res.body.booking.primaryContactId).toBe("contact-uuid-1");
   });
 
   it("returns 409 for an already-accepted suggestion", async () => {

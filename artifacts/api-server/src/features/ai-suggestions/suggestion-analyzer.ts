@@ -13,6 +13,8 @@ export type ActivityRecord = {
   kind: string;
   timelineSortAt: Date | null;
   actRecordId: string | null;
+  contactId: string | null;
+  organizationId: string | null;
   contactFirstName: string | null;
   contactLastName: string | null;
   organizationName: string | null;
@@ -144,7 +146,10 @@ function parseSuggestionsFromResponse(text: string): RawSuggestion[] {
   }
 }
 
-function normalizeSuggestion(raw: RawSuggestion): HistorySuggestion | null {
+function normalizeSuggestion(
+  raw: RawSuggestion,
+  recordsByActId: Map<string, ActivityRecord>,
+): HistorySuggestion | null {
   const tripDescription =
     typeof raw.tripDescription === "string" && raw.tripDescription.trim()
       ? raw.tripDescription.trim()
@@ -164,6 +169,14 @@ function normalizeSuggestion(raw: RawSuggestion): HistorySuggestion | null {
       ? (rawEnd as string)
       : null;
 
+  const actRecordId =
+    typeof raw.actRecordId === "string" && raw.actRecordId.trim()
+      ? raw.actRecordId.trim()
+      : null;
+  // Carry the source record's contact/organization IDs so the UI can link
+  // the suggestion to the matching profile pages.
+  const source = actRecordId ? recordsByActId.get(actRecordId) : undefined;
+
   return {
     id: crypto.randomUUID(),
     suggestedDate,
@@ -182,12 +195,11 @@ function normalizeSuggestion(raw: RawSuggestion): HistorySuggestion | null {
       typeof raw.sourceSnippet === "string" && raw.sourceSnippet.trim()
         ? raw.sourceSnippet.trim().slice(0, 300)
         : "(no source snippet)",
-    actRecordId:
-      typeof raw.actRecordId === "string" && raw.actRecordId.trim()
-        ? raw.actRecordId.trim()
-        : null,
+    actRecordId,
     status: "pending",
     bookingId: null,
+    contactId: source?.contactId ?? null,
+    organizationId: source?.organizationId ?? null,
   };
 }
 
@@ -245,8 +257,12 @@ export async function analyzeHistory(
       );
 
       const rawSuggestions = parseSuggestionsFromResponse(responseText);
+      const recordsByActId = new Map<string, ActivityRecord>();
+      for (const record of batch) {
+        if (record.actRecordId) recordsByActId.set(record.actRecordId, record);
+      }
       for (const raw of rawSuggestions) {
-        const suggestion = normalizeSuggestion(raw);
+        const suggestion = normalizeSuggestion(raw, recordsByActId);
         if (suggestion) {
           const inserted = await addSuggestion(suggestion);
           if (!inserted) continue; // already known from a prior run

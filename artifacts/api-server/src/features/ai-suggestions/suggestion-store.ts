@@ -31,6 +31,10 @@ export type HistorySuggestion = {
   status: "pending" | "accepted" | "dismissed";
   /** UUID of the booking created on accept */
   bookingId: string | null;
+  /** Matched source contact, when the analyzed record had one */
+  contactId: string | null;
+  /** Matched source organization (event profile), when the record had one */
+  organizationId: string | null;
 };
 
 /**
@@ -74,6 +78,8 @@ function toSuggestion(row: SuggestionRow): HistorySuggestion {
     actRecordId: row.actRecordId,
     status: row.status,
     bookingId: row.bookingId,
+    contactId: (row.contactId as string | null) ?? null,
+    organizationId: (row.organizationId as string | null) ?? null,
   };
 }
 
