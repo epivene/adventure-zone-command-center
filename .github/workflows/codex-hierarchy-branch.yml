@@ -51,3 +51,5 @@ jobs:
         if: ${{ always() }}
       - run: pnpm run typecheck
       - run: pnpm run build
+        env:
+          PORT: "5173"
