@@ -3,6 +3,10 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import { describe, expect, it } from "vitest";
 
+import {
+  lockOrganizationFamilyMutationSnapshot,
+  lockOrganizationHierarchyMutationDomain,
+} from "./organization-family-lock";
 import { lockOrganizationFamilyReviewDomain } from "./organization-repository";
 
 const { Pool } = pg;
@@ -15,7 +19,172 @@ function deferred() {
   return { promise, resolve };
 }
 
-describe("organization family database serialization", () => {
+describe.sequential("organization family database serialization", () => {
+  it.skipIf(!process.env.TEST_DATABASE_URL)(
+    "includes a concurrent third location that began before the authoritative snapshot",
+    async () => {
+      const pool = new Pool({
+        connectionString: process.env.TEST_DATABASE_URL,
+        max: 4,
+      });
+      const database = drizzle(pool);
+      const firstId = crypto.randomUUID();
+      const secondId = crypto.randomUUID();
+      const thirdId = crypto.randomUUID();
+      const insertReady = deferred();
+      const releaseInsert = deferred();
+
+      await pool.query(
+        `insert into organizations (id, name, website, city, region)
+         values ($1, 'Lantern Festival Austin', 'https://lantern.test', 'Austin', 'TX'),
+                ($2, 'Lantern Festival Denver', 'https://lantern.test', 'Denver', 'CO')`,
+        [firstId, secondId],
+      );
+
+      try {
+        const inserting = database.transaction(async (transaction) => {
+          await transaction.execute(sql`
+            insert into organizations (id, name, website, city, region)
+            values (${thirdId}, 'Lantern Festival Fargo', 'https://lantern.test', 'Fargo', 'ND')
+          `);
+          insertReady.resolve();
+          await releaseInsert.promise;
+        });
+        await insertReady.promise;
+
+        let snapshotLocked = false;
+        const snapshot = database.transaction(async (transaction) => {
+          await lockOrganizationFamilyMutationSnapshot(transaction as never);
+          snapshotLocked = true;
+          const result = await transaction.execute<{ id: string }>(sql`
+            select id from organizations
+            where id in (${firstId}, ${secondId}, ${thirdId})
+            order by id
+          `);
+          return result.rows.map((row) => row.id);
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(snapshotLocked).toBe(false);
+
+        releaseInsert.resolve();
+        await inserting;
+        await expect(snapshot).resolves.toEqual(
+          [firstId, secondId, thirdId].sort(),
+        );
+      } finally {
+        releaseInsert.resolve();
+        await pool.query(
+          `delete from organization_family_reviews
+           where candidate_ids ?| array[$1, $2, $3]`,
+          [firstId, secondId, thirdId],
+        );
+        await pool.query(
+          `delete from organizations where id = any($1::uuid[])`,
+          [[firstId, secondId, thirdId]],
+        );
+        await pool.end();
+      }
+    },
+    20_000,
+  );
+
+  it.skipIf(!process.env.TEST_DATABASE_URL)(
+    "prevents hierarchy and family flows from inverting row and table locks",
+    async () => {
+      const pool = new Pool({
+        connectionString: process.env.TEST_DATABASE_URL,
+        max: 4,
+      });
+      const database = drizzle(pool);
+      const organizationId = crypto.randomUUID();
+      const hierarchyLocked = deferred();
+      const releaseHierarchy = deferred();
+
+      await pool.query(
+        "insert into organizations (id, name) values ($1, 'Lock order test')",
+        [organizationId],
+      );
+
+      try {
+        const hierarchy = database.transaction(async (transaction) => {
+          await lockOrganizationHierarchyMutationDomain(transaction as never);
+          await transaction.execute(sql`
+            select id from organizations where id = ${organizationId} for update
+          `);
+          hierarchyLocked.resolve();
+          await releaseHierarchy.promise;
+        });
+        await hierarchyLocked.promise;
+
+        let familyLocked = false;
+        const family = database.transaction(async (transaction) => {
+          await lockOrganizationFamilyMutationSnapshot(transaction as never);
+          familyLocked = true;
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(familyLocked).toBe(false);
+
+        releaseHierarchy.resolve();
+        await expect(Promise.all([hierarchy, family])).resolves.toEqual([
+          undefined,
+          undefined,
+        ]);
+      } finally {
+        releaseHierarchy.resolve();
+        await pool.query("delete from organizations where id = $1", [
+          organizationId,
+        ]);
+        await pool.end();
+      }
+    },
+    20_000,
+  );
+
+  it.skipIf(!process.env.TEST_DATABASE_URL)(
+    "holds ACT relationship evidence stable until the family decision commits",
+    async () => {
+      const pool = new Pool({
+        connectionString: process.env.TEST_DATABASE_URL,
+        max: 4,
+      });
+      const database = drizzle(pool);
+      const snapshotLocked = deferred();
+      const releaseSnapshot = deferred();
+
+      try {
+        const family = database.transaction(async (transaction) => {
+          await lockOrganizationFamilyMutationSnapshot(transaction as never);
+          snapshotLocked.resolve();
+          await releaseSnapshot.promise;
+        });
+        await snapshotLocked.promise;
+
+        let evidenceMutationLocked = false;
+        const evidenceMutation = database.transaction(async (transaction) => {
+          await transaction.execute(
+            sql`lock table act_migration_records in row exclusive mode`,
+          );
+          evidenceMutationLocked = true;
+        });
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(evidenceMutationLocked).toBe(false);
+
+        releaseSnapshot.resolve();
+        await expect(Promise.all([family, evidenceMutation])).resolves.toEqual([
+          undefined,
+          undefined,
+        ]);
+      } finally {
+        releaseSnapshot.resolve();
+        await pool.end();
+      }
+    },
+    20_000,
+  );
+
   it.skipIf(!process.env.TEST_DATABASE_URL)(
     "blocks the losing flow and makes it observe the committed winner",
     async () => {
