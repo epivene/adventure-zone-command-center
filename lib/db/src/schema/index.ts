@@ -254,6 +254,38 @@ export const organizationFamilyReviews = pgTable(
   ],
 );
 
+export const organizationLocations = pgTable(
+  "organization_locations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    label: text("label").notNull(),
+    venueName: text("venue_name"),
+    address1: text("address_1"),
+    address2: text("address_2"),
+    city: text("city"),
+    region: text("region"),
+    postalCode: text("postal_code"),
+    website: text("website"),
+    phone: text("phone"),
+    normalizedPhone: text("normalized_phone"),
+    email: text("email"),
+    localStatus: text("local_status"),
+    lat: doublePrecision("lat"),
+    lng: doublePrecision("lng"),
+    actRecordId: text("act_record_id").unique(),
+    actSourceLabel: text("act_source_label"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("organization_locations_organization_id_idx").on(table.organizationId),
+    index("organization_locations_normalized_phone_idx").on(table.normalizedPhone),
+  ],
+);
+
 export const contacts = pgTable("contacts", {
   id: uuid("id").defaultRandom().primaryKey(),
   organizationId: uuid("organization_id").references(() => organizations.id),
@@ -270,6 +302,10 @@ export const contacts = pgTable("contacts", {
   region: text("region"),
   postalCode: text("postal_code"),
   actRecordId: text("act_record_id").unique(),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -366,6 +402,10 @@ export const bookings = pgTable("bookings", {
   probability: probabilityEnum("probability").default("possible").notNull(),
   travelLegId: uuid("travel_leg_id").references(() => travelLegs.id),
   actRecordId: text("act_record_id").unique(),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
   notes: text("notes"),
   physicalAttractionTotal: integer("physical_attraction_total"),
   attractionTotalApprovalReason: text("attraction_total_approval_reason"),
@@ -739,6 +779,10 @@ export const followUps = pgTable("follow_ups", {
   nextFollowUpId: uuid("next_follow_up_id").references(
     (): AnyPgColumn => followUps.id,
   ),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -764,11 +808,15 @@ export const activities = pgTable("activities", {
   timelineSortAt: timestamp("timeline_sort_at", { withTimezone: true }).notNull(),
   dateIsImportFallback: boolean("date_is_import_fallback").default(false).notNull(),
   endsAt: timestamp("ends_at", { withTimezone: true }),
-  /** Act! source record key (e.g. "act_note:{id}") — set only on imported items; used for idempotent re-import. */
+  /** Act! source record key (e.g. "act_note:{id}")  set only on imported items; used for idempotent re-import. */
   actRecordId: text("act_record_id"),
   sourceRecordId: uuid("source_record_id").references(() => actSourceRecords.id, { onDelete: "restrict" }),
   sourceVersionId: uuid("source_version_id").references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
   sourceType: text("source_type"),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -832,6 +880,10 @@ export const callSessions = pgTable(
     disposition: callDispositionEnum("disposition").notNull(),
     resultingBookingStatus: bookingStatusEnum("resulting_booking_status"),
     noteActivityId: uuid("note_activity_id").references(() => activities.id),
+    organizationLocationId: uuid("organization_location_id").references(
+      () => organizationLocations.id,
+      { onDelete: "set null" },
+    ),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -2339,7 +2391,7 @@ export const routingCacheEntries = pgTable(
 );
 
 
-// ─── AI booking suggestions ──────────────────────────────────────────────────
+//     AI booking suggestions                                                   
 // Persisted so suggestions survive server restarts/redeploys (Render spins the
 // server down on idle and restarts on every deploy).
 
