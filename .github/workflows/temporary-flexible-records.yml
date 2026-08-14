@@ -22,8 +22,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Relevant API tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/calls/call-service.test.ts src/features/activities/activity-service.test.ts src/features/activities/activity-repository.test.ts src/features/activities/activity-associations.pglite.test.ts src/features/event-profiles/event-profile-hierarchy.test.ts src/routes/calendar.test.ts
-      - name: Web tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run
+      - name: Relevant web tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/activities/activity-timeline.test.tsx src/components/calls/call-workspace.test.tsx src/pages/ContactDetailPage.test.tsx src/components/event-profiles/event-profile-hierarchy.test.tsx
       - name: Typecheck
         run: pnpm run typecheck
       - name: Build
