@@ -29,44 +29,54 @@ const suggestionRows = vi.hoisted(() => ({
 // ─── Module mocks (hoisted before any import of the route) ───────────────────
 
 // Stub the DB client.
-// - Activities query (analyze route): select({...}).from().leftJoin()×2.where()
+// - Activities query (analyze route): selectDistinctOn({...}).from().leftJoin()×N.where()
 //   → activityRows.value
 // - Bookings insert (accept route): insert().values().returning()
 //   → [insertedBooking.value]
 // - ai_booking_suggestions table (suggestion store): select/insert/update/delete
 //   operate on suggestionRows.value, emulating the dedupe_key unique index via
-//   onConflictDoNothing.
+//   onConflictDoUpdate (updates contactId/organizationId on re-scan).
 vi.mock("@/db/client", () => {
+  const makeSelectChain = (table: { __name?: string }) => {
+    if (table.__name === "aiBookingSuggestions") {
+      return {
+        orderBy: () => Promise.resolve([...suggestionRows.value]),
+        where: (cond: { __eq?: unknown }) =>
+          Promise.resolve(
+            suggestionRows.value.filter((r) => r.id === cond.__eq),
+          ),
+      };
+    }
+    // activities query (analyze route) — leftJoin chains then where()
+    const chain = {
+      leftJoin: function () { return this; },
+      where: () => Promise.resolve(activityRows.value),
+    };
+    return chain;
+  };
+
   const db: Record<string, unknown> = {
-    select: () => ({
-      from: (table: { __name?: string }) => {
-        if (table.__name === "aiBookingSuggestions") {
-          return {
-            orderBy: () => Promise.resolve([...suggestionRows.value]),
-            where: (cond: { __eq?: unknown }) =>
-              Promise.resolve(
-                suggestionRows.value.filter((r) => r.id === cond.__eq),
-              ),
-          };
-        }
-        return {
-          leftJoin: function () { return this; },
-          where: () => Promise.resolve(activityRows.value),
-        };
-      },
-    }),
+    select: () => ({ from: makeSelectChain }),
+    // selectDistinctOn mirrors select for test purposes
+    selectDistinctOn: () => ({ from: makeSelectChain }),
+    alias: (table: unknown) => table,
     insert: (table: { __name?: string }) => ({
       values: (v: Record<string, unknown>) => {
         if (table.__name === "aiBookingSuggestions") {
           return {
-            onConflictDoNothing: () => ({
+            onConflictDoUpdate: () => ({
               returning: () => {
-                if (
-                  suggestionRows.value.some(
-                    (r) => r.dedupeKey === v.dedupeKey,
-                  )
-                ) {
-                  return Promise.resolve([]);
+                const existing = suggestionRows.value.findIndex(
+                  (r) => r.dedupeKey === v.dedupeKey,
+                );
+                if (existing !== -1) {
+                  // Update contactId/organizationId if now available
+                  suggestionRows.value[existing] = {
+                    ...suggestionRows.value[existing],
+                    contactId: v.contactId ?? suggestionRows.value[existing].contactId,
+                    organizationId: v.organizationId ?? suggestionRows.value[existing].organizationId,
+                  };
+                  return Promise.resolve([{ id: suggestionRows.value[existing].id }]);
                 }
                 suggestionRows.value.push({ ...v });
                 return Promise.resolve([{ id: v.id }]);
@@ -134,6 +144,7 @@ vi.mock("@/db/schema", () => {
     bookings: makeTable("bookings"),
     bookingContacts: makeTable("bookingContacts"),
     aiBookingSuggestions: makeTable("aiBookingSuggestions"),
+    activityAssociations: makeTable("activityAssociations"),
   };
 });
 
@@ -146,8 +157,12 @@ vi.mock("drizzle-orm", () => ({
   gte: () => Symbol("gte"),
   like: () => Symbol("like"),
   inArray: () => Symbol("inArray"),
+  isNull: () => Symbol("isNull"),
   asc: () => Symbol("asc"),
   desc: () => Symbol("desc"),
+  sql: Object.assign((_strings: TemplateStringsArray, ..._values: unknown[]) => Symbol("sql"), {
+    raw: (_s: string) => Symbol("sql.raw"),
+  }),
 }));
 
 // Stub Anthropic AI integration — returns controlled JSON responses

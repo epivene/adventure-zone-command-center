@@ -81,8 +81,8 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       import("drizzle-orm"),
     ]);
 
-    const { activities, contacts, organizations } = schema;
-    const { inArray, eq, and, gte } = orm;
+    const { activities, contacts, organizations, activityAssociations } = schema;
+    const { inArray, eq, and, gte, or, isNull } = orm;
 
     // Compute the lookback cutoff, or null for all history.
     let cutoff: Date | null = null;
@@ -91,37 +91,70 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       cutoff.setMonth(cutoff.getMonth() - rangeMonths);
     }
 
+    const kindFilter = cutoff
+      ? and(
+          inArray(activities.kind, ["act_history", "note", "calendar"]),
+          gte(activities.timelineSortAt, cutoff),
+        )
+      : inArray(activities.kind, ["act_history", "note", "calendar"]);
+
+    // Many imported Act! records are linked via activity_associations (bridge
+    // table) rather than direct FK columns. We resolve contact/org IDs from
+    // both sources: direct FK wins, association falls back when FK is null.
+    // One activity can have multiple associations; we pick the first contact
+    // and first organization via a lateral-style left join on kind.
+    const assocContact = (db as any).alias(activityAssociations, "assoc_contact");
+    const assocOrg = (db as any).alias(activityAssociations, "assoc_org");
+    const assocContactPerson = (db as any).alias(contacts, "assoc_contact_person");
+    const assocOrgCompany = (db as any).alias(organizations, "assoc_org_company");
+
     const rows = await (db as any)
-      .select({
+      .selectDistinctOn([activities.id], {
         id: activities.id,
         body: activities.body,
         subject: activities.subject,
         kind: activities.kind,
         timelineSortAt: activities.timelineSortAt,
         actRecordId: activities.actRecordId,
-        contactId: activities.contactId,
-        organizationId: activities.organizationId,
-        contactFirstName: contacts.firstName,
-        contactLastName: contacts.lastName,
-        organizationName: organizations.name,
+        // Prefer direct FK; fall back to association-linked ID
+        contactId: orm.sql`COALESCE(${activities.contactId}, ${assocContact.contactId})`,
+        organizationId: orm.sql`COALESCE(${activities.organizationId}, ${assocOrg.organizationId})`,
+        // Name from whichever contact source resolved first
+        contactFirstName: orm.sql`COALESCE(${contacts.firstName}, ${assocContactPerson.firstName})`,
+        contactLastName: orm.sql`COALESCE(${contacts.lastName}, ${assocContactPerson.lastName})`,
+        organizationName: orm.sql`COALESCE(${organizations.name}, ${assocOrgCompany.name})`,
       })
       .from(activities)
+      // Direct FK joins
       .leftJoin(contacts, eq(activities.contactId, contacts.id))
       .leftJoin(organizations, eq(activities.organizationId, organizations.id))
-      .where(
-        // Analyze all imported Act! timeline records: history entries, notes,
-        // and scheduled calendar activities. Calendar activities (past fairs,
-        // meetings) are often the strongest signal for recurring bookings.
-        // There is no feedback loop: accepted suggestions become bookings,
-        // never activity rows, so nothing AI-generated is ever re-scanned.
-        // "approved_suggestion" kind is deliberately not included.
-        cutoff
-          ? and(
-              inArray(activities.kind, ["act_history", "note", "calendar"]),
-              gte(activities.timelineSortAt, cutoff),
-            )
-          : inArray(activities.kind, ["act_history", "note", "calendar"]),
-      );
+      // Association-based contact fallback (only when direct FK is absent)
+      .leftJoin(
+        assocContact,
+        and(
+          eq(assocContact.activityId, activities.id),
+          eq(assocContact.associationType, "contact"),
+          isNull(activities.contactId),
+        ),
+      )
+      .leftJoin(
+        assocContactPerson,
+        eq(assocContactPerson.id, assocContact.contactId),
+      )
+      // Association-based organization fallback (only when direct FK is absent)
+      .leftJoin(
+        assocOrg,
+        and(
+          eq(assocOrg.activityId, activities.id),
+          eq(assocOrg.associationType, "organization"),
+          isNull(activities.organizationId),
+        ),
+      )
+      .leftJoin(
+        assocOrgCompany,
+        eq(assocOrgCompany.id, assocOrg.organizationId),
+      )
+      .where(kindFilter);
 
     const records: ActivityRecord[] = rows;
 

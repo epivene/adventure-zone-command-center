@@ -91,17 +91,28 @@ export async function clearSuggestions(): Promise<void> {
 
 /**
  * Inserts a suggestion, deduplicating on the stable suggestion key.
- * Returns true when the suggestion was inserted, false when an existing
- * suggestion with the same key was already present (insert skipped).
+ * Returns true when the suggestion was inserted (or its profile links were
+ * updated), false when an existing suggestion already had up-to-date links.
+ *
+ * On conflict we update contactId/organizationId so that re-scanning after
+ * the import fix populates links on suggestions that were stored without them.
+ * Accepted/dismissed status and bookingId are intentionally NOT overwritten.
  */
 export async function addSuggestion(
   suggestion: HistorySuggestion,
 ): Promise<boolean> {
-  const { db, table } = await deps();
+  const { db, table, orm } = await deps();
   const inserted = await db
     .insert(table)
     .values({ ...suggestion, dedupeKey: suggestionKey(suggestion) })
-    .onConflictDoNothing({ target: table.dedupeKey })
+    .onConflictDoUpdate({
+      target: table.dedupeKey,
+      set: {
+        contactId: orm.sql`COALESCE(EXCLUDED.contact_id, ${table.contactId})`,
+        organizationId: orm.sql`COALESCE(EXCLUDED.organization_id, ${table.organizationId})`,
+        updatedAt: new Date(),
+      },
+    })
     .returning({ id: table.id });
   return inserted.length > 0;
 }
