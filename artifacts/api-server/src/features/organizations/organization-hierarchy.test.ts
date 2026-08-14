@@ -308,6 +308,7 @@ class TestDatabase {
   async transaction<T>(work: (transaction: unknown) => Promise<T>): Promise<T> {
     const draft = cloneState(this.state);
     const transaction = {
+      execute: async (_query: unknown) => ({ rows: [] }),
       select: (selection?: Record<string, unknown>) =>
         new SelectBuilder(draft, selection),
       update: (table: unknown) => {
