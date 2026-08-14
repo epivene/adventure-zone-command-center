@@ -2,6 +2,8 @@ import app from "./app";
 import { runActReviewMigrations } from "@workspace/db/migrations";
 import { logger } from "./lib/logger";
 import { validateOwnerConfig } from "./lib/auth";
+import { db } from "@workspace/db";
+import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -31,6 +33,17 @@ logger.info(
   appliedMigrations.length > 0
     ? "Database migrations applied"
     : "Database schema is current",
+);
+
+const importedLocationFamilies = await autoConsolidateImportedLocationFamilies(
+  db,
+  new Date(),
+);
+logger.info(
+  importedLocationFamilies,
+  importedLocationFamilies.families > 0
+    ? "Imported organization profiles consolidated into locations"
+    : "No imported location families need consolidation",
 );
 
 let extractionRuntime: ActExtractionRuntime | null = null;
