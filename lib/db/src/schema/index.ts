@@ -860,6 +860,12 @@ export const activities = pgTable("activities", {
     table.bookingId,
     table.occurredAt.desc(),
   ),
+  // Partial composite index for the calendar query  covers both
+  // kind = 'calendar' and kind = 'act_history' predicates so PostgreSQL
+  // jumps straight to the date window instead of scanning every row.
+  index("activities_kind_timeline_sort_at_idx")
+    .on(table.kind, table.timelineSortAt)
+    .where(sql`${table.kind} in ('calendar', 'act_history')`),
 ]);
 
 export const activityRevisions = pgTable(
