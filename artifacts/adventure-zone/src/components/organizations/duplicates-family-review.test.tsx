@@ -229,6 +229,37 @@ describe("DuplicatesView family review", () => {
     expect(screen.getByRole("button", { name: "Merge all 1 group" })).toBeInTheDocument();
   });
 
+
+  it("shows the manual warning and strong evidence for a shared-website exact-name bucket", () => {
+    const thirdId = "44444444-4444-4444-8444-444444444444";
+    const ambiguous: DuplicateGroup = {
+      ...locationCandidate,
+      classification: "ambiguous_location_candidate",
+      groupKey: `organization-family:${FIRST_ID}|${SECOND_ID}|${thirdId}`,
+      candidateIds: [FIRST_ID, SECOND_ID, thirdId],
+      evidence: [
+        { family: "name", label: "exact organization names agree" },
+        { family: "website", label: "website domains agree" },
+        { family: "location", label: "locations differ" },
+      ],
+      organizations: [
+        organization(FIRST_ID, "Water Lantern Festival", "Denver", "CO"),
+        organization(SECOND_ID, "Water Lantern Festival", "Austin", "TX"),
+        organization(thirdId, "Water Lantern Festival", "Boston", "MA"),
+      ],
+    };
+
+    render(
+      <DuplicatesView groups={[ambiguous, duplicate]} onRefresh={vi.fn().mockResolvedValue([])} />,
+    );
+
+    const card = within(screen.getByTestId(`duplicate-group-${ambiguous.groupKey}`));
+    expect(card.getByText(/ambiguous location match/i)).toBeInTheDocument();
+    expect(card.getByText(/same website domain/i)).toBeInTheDocument();
+    expect(card.queryByRole("button", { name: "Merge duplicates" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Merge all 1 group" })).toBeInTheDocument();
+  });
+
   it("creates a parent for a reviewed family and refreshes server results", async () => {
     const onRefresh = vi.fn().mockResolvedValue([]);
     render(<DuplicatesView groups={[locationCandidate]} onRefresh={onRefresh} />);
