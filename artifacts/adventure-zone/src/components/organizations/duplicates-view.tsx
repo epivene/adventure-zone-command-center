@@ -9,6 +9,7 @@ import {
 } from "@/features/organizations/bulk-duplicate-merge";
 import { apiGet, apiPost } from "@/lib/auth-token";
 import { useToast } from "@/hooks/use-toast";
+import { ConsolidationDialog } from "./consolidation-dialog";
 
 type FamilyEvidence = {
   family: "name" | "website" | "location" | "address" | "act_relationship";
@@ -56,7 +57,7 @@ function MergeDialog({ group, primaryId, onConfirm, onCancel, merging }: MergeDi
         </p>
         <div className="mt-6 flex gap-3">
           <button className="button-primary flex-1" disabled={merging} onClick={onConfirm}>
-            {merging ? "Merging…" : "Confirm"}
+            {merging ? "Merging&" : "Confirm"}
           </button>
           <button className="button-secondary flex-1" disabled={merging} onClick={onCancel}>
             Cancel
@@ -129,7 +130,7 @@ function LocationList({ group, primaryId, onPrimaryChange, disabled }: {
                     {[organization.city, organization.region].filter(Boolean).join(", ") || "Location not recorded"}
                   </p>
                   <p className="mt-0.5 text-sm text-slate-600">
-                    {organization.contactCount} contact{organization.contactCount !== 1 ? "s" : ""} ·{" "}
+                    {organization.contactCount} contact{organization.contactCount !== 1 ? "s" : ""} �{" "}
                     {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
                   </p>
                 </div>
@@ -248,7 +249,7 @@ function MakeLocationsDialog({ group, onCancel, onComplete }: {
         ) : (
           <label className="mt-4 grid gap-1 text-sm font-semibold">Existing parent
             <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" disabled={loadingParents} onChange={(event) => setParentId(event.target.value)} value={parentId}>
-              <option value="">{loadingParents ? "Loading parents…" : "Choose an eligible parent"}</option>
+              <option value="">{loadingParents ? "Loading parents&" : "Choose an eligible parent"}</option>
               {parents.map((parent) => <option key={parent.id} value={parent.id}>{parent.name}</option>)}
             </select>
           </label>
@@ -291,8 +292,12 @@ function DuplicateGroupCard({
   const locationCandidate = isLocationCandidate(group);
   const [showMerge, setShowMerge] = useState(false);
   const [showLocations, setShowLocations] = useState(false);
+  const [showConsolidate, setShowConsolidate] = useState(false);
   const [pending, setPending] = useState(false);
   const { toast } = useToast();
+
+  const sourceOrgIds = group.candidateIds ?? group.organizations.map((item) => item.id);
+  const sourceOrgNames = group.organizations.map((item) => item.name);
 
   async function merge() {
     if (!primaryId) return;
@@ -329,17 +334,25 @@ function DuplicateGroupCard({
     <>
       {showMerge ? <MergeDialog group={group} merging={pending} onCancel={() => setShowMerge(false)} onConfirm={merge} primaryId={primaryId} /> : null}
       {showLocations ? <MakeLocationsDialog group={group} onCancel={() => setShowLocations(false)} onComplete={onResolved} /> : null}
+      {showConsolidate ? (
+        <ConsolidationDialog
+          onCancel={() => setShowConsolidate(false)}
+          onComplete={onResolved}
+          sourceOrgIds={sourceOrgIds}
+          sourceOrgNames={sourceOrgNames}
+        />
+      ) : null}
       <div className={`rounded-xl border p-4 ${locationCandidate ? "border-sky-200 bg-sky-50" : "border-amber-200 bg-amber-50"}`} data-testid={`duplicate-group-${group.groupKey ?? group.normalizedName}`}>
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className={`text-sm font-bold ${locationCandidate ? "text-sky-900" : "text-amber-800"}`}>
-              Group {index + 1} — {group.organizations.length} matching records
+              Group {index + 1}  {group.organizations.length} matching records
             </p>
             {locationCandidate ? (
               <>
                 <p className="mt-1 text-sm text-sky-900">
                   {group.classification === "ambiguous_location_candidate"
-                    ? "Ambiguous location match — review these profiles manually."
+                    ? "Ambiguous location match  review these profiles manually."
                     : "These may be locations of the same organization."}
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
@@ -351,10 +364,24 @@ function DuplicateGroupCard({
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!locationCandidate ? <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>Merge duplicates</button> : null}
+            {!locationCandidate ? (
+              <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>
+                Merge duplicates
+              </button>
+            ) : null}
             {locationCandidate ? (
               <>
-                <button className="button-primary text-sm" disabled={disabled || pending} onClick={() => setShowLocations(true)}>Same organization—make locations</button>
+                <button
+                  className="button-primary text-sm"
+                  disabled={disabled || pending}
+                  onClick={() => setShowConsolidate(true)}
+                  title="Consolidate: keep each profile as a named location with its own history"
+                >
+                  Consolidate as locations
+                </button>
+                <button className="button-secondary text-sm" disabled={disabled || pending} onClick={() => setShowLocations(true)}>
+                  Same organizationmake locations
+                </button>
                 <button className="button-secondary text-sm" disabled={disabled || pending} onClick={notRelated}>Not related</button>
               </>
             ) : null}
@@ -501,13 +528,13 @@ export function DuplicatesView({ groups, onRefresh }: {
             <p className="mt-0.5 text-sm text-slate-600">Location candidates are excluded until reviewed.</p>
           </div>
           {bulkMerging ? (
-            <p aria-live="polite" className="font-bold text-orange-700">{reconciling ? "Checking server status…" : `Merging ${bulkProgress.completed} of ${bulkProgress.total}`}</p>
+            <p aria-live="polite" className="font-bold text-orange-700">{reconciling ? "Checking server status&" : `Merging ${bulkProgress.completed} of ${bulkProgress.total}`}</p>
           ) : bulkError ? (
             reconciliationError ? (
               <button className="button-primary" onClick={reconcileAfterFailure}>Retry status refresh</button>
             ) : (
               <button className="button-primary" disabled={!canResume || Boolean(missingPrimaryGroup)} onClick={runBulkMerge}>
-                {reconciling ? "Checking server status…" : "Resume remaining merges"}
+                {reconciling ? "Checking server status&" : "Resume remaining merges"}
               </button>
             )
           ) : (
@@ -520,10 +547,10 @@ export function DuplicatesView({ groups, onRefresh }: {
 
       {bulkError && !bulkMerging ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4" role="alert">
-          <p className="font-semibold text-rose-800">Could not merge “{bulkError.groupName}”. {bulkError.completed} of {bulkError.total} completed.</p>
+          <p className="font-semibold text-rose-800">Could not merge {bulkError.groupName}. {bulkError.completed} of {bulkError.total} completed.</p>
           <p className="mt-1 text-sm text-rose-700">{bulkError.cause instanceof Error ? bulkError.cause.message : "Unknown error"}</p>
           {reconciliationError ? <p className="mt-2 text-sm font-semibold text-rose-800">{reconciliationError}</p> : missingPrimaryGroup ? (
-            <p className="mt-2 text-sm font-semibold text-rose-800">The previous Primary for “{missingPrimaryGroup.normalizedName}” is no longer available. Choose a Primary below before resuming.</p>
+            <p className="mt-2 text-sm font-semibold text-rose-800">The previous Primary for {missingPrimaryGroup.normalizedName} is no longer available. Choose a Primary below before resuming.</p>
           ) : null}
         </div>
       ) : null}

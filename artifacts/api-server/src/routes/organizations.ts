@@ -25,6 +25,14 @@ import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { DrizzleLocationRepository } from "@/features/organization-locations/location-repository";
 import locationRoutes from "@/routes/organization-locations";
+import {
+  applyConsolidation,
+  buildConsolidationPreview,
+  getConsolidationRedirect,
+  migrateExistingHierarchyToConsolidation,
+  type ConsolidationApplyInput,
+  type ConsolidationPreviewInput,
+} from "@/features/organizations/organization-consolidation";
 
 const router: IRouter = Router();
 function orgRepo() { return new DrizzleOrganizationRepository(db); }
@@ -164,6 +172,13 @@ router.use("/organizations/:id/locations", locationRoutes);
 router.get("/organizations/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
+    // Check for consolidation redirect before loading the full summary.
+    const redirect = await getConsolidationRedirect(db, id);
+    if (redirect) {
+      res.json({ consolidatedInto: redirect });
+      return;
+    }
+
     const locRepo = new DrizzleLocationRepository(db);
     const [organization, timelinePage, orgLocations, orgLocationRollup] = await Promise.all([
       orgRepo().getOrganizationSummary(id),
@@ -221,6 +236,83 @@ router.post("/organizations/last-resort", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to update last resort");
     res.status(500).json({ ok: false, error: "Could not update last resort status" });
+  }
+});
+
+//     Consolidation                                                             
+
+const consolidationPreviewBodySchema = z.object({
+  canonicalOrgId: z.string().uuid().nullable().default(null),
+  proposedCanonicalName: z.string().trim().min(1).max(240).optional(),
+  sourceOrgIds: z.array(z.string().uuid()).min(2).max(20),
+});
+
+router.post("/organizations/consolidation-preview", async (req, res): Promise<void> => {
+  const parsed = consolidationPreviewBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  const input: ConsolidationPreviewInput = parsed.data;
+  try {
+    const preview = await buildConsolidationPreview(db, input);
+    res.json({ ok: true, preview });
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Canonical organization not found")) {
+      res.status(404).json({ ok: false, error: err.message });
+      return;
+    }
+    req.log.error({ err }, "Failed to build consolidation preview");
+    res.status(500).json({ ok: false, error: "Could not build consolidation preview" });
+  }
+});
+
+const consolidationApplyBodySchema = z.object({
+  canonicalOrgId: z.string().uuid().nullable().default(null),
+  proposedCanonical: z.object({
+    name: z.string().trim().min(1).max(240),
+    website: z.string().trim().max(2048).nullable().optional(),
+    phone: z.string().trim().max(80).nullable().optional(),
+  }).optional(),
+  locationAssignments: z.array(z.object({
+    sourceOrgId: z.string().uuid(),
+    label: z.string().trim().min(1).max(240),
+  })).min(2).max(20).refine(
+    (assignments) => {
+      const ids = assignments.map((a) => a.sourceOrgId);
+      return new Set(ids).size === ids.length;
+    },
+    { message: "locationAssignments.sourceOrgId values must be unique" },
+  ),
+});
+
+router.post("/organizations/consolidation-apply", async (req, res): Promise<void> => {
+  const parsed = consolidationApplyBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  const input: ConsolidationApplyInput = parsed.data;
+  try {
+    const result = await applyConsolidation(db, input, new Date());
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err instanceof HierarchyConflictError) {
+      res.status(409).json({ ok: false, error: err.message });
+      return;
+    }
+    req.log.error({ err }, "Failed to apply consolidation");
+    res.status(500).json({ ok: false, error: "Could not apply consolidation" });
+  }
+});
+
+router.post("/organizations/consolidation-migrate-hierarchy", async (req, res): Promise<void> => {
+  try {
+    const result = await migrateExistingHierarchyToConsolidation(db, new Date());
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    req.log.error({ err }, "Failed to migrate hierarchy to consolidation");
+    res.status(500).json({ ok: false, error: "Could not migrate hierarchy" });
   }
 });
 
