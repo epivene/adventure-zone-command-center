@@ -14,6 +14,7 @@ class CallTestRepository {
     number: "701-555-0100",
     extension: "12",
   };
+  createdActivity: Record<string, unknown> | undefined;
   createdSession: Record<string, unknown> | undefined;
   suppressedPhoneId: string | undefined;
   updatedOrganization: Record<string, unknown> | undefined;
@@ -57,7 +58,8 @@ class CallTestRepository {
     };
   }
 
-  async createActivity() {
+  async createActivity(input: Record<string, unknown>) {
+    this.createdActivity = input;
     return { id: "40000000-0000-4000-8000-000000000001" };
   }
 
@@ -139,6 +141,23 @@ describe("CallService call metadata", () => {
       phoneExtensionSnapshot: "12",
       scriptKind: "follow_up",
     });
+  });
+
+  it("allows a quick outcome with blank note and no next action", async () => {
+    const repository = new CallTestRepository();
+    const service = new CallService(repository as never, {
+      now: () => new Date("2026-08-12T16:00:00.000Z"),
+    });
+
+    const result = await service.complete(validCall({
+      note: "",
+      disposition: "no_answer",
+      nextAction: null,
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(repository.createdActivity).toMatchObject({ body: "No answer." });
+    expect(repository.createdSession).toMatchObject({ disposition: "no_answer" });
   });
 
   it("marks only the selected number Do Not Call after confirmation", async () => {
