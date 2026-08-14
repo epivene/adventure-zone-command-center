@@ -16,7 +16,13 @@ import {
   DrizzleActReviewReader,
   DrizzleProductionOrganizerStore,
 } from "./review-sql-adapter";
-import { ReviewCommandService } from "./review-command-service";
+import { ReviewCommandService, type AutomaticReviewCommandResult } from "./review-command-service";
+
+function completedAutomaticReview(result: AutomaticReviewCommandResult) {
+  expect(result.status).toBe("complete");
+  if (result.status !== "complete") throw new Error("automatic_review_not_complete");
+  return result;
+}
 
 type QueryResult<Row> = { rows: Row[] };
 type TestPool = {
@@ -138,6 +144,7 @@ async function installDisposableSchema(pool: TestPool) {
     "019_act_approval_provenance.sql",
     "020_act_automatic_review_recovery.sql",
     "021_act_manifest_digest_version.sql",
+    "022_act_manifest_generation.sql",
   ]) {
     const path = fileURLToPath(
       new URL(`../../../../../lib/db/migrations/${migration}`, import.meta.url),
@@ -653,8 +660,8 @@ describe("one-time Act import on disposable PostgreSQL", () => {
         requestKey: "automatic-cleanup",
         requestedBy: "owner",
       };
-      const first = await runtime.approval.resolveAutomatically(request);
-      const replay = await runtime.approval.resolveAutomatically(request);
+      const first = completedAutomaticReview(await runtime.approval.resolveAutomatically(request));
+      const replay = completedAutomaticReview(await runtime.approval.resolveAutomatically(request));
 
       expect(first.decisions).toEqual(expect.arrayContaining([
         expect.objectContaining({ sourceRecordId: seeded.ids.get("natalie")!.sourceRecordId, scope: "field_conflict", decision: "use_source", fieldName: "jobTitle" }),
@@ -735,12 +742,12 @@ describe("one-time Act import on disposable PostgreSQL", () => {
         return originalRebuild(runId);
       });
 
-      const automatic = await runtime.approval.resolveAutomatically({
+      const automatic = completedAutomaticReview(await runtime.approval.resolveAutomatically({
         runId: seeded.runId,
         expectedManifestDigest: organized.manifest.digest,
         requestKey: "proof-stale-automatic",
         requestedBy: "owner",
-      });
+      }));
       expect(automatic.decisions).toEqual([
         expect.objectContaining({
           sourceRecordId: source.sourceRecordId,
@@ -963,7 +970,7 @@ describe("one-time Act import on disposable PostgreSQL", () => {
         source_links: 0,
       });
 
-      const resolved = await runtime.approval.resolveAutomatically(automaticRequest);
+      const resolved = completedAutomaticReview(await runtime.approval.resolveAutomatically(automaticRequest));
       expect(rebuild).toHaveBeenCalledTimes(2);
       expect(resolved.decisions).toHaveLength(5);
       expect(resolved.decisions).toEqual(expect.arrayContaining([
@@ -978,7 +985,7 @@ describe("one-time Act import on disposable PostgreSQL", () => {
       expect(await targetTableSnapshot(runtime.pool)).toEqual(targetsBefore);
       expect(await contactSnapshot(runtime.pool, natalie.rows[0]!.id)).toEqual(natalieBefore);
 
-      const replayedResolution = await runtime.approval.resolveAutomatically(automaticRequest);
+      const replayedResolution = completedAutomaticReview(await runtime.approval.resolveAutomatically(automaticRequest));
       expect(replayedResolution).toEqual(resolved);
       expect(await automaticDurableIds(runtime.pool, seeded.runId, automaticRequest.requestKey)).toEqual(interruptedIds);
       expect(await targetTableSnapshot(runtime.pool)).toEqual(targetsBefore);
