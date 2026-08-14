@@ -14,6 +14,8 @@ const contactAssocActivityId = "00000000-0000-4000-8000-000000000012";
 const bookingAssocActivityId = "00000000-0000-4000-8000-000000000013";
 const directAndAssocActivityId = "00000000-0000-4000-8000-000000000014";
 const unrelatedActivityId = "00000000-0000-4000-8000-000000000015";
+const contactDirectAndAssocActivityId = "00000000-0000-4000-8000-000000000016";
+const emptyProfileId = "00000000-0000-4000-8000-000000000021";
 
 let client: PGlite;
 let database: ReturnType<typeof drizzle>;
@@ -122,7 +124,8 @@ beforeAll(async () => {
 
     INSERT INTO organizations (id, name, parent_organization_id)
       VALUES ('${parentOrgId}', 'Parent Co', NULL),
-             ('${profileId}', 'Adventure Zone - Austin', '${parentOrgId}');
+             ('${profileId}', 'Adventure Zone - Austin', '${parentOrgId}'),
+             ('${emptyProfileId}', 'Empty Place', '${parentOrgId}');
     INSERT INTO contacts (id, first_name, last_name) VALUES ('${contactId}', 'Ada', 'Lovelace');
     INSERT INTO organization_contacts (organization_id, contact_id, is_primary)
       VALUES ('${profileId}', '${contactId}', true);
@@ -137,12 +140,15 @@ beforeAll(async () => {
     -- Manually created activity that also carries an association (dedupe case).
     INSERT INTO activities (id, organization_id, kind, body, occurred_at, timeline_sort_at)
       VALUES ('${directAndAssocActivityId}', '${profileId}', 'note', 'direct + association', '2024-04-01T00:00:00Z', '2024-04-01T00:00:00Z');
+    INSERT INTO activities (id, contact_id, kind, body, occurred_at, timeline_sort_at)
+      VALUES ('${contactDirectAndAssocActivityId}', '${contactId}', 'note', 'contact direct + association', '2024-05-01T00:00:00Z', '2024-05-01T00:00:00Z');
 
     INSERT INTO activity_associations (activity_id, organization_id, contact_id, booking_id) VALUES
       ('${orgAssocActivityId}', '${profileId}', NULL, NULL),
       ('${contactAssocActivityId}', NULL, '${contactId}', NULL),
       ('${bookingAssocActivityId}', NULL, NULL, '${bookingId}'),
       ('${directAndAssocActivityId}', '${profileId}', NULL, NULL),
+      ('${contactDirectAndAssocActivityId}', NULL, '${contactId}', NULL),
       ('${unrelatedActivityId}', NULL, NULL, '99999999-0000-4000-8000-000000000099');
   `);
 });
@@ -158,6 +164,7 @@ describe("association-linked imported history", () => {
     const ids = page.items.map((item) => item.id);
     expect(ids).toContain(contactAssocActivityId);
     expect(ids).not.toContain(unrelatedActivityId);
+    expect(ids.filter((id) => id === contactDirectAndAssocActivityId)).toHaveLength(1);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
@@ -180,5 +187,13 @@ describe("association-linked imported history", () => {
     expect(noteIds).toContain(bookingAssocActivityId);
     expect(noteIds).not.toContain(unrelatedActivityId);
     expect(noteIds.filter((id) => id === directAndAssocActivityId)).toHaveLength(1);
+    expect(new Set(noteIds).size).toBe(noteIds.length);
+  });
+
+  it("keeps other profiles' association-linked history off an unrelated profile", async () => {
+    const repository = new DrizzleEventProfileRepository(database as never);
+    const profile = await repository.getEventProfile(emptyProfileId);
+    expect(profile).not.toBeNull();
+    expect(profile!.notes).toEqual([]);
   });
 });
