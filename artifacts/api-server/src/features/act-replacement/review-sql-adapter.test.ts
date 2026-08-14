@@ -1157,7 +1157,12 @@ describe("durable review adapter projections", () => {
           limit: () => chain,
           for: async (mode: string) => {
             events.push(`run:${mode}`);
-            return [{ summary: { manifestDigest: protectedDigest }, manifestDigestVersion: "canonical-json-v1" }];
+            return [{
+              summary: { manifestDigest: protectedDigest },
+              manifestDigestVersion: "canonical-json-v1",
+              manifestGeneration: "11111111-1111-4111-8111-111111111111",
+              phase: "ready_to_apply",
+            }];
           },
           then: (resolve: (rows: unknown[]) => unknown) => {
             events.push(currentSelect === 2 ? "request:check" : "decision-key:check");
@@ -1212,17 +1217,14 @@ describe("durable review adapter projections", () => {
       ],
     };
     vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifest")
+      .mockRejectedValue(new Error("durable_manifest_copy_forbidden_for_generated_manifest"));
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifestDigest")
+      .mockRejectedValue(new Error("durable_manifest_digest_copy_forbidden_for_generated_manifest"));
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest")
       .mockImplementation(async () => {
-        events.push("manifest:load");
+        events.push("manifest:protected");
         return manifest;
       });
-    vi.spyOn(DrizzleActReviewCommandStore.prototype, "getComputedManifestDigest")
-      .mockImplementation(async () => {
-        events.push("manifest:digest");
-        return manifest.digest;
-      });
-    vi.spyOn(DrizzleActReviewCommandStore.prototype, "recomputeAutomaticReviewManifest")
-      .mockResolvedValue(manifest);
     vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources")
       .mockResolvedValue([
         { sourceRecordId: "ambiguous", sourceVersionId: "v-ambiguous", streamType: "contact", display: { FirstName: "New", LastName: "Person" } },
@@ -1257,10 +1259,51 @@ describe("durable review adapter projections", () => {
     });
     expect(transactionOptions).toEqual({ isolationLevel: "serializable" });
     expect(events).toEqual([
-      "transaction:start", "run:update", "request:check", "manifest:digest", "sources:lock", "manifest:digest", "manifest:load", "targets:search",
+      "transaction:start", "run:update", "request:check", "sources:lock", "manifest:protected", "targets:search",
       "decision-key:check", "decision:duplicate_identity:keep_separate", "decision:unsupported_record:ignore_source",
       "request:save", "transaction:commit", "rebuild", "request:update",
     ]);
+  });
+
+  it("resolves generated automatic-review context in bounded source batches", async () => {
+    const outcomes = Array.from({ length: 61 }, (_, index) => ({
+      sourceRecordId: `source-${String(index).padStart(3, "0")}`,
+      sourceVersionId: `version-${index}`,
+      state: "awaiting_review" as const,
+      issues: [{ code: "unassigned", reason: "no_resolved_parent" }],
+      candidates: [],
+      match: null,
+      mappingWarnings: [],
+      unsupportedFieldPaths: [],
+      operationKeys: [],
+    }));
+    const manifest = { digest: "digest", diagnostics: [], operations: [], outcomes };
+    let largestSourceBatch = 0;
+    vi.spyOn(DrizzleActReviewCommandStore.prototype, "listSources")
+      .mockImplementation(async (_runId, sourceRecordIds) => {
+        const ids = sourceRecordIds ?? [];
+        largestSourceBatch = Math.max(largestSourceBatch, ids.length);
+        if (ids.length > 25) throw new Error("automatic_review_source_batch_unbounded");
+        return ids.map((sourceRecordId) => {
+          const outcome = outcomes.find((candidate) => candidate.sourceRecordId === sourceRecordId)!;
+          return {
+            sourceRecordId,
+            sourceVersionId: outcome.sourceVersionId,
+            streamType: "history",
+            display: { Regarding: `History ${sourceRecordId}` },
+          };
+        });
+      });
+    const store = new DrizzleActReviewCommandStore({ execute: async () => ({ rows: [] }) } as never, {
+      sourceDatabaseKey: "act-db",
+    }, {} as never) as unknown as {
+      proposeProtectedAutomaticReview(runId: string, value: typeof manifest): Promise<{ proposals: unknown[] }>;
+    };
+
+    const result = await store.proposeProtectedAutomaticReview("run", manifest);
+    expect(result.proposals).toHaveLength(61);
+    expect(largestSourceBatch).toBeGreaterThan(0);
+    expect(largestSourceBatch).toBeLessThanOrEqual(25);
   });
 
   it("records an all-manual automatic replay without rebuilding an unchanged manifest", async () => {
@@ -2054,6 +2097,15 @@ describe("durable review adapter projections", () => {
     expect(rendered.sql).toContain("order by");
     expect(rendered.sql).toContain("for update of");
     expect(rendered.params).toEqual(["act-db", "run-id", "act-db"]);
+  });
+
+  it("can lock generated-manifest sources without materializing relationship evidence", () => {
+    const rendered = new PgDialect().sqlToQuery(lockAutomaticReviewSourceRowsQuery(
+      { sourceDatabaseKey: "act-db" }, "run-id", false,
+    ));
+
+    expect(rendered.sql).not.toContain("relationship_evidence");
+    expect(rendered.sql).toContain("for update of");
   });
 
   it("discovers automatic targets by exact normalized equality without a noisy 25-row window", () => {
