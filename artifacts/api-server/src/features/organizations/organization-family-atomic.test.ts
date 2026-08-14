@@ -13,6 +13,7 @@ import { HierarchyConflictError } from "./organization-hierarchy";
 const FIRST_ID = "11111111-1111-4111-8111-111111111111";
 const SECOND_ID = "22222222-2222-4222-8222-222222222222";
 const PARENT_ID = "33333333-3333-4333-8333-333333333333";
+const THIRD_ID = "44444444-4444-4444-8444-444444444444";
 const GROUP_KEY = `organization-family:${FIRST_ID}|${SECOND_ID}`;
 
 function sqlParameters(value: unknown, seen = new Set<unknown>()): unknown[] {
@@ -203,6 +204,49 @@ describe("atomic organization family review", () => {
       null,
     ]);
     expect(database.state.review?.status).toBe("proposed");
+  });
+
+
+  it("commits stale proposal cleanup before returning a refresh conflict", async () => {
+    const database = new AtomicFamilyDatabase();
+    database.state.organizations[1]!.name = "Independent Austin Festival";
+
+    await expect(
+      reviewOrganizationFamily(database as never, input, new Date("2026-08-13T00:00:00Z")),
+    ).rejects.toBeInstanceOf(HierarchyConflictError);
+
+    expect(database.state.review).toBeNull();
+    expect(database.state.organizations).toHaveLength(2);
+    expect(database.state.organizations.map((row) => row.parentOrganizationId)).toEqual([
+      null,
+      null,
+    ]);
+  });
+
+  it("treats an expanded exact-name bucket as stale and commits old proposal cleanup", async () => {
+    const database = new AtomicFamilyDatabase();
+    database.state.organizations.push({
+      id: THIRD_ID,
+      name: "Water Lantern Festival",
+      website: "https://waterlanternfestival.example/boston",
+      address1: "300 Harbor Rd",
+      city: "Boston",
+      region: "MA",
+      postalCode: null,
+      parentOrganizationId: null,
+    });
+
+    await expect(
+      reviewOrganizationFamily(database as never, input, new Date("2026-08-13T00:00:00Z")),
+    ).rejects.toBeInstanceOf(HierarchyConflictError);
+
+    expect(database.state.review).toBeNull();
+    expect(database.state.organizations).toHaveLength(3);
+    expect(database.state.organizations.map((row) => row.parentOrganizationId)).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it("serializes repeated create-parent decisions without creating an empty second parent", async () => {
