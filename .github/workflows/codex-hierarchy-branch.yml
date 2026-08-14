@@ -43,6 +43,7 @@ jobs:
         env:
           TEST_DATABASE_URL: ""
       - run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/organizations/organization-search-hierarchy.test.ts src/components/organizations/organization-list-hierarchy.test.tsx src/features/organizations/website-url.test.ts src/features/event-profiles/event-profile-hierarchy.test.ts src/components/event-profiles/event-profile-hierarchy.test.tsx src/components/organizations/hierarchy-controls.test.tsx src/components/organizations/duplicates-family-review.test.tsx src/features/organizations/bulk-duplicate-merge.test.ts
+      - run: pnpm run typecheck:libs
       - run: pnpm --filter @workspace/db build
       - run: pnpm exec tsc -p lib/api-zod/tsconfig.json
       - run: pnpm --filter @workspace/api-server typecheck
