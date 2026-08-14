@@ -88,6 +88,18 @@ class GuardTransaction {
         }
         return Promise.resolve([]);
       },
+      then: <TResult1 = unknown[], TResult2 = never>(
+        onfulfilled?: ((value: unknown[]) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+      ) => {
+        const rows =
+          table === organizations
+            ? [...this.selected, ...this.ownedLocations]
+            : table === organizationFamilyReviews
+              ? this.proposals
+              : [];
+        return Promise.resolve(rows).then(onfulfilled, onrejected);
+      },
     };
     return builder;
   }
