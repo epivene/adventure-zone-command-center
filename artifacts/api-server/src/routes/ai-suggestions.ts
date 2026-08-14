@@ -82,7 +82,7 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
     ]);
 
     const { activities, contacts, organizations, activityAssociations } = schema;
-    const { inArray, eq, and, gte, or, isNull } = orm;
+    const { inArray, eq, and, gte, isNull, isNotNull, alias } = orm;
 
     // Compute the lookback cutoff, or null for all history.
     let cutoff: Date | null = null;
@@ -102,11 +102,13 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
     // table) rather than direct FK columns. We resolve contact/org IDs from
     // both sources: direct FK wins, association falls back when FK is null.
     // One activity can have multiple associations; we pick the first contact
-    // and first organization via a lateral-style left join on kind.
-    const assocContact = (db as any).alias(activityAssociations, "assoc_contact");
-    const assocOrg = (db as any).alias(activityAssociations, "assoc_org");
-    const assocContactPerson = (db as any).alias(contacts, "assoc_contact_person");
-    const assocOrgCompany = (db as any).alias(organizations, "assoc_org_company");
+    // and first organization via a left join filtered by which ID column is
+    // non-null (the schema uses a "exactly one non-null" check constraint,
+    // so there is no associationType column).
+    const assocContact = alias(activityAssociations, "assoc_contact");
+    const assocOrg = alias(activityAssociations, "assoc_org");
+    const assocContactPerson = alias(contacts, "assoc_contact_person");
+    const assocOrgCompany = alias(organizations, "assoc_org_company");
 
     const rows = await (db as any)
       .selectDistinctOn([activities.id], {
@@ -128,12 +130,14 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       // Direct FK joins
       .leftJoin(contacts, eq(activities.contactId, contacts.id))
       .leftJoin(organizations, eq(activities.organizationId, organizations.id))
-      // Association-based contact fallback (only when direct FK is absent)
+      // Association-based contact fallback (only when direct FK is absent).
+      // activity_associations uses nullable ID columns with exactly-one-non-null
+      // constraint — there is no associationType column.
       .leftJoin(
         assocContact,
         and(
           eq(assocContact.activityId, activities.id),
-          eq(assocContact.associationType, "contact"),
+          isNotNull(assocContact.contactId),
           isNull(activities.contactId),
         ),
       )
@@ -146,7 +150,7 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
         assocOrg,
         and(
           eq(assocOrg.activityId, activities.id),
-          eq(assocOrg.associationType, "organization"),
+          isNotNull(assocOrg.organizationId),
           isNull(activities.organizationId),
         ),
       )
