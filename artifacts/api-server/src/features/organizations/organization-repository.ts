@@ -46,6 +46,11 @@ import {
   HierarchyConflictError,
   setOrganizationParentsInTransaction,
 } from "@/features/organizations/organization-hierarchy";
+import {
+  lockOrganizationFamilyMutationSnapshot,
+  lockOrganizationFamilyReviewDomain,
+} from "@/features/organizations/organization-family-lock";
+export { lockOrganizationFamilyReviewDomain } from "@/features/organizations/organization-family-lock";
 
 export type OrganizationPerson = {
   id: string;
@@ -297,7 +302,7 @@ export async function reviewOrganizationFamily(
   const groupKey = organizationFamilyGroupKey(candidateIds);
 
   const outcome = await database.transaction(async (transaction) => {
-    await lockOrganizationFamilyReviewDomain(transaction);
+    await lockOrganizationFamilyMutationSnapshot(transaction);
     const [review] = await transaction
       .select({
         groupKey: organizationFamilyReviews.groupKey,
@@ -420,16 +425,6 @@ type OrganizationMergeTransaction = Parameters<
 const organizationMergeFamilyConflictMessage =
   "These profiles may be locations of the same organization. Review the location group before merging.";
 
-const organizationFamilyReviewAdvisoryLockKey = 734_802_341;
-
-export async function lockOrganizationFamilyReviewDomain(
-  transaction: Pick<OrganizationMergeTransaction, "execute">,
-): Promise<void> {
-  await transaction.execute(
-    sql`select pg_advisory_xact_lock(${organizationFamilyReviewAdvisoryLockKey})`,
-  );
-}
-
 async function revalidateOrganizationsMergeable(
   transaction: OrganizationMergeTransaction,
   ids: string[],
@@ -439,7 +434,7 @@ async function revalidateOrganizationsMergeable(
   );
   const selectedIdSet = new Set(selectedIds);
 
-  await lockOrganizationFamilyReviewDomain(transaction);
+  await lockOrganizationFamilyMutationSnapshot(transaction);
   const proposedFamilies = await transaction
     .select({
       groupKey: organizationFamilyReviews.groupKey,
@@ -566,7 +561,7 @@ export async function persistProposedOrganizationFamilies(
   if (!eligibleProposals.length) return;
 
   await database.transaction(async (transaction) => {
-    await lockOrganizationFamilyReviewDomain(transaction);
+    await lockOrganizationFamilyMutationSnapshot(transaction);
     await transaction
       .insert(organizationFamilyReviews)
       .values(eligibleProposals.map((proposal) => ({
@@ -604,49 +599,50 @@ export async function persistProposedOrganizationFamilies(
     });
     if (!activeProposals.length) return;
 
-    const candidateIds = [
-      ...new Set(activeProposals.flatMap((proposal) => proposal.candidateIds)),
-    ].sort((left, right) => left.localeCompare(right, "en-US"));
-    const candidates = await transaction
-      .select({
-        id: organizations.id,
-        parentOrganizationId: organizations.parentOrganizationId,
-      })
+    // Rebuild the complete discovery set only after the table/evidence locks are
+    // held. This closes the gap where a concurrent third location could be
+    // omitted from an older A/B proposal snapshot.
+    const standaloneRecords = await transaction
+      .select()
       .from(organizations)
-      .where(inArray(organizations.id, candidateIds))
-      .orderBy(asc(organizations.id))
-      .for("update");
-    const ownedLocations = await transaction
-      .select({
-        id: organizations.id,
-        parentOrganizationId: organizations.parentOrganizationId,
-      })
-      .from(organizations)
-      .where(inArray(organizations.parentOrganizationId, candidateIds))
-      .orderBy(asc(organizations.id))
-      .for("update");
-
-    const candidateById = new Map(
-      candidates.map((candidate) => [candidate.id, candidate]),
+      .where(and(
+        isNull(organizations.parentOrganizationId),
+        sql`not exists (
+          select 1 from ${organizations} as confirmed_location
+          where confirmed_location.parent_organization_id = ${organizations.id}
+        )`,
+      ))
+      .orderBy(asc(organizations.id));
+    const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
+      transaction,
+      standaloneRecords,
     );
-    const parentsWithLocations = new Set(
-      ownedLocations.flatMap((location) =>
-        location.parentOrganizationId
-          ? [location.parentOrganizationId]
-          : [],
-      ),
+    const activeCandidateIds = new Set(
+      activeProposals.flatMap((proposal) => proposal.candidateIds),
+    );
+    const currentRelevantGroups = currentGroups.filter(
+      (group) =>
+        group.groupKey &&
+        group.candidateIds.some((candidateId) =>
+          activeCandidateIds.has(candidateId),
+        ),
+    );
+    const currentByKey = new Map(
+      currentRelevantGroups.map((group) => [group.groupKey!, group]),
     );
     const staleKeys = activeProposals
-      .filter((proposal) =>
-        !proposal.candidateIds.every((candidateId) => {
-          const candidate = candidateById.get(candidateId);
-          return (
-            candidate?.parentOrganizationId === null &&
-            !parentsWithLocations.has(candidateId)
-          );
-        }),
-      )
+      .filter((proposal) => {
+        const current = currentByKey.get(proposal.groupKey!);
+        return (
+          !current ||
+          current.candidateIds.length !== proposal.candidateIds.length ||
+          !current.candidateIds.every(
+            (id, index) => id === proposal.candidateIds[index],
+          )
+        );
+      })
       .map((proposal) => proposal.groupKey!);
+
     if (staleKeys.length) {
       await transaction
         .delete(organizationFamilyReviews)
@@ -654,6 +650,16 @@ export async function persistProposedOrganizationFamilies(
           eq(organizationFamilyReviews.status, "proposed"),
           inArray(organizationFamilyReviews.groupKey, staleKeys),
         ));
+
+      await transaction
+        .insert(organizationFamilyReviews)
+        .values(currentRelevantGroups.map((group) => ({
+          groupKey: group.groupKey!,
+          candidateIds: group.candidateIds,
+          status: "proposed" as const,
+          evidence: group.evidence,
+        })))
+        .onConflictDoNothing({ target: organizationFamilyReviews.groupKey });
     }
   });
 }
