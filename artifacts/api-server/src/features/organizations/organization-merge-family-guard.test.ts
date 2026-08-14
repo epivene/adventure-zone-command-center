@@ -375,7 +375,7 @@ describe("organization merge family guard", () => {
       [proposal],
     );
     expect(proposalWinner.events[0]).toBe("advisory");
-    expect(proposalWinner.locks).toEqual(["update", "update", "update"]);
+    expect(proposalWinner.locks).toEqual(["update"]);
     expect(proposalWinner.insertedProposals).toEqual([
       expect.objectContaining({
         groupKey: proposal.groupKey,
