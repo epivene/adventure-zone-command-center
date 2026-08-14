@@ -387,6 +387,59 @@ describe("organization merge family guard", () => {
     expect(proposalAfterMerge.insertedProposals).toEqual([]);
   });
 
+
+  it("replaces a stale subset proposal with the current entire exact-name bucket", async () => {
+    const thirdId = "66666666-6666-4666-8666-666666666666";
+    const proposalKey = `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}`;
+    const expandedKey = `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}|${thirdId}`;
+    const transaction = new GuardTransaction(
+      [
+        row(PRIMARY_ID, null, {
+          name: "Water Lantern Festival",
+          website: "https://waterlanternfestival.example/denver",
+          address1: "100 Lake St",
+          city: "Denver",
+          region: "CO",
+        }),
+        row(DUPLICATE_ID, null, {
+          name: "Water Lantern Festival",
+          website: "https://waterlanternfestival.example/austin",
+          address1: "200 River Rd",
+          city: "Austin",
+          region: "TX",
+        }),
+        row(thirdId, null, {
+          name: "Water Lantern Festival",
+          website: "https://waterlanternfestival.example/boston",
+          address1: "300 Harbor Rd",
+          city: "Boston",
+          region: "MA",
+        }),
+      ],
+      [],
+      [{ groupKey: proposalKey, candidateIds: [PRIMARY_ID, DUPLICATE_ID] }],
+    );
+
+    await expect(
+      assertOrganizationsMergeable(
+        transaction as never,
+        [PRIMARY_ID, DUPLICATE_ID],
+      ),
+    ).rejects.toEqual(new HierarchyConflictError(conflictMessage));
+
+    expect(transaction.mutations).toContainEqual({
+      kind: "delete",
+      table: organizationFamilyReviews,
+    });
+    expect(transaction.insertedProposals).toContainEqual(
+      expect.objectContaining({
+        groupKey: expandedKey,
+        candidateIds: [PRIMARY_ID, DUPLICATE_ID, thirdId],
+        status: "proposed",
+      }),
+    );
+  });
+
   it("deletes a stale website proposal and allows the ordinary merge", async () => {
     const proposalKey = `organization-family:${PRIMARY_ID}|${DUPLICATE_ID}`;
     const transaction = new GuardTransaction(
