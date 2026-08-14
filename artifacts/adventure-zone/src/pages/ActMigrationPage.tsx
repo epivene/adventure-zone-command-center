@@ -13,6 +13,7 @@ import {
   assignReviewParent,
   bulkDecideReviewRecords,
   decideReviewRecord,
+  getArchivedProfileImport,
   getAssignmentTargets,
   getLatestRun,
   getReview,
@@ -20,10 +21,12 @@ import {
   organizeRun,
   resolveAutomaticReview,
   resumeRun,
+  startArchivedProfileImport,
   startRun,
   supersedeRun,
   type ActPageSize,
   type ActReplacementWorkflowStatus,
+  type ArchiveProfileImportStatus,
   type AutomaticReviewResolutionSummary,
   type AssignmentTarget,
   type BulkReviewDecisionRequest,
@@ -92,6 +95,10 @@ type AutomaticReviewResult = {
   summary: AutomaticReviewResolutionSummary;
 };
 
+type ArchiveProfileLookup =
+  | { state: "unknown" | "loading" | "absent" | "error"; runId: string | null }
+  | { state: "present"; runId: string; status: ArchiveProfileImportStatus };
+
 function isFinished(phase: ActReplacementWorkflowStatus["phase"]) {
   return ["complete", "complete_with_issues", "failed", "superseded"].includes(
     phase,
@@ -146,6 +153,71 @@ function errorCode(error: unknown) {
   return error instanceof Error ? error.message : null;
 }
 
+function hasArchivedProfiles(run: ActReplacementWorkflowStatus | null) {
+  return Boolean(
+    run?.streams.reduce(
+      (total, stream) =>
+        stream.streamType === "company" || stream.streamType === "contact"
+          ? total + stream.archivedIdentities
+          : total,
+      0,
+    ),
+  );
+}
+
+function archiveProfileProjectionFingerprint(
+  run: ActReplacementWorkflowStatus | null,
+) {
+  if (!run) return null;
+  const profileStreams = run.streams
+    .filter(
+      (stream) =>
+        stream.streamType === "company" || stream.streamType === "contact",
+    )
+    .map((stream) =>
+      [
+        stream.streamType,
+        stream.state,
+        stream.observedIdentities,
+        stream.archivedIdentities,
+      ].join(":"),
+    )
+    .sort()
+    .join("|");
+  return [
+    run.runId,
+    run.phase,
+    run.manifestDigest ?? "",
+    run.canOrganize ? "recoverable" : "leased",
+    profileStreams,
+  ].join(";");
+}
+
+function canImportArchivedProfiles(
+  run: ActReplacementWorkflowStatus | null,
+) {
+  return Boolean(
+    run &&
+      !run.manifestDigest &&
+      hasArchivedProfiles(run) &&
+      (run.phase === "extract_complete" ||
+        run.phase === "failed" ||
+        run.phase === "complete" ||
+        run.phase === "complete_with_issues" ||
+        (run.phase === "ready_to_apply" && run.canOrganize) ||
+        (run.phase === "organizing" && run.canOrganize)),
+  );
+}
+
+function archiveProfilePhaseLabel(
+  phase: ArchiveProfileImportStatus["phase"],
+) {
+  if (phase === "companies") return "Companies";
+  if (phase === "contacts") return "Contacts";
+  if (phase === "complete") return "Complete";
+  return "Failed";
+}
+
 function StageProgress({ active }: { active: number }) {
   return (
     <nav aria-label="Act import stages" className="mt-6">
@@ -193,7 +265,7 @@ export default function ActMigrationPage() {
     string | null
   >(null);
   const [busy, setBusy] = useState<
-    "fetch" | "organize" | "apply" | "review" | null
+    "fetch" | "organize" | "profiles" | "apply" | "review" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const [importConfirmation, setImportConfirmation] =
@@ -202,13 +274,40 @@ export default function ActMigrationPage() {
   const [needsAttention, setNeedsAttention] = useState(false);
   const [sessionTotals, setSessionTotals] =
     useState<SessionTotals>(emptyTotals);
+  const [archiveProfileLookup, setArchiveProfileLookup] =
+    useState<ArchiveProfileLookup>({ state: "unknown", runId: null });
+  const [archiveProfileStartAttemptedRunId, setArchiveProfileStartAttemptedRunId] =
+    useState<string | null>(null);
   const reviewRequestToken = useRef(0);
+  const archiveProfileStatusRequestToken = useRef(0);
+  const archiveProfileGeneration = useRef(0);
+  const archiveProfileLookupInFlight = useRef<{
+    runId: string;
+    generation: number;
+    requestToken: number;
+  } | null>(null);
+  const lastArchiveProfileProjection = useRef<string | null>(null);
+  const lastArchiveProfileFocusCheckAt = useRef(0);
+  const archiveProfileRequestKeys = useRef(new Map<string, string>());
+  const archiveProfileRunId = useRef<string | null>(null);
+  const mounted = useRef(false);
   const targetSearchTokens = useRef(new Map<string, number>());
   const targetSearchSequence = useRef(0);
   const busyRef = useRef<typeof busy>(null);
   const modalReturnFocus = useRef<HTMLElement | null>(null);
   const bulkConfirmButtonRef = useRef<HTMLButtonElement | null>(null);
   const importConfirmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const archivedProfilesAvailable = hasArchivedProfiles(run);
+  const archiveProfileProjection = archiveProfileProjectionFingerprint(run);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      archiveProfileGeneration.current += 1;
+      archiveProfileStatusRequestToken.current += 1;
+    };
+  }, []);
 
   const invalidateAssignmentTargets = useCallback(() => {
     targetSearchTokens.current.clear();
@@ -232,7 +331,209 @@ export default function ActMigrationPage() {
   }, []);
 
   useEffect(() => {
-    if (!run || !["extracting", "organizing", "applying"].includes(run.phase)) return;
+    const nextRunId = run?.runId ?? null;
+    if (archiveProfileRunId.current === nextRunId) return;
+    archiveProfileRunId.current = nextRunId;
+    archiveProfileGeneration.current += 1;
+    archiveProfileStatusRequestToken.current += 1;
+    archiveProfileLookupInFlight.current = null;
+    lastArchiveProfileProjection.current = null;
+    lastArchiveProfileFocusCheckAt.current = 0;
+    archiveProfileRequestKeys.current.clear();
+    setArchiveProfileLookup({ state: "unknown", runId: nextRunId });
+    setArchiveProfileStartAttemptedRunId(null);
+    if (busyRef.current === "profiles") {
+      busyRef.current = null;
+      setBusy(null);
+    }
+    setError(null);
+  }, [run?.runId]);
+
+  const loadArchiveProfileStatus = useCallback(async (
+    runId: string,
+    generation: number,
+  ) => {
+    const currentRequest = archiveProfileLookupInFlight.current;
+    if (
+      currentRequest?.runId === runId &&
+      currentRequest.generation === generation
+    ) return;
+    const requestToken = ++archiveProfileStatusRequestToken.current;
+    const request = { runId, generation, requestToken };
+    archiveProfileLookupInFlight.current = request;
+    setArchiveProfileLookup({ state: "loading", runId });
+    try {
+      const status = await getArchivedProfileImport(runId);
+      if (
+        mounted.current &&
+        generation === archiveProfileGeneration.current &&
+        requestToken === archiveProfileStatusRequestToken.current &&
+        archiveProfileRunId.current === runId &&
+        status.runId === runId
+      ) {
+        setArchiveProfileLookup({ state: "present", runId, status });
+        setArchiveProfileStartAttemptedRunId((current) =>
+          current === runId ? null : current,
+        );
+        setError(null);
+      }
+    } catch (caught) {
+      if (
+        !mounted.current ||
+        generation !== archiveProfileGeneration.current ||
+        requestToken !== archiveProfileStatusRequestToken.current ||
+        archiveProfileRunId.current !== runId
+      ) return;
+      if (errorCode(caught) === "archive_profile_import_not_found") {
+        setArchiveProfileLookup({ state: "absent", runId });
+        setArchiveProfileStartAttemptedRunId((current) =>
+          current === runId ? null : current,
+        );
+        setError(null);
+        return;
+      }
+      setArchiveProfileLookup({ state: "error", runId });
+      setError(
+        errorCode(caught) ?? "Could not load archived profile import status",
+      );
+    } finally {
+      if (archiveProfileLookupInFlight.current === request) {
+        archiveProfileLookupInFlight.current = null;
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!run) return;
+    if (!archivedProfilesAvailable) {
+      archiveProfileStatusRequestToken.current += 1;
+      setArchiveProfileLookup({ state: "absent", runId: run.runId });
+      return;
+    }
+    const knownPresent =
+      archiveProfileLookup.state === "present" &&
+      archiveProfileLookup.runId === run.runId;
+    if (
+      knownPresent ||
+      archiveProfileLookupInFlight.current?.runId === run.runId ||
+      lastArchiveProfileProjection.current === archiveProfileProjection
+    ) return;
+    lastArchiveProfileProjection.current = archiveProfileProjection;
+    void loadArchiveProfileStatus(
+      run.runId,
+      archiveProfileGeneration.current,
+    );
+  }, [
+    run?.runId,
+    archivedProfilesAvailable,
+    archiveProfileProjection,
+    archiveProfileLookup.state,
+    archiveProfileLookup.runId,
+    loadArchiveProfileStatus,
+  ]);
+
+  const currentArchiveProfileImport =
+    archiveProfileLookup.state === "present" &&
+    archiveProfileLookup.runId === run?.runId
+      ? archiveProfileLookup.status
+      : null;
+
+  useEffect(() => {
+    if (
+      !run ||
+      !archivedProfilesAvailable ||
+      archiveProfileLookup.runId !== run.runId ||
+      !["absent", "error"].includes(archiveProfileLookup.state)
+    ) return;
+    const runId = run.runId;
+    const generation = archiveProfileGeneration.current;
+    const recheck = () => {
+      const now = Date.now();
+      if (
+        now - lastArchiveProfileFocusCheckAt.current < 500 ||
+        archiveProfileLookupInFlight.current?.runId === runId
+      ) return;
+      lastArchiveProfileFocusCheckAt.current = now;
+      void loadArchiveProfileStatus(runId, generation);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") recheck();
+    };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [
+    run?.runId,
+    archivedProfilesAvailable,
+    archiveProfileLookup.runId,
+    archiveProfileLookup.state,
+    loadArchiveProfileStatus,
+  ]);
+
+  useEffect(() => {
+    if (
+      !currentArchiveProfileImport?.active ||
+      currentArchiveProfileImport.runId !== run?.runId
+    )
+      return;
+    const runId = currentArchiveProfileImport.runId;
+    const generation = archiveProfileGeneration.current;
+    let current = true;
+    let polling = false;
+    const poll = window.setInterval(() => {
+      if (polling) return;
+      polling = true;
+      const requestToken = ++archiveProfileStatusRequestToken.current;
+      void getArchivedProfileImport(runId)
+        .then((status) => {
+          if (
+            current &&
+            mounted.current &&
+            generation === archiveProfileGeneration.current &&
+            requestToken === archiveProfileStatusRequestToken.current &&
+            archiveProfileRunId.current === runId &&
+            status.runId === runId
+          ) {
+            setArchiveProfileLookup({ state: "present", runId, status });
+            setArchiveProfileStartAttemptedRunId((current) =>
+              current === runId ? null : current,
+            );
+            setError(null);
+          }
+        })
+        .catch((caught) => {
+          if (
+            current &&
+            mounted.current &&
+            generation === archiveProfileGeneration.current &&
+            requestToken === archiveProfileStatusRequestToken.current
+          ) {
+            setError(
+              errorCode(caught) ??
+                "Could not refresh archived profile import status",
+            );
+          }
+        })
+        .finally(() => {
+          polling = false;
+        });
+    }, 3_000);
+    return () => {
+      current = false;
+      window.clearInterval(poll);
+    };
+  }, [currentArchiveProfileImport?.active, currentArchiveProfileImport?.runId, run?.runId]);
+
+  useEffect(() => {
+    if (
+      !run ||
+      !["extracting", "organizing", "applying"].includes(run.phase) ||
+      (run.phase === "organizing" && canImportArchivedProfiles(run))
+    )
+      return;
     const runId = run.runId;
     let current = true;
     let polling = false;
@@ -439,6 +740,67 @@ export default function ActMigrationPage() {
       setError(errorCode(caught) ?? "Could not organize fetched records");
     } finally {
       setBusy(null);
+    }
+  };
+
+  const importArchivedProfiles = async () => {
+    const canRetryCurrentJob = currentArchiveProfileImport?.phase === "failed";
+    if (
+      (!canImportArchivedProfiles(run) && !canRetryCurrentJob) ||
+      !run ||
+      !beginBusy("profiles")
+    ) {
+      return;
+    }
+    const runId = run.runId;
+    const generation = archiveProfileGeneration.current;
+    setArchiveProfileStartAttemptedRunId(runId);
+    let requestKey = archiveProfileRequestKeys.current.get(runId);
+    if (!requestKey) {
+      requestKey = crypto.randomUUID();
+      archiveProfileRequestKeys.current.set(runId, requestKey);
+    }
+    const requestToken = ++archiveProfileStatusRequestToken.current;
+    setError(null);
+    try {
+      const status = await startArchivedProfileImport(runId, requestKey);
+      if (
+        mounted.current &&
+        generation === archiveProfileGeneration.current &&
+        requestToken === archiveProfileStatusRequestToken.current &&
+        archiveProfileRunId.current === runId &&
+        status.runId === runId
+      ) {
+        setArchiveProfileLookup({ state: "present", runId, status });
+        setArchiveProfileStartAttemptedRunId((current) =>
+          current === runId ? null : current,
+        );
+      }
+    } catch (caught) {
+      if (
+        mounted.current &&
+        generation === archiveProfileGeneration.current &&
+        requestToken === archiveProfileStatusRequestToken.current &&
+        archiveProfileRunId.current === runId
+      ) {
+        setArchiveProfileLookup((current) =>
+          current.runId === runId && current.state !== "present"
+            ? { state: "error", runId }
+            : current,
+        );
+        setError(
+          errorCode(caught) ?? "Could not start archived profile import",
+        );
+      }
+    } finally {
+      if (
+        mounted.current &&
+        generation === archiveProfileGeneration.current &&
+        archiveProfileRunId.current === runId &&
+        busyRef.current === "profiles"
+      ) {
+        endBusy();
+      }
     }
   };
 
@@ -870,7 +1232,29 @@ export default function ActMigrationPage() {
   };
 
   const stage = activeStage(run, busy === "apply");
-  const canStart = !run || isFinished(run.phase);
+  const archiveProfileRecoveryAvailable = canImportArchivedProfiles(run);
+  const archiveProfileJobActive = Boolean(currentArchiveProfileImport?.active);
+  const currentArchiveProfileLookupState =
+    archiveProfileLookup.runId === run?.runId
+      ? archiveProfileLookup.state
+      : "unknown";
+  const archiveProfileStartAttempted =
+    archiveProfileStartAttemptedRunId === run?.runId;
+  const archiveProfileMutationPossible = Boolean(
+    archivedProfilesAvailable &&
+      (currentArchiveProfileLookupState !== "absent" ||
+        archiveProfileStartAttempted),
+  );
+  const showArchiveProfileImport = Boolean(
+    archivedProfilesAvailable &&
+      (archiveProfileRecoveryAvailable ||
+        currentArchiveProfileLookupState !== "absent" ||
+        archiveProfileStartAttempted),
+  );
+  const canStart =
+    (!run || isFinished(run.phase)) &&
+    !archiveProfileRecoveryAvailable &&
+    !archiveProfileJobActive;
   const showReview = Boolean(run?.manifestDigest);
   const showAutomaticReviewAction = Boolean(
     run &&
@@ -939,12 +1323,18 @@ export default function ActMigrationPage() {
       {run && (
         <ExtractionProgress
           status={run}
+          profileImportStarted={archiveProfileMutationPossible}
+          allowStartOver={
+            !archiveProfileJobActive &&
+            busy !== "profiles" &&
+            !archiveProfileStartAttempted
+          }
           onResume={() => void runStatusAction(() => resumeRun(run.runId))}
           onStartOver={startOver}
         />
       )}
 
-      {run?.canOrganize && (
+      {run?.manifestDigest && run.canOrganize && (
         <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-wide text-orange-700">
             Organize
@@ -969,6 +1359,139 @@ export default function ActMigrationPage() {
                 ? "Auto-review fetched archive"
                 : "Auto-review saved archive"}
           </button>
+        </section>
+      )}
+
+      {showArchiveProfileImport && (
+        <section
+          aria-labelledby="archive-profile-import-heading"
+          aria-busy={
+            currentArchiveProfileLookupState === "loading" ||
+            busy === "profiles"
+          }
+          className="mt-6 rounded-xl border border-orange-200 bg-white p-5 shadow-sm sm:p-6"
+        >
+          <p className="text-sm font-semibold uppercase tracking-wide text-orange-700">
+            Profiles
+          </p>
+          <h2
+            id="archive-profile-import-heading"
+            className="mt-1 text-xl font-semibold text-slate-900"
+          >
+            Import companies and contacts from the saved archive
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Notes and history are still safely archived and will be attached after the profiles are created.
+          </p>
+
+          {currentArchiveProfileLookupState === "loading" &&
+            !currentArchiveProfileImport && (
+            <p role="status" className="mt-4 text-sm font-medium text-slate-700">
+              Checking saved profile import…
+            </p>
+          )}
+          {currentArchiveProfileLookupState === "error" && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm text-amber-900">
+                The saved profile import status could not be confirmed.
+              </p>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => {
+                  if (run) {
+                    void loadArchiveProfileStatus(
+                      run.runId,
+                      archiveProfileGeneration.current,
+                    );
+                  }
+                }}
+                className="mt-3 rounded-lg border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 disabled:opacity-50"
+              >
+                Retry status check
+              </button>
+            </div>
+          )}
+          {busy === "profiles" && (
+            <p role="status" className="mt-4 text-sm font-medium text-slate-700">
+              Starting archived profile import…
+            </p>
+          )}
+
+          {currentArchiveProfileImport && (
+            <div
+              role="status"
+              aria-live="polite"
+              className={`mt-5 rounded-lg border p-4 ${
+                currentArchiveProfileImport.phase === "failed"
+                  ? "border-amber-200 bg-amber-50"
+                  : currentArchiveProfileImport.phase === "complete"
+                    ? "border-green-200 bg-green-50"
+                    : "border-blue-200 bg-blue-50"
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Current phase
+                  </p>
+                  <p className="text-lg font-semibold text-slate-900">
+                    {archiveProfilePhaseLabel(currentArchiveProfileImport.phase)}
+                  </p>
+                </div>
+                <div className="text-left sm:text-right">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                    Processed / eligible
+                  </p>
+                  <p className="text-lg font-semibold text-slate-900">
+                    {currentArchiveProfileImport.processedCount.toLocaleString()} / {currentArchiveProfileImport.eligibleCount.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+                {[
+                  ["Created", currentArchiveProfileImport.createdCount],
+                  ["Linked", currentArchiveProfileImport.linkedCount],
+                  ["Updated", currentArchiveProfileImport.updatedCount],
+                  ["Already imported", currentArchiveProfileImport.alreadyImportedCount],
+                  ["Preserved", currentArchiveProfileImport.preservedCount],
+                  ["Retryable failures", currentArchiveProfileImport.retryableFailureCount],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0 rounded-lg bg-white/80 p-3">
+                    <dt className="text-xs text-slate-600">{label}</dt>
+                    <dd className="mt-1 text-lg font-semibold text-slate-900">
+                      {Number(value).toLocaleString()}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {currentArchiveProfileImport.phase === "failed" && (
+                <p className="mt-3 text-sm text-amber-900">
+                  The import paused safely. Everything already committed is still counted above and the remaining records can be retried.
+                </p>
+              )}
+            </div>
+          )}
+
+          {currentArchiveProfileImport?.phase !== "complete" && (
+            <button
+              type="button"
+              disabled={
+                busy !== null ||
+                currentArchiveProfileLookupState === "loading" ||
+                currentArchiveProfileLookupState === "error" ||
+                Boolean(currentArchiveProfileImport?.active)
+              }
+              onClick={() => void importArchivedProfiles()}
+              className="mt-5 w-full rounded-lg bg-orange-600 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              {currentArchiveProfileImport?.phase === "failed"
+                ? "Retry archived profile import"
+                : currentArchiveProfileImport?.active
+                  ? "Importing archived profiles…"
+                  : "Import archived profiles"}
+            </button>
+          )}
         </section>
       )}
 

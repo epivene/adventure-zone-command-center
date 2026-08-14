@@ -7,13 +7,16 @@ import {
   within,
   waitFor,
 } from "@testing-library/react";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ActMigrationPage from "./ActMigrationPage";
 
 const client = vi.hoisted(() => ({
   getLatestRun: vi.fn(),
   getRun: vi.fn(),
+  getArchivedProfileImport: vi.fn(),
   startRun: vi.fn(),
+  startArchivedProfileImport: vi.fn(),
   resumeRun: vi.fn(),
   supersedeRun: vi.fn(),
   organizeRun: vi.fn(),
@@ -83,6 +86,70 @@ function readyRun(overrides: Record<string, unknown> = {}) {
     canOrganize: false,
     canReview: true,
     canApplySafe: true,
+    ...overrides,
+  };
+}
+
+function archivedStream(streamType: string, archivedIdentities: number) {
+  return {
+    streamType,
+    state: "complete",
+    completedCheckpoints: 1,
+    totalCheckpoints: 1,
+    queryMode: "projected",
+    lastSucceededAt: "2026-08-14T12:00:00.000Z",
+    error: null,
+    responseRows: archivedIdentities,
+    observedIdentities: archivedIdentities,
+    archivedIdentities,
+    completeIdentities: archivedIdentities,
+    partialIdentities: 0,
+    failedIdentities: 0,
+    snapshotVersionsInserted: archivedIdentities,
+  };
+}
+
+function savedArchiveRun(overrides: Record<string, unknown> = {}) {
+  return readyRun({
+    phase: "extract_complete",
+    manifestDigest: null,
+    canOrganize: true,
+    canReview: false,
+    canApplySafe: false,
+    safeOperationCount: 0,
+    autoResolvedCount: 0,
+    archivedOnlyCount: 0,
+    reviewRequiredCount: 0,
+    streams: [
+      archivedStream("company", 100),
+      archivedStream("contact", 60),
+    ],
+    allStreams: {
+      ...counters,
+      observedIdentities: 160,
+      archivedIdentities: 160,
+      completeIdentities: 160,
+      snapshotVersionsInserted: 160,
+    },
+    ...overrides,
+  });
+}
+
+function archivedProfileStatus(overrides: Record<string, unknown> = {}) {
+  return {
+    jobId: "00000000-0000-4000-8000-000000000101",
+    runId: readyRun().runId,
+    phase: "companies",
+    active: true,
+    eligibleCount: 160,
+    processedCount: 50,
+    createdCount: 31,
+    linkedCount: 7,
+    updatedCount: 3,
+    alreadyImportedCount: 4,
+    preservedCount: 3,
+    retryableFailureCount: 2,
+    lastErrorCode: null,
     ...overrides,
   };
 }
@@ -190,6 +257,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   client.getLatestRun.mockResolvedValue({ run: null });
   client.getRun.mockResolvedValue({ run: readyRun({ phase: "complete" }) });
+  client.getArchivedProfileImport.mockRejectedValue(
+    Object.assign(new Error("archive_profile_import_not_found"), {
+      code: "archive_profile_import_not_found",
+      status: 404,
+    }),
+  );
+  client.startArchivedProfileImport.mockResolvedValue(
+    archivedProfileStatus(),
+  );
   client.startRun.mockResolvedValue({
     created: true,
     run: readyRun({
@@ -212,6 +288,778 @@ afterEach(() => {
 });
 
 describe("ActMigrationPage", () => {
+  it.each([
+    ["extracted", "extract_complete"],
+    ["stuck organizer", "organizing"],
+  ] as const)(
+    "offers Import archived profiles for a saved %s run without requiring the old organizer",
+    async (_label, phase) => {
+      client.getLatestRun.mockResolvedValue({
+        run: savedArchiveRun({ phase, canOrganize: true }),
+      });
+
+      render(<ActMigrationPage />);
+
+      expect(
+        await screen.findByRole("button", {
+          name: "Import archived profiles",
+        }),
+      ).toBeEnabled();
+      expect(
+        screen.queryByRole("button", { name: /auto-review.*archive/i }),
+      ).not.toBeInTheDocument();
+    },
+  );
+
+  it("offers archived profile recovery for a manifestless ready-to-apply run", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: savedArchiveRun({ phase: "ready_to_apply", canOrganize: true }),
+    });
+
+    render(<ActMigrationPage />);
+
+    expect(
+      await screen.findByRole("button", { name: "Import archived profiles" }),
+    ).toBeEnabled();
+  });
+
+  it("keeps polling a healthy organizer and does not offer a concurrent profile import", async () => {
+    vi.useFakeTimers();
+    try {
+      const organizing = savedArchiveRun({
+        phase: "organizing",
+        canOrganize: false,
+      });
+      const organized = readyRun({
+        runId: organizing.runId,
+        phase: "ready_to_apply",
+        manifestDigest: digest,
+      });
+      client.getLatestRun.mockResolvedValue({ run: organizing });
+      client.getRun.mockResolvedValue({ run: organized });
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+
+      expect(
+        screen.queryByRole("button", { name: "Import archived profiles" }),
+      ).not.toBeInTheDocument();
+      expect(client.getArchivedProfileImport).toHaveBeenCalledWith(
+        organizing.runId,
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+
+      expect(client.getRun).toHaveBeenCalledWith(organizing.runId);
+      expect(
+        screen.getByText("42 safe operations ready"),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an active durable import visible when a manifest arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const saved = savedArchiveRun({ phase: "organizing", canOrganize: false });
+      client.getLatestRun.mockResolvedValue({ run: saved });
+      client.getArchivedProfileImport.mockResolvedValue(
+        archivedProfileStatus({ runId: saved.runId, processedCount: 40 }),
+      );
+      client.getRun.mockResolvedValue({
+        run: readyRun({ runId: saved.runId, streams: saved.streams }),
+      });
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      expect(screen.getByText("40 / 160")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("40 / 160")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Importing archived profiles…" }),
+      ).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Start over" }),
+      ).not.toBeInTheDocument();
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("discovers another tab's active import after a same-run projection change", async () => {
+    vi.useFakeTimers();
+    try {
+      const organizing = savedArchiveRun({
+        phase: "organizing",
+        canOrganize: false,
+      });
+      const projected = readyRun({
+        runId: organizing.runId,
+        streams: organizing.streams,
+      });
+      client.getLatestRun.mockResolvedValue({ run: organizing });
+      client.getRun.mockResolvedValue({ run: projected });
+      client.getArchivedProfileImport
+        .mockRejectedValueOnce(
+          Object.assign(new Error("archive_profile_import_not_found"), {
+            code: "archive_profile_import_not_found",
+            status: 404,
+          }),
+        )
+        .mockResolvedValueOnce(
+          archivedProfileStatus({ runId: organizing.runId }),
+        );
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      expect(screen.getByText("Preview only")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+      await act(async () => Promise.resolve());
+
+      expect(screen.getByText("50 / 160")).toBeInTheDocument();
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+      expect(
+        screen.queryByRole("button", { name: "Start over" }),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rechecks an absent current-run status when the window regains focus", async () => {
+    const run = savedArchiveRun({ phase: "complete" });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getArchivedProfileImport
+      .mockRejectedValueOnce(
+        Object.assign(new Error("archive_profile_import_not_found"), {
+          code: "archive_profile_import_not_found",
+          status: 404,
+        }),
+      )
+      .mockResolvedValueOnce(
+        archivedProfileStatus({ runId: run.runId, phase: "contacts" }),
+      );
+
+    render(<ActMigrationPage />);
+    expect(await screen.findByText("Preview only")).toBeInTheDocument();
+
+    window.dispatchEvent(new Event("focus"));
+
+    expect(await screen.findByText("Contacts")).toBeInTheDocument();
+    expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+  });
+
+  it("discovers an active job started in another tab even with a legacy manifest", async () => {
+    const run = readyRun({ streams: savedArchiveRun().streams });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getArchivedProfileImport.mockResolvedValue(
+      archivedProfileStatus({ runId: run.runId, phase: "contacts" }),
+    );
+
+    render(<ActMigrationPage />);
+
+    expect(await screen.findByText("Contacts")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start over" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("retries a discovered failed job after the workflow gains a manifest", async () => {
+    const run = readyRun({ streams: savedArchiveRun().streams });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getArchivedProfileImport.mockResolvedValue(
+      archivedProfileStatus({
+        runId: run.runId,
+        phase: "failed",
+        active: false,
+      }),
+    );
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Retry archived profile import",
+      }),
+    );
+
+    expect(client.startArchivedProfileImport).toHaveBeenCalledWith(
+      run.runId,
+      expect.any(String),
+    );
+  });
+
+  it("does not offer profile import for a notes-and-history-only archive", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: savedArchiveRun({
+        streams: [archivedStream("note", 80), archivedStream("history", 80)],
+      }),
+    });
+
+    render(<ActMigrationPage />);
+    await screen.findByLabelText("Act extraction progress");
+
+    expect(
+      screen.queryByRole("button", { name: "Import archived profiles" }),
+    ).not.toBeInTheDocument();
+    expect(client.getArchivedProfileImport).not.toHaveBeenCalled();
+  });
+
+  it("starts once with one stable key and then polls durable status every three seconds", async () => {
+    vi.useFakeTimers();
+    const randomUuid = vi
+      .spyOn(crypto, "randomUUID")
+      .mockReturnValue("00000000-0000-4000-8000-000000000102");
+    try {
+      const run = savedArchiveRun();
+      client.getLatestRun.mockResolvedValue({ run });
+      client.getArchivedProfileImport
+        .mockRejectedValueOnce(
+          Object.assign(new Error("archive_profile_import_not_found"), {
+            code: "archive_profile_import_not_found",
+            status: 404,
+          }),
+        )
+        .mockResolvedValue(archivedProfileStatus());
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      const button = screen.getByRole("button", {
+        name: "Import archived profiles",
+      });
+      fireEvent.click(button);
+      fireEvent.click(button);
+      await act(async () => Promise.resolve());
+
+      expect(client.startArchivedProfileImport).toHaveBeenCalledOnce();
+      expect(client.startArchivedProfileImport).toHaveBeenCalledWith(
+        run.runId,
+        "00000000-0000-4000-8000-000000000102",
+      );
+      expect(screen.getByText("Companies")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(2_999);
+        await Promise.resolve();
+      });
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        vi.advanceTimersByTime(1);
+        await Promise.resolve();
+      });
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+    } finally {
+      randomUuid.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows Companies then Contacts progress with every durable counter", async () => {
+    vi.useFakeTimers();
+    try {
+      client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+      client.getArchivedProfileImport
+        .mockResolvedValueOnce(archivedProfileStatus())
+        .mockResolvedValueOnce(
+          archivedProfileStatus({
+            phase: "contacts",
+            processedCount: 125,
+            createdCount: 80,
+            linkedCount: 14,
+            updatedCount: 8,
+            alreadyImportedCount: 9,
+            preservedCount: 11,
+            retryableFailureCount: 3,
+          }),
+        );
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      expect(screen.getByText("Companies")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("Contacts")).toBeInTheDocument();
+      expect(screen.getByText("125 / 160")).toBeInTheDocument();
+      expect(screen.getByText("80", { selector: "dd" })).toBeInTheDocument();
+      expect(screen.getByText("14", { selector: "dd" })).toBeInTheDocument();
+      expect(screen.getByText("8", { selector: "dd" })).toBeInTheDocument();
+      expect(screen.getByText("9", { selector: "dd" })).toBeInTheDocument();
+      expect(screen.getByText("11", { selector: "dd" })).toBeInTheDocument();
+      expect(screen.getByText("3", { selector: "dd" })).toBeInTheDocument();
+      expect(screen.getByText("Created")).toBeInTheDocument();
+      expect(screen.getByText("Linked")).toBeInTheDocument();
+      expect(screen.getByText("Updated")).toBeInTheDocument();
+      expect(screen.getByText("Already imported")).toBeInTheDocument();
+      expect(screen.getByText("Preserved")).toBeInTheDocument();
+      expect(screen.getByText("Retryable failures")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("resumes durable status polling after a page refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+      client.getArchivedProfileImport.mockResolvedValue(
+        archivedProfileStatus({ phase: "contacts", processedCount: 100 }),
+      );
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+
+      expect(screen.getByText("Contacts")).toBeInTheDocument();
+      expect(client.startArchivedProfileImport).not.toHaveBeenCalled();
+      expect(client.getArchivedProfileImport).toHaveBeenCalledOnce();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("explains that notes and history remain safely archived", async () => {
+    client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+
+    render(<ActMigrationPage />);
+
+    expect(
+      await screen.findByText(
+        "Notes and history are still safely archived and will be attached after the profiles are created.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("offers retry after failure without hiding committed progress", async () => {
+    let finishRetry!: (value: ReturnType<typeof archivedProfileStatus>) => void;
+    const retry = new Promise<ReturnType<typeof archivedProfileStatus>>(
+      (resolve) => {
+        finishRetry = resolve;
+      },
+    );
+    client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+    client.getArchivedProfileImport.mockResolvedValue(
+      archivedProfileStatus({
+        phase: "failed",
+        active: false,
+        processedCount: 125,
+        createdCount: 80,
+        lastErrorCode: "archive_profile_database_unavailable",
+      }),
+    );
+    client.startArchivedProfileImport.mockReturnValue(retry);
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Retry archived profile import",
+      }),
+    );
+
+    expect(client.startArchivedProfileImport).toHaveBeenCalledOnce();
+    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText("125 / 160")).toBeInTheDocument();
+    expect(screen.getByText("80", { selector: "dd" })).toBeInTheDocument();
+
+    finishRetry(
+      archivedProfileStatus({
+        phase: "companies",
+        active: true,
+        processedCount: 125,
+        createdCount: 80,
+        lastErrorCode: null,
+      }),
+    );
+    await act(async () => Promise.resolve());
+    expect(screen.getByText("125 / 160")).toBeInTheDocument();
+    expect(screen.getByText("Companies")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Importing archived profiles…" }),
+    ).toBeDisabled();
+  });
+
+  it("scopes durable status and stale responses to the current run", async () => {
+    const prompt = vi.spyOn(window, "prompt").mockReturnValue("START OVER");
+    try {
+      const runA = savedArchiveRun({ phase: "complete" });
+      const runB = savedArchiveRun({
+        runId: "00000000-0000-4000-8000-000000000002",
+      });
+      let finishOldStatus!: (value: ReturnType<typeof archivedProfileStatus>) => void;
+      let finishNewStatus!: (value: ReturnType<typeof archivedProfileStatus>) => void;
+      const oldStatus = new Promise<ReturnType<typeof archivedProfileStatus>>(
+        (resolve) => {
+          finishOldStatus = resolve;
+        },
+      );
+      const newStatus = new Promise<ReturnType<typeof archivedProfileStatus>>(
+        (resolve) => {
+          finishNewStatus = resolve;
+        },
+      );
+      client.getLatestRun.mockResolvedValue({ run: runA });
+      client.getArchivedProfileImport.mockImplementation((runId) =>
+        runId === runB.runId ? newStatus : oldStatus,
+      );
+      client.supersedeRun.mockResolvedValue({
+        run: { ...runA, phase: "superseded" },
+      });
+      client.startRun.mockResolvedValue({ created: true, run: runB });
+
+      render(<ActMigrationPage />);
+      await screen.findByText("Checking saved profile import…");
+      fireEvent.click(screen.getByRole("button", { name: "Start over" }));
+      await act(async () => Promise.resolve());
+      fireEvent.click(
+        screen.getByRole("button", { name: "Import everything from Act!" }),
+      );
+      await act(async () => Promise.resolve());
+
+      expect(client.getArchivedProfileImport).toHaveBeenCalledWith(runB.runId);
+      expect(screen.getByText("Checking saved profile import…")).toBeInTheDocument();
+
+      finishNewStatus(
+        archivedProfileStatus({
+          runId: runB.runId,
+          phase: "contacts",
+          processedCount: 22,
+        }),
+      );
+      await act(async () => Promise.resolve());
+      expect(screen.getByText("22 / 160")).toBeInTheDocument();
+
+      finishOldStatus(
+        archivedProfileStatus({
+          runId: runA.runId,
+          phase: "failed",
+          active: false,
+          processedCount: 99,
+        }),
+      );
+      await act(async () => Promise.resolve());
+      expect(screen.getByText("22 / 160")).toBeInTheDocument();
+      expect(screen.queryByText("99 / 160")).not.toBeInTheDocument();
+    } finally {
+      prompt.mockRestore();
+    }
+  });
+
+  it("shows busy status while checking and starting the durable import", async () => {
+    let rejectLookup!: (reason?: unknown) => void;
+    let finishStart!: (value: ReturnType<typeof archivedProfileStatus>) => void;
+    const lookup = new Promise<never>((_resolve, reject) => {
+      rejectLookup = reject;
+    });
+    const start = new Promise<ReturnType<typeof archivedProfileStatus>>(
+      (resolve) => {
+        finishStart = resolve;
+      },
+    );
+    client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+    client.getArchivedProfileImport.mockReturnValue(lookup);
+    client.startArchivedProfileImport.mockReturnValue(start);
+
+    render(<ActMigrationPage />);
+    const heading = await screen.findByRole("heading", {
+      name: "Import companies and contacts from the saved archive",
+    });
+    const section = heading.closest("section");
+    expect(
+      await screen.findByText("Checking saved profile import…"),
+    ).toBeInTheDocument();
+    expect(section).toHaveAttribute("aria-busy", "true");
+    expect(
+      screen.getByRole("button", { name: "Import archived profiles" }),
+    ).toBeDisabled();
+
+    rejectLookup(
+      Object.assign(new Error("archive_profile_import_not_found"), {
+        code: "archive_profile_import_not_found",
+        status: 404,
+      }),
+    );
+    await act(async () => Promise.resolve());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Import archived profiles" }),
+    );
+    expect(section).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText("Starting archived profile import…")).toBeInTheDocument();
+
+    finishStart(archivedProfileStatus());
+    await act(async () => Promise.resolve());
+  });
+
+  it("does not claim preview-only or no profile writes while the initial status lookup is unresolved", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: savedArchiveRun({ phase: "complete" }),
+    });
+    client.getArchivedProfileImport.mockReturnValue(
+      new Promise<never>(() => undefined),
+    );
+
+    render(<ActMigrationPage />);
+
+    expect(
+      await screen.findByText("Checking saved profile import…"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Preview only")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Nothing has been added to profiles yet/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps mutation copy conservative after status failure and offers a status retry", async () => {
+    const run = savedArchiveRun({ phase: "complete" });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.getArchivedProfileImport
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(
+        archivedProfileStatus({ runId: run.runId, phase: "contacts" }),
+      );
+
+    render(<ActMigrationPage />);
+
+    const retry = await screen.findByRole("button", {
+      name: "Retry status check",
+    });
+    expect(screen.queryByText("Preview only")).not.toBeInTheDocument();
+    fireEvent.click(retry);
+    expect(await screen.findByText("Contacts")).toBeInTheDocument();
+    expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores preview copy only after durable status is confirmed absent", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: savedArchiveRun({ phase: "complete" }),
+    });
+
+    render(<ActMigrationPage />);
+
+    expect(await screen.findByText("Preview only")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nothing has been added to profiles yet/i),
+    ).toBeInTheDocument();
+  });
+
+  it("does not restore no-write claims when a start response is ambiguous", async () => {
+    let rejectStart!: (reason?: unknown) => void;
+    client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+    client.startArchivedProfileImport.mockReturnValue(
+      new Promise<never>((_resolve, reject) => {
+        rejectStart = reject;
+      }),
+    );
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import archived profiles" }),
+    );
+    rejectStart(new TypeError("Failed to fetch"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Failed to fetch");
+    expect(screen.queryByText("Preview only")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Retry status check" }),
+    ).toBeInTheDocument();
+  });
+
+  it("restores Start over after a terminal POST status is accepted", async () => {
+    const run = savedArchiveRun();
+    client.getLatestRun.mockResolvedValue({ run });
+    client.startArchivedProfileImport.mockResolvedValue(
+      archivedProfileStatus({
+        runId: run.runId,
+        phase: "complete",
+        active: false,
+        processedCount: 160,
+      }),
+    );
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Import archived profiles" }),
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Start over" }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses active durable status, not the optimistic marker, as the replacement fence", async () => {
+    vi.useFakeTimers();
+    try {
+      const run = savedArchiveRun();
+      client.getLatestRun.mockResolvedValue({ run });
+      client.startArchivedProfileImport.mockResolvedValue(
+        archivedProfileStatus({ runId: run.runId }),
+      );
+      client.getArchivedProfileImport
+        .mockRejectedValueOnce(
+          Object.assign(new Error("archive_profile_import_not_found"), {
+            code: "archive_profile_import_not_found",
+            status: 404,
+          }),
+        )
+        .mockResolvedValueOnce(
+          archivedProfileStatus({
+            runId: run.runId,
+            phase: "complete",
+            active: false,
+            processedCount: 160,
+          }),
+        );
+
+      render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Import archived profiles",
+        }),
+      );
+      await act(async () => Promise.resolve());
+      expect(
+        screen.getByRole("button", {
+          name: "Importing archived profiles…",
+        }),
+      ).toBeDisabled();
+      expect(
+        screen.queryByRole("button", { name: "Start over" }),
+      ).not.toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_000);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText("160 / 160")).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "Start over" }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("removes preview-only mutation claims once profile import exists", async () => {
+    client.getLatestRun.mockResolvedValue({
+      run: savedArchiveRun({ phase: "complete" }),
+    });
+    client.getArchivedProfileImport.mockResolvedValue(
+      archivedProfileStatus({
+        phase: "complete",
+        active: false,
+        processedCount: 160,
+      }),
+    );
+
+    render(<ActMigrationPage />);
+    expect(await screen.findByText("160 / 160")).toBeInTheDocument();
+    expect(screen.queryByText("Preview only")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Nothing has been added to profiles yet/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not overlap archived status polls and stops polling after unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishPoll!: (value: ReturnType<typeof archivedProfileStatus>) => void;
+      const slowPoll = new Promise<ReturnType<typeof archivedProfileStatus>>(
+        (resolve) => {
+          finishPoll = resolve;
+        },
+      );
+      client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+      client.getArchivedProfileImport
+        .mockResolvedValueOnce(archivedProfileStatus())
+        .mockReturnValueOnce(slowPoll);
+
+      const page = render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      await act(async () => {
+        vi.advanceTimersByTime(6_000);
+        await Promise.resolve();
+      });
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+
+      page.unmount();
+      finishPoll(archivedProfileStatus({ processedCount: 100 }));
+      await act(async () => Promise.resolve());
+      await act(async () => {
+        vi.advanceTimersByTime(6_000);
+        await Promise.resolve();
+      });
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("deduplicates the initial durable lookup under StrictMode", async () => {
+    client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+
+    render(
+      <StrictMode>
+        <ActMigrationPage />
+      </StrictMode>,
+    );
+
+    expect(await screen.findByText("Preview only")).toBeInTheDocument();
+    expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not start polling when a POST resolves after unmount", async () => {
+    vi.useFakeTimers();
+    try {
+      let finishStart!: (value: ReturnType<typeof archivedProfileStatus>) => void;
+      client.getLatestRun.mockResolvedValue({ run: savedArchiveRun() });
+      client.startArchivedProfileImport.mockReturnValue(
+        new Promise((resolve) => {
+          finishStart = resolve;
+        }),
+      );
+
+      const page = render(<ActMigrationPage />);
+      await act(async () => Promise.resolve());
+      fireEvent.click(
+        screen.getByRole("button", { name: "Import archived profiles" }),
+      );
+      page.unmount();
+      finishStart(archivedProfileStatus());
+      await act(async () => Promise.resolve());
+      await act(async () => {
+        vi.advanceTimersByTime(6_000);
+        await Promise.resolve();
+      });
+
+      expect(client.getArchivedProfileImport).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("clears a transient polling error after the next successful refresh", async () => {
     vi.useFakeTimers();
     try {
@@ -1911,101 +2759,6 @@ describe("ActMigrationPage", () => {
       }),
     ).not.toBeInTheDocument();
     expect(client.decideReviewRecord).not.toHaveBeenCalled();
-  });
-
-  it("organizes an extracted run and refreshes its durable status", async () => {
-    const extracted = readyRun({
-      phase: "extract_complete",
-      manifestDigest: null,
-      safeOperationCount: 0,
-      reviewRequiredCount: 0,
-      canOrganize: true,
-      canApplySafe: false,
-    });
-    client.getLatestRun.mockResolvedValue({ run: extracted });
-    client.organizeRun.mockResolvedValue({
-      status: "ready_to_apply",
-      manifest: { digest },
-    });
-    client.getRun.mockResolvedValue({ run: readyRun() });
-
-    render(<ActMigrationPage />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Auto-review fetched archive" }),
-    );
-
-    await waitFor(() =>
-      expect(client.organizeRun).toHaveBeenCalledWith(extracted.runId),
-    );
-    expect(client.getRun).toHaveBeenCalledWith(extracted.runId);
-    expect(
-      await screen.findByText("42 safe operations ready"),
-    ).toBeInTheDocument();
-  });
-
-  it("moves from accepted auto-review polling to an operation-only safe import without review decisions", async () => {
-    // Protects against reintroducing a manual-decision step or presenting the
-    // safe-import confirmation as a record-level operation.
-    const extracted = readyRun({
-      phase: "extract_complete",
-      manifestDigest: null,
-      safeOperationCount: 0,
-      autoResolvedCount: 0,
-      archivedOnlyCount: 0,
-      reviewRequiredCount: 0,
-      canOrganize: true,
-      canApplySafe: false,
-    });
-    const organizing = readyRun({
-      phase: "organizing",
-      manifestDigest: null,
-      safeOperationCount: 0,
-      autoResolvedCount: 0,
-      archivedOnlyCount: 0,
-      reviewRequiredCount: 0,
-      canOrganize: false,
-      canApplySafe: false,
-    });
-    const automaticallyReviewed = readyRun({
-      safeOperationCount: 5,
-      autoResolvedCount: 2,
-      archivedOnlyCount: 3,
-      reviewRequiredCount: 0,
-      canReview: false,
-    });
-    client.getLatestRun.mockResolvedValue({ run: extracted });
-    client.organizeRun.mockResolvedValue({ status: "organizing" });
-    client.getRun
-      .mockResolvedValueOnce({ run: organizing })
-      .mockResolvedValueOnce({ run: automaticallyReviewed });
-    client.approveSafeDefaults.mockResolvedValue(approvalWithOperationIds(5));
-    client.getManifest.mockResolvedValue(manifestForApproval(5));
-
-    render(<ActMigrationPage />);
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Auto-review fetched archive",
-      }),
-    );
-
-    await waitFor(() => expect(client.organizeRun).toHaveBeenCalledWith(extracted.runId));
-    expect(client.getRun).toHaveBeenCalledWith(extracted.runId);
-    expect(
-      await screen.findByText("5 safe operations ready", {}, { timeout: 5_000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("2 records auto-resolved from strong context clues")).toBeInTheDocument();
-    expect(screen.getByText("3 uncertain records kept in the archive")).toBeInTheDocument();
-    expect(client.decideReviewRecord).not.toHaveBeenCalled();
-    expect(client.bulkDecideReviewRecords).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Import safe records" }));
-    const confirmation = await screen.findByRole("dialog");
-    expect(client.approveSafeDefaults).toHaveBeenCalledOnce();
-    expect(client.approveReadyOperations).not.toHaveBeenCalled();
-    expect(confirmation).toHaveTextContent(
-      "5 safe operations will be processed automatically in small batches.",
-    );
-    expect(confirmation).not.toHaveTextContent(/distinct source records/i);
   });
 
   it("prepares automatic import from the bounded server approval without loading the manifest", async () => {

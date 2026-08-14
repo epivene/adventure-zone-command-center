@@ -94,4 +94,20 @@ describe("ExtractionProgress", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("does not claim preview-only behavior after profile mutations start", () => {
+    render(
+      <ExtractionProgress
+        status={{ ...status, phase: "complete" }}
+        profileImportStarted
+        onResume={() => {}}
+        onStartOver={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("Preview only")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Nothing has been added to profiles yet/i),
+    ).not.toBeInTheDocument();
+  });
 });

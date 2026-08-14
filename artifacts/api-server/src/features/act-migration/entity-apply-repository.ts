@@ -12,6 +12,7 @@ import {
 import type { MigrationApplyOperation } from "@/features/act-migration/apply-repository";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
+import { lockProfileLinkTransaction } from "./profile-link-transaction-lock";
 
 type DrizzleDatabase = typeof database;
 type Transaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
@@ -110,12 +111,18 @@ export class MigrationEntityApplyRepository {
 
   applyOrganization(operation: MigrationApplyOperation): Promise<MigrationEntityApplyResult> {
     if (operation.targetEntityType !== "organization") throw new Error("Expected an Organization apply operation.");
-    return this.database.transaction((transaction) => this.applyOrganizationIn(transaction, operation));
+    return this.database.transaction(async (transaction) => {
+      await lockProfileLinkTransaction(transaction);
+      return this.applyOrganizationIn(transaction, operation);
+    });
   }
 
   applyContact(operation: MigrationApplyOperation): Promise<MigrationEntityApplyResult> {
     if (operation.targetEntityType !== "contact") throw new Error("Expected a Contact apply operation.");
-    return this.database.transaction((transaction) => this.applyContactIn(transaction, operation));
+    return this.database.transaction(async (transaction) => {
+      await lockProfileLinkTransaction(transaction);
+      return this.applyContactIn(transaction, operation);
+    });
   }
 
   private async lockOperation(transaction: Transaction, operation: MigrationApplyOperation) {
@@ -204,6 +211,38 @@ export class MigrationEntityApplyRepository {
     return { changed, primaryId };
   }
 
+  private async findPriorLink(
+    transaction: Transaction,
+    entityType: "organization" | "contact",
+    sourceType: "company" | "contact",
+    sourceIds: readonly string[],
+  ) {
+    if (sourceIds.length === 0) return null;
+    return (await transaction.select().from(actExternalLinks).where(and(
+      eq(actExternalLinks.sourceEntityType, sourceType),
+      inArray(actExternalLinks.actRecordId, [...sourceIds]),
+      eq(actExternalLinks.entityType, entityType),
+    )).orderBy(asc(actExternalLinks.id)).limit(1))[0] ?? null;
+  }
+
+  private async lockPriorLink(
+    transaction: Transaction,
+    priorLink: typeof actExternalLinks.$inferSelect,
+    entityType: "organization" | "contact",
+    sourceType: "company" | "contact",
+    sourceIds: readonly string[],
+  ) {
+    const locked = (await transaction.select().from(actExternalLinks).where(and(
+      eq(actExternalLinks.id, priorLink.id),
+      eq(actExternalLinks.entityId, priorLink.entityId),
+      eq(actExternalLinks.entityType, entityType),
+      eq(actExternalLinks.sourceEntityType, sourceType),
+      inArray(actExternalLinks.actRecordId, [...sourceIds]),
+    )).limit(1).for("update"))[0] ?? null;
+    if (!locked) throw new Error("Act migration prior source link changed while applying.");
+    return locked;
+  }
+
   private async applyOrganizationIn(transaction: Transaction, operation: MigrationApplyOperation): Promise<MigrationEntityApplyResult> {
     const records = await this.lockOperation(transaction, operation);
     const companies = records.filter((record) => record.streamType === "company");
@@ -229,15 +268,16 @@ export class MigrationEntityApplyRepository {
     } else {
       // Upsert safety: detect entities linked in a prior run that the matcher missed
       const sourceIds = records.filter((r) => r.streamType === "company" && r.sourceId !== null).map((r) => r.sourceId!);
-      const priorLink = sourceIds.length === 0 ? null
-        : (await transaction.select().from(actExternalLinks).where(and(
-            eq(actExternalLinks.sourceEntityType, "company"),
-            inArray(actExternalLinks.actRecordId, sourceIds),
-            eq(actExternalLinks.entityType, "organization"),
-          )).limit(1).for("update"))[0] ?? null;
+      const priorLink = await this.findPriorLink(transaction, "organization", "company", sourceIds);
       if (priorLink) {
         const [current] = await transaction.select().from(organizations).where(eq(organizations.id, priorLink.entityId)).limit(1).for("update");
         if (!current) throw new Error("Act migration Organization target is missing.");
+        const lockedPriorLink = await this.lockPriorLink(
+          transaction, priorLink, "organization", "company", sourceIds,
+        );
+        if (lockedPriorLink.entityId !== current.id) {
+          throw new Error("Act migration prior source link target changed while applying.");
+        }
         const changed = changedFields(current, values);
         if (Object.keys(changed).length) entity = (await transaction.update(organizations).set({ ...changed, updatedAt: new Date() }).where(eq(organizations.id, current.id)).returning())[0]!;
         else entity = current;
@@ -282,15 +322,16 @@ export class MigrationEntityApplyRepository {
     } else {
       // Upsert safety: detect entities linked in a prior run that the matcher missed
       const sourceIds = records.filter((r) => r.streamType === "contact" && r.sourceId !== null).map((r) => r.sourceId!);
-      const priorLink = sourceIds.length === 0 ? null
-        : (await transaction.select().from(actExternalLinks).where(and(
-            eq(actExternalLinks.sourceEntityType, "contact"),
-            inArray(actExternalLinks.actRecordId, sourceIds),
-            eq(actExternalLinks.entityType, "contact"),
-          )).limit(1).for("update"))[0] ?? null;
+      const priorLink = await this.findPriorLink(transaction, "contact", "contact", sourceIds);
       if (priorLink) {
         const [current] = await transaction.select().from(contacts).where(eq(contacts.id, priorLink.entityId)).limit(1).for("update");
         if (!current) throw new Error("Act migration Contact target is missing.");
+        const lockedPriorLink = await this.lockPriorLink(
+          transaction, priorLink, "contact", "contact", sourceIds,
+        );
+        if (lockedPriorLink.entityId !== current.id) {
+          throw new Error("Act migration prior source link target changed while applying.");
+        }
         const changed = changedFields(current, values);
         if (Object.keys(changed).length) entity = (await transaction.update(contacts).set({ ...changed, updatedAt: new Date() }).where(eq(contacts.id, current.id)).returning())[0]!;
         else entity = current;
