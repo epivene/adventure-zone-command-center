@@ -38,7 +38,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/db exec drizzle-kit push --force --config ./drizzle.config.ts
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/organizations/organization-family-lock.test.ts src/features/organizations/organization-family-concurrency.integration.test.ts --testTimeout=20000
       - run: pnpm --filter @workspace/api-server exec vitest run --testTimeout=20000
+        env:
+          TEST_DATABASE_URL: ""
       - run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/organizations/organization-search-hierarchy.test.ts src/components/organizations/organization-list-hierarchy.test.tsx src/features/organizations/website-url.test.ts src/features/event-profiles/event-profile-hierarchy.test.ts src/components/event-profiles/event-profile-hierarchy.test.tsx src/components/organizations/hierarchy-controls.test.tsx src/components/organizations/duplicates-family-review.test.tsx src/features/organizations/bulk-duplicate-merge.test.ts
       - run: pnpm --filter @workspace/db build
       - run: pnpm exec tsc -p lib/api-zod/tsconfig.json
