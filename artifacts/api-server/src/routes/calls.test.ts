@@ -114,6 +114,21 @@ describe("call completion HTTP dates", () => {
     }));
   });
 
+  it("explains when a future next action is required", async () => {
+    complete.mockResolvedValueOnce({ ok: false, error: { code: "NEXT_ACTION_REQUIRED" } });
+
+    const response = await request(app)
+      .post("/calls/complete")
+      .set("Authorization", authorization)
+      .send({ ...completeBody, nextAction: null })
+      .expect(400);
+
+    expect(response.body).toEqual({
+      ok: false,
+      error: "Choose a next action and a future date before saving this call.",
+    });
+  });
+
   it("rejects invalid JSON dates before calling the service", async () => {
     await request(app).post("/calls/complete").set("Authorization", authorization).send({
       ...completeBody,
