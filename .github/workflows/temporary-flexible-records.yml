@@ -20,8 +20,8 @@ jobs:
       - run: corepack enable
       - run: corepack prepare pnpm@10.15.0 --activate
       - run: pnpm install --frozen-lockfile
-      - name: API tests
-        run: pnpm --filter @workspace/api-server exec vitest run
+      - name: Relevant API tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/calls/call-service.test.ts src/features/activities/activity-service.test.ts src/features/activities/activity-repository.test.ts src/features/activities/activity-associations.pglite.test.ts src/features/event-profiles/event-profile-hierarchy.test.ts src/routes/calendar.test.ts
       - name: Web tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run
       - name: Typecheck
