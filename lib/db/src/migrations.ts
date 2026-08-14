@@ -130,6 +130,22 @@ const migrationFiles = [
           AND NOT tgisinternal
       ) AS ready`,
   },
+  {
+    name: "024_ai_booking_suggestions.sql",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.ai_booking_suggestions') IS NOT NULL AS ready",
+  },
+  {
+    name: "022_act_manifest_generation.sql",
+    markerSql: `SELECT COUNT(*) = 2 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND (
+          (table_name = 'act_replacement_runs' AND column_name = 'manifest_generation')
+          OR
+          (table_name = 'act_replacement_apply_operations' AND column_name = 'manifest_generation')
+        )`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

@@ -93,6 +93,7 @@ function reviewPage() {
 
 function automaticReviewResult(overrides: Record<string, unknown> = {}) {
   return {
+    status: "complete",
     summary: {
       linkedExisting: 2,
       importedNew: 3,
@@ -329,7 +330,7 @@ describe("ActMigrationPage", () => {
     );
   });
 
-  it("offers automatic cleanup only for an organized run with review-required outcomes", async () => {
+  it("offers automatic cleanup only for an organized run with archived records", async () => {
     client.getLatestRun.mockResolvedValue({ run: readyRun() });
 
     const first = render(<ActMigrationPage />);
@@ -351,11 +352,22 @@ describe("ActMigrationPage", () => {
 
     first.unmount();
     client.getLatestRun.mockResolvedValue({
-      run: readyRun({ reviewRequiredCount: 0 }),
+      run: readyRun({ reviewRequiredCount: 0, archivedOnlyCount: 3 }),
     });
     render(<ActMigrationPage />);
 
     await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(2));
+    expect(
+      screen.getByRole("button", { name: "Resolve obvious issues" }),
+    ).toBeInTheDocument();
+
+    cleanup();
+    client.getLatestRun.mockResolvedValue({
+      run: readyRun({ reviewRequiredCount: 0, archivedOnlyCount: 0 }),
+    });
+    render(<ActMigrationPage />);
+
+    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(3));
     expect(
       screen.queryByRole("button", { name: "Resolve obvious issues" }),
     ).not.toBeInTheDocument();
@@ -366,21 +378,30 @@ describe("ActMigrationPage", () => {
     });
     render(<ActMigrationPage />);
 
-    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(client.getLatestRun).toHaveBeenCalledTimes(4));
     expect(
       screen.queryByRole("button", { name: "Resolve obvious issues" }),
     ).not.toBeInTheDocument();
   });
 
   it("runs automatic cleanup for a reviewable complete-with-issues run", async () => {
+    const refreshedDigest = "c".repeat(64);
     const run = readyRun({
       phase: "complete_with_issues",
       reviewRequiredCount: 2,
       canReview: true,
       canApplySafe: true,
     });
+    const refreshed = readyRun({
+      phase: "complete_with_issues",
+      manifestDigest: refreshedDigest,
+      reviewRequiredCount: 2,
+      canReview: true,
+      canApplySafe: true,
+    });
     client.getLatestRun.mockResolvedValue({ run });
-    client.getRun.mockResolvedValue({ run });
+    client.organizeRun.mockResolvedValue({ status: "organizing" });
+    client.getRun.mockResolvedValue({ run: refreshed });
 
     render(<ActMigrationPage />);
     fireEvent.click(
@@ -390,15 +411,95 @@ describe("ActMigrationPage", () => {
     await waitFor(() =>
       expect(client.resolveAutomaticReview).toHaveBeenCalledWith(
         run.runId,
-        expect.objectContaining({ expectedManifestDigest: digest }),
+        expect.objectContaining({ expectedManifestDigest: refreshedDigest }),
       ),
     );
+    expect(client.organizeRun).toHaveBeenCalledWith(run.runId);
+  });
+
+  it("runs automatic cleanup after the safe import completes with archived records", async () => {
+    const refreshedDigest = "c".repeat(64);
+    const run = readyRun({
+      phase: "complete",
+      reviewRequiredCount: 0,
+      archivedOnlyCount: 12_476,
+      canReview: true,
+      canApplySafe: false,
+    });
+    const refreshed = readyRun({
+      phase: "ready_to_apply",
+      manifestDigest: refreshedDigest,
+      reviewRequiredCount: 12_476,
+      archivedOnlyCount: 12_476,
+      canReview: true,
+      canApplySafe: false,
+    });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.organizeRun.mockResolvedValue({ status: "organizing" });
+    client.getRun.mockResolvedValue({ run: refreshed });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+
+    await waitFor(() =>
+      expect(client.resolveAutomaticReview).toHaveBeenCalledWith(
+        run.runId,
+        expect.objectContaining({ expectedManifestDigest: refreshedDigest }),
+      ),
+    );
+    expect(client.organizeRun).toHaveBeenCalledWith(run.runId);
+    expect(client.organizeRun.mock.invocationCallOrder[0])
+      .toBeLessThan(client.resolveAutomaticReview.mock.invocationCallOrder[0]!);
+  });
+
+  it("refreshes an unversioned ready plan before automatic cleanup", async () => {
+    const refreshedDigest = "d".repeat(64);
+    const run = readyRun({
+      phase: "ready_to_apply",
+      canOrganize: true,
+      reviewRequiredCount: 12_719,
+      archivedOnlyCount: 12_719,
+    });
+    const refreshed = readyRun({
+      phase: "ready_to_apply",
+      canOrganize: false,
+      manifestDigest: refreshedDigest,
+      reviewRequiredCount: 12_719,
+      archivedOnlyCount: 12_719,
+    });
+    client.getLatestRun.mockResolvedValue({ run });
+    client.organizeRun.mockResolvedValue({ status: "organizing" });
+    client.getRun.mockResolvedValue({ run: refreshed });
+
+    render(<ActMigrationPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Resolve obvious issues" }),
+    );
+
+    await waitFor(() =>
+      expect(client.resolveAutomaticReview).toHaveBeenCalledWith(run.runId, {
+        expectedManifestDigest: refreshedDigest,
+        requestKey: expect.any(String),
+      }),
+    );
+    expect(client.organizeRun).toHaveBeenCalledWith(run.runId);
   });
 
   it("continues from complete-with-issues through cleanup approval and safe apply", async () => {
+    const organizedDigest = "c".repeat(64);
     const rebuiltDigest = "b".repeat(64);
     const initial = readyRun({
       phase: "complete_with_issues",
+      reviewRequiredCount: 7,
+      safeOperationCount: 0,
+      canReview: true,
+      canApplySafe: false,
+    });
+    const organized = readyRun({
+      phase: "ready_to_apply",
+      manifestDigest: organizedDigest,
       reviewRequiredCount: 7,
       safeOperationCount: 0,
       canReview: true,
@@ -421,6 +522,7 @@ describe("ActMigrationPage", () => {
       canApplySafe: false,
     });
     client.getLatestRun.mockResolvedValue({ run: initial });
+    client.organizeRun.mockResolvedValue({ status: "organizing" });
     client.resolveAutomaticReview.mockResolvedValue(automaticReviewResult({
       manifestDigest: rebuiltDigest,
       remainingReview: {
@@ -439,6 +541,7 @@ describe("ActMigrationPage", () => {
       },
     }));
     client.getRun
+      .mockResolvedValueOnce({ run: organized })
       .mockResolvedValueOnce({ run: rebuilt })
       .mockResolvedValueOnce({ run: completed });
     client.approveSafeDefaults.mockResolvedValue({
@@ -460,7 +563,7 @@ describe("ActMigrationPage", () => {
       await screen.findByRole("button", { name: "Resolve obvious issues" }),
     );
     await screen.findByRole("status", { name: "Automatically resolved" });
-    await waitFor(() => expect(client.getRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(client.getRun).toHaveBeenCalledTimes(2));
 
     fireEvent.click(screen.getByRole("button", { name: "Import safe records" }));
     await screen.findByRole("dialog");
@@ -470,9 +573,12 @@ describe("ActMigrationPage", () => {
 
     await waitFor(() => expect(client.applyNext).toHaveBeenCalledOnce());
     expect(client.resolveAutomaticReview).toHaveBeenCalledWith(initial.runId, {
-      expectedManifestDigest: digest,
+      expectedManifestDigest: organizedDigest,
       requestKey: "00000000-0000-4000-8000-000000000103",
     });
+    expect(client.organizeRun).toHaveBeenCalledWith(initial.runId);
+    expect(client.organizeRun.mock.invocationCallOrder[0])
+      .toBeLessThan(client.resolveAutomaticReview.mock.invocationCallOrder[0]!);
     expect(client.approveSafeDefaults).toHaveBeenCalledWith(
       initial.runId,
       rebuiltDigest,
@@ -496,7 +602,6 @@ describe("ActMigrationPage", () => {
     "extract_complete",
     "organizing",
     "applying",
-    "complete",
     "failed",
     "superseded",
   ] as const)("hides automatic cleanup in the excluded %s phase", async (phase) => {

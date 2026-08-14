@@ -168,6 +168,56 @@ export async function getActCalendarActivities(
   return rows.filter(isCalendarEligibleRow).map(mapActivityRow);
 }
 
+/**
+ * Debug endpoint — owner-only. Returns a summary of what is stored in the
+ * activities table so you can confirm whether Act! calendar records exist
+ * before chasing a display bug.
+ *
+ * GET /api/calendar/debug
+ */
+router.get("/calendar/debug", async (req, res): Promise<void> => {
+  try {
+    const { db } = await import("@/db/client");
+    const { sql } = await import("drizzle-orm");
+
+    const rows = await db.execute(sql`
+      select
+        kind,
+        case
+          when act_record_id like 'act_activity:%' then 'act_activity:*'
+          when act_record_id like 'act_note:%'     then 'act_note:*'
+          when act_record_id like 'act_history:%'  then 'act_history:*'
+          when act_record_id is null               then '(null)'
+          else 'other'
+        end as act_record_id_pattern,
+        source_type,
+        count(*)::int as count,
+        min(timeline_sort_at) as earliest,
+        max(timeline_sort_at) as latest
+      from activities
+      group by 1, 2, 3
+      order by 1, 2, 3
+    `);
+
+    const eligible = await db.execute(sql`
+      select id, kind, subject, body, timeline_sort_at, ends_at, act_record_id
+      from activities
+      where kind = 'calendar'
+         or (kind = 'act_history' and act_record_id like 'act_activity:%')
+      order by timeline_sort_at desc
+      limit 20
+    `);
+
+    res.json({
+      summary: (rows as { rows: unknown[] }).rows,
+      calendarEligibleSample: (eligible as { rows: unknown[] }).rows,
+    });
+  } catch (err) {
+    req.log.error({ err }, "Failed to load calendar debug");
+    res.status(500).json({ error: "Failed to load calendar debug" });
+  }
+});
+
 router.get("/calendar", async (req, res): Promise<void> => {
   try {
     const [bookingEvents, actActivities] = await Promise.all([

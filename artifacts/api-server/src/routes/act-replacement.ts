@@ -27,7 +27,7 @@ import {
   type ReviewReader,
 } from "@/features/act-replacement/review-reader";
 import { projectActReviewDisplay } from "@/features/act-replacement/review-display";
-import { ReviewCommandService } from "@/features/act-replacement/review-command-service";
+import { ReviewCommandService, type AutomaticReviewDecisionResult } from "@/features/act-replacement/review-command-service";
 import { createProductionReview } from "@/features/act-replacement/production-review";
 import type { ActApplyCoordinator } from "@/features/act-replacement/apply-coordinator";
 import { logger } from "@/lib/logger";
@@ -563,7 +563,7 @@ function safeAutomaticApproval(result: {
 }
 
 function safeAutomaticReviewResult(
-  result: Awaited<ReturnType<ReviewCommandService["resolveAutomatically"]>>,
+  result: AutomaticReviewDecisionResult,
   remaining: Awaited<ReturnType<typeof readReview>>,
   workflow: ImportWorkflow,
 ) {
@@ -1074,6 +1074,11 @@ export function createActReplacementRouter(
           requestKey: body.data.requestKey,
           requestedBy: context.requestedBy,
         });
+        if (result.status === "processing") {
+          res.status(202).json({ status: "processing" });
+          return;
+        }
+        const completed = result;
         const remaining = await readReview(review.reader, {
           runId: owned.runId,
           state: "needs_review",
@@ -1083,15 +1088,15 @@ export function createActReplacementRouter(
         const workflow = await review.workflow.summarize(owned.runId);
         const published = await review.reader.getManifest(owned.runId);
         if (
-          !digestSchema.safeParse(result.manifestDigest).success ||
-          remaining.manifestDigest !== result.manifestDigest ||
-          workflow.manifestDigest !== result.manifestDigest ||
-          published?.digest !== result.manifestDigest
+          !digestSchema.safeParse(completed.manifestDigest).success ||
+          remaining.manifestDigest !== completed.manifestDigest ||
+          workflow.manifestDigest !== completed.manifestDigest ||
+          published?.digest !== completed.manifestDigest
         ) {
           res.status(409).json({ code: "review_generation_changed" });
           return;
         }
-        res.json(safeAutomaticReviewResult(result, remaining, workflow));
+        res.json({ status: "complete", ...safeAutomaticReviewResult(completed, remaining, workflow) });
       } catch (error) {
         handleRouteError(error, res);
       }

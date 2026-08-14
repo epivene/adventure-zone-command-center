@@ -1,7 +1,7 @@
 /**
  * AI history analysis routes — suggest future bookings from Act! history.
  *
- * POST /api/ai-suggestions/analyze  — SSE: fetch + analyze last 12 months of history
+ * POST /api/ai-suggestions/analyze  — SSE: fetch + analyze history (12/24/36 months or all)
  * GET  /api/ai-suggestions           — list current session suggestions
  * POST /api/ai-suggestions/:id/accept  — create draft booking from suggestion
  * POST /api/ai-suggestions/:id/dismiss — mark suggestion dismissed
@@ -19,10 +19,31 @@ import {
 const router: IRouter = Router();
 
 // ─── POST /ai-suggestions/analyze ────────────────────────────────────────────
-// SSE endpoint. Fetches the last 12 months of Act! activity records from DB,
+// SSE endpoint. Fetches Act! activity records from DB for the chosen range,
 // sends them to Claude in batches, streams progress and suggestion events back.
 
+const ALLOWED_RANGES = [12, 24, 36] as const;
+
 router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
+  // ── Parse the lookback range: 12 / 24 / 36 months, or "all" for no limit.
+  const rawRange = (req.body as { rangeMonths?: unknown } | undefined)?.rangeMonths;
+  let rangeMonths: number | null; // null = all history
+  if (rawRange === undefined || rawRange === null) {
+    rangeMonths = 12; // default preserves previous behaviour
+  } else if (rawRange === "all") {
+    rangeMonths = null;
+  } else if (
+    typeof rawRange === "number" &&
+    (ALLOWED_RANGES as readonly number[]).includes(rawRange)
+  ) {
+    rangeMonths = rawRange;
+  } else {
+    res.status(400).json({
+      error: `Invalid rangeMonths — expected one of ${ALLOWED_RANGES.join(", ")} or "all"`,
+    });
+    return;
+  }
+
   // ── Pre-flight: check AI provider availability before opening the SSE stream.
   // This lets us return a proper 503 JSON response (not an SSE error event)
   // when no API key is configured — cleaner for the client to handle.
@@ -61,10 +82,14 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
     ]);
 
     const { activities, contacts, organizations } = schema;
-    const { or, eq, and, gte } = orm;
+    const { inArray, eq, and, gte } = orm;
 
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+    // Compute the lookback cutoff, or null for all history.
+    let cutoff: Date | null = null;
+    if (rangeMonths !== null) {
+      cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - rangeMonths);
+    }
 
     const rows = await (db as any)
       .select({
@@ -82,10 +107,18 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
       .leftJoin(contacts, eq(activities.contactId, contacts.id))
       .leftJoin(organizations, eq(activities.organizationId, organizations.id))
       .where(
-        and(
-          or(eq(activities.kind, "act_history"), eq(activities.kind, "calendar")),
-          gte(activities.timelineSortAt, twelveMonthsAgo),
-        ),
+        // Analyze all imported Act! timeline records: history entries, notes,
+        // and scheduled calendar activities. Calendar activities (past fairs,
+        // meetings) are often the strongest signal for recurring bookings.
+        // There is no feedback loop: accepted suggestions become bookings,
+        // never activity rows, so nothing AI-generated is ever re-scanned.
+        // "approved_suggestion" kind is deliberately not included.
+        cutoff
+          ? and(
+              inArray(activities.kind, ["act_history", "note", "calendar"]),
+              gte(activities.timelineSortAt, cutoff),
+            )
+          : inArray(activities.kind, ["act_history", "note", "calendar"]),
       );
 
     const records: ActivityRecord[] = rows;
@@ -105,8 +138,13 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
 
 // ─── GET /ai-suggestions ──────────────────────────────────────────────────────
 
-router.get("/ai-suggestions", (_req, res): void => {
-  res.json(getSuggestions());
+router.get("/ai-suggestions", async (req, res): Promise<void> => {
+  try {
+    res.json(await getSuggestions());
+  } catch (err) {
+    req.log.error({ err }, "Failed to load AI suggestions");
+    res.status(500).json({ error: "Failed to load suggestions" });
+  }
 });
 
 // ─── POST /ai-suggestions/:id/accept ─────────────────────────────────────────
@@ -114,7 +152,7 @@ router.get("/ai-suggestions", (_req, res): void => {
 
 router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
   const { id } = req.params;
-  const suggestion = getSuggestion(id);
+    const suggestion = await getSuggestion(id);
   if (!suggestion) {
     res.status(404).json({ error: "Suggestion not found" });
     return;
@@ -175,10 +213,7 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
       })
       .returning();
 
-    const updated = updateSuggestion(id, {
-      status: "accepted",
-      bookingId: booking.id,
-    });
+    const updated = await updateSuggestion(id, { status: "dismissed" });
 
     res.json({ suggestion: updated, booking });
   } catch (err) {
@@ -189,19 +224,24 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
 
 // ─── POST /ai-suggestions/:id/dismiss ────────────────────────────────────────
 
-router.post("/ai-suggestions/:id/dismiss", (req, res): void => {
+router.post("/ai-suggestions/:id/dismiss", async (req, res): Promise<void> => {
   const { id } = req.params;
-  const suggestion = getSuggestion(id);
-  if (!suggestion) {
-    res.status(404).json({ error: "Suggestion not found" });
-    return;
+  try {
+    const suggestion = await getSuggestion(id);
+    if (!suggestion) {
+      res.status(404).json({ error: "Suggestion not found" });
+      return;
+    }
+    if (suggestion.status !== "pending") {
+      res.status(409).json({ error: `Suggestion already ${suggestion.status}` });
+      return;
+    }
+    const updated = await updateSuggestion(id, { status: "dismissed" });
+    res.json({ suggestion: updated });
+  } catch (err) {
+    req.log.error({ err }, "Failed to dismiss suggestion");
+    res.status(500).json({ error: "Failed to dismiss suggestion" });
   }
-  if (suggestion.status !== "pending") {
-    res.status(409).json({ error: `Suggestion already ${suggestion.status}` });
-    return;
-  }
-  const updated = updateSuggestion(id, { status: "dismissed" });
-  res.json({ suggestion: updated });
 });
 
 export default router;

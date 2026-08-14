@@ -28,9 +28,12 @@ export type AiCompletionClient = {
  */
 export async function createAiClient(): Promise<AiCompletionClient> {
   // ── Priority 1: Replit managed Anthropic proxy ──────────────────────────
-  // Both vars must be present; the integration lib throws at module load time
-  // if they're missing, so we guard before importing it.
+  // All three vars must be present. REPL_ID is injected automatically by
+  // Replit and is never present on Render or other hosts — this prevents
+  // the proxy path from being chosen when AI_INTEGRATIONS_* vars are
+  // accidentally set on Render (where the proxy URL is unreachable).
   if (
+    process.env.REPL_ID &&
     process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL &&
     process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY
   ) {

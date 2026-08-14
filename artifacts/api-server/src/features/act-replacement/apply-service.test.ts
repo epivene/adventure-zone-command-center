@@ -486,6 +486,49 @@ it("reclaims an expired applying batch and resumes idempotently", async () => {
   expect(repo.operations.get("a")?.attemptCount).toBe(1);
 });
 
+it("reclaims an operation left leased by an expired applying batch", async () => {
+  const repo = new InMemoryApplyRepository({ unsafeForTests: true });
+  repo.seedManifest("r", "d");
+  repo.seedOperations([op("a", "create", { normalized: { name: "A" } })]);
+  approve(repo, ["a"]);
+  repo.operations.get("a")!.status = "leased";
+  repo.operations.get("a")!.attemptCount = 1;
+  repo.batches.set("r:approval:0", {
+    batchId: "expired-batch",
+    runId: "r",
+    requestKey: "approval:0",
+    approvalRequestKey: "approval",
+    startCursor: 0,
+    manifestDigest: "d",
+    operationIds: ["a"],
+    state: "applying",
+    completed: 0,
+    alreadyPresent: 0,
+    blocked: 0,
+    failed: 0,
+    leaseOwner: "dead-worker",
+    leaseExpiresAt: Date.now() - 1,
+  });
+
+  const result = await new ActApplyService(repo, true).apply({
+    runId: "r",
+    approvedOperationIds: ["a"],
+    expectedManifestDigest: "d",
+    requestKey: "approval:0",
+    approvalRequestKey: "approval",
+    startCursor: 0,
+    requestedBy: "replacement-worker",
+  });
+
+  expect(result).toMatchObject({
+    batchId: "expired-batch",
+    state: "complete",
+    completedCount: 1,
+  });
+  expect(repo.operations.get("a")?.status).toBe("applied");
+  expect(repo.operations.get("a")?.attemptCount).toBe(2);
+});
+
 it("retries only failed durable outcomes when the coordinator authorizes a retry", async () => {
   const repo = new InMemoryApplyRepository({ unsafeForTests: true });
   repo.seedManifest("r", "d");

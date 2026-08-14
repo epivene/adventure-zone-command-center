@@ -6,6 +6,7 @@ import {
   automaticReviewRequestFingerprint,
   InMemoryReviewCommandStore,
   ReviewCommandService,
+  type AutomaticReviewCommandResult,
   type AutomaticReviewDecisionInput,
   type SaveDecisionInput,
 } from "./review-command-service";
@@ -150,11 +151,16 @@ function automaticService() {
 }
 
 const automaticEnvelope = { runId: "automatic-run", expectedManifestDigest: "automatic-digest-1", requestKey: "automatic-request", requestedBy: "owner" };
+function automaticComplete(result: AutomaticReviewCommandResult) {
+  expect(result.status).toBe("complete");
+  if (result.status !== "complete") throw new Error("automatic_review_not_complete");
+  return result;
+}
 
 describe("automatic heterogeneous review decisions", () => {
   it("persists a proof-bound mixed batch in deterministic decision order and rebuilds once", async () => {
     const { commands, rebuilds } = automaticService();
-    const result = await commands.resolveAutomatically(automaticEnvelope);
+    const result = automaticComplete(await commands.resolveAutomatically(automaticEnvelope));
     expect(result.decisions.map(({ sourceRecordId, scope, decision, fieldName, relationshipSlot }) => ({ sourceRecordId, scope, decision, fieldName, relationshipSlot }))).toEqual([
       { sourceRecordId: "assigned", scope: "relationship", decision: "assign_parent", fieldName: null, relationshipSlot: "company-parent" },
       { sourceRecordId: "assigned", scope: "relationship", decision: "assign_parent", fieldName: null, relationshipSlot: "secondary-parent" },
@@ -199,8 +205,8 @@ describe("automatic heterogeneous review decisions", () => {
 
   it("returns an exact replay without rebuilding or replacing the audit actor", async () => {
     const { commands, rebuilds } = automaticService();
-    const first = await commands.resolveAutomatically(automaticEnvelope);
-    const replay = await commands.resolveAutomatically(automaticEnvelope);
+    const first = automaticComplete(await commands.resolveAutomatically(automaticEnvelope));
+    const replay = automaticComplete(await commands.resolveAutomatically(automaticEnvelope));
     expect(replay).toEqual(first);
     expect(replay.decisions.every((decision) => decision.decidedBy === "owner")).toBe(true);
     expect(rebuilds()).toBe(1);
@@ -222,7 +228,7 @@ describe("automatic heterogeneous review decisions", () => {
 
   it("rejects a same-tuple replay when the recomputed request fingerprint changes", async () => {
     const { commands, store, rebuilds } = automaticService();
-    const first = await commands.resolveAutomatically(automaticEnvelope);
+    const first = automaticComplete(await commands.resolveAutomatically(automaticEnvelope));
     store.seedAutomaticReview("automatic-run", { records: [] });
     await expect(commands.resolveAutomatically(automaticEnvelope)).rejects.toMatchObject({ code: "request_replay_mismatch", status: 409 });
     expect(first.decisions).toHaveLength(8);
@@ -249,7 +255,7 @@ describe("automatic heterogeneous review decisions", () => {
       records: [{ sourceRecordId: "linked", sourceVersionId: "v-linked", issues: [{ code: "ambiguous_match" }], match: { kind: "ambiguous", candidateIds: ["local-linked"], reason: "multiple_candidates" } }],
       context: { sourceRecords: [{ sourceRecordId: "linked", sourceVersionId: "v-linked", streamType: "contact", display: { fullName: "Linked Person" } }], targetsByEntityType: { contact: [{ id: "local-linked", entityType: "contact", label: "Linked Person", detail: null, fields: {} }, { id: "duplicate-linked", entityType: "contact", label: "Linked Person", detail: null, fields: {} }] } },
     });
-    const result = await commands.resolveAutomatically(automaticEnvelope);
+    const result = automaticComplete(await commands.resolveAutomatically(automaticEnvelope));
     expect(result.decisions).toEqual([]);
     expect(result.summary.manualReview).toBe(1);
     expect(rebuilds()).toBe(0);
@@ -267,7 +273,7 @@ describe("automatic heterogeneous review decisions", () => {
 
   it("reruns automatic cleanup to replace only a field decision made stale by a local edit", async () => {
     const { commands, store } = automaticService();
-    const first = await commands.resolveAutomatically(automaticEnvelope);
+    const first = automaticComplete(await commands.resolveAutomatically(automaticEnvelope));
     const oldPhone = first.decisions.find((decision) => decision.sourceRecordId === "fields" && decision.fieldName === "phone")!;
     const current = store.manifests.get("automatic-run")!;
     store.seed("automatic-run", {
@@ -292,11 +298,11 @@ describe("automatic heterogeneous review decisions", () => {
       },
     });
 
-    const rerun = await commands.resolveAutomatically({
+    const rerun = automaticComplete(await commands.resolveAutomatically({
       ...automaticEnvelope,
       expectedManifestDigest: "automatic-digest-2",
       requestKey: "automatic-rerun",
-    });
+    }));
 
     expect(rerun.decisions).toEqual([
       expect.objectContaining({ fieldName: "phone", decision: "use_source", reviewedLocalValue: "555-CONCURRENT", active: true }),

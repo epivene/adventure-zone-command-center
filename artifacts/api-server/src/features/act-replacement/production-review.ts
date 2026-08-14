@@ -2,6 +2,7 @@ import type { ActApplyService } from "./apply-service";
 import { ActApplyCoordinator } from "./apply-coordinator";
 import {
   automaticReviewProofSql,
+  currentManifestOperationPredicate,
   DrizzleActReviewCommandStore,
   DrizzleActReviewReader,
 } from "./review-sql-adapter";
@@ -59,6 +60,7 @@ export const workflowOperationSelection = {
 
 export type ImportWorkflowProjectionInput = {
   phase: string;
+  manifestGeneration?: string | null;
   organizerLeaseExpiresAt?: Date | null;
   summary: Record<string, unknown> | null | undefined;
   outcomes: readonly {
@@ -295,6 +297,8 @@ export function projectImportWorkflow(
     input.phase === "ready_to_apply" &&
     input.batches.length === 0 &&
     input.operations.every((operation) => operation.status === "pending");
+  const mustVersionLegacyManifest =
+    input.phase === "ready_to_apply" && input.manifestGeneration === null;
 
   return {
     safeOperationCount,
@@ -320,7 +324,8 @@ export function projectImportWorkflow(
     canOrganize:
       input.phase === "extract_complete" ||
       organizerLeaseExpired ||
-      canRebuildUnapplied,
+      canRebuildUnapplied ||
+      mustVersionLegacyManifest,
     canReview:
       archivedOnlyCount > 0 &&
       (canRebuildUnapplied ||
@@ -385,6 +390,7 @@ class DrizzleWorkflowReader implements WorkflowReader {
       .select({
         phase: actReplacementRuns.phase,
         summary: actReplacementRuns.summary,
+        manifestGeneration: actReplacementRuns.manifestGeneration,
         organizerLeaseExpiresAt: actReplacementRuns.organizerLeaseExpiresAt,
       })
       .from(actReplacementRuns)
@@ -414,7 +420,7 @@ class DrizzleWorkflowReader implements WorkflowReader {
       this.database
         .select(workflowOperationSelection)
         .from(actReplacementApplyOperations)
-        .where(eq(actReplacementApplyOperations.runId, runId)),
+        .where(currentManifestOperationPredicate(runId, run.manifestGeneration)),
       this.database
         .select({
           id: actReplacementApplyBatches.id,
@@ -447,6 +453,7 @@ class DrizzleWorkflowReader implements WorkflowReader {
 
     return projectImportWorkflow({
       phase: run.phase,
+      manifestGeneration: run.manifestGeneration,
       summary: run.summary,
       organizerLeaseExpiresAt: run.organizerLeaseExpiresAt,
       outcomes,

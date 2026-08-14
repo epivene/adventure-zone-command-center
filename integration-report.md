@@ -13,7 +13,7 @@ The merge used the complete current-main tree and overlaid every feature-side ch
 - `lib/db/src/schema/index.ts`: retained main's contact-phone, call-session metadata, and disposition additions while adding the organization self-reference and family-review table.
 - `pnpm-lock.yaml`: retained main's PGlite and Anthropic integration graph while keeping the feature's root Vitest dependency.
 
-The hierarchy migration was moved from `020_organization_location_hierarchy.sql` to `024_organization_location_hierarchy.sql` so it follows main's assisted-calling/contact-phone migrations through 023.
+The hierarchy migration was moved from `020_organization_location_hierarchy.sql` to `025_organization_location_hierarchy.sql` so it follows main's assisted-calling/contact-phone migrations through 023.
 
 ## Integration fixes
 
@@ -66,3 +66,12 @@ Commit tested: `87e66ba0d4440eb3248d57618e15a9b535fb3a50`
 - Production-data verification remained unavailable because branch CI had no `DATABASE_URL`; the workflow recorded that limitation explicitly.
 
 The temporary refresh workflow was removed after this successful run.
+
+
+## Current-main integration (2026-08-13)
+
+- Feature cleanup head before integration: `8ff6728896309a3369387ba452353adfaf01e68e`.
+- Integrated current main: `a0591c284ac12e49be81933262f4c939158221e4` using a true two-parent merge commit.
+- Preserved current-main ACT recovery and AI booking suggestion fixes while retaining hierarchy-specific AI route test configuration.
+- Renamed the hierarchy migration to `025_organization_location_hierarchy.sql` because current main owns `024_ai_booking_suggestions.sql`.
+- Temporary verification workflow is used only for evidence and is removed before handoff.

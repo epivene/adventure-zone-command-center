@@ -133,7 +133,7 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
       systemWorkerLoopScheduler,
     },
     { ProductionActOrganizer, ProductionActOrganizerRecoveryWorker },
-    { DrizzleProductionOrganizerStore },
+    { DrizzleActReviewCommandStore, DrizzleProductionOrganizerStore },
   ] = await Promise.all([
     import("@/db/client"),
     import("@/features/act-sync/act-client"),
@@ -181,13 +181,32 @@ export async function createActExtractionRuntime(): Promise<ActExtractionRuntime
     clock,
     scheduler: systemWorkerLoopScheduler,
   });
+  const automaticReviewStore = new DrizzleActReviewCommandStore(
+    db,
+    { sourceDatabaseKey: environment.config.databaseName },
+    {} as never,
+  );
+  await automaticReviewStore.releaseAbandonedAutomaticReviewClaims(clock.now());
+  const automaticReviewLoop = new ActOrganizerWorkerLoop({
+    worker: {
+      runOne: (input) => automaticReviewStore.recoverOneAutomaticReview(input),
+    },
+    workerId: `act-automatic-review-${process.pid}-${randomUUID()}`,
+    clock,
+    scheduler: systemWorkerLoopScheduler,
+  });
   return {
     start() {
       extractionLoop.start();
+      automaticReviewLoop.start();
       organizerLoop.start();
     },
     async close() {
-      await Promise.all([organizerLoop.close(), extractionLoop.close()]);
+      await Promise.all([
+        automaticReviewLoop.close(),
+        organizerLoop.close(),
+        extractionLoop.close(),
+      ]);
     },
   };
 }

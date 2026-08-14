@@ -32,6 +32,18 @@ const allowed = new Set([
   "CreateDate",
   "scheduleDate",
   "ScheduleDate",
+  // Alternate start-date field names returned by some Act! API versions
+  "startDate",
+  "StartDate",
+  "date",
+  "Date",
+  "activityDate",
+  "ActivityDate",
+  // End-date fields for multi-day calendar events
+  "endDate",
+  "EndDate",
+  "endTime",
+  "EndTime",
   "duration",
   "Duration",
   "status",
@@ -53,13 +65,33 @@ export const normalizeTimeline = (
   const date = text(
     r,
     sourceType === "activity"
-      ? ["scheduleDate", "ScheduleDate"]
+      ? [
+          // Primary Act! field name, then alternate names returned by older
+          // or customized Act! API deployments
+          "scheduleDate",
+          "ScheduleDate",
+          "startDate",
+          "StartDate",
+          "activityDate",
+          "ActivityDate",
+          "date",
+          "Date",
+        ]
       : ["createDate", "CreateDate"],
   );
   const occurred = validDate(date) ? date : null;
   if (!occurred) z.w.add("source_date_unavailable");
   if (date && !occurred)
     z.p.add(sourceType === "activity" ? "scheduleDate" : "createDate");
+
+  // Extract end date for multi-day calendar events (fairs, festivals, etc.)
+  const endDateRaw =
+    sourceType === "activity"
+      ? text(r, ["endDate", "EndDate", "endTime", "EndTime"])
+      : null;
+  const endsAt =
+    endDateRaw && validDate(endDateRaw) ? endDateRaw : null;
+
   const body =
     text(
       r,
@@ -82,7 +114,7 @@ export const normalizeTimeline = (
     sourceOccurredAt: occurred,
     timelineSortAt: occurred ?? capturedAt,
     dateIsImportFallback: !occurred,
-    endsAt: null,
+    endsAt,
     status: sourceType === "activity" ? text(r, ["status", "Status"]) : null,
     calendarCapable: sourceType === "activity" && !!occurred,
   };

@@ -430,9 +430,14 @@ export function EventCalendar({
           </div>
           <div className="grid gap-px bg-slate-200 sm:grid-cols-7">
             {monthDays.map((date) => {
+              // Use UTC date key for both the grid cell and event matching.
+              // Grid cells are built as UTC midnight dates; events from Act! are
+              // typically stored as date-only values that land at midnight UTC.
+              // Using businessDateKey here shifts events to the previous day in
+              // western US timezones, causing them to appear on the wrong cell.
               const dateKey = date.toISOString().slice(0, 10);
               const dayEvents = allDatedEvents.filter(
-                (event) => businessDateKey(event.startsAt) === dateKey,
+                (event) => event.startsAt.toISOString().slice(0, 10) === dateKey,
               );
               const inMonth = date.getUTCMonth() === activeMonth.getUTCMonth();
 

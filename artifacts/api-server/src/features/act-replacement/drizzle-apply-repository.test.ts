@@ -814,6 +814,8 @@ describe("DrizzleApplyRepository", () => {
 
     expect(statements).toHaveLength(2);
     expect(statements[0]).toContain("update act_replacement_outcomes");
+    expect(statements[0]).toContain("with current_operations as");
+    expect(statements[0]).toContain("operations.manifest_generation is not distinct from runs.manifest_generation");
     expect(statements[0]).toContain("status not in ('applied','already_present')");
     expect(statements[1]).toContain("update act_replacement_apply_batches");
   });

@@ -4,11 +4,7 @@
  */
 
 import crypto from "crypto";
-import {
-  addSuggestion,
-  clearSuggestions,
-  type HistorySuggestion,
-} from "./suggestion-store";
+import { addSuggestion, type HistorySuggestion } from "./suggestion-store";
 
 export type ActivityRecord = {
   id: string;
@@ -205,7 +201,13 @@ export async function analyzeHistory(
   records: ActivityRecord[],
   onEvent: (event: ProgressEvent) => void,
 ): Promise<void> {
-  clearSuggestions();
+  // Re-analysis MERGES with existing suggestions rather than wiping them.
+  // The AI is non-deterministic — a suggestion found in one run may not be
+  // found in the next, and losing it on re-analyze is confusing and can
+  // discard something the owner intended to accept. Accepted/dismissed
+  // suggestions are also preserved so their state isn't lost.
+  // Deduplication happens on insert: the store's dedupe_key unique index
+  // (same key logic as before) makes duplicate inserts no-ops.
 
   if (records.length === 0) {
     onEvent({ type: "done", totalRecords: 0, totalSuggestions: 0, hadErrors: false, errors: [] });
@@ -246,7 +248,8 @@ export async function analyzeHistory(
       for (const raw of rawSuggestions) {
         const suggestion = normalizeSuggestion(raw);
         if (suggestion) {
-          addSuggestion(suggestion);
+          const inserted = await addSuggestion(suggestion);
+          if (!inserted) continue; // already known from a prior run
           totalSuggestions++;
           onEvent({ type: "suggestion", suggestion });
         }

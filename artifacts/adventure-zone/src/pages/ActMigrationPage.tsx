@@ -101,8 +101,29 @@ function isFinished(phase: ActReplacementWorkflowStatus["phase"]) {
 function canResolveAutomaticReview(
   phase: ActReplacementWorkflowStatus["phase"],
 ) {
-  return ["ready_to_apply", "complete_with_issues"].includes(phase);
+  return ["ready_to_apply", "complete", "complete_with_issues"].includes(
+    phase,
+  );
 }
+
+function needsReviewPlanRefresh(
+  run: Pick<ActReplacementWorkflowStatus, "phase" | "canOrganize">,
+) {
+  return (
+    run.phase === "complete" ||
+    run.phase === "complete_with_issues" ||
+    (run.phase === "ready_to_apply" && run.canOrganize)
+  );
+}
+
+function isRefreshedReviewPhase(
+  phase: ActReplacementWorkflowStatus["phase"],
+) {
+  return phase === "ready_to_apply" || phase === "complete_with_issues";
+}
+
+const waitForReviewPlanPoll = () =>
+  new Promise<void>((resolve) => window.setTimeout(resolve, 3_000));
 
 function activeStage(
   run: ActReplacementWorkflowStatus | null,
@@ -759,29 +780,70 @@ export default function ActMigrationPage() {
     if (
       !run?.manifestDigest ||
       !canResolveAutomaticReview(run.phase) ||
-      run.reviewRequiredCount <= 0 ||
+      run.archivedOnlyCount <= 0 ||
       !run.canReview ||
       !beginBusy("review")
     ) {
       return;
     }
     const runId = run.runId;
-    const expectedManifestDigest = run.manifestDigest;
     const requestKey = crypto.randomUUID();
     setError(null);
     try {
+      let reviewRun = run;
+      if (needsReviewPlanRefresh(run)) {
+        await organizeRun(runId);
+        for (let attempt = 0; attempt < 200; attempt += 1) {
+          reviewRun = await refreshRun(runId);
+          if (isRefreshedReviewPhase(reviewRun.phase)) break;
+          if (
+            reviewRun.phase === "failed" ||
+            reviewRun.phase === "superseded"
+          ) {
+            throw Object.assign(new Error("review_plan_refresh_failed"), {
+              code: "review_plan_refresh_failed",
+            });
+          }
+          if (attempt === 199) {
+            throw Object.assign(new Error("review_plan_refresh_timeout"), {
+              code: "review_plan_refresh_timeout",
+            });
+          }
+          await waitForReviewPlanPoll();
+        }
+      }
+      if (
+        !reviewRun.manifestDigest ||
+        !isRefreshedReviewPhase(reviewRun.phase) ||
+        !reviewRun.canReview
+      ) {
+        throw Object.assign(new Error("review_plan_not_ready"), {
+          code: "review_plan_not_ready",
+        });
+      }
+      const expectedManifestDigest = reviewRun.manifestDigest;
       const request = () =>
         resolveAutomaticReview(runId, {
           expectedManifestDigest,
           requestKey,
         });
-      let result: Awaited<ReturnType<typeof resolveAutomaticReview>>;
-      try {
-        result = await request();
-      } catch (caught) {
-        if (!(caught instanceof TypeError)) throw caught;
-        result = await request();
+      let response: Awaited<ReturnType<typeof resolveAutomaticReview>>;
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          response = await request();
+        } catch (caught) {
+          if (!(caught instanceof TypeError)) throw caught;
+          response = await request();
+        }
+        if (response.status === "complete") break;
+        if (attempt >= 399) {
+          throw Object.assign(new Error("automatic_review_timeout"), {
+            code: "automatic_review_timeout",
+          });
+        }
+        await waitForReviewPlanPoll();
       }
+      const result = response;
       setAutomaticReviewResult({
         runId,
         manifestDigest: result.manifestDigest,
@@ -814,7 +876,7 @@ export default function ActMigrationPage() {
     run &&
       canResolveAutomaticReview(run.phase) &&
       run.manifestDigest &&
-      run.reviewRequiredCount > 0 &&
+      run.archivedOnlyCount > 0 &&
       run.canReview,
   );
   const visibleAutomaticReviewResult =
