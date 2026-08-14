@@ -6,7 +6,6 @@ import {
   validateApprovedBookingPatch,
 } from "@/features/calls/call-input";
 import type { BookingStatus } from "@/features/bookings/booking-types";
-import { needsFollowUpPlan } from "@/features/follow-ups/follow-up-policy";
 import {
   dispositionBookingStatus,
   persistedCallDisposition,
@@ -133,6 +132,22 @@ function validateCanonicalContext(
   });
 }
 
+function defaultCallNote(disposition: CompleteCallInput["disposition"]) {
+  return {
+    no_answer: "No answer.",
+    left_voicemail: "Left voicemail.",
+    follow_up_needed: "Follow-up needed.",
+    interested: "Interested.",
+    proposal_contract_sent: "Proposal or contract sent.",
+    booked: "Booked.",
+    declined: "Declined.",
+    move_to_last_resort: "Moved to Last Resort.",
+    spoke_with_contact: "Spoke with contact.",
+    wrong_number: "Wrong number.",
+    do_not_call: "Marked Do Not Call.",
+  }[disposition];
+}
+
 export class CallService {
   private readonly now: () => Date;
 
@@ -148,7 +163,10 @@ export class CallService {
         message: parsed.error.issues[0]?.message ?? "Review the call details.",
       });
     }
-    const value = parsed.data as CompleteCallInput;
+    const value = {
+      ...parsed.data,
+      note: parsed.data.note || defaultCallNote(parsed.data.disposition),
+    } as CompleteCallInput;
     const completedAt = this.now();
 
     return this.repository.transaction(async (transaction) => {
@@ -209,28 +227,11 @@ export class CallService {
         ?? value.resultingBookingStatus
         ?? value.approvedBookingUpdates?.status
         ?? null;
-      const bookingStatus = context.booking
-        ? resultingBookingStatus ?? context.booking.status
-        : null;
       const hasFutureNextAction = Boolean(
         value.nextAction &&
         isFutureBusinessDate(value.nextAction.dueAt, completedAt),
       );
-      const terminalDisposition =
-        value.disposition === "declined" ||
-        value.disposition === "move_to_last_resort" ||
-        value.disposition === "do_not_call";
-      if (
-        (value.nextAction && !hasFutureNextAction) ||
-        (context.booking && needsFollowUpPlan(
-          { status: bookingStatus! },
-          hasFutureNextAction
-            ? { ...value.nextAction!, completedAt: null }
-            : null,
-          completedAt,
-        )) ||
-        (!context.booking && !terminalDisposition && !hasFutureNextAction)
-      ) {
+      if (value.nextAction && !hasFutureNextAction) {
         return err({ code: "NEXT_ACTION_REQUIRED" });
       }
       if (value.approvedContactUpdates && !context.contact) return err({ code: "CONTACT_NOT_FOUND" });

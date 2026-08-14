@@ -57,6 +57,16 @@ export async function editActivityAction(
   }
 }
 
+export async function deleteActivityAction(
+  activityId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    return await apiPost<{ ok: true } | { ok: false; error: string }>("/activities/delete", { activityId });
+  } catch (error: any) {
+    return { ok: false, error: error.message ?? "Could not delete activity." };
+  }
+}
+
 export async function listActivityRevisionsAction(
   activityId: string,
 ): Promise<ActivityRevisionResult> {

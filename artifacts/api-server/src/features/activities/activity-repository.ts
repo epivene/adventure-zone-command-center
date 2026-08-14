@@ -1,4 +1,4 @@
-import { and, count, desc, eq, exists, or } from "drizzle-orm";
+import { and, count, desc, eq, exists, isNull, or } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -41,6 +41,7 @@ export interface ActivityRepository {
   listTimeline(parent: ActivityParent, page?: number): Promise<ActivityTimelinePage>;
   create(input: CreateActivityInput): Promise<ActivityTimelineItem>;
   edit(input: EditActivityInput): Promise<Result<ActivityTimelineItem, ActivityError>>;
+  delete(activityId: string): Promise<Result<void, ActivityError>>;
 }
 
 export interface ActivityRevisionReader {
@@ -145,7 +146,7 @@ export class DrizzleActivityRepository
       .select({ activity: activities, revisionCount: count(activityRevisions.id) })
       .from(activities)
       .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
-      .where(condition)
+      .where(and(condition, isNull(activities.deletedAt)))
       .groupBy(activities.id)
       .orderBy(desc(activities.timelineSortAt), desc(activities.createdAt), desc(activities.id))
       .limit(TIMELINE_PAGE_SIZE + 1)
@@ -269,7 +270,7 @@ export class DrizzleActivityRepository
       const [before] = await transaction
         .select()
         .from(activities)
-        .where(eq(activities.id, input.activityId))
+        .where(and(eq(activities.id, input.activityId), isNull(activities.deletedAt)))
         .limit(1)
         .for("update");
       if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
@@ -302,6 +303,33 @@ export class DrizzleActivityRepository
         .from(activityRevisions)
         .where(eq(activityRevisions.activityId, updated.id));
       return ok(toTimelineItem(updated, revisionTotal?.value ?? 0));
+    });
+  }
+
+  async delete(activityId: string): Promise<Result<void, ActivityError>> {
+    return this.database.transaction(async (transaction) => {
+      const [before] = await transaction
+        .select()
+        .from(activities)
+        .where(and(eq(activities.id, activityId), isNull(activities.deletedAt)))
+        .limit(1)
+        .for("update");
+      if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
+
+      const now = new Date();
+      await transaction
+        .update(activities)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(activities.id, activityId));
+
+      await recordAuditEntry(transaction, {
+        entityType: "activity",
+        entityId: activityId,
+        action: "delete",
+        before: activitySnapshot(before),
+        after: null,
+      });
+      return ok(undefined);
     });
   }
 }

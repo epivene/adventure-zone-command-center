@@ -8,6 +8,7 @@ import { LastResortWarning } from "@/components/organizations/last-resort-warnin
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import {
   createActivityAction,
+  deleteActivityAction,
   editActivityAction,
   listActivityRevisionsAction,
 } from "@/actions/activities";
@@ -123,6 +124,7 @@ export default function BookingDetailPage() {
         activities={timeline ?? []}
         parent={{ bookingId: bookingId! }}
         createActivity={createActivityAction}
+        deleteActivity={deleteActivityAction}
         editActivity={editActivityAction}
         loadRevisions={listActivityRevisionsAction}
       />

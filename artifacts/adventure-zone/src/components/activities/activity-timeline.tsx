@@ -55,6 +55,7 @@ export function ActivityTimeline({
   parent,
   createActivity,
   editActivity,
+  deleteActivity,
   loadRevisions,
   initialNextPage = null,
   loadPage,
@@ -63,6 +64,7 @@ export function ActivityTimeline({
   parent?: ActivityParent;
   createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
   editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
+  deleteActivity?: (activityId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   loadRevisions: (
     activityId: string,
     page?: number,
@@ -85,6 +87,8 @@ export function ActivityTimeline({
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [editForms, setEditForms] = useState<Record<string, EditFormState>>({});
+  const [deleting, setDeleting] = useState<Record<string, boolean>>({});
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
 
   function editForm(activity: ActivityTimelineItem): EditFormState {
     return editForms[activity.id] ?? {
@@ -227,6 +231,28 @@ export function ActivityTimeline({
         saving: false,
         error: "The activity edit could not be saved. Please try again.",
       });
+    }
+  }
+
+  async function removeActivity(activity: ActivityTimelineItem) {
+    if (!deleteActivity || deleting[activity.id]) return;
+    if (!window.confirm("Delete this history item? This removes it from the visible timeline.")) return;
+    setDeleting((current) => ({ ...current, [activity.id]: true }));
+    setDeleteErrors((current) => ({ ...current, [activity.id]: "" }));
+    try {
+      const result = await deleteActivity(activity.id);
+      if (!result.ok) {
+        setDeleteErrors((current) => ({ ...current, [activity.id]: result.error }));
+        return;
+      }
+      setItems((current) => current.filter((item) => item.id !== activity.id));
+    } catch {
+      setDeleteErrors((current) => ({
+        ...current,
+        [activity.id]: "The activity could not be deleted. Please try again.",
+      }));
+    } finally {
+      setDeleting((current) => ({ ...current, [activity.id]: false }));
     }
   }
 
@@ -395,6 +421,21 @@ export function ActivityTimeline({
                   </div>
                 ) : null}
 
+                {deleteActivity ? (
+                  <div className="mt-3">
+                    <button
+                      className="text-sm font-semibold text-rose-700 hover:text-rose-900"
+                      disabled={Boolean(deleting[activity.id])}
+                      onClick={() => void removeActivity(activity)}
+                      type="button"
+                    >
+                      {deleting[activity.id] ? "Deleting…" : "Delete activity"}
+                    </button>
+                    {deleteErrors[activity.id] ? (
+                      <p className="mt-2 text-sm text-rose-700" role="alert">{deleteErrors[activity.id]}</p>
+                    ) : null}
+                  </div>
+                ) : null}
                 {activity.revisionCount ? (
                   <div className="mt-3">
                     <button

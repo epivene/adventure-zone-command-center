@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, exists, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, inArray, isNull, or, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -370,7 +370,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         kind: activities.kind,
         body: activities.body,
         occurredAt: activities.timelineSortAt,
-      }).from(activities).where(profileCondition)
+      }).from(activities).where(and(profileCondition, isNull(activities.deletedAt)))
         .orderBy(desc(activities.timelineSortAt), desc(activities.id)),
       this.database.select({
         id: followUps.id,

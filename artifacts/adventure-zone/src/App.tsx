@@ -24,6 +24,7 @@ import CallWorkspacePage from "@/pages/CallWorkspacePage";
 import MobileCallLogPage from "@/pages/MobileCallLogPage";
 import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
+import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import QuickAddPage from "@/pages/QuickAddPage";
@@ -189,6 +190,7 @@ function AppRoutes() {
               <Route path="/calls/new" component={CallWorkspacePage} />
               <Route path="/calls/log"><MobileCallLogPage /></Route>
               <Route path="/event-profiles/new" component={EventProfileNewPage} />
+              <Route path="/event-profiles/:profileId/edit" component={EventProfileEditPage} />
               <Route path="/event-profiles/:profileId" component={EventProfilePage} />
               <Route path="/quick-add" component={QuickAddPage} />
               <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />

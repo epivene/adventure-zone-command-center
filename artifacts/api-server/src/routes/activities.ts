@@ -4,6 +4,7 @@ import { DrizzleActivityRepository } from "@/features/activities/activity-reposi
 import { ActivityService } from "@/features/activities/activity-service";
 import {
   createActivityInputSchema,
+  deleteActivityInputSchema,
   editActivityInputSchema,
 } from "@/features/activities/activity-input";
 
@@ -64,6 +65,28 @@ router.post("/activities/edit", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to edit activity");
     res.status(500).json({ ok: false, error: "Server error" });
+  }
+});
+
+router.post("/activities/delete", async (req, res): Promise<void> => {
+  const parsed = deleteActivityInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  try {
+    const result = await activityService().delete(parsed.data.activityId);
+    if (!result.ok) {
+      res.status(result.error.code === "ACTIVITY_NOT_FOUND" ? 404 : 400).json({
+        ok: false,
+        error: result.error.code === "ACTIVITY_NOT_FOUND" ? "Activity not found" : result.error.message,
+      });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to delete activity");
+    res.status(500).json({ ok: false, error: "Could not delete activity" });
   }
 });
 

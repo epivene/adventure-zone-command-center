@@ -163,7 +163,10 @@ export async function getActCalendarActivities(
           ? or(isNull(activities.timelineSortAt), lte(activities.timelineSortAt, to))
           : undefined;
 
-  const whereClause = dateFilter ? and(kindFilter, dateFilter) : kindFilter;
+  const visibleFilter = isNull(activities.deletedAt);
+  const whereClause = dateFilter
+    ? and(kindFilter, visibleFilter, dateFilter)
+    : and(kindFilter, visibleFilter);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rows: ActivityQueryRow[] = await (resolvedDb as any)

@@ -5,6 +5,7 @@ import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
 import {
   createActivityAction,
+  deleteActivityAction,
   editActivityAction,
   listActivityRevisionsAction,
   loadTimelinePageAction,
@@ -136,6 +137,7 @@ export default function ContactDetailPage() {
         activities={timeline ?? []}
         parent={{ contactId: contactId! }}
         createActivity={createActivityAction}
+        deleteActivity={deleteActivityAction}
         editActivity={editActivityAction}
         loadRevisions={listActivityRevisionsAction}
         initialNextPage={data.timelineNextPage ?? null}
