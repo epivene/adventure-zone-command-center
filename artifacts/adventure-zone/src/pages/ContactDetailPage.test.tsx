@@ -9,8 +9,10 @@ vi.mock("@/components/contacts/sync-state-badge", () => ({ SyncStateBadge: () =>
 vi.mock("@/components/activities/activity-timeline", () => ({ ActivityTimeline: () => null }));
 vi.mock("@/actions/activities", () => ({
   createActivityAction: vi.fn(),
+  deleteActivityAction: vi.fn(),
   editActivityAction: vi.fn(),
   listActivityRevisionsAction: vi.fn(),
+  loadTimelinePageAction: vi.fn(),
 }));
 vi.mock("wouter", () => ({
   useParams: () => ({ contactId }),
