@@ -232,6 +232,42 @@ describe("POST /ai-suggestions/analyze", () => {
     expect(doneEvent!.hadErrors).toBe(false);
   });
 
+  it("accepts a valid rangeMonths of 24", async () => {
+    activityRows.value = [];
+
+    const res = await request(app)
+      .post("/api/ai-suggestions/analyze")
+      .set("Authorization", authorization)
+      .send({ rangeMonths: 24 });
+
+    expect(res.status).toBe(200);
+    const events = parseSSEEvents(res.text);
+    expect(events.find((e) => e.type === "done")).toBeDefined();
+  });
+
+  it('accepts rangeMonths "all" (no date cutoff)', async () => {
+    activityRows.value = [];
+
+    const res = await request(app)
+      .post("/api/ai-suggestions/analyze")
+      .set("Authorization", authorization)
+      .send({ rangeMonths: "all" });
+
+    expect(res.status).toBe(200);
+    const events = parseSSEEvents(res.text);
+    expect(events.find((e) => e.type === "done")).toBeDefined();
+  });
+
+  it("rejects an invalid rangeMonths with 400 before opening the stream", async () => {
+    const res = await request(app)
+      .post("/api/ai-suggestions/analyze")
+      .set("Authorization", authorization)
+      .send({ rangeMonths: 7 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/rangeMonths/);
+  });
+
   it("streams a suggestion event when AI returns a future-dated suggestion", async () => {
     activityRows.value = [
       {

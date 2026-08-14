@@ -1,7 +1,7 @@
 /**
  * AI history analysis routes — suggest future bookings from Act! history.
  *
- * POST /api/ai-suggestions/analyze  — SSE: fetch + analyze last 12 months of history
+ * POST /api/ai-suggestions/analyze  — SSE: fetch + analyze history (12/24/36 months or all)
  * GET  /api/ai-suggestions           — list current session suggestions
  * POST /api/ai-suggestions/:id/accept  — create draft booking from suggestion
  * POST /api/ai-suggestions/:id/dismiss — mark suggestion dismissed
@@ -19,10 +19,31 @@ import {
 const router: IRouter = Router();
 
 // ─── POST /ai-suggestions/analyze ────────────────────────────────────────────
-// SSE endpoint. Fetches the last 12 months of Act! activity records from DB,
+// SSE endpoint. Fetches Act! activity records from DB for the chosen range,
 // sends them to Claude in batches, streams progress and suggestion events back.
 
+const ALLOWED_RANGES = [12, 24, 36] as const;
+
 router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
+  // ── Parse the lookback range: 12 / 24 / 36 months, or "all" for no limit.
+  const rawRange = (req.body as { rangeMonths?: unknown } | undefined)?.rangeMonths;
+  let rangeMonths: number | null; // null = all history
+  if (rawRange === undefined || rawRange === null) {
+    rangeMonths = 12; // default preserves previous behaviour
+  } else if (rawRange === "all") {
+    rangeMonths = null;
+  } else if (
+    typeof rawRange === "number" &&
+    (ALLOWED_RANGES as readonly number[]).includes(rawRange)
+  ) {
+    rangeMonths = rawRange;
+  } else {
+    res.status(400).json({
+      error: `Invalid rangeMonths — expected one of ${ALLOWED_RANGES.join(", ")} or "all"`,
+    });
+    return;
+  }
+
   // ── Pre-flight: check AI provider availability before opening the SSE stream.
   // This lets us return a proper 503 JSON response (not an SSE error event)
   // when no API key is configured — cleaner for the client to handle.
@@ -63,8 +84,12 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
     const { activities, contacts, organizations } = schema;
     const { inArray, eq, and, gte } = orm;
 
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setFullYear(twelveMonthsAgo.getFullYear() - 1);
+    // Compute the lookback cutoff, or null for all history.
+    let cutoff: Date | null = null;
+    if (rangeMonths !== null) {
+      cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - rangeMonths);
+    }
 
     const rows = await (db as any)
       .select({
@@ -88,10 +113,12 @@ router.post("/ai-suggestions/analyze", async (req, res): Promise<void> => {
         // There is no feedback loop: accepted suggestions become bookings,
         // never activity rows, so nothing AI-generated is ever re-scanned.
         // "approved_suggestion" kind is deliberately not included.
-        and(
-          inArray(activities.kind, ["act_history", "note", "calendar"]),
-          gte(activities.timelineSortAt, twelveMonthsAgo),
-        ),
+        cutoff
+          ? and(
+              inArray(activities.kind, ["act_history", "note", "calendar"]),
+              gte(activities.timelineSortAt, cutoff),
+            )
+          : inArray(activities.kind, ["act_history", "note", "calendar"]),
       );
 
     const records: ActivityRecord[] = rows;

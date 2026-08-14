@@ -23,6 +23,19 @@ export type HistorySuggestion = {
   bookingId: string | null;
 };
 
+type RangeOption = 12 | 24 | 36 | "all";
+
+const RANGE_OPTIONS: { value: RangeOption; label: string }[] = [
+  { value: 12, label: "12 months" },
+  { value: 24, label: "24 months" },
+  { value: 36, label: "36 months" },
+  { value: "all", label: "All history" },
+];
+
+function rangeLabel(range: RangeOption): string {
+  return range === "all" ? "all history" : `the last ${range} months`;
+}
+
 type AnalysisState =
   | { phase: "idle" }
   | { phase: "running"; recordsFetched: number; batchIndex: number; totalBatches: number; suggestionsFound: number }
@@ -156,11 +169,15 @@ export function HistorySuggestions() {
   const [state, setState] = useState<AnalysisState>({ phase: "idle" });
   const [suggestions, setSuggestions] = useState<HistorySuggestion[]>([]);
   const [filter, setFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [range, setRange] = useState<RangeOption>(12);
+  // Range that the last-completed scan actually used, for the summary text.
+  const [scannedRange, setScannedRange] = useState<RangeOption>(12);
   const abortRef = useRef<AbortController | null>(null);
 
   const startAnalysis = useCallback(async () => {
     if (state.phase === "running") return;
     setSuggestions([]);
+    setScannedRange(range);
     setState({ phase: "running", recordsFetched: 0, batchIndex: 0, totalBatches: 0, suggestionsFound: 0 });
 
     abortRef.current?.abort();
@@ -172,6 +189,7 @@ export function HistorySuggestions() {
       // root (including VITE_API_BASE_URL for deployed configurations).
       const resp = await apiFetch("/ai-suggestions/analyze", {
         method: "POST",
+        body: JSON.stringify({ rangeMonths: range }),
         signal: abort.signal,
       });
 
@@ -244,7 +262,7 @@ export function HistorySuggestions() {
       if ((err as Error).name === "AbortError") return;
       setState({ phase: "error", message: (err as Error).message ?? "Analysis failed" });
     }
-  }, [state.phase]);
+  }, [state.phase, range]);
 
   // Cleanup on unmount
   useEffect(() => () => abortRef.current?.abort(), []);
@@ -283,15 +301,40 @@ export function HistorySuggestions() {
 
   const pending = suggestions.filter((s) => s.status === "pending").length;
 
-  // ─── Idle state: just the button ──────────────────────────────────────────
+  const rangeSelect = (
+    <label className="flex items-center gap-2 text-sm text-slate-600">
+      <span className="whitespace-nowrap">Scan range</span>
+      <select
+        value={String(range)}
+        disabled={state.phase === "running"}
+        onChange={(e) =>
+          setRange(
+            e.target.value === "all" ? "all" : (Number(e.target.value) as RangeOption),
+          )
+        }
+        className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-700 disabled:opacity-50"
+      >
+        {RANGE_OPTIONS.map((o) => (
+          <option key={String(o.value)} value={String(o.value)}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  // ─── Idle state: range selector + button ──────────────────────────────────
   if (state.phase === "idle") {
     return (
-      <button
-        onClick={() => void startAnalysis()}
-        className="flex items-center gap-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 hover:bg-orange-100 transition-colors"
-      >
-        <span>✦</span> Suggest bookings from Act! history
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => void startAnalysis()}
+          className="flex items-center gap-2 rounded-lg border border-dashed border-orange-300 bg-orange-50 px-4 py-2.5 text-sm font-semibold text-orange-700 hover:bg-orange-100 transition-colors"
+        >
+          <span>✦</span> Suggest bookings from Act! history
+        </button>
+        {rangeSelect}
+      </div>
     );
   }
 
@@ -302,13 +345,16 @@ export function HistorySuggestions() {
         <h2 className="text-lg font-semibold text-slate-800">
           AI Booking Suggestions
         </h2>
-        <button
-          onClick={() => void startAnalysis()}
-          disabled={state.phase === "running"}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-        >
-          {state.phase === "running" ? "Analyzing…" : "Re-analyze"}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          {rangeSelect}
+          <button
+            onClick={() => void startAnalysis()}
+            disabled={state.phase === "running"}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            {state.phase === "running" ? "Analyzing…" : "Re-analyze"}
+          </button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -338,7 +384,8 @@ export function HistorySuggestions() {
       {/* Done / error summary */}
       {state.phase === "done" && !state.hadErrors && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-          Analysis complete — scanned {state.totalRecords} records, found{" "}
+          Analysis complete — scanned {state.totalRecords} records from{" "}
+          {rangeLabel(scannedRange)}, found{" "}
           {state.totalSuggestions} suggestion{state.totalSuggestions !== 1 ? "s" : ""}.
           {pending > 0 && (
             <span className="ml-1 font-semibold">{pending} awaiting review.</span>
@@ -352,7 +399,8 @@ export function HistorySuggestions() {
             Analysis finished with errors — results may be incomplete.
           </p>
           <p>
-            Scanned {state.totalRecords} records, found {state.totalSuggestions} suggestion
+            Scanned {state.totalRecords} records from {rangeLabel(scannedRange)}, found{" "}
+            {state.totalSuggestions} suggestion
             {state.totalSuggestions !== 1 ? "s" : ""}.
             {state.errors.length > 0 && (
               <span className="ml-1">Failed batches: {state.errors.join("; ")}</span>
@@ -402,7 +450,7 @@ export function HistorySuggestions() {
         </div>
       ) : state.phase === "done" && suggestions.length === 0 ? (
         <p className="text-sm text-slate-500 italic">
-          No future booking suggestions found in the last 12 months of history.
+          No future booking suggestions found in {rangeLabel(scannedRange)}.
         </p>
       ) : null}
     </div>
