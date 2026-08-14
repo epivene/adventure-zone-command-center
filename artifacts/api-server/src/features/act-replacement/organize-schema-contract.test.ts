@@ -277,6 +277,26 @@ describe("Act organize/apply schema contract", () => {
     expect(migration).not.toMatch(/UPDATE\s+act_replacement_runs/i);
   });
 
+  it("registers nullable manifest generations for durable current-plan membership", async () => {
+    const migration = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/022_act_manifest_generation.sql", import.meta.url)),
+      "utf8",
+    ).catch(() => "");
+    const registry = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/src/migrations.ts", import.meta.url)),
+      "utf8",
+    );
+    const runs = getTableColumns(table("actReplacementRuns"));
+    const operations = getTableColumns(table("actReplacementApplyOperations"));
+
+    expect(registry).toContain('name: "022_act_manifest_generation.sql"');
+    expect(runs.manifestGeneration?.notNull).toBe(false);
+    expect(operations.manifestGeneration?.notNull).toBe(false);
+    expect(migration).toContain("act_replacement_runs");
+    expect(migration).toContain("act_replacement_apply_operations");
+    expect(migration).toContain("manifest_generation uuid");
+  });
+
   const postgresOnly = process.env.TEST_DATABASE_URL ? describe : describe.skip;
   postgresOnly("PostgreSQL constraint behavior", () => {
     it("allows terminal batches sequentially but only one queued/applying batch", async () => {

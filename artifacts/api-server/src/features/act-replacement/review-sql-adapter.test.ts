@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { approvalClosureFromDurableRow, approvalManifestFromRows, approvalOperationSelection, approvalOutcomeSelection, automaticReviewSummaryFromDecisions, automaticTargetExactMatchQuery, DrizzleActReviewCommandStore, DrizzleActReviewReader, DrizzleProductionOrganizerStore, lockAutomaticReviewSourceRowsQuery, lockBulkSourceRowsQuery, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, operationSemanticsMatch, projectActReviewDisplay, staleNonterminalOperationPredicate } from "./review-sql-adapter";
+import { approvalClosureFromDurableRow, approvalManifestFromRows, approvalOperationSelection, approvalOutcomeSelection, automaticReviewSummaryFromDecisions, automaticTargetExactMatchQuery, currentManifestOperationPredicate, DrizzleActReviewCommandStore, DrizzleActReviewReader, DrizzleProductionOrganizerStore, lockAutomaticReviewSourceRowsQuery, lockBulkSourceRowsQuery, manifestFromRows, manifestSourcesFromArchiveRows, manifestWriteBatches, operationSemanticsMatch, projectActReviewDisplay, staleNonterminalOperationPredicate } from "./review-sql-adapter";
 import { ProductionActOrganizer, type ProductionOrganizerStore } from "./production-organizer";
 import { automaticReviewRequestFingerprint, individualDecisionRequestFingerprint } from "./review-command-service";
 import { digestLegacyManifestRows } from "./manifest-digest";
@@ -435,6 +435,7 @@ describe("durable review adapter projections", () => {
     expect(published).toMatchObject({
       phase: "ready_to_apply",
       manifestDigestVersion: "canonical-json-v1",
+      manifestGeneration: "claim-token",
       organizerToken: null,
       organizerLeaseExpiresAt: null,
     });
@@ -743,6 +744,16 @@ describe("durable review adapter projections", () => {
     expect(rendered.sql).toContain("not in");
   });
 
+  it("selects only operation rows belonging to the published manifest generation", () => {
+    const generation = "00000000-0000-4000-8000-000000000123";
+    const rendered = new PgDialect().sqlToQuery(
+      currentManifestOperationPredicate("run-1", generation) as never,
+    );
+
+    expect(rendered.sql).toContain("manifest_generation");
+    expect(rendered.params).toEqual(["run-1", generation]);
+  });
+
   it("rejects semantic mutation behind a reused terminal operation key", () => {
     const operation = {
       sourceRecordId: "source-1", sourceVersionId: "version-1", targetType: "organization" as const,
@@ -787,7 +798,7 @@ describe("durable review adapter projections", () => {
     ]));
   });
 
-  it("reclaims a ready run only when no apply work has started", async () => {
+  it("reclaims a ready run before apply or when its legacy plan needs versioning", async () => {
     let whereClause: unknown;
     const database = {
       update: () => ({
@@ -805,7 +816,8 @@ describe("durable review adapter projections", () => {
 
     expect(rendered.sql).toContain("act_replacement_apply_batches");
     expect(rendered.sql).toContain("act_replacement_apply_operations");
-    expect(rendered.sql.match(/not exists/g)).toHaveLength(2);
+    expect(rendered.sql.match(/not exists/g)).toHaveLength(3);
+    expect(rendered.sql).toContain("manifest_generation");
     expect(rendered.params).toEqual(expect.arrayContaining(["ready_to_apply", "pending"]));
     const readyParameter = `$${rendered.params.indexOf("ready_to_apply") + 1}`;
     expect(rendered.sql).toContain(`"act_replacement_runs"."phase" = ${readyParameter} and not exists`);

@@ -102,6 +102,18 @@ export function staleNonterminalOperationPredicate(runId: string, operationKeys:
   return and(staleIdentity, notInArray(actReplacementApplyOperations.status, ["applied", "already_present"]));
 }
 
+/** Selects only operations published as part of the run's current manifest.
+ * Null is the pre-migration representation, where every durable row belonged
+ * to the sole manifest generation. */
+export function currentManifestOperationPredicate(runId: string, manifestGeneration: string | null | undefined) {
+  return manifestGeneration
+    ? and(
+        eq(actReplacementApplyOperations.runId, runId),
+        eq(actReplacementApplyOperations.manifestGeneration, manifestGeneration),
+      )
+    : eq(actReplacementApplyOperations.runId, runId);
+}
+
 type OperationSemantics = Pick<ManifestOperation, "sourceRecordId" | "sourceVersionId" | "targetType" | "action" | "payload" | "dependencyOperationKeys" | "requiredForSourceOutcome" | "safeByDefault">;
 
 export function operationSemanticsMatch(left: OperationSemantics, right: OperationSemantics): boolean {
@@ -910,6 +922,11 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
             sql`not exists (select 1 from ${actReplacementApplyOperations} where ${actReplacementApplyOperations.runId} = ${actReplacementRuns.id} and ${actReplacementApplyOperations.status} <> ${"pending"})`,
           ),
           and(
+            eq(actReplacementRuns.phase, "ready_to_apply"),
+            isNull(actReplacementRuns.manifestGeneration),
+            sql`not exists (select 1 from ${actReplacementApplyBatches} where ${actReplacementApplyBatches.runId} = ${actReplacementRuns.id} and ${actReplacementApplyBatches.state} in ('queued', 'applying'))`,
+          ),
+          and(
             eq(actReplacementRuns.phase, "complete"),
             isNull(actReplacementRuns.organizerToken),
             sql`exists (select 1 from ${actReplacementOutcomes} review_outcomes where review_outcomes.run_id = ${actReplacementRuns.id} and review_outcomes.state in (${sql.join(["awaiting_review", "unassigned", "unsupported"].map((state) => sql`${state}`), sql`, `)}))`,
@@ -1115,7 +1132,7 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
         }
         await transaction
           .insert(actReplacementApplyOperations)
-          .values(operations.map((operation) => ({ runId, ...operation })))
+          .values(operations.map((operation) => ({ runId, manifestGeneration: claimToken, ...operation })))
           .onConflictDoUpdate({
             target: [actReplacementApplyOperations.runId, actReplacementApplyOperations.operationKey],
             set: {
@@ -1127,6 +1144,7 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
               dependencyOperationKeys: sql`excluded.dependency_operation_keys`,
               requiredForSourceOutcome: sql`excluded.required_for_source_outcome`,
               safeByDefault: sql`excluded.safe_by_default`,
+              manifestGeneration: sql`excluded.manifest_generation`,
               status: sql`case when ${actReplacementApplyOperations.status} in ('applied','already_present') then ${actReplacementApplyOperations.status} else 'pending' end`,
               batchId: sql`case when ${actReplacementApplyOperations.status} in ('applied','already_present') then ${actReplacementApplyOperations.batchId} else null end`,
               leaseOwner: null,
@@ -1144,6 +1162,7 @@ export class DrizzleProductionOrganizerStore implements ProductionOrganizerStore
         .set({
           phase: "ready_to_apply",
           manifestDigestVersion: canonicalManifestDigestVersion,
+          manifestGeneration: claimToken,
           summary: sql`coalesce(${actReplacementRuns.summary}, '{}'::jsonb) || ${JSON.stringify({ manifestDigest: manifest.digest })}::jsonb`,
           lastErrorCode: null,
           organizerToken: null,
@@ -1368,7 +1387,7 @@ class DrizzleActReviewReaderBase implements ReviewReader {
   }
   async getManifest(runId: string) {
     const [run] = await this.database
-      .select({ summary: actReplacementRuns.summary })
+      .select({ summary: actReplacementRuns.summary, manifestGeneration: actReplacementRuns.manifestGeneration })
       .from(actReplacementRuns)
       .where(this.ownedRunPredicate(runId))
       .limit(1);
@@ -1376,7 +1395,7 @@ class DrizzleActReviewReaderBase implements ReviewReader {
     const operationRows = await this.database
       .select()
       .from(actReplacementApplyOperations)
-      .where(eq(actReplacementApplyOperations.runId, runId));
+      .where(currentManifestOperationPredicate(runId, run.manifestGeneration));
     const outcomeRows = await this.database
       .select()
       .from(actReplacementOutcomes)
@@ -1815,7 +1834,7 @@ class DrizzleApprovalRepository implements ApprovalRepository {
   ) {}
   async getManifest(runId: string) {
     const [run] = await this.database
-      .select({ summary: actReplacementRuns.summary })
+      .select({ summary: actReplacementRuns.summary, manifestGeneration: actReplacementRuns.manifestGeneration })
       .from(actReplacementRuns)
       .where(and(
         eq(actReplacementRuns.id, runId),
@@ -1827,7 +1846,7 @@ class DrizzleApprovalRepository implements ApprovalRepository {
       this.database
         .select(approvalOperationSelection)
         .from(actReplacementApplyOperations)
-        .where(eq(actReplacementApplyOperations.runId, runId)),
+        .where(currentManifestOperationPredicate(runId, run.manifestGeneration)),
       this.database
         .select(approvalOutcomeSelection)
         .from(actReplacementOutcomes)
