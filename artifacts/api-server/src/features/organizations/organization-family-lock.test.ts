@@ -29,10 +29,10 @@ describe("organization family lock order", () => {
 
     expect(statements).toHaveLength(3);
     expect(statements[0]).toContain("pg_advisory_xact_lock");
-    expect(statements[1]).toBe('lock table "organizations" in exclusive mode');
-    expect(statements[2]).toBe(
-      'lock table "act_migration_records", "act_external_links" in share mode',
+    expect(statements[1]).toBe(
+      'lock table "act_migration_records", "act_external_links" in exclusive mode',
     );
+    expect(statements[2]).toBe('lock table "organizations" in exclusive mode');
   });
 
   it("makes hierarchy changes enter the advisory domain before taking row locks", async () => {
