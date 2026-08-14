@@ -24,7 +24,7 @@ import { assignmentTargetEntityTypes, assignmentTargetLikePattern, isAssignmentT
 import { projectActReviewDisplay } from "./review-display";
 import { organizerErrorCode, ProductionActOrganizer, type OrganizerRun, type ProductionOrganizerStore } from "./production-organizer";
 import { fingerprintSourceContent } from "./source-fingerprint";
-import { proposeAutomaticReview, type AutomaticReviewContext, type AutomaticReviewInput, type AutomaticReviewIssue, type AutomaticReviewRecord, type AutomaticReviewResolutionSummary, type AutomaticReviewSourceProjection } from "./automatic-review-resolver";
+import { proposeAutomaticReview, type AutomaticReviewContext, type AutomaticReviewIssue, type AutomaticReviewRecord, type AutomaticReviewResolution, type AutomaticReviewResolutionSummary, type AutomaticReviewSourceProjection } from "./automatic-review-resolver";
 
 export { projectActReviewDisplay } from "./review-display";
 
@@ -141,11 +141,15 @@ export function lockBulkSourceRowsQuery(scope: SourceDatabaseScope, sourceRecord
     for update`;
 }
 
-export function lockAutomaticReviewSourceRowsQuery(scope: SourceDatabaseScope, runId: string): SQL {
+export function lockAutomaticReviewSourceRowsQuery(
+  scope: SourceDatabaseScope,
+  runId: string,
+  includeRelationshipEvidence = true,
+): SQL {
   return sql`select ${actSourceRecords.id}::text as "sourceRecordId",
       ${actSourceRecords.latestVersionId}::text as "sourceVersionId",
-      ${actSourceRecords.streamType} as "streamType",
-      ${actSourceRecords.relationshipEvidence} as "relationshipEvidence"
+      ${actSourceRecords.streamType} as "streamType"
+      ${includeRelationshipEvidence ? sql`, ${actSourceRecords.relationshipEvidence} as "relationshipEvidence"` : sql``}
     from ${actReplacementObservations}
     inner join ${actSourceRecords}
       on ${actSourceRecords.id} = ${actReplacementObservations.sourceRecordId}
@@ -1483,6 +1487,37 @@ class DrizzleActReviewReaderBase implements ReviewReader {
     });
     return { manifest: currentManifest, lockedById };
   }
+  protected async protectedGeneratedManifest(
+    runId: string,
+    storedDigest: string,
+    excludedDecisionIds: readonly string[] = [],
+  ): Promise<{ manifest: ActOrganizeManifest; lockedById: Map<string, { sourceRecordId: string; sourceVersionId: string; streamType: string }> }> {
+    const lockedSources = resultRows<{ sourceRecordId: string; sourceVersionId: string; streamType: string }>(
+      await this.database.execute(lockAutomaticReviewSourceRowsQuery(this.scope, runId, false)),
+    );
+    const lockedById = new Map(lockedSources.map((source) => [source.sourceRecordId, source]));
+    const manifest = excludedDecisionIds.length
+      ? await this.recomputeAutomaticReviewManifest(runId, excludedDecisionIds)
+      : await this.recomputeAutomaticReviewManifest(runId);
+    if (manifest.digest !== storedDigest) manifestDigestMismatch();
+    for (const outcome of manifest.outcomes) {
+      const source = lockedById.get(outcome.sourceRecordId);
+      if (!source || source.sourceVersionId !== outcome.sourceVersionId)
+        throw Object.assign(new Error("stale_source_version"), { code: "stale_source_version", status: 409 });
+    }
+    return { manifest, lockedById };
+  }
+  protected protectedAutomaticManifest(
+    runId: string,
+    storedDigest: string,
+    digestVersion: string | null | undefined,
+    manifestGeneration: string | null | undefined,
+    excludedDecisionIds: readonly string[] = [],
+  ) {
+    return manifestGeneration && digestVersion === canonicalManifestDigestVersion
+      ? this.protectedGeneratedManifest(runId, storedDigest, excludedDecisionIds)
+      : this.protectedCurrentManifest(runId, storedDigest, digestVersion, excludedDecisionIds);
+  }
   async ownsSourceInRun(runId: string, sourceRecordId: string) {
     const [row] = await this.database
       .select({ sourceRecordId: actReplacementOutcomes.sourceRecordId })
@@ -2276,6 +2311,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
     };
     for (const outcome of manifest.outcomes) {
       const source = sourceById.get(outcome.sourceRecordId);
+      if (!source) continue;
       const sourceType = source ? automaticTargetTypeByStream[source.streamType.toLowerCase()] : undefined;
       for (const candidate of outcome.candidates) add(sourceType, object(candidate).candidateId);
       const match = object(outcome.match);
@@ -2290,6 +2326,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
       }
     }
     for (const operation of manifest.operations) {
+      if (!sourceById.has(operation.sourceRecordId)) continue;
       if (!isAssignmentTargetEntityType(operation.targetType)) continue;
       add(operation.targetType, operation.payload.localId);
       add(operation.targetType, operation.payload.entityId);
@@ -2385,20 +2422,45 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
     }
     return targetsByEntityType;
   }
-  private async protectedAutomaticReviewInput(
+  private async proposeProtectedAutomaticReview(
     runId: string,
     manifest: ActOrganizeManifest,
-  ): Promise<AutomaticReviewInput> {
-    const records = automaticReviewRecords(manifest);
-    const sourceRecords = this.automaticSourceProjections(
-      manifest,
-      await this.listSources(runId, automaticContextSourceIds(records)),
-    );
-    const targetsByEntityType = await this.lockedAutomaticTargets(await this.currentAutomaticTargetIds(manifest, sourceRecords));
-    return {
-      records,
-      context: { sourceRecords, targetsByEntityType },
+  ): Promise<AutomaticReviewResolution> {
+    const records = automaticReviewRecords(manifest).sort((left, right) =>
+      left.sourceRecordId.localeCompare(right.sourceRecordId)
+      || left.sourceVersionId.localeCompare(right.sourceVersionId));
+    const resolution: AutomaticReviewResolution = {
+      proposals: [],
+      summary: {
+        linkedExisting: 0,
+        importedNew: 0,
+        relationshipsAssigned: 0,
+        relationshipsOmitted: 0,
+        actValuesSelected: 0,
+        unsupportedIgnored: 0,
+        manualReview: 0,
+        decisionsCreatedOrReplayed: 0,
+      },
     };
+    for (let offset = 0; offset < records.length; offset += 25) {
+      const batch = records.slice(offset, offset + 25);
+      const sourceRecords = this.automaticSourceProjections(
+        manifest,
+        await this.listSources(runId, automaticContextSourceIds(batch)),
+      );
+      const targetsByEntityType = await this.lockedAutomaticTargets(
+        await this.currentAutomaticTargetIds(manifest, sourceRecords),
+      );
+      const batchResolution = proposeAutomaticReview({
+        records: batch,
+        context: { sourceRecords, targetsByEntityType },
+      });
+      resolution.proposals.push(...batchResolution.proposals);
+      for (const key of Object.keys(resolution.summary) as Array<keyof AutomaticReviewResolutionSummary>) {
+        resolution.summary[key] += batchResolution.summary[key];
+      }
+    }
+    return resolution;
   }
   private automaticRequestFingerprint(
     runId: string,
@@ -2827,6 +2889,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
         .select({
           summary: actReplacementRuns.summary,
           manifestDigestVersion: actReplacementRuns.manifestDigestVersion,
+          manifestGeneration: actReplacementRuns.manifestGeneration,
           phase: actReplacementRuns.phase,
         })
         .from(actReplacementRuns)
@@ -2869,10 +2932,11 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
         const lockedDigest = text(object(run.summary).manifestDigest);
         if (lockedDigest !== expectedManifestDigest) {
           if (run.phase !== undefined && run.phase !== "ready_to_apply") manifestDigestMismatch();
-          const { manifest: rebuiltManifest } = await store.protectedCurrentManifest(
+          const { manifest: rebuiltManifest } = await store.protectedAutomaticManifest(
             runId,
             lockedDigest,
             run.manifestDigestVersion,
+            run.manifestGeneration,
           );
           const recovered: AutomaticReviewDecisionResult = {
             ...replay,
@@ -2891,10 +2955,11 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
           return { kind: "complete" as const, result: recovered };
         }
         if (run.manifestDigestVersion !== undefined) {
-          await store.protectedCurrentManifest(
+          await store.protectedAutomaticManifest(
             runId,
             lockedDigest,
             run.manifestDigestVersion,
+            run.manifestGeneration,
             replay.decisions.map((decision) => decision.id),
           );
         }
@@ -2927,10 +2992,11 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
       let currentManifest: ActOrganizeManifest;
       let lockedById: Map<string, { sourceRecordId: string; sourceVersionId: string; streamType: string; relationshipEvidence?: unknown }>;
       if (run.manifestDigestVersion !== undefined || /^[a-f0-9]{64}$/.test(lockedDigest)) {
-        ({ manifest: currentManifest, lockedById } = await store.protectedCurrentManifest(
+        ({ manifest: currentManifest, lockedById } = await store.protectedAutomaticManifest(
           runId,
           lockedDigest,
           run.manifestDigestVersion,
+          run.manifestGeneration,
         ));
       } else {
         const initialManifest = await store.getComputedManifest(runId);
@@ -2954,7 +3020,7 @@ export class DrizzleActReviewCommandStore extends DrizzleActReviewReaderBase imp
         }
       }
 
-      const resolution = proposeAutomaticReview(await store.protectedAutomaticReviewInput(runId, currentManifest));
+      const resolution = await store.proposeProtectedAutomaticReview(runId, currentManifest);
       const proposed = resolution.proposals
         .filter((proposal): proposal is Extract<typeof proposal, { kind: "decision" }> => proposal.kind === "decision")
         .map(({ kind: _kind, reason: _reason, ...decision }) => decision)
