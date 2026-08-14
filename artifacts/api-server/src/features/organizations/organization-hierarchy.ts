@@ -3,6 +3,7 @@ import { asc, eq, inArray } from "drizzle-orm";
 import type { db as applicationDatabase } from "@/db/client";
 import { organizations } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { lockOrganizationHierarchyMutationDomain } from "./organization-family-lock";
 import type {
   CreateOrganizationParentInput,
   SetOrganizationParentInput,
@@ -88,6 +89,7 @@ export async function setOrganizationParentsInTransaction(
       throw new HierarchyConflictError("A profile cannot be its own parent.");
     }
 
+    await lockOrganizationHierarchyMutationDomain(transaction);
     const involvedOrganizations = await lockOrganizations(transaction, [
       input.parentId,
       ...childIds,
@@ -175,6 +177,7 @@ export async function ungroupOrganization(
   changedAt: Date,
 ): Promise<void> {
   await database.transaction(async (transaction) => {
+    await lockOrganizationHierarchyMutationDomain(transaction);
     const child = await lockOrganization(transaction, input.childId);
 
     await transaction
@@ -200,6 +203,7 @@ export async function createOrganizationParentInTransaction(
   input: CreateOrganizationParentInput,
   changedAt: Date,
 ): Promise<{ parentId: string }> {
+    await lockOrganizationHierarchyMutationDomain(transaction);
     const childIds = [...new Set(input.childIds)];
     const children = await transaction
       .select({
