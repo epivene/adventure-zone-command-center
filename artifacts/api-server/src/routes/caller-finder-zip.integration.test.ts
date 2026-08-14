@@ -38,9 +38,16 @@ let database: ReturnType<typeof drizzle>;
 async function seedZipOnlyCallerFixture() {
   await client.exec(`
     CREATE TABLE organizations (id uuid PRIMARY KEY, name text NOT NULL);
+    CREATE TABLE organization_locations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_id uuid NOT NULL,
+      label text NOT NULL DEFAULT '',
+      normalized_phone text
+    );
     CREATE TABLE contacts (
       id uuid PRIMARY KEY,
       organization_id uuid,
+      organization_location_id uuid,
       first_name text NOT NULL,
       last_name text NOT NULL,
       email text,
