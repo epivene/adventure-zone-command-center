@@ -146,12 +146,14 @@ vi.mock("@workspace/integrations-anthropic-ai", () => ({
 import { issueToken, requireOwnerMiddleware } from "@/lib/auth";
 
 const originalSecret = process.env.SESSION_SECRET;
+const originalReplId = process.env.REPL_ID;
 const originalAnthropicBaseUrl = process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
 const originalAnthropicApiKey = process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
 let authorization = "";
 
 beforeAll(() => {
   process.env.SESSION_SECRET = "ai-suggestions-test-secret-2026";
+  process.env.REPL_ID = "ai-suggestions-test-repl";
   process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL = "https://anthropic.test";
   process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY = "test-key";
   const issued = issueToken();
@@ -162,6 +164,8 @@ beforeAll(() => {
 afterAll(() => {
   if (originalSecret === undefined) delete process.env.SESSION_SECRET;
   else process.env.SESSION_SECRET = originalSecret;
+  if (originalReplId === undefined) delete process.env.REPL_ID;
+  else process.env.REPL_ID = originalReplId;
   if (originalAnthropicBaseUrl === undefined) delete process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL;
   else process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL = originalAnthropicBaseUrl;
   if (originalAnthropicApiKey === undefined) delete process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY;
