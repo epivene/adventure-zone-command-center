@@ -110,9 +110,6 @@ export function discoverOrganizationFamilyCandidates(
     }
   }
 
-  const strongCandidateSets = new Set(
-    candidates.map((candidate) => candidate.candidateIds.join("|")),
-  );
   const byExactName = new Map<string, OrganizationFamilyRecord[]>();
   for (const record of hydratedRecords) {
     const exactName = normalizeMatchingText(record.name);
@@ -126,8 +123,6 @@ export function discoverOrganizationFamilyCandidates(
     const candidateIds = bucket
       .map((record) => record.id)
       .sort((left, right) => left.localeCompare(right, "en-US"));
-    if (strongCandidateSets.has(candidateIds.join("|"))) continue;
-
     const locations = bucket.map((record) => {
       const city = normalizeMatchingText(record.city ?? null);
       const region = normalizeMatchingText(record.region ?? null);
@@ -143,6 +138,12 @@ export function discoverOrganizationFamilyCandidates(
     const hasRepeatedAddress = new Set(addresses).size !== addresses.length;
 
     const exactCandidateIds = new Set(candidateIds);
+    const strongEvidence = candidates
+      .filter((candidate) =>
+        candidate.candidateIds.some((id) => exactCandidateIds.has(id)),
+      )
+      .flatMap((candidate) => candidate.evidence)
+      .filter((item) => item.family !== "name" && item.family !== "location");
     for (let index = candidates.length - 1; index >= 0; index -= 1) {
       if (
         candidates[index]!.candidateIds.some((id) => exactCandidateIds.has(id))
@@ -150,6 +151,23 @@ export function discoverOrganizationFamilyCandidates(
         candidates.splice(index, 1);
       }
     }
+    const evidence = [
+      { family: "name" as const, label: "exact organization names agree" },
+      ...strongEvidence,
+      { family: "location" as const, label: "locations differ" },
+      ...(hasRepeatedAddress
+        ? [{
+            family: "address" as const,
+            label: "street addresses repeat across different locations",
+          }]
+        : []),
+    ].filter(
+      (item, index, all) =>
+        all.findIndex(
+          (candidate) =>
+            candidate.family === item.family && candidate.label === item.label,
+        ) === index,
+    );
     candidates.push({
       normalizedName: exactName,
       city: "",
@@ -157,16 +175,7 @@ export function discoverOrganizationFamilyCandidates(
       classification: "ambiguous_location_candidate",
       groupKey: `organization-family:${candidateIds.join("|")}`,
       candidateIds,
-      evidence: [
-        { family: "name", label: "exact organization names agree" },
-        { family: "location", label: "locations differ" },
-        ...(hasRepeatedAddress
-          ? [{
-              family: "address" as const,
-              label: "street addresses repeat across different locations",
-            }]
-          : []),
-      ],
+      evidence,
     });
   }
 
