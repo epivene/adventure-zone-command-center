@@ -296,7 +296,7 @@ export async function reviewOrganizationFamily(
   );
   const groupKey = organizationFamilyGroupKey(candidateIds);
 
-  await database.transaction(async (transaction) => {
+  const outcome = await database.transaction(async (transaction) => {
     await lockOrganizationFamilyReviewDomain(transaction);
     const [review] = await transaction
       .select({
@@ -334,9 +334,10 @@ export async function reviewOrganizationFamily(
       standaloneRecords.map((organization) => [organization.id, organization]),
     );
     if (!candidateIds.every((id) => candidatesById.has(id))) {
-      throw new HierarchyConflictError(
-        "This organization family changed. Refresh the review list and try again.",
-      );
+      await transaction
+        .delete(organizationFamilyReviews)
+        .where(eq(organizationFamilyReviews.groupKey, groupKey));
+      return "stale" as const;
     }
 
     const currentGroups = await discoverOrganizationFamilyCandidatesFromDatabase(
@@ -353,9 +354,7 @@ export async function reviewOrganizationFamily(
       await transaction
         .delete(organizationFamilyReviews)
         .where(eq(organizationFamilyReviews.groupKey, groupKey));
-      throw new HierarchyConflictError(
-        "This organization family changed. Refresh the review list and try again.",
-      );
+      return "stale" as const;
     }
 
     if (input.action === "not_related") {
@@ -368,7 +367,7 @@ export async function reviewOrganizationFamily(
           updatedAt: changedAt,
         })
         .where(eq(organizationFamilyReviews.groupKey, groupKey));
-      return;
+      return "applied" as const;
     }
 
     if (input.parent.kind === "new") {
@@ -393,7 +392,14 @@ export async function reviewOrganizationFamily(
     await transaction
       .delete(organizationFamilyReviews)
       .where(eq(organizationFamilyReviews.groupKey, groupKey));
+    return "applied" as const;
   }, { isolationLevel: "serializable" });
+
+  if (outcome === "stale") {
+    throw new HierarchyConflictError(
+      "This organization family changed. Refresh the review list and try again.",
+    );
+  }
 }
 
 export interface OrganizationRepository {
