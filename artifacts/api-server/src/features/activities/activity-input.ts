@@ -29,5 +29,10 @@ export const editActivityInputSchema = z.object({
   reason: z.string().trim().min(1, "Add a reason for the edit."),
 });
 
+export const deleteActivityInputSchema = z.object({
+  activityId: z.uuid(),
+});
+
 export type ActivityCreateInput = z.output<typeof createActivityInputSchema>;
 export type ActivityEditInput = z.output<typeof editActivityInputSchema>;
+export type ActivityDeleteInput = z.output<typeof deleteActivityInputSchema>;
