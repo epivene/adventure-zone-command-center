@@ -838,6 +838,7 @@ export const activities = pgTable("activities", {
   ),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 }, (table) => [
   check(
     "activities_parent_required",
