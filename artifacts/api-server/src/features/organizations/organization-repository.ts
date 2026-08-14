@@ -398,7 +398,7 @@ export async function reviewOrganizationFamily(
       .delete(organizationFamilyReviews)
       .where(eq(organizationFamilyReviews.groupKey, groupKey));
     return "applied" as const;
-  }, { isolationLevel: "serializable" });
+  }, { isolationLevel: "read committed" });
 
   if (outcome === "stale") {
     throw new HierarchyConflictError(
