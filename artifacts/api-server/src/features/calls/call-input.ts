@@ -70,7 +70,7 @@ export const completeCallInputSchema = z.object({
   contactId: z.string().uuid().nullable(),
   bookingId: z.string().uuid().nullable(),
   followUpId: z.string().uuid().nullable(),
-  note: z.string().trim().min(1, "Add a call note."),
+  note: z.string().trim(),
   disposition: callDispositionSchema,
   resultingBookingStatus: z.enum(bookingStatusValues).nullable(),
   startedAt: transportDate,
