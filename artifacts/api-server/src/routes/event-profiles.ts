@@ -17,7 +17,7 @@ import { parseBusinessDateInput } from "@/lib/business-date";
 
 const router: IRouter = Router();
 
-const uuid = z.uuid();
+const uuid = z.string().uuid();
 const creationSchema = z.object({
   event: z.object({ id: z.string().nullable(), name: z.string(), city: z.string(), region: z.string() }),
   contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string(), primary: z.boolean().optional() })).min(1),
