@@ -28,6 +28,7 @@ describe("ActivityTimeline deletion", () => {
           revisionCount: 0,
         }]}
         deleteActivity={deleteActivity}
+        loadRevisions={vi.fn().mockResolvedValue({ ok: true, revisions: [], nextPage: null })}
       />,
     );
 
@@ -56,6 +57,7 @@ describe("ActivityTimeline deletion", () => {
           revisionCount: 0,
         }]}
         deleteActivity={deleteActivity}
+        loadRevisions={vi.fn().mockResolvedValue({ ok: true, revisions: [], nextPage: null })}
       />,
     );
 
