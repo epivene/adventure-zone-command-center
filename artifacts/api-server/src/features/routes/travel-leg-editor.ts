@@ -14,10 +14,6 @@ export type TravelLegDetailsError = {
   code: "LEG_NOT_FOUND" | "LEG_ARCHIVED";
 };
 
-export type TravelLegAddError = {
-  code: "LEG_LIMIT_REACHED";
-};
-
 export type TravelLegDeleteError = {
   code: "LEG_MINIMUM_REACHED" | "LEG_NOT_FOUND";
 };
@@ -45,7 +41,6 @@ export interface TravelLegEditorTransaction {
   listForUpdate(): Promise<TravelLeg[]>;
   update(id: string, values: TravelLegDetailValues): Promise<TravelLeg>;
   setArchived(id: string, archivedAt: Date | null): Promise<TravelLeg>;
-  /** Atomically reorder all legs in a single SQL statement to avoid unique-constraint conflicts. */
   reorderLegs(orders: { id: string; sortOrder: number }[]): Promise<void>;
   insert(values: {
     name: string;
@@ -91,12 +86,6 @@ function detailChanged(
   );
 }
 
-/**
- * Ordering invariant: active legs always occupy sort positions 1..A (in the
- * user-chosen order) and archived legs occupy A+1..N (preserving their
- * relative order). Configuration applies to active legs only; archive,
- * restore, and add renormalize the full sequence to keep it contiguous.
- */
 function normalizedOrders(
   activeInOrder: { id: string }[],
   archivedInOrder: { id: string }[],
@@ -131,18 +120,12 @@ export class TravelLegService {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
       const target = current.find((leg) => leg.id === id);
-      if (!target) {
-        return err({ code: "LEG_NOT_FOUND" });
-      }
-      if (target.archivedAt) {
-        return err({ code: "LEG_ARCHIVED" });
-      }
+      if (!target) return err({ code: "LEG_NOT_FOUND" });
+      if (target.archivedAt) return err({ code: "LEG_ARCHIVED" });
 
       const before = detailValues(target);
       const next = detailValues(input);
-      if (!detailChanged(before, next)) {
-        return ok(target);
-      }
+      if (!detailChanged(before, next)) return ok(target);
 
       const saved = await transaction.update(id, next);
       await transaction.audit({
@@ -192,9 +175,6 @@ export class TravelLegService {
       const current = await transaction.listForUpdate();
       const active = current.filter((leg) => !leg.archivedAt);
       const archived = current.filter((leg) => leg.archivedAt);
-
-      // Configuration covers exactly the active legs — archived legs cannot
-      // be renamed, re-detailed, or reordered until they are restored.
       const activeIds = new Set(active.map((l) => l.id));
       if (
         input.legs.length !== active.length ||
@@ -204,9 +184,6 @@ export class TravelLegService {
       }
 
       const requestedById = new Map(input.legs.map((l) => [l.id, l]));
-
-      // Atomically renumber: requested active order first, then archived legs
-      // in their existing relative order.
       const requestedActive = [...input.legs].sort(
         (a, b) => a.sortOrder - b.sortOrder,
       );
@@ -214,7 +191,6 @@ export class TravelLegService {
       await applyOrders(transaction, current, orders);
       const orderById = new Map(orders.map((o) => [o.id, o.sortOrder]));
 
-      // Update details for each active leg that changed
       const updated: TravelLeg[] = [];
       for (const leg of active) {
         const next = requestedById.get(leg.id)!;
@@ -230,7 +206,6 @@ export class TravelLegService {
           });
           updated.push({ ...saved, sortOrder });
         } else {
-          // Sort order may have changed; reflect the normalized value
           updated.push({ ...leg, sortOrder });
         }
       }
@@ -242,16 +217,11 @@ export class TravelLegService {
     });
   }
 
-  addLeg(): Promise<Result<TravelLeg, TravelLegAddError>> {
+  addLeg(): Promise<Result<TravelLeg, never>> {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
-      if (current.length >= 9) {
-        return err({ code: "LEG_LIMIT_REACHED" });
-      }
       const active = current.filter((l) => !l.archivedAt);
       const archived = current.filter((l) => l.archivedAt);
-      // Insert at the very end (guaranteed free slot), then renormalize so the
-      // new active leg lands at the end of the active block, before archived.
       const leg = await transaction.insert({
         name: `Leg ${active.length + 1}`,
         color: "#6B7280",
@@ -273,19 +243,11 @@ export class TravelLegService {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
       const target = current.find((l) => l.id === id);
-      if (!target) {
-        return err({ code: "LEG_NOT_FOUND" });
-      }
-      if (target.archivedAt) {
-        return ok(target);
-      }
+      if (!target) return err({ code: "LEG_NOT_FOUND" });
+      if (target.archivedAt) return ok(target);
       const active = current.filter((l) => !l.archivedAt);
-      if (active.length <= 1) {
-        return err({ code: "LAST_ACTIVE_LEG" });
-      }
+      if (active.length <= 1) return err({ code: "LAST_ACTIVE_LEG" });
       const saved = await transaction.setArchived(id, new Date());
-      // Move the newly archived leg to the front of the archived block so
-      // active legs stay contiguous at 1..A.
       const archived = current.filter((l) => l.archivedAt);
       const orders = normalizedOrders(
         active.filter((l) => l.id !== id),
@@ -306,14 +268,9 @@ export class TravelLegService {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
       const target = current.find((l) => l.id === id);
-      if (!target) {
-        return err({ code: "LEG_NOT_FOUND" });
-      }
-      if (!target.archivedAt) {
-        return ok(target);
-      }
+      if (!target) return err({ code: "LEG_NOT_FOUND" });
+      if (!target.archivedAt) return ok(target);
       const saved = await transaction.setArchived(id, null);
-      // Restored leg joins the end of the active block.
       const active = current.filter((l) => !l.archivedAt);
       const archived = current.filter((l) => l.archivedAt && l.id !== id);
       const orders = normalizedOrders([...active, saved], archived);
@@ -332,12 +289,8 @@ export class TravelLegService {
     return this.repository.transaction(async (transaction) => {
       const current = await transaction.listForUpdate();
       const target = current.find((l) => l.id === id);
-      if (!target) {
-        return err({ code: "LEG_NOT_FOUND" });
-      }
-      if (current.length <= 1) {
-        return err({ code: "LEG_MINIMUM_REACHED" });
-      }
+      if (!target) return err({ code: "LEG_NOT_FOUND" });
+      if (current.length <= 1) return err({ code: "LEG_MINIMUM_REACHED" });
       await transaction.audit({
         entityId: id,
         before: { name: target.name, color: target.color, sortOrder: target.sortOrder },

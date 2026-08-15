@@ -1,3 +1,9 @@
+import ManagerIssuesAdminPage from "@/pages/ManagerIssuesAdminPage";
+import ManagerRoutePage from "@/pages/ManagerRoutePage";
+import ManagerHomePage from "@/pages/ManagerHomePage";
+import ManagerSignInPage from "@/pages/ManagerSignInPage";
+import { ManagerShell } from "@/components/manager/manager-shell";
+import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
@@ -157,6 +163,13 @@ function SettingsStub() {
       <p className="mt-2 text-slate-600">This settings page is available in the full backend setup.</p>
     </div>
   );
+}
+
+function ManagerProtectedApp() {
+  const { manager, loading } = useManagerAuth();
+  if (loading) return <div className="p-6">Loading manager portal…</div>;
+  if (!manager) return <Redirect to="/manager/sign-in" />;
+  return <ManagerShell><Switch><Route path="/manager/route"><ManagerRoutePage /></Route><Route path="/manager"><ManagerHomePage /></Route></Switch></ManagerShell>;
 }
 
 function AppRoutes() {

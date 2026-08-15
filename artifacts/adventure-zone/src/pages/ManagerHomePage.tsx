@@ -1,0 +1,3 @@
+import { Link } from "wouter";
+import { useManagerAuth } from "@/lib/manager-auth-context";
+export default function ManagerHomePage(){const {manager}=useManagerAuth();return <div className="grid gap-4"><div><p className="text-sm text-slate-600">Signed in for</p><h1 className="text-2xl font-bold">{manager?.legName}</h1></div><section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Schedule & route</h2><p className="mt-1 text-sm text-slate-600">Official schedule information is view-only here.</p><Link href="/manager/route" className="button-primary mt-4 inline-flex">View events & route</Link></section></div>}

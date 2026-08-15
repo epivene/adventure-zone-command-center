@@ -17,6 +17,9 @@ import actReplacementRouter from "./act-replacement";
 import aiSuggestionsRouter from "./ai-suggestions";
 import followUpsRouter from "./follow-ups";
 import authRouter from "./auth";
+import managerAuthRouter from "./leg-manager-auth";
+import managerRouter from "./leg-manager";
+import managerAdminRouter from "./leg-manager-admin";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();

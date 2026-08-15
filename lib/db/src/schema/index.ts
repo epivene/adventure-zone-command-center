@@ -390,15 +390,24 @@ export const travelLegs = pgTable(
   },
   (table) => [
     check(
-      "travel_legs_sort_order_between_1_and_9",
-      sql`${table.sortOrder} between 1 and 9`,
-    ),
-    check(
       "travel_legs_default_mpg_positive",
       sql`${table.defaultMpg} is null or ${table.defaultMpg} > 0`,
     ),
   ],
 );
+
+export const legManagerAccess = pgTable("leg_manager_access", {
+  legId: uuid("leg_id")
+    .primaryKey()
+    .references(() => travelLegs.id, { onDelete: "cascade" }),
+  passwordHash: text("password_hash").notNull(),
+  passwordSalt: text("password_salt").notNull(),
+  sessionVersion: integer("session_version").default(1).notNull(),
+  managerName: text("manager_name"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("leg_manager_access_session_version_positive", sql`${table.sessionVersion} >= 1`),
+]);
 
 export const bookings = pgTable("bookings", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -2594,6 +2603,30 @@ export const tripSegments = pgTable(
       "trip_segments_override_minutes_nonnegative",
       sql`${table.overrideMinutes} is null or ${table.overrideMinutes} >= 0`,
     ),
+  ],
+);
+
+export const legScheduleIssues = pgTable(
+  "leg_schedule_issues",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(),
+    notes: text("notes").notNull(),
+    status: text("status").default("open").notNull(),
+    clientMutationId: uuid("client_mutation_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    resolutionNote: text("resolution_note"),
+  },
+  (table) => [
+    unique("leg_schedule_issues_leg_mutation_unique").on(table.legId, table.clientMutationId),
+    index("leg_schedule_issues_leg_status_idx").on(table.legId, table.status),
+    check("leg_schedule_issues_kind_valid", sql`${table.kind} in ('wrong_datetime','wrong_location','wrong_leg','route_problem','event_details_changed','other')`),
+    check("leg_schedule_issues_status_valid", sql`${table.status} in ('open','resolved')`),
   ],
 );
 

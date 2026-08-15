@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"composite":false,"noEmit":true},"references":[],"include":["src/features/leg-manager/**/*.ts","src/routes/leg-manager-auth.ts","src/routes/leg-manager-admin.ts"]}
