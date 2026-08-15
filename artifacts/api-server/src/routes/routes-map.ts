@@ -9,7 +9,10 @@ import {
   travelLegOrderSchema,
 } from "@/features/routes/travel-leg-input";
 import { filterMapEvents } from "@/features/routes/map-data";
-import { resolveRouteMapEvents } from "@/features/routes/location-resolver";
+import {
+  invalidateRouteLocationCache,
+  resolveRouteMapEvents,
+} from "@/features/routes/location-resolver";
 import { NominatimGeocodingProvider } from "@/features/trips/geocoding";
 
 const router: IRouter = Router();
@@ -35,6 +38,28 @@ router.get("/routes", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to load routes");
     res.status(500).json({ error: "Failed to load routes" });
+  }
+});
+
+router.post("/routes/events/:bookingId/retry-location", async (req, res): Promise<void> => {
+  try {
+    const repo = new DrizzleTravelLegRepository(db);
+    const event = (await repo.listMapEvents()).find((row) => row.id === req.params.bookingId);
+    if (!event) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+
+    if (event.locationLabel) invalidateRouteLocationCache(event.locationLabel);
+    const refreshed = (await resolveRouteMapEvents([event], routeGeocoder))[0];
+    if (!refreshed) {
+      res.status(404).json({ error: "Booking not found" });
+      return;
+    }
+    res.json({ event: refreshed });
+  } catch (err) {
+    req.log.error({ err }, "Failed to retry route location");
+    res.status(500).json({ error: "Could not retry location" });
   }
 });
 
@@ -142,7 +167,6 @@ router.post("/routes/travel-legs/:id/archive", async (req, res): Promise<void> =
       }
       return;
     }
-    // Archiving permanently invalidates every manager token, including after a later restore.
     await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
     res.json({ ok: true, leg: result.value });
   } catch (err) {
@@ -167,8 +191,6 @@ router.post("/routes/travel-legs/:id/restore", async (req, res): Promise<void> =
   }
 });
 
-// Permanent deletion remains an API compatibility escape hatch for the owner,
-// but the supported day-to-day lifecycle is archive/restore in the UI.
 router.delete("/routes/travel-legs/:id", async (req, res): Promise<void> => {
   const { id } = req.params;
   try {

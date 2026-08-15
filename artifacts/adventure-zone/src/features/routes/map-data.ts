@@ -7,6 +7,14 @@ import { businessDateKey, parseBusinessDate } from "@/lib/business-date";
 
 export type LocationQuality = "coordinates" | "address" | "city" | "missing";
 
+export type RouteMappingState =
+  | "mapped_coordinates"
+  | "mapped_address"
+  | "mapped_city"
+  | "needs_mapping_no_results"
+  | "needs_mapping_provider_unavailable"
+  | "needs_mapping_missing_location";
+
 export type MapEvent = {
   id: string;
   name: string;
@@ -24,6 +32,7 @@ export type MapEvent = {
   routeBucket?: RouteBucket;
   locationQuality?: LocationQuality;
   locationLabel?: string | null;
+  mappingState?: RouteMappingState;
   seasonYear?: number | null;
 };
 
@@ -47,6 +56,7 @@ export type MapFeatureProperties = {
   routeBucket?: RouteBucket;
   locationQuality?: LocationQuality;
   locationLabel?: string | null;
+  mappingState?: RouteMappingState;
   seasonYear?: number | null;
   emphasis?: "primary" | "dimmed";
 };
@@ -167,6 +177,7 @@ export function toMapDataset(events: MapEvent[]): MapDataset {
           routeBucket: event.routeBucket,
           locationQuality: event.locationQuality,
           locationLabel: event.locationLabel,
+          mappingState: event.mappingState,
           seasonYear: event.seasonYear,
         },
       })),

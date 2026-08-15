@@ -1,4 +1,8 @@
-import type { MapEvent, LocationQuality } from "./map-data";
+import type {
+  MapEvent,
+  LocationQuality,
+  RouteMappingState,
+} from "./map-data";
 import type { GeocodingProvider } from "@/features/trips/geocoding";
 import { GeocodingUnavailableError } from "@/features/trips/geocoding";
 
@@ -7,15 +11,19 @@ export type ResolvedMapLocation = {
   longitude: number | null;
   label: string | null;
   quality: LocationQuality;
+  mappingState: RouteMappingState;
 };
 
-type CachedLocation = {
-  latitude: number;
-  longitude: number;
-  displayName: string;
-};
+type CachedLocation =
+  | {
+      kind: "success";
+      latitude: number;
+      longitude: number;
+      displayName: string;
+    }
+  | { kind: "no_results" };
 
-const locationCache = new Map<string, CachedLocation | null>();
+const locationCache = new Map<string, CachedLocation>();
 
 function validCoordinatePair(event: Pick<MapEvent, "latitude" | "longitude">) {
   return (
@@ -42,6 +50,10 @@ export function routeLocationLabel(event: MapEvent): string | null {
   return null;
 }
 
+function successState(event: MapEvent): RouteMappingState {
+  return event.locationQuality === "address" ? "mapped_address" : "mapped_city";
+}
+
 export async function resolveMapLocation(
   event: MapEvent,
   geocoder: GeocodingProvider,
@@ -54,6 +66,7 @@ export async function resolveMapLocation(
       longitude: event.longitude,
       label,
       quality: "coordinates",
+      mappingState: "mapped_coordinates",
     };
   }
 
@@ -63,43 +76,86 @@ export async function resolveMapLocation(
       longitude: null,
       label: null,
       quality: "missing",
+      mappingState: "needs_mapping_missing_location",
     };
   }
 
-  const cacheKey = label.toLowerCase();
-  if (locationCache.has(cacheKey)) {
-    const cached = locationCache.get(cacheKey) ?? null;
-    return cached
-      ? {
-          latitude: cached.latitude,
-          longitude: cached.longitude,
-          label,
-          quality: event.locationQuality === "address" ? "address" : "city",
-        }
-      : { latitude: null, longitude: null, label, quality: "missing" };
+  const cacheKey = label.trim().toLowerCase();
+  const cached = locationCache.get(cacheKey);
+  if (cached) {
+    if (cached.kind === "no_results") {
+      return {
+        latitude: null,
+        longitude: null,
+        label,
+        quality: "missing",
+        mappingState: "needs_mapping_no_results",
+      };
+    }
+    return {
+      latitude: cached.latitude,
+      longitude: cached.longitude,
+      label,
+      quality: event.locationQuality === "address" ? "address" : "city",
+      mappingState: successState(event),
+    };
   }
 
   try {
     const results = await geocoder.geocode(label);
     const first = results[0];
     if (!first) {
-      locationCache.set(cacheKey, null);
-      return { latitude: null, longitude: null, label, quality: "missing" };
+      locationCache.set(cacheKey, { kind: "no_results" });
+      return {
+        latitude: null,
+        longitude: null,
+        label,
+        quality: "missing",
+        mappingState: "needs_mapping_no_results",
+      };
     }
-    locationCache.set(cacheKey, first);
+
+    locationCache.set(cacheKey, {
+      kind: "success",
+      latitude: first.latitude,
+      longitude: first.longitude,
+      displayName: first.displayName,
+    });
     return {
       latitude: first.latitude,
       longitude: first.longitude,
       label,
       quality: event.locationQuality === "address" ? "address" : "city",
+      mappingState: successState(event),
     };
   } catch (error) {
     if (error instanceof GeocodingUnavailableError) {
-      // Do not cache provider outages. A later request should be allowed to retry.
-      if (error.code === "no_results") locationCache.set(cacheKey, null);
-      return { latitude: null, longitude: null, label, quality: "missing" };
+      if (error.code === "no_results") {
+        locationCache.set(cacheKey, { kind: "no_results" });
+        return {
+          latitude: null,
+          longitude: null,
+          label,
+          quality: "missing",
+          mappingState: "needs_mapping_no_results",
+        };
+      }
+      return {
+        latitude: null,
+        longitude: null,
+        label,
+        quality: "missing",
+        mappingState: "needs_mapping_provider_unavailable",
+      };
     }
-    return { latitude: null, longitude: null, label, quality: "missing" };
+
+    return {
+      latitude: null,
+      longitude: null,
+      label,
+      quality: "missing",
+      mappingState: "needs_mapping_provider_unavailable",
+    };
   }
 }
 
@@ -109,11 +165,18 @@ export async function resolveRouteMapEvents(
 ): Promise<MapEvent[]> {
   const resolved: MapEvent[] = [];
 
-  // Nominatim asks clients to make requests serially. The cache means repeated
-  // city/state pairs cost only one lookup per server process.
   for (const event of events) {
     if (!event.travelLegId) {
-      resolved.push(event);
+      resolved.push({
+        ...event,
+        mappingState:
+          event.mappingState ??
+          (validCoordinatePair(event)
+            ? "mapped_coordinates"
+            : routeLocationLabel(event)
+              ? "needs_mapping_no_results"
+              : "needs_mapping_missing_location"),
+      });
       continue;
     }
 
@@ -124,11 +187,16 @@ export async function resolveRouteMapEvents(
       longitude: location.longitude,
       locationLabel: location.label,
       locationQuality: location.quality,
+      mappingState: location.mappingState,
       seasonYear: event.seasonYear ?? event.startsAt?.getUTCFullYear() ?? null,
     });
   }
 
   return resolved;
+}
+
+export function invalidateRouteLocationCache(label: string) {
+  locationCache.delete(label.trim().toLowerCase());
 }
 
 export function clearRouteLocationCacheForTests() {
