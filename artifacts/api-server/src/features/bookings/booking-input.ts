@@ -86,11 +86,14 @@ export const bookingEditInputSchema = z
         path: [input.latitude === null ? "latitude" : "longitude"],
       });
     }
-    if (
-      input.startsAt &&
-      input.endsAt &&
-      input.endsAt.getTime() < input.startsAt.getTime()
-    ) {
+
+    // Normalize again at the cross-field boundary instead of assuming the
+    // values reaching superRefine are already Date instances. This keeps a
+    // string-shaped PATCH payload from throwing before Zod can return a
+    // validation result.
+    const startsAt = parseBusinessDateInput(input.startsAt);
+    const endsAt = parseBusinessDateInput(input.endsAt);
+    if (startsAt && endsAt && endsAt.getTime() < startsAt.getTime()) {
       context.addIssue({
         code: "custom",
         message: "End date cannot be before the start date",
