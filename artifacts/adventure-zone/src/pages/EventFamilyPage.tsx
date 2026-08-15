@@ -1,13 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 import type { EventFamilyDetail } from "@/features/event-families/event-family-types";
+
+type AvailableProfile = {
+  id: string;
+  name: string;
+  city: string | null;
+  eventFamilyId?: string | null;
+};
 
 export default function EventFamilyPage() {
   const [, params] = useRoute("/event-families/:familyId");
   const familyId = params?.familyId ?? "";
   const [family, setFamily] = useState<EventFamilyDetail | null>(null);
-  const [profiles, setProfiles] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<AvailableProfile[]>([]);
   const [name, setName] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -25,7 +32,7 @@ export default function EventFamilyPage() {
       ]);
       setFamily(familyResult.family);
       setName(familyResult.family.name);
-      setProfiles(profileResult.organizations ?? []);
+      setProfiles(profileResult.organizations?.records ?? []);
     } catch (err: any) {
       setError(err?.message ?? "Could not load event family");
     } finally {
@@ -37,8 +44,7 @@ export default function EventFamilyPage() {
     void load();
   }, [familyId]);
 
-  const memberIds = useMemo(() => new Set(family?.members.map((member) => member.id) ?? []), [family]);
-  const availableProfiles = profiles.filter((profile) => !memberIds.has(profile.id));
+  const availableProfiles = profiles.filter((profile) => !profile.eventFamilyId);
 
   async function rename() {
     if (!family || !name.trim() || name.trim() === family.name) return;
@@ -101,6 +107,7 @@ export default function EventFamilyPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="text-lg font-bold">Add a profile</h2>
+        <p className="mt-1 text-sm text-slate-500">Showing ungrouped profiles from the current profile page.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <select className="min-w-72 rounded-lg border border-slate-300 px-3 py-2" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
             <option value="">Choose an ungrouped profile…</option>
