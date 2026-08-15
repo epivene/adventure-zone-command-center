@@ -1,0 +1,70 @@
+name: Leg Manager Money Task 6
+on:
+  push:
+    branches: [feature/leg-manager-money]
+jobs:
+  task6:
+    if: "!contains(github.event.head_commit.message, '[skip money-task6]')"
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: RED — operations rollup
+        run: |
+          cat > artifacts/api-server/src/features/leg-manager/operations-rollup.test.ts <<'EOF'
+          import { describe,expect,it } from 'vitest';import { rollupOperations } from './operations-rollup';
+          describe('rollupOperations',()=>{it('totals segment mileage and categorized expenses once',()=>{const result=rollupOperations([{id:'s1',miles:100,overrideMiles:null},{id:'s2',miles:50,overrideMiles:55}],[{tripSegmentId:'s1',category:'fuel',amountCents:4000,taxCents:0},{tripSegmentId:'s1',category:'food',amountCents:2000,taxCents:200},{tripSegmentId:'s2',category:'rv_park',amountCents:5000,taxCents:0}],[{tripSegmentId:'s1',miles:102,odometerStart:null,odometerEnd:null},{tripSegmentId:'s2',miles:null,odometerStart:1000,odometerEnd:1058}]);expect(result.segments.find(s=>s.id==='s1')).toMatchObject({routeMiles:100,recordedMiles:102,expenseTotalCents:6200});expect(result.segments.find(s=>s.id==='s2')).toMatchObject({routeMiles:55,recordedMiles:58,expenseTotalCents:5000});expect(result.trip).toMatchObject({routeMiles:155,recordedMiles:160,expenseTotalCents:11200});});});
+          EOF
+          set +e; pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/operations-rollup.test.ts >/tmp/r6 2>&1; c=$?; set -e; cat /tmp/r6; test "$c" -ne 0
+      - name: GREEN — operations rollups and manager forms
+        run: |
+          cat > artifacts/api-server/src/features/leg-manager/operations-rollup.ts <<'EOF'
+          type Segment={id:string;miles:number|null;overrideMiles:number|null};type Expense={tripSegmentId:string|null;category:string;amountCents:number;taxCents:number};type Mileage={tripSegmentId:string|null;miles:number|null;odometerStart:number|null;odometerEnd:number|null};
+          export function rollupOperations(segments:Segment[],expenses:Expense[],mileage:Mileage[]){const rows=segments.map(segment=>{const segmentExpenses=expenses.filter(e=>e.tripSegmentId===segment.id);const segmentMileage=mileage.filter(m=>m.tripSegmentId===segment.id);const byCategory:Record<string,number>={};for(const e of segmentExpenses)byCategory[e.category]=(byCategory[e.category]??0)+e.amountCents+e.taxCents;const recordedMiles=segmentMileage.reduce((n,m)=>n+(m.miles??((m.odometerEnd??0)-(m.odometerStart??0))),0);return{id:segment.id,routeMiles:segment.overrideMiles??segment.miles??0,recordedMiles,expenseTotalCents:Object.values(byCategory).reduce((a,b)=>a+b,0),byCategory}});return{segments:rows,trip:{routeMiles:rows.reduce((n,r)=>n+r.routeMiles,0),recordedMiles:rows.reduce((n,r)=>n+r.recordedMiles,0),expenseTotalCents:rows.reduce((n,r)=>n+r.expenseTotalCents,0)}}}
+          EOF
+          cat > artifacts/adventure-zone/src/components/manager/mileage-form.tsx <<'EOF'
+          import { useState } from 'react';import { useManagerAuth } from '@/lib/manager-auth-context';import { queueManagerMutation,flushManagerMutationQueue } from '@/lib/manager-sync-queue';
+          export function MileageForm({tripId,tripSegmentId=null}:{tripId:string;tripSegmentId?:string|null}){const{manager,managerApi}=useManagerAuth();const[miles,setMiles]=useState('');const[start,setStart]=useState('');const[end,setEnd]=useState('');const[vehicle,setVehicle]=useState('');const[status,setStatus]=useState('');async function submit(e:React.FormEvent){e.preventDefault();if(!manager)return;const id=crypto.randomUUID();await queueManagerMutation({id,legId:manager.legId,method:'POST',path:'/manager/mileage',body:{tripId,tripSegmentId,bookingId:null,miles:miles?Number(miles):null,odometerStart:start?Number(start):null,odometerEnd:end?Number(end):null,vehicleLabel:vehicle||null,occurredAt:new Date().toISOString(),clientMutationId:id},createdAt:new Date().toISOString()});setStatus('Saved offline');if(navigator.onLine){await flushManagerMutationQueue(managerApi);setStatus('Synced')}}return <form onSubmit={submit} className="grid gap-2 rounded-xl border bg-white p-4"><h2 className="font-bold">Mileage</h2><label>Miles<input value={miles} onChange={e=>setMiles(e.target.value)} inputMode="decimal"/></label><p className="text-xs text-slate-500">Or enter odometer readings</p><div className="grid grid-cols-2 gap-2"><label>Start<input value={start} onChange={e=>setStart(e.target.value)} inputMode="decimal"/></label><label>End<input value={end} onChange={e=>setEnd(e.target.value)} inputMode="decimal"/></label></div><label>Vehicle<input value={vehicle} onChange={e=>setVehicle(e.target.value)}/></label><button className="button-primary">Save mileage</button>{status?<p>{status}</p>:null}</form>}
+          EOF
+          cat > artifacts/adventure-zone/src/components/manager/maintenance-form.tsx <<'EOF'
+          import { useState } from 'react';import { useManagerAuth } from '@/lib/manager-auth-context';import { queueManagerMutation,flushManagerMutationQueue } from '@/lib/manager-sync-queue';
+          export function MaintenanceForm({tripId=null,tripSegmentId=null}:{tripId?:string|null;tripSegmentId?:string|null}){const{manager,managerApi}=useManagerAuth();const[type,setType]=useState('vehicle_maintenance');const[label,setLabel]=useState('');const[issue,setIssue]=useState('');const[provider,setProvider]=useState('');const[amount,setAmount]=useState('');async function submit(e:React.FormEvent){e.preventDefault();if(!manager)return;const id=crypto.randomUUID();await queueManagerMutation({id,legId:manager.legId,method:'POST',path:'/manager/expenses',body:{tripId,tripSegmentId,bookingId:null,category:type,merchant:provider||null,amountCents:Math.round(Number(amount)*100),taxCents:0,paymentSource:'adventure_zone_debit',occurredAt:new Date().toISOString(),detailJson:{assetLabel:label,issue,provider},clientMutationId:id},createdAt:new Date().toISOString()});if(navigator.onLine)await flushManagerMutationQueue(managerApi)}return <form onSubmit={submit} className="grid gap-2 rounded-xl border bg-white p-4"><h2 className="font-bold">Maintenance</h2><select aria-label="Maintenance type" value={type} onChange={e=>setType(e.target.value)}><option value="vehicle_maintenance">Vehicle</option><option value="trailer_maintenance">Trailer</option></select><label>Vehicle / trailer<label><input value={label} onChange={e=>setLabel(e.target.value)}/></label></label><label>Issue<textarea value={issue} onChange={e=>setIssue(e.target.value)} required/></label><label>Provider<input value={provider} onChange={e=>setProvider(e.target.value)}/></label><label>Cost<input inputMode="decimal" value={amount} onChange={e=>setAmount(e.target.value)} required/></label><button className="button-primary">Save maintenance</button></form>}
+          EOF
+          cat > artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx <<'EOF'
+          import { useEffect,useState } from 'react';import { useManagerAuth } from '@/lib/manager-auth-context';import { MileageForm } from '@/components/manager/mileage-form';import { MaintenanceForm } from '@/components/manager/maintenance-form';
+          export default function ManagerOperationsPage(){const{managerApi}=useManagerAuth();const[dashboard,setDashboard]=useState<any>(null);const[rollup,setRollup]=useState<any>(null);useEffect(()=>{managerApi<any>('/manager/dashboard').then(async d=>{setDashboard(d);const tripId=d.route?.trip?.id??d.trips?.[0]?.id;if(tripId)setRollup(await managerApi(`/manager/operations/segments?tripId=${tripId}`))})},[managerApi]);const tripId=dashboard?.route?.trip?.id??dashboard?.trips?.[0]?.id;return <div className="grid gap-4"><h1 className="text-2xl font-bold">Trip operations</h1>{rollup?<section className="rounded-xl border bg-white p-4"><p>Route miles: {rollup.trip.routeMiles}</p><p>Recorded miles: {rollup.trip.recordedMiles}</p><p>Segment expenses: ${(rollup.trip.expenseTotalCents/100).toFixed(2)}</p></section>:null}{tripId?<><MileageForm tripId={tripId}/><MaintenanceForm tripId={tripId}/></>:<p>No current trip.</p>}</div>}
+          EOF
+      - name: Patch operations endpoint and route
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager.ts');s=p.read_text();
+          if 'rollupOperations' not in s:s=s.replace('import { z } from "zod";','import { z } from "zod";\nimport { rollupOperations } from "@/features/leg-manager/operations-rollup";')
+          marker='\nconst issueSchema='
+          block='''\nrouter.get("/manager/operations/segments",requireManager,async(req,res):Promise<void>=>{const tripId=typeof req.query.tripId==="string"?req.query.tripId:"";if(!tripId){res.status(400).json({error:"tripId is required"});return;}if(!(await finance.refsBelongToLeg(req.legManager!.legId,{tripId,bookingId:null,tripSegmentId:null}))){res.status(403).json({error:"Trip is outside your leg"});return;}const tripRepo=new DrizzleTripRepository(db);const segments=await tripRepo.listSegments(tripId);const summary=await finance.summary(req.legManager!.legId,tripId);res.json(rollupOperations(segments,summary.expenses,summary.mileage));});\n'''
+          if '/manager/operations/segments' not in s:s=s.replace(marker,block+marker)
+          p.write_text(s)
+          app=Path('artifacts/adventure-zone/src/App.tsx');s=app.read_text();
+          if 'ManagerOperationsPage' not in s:s=s.replace('import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";','import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";\nimport ManagerOperationsPage from "@/pages/ManagerOperationsPage";')
+          if '/manager/operations' not in s:s=s.replace('<Route path="/manager/receipts"><ManagerReceiptsPage /></Route>','<Route path="/manager/operations"><ManagerOperationsPage /></Route><Route path="/manager/receipts"><ManagerReceiptsPage /></Route>')
+          app.write_text(s)
+          money=Path('artifacts/adventure-zone/src/pages/ManagerMoneyPage.tsx');s=money.read_text();
+          if '/manager/operations' not in s:s=s.replace('Receipt photos →</a>','Receipt photos →</a>\n      <a className="rounded-xl border bg-white p-3 font-semibold" href="/manager/operations">Mileage & operations →</a>')
+          money.write_text(s)
+          PY
+      - name: Verify Task 6
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/operations-rollup.test.ts
+          pnpm --filter @workspace/api-server exec tsc -p tsconfig.manager.json --noEmit
+          pnpm --filter @workspace/adventure-zone typecheck
+      - name: Commit Task 6
+        run: |
+          git config user.name github-actions && git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/leg-manager/operations-rollup.ts artifacts/api-server/src/features/leg-manager/operations-rollup.test.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx artifacts/adventure-zone/src/components/manager/mileage-form.tsx artifacts/adventure-zone/src/components/manager/maintenance-form.tsx artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/pages/ManagerMoneyPage.tsx
+          git commit -m 'feat: add trip operations and mileage rollups [skip money-task1] [skip money-task2] [skip money-task2-retry] [skip money-task3] [skip money-task4] [skip money-task5] [skip money-task5-retry] [skip money-task6]'
+          git push
