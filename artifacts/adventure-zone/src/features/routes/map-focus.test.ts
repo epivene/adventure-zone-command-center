@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import type { MapEvent } from "./map-data";
-import { UTAH_DEFAULT_VIEW } from "./manager-map-navigation";
 import { primaryViewportEvents, routeScopeSummary, viewportTarget } from "./map-focus";
 
 const baseEvent = (overrides: Partial<MapEvent>): MapEvent => ({
@@ -71,11 +70,9 @@ describe("viewportTarget", () => {
     });
   });
 
-  it("returns the Utah regional fallback when no mapped primary events remain", () => {
+  it("returns none when no mapped primary events remain", () => {
     expect(viewportTarget({ primaryEvents: [], explicitEventId: null, tripCoordinates: null })).toEqual({
-      kind: "center",
-      center: UTAH_DEFAULT_VIEW.center,
-      zoom: UTAH_DEFAULT_VIEW.zoom,
+      kind: "none",
     });
   });
 
