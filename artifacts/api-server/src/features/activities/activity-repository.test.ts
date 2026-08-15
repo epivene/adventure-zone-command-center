@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { activities, activityRevisions, callSessions } from "@/db/schema";
+
 import { DrizzleActivityRepository } from "./activity-repository";
 
 type TimelineRow = {
@@ -9,7 +11,11 @@ type TimelineRow = {
     timelineSortAt: Date;
   };
   revisionCount: number;
-  callSessionDisposition?: string | null;
+};
+
+type CallSessionRow = {
+  noteActivityId: string;
+  disposition: "left_voicemail";
 };
 
 function orderedColumn(expression: unknown) {
@@ -52,6 +58,166 @@ function databaseWithPostgresNullOrdering(rows: TimelineRow[]) {
     },
   };
   return { select: () => query };
+}
+
+function isColumnPair(
+  predicate: unknown,
+  leftColumn: unknown,
+  rightColumn: unknown,
+) {
+  if (
+    typeof predicate === "object" &&
+    predicate !== null &&
+    "kind" in predicate &&
+    (predicate as { kind: unknown }).kind === "eq"
+  ) {
+    const eqPredicate = predicate as { left: unknown; right: unknown };
+    return (
+      (eqPredicate.left === leftColumn && eqPredicate.right === rightColumn) ||
+      (eqPredicate.left === rightColumn && eqPredicate.right === leftColumn)
+    );
+  }
+  const chunks = (predicate as { queryChunks?: unknown[] }).queryChunks ?? [];
+  return chunks.includes(leftColumn) && chunks.includes(rightColumn);
+}
+
+function databaseWithLinkedCallSessions(
+  rows: TimelineRow[],
+  linkedCallSessions: CallSessionRow[],
+) {
+  let firstOrderColumn: string | undefined;
+  let hasCallSessionNoteActivityJoin = false;
+  const query = {
+    from() { return this; },
+    leftJoin(table: unknown, predicate: unknown) {
+      if (
+        table === callSessions &&
+        isColumnPair(predicate, callSessions.noteActivityId, activities.id)
+      ) {
+        hasCallSessionNoteActivityJoin = true;
+      }
+      return this;
+    },
+    where() { return this; },
+    groupBy() { return this; },
+    orderBy(first: unknown) {
+      firstOrderColumn = orderedColumn(first);
+      return this;
+    },
+    limit(limit: number) {
+      this.limitValue = limit;
+      return this;
+    },
+    limitValue: Number.POSITIVE_INFINITY,
+    offset(offsetValue: number) {
+      const value = (row: TimelineRow) =>
+        firstOrderColumn === "timeline_sort_at"
+          ? row.activity.timelineSortAt
+          : row.activity.occurredAt;
+      return Promise.resolve([...rows].sort((left, right) => {
+        const leftValue = value(left);
+        const rightValue = value(right);
+        if (leftValue === null) return rightValue === null ? 0 : -1;
+        if (rightValue === null) return 1;
+        return rightValue.getTime() - leftValue.getTime();
+      }).slice(offsetValue, offsetValue + this.limitValue).map((row) => {
+        const linkedCallSession = hasCallSessionNoteActivityJoin
+          ? linkedCallSessions.find((session) => session.noteActivityId === row.activity.id)
+          : undefined;
+        return {
+          ...row,
+          callSessionDisposition: linkedCallSession?.disposition ?? null,
+        };
+      }));
+    },
+  };
+  return { select: () => query };
+}
+
+function databaseWithEditableLinkedCall(
+  initialActivity: TimelineRow["activity"],
+  linkedCallSession: CallSessionRow,
+) {
+  const revisions: unknown[] = [];
+  let activity = initialActivity;
+  function select(selection?: Record<string, unknown>) {
+    let selectedTable: unknown;
+    let hasCallSessionNoteActivityJoin = false;
+    const query = {
+      from(table: unknown) {
+        selectedTable = table;
+        return this;
+      },
+      leftJoin(table: unknown, predicate: unknown) {
+        if (
+          table === callSessions &&
+          isColumnPair(predicate, callSessions.noteActivityId, activities.id)
+        ) {
+          hasCallSessionNoteActivityJoin = true;
+        }
+        return this;
+      },
+      where() { return this; },
+      groupBy() { return this; },
+      orderBy() { return this; },
+      limit() { return this; },
+      for() {
+        return Promise.resolve([activity]);
+      },
+      then(resolve: (value: unknown[]) => unknown) {
+        if (selectedTable === activityRevisions) {
+          return Promise.resolve([{ value: revisions.length }]).then(resolve);
+        }
+        if (selection && "callSessionDisposition" in selection) {
+          return Promise.resolve([
+            {
+              activity,
+              revisionCount: revisions.length,
+              callSessionDisposition:
+                hasCallSessionNoteActivityJoin &&
+                linkedCallSession.noteActivityId === activity.id
+                  ? linkedCallSession.disposition
+                  : null,
+            },
+          ]).then(resolve);
+        }
+        return Promise.resolve([activity]).then(resolve);
+      },
+    };
+    return query;
+  }
+  const transaction = {
+    select,
+    insert(table: unknown) {
+      return {
+        values(value: unknown) {
+          if (table === activityRevisions) revisions.push(value);
+          return Promise.resolve();
+        },
+      };
+    },
+    update(table: unknown) {
+      return {
+        set(patch: Record<string, unknown>) {
+          return {
+            where() {
+              return {
+                returning() {
+                  if (table === activities) activity = { ...activity, ...patch };
+                  return Promise.resolve([activity]);
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  return {
+    transaction(callback: (tx: typeof transaction) => unknown) {
+      return callback(transaction);
+    },
+  };
 }
 
 function row(id: string, occurredAt: Date | null, timelineSortAt: Date): TimelineRow {
@@ -108,22 +274,22 @@ describe("DrizzleActivityRepository timeline ordering", () => {
     expect(timeline.items[0]).toMatchObject({ id: "newer-call" });
   });
 
-  it("projects linked call disposition metadata without marking unlinked calls as linked", async () => {
-    const linkedCall = {
-      ...row(
-        "linked-call",
-        new Date("2026-08-13T16:00:00.000Z"),
-        new Date("2026-08-13T16:00:00.000Z"),
-      ),
-      callSessionDisposition: "left_voicemail",
-    };
+  it("links call disposition metadata through call session note activity ids", async () => {
+    const linkedCall = row(
+      "linked-call",
+      new Date("2026-08-13T16:00:00.000Z"),
+      new Date("2026-08-13T16:00:00.000Z"),
+    );
     const unlinkedCall = row(
       "unlinked-call",
       new Date("2026-08-13T15:00:00.000Z"),
       new Date("2026-08-13T15:00:00.000Z"),
     );
     const repository = new DrizzleActivityRepository(
-      databaseWithPostgresNullOrdering([linkedCall, unlinkedCall]) as never,
+      databaseWithLinkedCallSessions(
+        [linkedCall, unlinkedCall],
+        [{ noteActivityId: "linked-call", disposition: "left_voicemail" }],
+      ) as never,
     );
 
     const timeline = await repository.listTimeline({
@@ -142,5 +308,35 @@ describe("DrizzleActivityRepository timeline ordering", () => {
         hasLinkedCallSession: false,
       }),
     ]);
+  });
+
+  it("returns linked call metadata after editing a linked call activity", async () => {
+    const linkedCall = row(
+      "linked-call",
+      new Date("2026-08-13T16:00:00.000Z"),
+      new Date("2026-08-13T16:00:00.000Z"),
+    );
+    const repository = new DrizzleActivityRepository(
+      databaseWithEditableLinkedCall(
+        linkedCall.activity,
+        { noteActivityId: "linked-call", disposition: "left_voicemail" },
+      ) as never,
+    );
+
+    const result = await repository.edit({
+      activityId: "linked-call",
+      body: "updated linked call note",
+      reason: "corrected details",
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    if (!result.ok) throw new Error("Expected edit to succeed.");
+    expect(result.value).toMatchObject({
+      id: "linked-call",
+      body: "updated linked call note",
+      revisionCount: 1,
+      callOutcome: "left_voicemail",
+      hasLinkedCallSession: true,
+    });
   });
 });
