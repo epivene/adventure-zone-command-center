@@ -1,4 +1,5 @@
 import { activityKindValues } from "@/db/schema";
+import type { PersistedCallDisposition } from "@/features/calls/call-types";
 
 export type ActivityKind = (typeof activityKindValues)[number];
 
@@ -31,6 +32,8 @@ export type ActivityTimelineItem = {
   createdAt: Date;
   updatedAt: Date;
   revisionCount: number;
+  callOutcome: PersistedCallDisposition | null;
+  hasLinkedCallSession: boolean;
 };
 
 export type ActivityRevision = {
