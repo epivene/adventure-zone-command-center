@@ -384,7 +384,7 @@ export function TravelLegEditor({
                         type="password"
                         value={password}
                         placeholder={accessEnabled ? "Leave blank to keep current" : "Set password"}
-                        onChange={(event) => setPasswords((current) => ({ ...current, [leg.id]: event.currentTarget.value }))}
+                        onChange={(event) => { const value = event.currentTarget.value; setPasswords((current) => ({ ...current, [leg.id]: value })); }}
                       />
                     </label>
                     <button type="button" className="button-primary" disabled={!password || accessBusy} onClick={() => handleSavePassword(leg.id, accessEnabled)}>
