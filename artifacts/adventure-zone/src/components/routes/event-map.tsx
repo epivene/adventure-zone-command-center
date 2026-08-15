@@ -24,7 +24,11 @@ import { primaryViewportEvents, routeScopeSummary, viewportTarget } from "@/feat
 import { readManagerMapMode, writeManagerMapMode, type ManagerMapMode } from "@/features/routes/manager-map-navigation";
 import { ManagerMapModeToggle } from "./manager-map-mode";
 import { ManagerRouteMapShell } from "./manager-route-map-shell";
-import { ManagerRouteMapLayers } from "./manager-route-map-layers";
+import {
+  ManagerRouteMapLayers,
+  ManagerTripNavigationActions,
+  type FocusedTripMapData,
+} from "./manager-route-map-layers";
 
 const initialFilters: MapFilters = {
   statuses: [],
@@ -169,12 +173,14 @@ export function EventMap({
   events,
   travelLegs,
   handoffs = [],
+  focusedTrip = null,
   focusedTripCoordinates = null,
   onClearTripFocus,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
   handoffs?: EquipmentHandoffView[];
+  focusedTrip?: FocusedTripMapData | null;
   focusedTripCoordinates?: [number, number][] | null;
   onClearTripFocus?: () => void;
 }) {
@@ -394,6 +400,15 @@ export function EventMap({
       })),
   }), [handoffs, seasonYear]);
 
+  const planningRouteLines = useMemo(
+    () => routeLines.features.map((feature) => ({
+      coordinates: feature.geometry.coordinates,
+      color: feature.properties.color,
+      emphasis: feature.properties.emphasis,
+    })),
+    [routeLines.features],
+  );
+
   return (
     <div className="grid gap-5">
       <ManagerMapModeToggle
@@ -454,6 +469,8 @@ export function EventMap({
         </div>
       </div>
 
+      <ManagerTripNavigationActions trip={focusedTrip} mode={managerMode} />
+
       {retryError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{retryError}</p> : null}
       {mapError ? <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{mapError}</p> : null}
 
@@ -478,8 +495,10 @@ export function EventMap({
           <ManagerRouteMapLayers
             events={planningEvents}
             handoffs={handoffs.filter((handoff) => new Date(handoff.windowStartsAt).getFullYear() === seasonYear)}
+            routeLines={planningRouteLines}
             focusedEventId={focusedEventId}
             managerMode={managerMode}
+            focusedTrip={focusedTrip}
             onFocusEvent={setFocusedEventId}
           />
         </ManagerRouteMapShell>
