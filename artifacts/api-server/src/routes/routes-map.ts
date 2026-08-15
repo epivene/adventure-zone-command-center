@@ -9,8 +9,11 @@ import {
   travelLegOrderSchema,
 } from "@/features/routes/travel-leg-input";
 import { filterMapEvents } from "@/features/routes/map-data";
+import { resolveRouteMapEvents } from "@/features/routes/location-resolver";
+import { NominatimGeocodingProvider } from "@/features/trips/geocoding";
 
 const router: IRouter = Router();
+const routeGeocoder = new NominatimGeocodingProvider();
 
 router.get("/routes", async (req, res): Promise<void> => {
   try {
@@ -20,13 +23,14 @@ router.get("/routes", async (req, res): Promise<void> => {
       legRepo.listMapEvents(),
       legRepo.listLegResources(),
     ]);
-    const events = filterMapEvents(mapEvents, {
+    const filteredEvents = filterMapEvents(mapEvents, {
       statuses: [],
       travelLegIds: [],
       dateFrom: null,
       dateTo: null,
       regions: [],
     });
+    const events = await resolveRouteMapEvents(filteredEvents, routeGeocoder);
     res.json({ travelLegs, events, legResources });
   } catch (err) {
     req.log.error({ err }, "Failed to load routes");
@@ -114,8 +118,11 @@ router.post("/routes/travel-legs", async (req, res): Promise<void> => {
   try {
     const repo = new DrizzleTravelLegRepository(db);
     const result = await new TravelLegService(repo).addLeg();
-    if (!result.ok) { res.status(500).json({ ok: false, error: "Could not add travel leg" }); return; }
-    res.status(201).json(result.value)
+    if (!result.ok) {
+      res.status(500).json({ ok: false, error: "Could not add travel leg" });
+      return;
+    }
+    res.status(201).json(result.value);
   } catch (err) {
     req.log.error({ err }, "Failed to add travel leg");
     res.status(500).json({ ok: false, error: "Could not add travel leg" });
@@ -135,12 +142,6 @@ router.post("/routes/travel-legs/:id/archive", async (req, res): Promise<void> =
       }
       return;
     }
-    // Archiving permanently invalidates every manager token, including after a later restore.
-    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
-    // Archiving permanently invalidates every manager token, including after a later restore.
-    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
-    // Archiving permanently invalidates every manager token, including after a later restore.
-    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
     // Archiving permanently invalidates every manager token, including after a later restore.
     await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
     res.json({ ok: true, leg: result.value });
