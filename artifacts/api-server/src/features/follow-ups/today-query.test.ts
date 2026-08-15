@@ -25,6 +25,21 @@ const currentBooking: TodayDashboardBookingRecord = {
   updatedAt: new Date("2026-08-01T17:00:00.000Z"),
 };
 
+const pastConfirmedBooking: TodayDashboardBookingRecord = {
+  id: "30000000-0000-4000-8000-000000000004",
+  organizationId: "10000000-0000-4000-8000-000000000004",
+  primaryContactId: "20000000-0000-4000-8000-000000000004",
+  name: "Eastern Montana Fair",
+  city: "Sidney",
+  region: "MT",
+  startsAt: new Date("2026-08-10T17:00:00.000Z"),
+  endsAt: new Date("2026-08-12T23:00:00.000Z"),
+  status: "confirmed",
+  probability: "possible",
+  createdAt: new Date("2026-06-01T17:00:00.000Z"),
+  updatedAt: new Date("2026-08-12T23:00:00.000Z"),
+};
+
 const renewalSoon: RenewalItem = {
   id: "30000000-0000-4000-8000-000000000002",
   organizationId: "10000000-0000-4000-8000-000000000002",
@@ -87,6 +102,7 @@ describe("Today renewal separation", () => {
     expect(result.needsFollowUpPlan.map((item) => item.id)).toEqual([
       currentBooking.id,
     ]);
+    expect(result.needsFollowUpPlan[0]?.planReason).toBe("needs_action");
     expect(result.renewals.map((item) => item.id)).toEqual([
       renewalSoon.id,
       renewalLater.id,
@@ -94,6 +110,35 @@ describe("Today renewal separation", () => {
     expect(result.renewalTotal).toBe(2);
     expect(result.renewalProminentCount).toBe(1);
     expect(result.renewalError).toBeNull();
+  });
+
+  it("labels a past confirmed booking as post-event work", async () => {
+    const result = await getTodayDashboard(
+      now,
+      repository({
+        async listNeedsFollowUpPlan() {
+          return {
+            records: [currentBooking, pastConfirmedBooking],
+            total: 2,
+            page: 1,
+          };
+        },
+      }),
+    );
+
+    expect(result.needsFollowUpPlan).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: currentBooking.id,
+          planReason: "needs_action",
+        }),
+        expect.objectContaining({
+          id: pastConfirmedBooking.id,
+          status: "confirmed",
+          planReason: "post_event",
+        }),
+      ]),
+    );
   });
 
   it("isolates a renewal-load failure from the primary Today dashboard", async () => {
