@@ -16,6 +16,7 @@ vi.mock("@/lib/auth-token", () => ({
 import {
   DEFAULT_MAP_STYLE_URL,
   EventMap,
+  applyMapViewport,
   installMapOverlaysWhenStyleReady,
   resolveMapStyle,
   viewportMode,
@@ -65,7 +66,7 @@ describe("route map runtime", () => {
     expect(DEFAULT_MAP_STYLE_URL).toBe("https://tiles.openfreemap.org/styles/liberty");
   });
 
-  it("installs route overlays from MapLibre's documented styledata event", () => {
+  it("installs route overlays from styledata with load as a missed-event fallback", () => {
     const handlers = new Map<string, () => void>();
     let styleLoaded = false;
     const map = {
@@ -77,14 +78,13 @@ describe("route map runtime", () => {
     installMapOverlaysWhenStyleReady(map as never, install);
 
     expect(map.on).toHaveBeenCalledWith("styledata", expect.any(Function));
-    expect(map.on).not.toHaveBeenCalledWith("style.load", expect.any(Function));
-    expect(map.on).not.toHaveBeenCalledWith("load", expect.any(Function));
-    expect(install).not.toHaveBeenCalled();
-
-    handlers.get("styledata")?.();
+    expect(map.on).toHaveBeenCalledWith("load", expect.any(Function));
     expect(install).not.toHaveBeenCalled();
 
     styleLoaded = true;
+    handlers.get("load")?.();
+    expect(install).toHaveBeenCalledTimes(1);
+
     handlers.get("styledata")?.();
     expect(install).toHaveBeenCalledTimes(1);
   });
@@ -99,6 +99,12 @@ describe("route map runtime", () => {
     installMapOverlaysWhenStyleReady(map as never, install);
 
     expect(install).toHaveBeenCalledTimes(1);
+  });
+
+  it("applies a center viewport without depending on map sources", () => {
+    const map = { easeTo: vi.fn(), fitBounds: vi.fn() };
+    applyMapViewport(map as never, { kind: "center", center: [-105.8406, 46.4083], zoom: 11 }, vi.fn() as never);
+    expect(map.easeTo).toHaveBeenCalledWith({ center: [-105.8406, 46.4083], zoom: 11, duration: 0 });
   });
 
   it("centers a single Miles City marker at city zoom", () => {
