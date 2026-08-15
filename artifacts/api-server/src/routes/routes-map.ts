@@ -2,7 +2,11 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { TravelLegService } from "@/features/routes/travel-leg-editor";
-import { travelLegConfigurationSchema } from "@/features/routes/travel-leg-input";
+import {
+  travelLegConfigurationSchema,
+  travelLegDetailsSchema,
+  travelLegOrderSchema,
+} from "@/features/routes/travel-leg-input";
 import { filterMapEvents } from "@/features/routes/map-data";
 
 const router: IRouter = Router();
@@ -43,7 +47,56 @@ router.get("/routes/travel-legs", async (req, res): Promise<void> => {
   }
 });
 
-// Configure (rename/recolor) existing legs — no add/delete
+// Configure one active leg's editable details without touching other legs or order.
+router.post("/routes/travel-legs/:id/configure", async (req, res): Promise<void> => {
+  const parsed = travelLegDetailsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+
+  const { id } = req.params;
+  try {
+    const repo = new DrizzleTravelLegRepository(db);
+    const result = await new TravelLegService(repo).updateLegDetails(id, parsed.data);
+    if (!result.ok) {
+      if (result.error.code === "LEG_NOT_FOUND") {
+        res.status(404).json({ ok: false, error: "Travel leg not found" });
+      } else {
+        res.status(409).json({ ok: false, error: "Restore this travel leg before editing it" });
+      }
+      return;
+    }
+    res.json({ ok: true, leg: result.value });
+  } catch (err) {
+    req.log.error({ err }, "Failed to update travel leg");
+    res.status(500).json({ ok: false, error: "Could not update travel leg" });
+  }
+});
+
+// Save active-leg order only; detail fields are intentionally not accepted here.
+router.post("/routes/travel-legs/reorder", async (req, res): Promise<void> => {
+  const parsed = travelLegOrderSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+
+  try {
+    const repo = new DrizzleTravelLegRepository(db);
+    const result = await new TravelLegService(repo).reorderActiveLegs(parsed.data);
+    if (!result.ok) {
+      res.status(409).json({ ok: false, error: "Could not reorder travel legs: configuration conflict" });
+      return;
+    }
+    res.json({ ok: true, legs: result.value });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reorder travel legs");
+    res.status(500).json({ ok: false, error: "Could not reorder travel legs" });
+  }
+});
+
+// Legacy bulk configuration endpoint retained for compatibility.
 router.post("/routes/travel-legs/configure", async (req, res): Promise<void> => {
   const parsed = travelLegConfigurationSchema.safeParse(req.body);
   if (!parsed.success) {
