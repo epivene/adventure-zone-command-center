@@ -5,6 +5,8 @@ import { OrganizationList } from "@/components/organizations/organization-list";
 import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/duplicates-view";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 import { Toaster } from "@/components/ui/toaster";
+import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
+import { EventFamilyCard } from "@/components/event-families/event-family-card";
 
 export default function OrganizationsPage() {
   const search = useSearch();
@@ -35,7 +37,7 @@ export default function OrganizationsPage() {
   const [dupError, setDupError] = useState<string | null>(null);
   const [dupGroups, setDupGroups] = useState<DuplicateGroup[] | null>(null);
 
-  useEffect(() => {
+  const loadProfiles = useCallback(async () => {
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
     if (query.lastResort !== undefined) qs.set("lastResort", String(query.lastResort));
@@ -49,10 +51,20 @@ export default function OrganizationsPage() {
     if (query.hasLocations) qs.set("hasLocations", "yes");
     if (query.page && query.page > 1) qs.set("page", String(query.page));
 
-    apiGet<any>(`/organizations?${qs.toString()}`)
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await apiGet<any>(`/organizations?${qs.toString()}`));
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load profiles");
+    } finally {
+      setLoading(false);
+    }
   }, [search]);
+
+  useEffect(() => {
+    void loadProfiles();
+  }, [loadProfiles]);
 
   const loadDuplicates = useCallback(async () => {
     setDupLoading(true);
@@ -78,6 +90,8 @@ export default function OrganizationsPage() {
     setShowDuplicates(false);
     setDupGroups(null);
   }
+
+  const families = data?.families ?? [];
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -145,19 +159,37 @@ export default function OrganizationsPage() {
             </div>
           ) : null}
         </div>
-      ) : loading ? (
-        <p className="text-slate-500">Loading places…</p>
-      ) : error ? (
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
-          <p className="text-rose-700">{error}</p>
-        </div>
-      ) : data ? (
-        <OrganizationList
-          organizations={data.organizations ?? data}
-          query={query}
-          travelLegs={data.travelLegs ?? []}
-        />
-      ) : null}
+      ) : (
+        <>
+          <EventFamilySuggestions onChanged={loadProfiles} />
+
+          {families.length > 0 ? (
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-bold">Event families</h2>
+                <span className="text-sm text-slate-500">Original profiles remain separate and editable.</span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {families.map((family: any) => <EventFamilyCard key={family.id} family={family} />)}
+              </div>
+            </section>
+          ) : null}
+
+          {loading ? (
+            <p className="text-slate-500">Loading places…</p>
+          ) : error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+              <p className="text-rose-700">{error}</p>
+            </div>
+          ) : data ? (
+            <OrganizationList
+              organizations={data.organizations ?? data}
+              query={query}
+              travelLegs={data.travelLegs ?? []}
+            />
+          ) : null}
+        </>
+      )}
 
       <Toaster />
     </div>

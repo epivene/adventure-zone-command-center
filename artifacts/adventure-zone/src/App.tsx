@@ -17,6 +17,7 @@ import ContactDetailPage from "@/pages/ContactDetailPage";
 import ContactEditPage from "@/pages/ContactEditPage";
 import ContactNewPage from "@/pages/ContactNewPage";
 import OrganizationsPage from "@/pages/OrganizationsPage";
+import EventFamilyPage from "@/pages/EventFamilyPage";
 import CalendarPage from "@/pages/CalendarPage";
 import RoutesPage from "@/pages/RoutesPage";
 import TripDetailPage from "@/pages/TripDetailPage";
@@ -184,6 +185,7 @@ function AppRoutes() {
                 {(params) => <Redirect to={`/event-profiles/${params.organizationId}`} />}
               </Route>
               <Route path="/organizations" component={OrganizationsPage} />
+              <Route path="/event-families/:familyId" component={EventFamilyPage} />
               <Route path="/calendar" component={CalendarPage} />
               <Route path="/routes" component={RoutesPage} />
               <Route path="/trips/:tripId" component={TripDetailPage} />

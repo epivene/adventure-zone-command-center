@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./migrations": "./src/migrations.ts",
-    "./schema": "./src/schema/index.ts"
+    "./schema": "./src/schema/index.ts",
+    "./event-family-schema": "./src/event-family-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
