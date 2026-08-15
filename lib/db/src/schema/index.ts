@@ -2736,3 +2736,38 @@ export const aiBookingSuggestions = pgTable(
     ),
   ],
 );
+
+export const legEventIncome = pgTable("leg_event_income", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+  tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+  cashCents: integer("cash_cents").default(0).notNull(),
+  squareCents: integer("square_cents").default(0).notNull(),
+  otherCents: integer("other_cents").default(0).notNull(),
+  otherLabel: text("other_label"), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"),
+  clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_event_income_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_event_income_leg_trip_idx").on(table.legId, table.tripId), check("leg_event_income_cash_nonnegative", sql`${table.cashCents} >= 0`), check("leg_event_income_square_nonnegative", sql`${table.squareCents} >= 0`), check("leg_event_income_other_nonnegative", sql`${table.otherCents} >= 0`), check("leg_event_income_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const legExpenses = pgTable("leg_expenses", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+  category: text("category").notNull(), merchant: text("merchant"), amountCents: integer("amount_cents").notNull(), taxCents: integer("tax_cents").default(0).notNull(), paymentSource: text("payment_source").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), employeeNote: text("employee_note"), detailJson: jsonb("detail_json"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_expenses_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_expenses_leg_trip_idx").on(table.legId, table.tripId), check("leg_expenses_amount_nonnegative", sql`${table.amountCents} >= 0`), check("leg_expenses_tax_nonnegative", sql`${table.taxCents} >= 0`), check("leg_expenses_category_valid", sql`${table.category} in ('fuel','food','rv_park','vehicle_maintenance','trailer_maintenance','supplies','employee_related','other')`), check("leg_expenses_payment_source_valid", sql`${table.paymentSource} in ('adventure_zone_cash','adventure_zone_debit','personal')`), check("leg_expenses_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const legCashEntries = pgTable("leg_cash_entries", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(), amountCents: integer("amount_cents").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_cash_entries_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_cash_entries_leg_trip_idx").on(table.legId, table.tripId), check("leg_cash_entries_kind_valid", sql`${table.kind} in ('event_cash_collected','expense_paid_cash','advance_received','cash_turned_in','cash_returned','manager_reimbursed','adjustment')`), check("leg_cash_entries_amount_valid", sql`${table.kind} = 'adjustment' or ${table.amountCents} >= 0`), check("leg_cash_entries_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const legMileageEntries = pgTable("leg_mileage_entries", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }), miles: doublePrecision("miles"), odometerStart: doublePrecision("odometer_start"), odometerEnd: doublePrecision("odometer_end"), vehicleLabel: text("vehicle_label"), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_mileage_entries_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_mileage_entries_leg_trip_idx").on(table.legId, table.tripId), check("leg_mileage_entries_distance_valid", sql`(${table.miles} is not null and ${table.miles} >= 0) or (${table.odometerStart} is not null and ${table.odometerEnd} is not null and ${table.odometerEnd} >= ${table.odometerStart})`), check("leg_mileage_entries_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const legReceipts = pgTable("leg_receipts", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), expenseId: uuid("expense_id").notNull().references(() => legExpenses.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_receipts_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_receipts_leg_expense_idx").on(table.legId, table.expenseId), check("leg_receipts_image_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`), check("leg_receipts_revision_positive", sql`${table.revision} >= 1`)]);
