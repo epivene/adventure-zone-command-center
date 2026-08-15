@@ -9,6 +9,13 @@ describe("calculateSettlement", () => {
     ])).toEqual({ ownerOwesManagerCents: 3000, managerOwesOwnerCents: 0, netCents: 3000 });
   });
 
+  it("allows over-reimbursement to flip who owes whom", () => {
+    expect(calculateSettlement([
+      { kind: "personal_expense", amountCents: 1000 },
+      { kind: "manager_reimbursed", amountCents: 1500 },
+    ])).toEqual({ ownerOwesManagerCents: 0, managerOwesOwnerCents: 500, netCents: -500 });
+  });
+
   it("does not treat company debit expenses as personal settlement", () => {
     expect(calculateSettlement([
       { kind: "company_debit_expense", amountCents: 7250 },
