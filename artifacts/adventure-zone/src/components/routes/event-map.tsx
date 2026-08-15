@@ -340,7 +340,9 @@ export function EventMap({
       result.push({
         ...event,
         routeBucket: bucket,
-        locationLabel: event.locationLabel ?? [event.city, event.region].filter(Boolean).join(", ") || null,
+        locationLabel:
+          event.locationLabel ??
+          ([event.city, event.region].filter(Boolean).join(", ") || null),
         locationQuality:
           event.locationQuality ??
           (event.latitude !== null && event.longitude !== null
