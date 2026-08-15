@@ -25,12 +25,15 @@ import { requireOwnerMiddleware } from "../lib/auth";
 const router: IRouter = Router();
 
 router.use(healthRouter);
-// Auth routes are mounted before the owner middleware; login is public and
-// /auth/me enforces auth itself.
+// Owner login and manager login/data routes are mounted before the owner
+// middleware. Manager data routes enforce their own manager-session middleware.
 router.use(authRouter);
+router.use(managerAuthRouter);
+router.use(managerRouter);
 
-// All other app routes require the owner's bearer token
+// Owner-only app and manager-admin routes require the owner's bearer token.
 router.use(requireOwnerMiddleware);
+router.use(managerAdminRouter);
 router.use(todayRouter);
 router.use(bookingsRouter);
 router.use(contactsRouter);
