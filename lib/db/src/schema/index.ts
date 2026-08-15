@@ -2861,3 +2861,18 @@ export const eventManagerReviews = pgTable(
     check("event_manager_reviews_recommend_return_valid", sql`${table.recommendReturn} is null or ${table.recommendReturn} in ('yes','no','unsure')`),
   ],
 );
+
+export const legIncidents = pgTable("leg_incidents", {
+  id: uuid("id").primaryKey(),
+  legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+  type: text("type").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  locationText: text("location_text"), peopleInvolved: text("people_involved"), description: text("description").notNull(), actionTaken: text("action_taken"), followUpNeeded: boolean("follow_up_needed").default(false).notNull(),
+  clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_incidents_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incidents_leg_occurred_idx").on(table.legId, table.occurredAt.desc()), check("leg_incidents_type_nonblank", sql`nullif(trim(${table.type}), '') is not null`), check("leg_incidents_description_nonblank", sql`nullif(trim(${table.description}), '') is not null`), check("leg_incidents_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const legIncidentAttachments = pgTable("leg_incident_attachments", {
+  id: uuid("id").primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), incidentId: uuid("incident_id").notNull().references(() => legIncidents.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_incident_attachments_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incident_attachments_incident_idx").on(table.incidentId), check("leg_incident_attachments_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`)]);
