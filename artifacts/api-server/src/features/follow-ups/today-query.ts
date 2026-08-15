@@ -31,6 +31,10 @@ import type {
   BookingOperationsSummaryProvider,
 } from "@/features/bookings/booking-operations-summary";
 import {
+  listRenewals as loadRenewals,
+  type RenewalItem,
+} from "@/features/follow-ups/renewal-query";
+import {
   businessDayBounds,
   classifyBusinessDueDate,
   isFutureBusinessDate,
@@ -121,6 +125,7 @@ export interface TodayDashboardRepository {
     startToday: Date,
     limit: number,
   ): Promise<TodayDashboardBookingRecord[]>;
+  listRenewals(now: Date): Promise<RenewalItem[]>;
 }
 
 export type FollowUpPlanItem = {
@@ -160,6 +165,10 @@ export type TodayDashboard = {
   needsFollowUpPlanPage: number;
   needsFollowUpPlanPageCount: number;
   upcomingEvents: UpcomingEvent[];
+  renewals: RenewalItem[];
+  renewalTotal: number;
+  renewalProminentCount: number;
+  renewalError: string | null;
 };
 
 export async function enrichTodayDashboardOperations(
@@ -175,6 +184,7 @@ export async function enrichTodayDashboardOperations(
       ...(dashboard.nextCall?.bookingId ? [dashboard.nextCall.bookingId] : []),
       ...dashboard.needsFollowUpPlan.map(({ id }) => id),
       ...dashboard.upcomingEvents.map(({ id }) => id),
+      ...dashboard.renewals.map(({ id }) => id),
     ]),
   ].sort();
   const summaries =
@@ -220,6 +230,10 @@ export async function enrichTodayDashboardOperations(
       ...event,
       operations: withOperations(event.id),
     })),
+    renewals: dashboard.renewals.map((renewal) => ({
+      ...renewal,
+      operations: withOperations(renewal.id),
+    })),
   };
 }
 
@@ -240,8 +254,9 @@ const contractStatuses = [
   "contract_received",
 ] as const satisfies readonly BookingStatus[];
 
-const activeStatuses = bookingStatusValues.filter(
-  (status) => !["declined", "cancelled", "completed"].includes(status),
+export const currentSeasonPlanStatuses = bookingStatusValues.filter(
+  (status) =>
+    !["declined", "cancelled", "completed", "renewal_due"].includes(status),
 );
 
 const followUpSelection = {
@@ -389,7 +404,7 @@ export function openFollowUpsCondition() {
 export function needsFollowUpPlanCondition(futureBoundary: Date) {
   const serializedFutureBoundary = futureBoundary.toISOString();
   return and(
-    inArray(bookings.status, activeStatuses),
+    inArray(bookings.status, currentSeasonPlanStatuses),
     notExists(sql`(
       select 1 from ${followUps}
       where ${followUps.bookingId} = ${bookings.id}
@@ -533,6 +548,10 @@ export function createDrizzleTodayDashboardRepository(
         .orderBy(asc(bookings.startsAt), asc(bookings.id))
         .limit(limit);
     },
+
+    listRenewals(now) {
+      return loadRenewals(db, now);
+    },
   };
 }
 
@@ -551,21 +570,36 @@ export async function getTodayDashboard(
   const { start: startToday, end: endToday } = businessDayBounds(now);
   const followUpPage = Math.max(1, pages.followUps ?? 1);
   const planPage = Math.max(1, pages.needsFollowUpPlan ?? 1);
-  const [counts, followUpResult, nextCallRecord, planResult, upcoming] =
-    await Promise.all([
-      source.getCounts(endToday),
-      source.listOpenFollowUps({
-        page: followUpPage,
-        pageSize: TODAY_FOLLOW_UP_PAGE_SIZE,
-        now,
-      }),
-      source.findNextCall(now),
-      source.listNeedsFollowUpPlan(endToday, {
-        page: planPage,
-        pageSize: TODAY_PLAN_PAGE_SIZE,
-      }),
-      source.listUpcomingEvents(startToday, TODAY_UPCOMING_EVENT_LIMIT),
-    ]);
+  const renewalPromise = source
+    .listRenewals(now)
+    .then((items) => ({ items, error: null as string | null }))
+    .catch(() => ({
+      items: [] as RenewalItem[],
+      error: "Could not load next-season renewals.",
+    }));
+
+  const [
+    counts,
+    followUpResult,
+    nextCallRecord,
+    planResult,
+    upcoming,
+    renewalResult,
+  ] = await Promise.all([
+    source.getCounts(endToday),
+    source.listOpenFollowUps({
+      page: followUpPage,
+      pageSize: TODAY_FOLLOW_UP_PAGE_SIZE,
+      now,
+    }),
+    source.findNextCall(now),
+    source.listNeedsFollowUpPlan(endToday, {
+      page: planPage,
+      pageSize: TODAY_PLAN_PAGE_SIZE,
+    }),
+    source.listUpcomingEvents(startToday, TODAY_UPCOMING_EVENT_LIMIT),
+    renewalPromise,
+  ]);
 
   const followUpPageCount = Math.max(
     1,
@@ -611,6 +645,12 @@ export async function getTodayDashboard(
         region: booking.region,
         startsAt: booking.startsAt,
       })),
+    renewals: renewalResult.items,
+    renewalTotal: renewalResult.items.length,
+    renewalProminentCount: renewalResult.items.filter(
+      (item) => item.attention === "overdue" || item.attention === "soon",
+    ).length,
+    renewalError: renewalResult.error,
   };
   return operationsProvider
     ? enrichTodayDashboardOperations(dashboard, operationsProvider)
