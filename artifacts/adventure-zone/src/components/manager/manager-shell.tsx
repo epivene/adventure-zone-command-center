@@ -1,11 +1,14 @@
 import { useEffect } from "react";
-import { Link } from "wouter";
-import { Home, MapPinned, LogOut, WalletCards, UsersRound } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { ArrowLeft, Home, MapPinned, LogOut, WalletCards, UsersRound } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
+import { managerBackTarget } from "@/lib/manager-back-target";
 
 export function ManagerShell({ children }: { children: React.ReactNode }) {
   const { manager, signOut, managerApi } = useManagerAuth();
+  const [location] = useLocation();
+  const backTarget = managerBackTarget(location);
 
   useEffect(() => {
     const flush = () => void flushManagerMutationQueue(managerApi).catch(() => undefined);
@@ -16,8 +19,11 @@ export function ManagerShell({ children }: { children: React.ReactNode }) {
 
   return <div className="min-h-dvh bg-slate-50 pb-20">
     <header className="sticky top-0 z-10 border-b bg-white px-4 py-3">
-      <div className="mx-auto flex max-w-3xl items-center justify-between">
-        <div><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Leg Manager Portal</p><p className="font-semibold">{manager?.legName}</p></div>
+      <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {backTarget ? <Link href={backTarget} className="flex shrink-0 items-center gap-1 rounded-lg border px-2 py-2 text-sm font-semibold" aria-label="Back"><ArrowLeft className="h-4 w-4"/><span className="hidden sm:inline">Back</span></Link> : null}
+          <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Leg Manager Portal</p><p className="truncate font-semibold">{manager?.legName}</p></div>
+        </div>
         <button className="rounded-lg p-2" aria-label="Sign out" onClick={signOut}><LogOut className="h-5 w-5" /></button>
       </div>
     </header>
