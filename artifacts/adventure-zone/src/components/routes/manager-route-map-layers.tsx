@@ -64,6 +64,45 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
   </div>`;
 }
 
+export function ManagerTripNavigationActions({
+  trip,
+  mode,
+}: {
+  trip: FocusedTripMapData | null;
+  mode: ManagerMapMode;
+}) {
+  if (!trip?.points.length) return null;
+  const firstDestination = trip.points.length > 1 ? trip.points[1]! : trip.points[0]!;
+  const finalDestination = trip.points[trip.points.length - 1]!;
+  const fullRouteWaypoints = trip.points.slice(0, -1).map(
+    (point) => [point.longitude, point.latitude] as [number, number],
+  );
+  const nextUrl = googleDirectionsUrl({
+    destination: [firstDestination.longitude, firstDestination.latitude],
+  });
+  const fullRouteUrl = googleDirectionsUrl({
+    destination: [finalDestination.longitude, finalDestination.latitude],
+    waypoints: fullRouteWaypoints,
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div className="mr-auto">
+        <p className="text-sm font-bold text-slate-900">{trip.name}</p>
+        <p className="text-xs text-slate-500">{trip.points.length} mapped route points</p>
+      </div>
+      {mode === "on-road" ? (
+        <a className="button-primary" href={nextUrl} rel="noreferrer" target="_blank">
+          Navigate to next stop
+        </a>
+      ) : null}
+      <a className="button-secondary" href={fullRouteUrl} rel="noreferrer" target="_blank">
+        Open full trip route
+      </a>
+    </div>
+  );
+}
+
 export function ManagerRouteMapLayers({
   events,
   handoffs,
