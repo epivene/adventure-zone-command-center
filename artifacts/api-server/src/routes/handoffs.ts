@@ -21,6 +21,7 @@ function tripService(): TripService {
       new OsrmRoutingProvider(),
       new DrizzleRoutingCacheStore(db),
     ),
+    new HandoffRepository(db),
   );
 }
 
