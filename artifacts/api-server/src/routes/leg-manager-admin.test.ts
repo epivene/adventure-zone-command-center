@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   incrementSessionVersion: vi.fn(),
 }));
 
+vi.mock("@workspace/db", () => ({ db: {} }));
+
 vi.mock("@/features/leg-manager/leg-manager-repository", () => ({
   DrizzleLegManagerRepository: class {
     listAdminStatuses = mocks.listAdminStatuses;
