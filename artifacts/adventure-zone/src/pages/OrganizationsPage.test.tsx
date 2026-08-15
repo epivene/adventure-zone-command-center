@@ -11,10 +11,30 @@ vi.mock("@/components/organizations/organization-list", () => ({
 }));
 vi.mock("@/features/organizations/last-resort-input", () => ({
   organizationListQuerySchema: {
-    parse: () => ({ search: "", page: 1 }),
+    parse: () => ({
+      search: "",
+      lastResort: "all",
+      travelLegId: null,
+      placeType: null,
+      region: null,
+      hasPhone: false,
+      hasEmail: false,
+      hasFollowUp: false,
+      hasBooking: false,
+      hasLocations: false,
+      showMembers: false,
+      page: 1,
+      pageSize: 50,
+    }),
   },
 }));
 vi.mock("@/components/ui/toaster", () => ({ Toaster: () => null }));
+vi.mock("@/components/event-families/event-family-suggestions", () => ({
+  EventFamilySuggestions: () => null,
+}));
+vi.mock("@/components/event-families/event-family-card", () => ({
+  EventFamilyCard: () => null,
+}));
 vi.mock("@/components/organizations/duplicates-view", async () => {
   const React = await import("react");
   return {
@@ -59,39 +79,30 @@ describe("OrganizationsPage duplicate refresh", () => {
 
   it("keeps loaded duplicate controls visible during a background refresh", async () => {
     const groups = [{ normalizedName: "ten mile pride", organizations: [] }];
+    let duplicateCalls = 0;
     apiGet.mockImplementation((url: string) => {
-      if (url.startsWith("/organizations?"))
-        return Promise.resolve({ organizations: [] });
-      if (
-        apiGet.mock.calls.filter(
-          ([calledUrl]) => calledUrl === "/organizations/duplicates",
-        ).length === 1
-      ) {
-        return Promise.resolve({ groups });
-      }
-      return pendingPromise();
+      if (url.startsWith("/organizations?")) return Promise.resolve({ organizations: [] });
+      if (url !== "/organizations/duplicates") return Promise.resolve({});
+      duplicateCalls += 1;
+      return duplicateCalls === 1 ? Promise.resolve({ groups }) : pendingPromise();
     });
 
     render(<OrganizationsPage />);
     fireEvent.click(screen.getByRole("button", { name: "Find Duplicates" }));
 
     expect(await screen.findByText("Merge all 1 group")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Test background refresh" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Test background refresh" }));
 
     expect(screen.getByText("Merge all 1 group")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Scanning for duplicates…"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Scanning for duplicates…")).not.toBeInTheDocument();
   });
 
   it("keeps the loaded duplicate view mounted when background refresh fails", async () => {
     const groups = [{ normalizedName: "ten mile pride", organizations: [] }];
     let duplicateCalls = 0;
     apiGet.mockImplementation((url: string) => {
-      if (url.startsWith("/organizations?"))
-        return Promise.resolve({ organizations: [] });
+      if (url.startsWith("/organizations?")) return Promise.resolve({ organizations: [] });
+      if (url !== "/organizations/duplicates") return Promise.resolve({});
       duplicateCalls += 1;
       return duplicateCalls === 1
         ? Promise.resolve({ groups })
@@ -102,13 +113,9 @@ describe("OrganizationsPage duplicate refresh", () => {
     fireEvent.click(screen.getByRole("button", { name: "Find Duplicates" }));
     expect(await screen.findByText("Merge all 1 group")).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Test background refresh" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Test background refresh" }));
 
-    expect(
-      await screen.findByText("Could not refresh duplicate status: offline"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Could not refresh duplicate status: offline")).toBeInTheDocument();
     expect(screen.getByText("Merge all 1 group")).toBeInTheDocument();
   });
 
@@ -117,8 +124,8 @@ describe("OrganizationsPage duplicate refresh", () => {
     const refreshed = [{ normalizedName: "county fair", organizations: [] }];
     let duplicateCalls = 0;
     apiGet.mockImplementation((url: string) => {
-      if (url.startsWith("/organizations?"))
-        return Promise.resolve({ organizations: [] });
+      if (url.startsWith("/organizations?")) return Promise.resolve({ organizations: [] });
+      if (url !== "/organizations/duplicates") return Promise.resolve({});
       duplicateCalls += 1;
       return Promise.resolve({ groups: duplicateCalls === 1 ? initial : refreshed });
     });
@@ -127,9 +134,7 @@ describe("OrganizationsPage duplicate refresh", () => {
     fireEvent.click(screen.getByRole("button", { name: "Find Duplicates" }));
     expect(await screen.findByText("Merge all 1 group")).toBeInTheDocument();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Test background refresh" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Test background refresh" }));
 
     expect(await screen.findByText("county fair")).toBeInTheDocument();
   });
