@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clearManagerPrivateData } from "./manager-sync-queue";
+import { clearManagerBlobData } from "./manager-blob-queue";
 
 const KEY = "az_manager_token";
 const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -27,7 +28,10 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
     const current = managerRef.current;
     save(null);
     setManager(null);
-    if (current?.legId) void clearManagerPrivateData(current.legId);
+    if (current) {
+      void clearManagerPrivateData(current.legId);
+      void clearManagerBlobData(current.legId);
+    }
   }, []);
 
   const managerApi = useCallback(async <T,>(path: string, options: RequestInit = {}) => {

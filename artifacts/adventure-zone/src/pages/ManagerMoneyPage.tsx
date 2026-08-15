@@ -59,6 +59,7 @@ export default function ManagerMoneyPage() {
         <div className="rounded-xl border bg-white p-3"><p className="text-xs text-slate-500">Cash on hand</p><p className="font-bold">{money(summary.cashPosition.cashOnHandCents)}</p></div>
       </div>
       <SettlementSummary settlement={summary.settlement} />
+      <a className="rounded-xl border bg-white p-3 font-semibold" href="/manager/receipts">Receipt photos →</a>
       <EventIncomeForm events={events} />
       <ExpenseForm />
       <CashEntryForm />
