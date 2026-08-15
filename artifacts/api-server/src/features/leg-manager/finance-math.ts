@@ -24,36 +24,36 @@ export function calculateCashPosition(entries: CashPositionEntry[]) {
 }
 
 export function calculateSettlement(effects: SettlementEffect[]) {
-  let ownerOwesManagerCents = 0;
-  let managerOwesOwnerCents = 0;
+  // Positive net = Adventure Zone owes manager. Negative = manager owes Adventure Zone.
+  let netCents = 0;
   for (const effect of effects) {
     switch (effect.kind) {
       case "personal_expense":
-        ownerOwesManagerCents += effect.amountCents;
+        netCents += effect.amountCents;
         break;
       case "manager_reimbursed":
-        ownerOwesManagerCents = Math.max(0, ownerOwesManagerCents - effect.amountCents);
+        netCents -= effect.amountCents;
         break;
       case "advance_received":
       case "event_cash_collected":
-        managerOwesOwnerCents += effect.amountCents;
+        netCents -= effect.amountCents;
         break;
       case "expense_paid_cash":
       case "cash_turned_in":
       case "cash_returned":
-        managerOwesOwnerCents = Math.max(0, managerOwesOwnerCents - effect.amountCents);
+        netCents += effect.amountCents;
         break;
       case "adjustment":
-        if (effect.amountCents >= 0) managerOwesOwnerCents += effect.amountCents;
-        else managerOwesOwnerCents = Math.max(0, managerOwesOwnerCents + effect.amountCents);
+        // Positive adjustment means more company cash to account for.
+        netCents -= effect.amountCents;
         break;
       case "company_debit_expense":
         break;
     }
   }
   return {
-    ownerOwesManagerCents,
-    managerOwesOwnerCents,
-    netCents: ownerOwesManagerCents - managerOwesOwnerCents,
+    ownerOwesManagerCents: Math.max(netCents, 0),
+    managerOwesOwnerCents: Math.max(-netCents, 0),
+    netCents,
   };
 }
