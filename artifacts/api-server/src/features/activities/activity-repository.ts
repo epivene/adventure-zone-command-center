@@ -54,6 +54,11 @@ export interface ActivityRevisionReader {
 }
 
 type DrizzleDatabase = typeof database;
+type ActivityTimelineProjection = {
+  activity: typeof activities.$inferSelect;
+  revisionCount: number;
+  callSessionDisposition: PersistedCallDisposition | null;
+};
 const REVISION_PAGE_SIZE = 25;
 const TIMELINE_PAGE_SIZE = 25;
 
@@ -83,6 +88,35 @@ function toTimelineItem(
     callOutcome,
     hasLinkedCallSession: callOutcome !== null,
   };
+}
+
+function toTimelineItemFromProjection(
+  projection: ActivityTimelineProjection,
+): ActivityTimelineItem {
+  return toTimelineItem(
+    projection.activity,
+    Number(projection.revisionCount),
+    projection.callSessionDisposition ?? null,
+  );
+}
+
+async function loadTimelineItemById(
+  database: DrizzleDatabase,
+  activityId: string,
+): Promise<ActivityTimelineItem | null> {
+  const [record] = await database
+    .select({
+      activity: activities,
+      revisionCount: count(activityRevisions.id),
+      callSessionDisposition: callSessions.disposition,
+    })
+    .from(activities)
+    .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
+    .leftJoin(callSessions, eq(callSessions.noteActivityId, activities.id))
+    .where(and(eq(activities.id, activityId), isNull(activities.deletedAt)))
+    .groupBy(activities.id, callSessions.disposition)
+    .limit(1);
+  return record ? toTimelineItemFromProjection(record) : null;
 }
 
 function toRevision(revision: typeof activityRevisions.$inferSelect): ActivityRevision {
@@ -163,9 +197,7 @@ export class DrizzleActivityRepository
       .offset((page - 1) * TIMELINE_PAGE_SIZE);
 
     return {
-      items: records.slice(0, TIMELINE_PAGE_SIZE).map(({ activity, revisionCount, callSessionDisposition }) =>
-        toTimelineItem(activity, Number(revisionCount), callSessionDisposition ?? null),
-      ),
+      items: records.slice(0, TIMELINE_PAGE_SIZE).map(toTimelineItemFromProjection),
       nextPage: records.length > TIMELINE_PAGE_SIZE ? page + 1 : null,
     };
   }
@@ -300,46 +332,3 @@ export class DrizzleActivityRepository
         .returning();
       if (!updated) throw new Error("Activity disappeared while being edited.");
 
-      await recordAuditEntry(transaction, {
-        entityType: "activity",
-        entityId: updated.id,
-        action: "update",
-        before: activitySnapshot(before),
-        after: activitySnapshot(updated),
-      });
-
-      const [revisionTotal] = await transaction
-        .select({ value: count() })
-        .from(activityRevisions)
-        .where(eq(activityRevisions.activityId, updated.id));
-      return ok(toTimelineItem(updated, revisionTotal?.value ?? 0));
-    });
-  }
-
-  async delete(activityId: string): Promise<Result<void, ActivityError>> {
-    return this.database.transaction(async (transaction) => {
-      const [before] = await transaction
-        .select()
-        .from(activities)
-        .where(and(eq(activities.id, activityId), isNull(activities.deletedAt)))
-        .limit(1)
-        .for("update");
-      if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
-
-      const now = new Date();
-      await transaction
-        .update(activities)
-        .set({ deletedAt: now, updatedAt: now })
-        .where(eq(activities.id, activityId));
-
-      await recordAuditEntry(transaction, {
-        entityType: "activity",
-        entityId: activityId,
-        action: "delete",
-        before: activitySnapshot(before),
-        after: null,
-      });
-      return ok(undefined);
-    });
-  }
-}
