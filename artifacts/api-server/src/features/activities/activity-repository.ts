@@ -7,6 +7,7 @@ import {
   activityRevisions,
   bookingContacts,
   bookings,
+  callSessions,
   contacts,
   organizationContacts,
   organizations,
@@ -23,6 +24,7 @@ import type {
   CreateActivityInput,
   EditActivityInput,
 } from "@/features/activities/activity-types";
+import type { PersistedCallDisposition } from "@/features/calls/call-types";
 
 import type { ActivityTimelinePage } from "@/features/activities/activity-types";
 
@@ -65,6 +67,7 @@ export class ActivityParentValidationError extends Error {
 function toTimelineItem(
   activity: typeof activities.$inferSelect,
   revisionCount: number,
+  callOutcome: PersistedCallDisposition | null = null,
 ): ActivityTimelineItem {
   return {
     id: activity.id,
@@ -77,6 +80,8 @@ function toTimelineItem(
     createdAt: activity.createdAt,
     updatedAt: activity.updatedAt,
     revisionCount,
+    callOutcome,
+    hasLinkedCallSession: callOutcome !== null,
   };
 }
 
@@ -143,18 +148,23 @@ export class DrizzleActivityRepository
     if (!condition) return { items: [], nextPage: null };
 
     const records = await this.database
-      .select({ activity: activities, revisionCount: count(activityRevisions.id) })
+      .select({
+        activity: activities,
+        revisionCount: count(activityRevisions.id),
+        callSessionDisposition: callSessions.disposition,
+      })
       .from(activities)
       .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
+      .leftJoin(callSessions, eq(callSessions.noteActivityId, activities.id))
       .where(and(condition, isNull(activities.deletedAt)))
-      .groupBy(activities.id)
+      .groupBy(activities.id, callSessions.disposition)
       .orderBy(desc(activities.timelineSortAt), desc(activities.createdAt), desc(activities.id))
       .limit(TIMELINE_PAGE_SIZE + 1)
       .offset((page - 1) * TIMELINE_PAGE_SIZE);
 
     return {
-      items: records.slice(0, TIMELINE_PAGE_SIZE).map(({ activity, revisionCount }) =>
-        toTimelineItem(activity, Number(revisionCount)),
+      items: records.slice(0, TIMELINE_PAGE_SIZE).map(({ activity, revisionCount, callSessionDisposition }) =>
+        toTimelineItem(activity, Number(revisionCount), callSessionDisposition ?? null),
       ),
       nextPage: records.length > TIMELINE_PAGE_SIZE ? page + 1 : null,
     };
