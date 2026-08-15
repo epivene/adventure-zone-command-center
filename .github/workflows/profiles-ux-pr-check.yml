@@ -1,0 +1,48 @@
+name: Profiles UX PR Check
+on:
+  push:
+    branches: [feature/profiles-event-families-ux]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused Profiles UX tests
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run \
+            src/pages/OrganizationsPage.test.tsx \
+            src/components/organizations/organization-list.test.tsx \
+            src/components/event-families/profile-member-picker.test.tsx \
+            src/components/event-profiles/event-profile-form.test.tsx \
+            src/components/organizations/possible-locations-drawer.test.tsx \
+            src/components/routes/event-map.test.tsx
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-repository-idempotency.test.ts
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Web build
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Final requested-behavior guards
+        run: |
+          ! grep -q '>Source provenance<' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
+          grep -q 'Show family/group members' artifacts/adventure-zone/src/components/organizations/organization-list.tsx
+          grep -q 'Review family suggestions' artifacts/adventure-zone/src/components/event-families/event-family-suggestions.tsx
+          grep -q 'Create new event in this family' artifacts/adventure-zone/src/pages/EventFamilyPage.tsx
+          grep -q 'PossibleLocationsDrawer' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
+          grep -q 'Add Event / Lead' artifacts/adventure-zone/src/pages/EventProfileNewPage.tsx
+          grep -q 'component={EventProfileNewPage}' artifacts/adventure-zone/src/App.tsx
+          test ! -f .github/workflows/profiles-ux-batch1.yml
+          test ! -f .github/workflows/profiles-ux-finalize.yml
+          test ! -f .github/workflows/profiles-ux-sync-main.yml
