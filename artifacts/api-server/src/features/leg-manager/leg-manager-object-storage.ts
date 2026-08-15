@@ -7,4 +7,12 @@ export class GoogleCloudLegManagerObjectStorage implements LegManagerObjectStora
     if (!this.bucketName) throw new Error("Receipt object storage bucket is not configured");
     await this.storage.bucket(this.bucketName).file(key).save(Buffer.from(bytes), { resumable:false, contentType, metadata:{ cacheControl:"private, max-age=0, no-store" } });
   }
+  async getSignedUrl(key:string) {
+    if (!this.bucketName) throw new Error("Receipt object storage bucket is not configured");
+    const [url] = await this.storage.bucket(this.bucketName).file(key).getSignedUrl({
+      action: "read",
+      expires: Date.now() + 15 * 60 * 1000,
+    });
+    return url;
+  }
 }
