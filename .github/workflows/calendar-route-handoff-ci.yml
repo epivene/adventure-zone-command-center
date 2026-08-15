@@ -26,105 +26,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
-      - name: Apply map overlay camera race hotfix
-        if: github.ref_name == 'fix/map-overlay-camera-race'
+          ref: fix/map-overlay-camera-race
+      - name: Patch map lifecycle on hotfix branch
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path('artifacts/adventure-zone/src/components/routes/event-map.tsx')
+          p = Path("artifacts/adventure-zone/src/components/routes/event-map.tsx")
           s = p.read_text()
-          old = '''type StyleReadyMap = {
-            isStyleLoaded: () => boolean;
-            on: (event: "styledata", handler: () => void) => unknown;
-          };
-
-          export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
-            if (map.isStyleLoaded()) {
-              install();
-              return;
-            }
-            const installWhenLoaded = () => {
-              if (map.isStyleLoaded()) install();
-            };
-            map.on("styledata", installWhenLoaded);
-          }'''
-          new = '''type StyleReadyMap = {
-            isStyleLoaded: () => boolean;
-            on: (event: "styledata" | "load", handler: () => void) => unknown;
-          };
-
-          export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
-            let installed = false;
-            const installOnce = () => {
-              if (installed || !map.isStyleLoaded()) return;
-              installed = true;
-              install();
-            };
-            if (map.isStyleLoaded()) {
-              installOnce();
-              return;
-            }
-            map.on("styledata", installOnce);
-            map.on("load", installOnce);
-          }'''
-          if old not in s:
-              raise SystemExit('style helper snippet not found')
-          s = s.replace(old, new, 1)
-
-          marker = '''export function viewportMode(coordinates: [number, number][]) {
-            if (coordinates.length === 0) return { kind: "none" as const };
-            if (coordinates.length === 1) {
-              return { kind: "center" as const, center: coordinates[0]!, zoom: 10 };
-            }
-            return { kind: "bounds" as const, coordinates };
-          }
-'''
-          helper = marker + '''\nexport function applyMapViewport(\n  map: Pick<MapLibreMap, "easeTo" | "fitBounds">,\n  target: MapViewportTarget,\n  Bounds: new (southWest: [number, number], northEast: [number, number]) => { extend: (point: [number, number]) => unknown },\n) {\n  if (target.kind === "none") return;\n  if (target.kind === "center") {\n    map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });\n    return;\n  }\n  const first = target.coordinates[0];\n  if (!first) return;\n  const bounds = new Bounds(first, first);\n  for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);\n  map.fitBounds(bounds as never, { padding: 56, maxZoom: 10, duration: 0 });\n}\n'''
-          if marker not in s:
-              raise SystemExit('viewport marker not found')
-          s = s.replace(marker, helper, 1)
-
-          old_fit = '''      const fitVisibleData = () => {
-            const target = viewportRef.current;
-            if (target.kind === "none") return;
-            if (target.kind === "center") {
-              map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });
-              return;
-            }
-            const first = target.coordinates[0];
-            if (!first) return;
-            const bounds = new maplibregl.LngLatBounds(first, first);
-            for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);
-            map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });
-          };'''
-          new_fit = '''      const fitVisibleData = () => {
-            applyMapViewport(map, viewportRef.current, maplibregl.LngLatBounds as never);
-          };'''
-          if old_fit not in s:
-              raise SystemExit('fit helper snippet not found')
-          s = s.replace(old_fit, new_fit, 1)
-
-          old_effect = '''  useEffect(() => {
-            viewportRef.current = viewport;
-            if (mapRef.current?.getSource("events")) fitVisibleRef.current?.();
-          }, [viewport]);'''
-          new_effect = '''  useEffect(() => {
-            viewportRef.current = viewport;
-            fitVisibleRef.current?.();
-          }, [viewport]);'''
-          if old_effect not in s:
-              raise SystemExit('viewport effect snippet not found')
-          s = s.replace(old_effect, new_effect, 1)
+          s = s.replace('on: (event: "styledata", handler: () => void) => unknown;', 'on: (event: "styledata" | "load", handler: () => void) => unknown;', 1)
+          s = s.replace('''  const installWhenLoaded = () => {\n    if (map.isStyleLoaded()) install();\n  };\n  map.on("styledata", installWhenLoaded);''', '''  let installed = false;\n  const installOnce = () => {\n    if (installed || !map.isStyleLoaded()) return;\n    installed = true;\n    install();\n  };\n  map.on("styledata", installOnce);\n  map.on("load", installOnce);''', 1)
+          s = s.replace('''    viewportRef.current = viewport;\n    if (mapRef.current?.getSource("events")) fitVisibleRef.current?.();''', '''    viewportRef.current = viewport;\n    fitVisibleRef.current?.();''', 1)
+          if 'export function applyMapViewport' not in s:
+              marker = 'function MapCanvas({'
+              helper = '''export function applyMapViewport(map: Pick<MapLibreMap, "easeTo" | "fitBounds">, target: MapViewportTarget, Bounds: any) {\n  if (target.kind === "none") return;\n  if (target.kind === "center") {\n    map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });\n    return;\n  }\n  const first = target.coordinates[0];\n  if (!first) return;\n  const bounds = new Bounds(first, first);\n  for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);\n  map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });\n}\n\n'''
+              s = s.replace(marker, helper + marker, 1)
+              old = '''      const fitVisibleData = () => {\n        const target = viewportRef.current;\n        if (target.kind === "none") return;\n        if (target.kind === "center") {\n          map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });\n          return;\n        }\n        const first = target.coordinates[0];\n        if (!first) return;\n        const bounds = new maplibregl.LngLatBounds(first, first);\n        for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);\n        map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });\n      };'''
+              s = s.replace(old, '''      const fitVisibleData = () => {\n        applyMapViewport(map, viewportRef.current, maplibregl.LngLatBounds);\n      };''', 1)
           p.write_text(s)
           PY
-          if ! git diff --quiet -- artifacts/adventure-zone/src/components/routes/event-map.tsx; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add artifacts/adventure-zone/src/components/routes/event-map.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/adventure-zone/src/components/routes/event-map.tsx
+          if ! git diff --cached --quiet; then
             git commit -m "fix: make route overlay and camera lifecycle resilient"
             git push origin HEAD:fix/map-overlay-camera-race
-            exit 0
           fi
       - uses: pnpm/action-setup@v4
         with:
