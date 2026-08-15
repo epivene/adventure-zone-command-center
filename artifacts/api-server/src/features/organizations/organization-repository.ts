@@ -1335,7 +1335,29 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             eq(actMigrationRecords.matchedEntityType, "organization"),
           ));
 
-        // Step 10: Delete the now-empty duplicate
+        // Step 10: Re-parent saved locations before deleting the duplicate.
+        // organization_locations.organization_id uses ON DELETE RESTRICT, so
+        // leaving even one location attached to dupId makes the merge fail.
+        await tx.update(organizationLocations)
+          .set({ organizationId: primaryId, updatedAt: now })
+          .where(eq(organizationLocations.organizationId, dupId));
+
+        // Step 11: A location can also retain the duplicate as its historical
+        // consolidation source. That FK is RESTRICT as well. The source profile
+        // is being deleted by this plain duplicate merge, so clear that stale
+        // provenance pointer while preserving the location record itself.
+        await tx.update(organizationLocations)
+          .set({ consolidationSourceOrgId: null, updatedAt: now })
+          .where(eq(organizationLocations.consolidationSourceOrgId, dupId));
+
+        // Step 12: If the duplicate had already been used as a canonical parent
+        // for retired location profiles, keep those redirects intact by pointing
+        // the retired profiles at the organization that survives this merge.
+        await tx.update(organizations)
+          .set({ consolidatedIntoId: primaryId, updatedAt: now })
+          .where(eq(organizations.consolidatedIntoId, dupId));
+
+        // Step 13: Delete the now-empty duplicate
         await tx.delete(organizations).where(eq(organizations.id, dupId));
       }
       return "merged" as const;
