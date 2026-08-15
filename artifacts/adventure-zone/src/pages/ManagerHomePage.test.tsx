@@ -39,7 +39,13 @@ describe("ManagerHomePage", () => {
 
     expect(await screen.findByText("Eastern Montana Fair")).toBeInTheDocument();
     expect(screen.getByText(/Miles City, MT/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Events & Route/i })).toHaveAttribute("href", "/manager/route");
+
+    const routeLinks = screen.getAllByRole("link", { name: /Events & Route/i });
+    expect(routeLinks.length).toBeGreaterThanOrEqual(1);
+    for (const link of routeLinks) {
+      expect(link).toHaveAttribute("href", "/manager/route");
+    }
+
     expect(screen.getByRole("link", { name: /Money/i })).toHaveAttribute("href", "/manager/money");
     expect(screen.getByRole("link", { name: /Receipts/i })).toHaveAttribute("href", "/manager/receipts");
     expect(screen.getByRole("link", { name: /Crew/i })).toHaveAttribute("href", "/manager/crew");
