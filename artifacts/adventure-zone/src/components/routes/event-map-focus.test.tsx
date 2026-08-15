@@ -2,11 +2,18 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EventMap } from "./event-map";
 import type { MapEvent } from "@/features/routes/map-data";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
 vi.mock("@/lib/auth-token", () => ({ apiPost: vi.fn() }));
+vi.mock("./manager-route-map-shell", () => ({
+  ManagerRouteMapShell: ({ children }: any) => <div data-testid="route-map-shell">{children}</div>,
+}));
+vi.mock("./manager-route-map-layers", () => ({
+  ManagerRouteMapLayers: () => <div data-testid="route-map-layers" />,
+}));
+
+import { EventMap } from "./event-map";
 
 const legs: TravelLeg[] = [
   { id: "leg-kristy", name: "Kristy", color: "#ef4444", sortOrder: 1, archivedAt: null, baseAddress: null, defaultVehicleName: null, defaultMpg: null },
