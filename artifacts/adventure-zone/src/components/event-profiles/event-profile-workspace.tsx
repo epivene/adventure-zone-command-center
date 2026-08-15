@@ -5,7 +5,7 @@ import { Link } from "wouter";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
-import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
+import { PossibleLocationsDrawer } from "@/components/organizations/possible-locations-drawer";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -106,7 +106,7 @@ export function EventProfileWorkspace({
             )}
             {assistedCallingEnabled ? <Link className="button-secondary text-center" href={callHref(profile, context, selectedContactId, "/calls/log")}>Log call</Link> : null}
             <Link className="button-secondary text-center" href={`/event-profiles/${profile.id}/edit`}>Edit profile</Link>
-            <Link className="button-secondary text-center" href="/event-profiles/new">New event</Link>
+            <Link className="button-secondary text-center" href="/event-profiles/new">Add Event / Lead</Link>
           </div>
         </div>
         {context.mode === "prospect" || context.action || selectedBooking || selectedFollowUp ? (
@@ -117,6 +117,12 @@ export function EventProfileWorkspace({
             {selectedFollowUp ? <span className="rounded-full bg-rose-100 px-2.5 py-1 font-semibold text-rose-900">Selected follow-up context: {titleCase(selectedFollowUp.kind)}</span> : null}
           </div>
         ) : null}
+        {profile.familyContext ? (
+          <p className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm font-semibold text-orange-950">
+            {profile.familyContext.kind === "event_family" ? "Part of" : "Location of"}{" "}
+            <Link className="underline" href={profile.familyContext.kind === "event_family" ? `/event-families/${profile.familyContext.id}` : `/event-profiles/${profile.familyContext.id}`}>{profile.familyContext.name}</Link>
+          </p>
+        ) : null}
         {profile.place.lastResort ? (
           <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-950" role="alert">
             Last Resort: {profile.place.lastResortReason || "Review this event before making commitments."}
@@ -124,7 +130,7 @@ export function EventProfileWorkspace({
         ) : null}
       </header>
 
-      <PossibleLocationsSection orgId={profile.id} />
+      <PossibleLocationsDrawer orgId={profile.id} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.45fr)_minmax(20rem,1fr)]">
         <div className="grid gap-5">
@@ -251,10 +257,6 @@ export function EventProfileWorkspace({
             {profile.groups.length ? <ul className="mt-3 grid gap-2 text-sm">{profile.groups.map((group) => <li key={group.id}>{group.name} <span className="text-slate-600">· {group.sourceStatus}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-600">This event has no calling-list membership.</p>}
           </section>
 
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-sources-title">
-            <h2 className="text-xl font-bold" id="event-sources-title">Source provenance</h2>
-            {profile.sourceProvenance.length ? <ul className="mt-3 grid gap-2 text-sm">{profile.sourceProvenance.map((source) => <li key={`${source.entityId}:${source.sourceEntityType}:${source.actRecordId}`}><span className="font-semibold">{source.actRecordId}</span> <span className="text-slate-600">· {source.sourceEntityType}</span></li>)}</ul> : <p className="mt-3 text-sm text-slate-600">No external source record is linked.</p>}
-          </section>
         </aside>
       </div>
     </div>

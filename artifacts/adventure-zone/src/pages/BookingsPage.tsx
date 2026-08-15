@@ -41,7 +41,7 @@ export default function BookingsPage() {
           </p>
         </div>
         <Link className="button-primary text-center" href="/bookings/new">
-          Add lead
+          Add Event / Lead
         </Link>
       </header>
 

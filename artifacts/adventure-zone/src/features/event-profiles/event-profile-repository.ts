@@ -124,6 +124,7 @@ export type EventProfile = {
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
+  familyContext?: { kind: "event_family" | "organization_group"; id: string; name: string } | null;
   migrationHistory?: {
     contactSourceIds: string[];
     phones: string[];

@@ -60,10 +60,12 @@ router.get("/organizations", async (req, res): Promise<void> => {
     hasFollowUp: req.query.hasFollowUp ?? undefined,
     hasBooking: req.query.hasBooking ?? undefined,
     hasLocations: req.query.hasLocations ?? undefined,
+    showMembers: req.query.showMembers ?? undefined,
     contact: req.query.contact ?? undefined,
     activity: req.query.activity ?? undefined,
     includeRetired: req.query.includeRetired ?? undefined,
     page: req.query.page ?? undefined,
+    pageSize: req.query.pageSize ?? undefined,
   });
   try {
     const organizationPage = await orgRepo().listOrganizations(query);

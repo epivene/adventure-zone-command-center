@@ -1,22 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import { ProfileMemberPicker } from "@/components/event-families/profile-member-picker";
 import type { EventFamilyDetail } from "@/features/event-families/event-family-types";
-
-type AvailableProfile = {
-  id: string;
-  name: string;
-  city: string | null;
-  eventFamilyId?: string | null;
-};
 
 export default function EventFamilyPage() {
   const [, params] = useRoute("/event-families/:familyId");
   const familyId = params?.familyId ?? "";
   const [family, setFamily] = useState<EventFamilyDetail | null>(null);
-  const [profiles, setProfiles] = useState<AvailableProfile[]>([]);
   const [name, setName] = useState("");
-  const [selectedId, setSelectedId] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,13 +18,9 @@ export default function EventFamilyPage() {
     setLoading(true);
     setError(null);
     try {
-      const [familyResult, profileResult] = await Promise.all([
-        apiGet<{ family: EventFamilyDetail }>(`/event-families/${familyId}`),
-        apiGet<any>("/organizations?page=1"),
-      ]);
-      setFamily(familyResult.family);
-      setName(familyResult.family.name);
-      setProfiles(profileResult.organizations?.records ?? []);
+      const result = await apiGet<{ family: EventFamilyDetail }>(`/event-families/${familyId}`);
+      setFamily(result.family);
+      setName(result.family.name);
     } catch (err: any) {
       setError(err?.message ?? "Could not load event family");
     } finally {
@@ -44,11 +32,10 @@ export default function EventFamilyPage() {
     void load();
   }, [familyId]);
 
-  const availableProfiles = profiles.filter((profile) => !profile.eventFamilyId);
-
   async function rename() {
     if (!family || !name.trim() || name.trim() === family.name) return;
     setSaving(true);
+    setError(null);
     try {
       await apiPatch(`/event-families/${family.id}`, { name: name.trim() });
       await load();
@@ -62,6 +49,7 @@ export default function EventFamilyPage() {
   async function removeMember(organizationId: string, organizationName: string) {
     if (!family || !window.confirm(`Remove ${organizationName} from ${family.name}? The original profile and all of its history will stay intact.`)) return;
     setSaving(true);
+    setError(null);
     try {
       await apiDelete(`/event-families/${family.id}/members/${organizationId}`);
       await load();
@@ -72,12 +60,12 @@ export default function EventFamilyPage() {
     }
   }
 
-  async function addMember() {
-    if (!family || !selectedId) return;
+  async function addMember(organizationId: string) {
+    if (!family) return;
     setSaving(true);
+    setError(null);
     try {
-      await apiPost(`/event-families/${family.id}/members`, { organizationId: selectedId });
-      setSelectedId("");
+      await apiPost(`/event-families/${family.id}/members`, { organizationId });
       await load();
     } catch (err: any) {
       setError(err?.message ?? "Could not add profile to family");
@@ -95,27 +83,30 @@ export default function EventFamilyPage() {
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Event family</p>
         <div className="mt-2 flex flex-wrap items-end gap-2">
-          <input className="min-w-64 rounded-lg border border-slate-300 px-3 py-2 text-2xl font-bold" value={name} onChange={(event) => setName(event.target.value)} />
+          <input
+            className="min-w-64 rounded-lg border border-slate-300 px-3 py-2 text-2xl font-bold"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+          />
           <button className="button-secondary" disabled={saving || !name.trim() || name.trim() === family.name} onClick={rename} type="button">Save name</button>
         </div>
         <p className="mt-2 text-sm text-slate-600">
-          This page groups related events for browsing only. Notes, calls, bookings, follow-ups, and edits remain on each original profile.
+          Related events live together here while each underlying profile keeps its own contacts, calls, notes, bookings, follow-ups, and history.
         </p>
       </header>
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-bold">Add a profile</h2>
-        <p className="mt-1 text-sm text-slate-500">Showing ungrouped profiles from the current profile page.</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <select className="min-w-72 rounded-lg border border-slate-300 px-3 py-2" value={selectedId} onChange={(event) => setSelectedId(event.target.value)}>
-            <option value="">Choose an ungrouped profile…</option>
-            {availableProfiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>{profile.name}{profile.city ? ` — ${profile.city}` : ""}</option>
-            ))}
-          </select>
-          <button className="button-primary" disabled={saving || !selectedId} onClick={addMember} type="button">Add to family</button>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Add events to this family</h2>
+            <p className="mt-1 text-sm text-slate-500">Search every profile, or create a brand-new event already assigned to this family.</p>
+          </div>
+          <Link className="button-secondary" href={`/event-profiles/new?familyId=${family.id}`}>Create new event in this family</Link>
+        </div>
+        <div className="mt-4">
+          <ProfileMemberPicker familyId={family.id} disabled={saving} onSelect={addMember} />
         </div>
       </section>
 
@@ -124,7 +115,7 @@ export default function EventFamilyPage() {
           <h2 className="text-lg font-bold">Member profiles</h2>
           <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-700">{family.members.length}</span>
         </div>
-        {family.members.map((member) => (
+        {family.members.length ? family.members.map((member) => (
           <article key={member.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -135,7 +126,9 @@ export default function EventFamilyPage() {
               <button className="button-secondary" disabled={saving} onClick={() => removeMember(member.id, member.name)} type="button">Remove from family</button>
             </div>
           </article>
-        ))}
+        )) : (
+          <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">No event profiles are in this family yet.</p>
+        )}
       </section>
     </div>
   );

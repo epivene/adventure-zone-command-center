@@ -29,7 +29,6 @@ import TodayPage from "@/pages/TodayPage";
 import BookingsPage from "@/pages/BookingsPage";
 import BookingDetailPage from "@/pages/BookingDetailPage";
 import BookingEditPage from "@/pages/BookingEditPage";
-import BookingNewPage from "@/pages/BookingNewPage";
 import ContactsPage from "@/pages/ContactsPage";
 import ContactDetailPage from "@/pages/ContactDetailPage";
 import ContactEditPage from "@/pages/ContactEditPage";
@@ -218,7 +217,7 @@ function AppRoutes() {
           <AppShell>
             <Switch>
               <Route path="/today" component={TodayPage} />
-              <Route path="/bookings/new" component={BookingNewPage} />
+              <Route path="/bookings/new" component={EventProfileNewPage} />
               <Route path="/bookings/:bookingId/edit" component={BookingEditPage} />
               <Route path="/bookings/:bookingId" component={BookingDetailPage} />
               <Route path="/bookings" component={BookingsPage} />

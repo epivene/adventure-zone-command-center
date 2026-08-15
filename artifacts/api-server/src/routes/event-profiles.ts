@@ -11,6 +11,8 @@ import {
   organizationContacts,
   organizations,
   eventManagerReviews,
+  eventFamilies,
+  eventFamilyMembers,
 } from "@/db/schema";
 import { DrizzleEventProfileRepository } from "@/features/event-profiles/event-profile-repository";
 import { ensurePlacePersonRelationship } from "@/features/relationships/relationship-writer";
@@ -21,12 +23,14 @@ const router: IRouter = Router();
 const uuid = z.string().uuid();
 const creationSchema = z.object({
   event: z.object({ id: z.string().nullable(), name: z.string(), city: z.string(), region: z.string() }),
-  contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string(), primary: z.boolean().optional() })).min(1),
+  contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string(), primary: z.boolean().optional() })).default([]),
   booking: z.object({ enabled: z.boolean(), name: z.string(), nextActionKind: z.string(), nextActionDueAt: z.string(), travelLegId: z.string().uuid().nullable() }),
+  familyId: z.string().uuid().nullable().optional().default(null),
 }).superRefine((input, context) => {
   const selectedIds = input.contacts.map((contact) => contact.id).filter((id): id is string => Boolean(id));
   if (new Set(selectedIds).size !== selectedIds.length) context.addIssue({ code: "custom", message: "Choose each existing contact only once." });
-  if (input.event.id ? !uuid.safeParse(input.event.id).success : !input.event.name.trim() || !input.event.city.trim() || input.event.region.trim().length !== 2) context.addIssue({ code: "custom", message: "Choose an event or enter its name, city, and two-letter state." });
+  if (input.event.id ? !uuid.safeParse(input.event.id).success : !input.event.name.trim()) context.addIssue({ code: "custom", message: "Choose an existing profile or enter an event / lead name." });
+  if (input.event.region.trim() && input.event.region.trim().length !== 2) context.addIssue({ code: "custom", message: "Use a two-letter state when a state is entered." });
   for (const contact of input.contacts) {
     if (contact.id ? !uuid.safeParse(contact.id).success : !contact.name.trim()) context.addIssue({ code: "custom", message: "Choose a contact or enter a contact name." });
     if (contact.email.trim() && !z.email().safeParse(contact.email.trim()).success) context.addIssue({ code: "custom", message: "Enter a valid contact email address." });
@@ -67,11 +71,29 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
     const repo = new DrizzleEventProfileRepository(db);
     const profile = await repo.getEventProfile(id, contactId);
     if (!profile) { res.status(404).json({ error: "Not found" }); return; }
+    const [membership] = await db
+      .select({ familyId: eventFamilyMembers.familyId, familyName: eventFamilies.name })
+      .from(eventFamilyMembers)
+      .innerJoin(eventFamilies, eq(eventFamilies.id, eventFamilyMembers.familyId))
+      .where(eq(eventFamilyMembers.organizationId, id))
+      .limit(1);
+    const [organizationContext] = await db
+      .select({ consolidatedIntoId: organizations.consolidatedIntoId })
+      .from(organizations)
+      .where(eq(organizations.id, id))
+      .limit(1);
+    let familyContext: { kind: "event_family" | "organization_group"; id: string; name: string } | null = membership
+      ? { kind: "event_family", id: membership.familyId, name: membership.familyName }
+      : null;
+    if (!familyContext && organizationContext?.consolidatedIntoId) {
+      const [parent] = await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(eq(organizations.id, organizationContext.consolidatedIntoId)).limit(1);
+      if (parent) familyContext = { kind: "organization_group", id: parent.id, name: parent.name };
+    }
     const bookingIds=profile.bookings.map((booking)=>booking.id);
     const allReviews=await db.select().from(eventManagerReviews);
     const managerReviews=allReviews.filter((review)=>bookingIds.includes(review.bookingId));
     const managerReviewAverage=managerReviews.length?managerReviews.reduce((sum,review)=>sum+review.rating,0)/managerReviews.length:null;
-    res.json({ ...profile, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
+    res.json({ ...profile, familyContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });
@@ -147,14 +169,24 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
       let eventCity = parsed.data.event.city.trim();
       let eventRegion = parsed.data.event.region.trim().toUpperCase();
       if (organizationId) {
-        const [found] = await transaction.select({ id: organizations.id, city: organizations.city, region: organizations.region }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+        const [found] = await transaction.select({ id: organizations.id, city: organizations.city, region: organizations.region, consolidatedIntoId: organizations.consolidatedIntoId }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
         if (!found) throw new Error("EVENT_NOT_FOUND");
         eventCity = found.city?.trim() ?? "";
         eventRegion = found.region?.trim().toUpperCase() ?? "";
       } else {
-        const [created] = await transaction.insert(organizations).values({ name: parsed.data.event.name.trim(), city: eventCity, region: eventRegion, placeType: "other", createdAt: now, updatedAt: now }).returning({ id: organizations.id });
+        const [created] = await transaction.insert(organizations).values({ name: parsed.data.event.name.trim(), city: eventCity || null, region: eventRegion || null, placeType: "festival_event", createdAt: now, updatedAt: now }).returning({ id: organizations.id });
         if (!created) throw new Error("EVENT_CREATE_FAILED");
         organizationId = created.id;
+      }
+
+      if (parsed.data.familyId) {
+        const [family] = await transaction.select({ id: eventFamilies.id }).from(eventFamilies).where(eq(eventFamilies.id, parsed.data.familyId)).limit(1);
+        if (!family) throw new Error("EVENT_FAMILY_NOT_FOUND");
+        const [organizationState] = await transaction.select({ consolidatedIntoId: organizations.consolidatedIntoId }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
+        if (organizationState?.consolidatedIntoId) throw new Error("GROUPED_PROFILE_CONFLICT");
+        const [existingMembership] = await transaction.select({ familyId: eventFamilyMembers.familyId }).from(eventFamilyMembers).where(eq(eventFamilyMembers.organizationId, organizationId)).limit(1);
+        if (existingMembership && existingMembership.familyId !== parsed.data.familyId) throw new Error("EVENT_FAMILY_CONFLICT");
+        if (!existingMembership) await transaction.insert(eventFamilyMembers).values({ familyId: parsed.data.familyId, organizationId, source: "manual" });
       }
 
       const contactIds: string[] = [];
@@ -188,19 +220,25 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
         if (!eventCity || eventRegion.length !== 2) throw new Error("BOOKING_EVENT_LOCATION_MISSING");
         const [booking] = await transaction.insert(bookings).values({ organizationId, name: parsed.data.booking.name.trim(), city: eventCity, region: eventRegion, travelLegId: parsed.data.booking.travelLegId, status: "new_lead", probability: "possible", createdAt: now, updatedAt: now }).returning({ id: bookings.id });
         if (!booking) throw new Error("BOOKING_CREATE_FAILED");
-        await transaction.insert(bookingContacts).values(contactIds.map((contactId) => ({ bookingId: booking.id, contactId, isPrimary: contactId === primaryContactId, source: "local" as const, createdAt: now, updatedAt: now })));
-        await transaction.update(bookings).set({ primaryContactId, updatedAt: now }).where(eq(bookings.id, booking.id));
+        if (contactIds.length) {
+          await transaction.insert(bookingContacts).values(contactIds.map((contactId) => ({ bookingId: booking.id, contactId, isPrimary: contactId === primaryContactId, source: "local" as const, createdAt: now, updatedAt: now })));
+        }
+        await transaction.update(bookings).set({ primaryContactId: primaryContactId ?? null, updatedAt: now }).where(eq(bookings.id, booking.id));
         const dueAt = parseBusinessDateInput(parsed.data.booking.nextActionDueAt);
         if (!dueAt) throw new Error("INVALID_BOOKING_DATE");
-        await transaction.insert(followUps).values({ bookingId: booking.id, organizationId, contactId: primaryContactId, kind: parsed.data.booking.nextActionKind.trim() || "call", dueAt, createdAt: now, updatedAt: now });
+        await transaction.insert(followUps).values({ bookingId: booking.id, organizationId, contactId: primaryContactId ?? null, kind: parsed.data.booking.nextActionKind.trim() || "call", dueAt, createdAt: now, updatedAt: now });
       }
       return organizationId;
     });
     res.status(201).json({ ok: true, profileId });
   } catch (error) {
     req.log.error({ err: error }, "Failed to create event profile");
-    if (error instanceof Error && ["EVENT_NOT_FOUND", "CONTACT_NOT_FOUND"].includes(error.message)) {
+    if (error instanceof Error && ["EVENT_NOT_FOUND", "CONTACT_NOT_FOUND", "EVENT_FAMILY_NOT_FOUND"].includes(error.message)) {
       res.status(400).json({ ok: false, error: "That event or contact no longer exists. Refresh and try again." });
+      return;
+    }
+    if (error instanceof Error && ["EVENT_FAMILY_CONFLICT", "GROUPED_PROFILE_CONFLICT"].includes(error.message)) {
+      res.status(409).json({ ok: false, error: "This profile already belongs to another family or profile group. Remove it there before moving it." });
       return;
     }
     if (error instanceof Error && error.message === "BOOKING_EVENT_LOCATION_MISSING") {
