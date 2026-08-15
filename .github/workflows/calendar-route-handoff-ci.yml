@@ -8,7 +8,6 @@ on:
       - feature/map-login-password-fixes
       - feature/map-focus-filter-interactions
       - fix/map-layer-style-ready
-      - fix/map-overlay-camera-race
   pull_request:
     paths:
       - "artifacts/adventure-zone/**"
