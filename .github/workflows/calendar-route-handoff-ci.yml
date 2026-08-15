@@ -6,6 +6,7 @@ on:
       - feature/leg-manager-foundation
       - feature/manager-leg-map-reliability
       - feature/map-login-password-fixes
+      - feature/map-focus-filter-interactions
       - fix/map-layer-style-ready
   pull_request:
     paths:
@@ -30,6 +31,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Calendar unit tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts
+      - name: Route focus unit tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/map-focus.test.ts
       - name: Handoff unit tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
       - name: Manager and route-map API tests
