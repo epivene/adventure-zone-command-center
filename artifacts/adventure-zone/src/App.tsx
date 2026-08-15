@@ -17,7 +17,7 @@ import { ManagerShell } from "@/components/manager/manager-shell";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
+import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/navigation/app-shell";
@@ -128,20 +128,20 @@ function SignInPage() {
 }
 
 function Landing() {
-  const [, setLocation] = useLocation();
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
       <h1 className="text-3xl font-bold tracking-tight">Adventure Zone Command Center</h1>
       <p className="mt-2 max-w-md text-center text-slate-600">
         Bookings, contacts, routes, and calls for your adventure business — all in one place.
       </p>
-      <button
-        type="button"
-        className="button-primary mt-8 px-6"
-        onClick={() => setLocation("/sign-in")}
-      >
-        Sign in
-      </button>
+      <div className="mt-8 grid w-full max-w-sm gap-3">
+        <Link className="button-primary px-6 py-3 text-center" href="/sign-in">
+          Admin / Command Center
+        </Link>
+        <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">
+          Manager Portal
+        </Link>
+      </div>
     </div>
   );
 }
