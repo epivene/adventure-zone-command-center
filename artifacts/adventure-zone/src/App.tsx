@@ -15,6 +15,7 @@ import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
+import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
@@ -206,7 +207,7 @@ function AppRoutes() {
       <Route path="/manager/sign-in">
         <ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider>
       </Route>
-      <Route path="/manager/{*rest}">
+      <Route path={MANAGER_PROTECTED_PATH}>
         <ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider>
       </Route>
       <Route path="/manager">
