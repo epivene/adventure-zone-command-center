@@ -19,6 +19,11 @@ export const bookingStatusValues = [
 
 export type BookingStatus = (typeof bookingStatusValues)[number];
 
-export const probabilityValues = ["likely", "possible", "unlikely"] as const;
+export const probabilityValues = [
+  "definite",
+  "likely",
+  "possible",
+  "unlikely",
+] as const;
 
 export type Probability = (typeof probabilityValues)[number];
