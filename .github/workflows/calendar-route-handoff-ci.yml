@@ -28,7 +28,8 @@ jobs:
         run: |
           pnpm exec vitest run \
             artifacts/adventure-zone/src/features/calendar/month-spans.test.ts \
-            artifacts/api-server/src/features/routes/handoff-scoring.test.ts
+            artifacts/api-server/src/features/routes/handoff-scoring.test.ts \
+            artifacts/api-server/src/features/trips/trip-service-handoff.test.ts
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server
