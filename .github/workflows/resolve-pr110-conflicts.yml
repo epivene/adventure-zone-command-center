@@ -1,0 +1,102 @@
+name: Resolve PR 110 Conflicts
+on:
+  push:
+    branches: [feature/leg-manager-crew-aftermath]
+
+jobs:
+  resolve:
+    if: "!contains(github.event.head_commit.message, '[skip conflict-resolver]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Merge latest main and resolve intentional overlaps
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_code=$?
+          set -e
+
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          unexpected="$(printf '%s\n' "$unresolved" | grep -v -E '^(artifacts/adventure-zone/src/pages/RoutesPage.tsx|artifacts/api-server/src/routes/leg-manager-admin.ts)$' || true)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected conflict files:" >&2
+            echo "$unexpected" >&2
+            exit 1
+          fi
+
+          if printf '%s\n' "$unresolved" | grep -qx 'artifacts/adventure-zone/src/pages/RoutesPage.tsx'; then
+            git checkout --theirs -- artifacts/adventure-zone/src/pages/RoutesPage.tsx
+            python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/adventure-zone/src/pages/RoutesPage.tsx')
+          s=p.read_text()
+          anchor='      <a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">View all leg finances →</a>\n'
+          addition='      <div className="grid gap-2 sm:grid-cols-2"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>\n'
+          if '/manager-crew' not in s:
+              if anchor not in s: raise SystemExit('manager finance anchor missing in latest main RoutesPage')
+              s=s.replace(anchor,anchor+addition)
+          p.write_text(s)
+          PY
+            git add artifacts/adventure-zone/src/pages/RoutesPage.tsx
+          fi
+
+          if printf '%s\n' "$unresolved" | grep -qx 'artifacts/api-server/src/routes/leg-manager-admin.ts'; then
+            git checkout --theirs -- artifacts/api-server/src/routes/leg-manager-admin.ts
+            python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager-admin.ts')
+          s=p.read_text()
+          import_anchor='import { DrizzleFinanceRepository } from "@/features/leg-manager/finance-repository";\n'
+          imports='import { DrizzleCrewRepository, listWorkersForManager } from "@/features/leg-manager/crew-repository";\nimport { crewRehireStatuses } from "@/features/leg-manager/crew-types";\nimport { DrizzleIncidentRepository } from "@/features/leg-manager/incident-repository";\nimport { DrizzleEventReviewRepository } from "@/features/leg-manager/event-review-repository";\n'
+          if 'DrizzleCrewRepository' not in s:
+              if import_anchor not in s: raise SystemExit('finance import anchor missing in latest main manager admin route')
+              s=s.replace(import_anchor,import_anchor+imports)
+          repo_anchor='const repo = new DrizzleLegManagerRepository(db);\n'
+          repo_add='const crew = new DrizzleCrewRepository(db);\nconst incidents = new DrizzleIncidentRepository(db);\nconst reviews = new DrizzleEventReviewRepository(db);\n'
+          if 'const crew = new DrizzleCrewRepository' not in s:
+              if repo_anchor not in s: raise SystemExit('repo anchor missing in latest main manager admin route')
+              s=s.replace(repo_anchor,repo_anchor+repo_add)
+          routes='''\nrouter.get("/manager-admin/crew", async (_req, res) => {\n  res.json({ workers: await listWorkersForManager(crew, "owner") });\n});\n\nrouter.post("/manager-admin/crew", async (req, res): Promise<void> => {\n  const parsed = z.object({\n    name: z.string().trim().min(1).max(160),\n    phone: z.string().trim().max(60).nullable().optional(),\n    email: z.string().trim().email().max(200).nullable().optional(),\n    city: z.string().trim().max(120).nullable().optional(),\n    region: z.string().trim().max(80).nullable().optional(),\n    locationText: z.string().trim().max(240).nullable().optional(),\n    rehireStatus: z.enum(crewRehireStatuses).optional(),\n  }).safeParse(req.body);\n  if (!parsed.success) { res.status(400).json({ error: "Invalid worker" }); return; }\n  res.status(201).json({ worker: await crew.createWorker(parsed.data) });\n});\n\nrouter.patch("/manager-admin/crew/:workerId/rehire-status", async (req, res): Promise<void> => {\n  const raw = req.params.workerId;\n  const workerId = Array.isArray(raw) ? raw[0] ?? "" : raw;\n  const parsed = z.object({ rehireStatus: z.enum(crewRehireStatuses) }).safeParse(req.body);\n  if (!workerId || !parsed.success) { res.status(400).json({ error: "Invalid rehire status" }); return; }\n  const worker = await crew.updateRehireStatus(workerId, parsed.data.rehireStatus);\n  if (!worker) { res.status(404).json({ error: "Worker not found" }); return; }\n  res.json({ worker });\n});\n\nrouter.patch("/manager-admin/crew/work-history/:historyId", async (req, res): Promise<void> => {\n  const raw = req.params.historyId;\n  const historyId = Array.isArray(raw) ? raw[0] ?? "" : raw;\n  const parsed = z.object({\n    role: z.string().trim().min(1).max(160).optional(),\n    startedAt: z.coerce.date().optional(),\n    endedAt: z.coerce.date().nullable().optional(),\n    rating: z.number().int().min(0).max(5).nullable().optional(),\n    note: z.string().trim().max(4000).nullable().optional(),\n  }).safeParse(req.body);\n  if (!historyId || !parsed.success) { res.status(400).json({ error: "Invalid history update" }); return; }\n  const entry = await crew.updateWorkHistory(historyId, parsed.data);\n  if (!entry) { res.status(404).json({ error: "History entry not found" }); return; }\n  res.json({ entry });\n});\n\nrouter.get("/manager-admin/incidents", async (_req, res) => {\n  res.json({ incidents: await incidents.listAll() });\n});\n\nrouter.get("/manager-admin/reviews", async (_req, res) => {\n  res.json({ reviews: await reviews.listAll() });\n});\n'''
+          export_anchor='\nexport default router;\n'
+          if '/manager-admin/crew' not in s:
+              if export_anchor not in s: raise SystemExit('export anchor missing in latest main manager admin route')
+              s=s.replace(export_anchor,routes+export_anchor)
+          p.write_text(s)
+          PY
+            git add artifacts/api-server/src/routes/leg-manager-admin.ts
+          fi
+
+          remaining="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$remaining" ]; then
+            echo "Unresolved conflicts remain:" >&2
+            echo "$remaining" >&2
+            exit 1
+          fi
+
+          git status --short
+          git commit -m 'merge: resolve Release 3 conflicts with latest main [skip conflict-resolver]'
+      - name: Verify merged Release 3
+        run: |
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-repository.test.ts src/features/leg-manager/crew-search.test.ts src/features/leg-manager/event-review-service.test.ts src/features/leg-manager/event-review-repository.test.ts src/features/leg-manager/incident-repository.test.ts src/routes/leg-manager-admin.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCrewPage.test.tsx src/pages/ManagerEventReviewPage.test.tsx src/pages/ManagerIncidentPage.test.tsx src/pages/ManagerAftermathAdminPage.test.tsx src/components/routes/travel-leg-editor.test.tsx src/components/routes/event-map.test.tsx
+          pnpm --filter @workspace/adventure-zone typecheck
+          pnpm --filter @workspace/api-server build
+          pnpm --filter @workspace/adventure-zone build
+      - name: Push resolved merge
+        run: git push origin HEAD:feature/leg-manager-crew-aftermath
