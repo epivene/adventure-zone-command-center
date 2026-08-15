@@ -35,14 +35,14 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile
-      - name: Remove superseded MapLibre dependency
+      - name: Remove stale MapLibre stylesheet import
         run: |
-          if grep -q '"maplibre-gl"' artifacts/adventure-zone/package.json; then
-            pnpm --filter @workspace/adventure-zone remove maplibre-gl
+          if grep -q "maplibre-gl/dist/maplibre-gl.css" artifacts/adventure-zone/src/index.css; then
+            sed -i "/maplibre-gl\/dist\/maplibre-gl.css/d" artifacts/adventure-zone/src/index.css
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add artifacts/adventure-zone/package.json pnpm-lock.yaml
-            git commit -m "chore: remove superseded MapLibre dependency"
+            git add artifacts/adventure-zone/src/index.css
+            git commit -m "chore: remove stale MapLibre stylesheet import"
             git push origin HEAD:feature/leaflet-manager-route-map
           fi
       - name: Leaflet route unit tests
