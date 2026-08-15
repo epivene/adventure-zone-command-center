@@ -36,7 +36,7 @@ export function resolveMapStyle(configured?: string) {
 
 type StyleReadyMap = {
   isStyleLoaded: () => boolean;
-  on: (event: "styledata", handler: () => void) => unknown;
+  on: (event: "styledata" | "load", handler: () => void) => unknown;
 };
 
 export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
@@ -44,10 +44,14 @@ export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: ()
     install();
     return;
   }
-  const installWhenLoaded = () => {
-    if (map.isStyleLoaded()) install();
+  let installed = false;
+  const installOnce = () => {
+    if (installed || !map.isStyleLoaded()) return;
+    installed = true;
+    install();
   };
-  map.on("styledata", installWhenLoaded);
+  map.on("styledata", installOnce);
+  map.on("load", installOnce);
 }
 
 const initialFilters: MapFilters = {
@@ -136,6 +140,19 @@ export function viewportMode(coordinates: [number, number][]) {
   return { kind: "bounds" as const, coordinates };
 }
 
+export function applyMapViewport(map: Pick<MapLibreMap, "easeTo" | "fitBounds">, target: MapViewportTarget, Bounds: any) {
+  if (target.kind === "none") return;
+  if (target.kind === "center") {
+    map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });
+    return;
+  }
+  const first = target.coordinates[0];
+  if (!first) return;
+  const bounds = new Bounds(first, first);
+  for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);
+  map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });
+}
+
 function MapCanvas({
   geoJson,
   routeLines,
@@ -177,17 +194,7 @@ function MapCanvas({
       });
 
       const fitVisibleData = () => {
-        const target = viewportRef.current;
-        if (target.kind === "none") return;
-        if (target.kind === "center") {
-          map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });
-          return;
-        }
-        const first = target.coordinates[0];
-        if (!first) return;
-        const bounds = new maplibregl.LngLatBounds(first, first);
-        for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);
-        map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });
+        applyMapViewport(map, viewportRef.current, maplibregl.LngLatBounds);
       };
       fitVisibleRef.current = fitVisibleData;
 
@@ -300,7 +307,7 @@ function MapCanvas({
 
   useEffect(() => {
     viewportRef.current = viewport;
-    if (mapRef.current?.getSource("events")) fitVisibleRef.current?.();
+    fitVisibleRef.current?.();
   }, [viewport]);
 
   return (
