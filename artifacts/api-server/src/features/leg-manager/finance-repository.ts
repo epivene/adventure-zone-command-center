@@ -7,6 +7,7 @@ import {
   legEventIncome,
   legExpenses,
   legMileageEntries,
+  legReceipts,
   tripSegments,
   trips,
 } from "@/db/schema";
@@ -33,6 +34,25 @@ export interface FinanceMutationStore {
   ): Promise<any | null>;
   refsBelongToLeg(legId: string, refs: FinanceRefs): Promise<boolean>;
   insert(kind: FinanceMutationKind, input: FinanceMutationInput): Promise<any>;
+  ensureDerivedCash?(
+    kind: FinanceMutationKind,
+    input: FinanceMutationInput,
+    row: any,
+  ): Promise<void>;
+}
+
+export function derivedCashEntryForMutation(
+  kind: FinanceMutationKind,
+  row: any,
+): { kind: LegCashEntryKind; amountCents: number } | null {
+  if (kind === "income" && Number(row.cashCents ?? 0) > 0) {
+    return { kind: "event_cash_collected", amountCents: Number(row.cashCents) };
+  }
+  if (kind === "expense" && row.paymentSource === "adventure_zone_cash") {
+    const amountCents = Number(row.amountCents ?? 0) + Number(row.taxCents ?? 0);
+    if (amountCents > 0) return { kind: "expense_paid_cash", amountCents };
+  }
+  return null;
 }
 
 export async function createFinanceMutation(
@@ -45,17 +65,18 @@ export async function createFinanceMutation(
     kind,
     input.clientMutationId,
   );
-  if (existing) return { ok: true as const, idempotent: true, row: existing };
+  if (existing) {
+    await store.ensureDerivedCash?.(kind, input, existing);
+    return { ok: true as const, idempotent: true, row: existing };
+  }
 
   if (!(await store.refsBelongToLeg(input.legId, input))) {
     return { ok: false as const, error: "OUTSIDE_LEG" as const };
   }
 
-  return {
-    ok: true as const,
-    idempotent: false,
-    row: await store.insert(kind, input),
-  };
+  const row = await store.insert(kind, input);
+  await store.ensureDerivedCash?.(kind, input, row);
+  return { ok: true as const, idempotent: false, row };
 }
 
 export class DrizzleFinanceRepository implements FinanceMutationStore {
@@ -72,12 +93,7 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
           await this.database
             .select()
             .from(legEventIncome)
-            .where(
-              and(
-                eq(legEventIncome.legId, legId),
-                eq(legEventIncome.clientMutationId, clientMutationId),
-              ),
-            )
+            .where(and(eq(legEventIncome.legId, legId), eq(legEventIncome.clientMutationId, clientMutationId)))
             .limit(1)
         )[0] ?? null;
       case "expense":
@@ -85,12 +101,7 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
           await this.database
             .select()
             .from(legExpenses)
-            .where(
-              and(
-                eq(legExpenses.legId, legId),
-                eq(legExpenses.clientMutationId, clientMutationId),
-              ),
-            )
+            .where(and(eq(legExpenses.legId, legId), eq(legExpenses.clientMutationId, clientMutationId)))
             .limit(1)
         )[0] ?? null;
       case "cash":
@@ -98,12 +109,7 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
           await this.database
             .select()
             .from(legCashEntries)
-            .where(
-              and(
-                eq(legCashEntries.legId, legId),
-                eq(legCashEntries.clientMutationId, clientMutationId),
-              ),
-            )
+            .where(and(eq(legCashEntries.legId, legId), eq(legCashEntries.clientMutationId, clientMutationId)))
             .limit(1)
         )[0] ?? null;
       case "mileage":
@@ -111,12 +117,7 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
           await this.database
             .select()
             .from(legMileageEntries)
-            .where(
-              and(
-                eq(legMileageEntries.legId, legId),
-                eq(legMileageEntries.clientMutationId, clientMutationId),
-              ),
-            )
+            .where(and(eq(legMileageEntries.legId, legId), eq(legMileageEntries.clientMutationId, clientMutationId)))
             .limit(1)
         )[0] ?? null;
     }
@@ -131,7 +132,6 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
         .limit(1);
       if (!rows[0]) return false;
     }
-
     if (refs.tripId) {
       const rows = await this.database
         .select({ id: trips.id })
@@ -140,22 +140,15 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
         .limit(1);
       if (!rows[0]) return false;
     }
-
     if (refs.tripSegmentId) {
       const rows = await this.database
         .select({ id: tripSegments.id })
         .from(tripSegments)
         .innerJoin(trips, eq(trips.id, tripSegments.tripId))
-        .where(
-          and(
-            eq(tripSegments.id, refs.tripSegmentId),
-            eq(trips.travelLegId, legId),
-          ),
-        )
+        .where(and(eq(tripSegments.id, refs.tripSegmentId), eq(trips.travelLegId, legId)))
         .limit(1);
       if (!rows[0]) return false;
     }
-
     return true;
   }
 
@@ -173,117 +166,78 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
   async insert(kind: FinanceMutationKind, input: FinanceMutationInput) {
     const values = this.values(input);
     let row: any | null = null;
-
     switch (kind) {
       case "income":
-        row = (
-          await this.database
-            .insert(legEventIncome)
-            .values(values as any)
-            .onConflictDoNothing({
-              target: [legEventIncome.legId, legEventIncome.clientMutationId],
-            })
-            .returning()
-        )[0] ?? null;
+        row = (await this.database.insert(legEventIncome).values(values as any).onConflictDoNothing({ target: [legEventIncome.legId, legEventIncome.clientMutationId] }).returning())[0] ?? null;
         break;
       case "expense":
-        row = (
-          await this.database
-            .insert(legExpenses)
-            .values(values as any)
-            .onConflictDoNothing({
-              target: [legExpenses.legId, legExpenses.clientMutationId],
-            })
-            .returning()
-        )[0] ?? null;
+        row = (await this.database.insert(legExpenses).values(values as any).onConflictDoNothing({ target: [legExpenses.legId, legExpenses.clientMutationId] }).returning())[0] ?? null;
         break;
       case "cash":
-        row = (
-          await this.database
-            .insert(legCashEntries)
-            .values(values as any)
-            .onConflictDoNothing({
-              target: [legCashEntries.legId, legCashEntries.clientMutationId],
-            })
-            .returning()
-        )[0] ?? null;
+        row = (await this.database.insert(legCashEntries).values(values as any).onConflictDoNothing({ target: [legCashEntries.legId, legCashEntries.clientMutationId] }).returning())[0] ?? null;
         break;
       case "mileage":
-        row = (
-          await this.database
-            .insert(legMileageEntries)
-            .values(values as any)
-            .onConflictDoNothing({
-              target: [legMileageEntries.legId, legMileageEntries.clientMutationId],
-            })
-            .returning()
-        )[0] ?? null;
+        row = (await this.database.insert(legMileageEntries).values(values as any).onConflictDoNothing({ target: [legMileageEntries.legId, legMileageEntries.clientMutationId] }).returning())[0] ?? null;
         break;
     }
-
     if (row) return row;
-
-    const existing = await this.findByMutation(
-      input.legId,
-      kind,
-      input.clientMutationId,
-    );
-    if (!existing) {
-      throw new Error("Finance mutation insert conflict without existing row");
-    }
+    const existing = await this.findByMutation(input.legId, kind, input.clientMutationId);
+    if (!existing) throw new Error("Finance mutation insert conflict without existing row");
     return existing;
   }
 
-  async summary(legId: string | null, tripId?: string | null) {
-    const incomeWhere = and(
-      legId ? eq(legEventIncome.legId, legId) : undefined,
-      tripId ? eq(legEventIncome.tripId, tripId) : undefined,
-    );
-    const expenseWhere = and(
-      legId ? eq(legExpenses.legId, legId) : undefined,
-      tripId ? eq(legExpenses.tripId, tripId) : undefined,
-    );
-    const cashWhere = and(
-      legId ? eq(legCashEntries.legId, legId) : undefined,
-      tripId ? eq(legCashEntries.tripId, tripId) : undefined,
-    );
-    const mileageWhere = and(
-      legId ? eq(legMileageEntries.legId, legId) : undefined,
-      tripId ? eq(legMileageEntries.tripId, tripId) : undefined,
-    );
+  async ensureDerivedCash(
+    kind: FinanceMutationKind,
+    input: FinanceMutationInput,
+    row: any,
+  ) {
+    const derived = derivedCashEntryForMutation(kind, row);
+    if (!derived) return;
+    await this.database
+      .insert(legCashEntries)
+      .values({
+        legId: input.legId,
+        bookingId: input.bookingId,
+        tripId: input.tripId,
+        tripSegmentId: input.tripSegmentId,
+        kind: derived.kind,
+        amountCents: derived.amountCents,
+        occurredAt: row.occurredAt ?? new Date(),
+        notes: kind === "income" ? "Automatically recorded from event cash income" : "Automatically recorded from cash-paid expense",
+        clientMutationId: input.clientMutationId,
+      })
+      .onConflictDoNothing({ target: [legCashEntries.legId, legCashEntries.clientMutationId] });
+  }
 
-    const [income, expenses, cash, mileage] = await Promise.all([
+  async summary(legId: string | null, tripId?: string | null) {
+    const incomeWhere = and(legId ? eq(legEventIncome.legId, legId) : undefined, tripId ? eq(legEventIncome.tripId, tripId) : undefined);
+    const expenseWhere = and(legId ? eq(legExpenses.legId, legId) : undefined, tripId ? eq(legExpenses.tripId, tripId) : undefined);
+    const cashWhere = and(legId ? eq(legCashEntries.legId, legId) : undefined, tripId ? eq(legCashEntries.tripId, tripId) : undefined);
+    const mileageWhere = and(legId ? eq(legMileageEntries.legId, legId) : undefined, tripId ? eq(legMileageEntries.tripId, tripId) : undefined);
+    const receiptWhere = legId ? eq(legReceipts.legId, legId) : undefined;
+
+    const [income, expenses, cash, mileage, receipts] = await Promise.all([
       this.database.select().from(legEventIncome).where(incomeWhere),
       this.database.select().from(legExpenses).where(expenseWhere),
       this.database.select().from(legCashEntries).where(cashWhere),
       this.database.select().from(legMileageEntries).where(mileageWhere),
+      this.database.select().from(legReceipts).where(receiptWhere),
     ]);
 
-    const incomeTotalCents = income.reduce(
-      (total, row) => total + row.cashCents + row.squareCents + row.otherCents,
-      0,
-    );
-    const expenseTotalCents = expenses.reduce(
-      (total, row) => total + row.amountCents + row.taxCents,
-      0,
-    );
-
+    const incomeTotalCents = income.reduce((total, row) => total + row.cashCents + row.squareCents + row.otherCents, 0);
+    const expenseTotalCents = expenses.reduce((total, row) => total + row.amountCents + row.taxCents, 0);
     const settlementEffects: Array<{ kind: any; amountCents: number }> = [];
     for (const expense of expenses) {
       const amountCents = expense.amountCents + expense.taxCents;
-      if (expense.paymentSource === "personal") {
-        settlementEffects.push({ kind: "personal_expense", amountCents });
-      } else if (expense.paymentSource === "adventure_zone_debit") {
-        settlementEffects.push({ kind: "company_debit_expense", amountCents });
-      }
+      if (expense.paymentSource === "personal") settlementEffects.push({ kind: "personal_expense", amountCents });
+      else if (expense.paymentSource === "adventure_zone_debit") settlementEffects.push({ kind: "company_debit_expense", amountCents });
     }
-    for (const entry of cash) {
-      settlementEffects.push({ kind: entry.kind as LegCashEntryKind, amountCents: entry.amountCents });
-    }
-
-    const cashPositionEntries = cash.map((entry) => ({
-      kind: entry.kind as LegCashEntryKind,
-      amountCents: entry.amountCents,
+    for (const entry of cash) settlementEffects.push({ kind: entry.kind as LegCashEntryKind, amountCents: entry.amountCents });
+    const cashPositionEntries = cash.map((entry) => ({ kind: entry.kind as LegCashEntryKind, amountCents: entry.amountCents }));
+    const receiptByExpense = new Map(receipts.map((receipt) => [receipt.expenseId, receipt.imageStatus]));
+    const expensesWithReceipts = expenses.map((expense) => ({
+      ...expense,
+      receiptStatus: receiptByExpense.get(expense.id) ?? "missing",
     }));
 
     return {
@@ -291,8 +245,9 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
       expenseTotalCents,
       cashPosition: calculateCashPosition(cashPositionEntries),
       settlement: calculateSettlement(settlementEffects),
+      missingReceiptCount: expensesWithReceipts.filter((expense) => expense.receiptStatus !== "image_uploaded").length,
       income,
-      expenses,
+      expenses: expensesWithReceipts,
       cash,
       mileage,
     };
