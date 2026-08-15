@@ -71,7 +71,9 @@ function toTimelineItem(
     createdAt: activity.createdAt,
     updatedAt: activity.updatedAt,
     revisionCount,
-  };
+    callOutcome: (activity as Record<string, unknown>).callOutcome ?? null,
+    hasLinkedCallSession: false,
+  } as ActivityTimelineItem;
 }
 
 function toRevision(revision: typeof activityRevisions.$inferSelect): ActivityRevision {

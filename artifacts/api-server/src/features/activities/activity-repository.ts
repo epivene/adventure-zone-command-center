@@ -387,27 +387,30 @@ export class DrizzleActivityRepository
     });
   }
 
-  async delete(activityId: string): Promise<Result<void, ActivityError>> {
+  async delete(id: string): Promise<Result<void, ActivityError>> {
     return this.database.transaction(async (transaction) => {
-      const [before] = await transaction
+      const [activity] = await transaction
         .select()
         .from(activities)
-        .where(and(eq(activities.id, activityId), isNull(activities.deletedAt)))
+        .where(eq(activities.id, id))
         .limit(1)
         .for("update");
-      if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
-
-      const now = new Date();
-      await transaction
-        .update(activities)
-        .set({ deletedAt: now, updatedAt: now })
-        .where(eq(activities.id, activityId));
-
+      if (!activity) return err({ code: "ACTIVITY_NOT_FOUND" });
+      if (activity.sourceRecordId) {
+        return err({
+          code: "INVALID_ACTIVITY_INPUT",
+          message: "Imported activities cannot be deleted.",
+        });
+      }
+      // Delete revisions first (no cascade from activities → activity_revisions)
+      await transaction.delete(activityRevisions).where(eq(activityRevisions.activityId, id));
+      // activity_associations cascade automatically via FK onDelete: "cascade"
+      await transaction.delete(activities).where(eq(activities.id, id));
       await recordAuditEntry(transaction, {
         entityType: "activity",
-        entityId: activityId,
+        entityId: id,
         action: "delete",
-        before: activitySnapshot(before),
+        before: activitySnapshot(activity),
         after: null,
       });
       return ok(undefined);

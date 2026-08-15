@@ -3,12 +3,20 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
+import { ActivityTimeline } from "@/components/activities/activity-timeline";
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
+import {
+  createActivityAction,
+  deleteActivityAction,
+  editActivityAction,
+  listActivityRevisionsAction,
+  loadTimelinePageAction,
+} from "@/actions/activities";
+import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { groupEventProfileContacts } from "@/features/event-profiles/group-event-profile-contacts";
-
-const NOTE_PAGE_SIZE = 25;
 
 function formatDate(value: Date | null) {
   if (!value) return "Not set";
@@ -54,7 +62,7 @@ export function EventProfileWorkspace({
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
   const [showLocations, setShowLocations] = useState<Record<string, boolean>>({});
-  const [visibleNoteCount, setVisibleNoteCount] = useState(NOTE_PAGE_SIZE);
+  const [followUpItems, setFollowUpItems] = useState(profile.followUps);
   const groupedContacts = useMemo(() => groupEventProfileContacts(profile.contacts), [profile.contacts]);
   const selectedContact = groupedContacts.find(({ id }) => id === selectedContactId) ?? groupedContacts[0] ?? null;
   const callablePhone = selectedContact
@@ -150,25 +158,30 @@ export function EventProfileWorkspace({
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-notes-title">
             <h2 className="text-xl font-bold" id="event-notes-title">Notes &amp; call outcomes</h2>
-            {profile.notes.length ? (
-              <>
-                <ul className="mt-4 grid gap-3">
-                  {profile.notes.slice(0, visibleNoteCount).map((note) => <li className="rounded-lg border border-slate-100 p-3" key={note.id}>
-                    <p className="text-sm font-semibold capitalize">{titleCase(note.kind)} · {formatDate(note.occurredAt)}</p>
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{note.body}</p>
-                  </li>)}
-                </ul>
-                {profile.notes.length > visibleNoteCount ? (
-                  <button
-                    className="mt-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    onClick={() => setVisibleNoteCount((current) => current + NOTE_PAGE_SIZE)}
-                    type="button"
-                  >
-                    Show older notes ({profile.notes.length - visibleNoteCount} more)
-                  </button>
-                ) : null}
-              </>
-            ) : <p className="mt-3 text-sm text-slate-600">No notes or call outcomes have been recorded.</p>}
+            <div className="mt-4">
+              <ActivityTimeline
+                activities={profile.notes.map((note) => ({
+                  id: note.id,
+                  organizationId: profile.id,
+                  contactId: note.contactId,
+                  bookingId: note.bookingId,
+                  kind: note.kind as any,
+                  body: note.body,
+                  occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+                  createdAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+                  updatedAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+                  revisionCount: 0,
+                  callOutcome: null,
+                  hasLinkedCallSession: false,
+                }))}
+                parent={{ organizationId: profile.id }}
+                createActivity={createActivityAction}
+                editActivity={editActivityAction}
+                deleteActivity={deleteActivityAction}
+                loadRevisions={listActivityRevisionsAction}
+                loadPage={(page) => loadTimelinePageAction({ organizationId: profile.id }, page)}
+              />
+            </div>
           </section>
         </div>
 
@@ -191,10 +204,31 @@ export function EventProfileWorkspace({
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-follow-ups-title">
             <h2 className="text-xl font-bold" id="event-follow-ups-title">Follow-up</h2>
-            {profile.followUps.length ? <ul className="mt-3 grid gap-3">
-              {profile.followUps.map((followUp) => <li className="text-sm" key={followUp.id}>
+            {followUpItems.length ? <ul className="mt-3 grid gap-3">
+              {followUpItems.map((followUp) => <li className="rounded-lg border border-slate-100 p-3 text-sm" key={followUp.id}>
                 <p className="font-semibold capitalize">{titleCase(followUp.kind)} {followUp.id === context.followUpId ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-900">Selected follow-up context</span> : null}</p>
                 <p className="text-slate-600">{followUp.completedAt ? `Completed ${formatDate(followUp.completedAt)}` : `Due ${formatDate(followUp.dueAt)}`}</p>
+                <FollowUpControls
+                  followUp={followUp}
+                  onEdit={async (id, input) => {
+                    const result = await editFollowUpAction({ followUpId: id, kind: input.kind, dueAt: new Date(input.dueAt), completed: false, outcome: null });
+                    if (result.ok) {
+                      setFollowUpItems((items) =>
+                        items.map((f) =>
+                          f.id === id
+                            ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt }
+                            : f,
+                        ),
+                      );
+                    }
+                    return result;
+                  }}
+                  onDelete={async (id) => {
+                    const result = await deleteFollowUpAction(id);
+                    if (result.ok) setFollowUpItems((items) => items.filter((f) => f.id !== id));
+                    return result;
+                  }}
+                />
               </li>)}
             </ul> : <p className="mt-3 text-sm text-slate-600">No follow-up is scheduled.</p>}
           </section>
