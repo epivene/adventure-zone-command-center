@@ -1,0 +1,19 @@
+name: Verify Leg Manager Route Hotfix
+on:
+  push:
+    branches: [fix/restore-leg-manager-route-mounts]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/routes/index.test.ts
