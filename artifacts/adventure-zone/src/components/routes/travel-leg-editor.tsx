@@ -1,24 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 
 import {
   travelLegDetailsSchema,
@@ -49,16 +32,12 @@ type LegFormValues = {
   name: string;
   color: string;
   sortOrder: number;
-  archived: boolean;
   baseAddress: string;
   defaultVehicleName: string;
   defaultMpg: string;
 };
 
-type LegDetailFormValues = Pick<
-  LegFormValues,
-  "name" | "color" | "baseAddress" | "defaultVehicleName" | "defaultMpg"
->;
+type EditableField = "name" | "color" | "baseAddress" | "defaultVehicleName" | "defaultMpg";
 
 function toFormValues(leg: TravelLeg): LegFormValues {
   return {
@@ -66,14 +45,13 @@ function toFormValues(leg: TravelLeg): LegFormValues {
     name: leg.name,
     color: leg.color,
     sortOrder: leg.sortOrder,
-    archived: Boolean(leg.archivedAt),
     baseAddress: leg.baseAddress ?? "",
     defaultVehicleName: leg.defaultVehicleName ?? "",
-    defaultMpg: leg.defaultMpg === null ? "" : String(leg.defaultMpg),
+    defaultMpg: leg.defaultMpg == null ? "" : String(leg.defaultMpg),
   };
 }
 
-function detailFormValues(leg: LegFormValues): LegDetailFormValues {
+function details(leg: LegFormValues) {
   return {
     name: leg.name,
     color: leg.color,
@@ -83,215 +61,9 @@ function detailFormValues(leg: LegFormValues): LegDetailFormValues {
   };
 }
 
-function sameDetails(left: LegDetailFormValues, right: LegDetailFormValues) {
-  return (
-    left.name === right.name &&
-    left.color === right.color &&
-    left.baseAddress === right.baseAddress &&
-    left.defaultVehicleName === right.defaultVehicleName &&
-    left.defaultMpg === right.defaultMpg
-  );
-}
-
-type EditableField = keyof LegDetailFormValues;
-
-function SortableLegCard({
-  leg,
-  resources,
-  onChangeField,
-  onSave,
-  isDirty,
-  isSaving,
-  isSaved,
-  onDelete,
-  onArchive,
-  deletingId,
-  archivingId,
-  isOnlyLeg,
-  isLastActiveLeg,
-}: {
-  leg: LegFormValues;
-  resources: LegResourceSummary[];
-  onChangeField: (id: string, field: EditableField, value: string) => void;
-  onSave: (id: string) => void;
-  isDirty: boolean;
-  isSaving: boolean;
-  isSaved: boolean;
-  onDelete?: (id: string) => void;
-  onArchive?: (id: string) => void;
-  deletingId: string | null;
-  archivingId: string | null;
-  isOnlyLeg: boolean;
-  isLastActiveLeg: boolean;
-}) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: leg.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
-
-  const isArchiveBusy = archivingId === leg.id;
-
-  return (
-    <fieldset
-      ref={setNodeRef}
-      style={style}
-      aria-label={`Travel leg ${leg.sortOrder}`}
-      className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3"
-    >
-      <legend className="flex items-center gap-1 px-1 text-sm font-bold">
-        <button
-          type="button"
-          aria-label={`Drag to reorder leg ${leg.sortOrder}`}
-          className="cursor-grab touch-none rounded p-0.5 text-slate-400 hover:text-slate-600 active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        Leg {leg.sortOrder}
-        {onArchive ? (
-          <button
-            aria-label={`Archive leg ${leg.sortOrder}`}
-            className="ml-1 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-40"
-            disabled={isArchiveBusy || isLastActiveLeg}
-            onClick={() => onArchive(leg.id)}
-            title={
-              isLastActiveLeg ? "At least one active leg is required" : undefined
-            }
-            type="button"
-          >
-            {isArchiveBusy ? "Archiving…" : "Archive"}
-          </button>
-        ) : null}
-        {onDelete ? (
-          <button
-            aria-label={`Delete leg ${leg.sortOrder}`}
-            className="ml-1 rounded px-1.5 py-0.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-            disabled={deletingId === leg.id || isOnlyLeg}
-            onClick={() => onDelete(leg.id)}
-            type="button"
-          >
-            {deletingId === leg.id ? "Deleting…" : "Delete"}
-          </button>
-        ) : null}
-      </legend>
-
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-        <label className="grid gap-1 text-sm font-semibold">
-          Name
-          <input
-            aria-label={`Travel leg ${leg.sortOrder} name`}
-            onChange={(event) =>
-              onChangeField(leg.id, "name", event.currentTarget.value)
-            }
-            type="text"
-            value={leg.name}
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-semibold">
-          Color
-          <input
-            aria-label={`Travel leg ${leg.sortOrder} color`}
-            className="h-11 w-full"
-            onChange={(event) =>
-              onChangeField(leg.id, "color", event.currentTarget.value)
-            }
-            type="color"
-            value={leg.color}
-          />
-        </label>
-      </div>
-
-      <label className="grid gap-1 text-sm font-semibold">
-        Base address
-        <input
-          aria-label={`Travel leg ${leg.sortOrder} base address`}
-          onChange={(event) =>
-            onChangeField(leg.id, "baseAddress", event.currentTarget.value)
-          }
-          placeholder="Where this leg is based"
-          type="text"
-          value={leg.baseAddress}
-        />
-      </label>
-
-      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-        <label className="grid gap-1 text-sm font-semibold">
-          Default vehicle
-          <input
-            aria-label={`Travel leg ${leg.sortOrder} default vehicle`}
-            onChange={(event) =>
-              onChangeField(
-                leg.id,
-                "defaultVehicleName",
-                event.currentTarget.value,
-              )
-            }
-            placeholder="e.g. Box truck 1"
-            type="text"
-            value={leg.defaultVehicleName}
-          />
-        </label>
-        <label className="grid gap-1 text-sm font-semibold">
-          Default MPG
-          <input
-            aria-label={`Travel leg ${leg.sortOrder} default MPG`}
-            inputMode="decimal"
-            min="0"
-            onChange={(event) =>
-              onChangeField(leg.id, "defaultMpg", event.currentTarget.value)
-            }
-            step="0.1"
-            type="number"
-            value={leg.defaultMpg}
-          />
-        </label>
-      </div>
-
-      <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
-        {isSaved && !isDirty ? (
-          <span className="text-sm font-semibold text-emerald-700" role="status">
-            Saved
-          </span>
-        ) : null}
-        <button
-          className="button-primary"
-          disabled={!isDirty || isSaving}
-          onClick={() => onSave(leg.id)}
-          type="button"
-        >
-          {isSaving ? "Saving…" : "Save leg"}
-        </button>
-      </div>
-
-      {resources.length > 0 ? (
-        <div className="rounded-md border border-slate-100 bg-slate-50 p-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-            Assigned resources
-          </p>
-          <ul className="mt-1 grid gap-0.5 text-sm text-slate-700">
-            {resources.map((resource) => (
-              <li key={resource.id}>
-                <span className="font-semibold">{resource.name}</span>{" "}
-                <span className="text-slate-500">
-                  ({resource.code} · {resource.category})
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </fieldset>
+function sameDetails(left: ReturnType<typeof details>, right: ReturnType<typeof details>) {
+  return Object.keys(left).every(
+    (key) => left[key as keyof typeof left] === right[key as keyof typeof right],
   );
 }
 
@@ -301,7 +73,6 @@ export function TravelLegEditor({
   onSaveLeg,
   onSaveOrder,
   onAdd,
-  onDelete,
   onArchive,
   onRestore,
 }: {
@@ -315,65 +86,40 @@ export function TravelLegEditor({
     input: TravelLegOrder,
   ) => Promise<SaveOrderResult> | SaveOrderResult;
   onAdd?: () => Promise<void>;
+  /** Deprecated compatibility prop. Permanent delete is intentionally not rendered. */
   onDelete?: (id: string) => Promise<void>;
   onArchive?: (id: string) => Promise<void>;
   onRestore?: (id: string) => Promise<void>;
 }) {
   const activeLegs = legs.filter((leg) => !leg.archivedAt);
+  const archivedLegs = legs.filter((leg) => leg.archivedAt);
   const [values, setValues] = useState<LegFormValues[]>(() =>
-    activeLegs.map(toFormValues).map((leg, index) => ({
-      ...leg,
-      sortOrder: index + 1,
+    activeLegs.map(toFormValues).map((leg, index) => ({ ...leg, sortOrder: index + 1 })),
+  );
+  const [savedDetails, setSavedDetails] = useState<Record<string, ReturnType<typeof details>>>(() =>
+    Object.fromEntries(activeLegs.map((leg) => {
+      const form = toFormValues(leg);
+      return [leg.id, details(form)];
     })),
   );
-  const [savedDetails, setSavedDetails] = useState<Record<string, LegDetailFormValues>>(
-    () =>
-      Object.fromEntries(
-        activeLegs.map((leg) => {
-          const form = toFormValues(leg);
-          return [leg.id, detailFormValues(form)];
-        }),
-      ),
-  );
-  const [savedOrder, setSavedOrder] = useState<string[]>(() =>
-    activeLegs.map((leg) => leg.id),
-  );
-  const archivedLegs = legs.filter((leg) => leg.archivedAt);
+  const [savedOrder, setSavedOrder] = useState(() => activeLegs.map((leg) => leg.id));
+  const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState("");
   const [savingLegId, setSavingLegId] = useState<string | null>(null);
   const [savedLegIds, setSavedLegIds] = useState<Set<string>>(() => new Set());
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [orderSaved, setOrderSaved] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
 
-  const totalLegs = values.length + archivedLegs.length;
   const currentOrder = values.map((leg) => leg.id);
-  const orderDirty = currentOrder.some((id, index) => savedOrder[index] !== id);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
-  );
+  const orderDirty =
+    currentOrder.length !== savedOrder.length ||
+    currentOrder.some((id, index) => savedOrder[index] !== id);
 
   function isLegDirty(leg: LegFormValues) {
     const baseline = savedDetails[leg.id];
-    return !baseline || !sameDetails(detailFormValues(leg), baseline);
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    setValues((current) => {
-      const oldIndex = current.findIndex((value) => value.id === active.id);
-      const newIndex = current.findIndex((value) => value.id === over.id);
-      const reordered = arrayMove(current, oldIndex, newIndex);
-      return reordered.map((leg, index) => ({ ...leg, sortOrder: index + 1 }));
-    });
-    setOrderSaved(false);
+    return !baseline || !sameDetails(details(leg), baseline);
   }
 
   function changeLeg(id: string, field: EditableField, value: string) {
@@ -387,16 +133,25 @@ export function TravelLegEditor({
     });
   }
 
+  function moveLeg(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= values.length) return;
+    setValues((current) => {
+      const next = [...current];
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      return next.map((leg, position) => ({ ...leg, sortOrder: position + 1 }));
+    });
+    setOrderSaved(false);
+  }
+
   async function handleSaveLeg(id: string) {
     const leg = values.find((value) => value.id === id);
     if (!leg) return;
-
-    const parsed = travelLegDetailsSchema.safeParse(detailFormValues(leg));
+    const parsed = travelLegDetailsSchema.safeParse(details(leg));
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Review this travel leg.");
       return;
     }
-
     setError("");
     setSavingLegId(id);
     try {
@@ -405,18 +160,11 @@ export function TravelLegEditor({
         setError(result.error);
         return;
       }
-
-      const savedForm = toFormValues(result.leg);
-      const savedDetail = detailFormValues(savedForm);
-      setSavedDetails((current) => ({ ...current, [id]: savedDetail }));
+      const saved = toFormValues(result.leg);
+      setSavedDetails((current) => ({ ...current, [id]: details(saved) }));
       setValues((current) =>
         current.map((value) =>
-          value.id === id
-            ? {
-                ...value,
-                ...savedDetail,
-              }
-            : value,
+          value.id === id ? { ...value, ...details(saved) } : value,
         ),
       );
       setSavedLegIds((current) => new Set(current).add(id));
@@ -429,16 +177,14 @@ export function TravelLegEditor({
 
   async function handleSaveOrder() {
     const parsed = travelLegOrderSchema.safeParse({
-      legs: values.map((leg) => ({ id: leg.id, sortOrder: leg.sortOrder })),
+      legs: values.map(({ id, sortOrder }) => ({ id, sortOrder })),
     });
     if (!parsed.success) {
       setError(parsed.error.issues[0]?.message ?? "Review the travel-leg order.");
       return;
     }
-
     setError("");
     setIsSavingOrder(true);
-    setOrderSaved(false);
     try {
       const result = await onSaveOrder(parsed.data);
       if (!result.ok) {
@@ -460,23 +206,10 @@ export function TravelLegEditor({
     setIsAdding(true);
     try {
       await onAdd();
-    } catch (e: any) {
-      setError(e.message ?? "Could not add travel leg.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not add travel leg.");
     } finally {
       setIsAdding(false);
-    }
-  }
-
-  async function handleDelete(id: string) {
-    if (!onDelete) return;
-    setError("");
-    setDeletingId(id);
-    try {
-      await onDelete(id);
-    } catch (e: any) {
-      setError(e.message ?? "Could not delete travel leg.");
-    } finally {
-      setDeletingId(null);
     }
   }
 
@@ -486,8 +219,8 @@ export function TravelLegEditor({
     setArchivingId(id);
     try {
       await onArchive(id);
-    } catch (e: any) {
-      setError(e.message ?? "Could not archive travel leg.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not archive travel leg.");
     } finally {
       setArchivingId(null);
     }
@@ -499,8 +232,8 @@ export function TravelLegEditor({
     setArchivingId(id);
     try {
       await onRestore(id);
-    } catch (e: any) {
-      setError(e.message ?? "Could not restore travel leg.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not restore travel leg.");
     } finally {
       setArchivingId(null);
     }
@@ -511,138 +244,115 @@ export function TravelLegEditor({
       <div>
         <h2 className="text-xl font-bold">Configure travel legs</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Edit a leg and save that leg by itself. Drag legs to change their
-          order, then save the order separately. Archived legs stay on old
-          bookings but are hidden from new ones. You can have between 1 and 9
-          legs.
+          Active legs are used for current planning. Archive a historical leg instead of deleting it;
+          archived legs remain attached to old bookings and can be restored later.
         </p>
       </div>
 
       {error ? (
-        <p
-          className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800"
-          role="alert"
-        >
+        <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">
           {error}
         </p>
       ) : null}
 
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
-      >
-        <SortableContext
-          items={values.map((value) => value.id)}
-          strategy={verticalListSortingStrategy}
-        >
-          <div className="grid gap-3 lg:grid-cols-2">
-            {values.map((leg) => (
-              <SortableLegCard
-                key={leg.id}
-                leg={leg}
-                resources={legResources.filter((resource) => resource.legId === leg.id)}
-                onChangeField={changeLeg}
-                onSave={handleSaveLeg}
-                isDirty={isLegDirty(leg)}
-                isSaving={savingLegId === leg.id}
-                isSaved={savedLegIds.has(leg.id)}
-                onDelete={onDelete ? handleDelete : undefined}
-                onArchive={onArchive ? handleArchive : undefined}
-                deletingId={deletingId}
-                archivingId={archivingId}
-                isOnlyLeg={totalLegs <= 1}
-                isLastActiveLeg={values.length <= 1}
-              />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {values.map((leg, index) => {
+          const dirty = isLegDirty(leg);
+          const resources = legResources.filter((resource) => resource.legId === leg.id);
+          return (
+            <fieldset key={leg.id} aria-label={`Travel leg ${leg.sortOrder}`} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
+              <legend className="flex items-center gap-2 px-1 text-sm font-bold">
+                Leg {leg.sortOrder}
+                <button type="button" aria-label={`Move leg ${leg.sortOrder} up`} disabled={index === 0} onClick={() => moveLeg(index, -1)} className="rounded p-1 text-slate-500 disabled:opacity-30">
+                  <ArrowUp className="h-4 w-4" />
+                </button>
+                <button type="button" aria-label={`Move leg ${leg.sortOrder} down`} disabled={index === values.length - 1} onClick={() => moveLeg(index, 1)} className="rounded p-1 text-slate-500 disabled:opacity-30">
+                  <ArrowDown className="h-4 w-4" />
+                </button>
+                {onArchive ? (
+                  <button type="button" aria-label={`Archive leg ${leg.sortOrder}`} disabled={values.length <= 1 || archivingId === leg.id} onClick={() => handleArchive(leg.id)} className="ml-auto rounded px-2 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:opacity-40">
+                    {archivingId === leg.id ? "Archiving…" : "Archive"}
+                  </button>
+                ) : null}
+              </legend>
+
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                <label className="grid gap-1 text-sm font-semibold">Name
+                  <input aria-label={`Travel leg ${leg.sortOrder} name`} type="text" value={leg.name} onChange={(event) => changeLeg(leg.id, "name", event.currentTarget.value)} />
+                </label>
+                <label className="grid gap-1 text-sm font-semibold">Color
+                  <input aria-label={`Travel leg ${leg.sortOrder} color`} className="h-11 w-full" type="color" value={leg.color} onChange={(event) => changeLeg(leg.id, "color", event.currentTarget.value)} />
+                </label>
+              </div>
+
+              <label className="grid gap-1 text-sm font-semibold">Base address
+                <input aria-label={`Travel leg ${leg.sortOrder} base address`} type="text" value={leg.baseAddress} onChange={(event) => changeLeg(leg.id, "baseAddress", event.currentTarget.value)} placeholder="Where this leg is based" />
+              </label>
+
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
+                <label className="grid gap-1 text-sm font-semibold">Default vehicle
+                  <input aria-label={`Travel leg ${leg.sortOrder} default vehicle`} type="text" value={leg.defaultVehicleName} onChange={(event) => changeLeg(leg.id, "defaultVehicleName", event.currentTarget.value)} placeholder="e.g. Box truck 1" />
+                </label>
+                <label className="grid gap-1 text-sm font-semibold">Default MPG
+                  <input aria-label={`Travel leg ${leg.sortOrder} default MPG`} type="number" inputMode="decimal" min="0" step="0.1" value={leg.defaultMpg} onChange={(event) => changeLeg(leg.id, "defaultMpg", event.currentTarget.value)} />
+                </label>
+              </div>
+
+              {resources.length > 0 ? (
+                <div className="rounded-md border border-slate-100 bg-slate-50 p-2 text-sm">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Assigned resources</p>
+                  <p className="mt-1 text-slate-700">{resources.map((resource) => resource.name).join(", ")}</p>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
+                {savedLegIds.has(leg.id) && !dirty ? <span role="status" className="text-sm font-semibold text-emerald-700">Saved</span> : null}
+                <button type="button" className="button-primary" disabled={!dirty || savingLegId === leg.id} onClick={() => handleSaveLeg(leg.id)}>
+                  {savingLegId === leg.id ? "Saving…" : "Save leg"}
+                </button>
+              </div>
+            </fieldset>
+          );
+        })}
+      </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          className="button-primary"
-          disabled={!orderDirty || isSavingOrder}
-          onClick={handleSaveOrder}
-          type="button"
-        >
+        <button type="button" className="button-primary" disabled={!orderDirty || isSavingOrder} onClick={handleSaveOrder}>
           {isSavingOrder ? "Saving order…" : "Save order"}
         </button>
-        {orderSaved && !orderDirty ? (
-          <span className="text-sm font-semibold text-emerald-700" role="status">
-            Order saved
-          </span>
-        ) : null}
+        {orderSaved && !orderDirty ? <span role="status" className="text-sm font-semibold text-emerald-700">Order saved</span> : null}
         {onAdd ? (
-          <button
-            className="button-secondary"
-            disabled={isAdding || totalLegs >= 9}
-            onClick={handleAdd}
-            title={totalLegs >= 9 ? "Maximum of 9 legs reached" : undefined}
-            type="button"
-          >
+          <button type="button" className="button-secondary" disabled={isAdding} onClick={handleAdd}>
             {isAdding ? "Adding…" : "Add leg"}
+          </button>
+        ) : null}
+        {archivedLegs.length > 0 ? (
+          <button type="button" className="button-secondary" onClick={() => setShowArchived((current) => !current)}>
+            {showArchived ? "Hide Archived" : `View Archived (${archivedLegs.length})`}
           </button>
         ) : null}
       </div>
 
-      {archivedLegs.length > 0 ? (
+      {showArchived && archivedLegs.length > 0 ? (
         <section aria-label="Archived travel legs" className="grid gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            Archived legs
-          </h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Archived legs</h3>
           <div className="grid gap-2 lg:grid-cols-2">
             {archivedLegs.map((leg) => (
-              <div
-                key={leg.id}
-                className="grid gap-1 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
-              >
+              <div key={leg.id} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
                 <div className="flex items-center gap-2">
-                  <span
-                    aria-hidden="true"
-                    className="inline-block size-3 shrink-0 rounded-full"
-                    style={{ backgroundColor: leg.color }}
-                  />
+                  <span aria-hidden="true" className="inline-block size-3 rounded-full" style={{ backgroundColor: leg.color }} />
                   <span className="font-bold">{leg.name}</span>
-                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">
-                    Archived
-                  </span>
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-600">Archived</span>
                   {onRestore ? (
-                    <button
-                      aria-label={`Restore leg ${leg.name}`}
-                      className="ml-auto rounded px-1.5 py-0.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
-                      disabled={archivingId === leg.id}
-                      onClick={() => handleRestore(leg.id)}
-                      type="button"
-                    >
+                    <button type="button" aria-label={`Restore leg ${leg.name}`} disabled={archivingId === leg.id} onClick={() => handleRestore(leg.id)} className="ml-auto rounded px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40">
                       {archivingId === leg.id ? "Restoring…" : "Restore"}
                     </button>
                   ) : null}
                 </div>
                 <p className="text-slate-600">
-                  {[
-                    leg.baseAddress,
-                    leg.defaultVehicleName,
-                    leg.defaultMpg !== null && leg.defaultMpg !== undefined
-                      ? `${leg.defaultMpg} MPG`
-                      : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ") || "No trip defaults set"}
+                  {[leg.baseAddress, leg.defaultVehicleName, leg.defaultMpg != null ? `${leg.defaultMpg} MPG` : null].filter(Boolean).join(" · ") || "No trip defaults set"}
                 </p>
-                <p className="text-xs text-slate-500">
-                  Restore this leg to edit it. It stays on old bookings but is
-                  hidden from new ones.
-                </p>
-                {legResources.filter((resource) => resource.legId === leg.id).length > 0 ? (
-                  <p className="text-xs text-slate-500">
-                    Assigned resources:{" "}
-                    {legResources
-                      .filter((resource) => resource.legId === leg.id)
-                      .map((resource) => resource.name)
-                      .join(", ")}
-                  </p>
-                ) : null}
+                <p className="text-xs text-slate-500">Restore this leg to edit it. Historical bookings stay attached while it is archived.</p>
               </div>
             ))}
           </div>

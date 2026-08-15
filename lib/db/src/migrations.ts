@@ -379,6 +379,22 @@ const migrationFiles = [
           AND column_name = 'parent_organization_id'
       ) AS ready`,
   },
+  {
+    name: "034_unlimited_travel_legs.sql",
+    markerSql: `SELECT NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid = to_regclass(current_schema() || '.travel_legs')
+        AND conname = 'travel_legs_sort_order_between_1_and_9'
+    ) AS ready`,
+  },
+  {
+    name: "035_leg_manager_access.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.leg_manager_access') IS NOT NULL AS ready",
+  },
+  {
+    name: "036_leg_schedule_issues.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.leg_schedule_issues') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

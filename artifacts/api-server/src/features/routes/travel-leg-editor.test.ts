@@ -125,7 +125,6 @@ describe("TravelLegService archive/restore ordering", () => {
     expect(result.ok).toBe(true);
 
     const ordered = repo.ordered();
-    // Active: 3 then restored 1; archived 2 last
     expect(ordered.map((l) => l.id)).toEqual([uuid(3), uuid(1), uuid(2)]);
     expect(ordered.map((l) => l.sortOrder)).toEqual([1, 2, 3]);
     expect(ordered[1].archivedAt).toBeNull();
@@ -174,16 +173,14 @@ describe("TravelLegService updateConfiguration", () => {
     expect(ordered.map((l) => l.id)).toEqual([uuid(3), uuid(1), uuid(2)]);
     expect(ordered.map((l) => l.sortOrder)).toEqual([1, 2, 3]);
     expect(ordered[2].archivedAt).toBeInstanceOf(Date);
-    // Archived leg untouched by detail updates
     expect(ordered[2].name).toBe("Leg 2");
-    // Detail fields persisted for the active leg
     expect(ordered[1].baseAddress).toBe("10 Main St");
     expect(ordered[1].defaultVehicleName).toBe("Van");
     expect(ordered[1].defaultMpg).toBe(12);
   });
 });
 
-describe("TravelLegService addLeg with archived legs present", () => {
+describe("TravelLegService addLeg", () => {
   it("inserts the new leg at the end of the active block, before archived legs", async () => {
     const repo = seed();
     const service = new TravelLegService(repo);
@@ -194,10 +191,21 @@ describe("TravelLegService addLeg with archived legs present", () => {
 
     const ordered = repo.ordered();
     expect(ordered.map((l) => l.sortOrder)).toEqual([1, 2, 3, 4]);
-    // Active block: 2, 3, new; archived leg 1 remains last
     expect(ordered[2].id).toMatch(/^new-/);
     expect(ordered[3].id).toBe(uuid(1));
     expect(ordered[3].archivedAt).toBeInstanceOf(Date);
+  });
+
+  it("adds a tenth active leg", async () => {
+    const repo = new FakeRepository(
+      Array.from({ length: 9 }, (_, index) =>
+        makeLeg({ id: `seed-${index + 1}`, sortOrder: index + 1 }),
+      ),
+    );
+    const result = await new TravelLegService(repo).addLeg();
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.sortOrder).toBe(10);
+    expect(repo.ordered()).toHaveLength(10);
   });
 });
 
@@ -209,7 +217,6 @@ describe("TravelLegService deleteLeg keeps ordering contiguous", () => {
     const result = await service.deleteLeg(uuid(1));
     expect(result.ok).toBe(true);
 
-    // Fake delete doesn't renumber (the SQL repository does); normalize check:
     const ordered = repo.ordered();
     expect(ordered.map((l) => l.id)).toEqual([uuid(2), uuid(3)]);
   });

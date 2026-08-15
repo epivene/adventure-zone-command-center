@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { TravelLegService } from "@/features/routes/travel-leg-editor";
+import { DrizzleLegManagerRepository } from "@/features/leg-manager/leg-manager-repository";
 import {
   travelLegConfigurationSchema,
   travelLegDetailsSchema,
@@ -33,13 +34,10 @@ router.get("/routes", async (req, res): Promise<void> => {
   }
 });
 
-// Active legs only by default (used by booking forms); ?includeArchived=1 for all
 router.get("/routes/travel-legs", async (req, res): Promise<void> => {
   try {
     const includeArchived = req.query.includeArchived === "1";
-    const legs = await new DrizzleTravelLegRepository(db).listTravelLegs({
-      includeArchived,
-    });
+    const legs = await new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived });
     res.json(legs);
   } catch (err) {
     req.log.error({ err }, "Failed to load travel legs");
@@ -47,14 +45,12 @@ router.get("/routes/travel-legs", async (req, res): Promise<void> => {
   }
 });
 
-// Configure one active leg's editable details without touching other legs or order.
 router.post("/routes/travel-legs/:id/configure", async (req, res): Promise<void> => {
   const parsed = travelLegDetailsSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
     return;
   }
-
   const { id } = req.params;
   try {
     const repo = new DrizzleTravelLegRepository(db);
@@ -74,14 +70,12 @@ router.post("/routes/travel-legs/:id/configure", async (req, res): Promise<void>
   }
 });
 
-// Save active-leg order only; detail fields are intentionally not accepted here.
 router.post("/routes/travel-legs/reorder", async (req, res): Promise<void> => {
   const parsed = travelLegOrderSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
     return;
   }
-
   try {
     const repo = new DrizzleTravelLegRepository(db);
     const result = await new TravelLegService(repo).reorderActiveLegs(parsed.data);
@@ -96,7 +90,6 @@ router.post("/routes/travel-legs/reorder", async (req, res): Promise<void> => {
   }
 });
 
-// Legacy bulk configuration endpoint retained for compatibility.
 router.post("/routes/travel-legs/configure", async (req, res): Promise<void> => {
   const parsed = travelLegConfigurationSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -117,23 +110,18 @@ router.post("/routes/travel-legs/configure", async (req, res): Promise<void> => 
   }
 });
 
-// Add a new leg (max 9)
 router.post("/routes/travel-legs", async (req, res): Promise<void> => {
   try {
     const repo = new DrizzleTravelLegRepository(db);
     const result = await new TravelLegService(repo).addLeg();
-    if (!result.ok) {
-      res.status(409).json({ ok: false, error: "Cannot add leg: maximum of 9 legs already reached" });
-      return;
-    }
-    res.status(201).json(result.value);
+    if (!result.ok) { res.status(500).json({ ok: false, error: "Could not add travel leg" }); return; }
+    res.status(201).json(result.value)
   } catch (err) {
     req.log.error({ err }, "Failed to add travel leg");
     res.status(500).json({ ok: false, error: "Could not add travel leg" });
   }
 });
 
-// Archive a leg (kept on existing bookings; hidden from new-booking pickers)
 router.post("/routes/travel-legs/:id/archive", async (req, res): Promise<void> => {
   const { id } = req.params;
   try {
@@ -147,6 +135,8 @@ router.post("/routes/travel-legs/:id/archive", async (req, res): Promise<void> =
       }
       return;
     }
+    // Archiving permanently invalidates every manager token, including after a later restore.
+    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
     res.json({ ok: true, leg: result.value });
   } catch (err) {
     req.log.error({ err }, "Failed to archive travel leg");
@@ -154,7 +144,6 @@ router.post("/routes/travel-legs/:id/archive", async (req, res): Promise<void> =
   }
 });
 
-// Restore an archived leg
 router.post("/routes/travel-legs/:id/restore", async (req, res): Promise<void> => {
   const { id } = req.params;
   try {
@@ -171,7 +160,8 @@ router.post("/routes/travel-legs/:id/restore", async (req, res): Promise<void> =
   }
 });
 
-// Delete a leg by id (min 1 must remain)
+// Permanent deletion remains an API compatibility escape hatch for the owner,
+// but the supported day-to-day lifecycle is archive/restore in the UI.
 router.delete("/routes/travel-legs/:id", async (req, res): Promise<void> => {
   const { id } = req.params;
   try {

@@ -45,8 +45,8 @@ export const travelLegDetailsSchema = z.object({
 });
 
 const travelLegOrderItemSchema = z.object({
-  id: z.uuid(),
-  sortOrder: z.number().int().min(1).max(9),
+  id: z.string().uuid(),
+  sortOrder: z.number().int().min(1),
 });
 
 function validateOrder(
@@ -80,7 +80,7 @@ export const travelLegOrderSchema = z
     legs: z
       .array(travelLegOrderItemSchema)
       .min(1, "At least one travel leg is required")
-      .max(9, "At most nine travel legs are allowed"),
+      ,
   })
   .superRefine((input, context) => validateOrder(input.legs, context));
 
@@ -89,13 +89,13 @@ export const travelLegConfigurationSchema = z
     legs: z
       .array(
         z.object({
-          id: z.uuid(),
+          id: z.string().uuid(),
           ...travelLegDetailsSchema.shape,
-          sortOrder: z.number().int().min(1).max(9),
+          sortOrder: z.number().int().min(1),
         }),
       )
       .min(1, "At least one travel leg is required")
-      .max(9, "At most nine travel legs are allowed"),
+      ,
   })
   .superRefine((input, context) => validateOrder(input.legs, context));
 
