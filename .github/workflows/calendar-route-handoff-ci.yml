@@ -15,12 +15,62 @@ on:
       - "lib/db/**"
       - ".github/workflows/calendar-route-handoff-ci.yml"
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Apply styledata overlay hotfix on hotfix branch
+        if: github.ref_name == 'fix/map-styledata-overlay'
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/adventure-zone/src/components/routes/event-map.tsx')
+          text = path.read_text()
+          old = '''type StyleReadyMap = {
+            isStyleLoaded: () => boolean;
+            on: (event: "style.load", handler: () => void) => unknown;
+          };
+
+          export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
+            if (map.isStyleLoaded()) {
+              install();
+              return;
+            }
+            map.on("style.load", install);
+          }'''
+          new = '''type StyleReadyMap = {
+            isStyleLoaded: () => boolean;
+            on: (event: "styledata", handler: () => void) => unknown;
+          };
+
+          export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
+            if (map.isStyleLoaded()) {
+              install();
+              return;
+            }
+            const installWhenLoaded = () => {
+              if (map.isStyleLoaded()) install();
+            };
+            map.on("styledata", installWhenLoaded);
+          }'''
+          if old in text:
+              path.write_text(text.replace(old, new, 1))
+          PY
+          if ! git diff --quiet -- artifacts/adventure-zone/src/components/routes/event-map.tsx; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add artifacts/adventure-zone/src/components/routes/event-map.tsx
+            git commit -m "fix: use MapLibre styledata for route overlays"
+            git push origin HEAD:fix/map-styledata-overlay
+            exit 0
+          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 10
