@@ -2837,3 +2837,27 @@ export const crewManagerNotes = pgTable(
     check("crew_manager_notes_note_nonblank", sql`nullif(trim(${table.note}), '') is not null`),
   ],
 );
+
+export const eventManagerReviews = pgTable(
+  "event_manager_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    rating: integer("rating").notNull(),
+    feedback: text("feedback"),
+    organizerSiteNotes: text("organizer_site_notes"),
+    crewNotes: text("crew_notes"),
+    recommendReturn: text("recommend_return"),
+    clientMutationId: uuid("client_mutation_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("event_manager_reviews_booking_created_idx").on(table.bookingId, table.createdAt.desc()),
+    index("event_manager_reviews_leg_created_idx").on(table.legId, table.createdAt.desc()),
+    uniqueIndex("event_manager_reviews_leg_mutation_unique").on(table.legId, table.clientMutationId),
+    check("event_manager_reviews_rating_valid", sql`${table.rating} between 0 and 5`),
+    check("event_manager_reviews_recommend_return_valid", sql`${table.recommendReturn} is null or ${table.recommendReturn} in ('yes','no','unsure')`),
+  ],
+);

@@ -403,6 +403,10 @@ const migrationFiles = [
     name: "038_leg_crew.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.crew_workers') IS NOT NULL AND to_regclass(current_schema() || '.crew_work_history') IS NOT NULL AND to_regclass(current_schema() || '.crew_manager_notes') IS NOT NULL AS ready",
   },
+  {
+  name: "039_event_manager_reviews.sql",
+  markerSql: "SELECT to_regclass(current_schema() || '.event_manager_reviews') IS NOT NULL AS ready",
+},
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
