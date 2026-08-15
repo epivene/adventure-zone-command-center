@@ -93,6 +93,13 @@ export type OrganizationListQuery = {
   search: string;
   lastResort: "all" | "only";
   travelLegId: string | null;
+  placeType: string | null;
+  region: string | null;
+  hasPhone: boolean;
+  hasEmail: boolean;
+  hasFollowUp: boolean;
+  hasBooking: boolean;
+  hasLocations: boolean;
   /** When true, consolidated source profiles are included in results. Defaults to false. */
   includeRetired: boolean;
   page: number;
@@ -673,8 +680,41 @@ export function buildOrganizationListCondition(
   const travelLegCondition = query.travelLegId
     ? sql`exists (select 1 from ${bookings} where ${bookings.organizationId} = ${organizations.id} and ${bookings.travelLegId} = ${query.travelLegId})`
     : undefined;
+  const typeCondition = query.placeType
+    ? sql`${organizations.placeType} = ${query.placeType}`
+    : undefined;
+  const regionCondition = query.region
+    ? sql`lower(${organizations.region}) = lower(${query.region})`
+    : undefined;
+  const phoneCondition = query.hasPhone
+    ? sql`exists (select 1 from ${organizationContacts} oc inner join ${contacts} c on c.id = oc.contact_id where oc.organization_id = ${organizations.id} and oc.active and c.phone is not null and btrim(c.phone) <> '')`
+    : undefined;
+  const emailCondition = query.hasEmail
+    ? sql`exists (select 1 from ${organizationContacts} oc inner join ${contacts} c on c.id = oc.contact_id where oc.organization_id = ${organizations.id} and oc.active and c.email is not null and btrim(c.email) <> '')`
+    : undefined;
+  const followUpCondition = query.hasFollowUp
+    ? sql`exists (select 1 from ${followUps} f where f.organization_id = ${organizations.id} or f.contact_id in (select oc.contact_id from ${organizationContacts} oc where oc.organization_id = ${organizations.id} and oc.active))`
+    : undefined;
+  const bookingCondition = query.hasBooking
+    ? sql`exists (select 1 from ${bookings} b where b.organization_id = ${organizations.id})`
+    : undefined;
+  const locationCondition = query.hasLocations
+    ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`
+    : undefined;
 
-  return and(searchCondition, notRetiredCondition, lastResortCondition, travelLegCondition) ?? undefined;
+  return and(
+    searchCondition,
+    notRetiredCondition,
+    lastResortCondition,
+    travelLegCondition,
+    typeCondition,
+    regionCondition,
+    phoneCondition,
+    emailCondition,
+    followUpCondition,
+    bookingCondition,
+    locationCondition,
+  ) ?? undefined;
 }
 
 export function buildOrganizationListOrderBy(
