@@ -1,0 +1,129 @@
+name: Leg Manager Money Task 5
+on:
+  push:
+    branches: [feature/leg-manager-money]
+
+jobs:
+  task5:
+    if: "!contains(github.event.head_commit.message, '[skip money-task5]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: RED — receipt metadata and blob queue tests
+        run: |
+          cat > artifacts/api-server/src/features/leg-manager/receipt-service.test.ts <<'EOF'
+          import { describe,expect,it } from "vitest";
+          import { createReceiptMetadata,uploadReceiptImage,type ReceiptMetadataStore,type ReceiptObjectStorage } from "./receipt-service";
+          function store():ReceiptMetadataStore & {rows:any[]}{const rows:any[]=[];return {rows,async expenseBelongsToLeg(legId,expenseId){return legId==='leg-a'&&expenseId==='expense-a'},async findByMutation(legId,id){return rows.find(r=>r.legId===legId&&r.clientMutationId===id)??null},async create(input){const row={id:'receipt-a',imageStatus:'image_pending',objectKey:null,...input};rows.push(row);return row},async setImageState(id,state){const row=rows.find(r=>r.id===id);Object.assign(row,state);return row}}}
+          describe('receipt service',()=>{
+            it('keeps metadata when image upload fails',async()=>{const s=store();const created=await createReceiptMetadata(s,{legId:'leg-a',expenseId:'expense-a',clientMutationId:'00000000-0000-4000-8000-000000000001',mimeType:'image/jpeg'});expect(created.ok).toBe(true);const storage:ReceiptObjectStorage={async put(){throw new Error('offline')}};const result=await uploadReceiptImage(s,storage,{legId:'leg-a',receiptId:'receipt-a',mimeType:'image/jpeg',bytes:new Uint8Array([1,2,3])});expect(result.ok).toBe(false);expect(s.rows).toHaveLength(1);expect(s.rows[0].imageStatus).toBe('image_failed');});
+            it('rejects another leg expense',async()=>{const s=store();expect(await createReceiptMetadata(s,{legId:'leg-b',expenseId:'expense-a',clientMutationId:'00000000-0000-4000-8000-000000000002',mimeType:'image/jpeg'})).toEqual({ok:false,error:'OUTSIDE_LEG'});});
+          });
+          EOF
+          cat > artifacts/adventure-zone/src/lib/manager-blob-queue.test.ts <<'EOF'
+          // @vitest-environment jsdom
+          import { describe,expect,it,vi } from 'vitest';
+          import { MemoryManagerBlobStore,queueManagerBlob,flushManagerBlobQueue } from './manager-blob-queue';
+          describe('manager blob queue',()=>{
+            it('keeps failed receipt images for retry',async()=>{const s=new MemoryManagerBlobStore();await queueManagerBlob({id:'r1',legId:'leg-a',receiptId:'r1',blob:new Blob(['x'],{type:'image/jpeg'}),createdAt:'2026-08-15T00:00:00Z'},s);const upload=vi.fn(async()=>{throw new Error('offline')});await flushManagerBlobQueue(upload,s);const rows=await s.list();expect(rows).toHaveLength(1);expect(rows[0].state).toBe('image_failed');});
+            it('purges only the signed-out leg',async()=>{const s=new MemoryManagerBlobStore();await queueManagerBlob({id:'a',legId:'leg-a',receiptId:'a',blob:new Blob(['a']),createdAt:'1'},s);await queueManagerBlob({id:'b',legId:'leg-b',receiptId:'b',blob:new Blob(['b']),createdAt:'2'},s);await s.clearLeg('leg-a');expect((await s.list()).map(r=>r.legId)).toEqual(['leg-b']);});
+          });
+          EOF
+          set +e
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/receipt-service.test.ts >/tmp/r5a 2>&1
+          a=$?
+          pnpm --filter @workspace/adventure-zone exec vitest run src/lib/manager-blob-queue.test.ts >/tmp/r5b 2>&1
+          b=$?
+          set -e
+          cat /tmp/r5a /tmp/r5b
+          test "$a" -ne 0
+          test "$b" -ne 0
+      - name: Add Google Cloud Storage dependency
+        run: pnpm --filter @workspace/api-server add @google-cloud/storage
+      - name: GREEN — receipt service/storage and browser blob queue
+        run: |
+          cat > artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts <<'EOF'
+          import { Storage } from '@google-cloud/storage';
+          export interface LegManagerObjectStorage { put(key:string,bytes:Uint8Array,contentType:string):Promise<void>; }
+          export class GoogleCloudLegManagerObjectStorage implements LegManagerObjectStorage {
+            private readonly storage=new Storage();
+            private readonly bucketName=process.env.LEG_MANAGER_RECEIPT_BUCKET ?? process.env.GOOGLE_CLOUD_STORAGE_BUCKET ?? '';
+            async put(key:string,bytes:Uint8Array,contentType:string){if(!this.bucketName)throw new Error('Receipt object storage bucket is not configured');await this.storage.bucket(this.bucketName).file(key).save(Buffer.from(bytes),{resumable:false,contentType,metadata:{cacheControl:'private, max-age=0, no-store'}});}
+          }
+          EOF
+          cat > artifacts/api-server/src/features/leg-manager/receipt-service.ts <<'EOF'
+          import { and,eq } from 'drizzle-orm';
+          import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
+          import * as schema from '@/db/schema';
+          import { legExpenses,legReceipts } from '@/db/schema';
+          import type { LegManagerObjectStorage } from './leg-manager-object-storage';
+          export type ReceiptObjectStorage=LegManagerObjectStorage;
+          export interface ReceiptMetadataStore {expenseBelongsToLeg(legId:string,expenseId:string):Promise<boolean>;findByMutation(legId:string,id:string):Promise<any|null>;create(input:{legId:string;expenseId:string;clientMutationId:string;mimeType:string|null}):Promise<any>;setImageState(id:string,state:{imageStatus:'image_pending'|'image_uploaded'|'image_failed';objectKey?:string|null;mimeType?:string|null}):Promise<any|null>;getForLeg?(legId:string,receiptId:string):Promise<any|null>;}
+          export async function createReceiptMetadata(store:ReceiptMetadataStore,input:{legId:string;expenseId:string;clientMutationId:string;mimeType:string|null}){const existing=await store.findByMutation(input.legId,input.clientMutationId);if(existing)return {ok:true as const,idempotent:true,receipt:existing};if(!(await store.expenseBelongsToLeg(input.legId,input.expenseId)))return {ok:false as const,error:'OUTSIDE_LEG' as const};return {ok:true as const,idempotent:false,receipt:await store.create(input)};}
+          export async function uploadReceiptImage(store:ReceiptMetadataStore,storage:ReceiptObjectStorage,input:{legId:string;receiptId:string;mimeType:string;bytes:Uint8Array}){if(store.getForLeg&&!(await store.getForLeg(input.legId,input.receiptId)))return {ok:false as const,error:'OUTSIDE_LEG' as const};const key=`leg-receipts/${input.legId}/${input.receiptId}`;try{await storage.put(key,input.bytes,input.mimeType);const receipt=await store.setImageState(input.receiptId,{imageStatus:'image_uploaded',objectKey:key,mimeType:input.mimeType});return {ok:true as const,receipt};}catch(error){await store.setImageState(input.receiptId,{imageStatus:'image_failed',objectKey:null,mimeType:input.mimeType});return {ok:false as const,error:'UPLOAD_FAILED' as const};}}
+          export class DrizzleReceiptMetadataStore implements ReceiptMetadataStore{constructor(private readonly database:NodePgDatabase<typeof schema>){}async expenseBelongsToLeg(legId:string,expenseId:string){return !!(await this.database.select({id:legExpenses.id}).from(legExpenses).where(and(eq(legExpenses.id,expenseId),eq(legExpenses.legId,legId))).limit(1))[0]}async findByMutation(legId:string,id:string){return (await this.database.select().from(legReceipts).where(and(eq(legReceipts.legId,legId),eq(legReceipts.clientMutationId,id))).limit(1))[0]??null}async create(input:any){return (await this.database.insert(legReceipts).values(input).onConflictDoNothing({target:[legReceipts.legId,legReceipts.clientMutationId]}).returning())[0]??await this.findByMutation(input.legId,input.clientMutationId)}async setImageState(id:string,state:any){return (await this.database.update(legReceipts).set({...state,updatedAt:new Date()}).where(eq(legReceipts.id,id)).returning())[0]??null}async getForLeg(legId:string,receiptId:string){return (await this.database.select().from(legReceipts).where(and(eq(legReceipts.id,receiptId),eq(legReceipts.legId,legId))).limit(1))[0]??null}}
+          EOF
+          cat > artifacts/adventure-zone/src/lib/manager-blob-queue.ts <<'EOF'
+          export type ManagerBlobState='image_pending'|'uploading'|'image_uploaded'|'image_failed';
+          export type ManagerBlobRow={id:string;legId:string;receiptId:string;blob:Blob;createdAt:string;state:ManagerBlobState;lastError?:string};
+          export interface ManagerBlobStore{put(row:ManagerBlobRow):Promise<void>;list():Promise<ManagerBlobRow[]>;remove(id:string):Promise<void>;clearLeg(legId:string):Promise<void>}
+          export class MemoryManagerBlobStore implements ManagerBlobStore{rows=new Map<string,ManagerBlobRow>();async put(r:ManagerBlobRow){this.rows.set(r.id,{...r})}async list(){return [...this.rows.values()].sort((a,b)=>a.createdAt.localeCompare(b.createdAt))}async remove(id:string){this.rows.delete(id)}async clearLeg(legId:string){for(const [id,r] of this.rows)if(r.legId===legId)this.rows.delete(id)}}
+          class IndexedDbManagerBlobStore implements ManagerBlobStore{private async db(){return new Promise<IDBDatabase>((resolve,reject)=>{const r=indexedDB.open('adventure-zone-manager-blobs',1);r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('receipt-blobs'))r.result.createObjectStore('receipt-blobs',{keyPath:'id'})};r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error)})}private async tx<T>(mode:IDBTransactionMode,fn:(s:IDBObjectStore)=>IDBRequest<T>){const db=await this.db();return new Promise<T>((resolve,reject)=>{const t=db.transaction('receipt-blobs',mode);const req=fn(t.objectStore('receipt-blobs'));req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);t.oncomplete=()=>db.close()})}async put(r:ManagerBlobRow){await this.tx('readwrite',s=>s.put(r))}async list(){return (await this.tx('readonly',s=>s.getAll())) as ManagerBlobRow[]}async remove(id:string){await this.tx('readwrite',s=>s.delete(id))}async clearLeg(legId:string){for(const r of await this.list())if(r.legId===legId)await this.remove(r.id)}}
+          export const indexedDbManagerBlobStore:ManagerBlobStore=typeof indexedDB==='undefined'?new MemoryManagerBlobStore():new IndexedDbManagerBlobStore();
+          export async function queueManagerBlob(input:Omit<ManagerBlobRow,'state'>,store:ManagerBlobStore=indexedDbManagerBlobStore){const existing=(await store.list()).find(r=>r.id===input.id);if(existing)return existing;const row={...input,state:'image_pending' as const};await store.put(row);return row}
+          export async function flushManagerBlobQueue(upload:(row:ManagerBlobRow)=>Promise<void>,store:ManagerBlobStore=indexedDbManagerBlobStore){for(const row of (await store.list()).filter(r=>r.state!=='image_uploaded')){await store.put({...row,state:'uploading',lastError:undefined});try{await upload(row);await store.put({...row,state:'image_uploaded',lastError:undefined})}catch(error){await store.put({...row,state:'image_failed',lastError:error instanceof Error?error.message:'Upload failed'});break}}return store.list()}
+          export async function clearManagerBlobData(legId:string,store:ManagerBlobStore=indexedDbManagerBlobStore){await store.clearLeg(legId)}
+          EOF
+          cat > artifacts/adventure-zone/src/components/manager/receipt-capture.tsx <<'EOF'
+          import { useState } from 'react';import { useManagerAuth } from '@/lib/manager-auth-context';import { queueManagerBlob,flushManagerBlobQueue } from '@/lib/manager-blob-queue';
+          export function ReceiptCapture({expenseId}:{expenseId:string}){const {manager,managerApi}=useManagerAuth();const [status,setStatus]=useState('');async function select(e:React.ChangeEvent<HTMLInputElement>){const file=e.target.files?.[0];if(!file||!manager)return;const receiptId=crypto.randomUUID();await managerApi('/manager/receipts',{method:'POST',body:JSON.stringify({id:receiptId,expenseId,clientMutationId:receiptId,mimeType:file.type||'image/jpeg'})});await queueManagerBlob({id:receiptId,legId:manager.legId,receiptId,blob:file,createdAt:new Date().toISOString()});setStatus('Receipt saved for upload');if(navigator.onLine){await flushManagerBlobQueue(async row=>{await managerApi(`/manager/receipts/${row.receiptId}/image`,{method:'PUT',headers:{'Content-Type':row.blob.type||'application/octet-stream'},body:row.blob})});setStatus('Receipt synced')}}return <div className="grid gap-2 rounded-xl border bg-white p-4"><label className="font-semibold">Receipt photo<input className="block mt-2" type="file" accept="image/*" capture="environment" onChange={select}/></label>{status?<p role="status" className="text-sm">{status}</p>:null}</div>}
+          EOF
+          cat > artifacts/adventure-zone/src/pages/ManagerReceiptsPage.tsx <<'EOF'
+          import { useEffect,useState } from 'react';import { useManagerAuth } from '@/lib/manager-auth-context';import { ReceiptCapture } from '@/components/manager/receipt-capture';
+          export default function ManagerReceiptsPage(){const {managerApi}=useManagerAuth();const [expenses,setExpenses]=useState<any[]>([]);useEffect(()=>{managerApi<any>('/manager/money/summary').then(s=>setExpenses(s.expenses??[])).catch(()=>setExpenses([]))},[managerApi]);return <div className="grid gap-4"><h1 className="text-2xl font-bold">Receipts</h1><p className="text-sm text-slate-600">Receipt metadata saves separately from the photo, so a failed upload can be retried safely.</p>{expenses.length?expenses.map(e=><section key={e.id} className="grid gap-2"><p className="font-semibold">{e.merchant||e.category} — ${(e.amountCents/100).toFixed(2)}</p><ReceiptCapture expenseId={e.id}/></section>):<p>No expenses yet.</p>}</div>}
+          EOF
+      - name: Patch receipt routes and blob privacy cleanup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager.ts');s=p.read_text()
+          s=s.replace('import { Router,type IRouter } from "express";','import express, { Router,type IRouter } from "express";')
+          if 'receipt-service' not in s:s=s.replace('import { z } from "zod";','import { z } from "zod";\nimport { createReceiptMetadata,DrizzleReceiptMetadataStore,uploadReceiptImage } from "@/features/leg-manager/receipt-service";\nimport { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";')
+          marker='\nconst issueSchema='
+          block='''\nconst receiptStore=new DrizzleReceiptMetadataStore(db);\nconst receiptStorage=new GoogleCloudLegManagerObjectStorage();\nconst receiptMeta=z.object({id:z.string().uuid().optional(),expenseId:z.string().uuid(),clientMutationId:z.string().uuid(),mimeType:z.string().max(120).nullable().optional()});\nrouter.post("/manager/receipts",requireManager,async(req,res):Promise<void>=>{const p=receiptMeta.safeParse(req.body);if(!p.success){res.status(400).json({error:"Invalid receipt"});return;}const result=await createReceiptMetadata(receiptStore,{legId:req.legManager!.legId,expenseId:p.data.expenseId,clientMutationId:p.data.clientMutationId,mimeType:p.data.mimeType??null});if(!result.ok){res.status(403).json({error:"Expense is outside your leg"});return;}res.status(result.idempotent?200:201).json(result.receipt);});\nrouter.put("/manager/receipts/:receiptId/image",requireManager,express.raw({type:"image/*",limit:"12mb"}),async(req,res):Promise<void>=>{const contentType=req.headers["content-type"]??"application/octet-stream";const bytes=req.body instanceof Buffer?new Uint8Array(req.body):new Uint8Array();if(!bytes.length){res.status(400).json({error:"Receipt image is required"});return;}const result=await uploadReceiptImage(receiptStore,receiptStorage,{legId:req.legManager!.legId,receiptId:req.params.receiptId,mimeType:contentType,bytes});if(!result.ok){res.status(result.error==="OUTSIDE_LEG"?403:503).json({error:result.error});return;}res.json(result.receipt);});\n'''
+          if '/manager/receipts' not in s:s=s.replace(marker,block+marker)
+          p.write_text(s)
+          # Add Receipts route under manager and link from Money page.
+          app=Path('artifacts/adventure-zone/src/App.tsx');s=app.read_text()
+          if 'ManagerReceiptsPage' not in s:s=s.replace('import ManagerMoneyPage from "@/pages/ManagerMoneyPage";','import ManagerMoneyPage from "@/pages/ManagerMoneyPage";\nimport ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";')
+          s=s.replace('<Route path="/manager/money"><ManagerMoneyPage /></Route>','<Route path="/manager/receipts"><ManagerReceiptsPage /></Route><Route path="/manager/money"><ManagerMoneyPage /></Route>')
+          app.write_text(s)
+          money=Path('artifacts/adventure-zone/src/pages/ManagerMoneyPage.tsx');s=money.read_text()
+          if '/manager/receipts' not in s:s=s.replace('<SettlementSummary settlement={summary.settlement} />','<SettlementSummary settlement={summary.settlement} />\n      <a className="rounded-xl border bg-white p-3 font-semibold" href="/manager/receipts">Receipt photos →</a>')
+          money.write_text(s)
+          # Purge receipt blobs on sign-out in manager auth context.
+          auth=Path('artifacts/adventure-zone/src/lib/manager-auth-context.tsx');s=auth.read_text()
+          if 'clearManagerBlobData' not in s:s=s.replace('import { clearManagerPrivateData } from "./manager-sync-queue";','import { clearManagerPrivateData } from "./manager-sync-queue";\nimport { clearManagerBlobData } from "./manager-blob-queue";')
+          s=s.replace('void clearManagerPrivateData(current.legId);','void clearManagerPrivateData(current.legId);\n      void clearManagerBlobData(current.legId);')
+          auth.write_text(s)
+          PY
+      - name: Verify Task 5 green
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/receipt-service.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run src/lib/manager-blob-queue.test.ts
+          pnpm --filter @workspace/api-server exec tsc -p tsconfig.manager.json --noEmit
+          pnpm --filter @workspace/adventure-zone typecheck
+      - name: Commit Task 5
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add package.json pnpm-lock.yaml artifacts/api-server/package.json artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts artifacts/api-server/src/features/leg-manager/receipt-service.ts artifacts/api-server/src/features/leg-manager/receipt-service.test.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/adventure-zone/src/lib/manager-blob-queue.ts artifacts/adventure-zone/src/lib/manager-blob-queue.test.ts artifacts/adventure-zone/src/components/manager/receipt-capture.tsx artifacts/adventure-zone/src/pages/ManagerReceiptsPage.tsx artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/pages/ManagerMoneyPage.tsx artifacts/adventure-zone/src/lib/manager-auth-context.tsx
+          git commit -m 'feat: add offline receipt capture [skip money-task1] [skip money-task2] [skip money-task2-retry] [skip money-task3] [skip money-task4] [skip money-task5]'
+          git push
