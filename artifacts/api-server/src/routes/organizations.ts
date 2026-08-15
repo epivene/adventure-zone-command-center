@@ -14,6 +14,7 @@ import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-reposit
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { DrizzleLocationRepository } from "@/features/organization-locations/location-repository";
+import { attachEventFamiliesToOrganizationPage } from "@/features/event-families/event-family-list";
 import locationRoutes from "@/routes/organization-locations";
 import {
   applyConsolidation,
@@ -64,9 +65,12 @@ router.get("/organizations", async (req, res): Promise<void> => {
     page: req.query.page ?? undefined,
   });
   try {
-    const organizations = await orgRepo().listOrganizations(query);
-    const travelLegs = await new DrizzleTravelLegRepository(db).listTravelLegs();
-    res.json({ organizations, travelLegs });
+    const organizationPage = await orgRepo().listOrganizations(query);
+    const [{ organizations, families }, travelLegs] = await Promise.all([
+      attachEventFamiliesToOrganizationPage(db, query, organizationPage),
+      new DrizzleTravelLegRepository(db).listTravelLegs(),
+    ]);
+    res.json({ organizations, families, travelLegs });
   } catch (err) {
     req.log.error({ err }, "Failed to list organizations");
     res.status(500).json({ error: "Failed to list organizations" });
@@ -191,7 +195,7 @@ router.post("/organizations/last-resort", async (req, res): Promise<void> => {
   }
 });
 
-//  Consolidation
+// Consolidation
 
 const consolidationPreviewBodySchema = z.object({
   canonicalOrgId: z.string().uuid().nullable().default(null),
