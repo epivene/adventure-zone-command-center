@@ -16,6 +16,7 @@ vi.mock("@/lib/auth-token", () => ({
 import {
   DEFAULT_MAP_STYLE_URL,
   EventMap,
+  installMapOverlaysWhenStyleReady,
   resolveMapStyle,
   viewportMode,
 } from "./event-map";
@@ -58,10 +59,40 @@ afterEach(() => {
 });
 
 describe("route map runtime", () => {
-  it("uses a configured Vite style and a real public fallback", () => {
+  it("uses a configured Vite style and the OpenFreeMap Liberty fallback", () => {
     expect(resolveMapStyle(" https://example.com/style.json ")).toBe("https://example.com/style.json");
     expect(resolveMapStyle(undefined)).toBe(DEFAULT_MAP_STYLE_URL);
-    expect(DEFAULT_MAP_STYLE_URL).toMatch(/^https:\/\//);
+    expect(DEFAULT_MAP_STYLE_URL).toBe("https://tiles.openfreemap.org/styles/liberty");
+  });
+
+  it("installs route overlays when the style is ready without waiting for full map load", () => {
+    const handlers = new Map<string, () => void>();
+    const map = {
+      isStyleLoaded: vi.fn(() => false),
+      on: vi.fn((event: string, handler: () => void) => handlers.set(event, handler)),
+    };
+    const install = vi.fn();
+
+    installMapOverlaysWhenStyleReady(map as never, install);
+
+    expect(map.on).toHaveBeenCalledWith("style.load", install);
+    expect(map.on).not.toHaveBeenCalledWith("load", install);
+    expect(install).not.toHaveBeenCalled();
+
+    handlers.get("style.load")?.();
+    expect(install).toHaveBeenCalledTimes(1);
+  });
+
+  it("installs route overlays immediately when the style is already loaded", () => {
+    const map = {
+      isStyleLoaded: vi.fn(() => true),
+      on: vi.fn(),
+    };
+    const install = vi.fn();
+
+    installMapOverlaysWhenStyleReady(map as never, install);
+
+    expect(install).toHaveBeenCalledTimes(1);
   });
 
   it("centers a single Miles City marker at city zoom", () => {

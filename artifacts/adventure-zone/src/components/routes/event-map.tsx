@@ -26,11 +26,24 @@ import {
 } from "@/features/routes/route-view";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
-export const DEFAULT_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
+export const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
 export function resolveMapStyle(configured?: string) {
   const trimmed = configured?.trim();
   return trimmed || DEFAULT_MAP_STYLE_URL;
+}
+
+type StyleReadyMap = {
+  isStyleLoaded: () => boolean;
+  on: (event: "style.load", handler: () => void) => unknown;
+};
+
+export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
+  if (map.isStyleLoaded()) {
+    install();
+    return;
+  }
+  map.on("style.load", install);
 }
 
 const initialFilters: MapFilters = {
@@ -171,8 +184,13 @@ function MapCanvas({
       };
       fitVisibleRef.current = fitVisibleData;
 
-      map.on("load", () => {
+      const installLayers = () => {
         if (cancelled) return;
+        if (map.getSource("events")) {
+          fitVisibleData();
+          return;
+        }
+
         map.addSource("route-lines", { type: "geojson", data: routeDataRef.current });
         map.addLayer({
           id: "route-lines",
@@ -241,7 +259,9 @@ function MapCanvas({
           },
         });
         fitVisibleData();
-      });
+      };
+
+      installMapOverlaysWhenStyleReady(map as unknown as StyleReadyMap, installLayers);
     });
 
     return () => {
