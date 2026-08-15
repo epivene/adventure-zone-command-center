@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { activityKindValues } from "@/db/schema";
+import { activityKindValues, callDispositionValues } from "@/db/schema";
 
 const activityParentInputSchema = z.object({
   organizationId: z.string().uuid().optional(),
@@ -27,6 +27,7 @@ export const editActivityInputSchema = z.object({
   activityId: z.string().uuid(),
   body: activityText,
   reason: z.string().trim().min(1, "Add a reason for the edit."),
+  callOutcome: z.enum(callDispositionValues).optional(),
 });
 
 export const deleteActivityInputSchema = z.object({

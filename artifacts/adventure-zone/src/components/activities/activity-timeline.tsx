@@ -10,6 +10,8 @@ import type {
   CreateActivityInput,
   EditActivityInput,
 } from "@/features/activities/activity-types";
+import type { PersistedCallDisposition } from "@/features/calls/call-types";
+import { callDispositionValues } from "@/db/schema";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 export type ActivityRevisionResult =
@@ -21,8 +23,7 @@ export type ActivityRevisionResult =
   | { ok: false; error: string };
 
 export type ActivityMutationResult =
-  | { ok: true; activity: ActivityTimelineItem }
-  | { ok: false; error: string };
+  { ok: true; activity: ActivityTimelineItem } | { ok: false; error: string };
 
 export type ActivityTimelinePageResult =
   | { ok: true; items: ActivityTimelineItem[]; nextPage: number | null }
@@ -31,6 +32,7 @@ export type ActivityTimelinePageResult =
 type EditFormState = {
   open: boolean;
   body: string;
+  callOutcome: PersistedCallDisposition;
   reason: string;
   error: string;
   saving: boolean;
@@ -41,6 +43,28 @@ const manualActivityKinds = [
   ["call", "Call"],
   ["follow_up", "Follow-up"],
 ] as const satisfies readonly (readonly [ActivityKind, string])[];
+
+const defaultCallOutcome: PersistedCallDisposition = "no_answer";
+
+function isLinkedCall(activity: ActivityTimelineItem) {
+  return activity.kind === "call" && activity.hasLinkedCallSession;
+}
+
+function formatCallOutcome(outcome: PersistedCallDisposition) {
+  const label = outcome.replaceAll("_", " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function defaultEditForm(activity: ActivityTimelineItem): EditFormState {
+  return {
+    open: false,
+    body: activity.body,
+    callOutcome: activity.callOutcome ?? defaultCallOutcome,
+    reason: "",
+    error: "",
+    saving: false,
+  };
+}
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -62,9 +86,13 @@ export function ActivityTimeline({
 }: {
   activities: ActivityTimelineItem[];
   parent?: ActivityParent;
-  createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
+  createActivity?: (
+    input: CreateActivityInput,
+  ) => Promise<ActivityMutationResult>;
   editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
-  deleteActivity?: (activityId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteActivity?: (
+    activityId: string,
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   loadRevisions: (
     activityId: string,
     page?: number,
@@ -73,11 +101,15 @@ export function ActivityTimeline({
   loadPage?: (page: number) => Promise<ActivityTimelinePageResult>;
 }) {
   const [items, setItems] = useState(activities);
-  const [timelineNextPage, setTimelineNextPage] = useState<number | null>(initialNextPage);
+  const [timelineNextPage, setTimelineNextPage] = useState<number | null>(
+    initialNextPage,
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState("");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [revisions, setRevisions] = useState<Record<string, ActivityRevision[]>>({});
+  const [revisions, setRevisions] = useState<
+    Record<string, ActivityRevision[]>
+  >({});
   const [nextPages, setNextPages] = useState<Record<string, number | null>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -91,13 +123,7 @@ export function ActivityTimeline({
   const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
 
   function editForm(activity: ActivityTimelineItem): EditFormState {
-    return editForms[activity.id] ?? {
-      open: false,
-      body: activity.body,
-      reason: "",
-      error: "",
-      saving: false,
-    };
+    return editForms[activity.id] ?? defaultEditForm(activity);
   }
 
   function updateEditForm(
@@ -107,13 +133,7 @@ export function ActivityTimeline({
     setEditForms((current) => ({
       ...current,
       [activity.id]: {
-        ...{
-          open: false,
-          body: activity.body,
-          reason: "",
-          error: "",
-          saving: false,
-        },
+        ...defaultEditForm(activity),
         ...current[activity.id],
         ...patch,
       },
@@ -194,23 +214,30 @@ export function ActivityTimeline({
     if (form.saving) return;
     updateEditForm(activity, { saving: true, error: "" });
     try {
-      const result = await editActivity({
+      const input: EditActivityInput = {
         activityId: activity.id,
         body: form.body,
         reason: form.reason,
+      };
+      if (isLinkedCall(activity)) {
+        input.callOutcome = form.callOutcome;
+      }
+      const result = await editActivity({
+        ...input,
       });
       if (!result.ok) {
         updateEditForm(activity, { saving: false, error: result.error });
         return;
       }
       setItems((current) =>
-        current.map((item) => (
-          item.id === result.activity.id ? result.activity : item
-        )),
+        current.map((item) =>
+          item.id === result.activity.id ? result.activity : item,
+        ),
       );
       updateEditForm(result.activity, {
         open: false,
         body: result.activity.body,
+        callOutcome: result.activity.callOutcome ?? defaultCallOutcome,
         reason: "",
         error: "",
         saving: false,
@@ -236,13 +263,21 @@ export function ActivityTimeline({
 
   async function removeActivity(activity: ActivityTimelineItem) {
     if (!deleteActivity || deleting[activity.id]) return;
-    if (!window.confirm("Delete this history item? This removes it from the visible timeline.")) return;
+    if (
+      !window.confirm(
+        "Delete this history item? This removes it from the visible timeline.",
+      )
+    )
+      return;
     setDeleting((current) => ({ ...current, [activity.id]: true }));
     setDeleteErrors((current) => ({ ...current, [activity.id]: "" }));
     try {
       const result = await deleteActivity(activity.id);
       if (!result.ok) {
-        setDeleteErrors((current) => ({ ...current, [activity.id]: result.error }));
+        setDeleteErrors((current) => ({
+          ...current,
+          [activity.id]: result.error,
+        }));
         return;
       }
       setItems((current) => current.filter((item) => item.id !== activity.id));
@@ -268,7 +303,10 @@ export function ActivityTimeline({
       }
       setItems((current) => {
         const seen = new Set(current.map((item) => item.id));
-        return [...current, ...result.items.filter((item) => !seen.has(item.id))];
+        return [
+          ...current,
+          ...result.items.filter((item) => !seen.has(item.id)),
+        ];
       });
       setTimelineNextPage(result.nextPage ?? null);
     } catch {
@@ -298,11 +336,15 @@ export function ActivityTimeline({
                 Activity type
                 <select
                   className="rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"
-                  onChange={(event) => setNewKind(event.target.value as ActivityKind)}
+                  onChange={(event) =>
+                    setNewKind(event.target.value as ActivityKind)
+                  }
                   value={newKind}
                 >
                   {manualActivityKinds.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -316,7 +358,9 @@ export function ActivityTimeline({
                 />
               </label>
               {createError ? (
-                <p className="text-sm text-rose-800" role="alert">{createError}</p>
+                <p className="text-sm text-rose-800" role="alert">
+                  {createError}
+                </p>
               ) : null}
               <button
                 className="w-fit rounded-md bg-orange-700 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
@@ -342,6 +386,7 @@ export function ActivityTimeline({
             const activityRevisions = revisions[activity.id] ?? [];
             const nextPage = nextPages[activity.id];
             const form = editForm(activity);
+            const usesCallEditor = isLinkedCall(activity);
             return (
               <li
                 className="rounded-lg border border-slate-200 bg-slate-50 p-3"
@@ -361,6 +406,14 @@ export function ActivityTimeline({
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {activity.body}
                 </p>
+                {usesCallEditor && activity.callOutcome ? (
+                  <p className="mt-2 text-sm text-slate-600">
+                    Call outcome:{" "}
+                    <span className="font-medium text-slate-800">
+                      {formatCallOutcome(activity.callOutcome)}
+                    </span>
+                  </p>
+                ) : null}
 
                 {editActivity ? (
                   <div className="mt-3">
@@ -368,15 +421,25 @@ export function ActivityTimeline({
                       aria-controls={editId}
                       aria-expanded={form.open}
                       className="text-sm font-semibold text-slate-700 underline-offset-2 hover:underline"
-                      onClick={() => updateEditForm(activity, {
-                        open: !form.open,
-                        body: activity.body,
-                        reason: "",
-                        error: "",
-                      })}
+                      onClick={() =>
+                        updateEditForm(activity, {
+                          open: !form.open,
+                          body: activity.body,
+                          callOutcome:
+                            activity.callOutcome ?? defaultCallOutcome,
+                          reason: "",
+                          error: "",
+                        })
+                      }
                       type="button"
                     >
-                      {form.open ? "Cancel edit" : "Edit activity"}
+                      {form.open
+                        ? usesCallEditor
+                          ? "Cancel call edit"
+                          : "Cancel edit"
+                        : usesCallEditor
+                          ? "Edit call"
+                          : "Edit activity"}
                     </button>
                     {form.open ? (
                       <div
@@ -384,37 +447,70 @@ export function ActivityTimeline({
                         id={editId}
                       >
                         <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                          Edited activity text
+                          {usesCallEditor
+                            ? "Edited call note"
+                            : "Edited activity text"}
                           <textarea
                             className="min-h-24 rounded-md border border-slate-300 px-3 py-2 font-normal"
                             maxLength={4000}
-                            onChange={(event) => updateEditForm(activity, {
-                              body: event.target.value,
-                            })}
+                            onChange={(event) =>
+                              updateEditForm(activity, {
+                                body: event.target.value,
+                              })
+                            }
                             value={form.body}
                           />
                         </label>
+                        {usesCallEditor ? (
+                          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                            Call outcome
+                            <select
+                              className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"
+                              onChange={(event) =>
+                                updateEditForm(activity, {
+                                  callOutcome: event.target
+                                    .value as PersistedCallDisposition,
+                                })
+                              }
+                              value={form.callOutcome}
+                            >
+                              {callDispositionValues.map((value) => (
+                                <option key={value} value={value}>
+                                  {formatCallOutcome(value)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
                         <label className="grid gap-1 text-sm font-semibold text-slate-700">
                           Reason for edit
                           <input
                             className="rounded-md border border-slate-300 px-3 py-2 font-normal"
                             maxLength={500}
-                            onChange={(event) => updateEditForm(activity, {
-                              reason: event.target.value,
-                            })}
+                            onChange={(event) =>
+                              updateEditForm(activity, {
+                                reason: event.target.value,
+                              })
+                            }
                             value={form.reason}
                           />
                         </label>
                         {form.error ? (
-                          <p className="text-sm text-rose-800" role="alert">{form.error}</p>
+                          <p className="text-sm text-rose-800" role="alert">
+                            {form.error}
+                          </p>
                         ) : null}
                         <button
-                          className="w-fit rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60"
+                          className="w-full rounded-md bg-slate-800 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-60 sm:w-fit"
                           disabled={form.saving}
                           onClick={() => void submitEdit(activity)}
                           type="button"
                         >
-                          {form.saving ? "Saving…" : "Save activity edit"}
+                          {form.saving
+                            ? "Saving…"
+                            : usesCallEditor
+                              ? "Save call edit"
+                              : "Save activity edit"}
                         </button>
                       </div>
                     ) : null}
@@ -432,7 +528,9 @@ export function ActivityTimeline({
                       {deleting[activity.id] ? "Deleting…" : "Delete activity"}
                     </button>
                     {deleteErrors[activity.id] ? (
-                      <p className="mt-2 text-sm text-rose-700" role="alert">{deleteErrors[activity.id]}</p>
+                      <p className="mt-2 text-sm text-rose-700" role="alert">
+                        {deleteErrors[activity.id]}
+                      </p>
                     ) : null}
                   </div>
                 ) : null}
@@ -455,7 +553,9 @@ export function ActivityTimeline({
                         id={historyId}
                       >
                         {loading[activity.id] ? (
-                          <p className="text-sm text-slate-600">Loading edit history…</p>
+                          <p className="text-sm text-slate-600">
+                            Loading edit history…
+                          </p>
                         ) : null}
                         {errors[activity.id] ? (
                           <p className="text-sm text-rose-800" role="alert">
@@ -466,7 +566,9 @@ export function ActivityTimeline({
                           <ol className="grid gap-3" aria-label="Edit history">
                             {activityRevisions.map((revision) => (
                               <li className="text-sm" key={revision.id}>
-                                <p className="font-semibold text-slate-700">Previous note</p>
+                                <p className="font-semibold text-slate-700">
+                                  Previous note
+                                </p>
                                 <p className="mt-1 whitespace-pre-wrap text-slate-600">
                                   {revision.priorBody}
                                 </p>
@@ -483,7 +585,9 @@ export function ActivityTimeline({
                           <button
                             className="mt-3 text-sm font-semibold text-orange-800 underline-offset-2 hover:underline disabled:opacity-60"
                             disabled={loading[activity.id]}
-                            onClick={() => void loadHistory(activity.id, nextPage)}
+                            onClick={() =>
+                              void loadHistory(activity.id, nextPage)
+                            }
                             type="button"
                           >
                             Load older edits
@@ -509,7 +613,9 @@ export function ActivityTimeline({
             {loadingMore ? "Loading older activity…" : "Load older activity"}
           </button>
           {loadMoreError ? (
-            <p className="mt-2 text-sm text-rose-800" role="alert">{loadMoreError}</p>
+            <p className="mt-2 text-sm text-rose-800" role="alert">
+              {loadMoreError}
+            </p>
           ) : null}
         </div>
       ) : null}

@@ -7,6 +7,7 @@ import {
   activityRevisions,
   bookingContacts,
   bookings,
+  callSessions,
   contacts,
   organizationContacts,
   organizations,
@@ -23,6 +24,7 @@ import type {
   CreateActivityInput,
   EditActivityInput,
 } from "@/features/activities/activity-types";
+import type { PersistedCallDisposition } from "@/features/calls/call-types";
 
 import type { ActivityTimelinePage } from "@/features/activities/activity-types";
 
@@ -52,6 +54,11 @@ export interface ActivityRevisionReader {
 }
 
 type DrizzleDatabase = typeof database;
+type ActivityTimelineProjection = {
+  activity: typeof activities.$inferSelect;
+  revisionCount: number;
+  callSessionDisposition: PersistedCallDisposition | null;
+};
 const REVISION_PAGE_SIZE = 25;
 const TIMELINE_PAGE_SIZE = 25;
 
@@ -65,6 +72,7 @@ export class ActivityParentValidationError extends Error {
 function toTimelineItem(
   activity: typeof activities.$inferSelect,
   revisionCount: number,
+  callOutcome: PersistedCallDisposition | null = null,
 ): ActivityTimelineItem {
   return {
     id: activity.id,
@@ -77,7 +85,38 @@ function toTimelineItem(
     createdAt: activity.createdAt,
     updatedAt: activity.updatedAt,
     revisionCount,
+    callOutcome,
+    hasLinkedCallSession: callOutcome !== null,
   };
+}
+
+function toTimelineItemFromProjection(
+  projection: ActivityTimelineProjection,
+): ActivityTimelineItem {
+  return toTimelineItem(
+    projection.activity,
+    Number(projection.revisionCount),
+    projection.callSessionDisposition ?? null,
+  );
+}
+
+async function loadTimelineItemById(
+  database: DrizzleDatabase,
+  activityId: string,
+): Promise<ActivityTimelineItem | null> {
+  const [record] = await database
+    .select({
+      activity: activities,
+      revisionCount: count(activityRevisions.id),
+      callSessionDisposition: callSessions.disposition,
+    })
+    .from(activities)
+    .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
+    .leftJoin(callSessions, eq(callSessions.noteActivityId, activities.id))
+    .where(and(eq(activities.id, activityId), isNull(activities.deletedAt)))
+    .groupBy(activities.id, callSessions.disposition)
+    .limit(1);
+  return record ? toTimelineItemFromProjection(record) : null;
 }
 
 function toRevision(revision: typeof activityRevisions.$inferSelect): ActivityRevision {
@@ -99,6 +138,13 @@ function activitySnapshot(activity: typeof activities.$inferSelect) {
     kind: activity.kind,
     body: activity.body,
     occurredAt: (activity.occurredAt ?? activity.timelineSortAt).toISOString(),
+  };
+}
+
+function callSessionSnapshot(callSession: typeof callSessions.$inferSelect) {
+  return {
+    noteActivityId: callSession.noteActivityId,
+    disposition: callSession.disposition,
   };
 }
 
@@ -143,19 +189,22 @@ export class DrizzleActivityRepository
     if (!condition) return { items: [], nextPage: null };
 
     const records = await this.database
-      .select({ activity: activities, revisionCount: count(activityRevisions.id) })
+      .select({
+        activity: activities,
+        revisionCount: count(activityRevisions.id),
+        callSessionDisposition: callSessions.disposition,
+      })
       .from(activities)
       .leftJoin(activityRevisions, eq(activityRevisions.activityId, activities.id))
+      .leftJoin(callSessions, eq(callSessions.noteActivityId, activities.id))
       .where(and(condition, isNull(activities.deletedAt)))
-      .groupBy(activities.id)
+      .groupBy(activities.id, callSessions.disposition)
       .orderBy(desc(activities.timelineSortAt), desc(activities.createdAt), desc(activities.id))
       .limit(TIMELINE_PAGE_SIZE + 1)
       .offset((page - 1) * TIMELINE_PAGE_SIZE);
 
     return {
-      items: records.slice(0, TIMELINE_PAGE_SIZE).map(({ activity, revisionCount }) =>
-        toTimelineItem(activity, Number(revisionCount)),
-      ),
+      items: records.slice(0, TIMELINE_PAGE_SIZE).map(toTimelineItemFromProjection),
       nextPage: records.length > TIMELINE_PAGE_SIZE ? page + 1 : null,
     };
   }
@@ -275,6 +324,21 @@ export class DrizzleActivityRepository
         .for("update");
       if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
 
+      const [linkedCallSession] = input.callOutcome
+        ? await transaction
+          .select()
+          .from(callSessions)
+          .where(eq(callSessions.noteActivityId, before.id))
+          .limit(1)
+          .for("update")
+        : [];
+      if (input.callOutcome && !linkedCallSession) {
+        return err({
+          code: "INVALID_ACTIVITY_INPUT",
+          message: "A call outcome can only be edited for a linked call activity.",
+        });
+      }
+
       const now = new Date();
       await transaction.insert(activityRevisions).values({
         activityId: before.id,
@@ -283,6 +347,13 @@ export class DrizzleActivityRepository
         reason: input.reason,
         createdAt: now,
       });
+      const [updatedCallSession] = input.callOutcome && linkedCallSession
+        ? await transaction
+          .update(callSessions)
+          .set({ disposition: input.callOutcome })
+          .where(eq(callSessions.id, linkedCallSession.id))
+          .returning()
+        : [];
       const [updated] = await transaction
         .update(activities)
         .set({ body: input.body, updatedAt: now })
@@ -297,12 +368,22 @@ export class DrizzleActivityRepository
         before: activitySnapshot(before),
         after: activitySnapshot(updated),
       });
+      if (linkedCallSession && updatedCallSession) {
+        await recordAuditEntry(transaction, {
+          entityType: "call_session",
+          entityId: updatedCallSession.id,
+          action: "update",
+          before: callSessionSnapshot(linkedCallSession),
+          after: callSessionSnapshot(updatedCallSession),
+        });
+      }
 
       const [revisionTotal] = await transaction
         .select({ value: count() })
         .from(activityRevisions)
         .where(eq(activityRevisions.activityId, updated.id));
-      return ok(toTimelineItem(updated, revisionTotal?.value ?? 0));
+      const projected = await loadTimelineItemById(transaction as DrizzleDatabase, updated.id);
+      return ok(projected ?? toTimelineItem(updated, revisionTotal?.value ?? 0));
     });
   }
 
