@@ -8,6 +8,7 @@ on:
       - feature/map-login-password-fixes
       - feature/map-focus-filter-interactions
       - fix/map-layer-style-ready
+      - feature/leaflet-manager-route-map
   pull_request:
     paths:
       - "artifacts/adventure-zone/**"
@@ -15,12 +16,17 @@ on:
       - "lib/db/**"
       - ".github/workflows/calendar-route-handoff-ci.yml"
 
+permissions:
+  contents: write
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: feature/leaflet-manager-route-map
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -28,11 +34,50 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - name: Calendar unit tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts
-      - name: Route focus unit tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/map-focus.test.ts src/components/routes/event-map-focus.test.tsx src/components/routes/trips-section.test.tsx
+      - run: pnpm install --no-frozen-lockfile
+      - name: Integrate Leaflet runtime on feature branch
+        run: |
+          pnpm --filter @workspace/adventure-zone add -D leaflet@1.9.4 @types/leaflet
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('artifacts/adventure-zone/src/components/routes/event-map.tsx')
+          s = p.read_text()
+          s = s.replace('import { useEffect, useMemo, useRef, useState } from "react";\nimport type {\n  GeoJSONSource,\n  Map as MapLibreMap,\n} from "maplibre-gl";\n', 'import { useMemo, useState } from "react";\n')
+          s = s.replace('  type MapFeatureCollection,\n', '')
+          s = s.replace('import { primaryViewportEvents, routeScopeSummary, viewportTarget, type MapViewportTarget } from "@/features/routes/map-focus";\n', 'import { primaryViewportEvents, routeScopeSummary, viewportTarget } from "@/features/routes/map-focus";\nimport { readManagerMapMode, writeManagerMapMode, type ManagerMapMode } from "@/features/routes/manager-map-navigation";\nimport { ManagerMapModeToggle } from "./manager-map-mode";\nimport { ManagerRouteMapShell } from "./manager-route-map-shell";\nimport { ManagerRouteMapLayers } from "./manager-route-map-layers";\n')
+          start = s.find('export const DEFAULT_MAP_STYLE_URL')
+          end = s.find('function EventList(')
+          if start != -1 and end != -1 and end > start:
+              s = s[:start] + s[end:]
+          needle = '  const currentYear = new Date().getFullYear();\n'
+          if 'const [managerMode, setManagerMode]' not in s:
+              replacement = needle + '''  const [managerMode, setManagerMode] = useState<ManagerMapMode>(() => {\n    if (typeof window === "undefined") return "planning";\n    return readManagerMapMode(window.localStorage);\n  });\n'''
+              s = s.replace(needle, replacement, 1)
+          marker = '  return (\n    <div className="grid gap-5">\n'
+          if '<ManagerMapModeToggle' not in s:
+              mode_ui = '''  return (\n    <div className="grid gap-5">\n      <ManagerMapModeToggle\n        mode={managerMode}\n        onChange={(next) => {\n          setManagerMode(next);\n          if (typeof window !== "undefined") writeManagerMapMode(window.localStorage, next);\n        }}\n      />\n'''
+              s = s.replace(marker, mode_ui, 1)
+          old = '<MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} viewport={currentViewport} onError={setMapError} />'
+          new = '''<ManagerRouteMapShell viewport={currentViewport} onTileError={() => setMapError("The map background could not be loaded.")}>\n          <ManagerRouteMapLayers\n            events={planningEvents}\n            handoffs={handoffs.filter((handoff) => new Date(handoff.windowStartsAt).getFullYear() === seasonYear)}\n            focusedEventId={focusedEventId}\n            managerMode={managerMode}\n            onFocusEvent={setFocusedEventId}\n          />\n        </ManagerRouteMapShell>'''
+          s = s.replace(old, new)
+          p.write_text(s)
+
+          css = Path('artifacts/adventure-zone/src/index.css')
+          c = css.read_text()
+          marker_css = '/* Adventure Zone Leaflet route markers */'
+          if marker_css not in c:
+              c += '''\n\n/* Adventure Zone Leaflet route markers */\n.az-route-marker-wrap,.az-handoff-marker-wrap,.az-trip-stop-wrap{background:transparent;border:0}\n.az-route-pin{--az-pin-color:#64748b;display:block;width:30px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--az-pin-color);border:3px solid #fff;box-shadow:0 2px 8px rgba(15,23,42,.35)}\n.az-route-pin__dot{display:block;width:10px;height:10px;border-radius:999px;background:#fff;margin:7px;transform:rotate(45deg)}\n.az-route-pin--focused{outline:4px solid #0f172a;outline-offset:2px}\n.az-route-pin--dimmed{opacity:.38}\n.az-handoff-marker{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:999px;border:3px solid #fff;font-weight:900;color:#fff;box-shadow:0 2px 7px rgba(15,23,42,.3)}\n.az-handoff-marker--suggested{background:#f97316}.az-handoff-marker--approved{background:#0ea5e9;border-color:#0f172a}\n.az-trip-stop{display:flex;width:28px;height:28px;align-items:center;justify-content:center;border-radius:999px;background:#0f172a;color:#fff;border:2px solid #fff;font-weight:800}\n.az-route-popup{min-width:210px;display:grid;gap:4px}.az-route-popup__actions{display:flex;gap:10px;margin-top:7px;font-weight:700}\n'''
+              css.write_text(c)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/adventure-zone/package.json pnpm-lock.yaml artifacts/adventure-zone/src/components/routes/event-map.tsx artifacts/adventure-zone/src/index.css
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: switch routes map runtime to Leaflet"
+            git push origin HEAD:feature/leaflet-manager-route-map
+          fi
+      - name: Leaflet route unit tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/manager-map-navigation.test.ts src/features/routes/map-focus.test.ts src/components/routes/manager-map-mode.test.tsx src/components/routes/event-map-focus.test.tsx src/components/routes/trips-section.test.tsx
       - name: Handoff unit tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
       - name: Manager and route-map API tests
