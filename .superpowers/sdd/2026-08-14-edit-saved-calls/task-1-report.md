@@ -42,3 +42,36 @@ GREEN:
 
 - Could not run the real repository dependency-backed Vitest/typecheck environment because the shell could not authenticate a checkout and `pnpm install`/dependency resolution required blocked network approval.
 - The focused test was verified in an offline local harness, not the full repo install.
+
+## Round 1 review fixes
+
+Addressed Important findings from `task-1-review.md`:
+
+1. `edit()` now returns linked call metadata by loading the edited activity through the same projection shape used by timeline list rows. The shared projection maps `callSessions.noteActivityId`/`callSessions.disposition` into `callOutcome` and `hasLinkedCallSession`.
+2. The repository test no longer pre-bakes `callSessionDisposition` into timeline rows. The fake query builder now derives linked disposition from separate call-session fixtures only when the repository performs `leftJoin(callSessions, eq(callSessions.noteActivityId, activities.id))`; removing that join made the linked metadata tests fail locally.
+
+Round 1 RED:
+
+- Command: `pnpm --filter @workspace/api-server exec vitest run src/features/activities/activity-repository.test.ts`
+- Result: failed as expected before the fix: `returns linked call metadata after editing a linked call activity` observed `callOutcome: null` instead of `"left_voicemail"`.
+
+Round 1 mutation check:
+
+- Temporarily removed the call-session joins from the local projection queries.
+- Command: `pnpm --filter @workspace/api-server exec vitest run src/features/activities/activity-repository.test.ts`
+- Result: failed as expected in both linked metadata tests with `callOutcome: null` instead of `"left_voicemail"`.
+
+Round 1 GREEN:
+
+- Command: `pnpm --filter @workspace/api-server exec vitest run src/features/activities/activity-repository.test.ts`
+- Result: passed locally in the same focused offline harness: 3 tests passed.
+
+Round 1 typechecks:
+
+- API typecheck attempted: `pnpm --filter @workspace/api-server run typecheck`; blocked with `tsc: not found`.
+- Web typecheck attempted: `pnpm --filter @workspace/adventure-zone run typecheck`; blocked with `tsc: not found`.
+
+Round 1 connector commits:
+
+- `dc626cdfb47c1e5e921a9f6d68c6fcbc28cfbee8` — preserve linked call metadata after activity edits.
+- `91592d63fb251e3fc13431c4ac34a8d1d66794ea` — verify call-session linkage and edit metadata.
