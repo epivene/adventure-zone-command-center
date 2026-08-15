@@ -8,6 +8,7 @@ import {
 import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
 import { SummaryCards } from "@/components/today/summary-cards";
 import { BookingOperations } from "@/components/today/booking-operations";
+import { RenewalsSection } from "@/components/today/renewals-section";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 function formatDate(value: Date) {
@@ -42,6 +43,13 @@ function coerceFollowUps(items: any[]) {
     lastContactedAt: followUp.lastContactedAt
       ? new Date(followUp.lastContactedAt)
       : null,
+  }));
+}
+
+function coerceRenewals(items: any[]) {
+  return (items ?? []).map((renewal) => ({
+    ...renewal,
+    dueAt: renewal.dueAt ? new Date(renewal.dueAt) : null,
   }));
 }
 
@@ -90,6 +98,7 @@ export default function TodayPage() {
 
   // Coerce date strings back to Date objects
   const followUps = coerceFollowUps(dashboard.followUps ?? []);
+  const renewals = coerceRenewals(dashboard.renewals ?? []);
 
   const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({
     ...e,
@@ -251,6 +260,13 @@ export default function TodayPage() {
           )}
         </section>
       </div>
+
+      <RenewalsSection
+        error={dashboard.renewalError ?? null}
+        prominentCount={dashboard.renewalProminentCount ?? 0}
+        renewals={renewals}
+        total={dashboard.renewalTotal ?? renewals.length}
+      />
     </div>
   );
 }
