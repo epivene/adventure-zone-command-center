@@ -4,6 +4,7 @@ import { logger } from "./lib/logger";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
+import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -28,6 +29,7 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const appliedMigrations = await runActReviewMigrations();
+await ensureEventFamilySchema();
 logger.info(
   {
     appliedMigrations,
