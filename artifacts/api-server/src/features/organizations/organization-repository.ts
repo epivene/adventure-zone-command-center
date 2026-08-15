@@ -22,6 +22,7 @@ import {
   followUps,
   organizationContacts,
   organizationFamilyReviews,
+  eventFamilyMembers,
   organizationLocations,
   organizations,
   travelLegs,
@@ -100,11 +101,17 @@ export type OrganizationListQuery = {
   hasFollowUp: boolean;
   hasBooking: boolean;
   hasLocations: boolean;
+  showMembers: boolean;
   /** When true, consolidated source profiles are included in results. Defaults to false. */
   includeRetired: boolean;
   page: number;
   pageSize: number;
 };
+
+export type ProfileParentContext =
+  | { kind: "event_family"; id: string; name: string }
+  | { kind: "organization_group"; id: string; name: string }
+  | null;
 
 export type MatchedOrganizationLocation = {
   id: string;
@@ -125,6 +132,7 @@ export type OrganizationListRecord = Omit<
   locationCount: number;
   /** Present when the search matched via an organization_locations record rather than the org's top-level fields. */
   matchedLocation: MatchedOrganizationLocation | null;
+  parentContext: ProfileParentContext;
 };
 
 export type OrganizationListPage = {
@@ -616,13 +624,15 @@ export function organizationOwnedRecordCondition(
 
 export function buildOrganizationListCondition(
   query: OrganizationListQuery,
+  options: { includeEventFamilyMembers?: boolean } = {},
 ): SQL | undefined {
   const pattern = `%${query.search}%`;
 
   // Consolidated source profiles are hidden by default.
-  const notRetiredCondition = query.includeRetired
-    ? undefined
-    : isNull(organizations.consolidatedIntoId);
+  const notRetiredCondition =
+    query.includeRetired || query.showMembers || Boolean(query.search)
+      ? undefined
+      : isNull(organizations.consolidatedIntoId);
 
   const searchCondition = query.search
     ? sql`(
@@ -701,6 +711,10 @@ export function buildOrganizationListCondition(
   const locationCondition = query.hasLocations
     ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`
     : undefined;
+  const familyMemberCondition =
+    options.includeEventFamilyMembers || query.showMembers || Boolean(query.search)
+      ? undefined
+      : sql`not exists (select 1 from ${eventFamilyMembers} efm where efm.organization_id = ${organizations.id})`;
 
   return and(
     searchCondition,
@@ -714,6 +728,7 @@ export function buildOrganizationListCondition(
     followUpCondition,
     bookingCondition,
     locationCondition,
+    familyMemberCondition,
   ) ?? undefined;
 }
 
@@ -906,6 +921,11 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     }
 
     const organizationIds = organizationRecords.map((organization) => organization.id);
+    const parentIds = [...new Set(organizationRecords.map((organization) => organization.consolidatedIntoId).filter((id): id is string => Boolean(id)))];
+    const parentRows = parentIds.length
+      ? await this.database.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, parentIds))
+      : [];
+    const parentNameById = new Map(parentRows.map((row) => [row.id, row.name]));
     const locationSearchPattern = query.search ? `%${query.search}%` : null;
     const [
       contactCounts,
@@ -1039,6 +1059,9 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         primaryContactName: primaryContactByOrganization.get(organization.id) ?? null,
         locationCount: locationCountByOrganization.get(organization.id) ?? 0,
         matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,
+        parentContext: organization.consolidatedIntoId
+          ? { kind: "organization_group" as const, id: organization.consolidatedIntoId, name: parentNameById.get(organization.consolidatedIntoId) ?? "Parent profile" }
+          : null,
       })),
       total,
       page,

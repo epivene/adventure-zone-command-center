@@ -30,7 +30,7 @@ export async function attachEventFamiliesToOrganizationPage(
   };
   families: EventFamilyListRecord[];
 }> {
-  const condition = buildOrganizationListCondition(query);
+  const condition = buildOrganizationListCondition(query, { includeEventFamilyMembers: true });
 
   const matchedFamilies = await db
     .select({
@@ -68,21 +68,29 @@ export async function attachEventFamiliesToOrganizationPage(
         .select({
           organizationId: eventFamilyMembers.organizationId,
           familyId: eventFamilyMembers.familyId,
+          familyName: eventFamilies.name,
         })
         .from(eventFamilyMembers)
+        .innerJoin(eventFamilies, eq(eventFamilies.id, eventFamilyMembers.familyId))
         .where(inArray(eventFamilyMembers.organizationId, pageOrganizationIds))
     : [];
   const familyByOrganization = new Map(
-    pageMemberships.map((membership) => [membership.organizationId, membership.familyId]),
+    pageMemberships.map((membership) => [membership.organizationId, membership]),
   );
 
   return {
     organizations: {
       ...page,
-      records: page.records.map((record) => ({
-        ...record,
-        eventFamilyId: familyByOrganization.get(record.id) ?? null,
-      })),
+      records: page.records.map((record) => {
+        const membership = familyByOrganization.get(record.id);
+        return {
+          ...record,
+          eventFamilyId: membership?.familyId ?? null,
+          parentContext: record.parentContext ?? (membership
+            ? { kind: "event_family" as const, id: membership.familyId, name: membership.familyName }
+            : null),
+        };
+      }),
     },
     families: matchedFamilies.map((family) => ({
       ...family,
