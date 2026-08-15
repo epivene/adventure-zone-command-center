@@ -6,6 +6,7 @@ import { db } from "@workspace/db";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
+import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -34,6 +35,7 @@ if (Number.isNaN(port) || port <= 0) {
 await ensureBookingProbabilitySchema();
 const appliedMigrations = await runActReviewMigrations();
 await ensureEventFamilySchema();
+await ensureActivityDeleteSchema();
 logger.info(
   {
     appliedMigrations,
