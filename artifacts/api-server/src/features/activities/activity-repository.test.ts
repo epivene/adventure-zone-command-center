@@ -279,6 +279,117 @@ function row(id: string, occurredAt: Date | null, timelineSortAt: Date): Timelin
   };
 }
 
+function activityRow(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  const base = new Date("2026-08-01T12:00:00.000Z");
+  return {
+    id: "40000000-0000-4000-8000-000000000001",
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    contactId: null,
+    bookingId: null,
+    kind: "call",
+    body: "Call note",
+    subject: null,
+    status: null,
+    occurredAt: base,
+    timelineSortAt: base,
+    sourceRecordId: null,
+    sourceVersionId: null,
+    sourceType: null,
+    actRecordId: null,
+    dateIsImportFallback: false,
+    endsAt: null,
+    deletedAt: null,
+    createdAt: base,
+    updatedAt: base,
+    ...overrides,
+  };
+}
+
+function databaseForDeletion(activity: Record<string, unknown>) {
+  const deletedTables: unknown[] = [];
+  const callSessionPatches: Array<Record<string, unknown>> = [];
+
+  const transaction = {
+    select() {
+      return {
+        from() { return this; },
+        where() { return this; },
+        limit() { return this; },
+        for() { return Promise.resolve([activity]); },
+      };
+    },
+    update(table: unknown) {
+      return {
+        set(patch: Record<string, unknown>) {
+          return {
+            where() {
+              if (table === callSessions) callSessionPatches.push(patch);
+              return Promise.resolve([]);
+            },
+          };
+        },
+      };
+    },
+    delete(table: unknown) {
+      return {
+        where() {
+          deletedTables.push(table);
+          return Promise.resolve([]);
+        },
+      };
+    },
+    insert() {
+      return { values() { return Promise.resolve([]); } };
+    },
+  };
+
+  return {
+    transaction(callback: (tx: typeof transaction) => unknown) {
+      return callback(transaction);
+    },
+    state: {
+      get deletedTables() { return deletedTables; },
+      get callSessionPatches() { return callSessionPatches; },
+    },
+  };
+}
+
+describe("DrizzleActivityRepository delete", () => {
+  it("clears the call session note_activity_id FK and deletes activity + revisions without removing the call session", async () => {
+    const activity = activityRow();
+    const database = databaseForDeletion(activity);
+    const repository = new DrizzleActivityRepository(database as never);
+
+    const result = await repository.delete(activity.id as string);
+
+    expect(result).toEqual({ ok: true, value: undefined });
+    // The noteActivityId FK is nulled so the FK constraint cannot fire
+    expect(database.state.callSessionPatches).toContainEqual(
+      expect.objectContaining({ noteActivityId: null }),
+    );
+    // Revisions and the activity itself are deleted
+    expect(database.state.deletedTables).toContain(activityRevisions);
+    expect(database.state.deletedTables).toContain(activities);
+    // The call session row is preserved (not deleted)
+    expect(database.state.deletedTables).not.toContain(callSessions);
+  });
+
+  it("rejects deleting an Act!-imported activity and leaves nothing modified", async () => {
+    const imported = activityRow({ sourceRecordId: "act-external-id-001" });
+    const database = databaseForDeletion(imported);
+    const repository = new DrizzleActivityRepository(database as never);
+
+    const result = await repository.delete(imported.id as string);
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "INVALID_ACTIVITY_INPUT" }),
+    });
+    expect(database.state.deletedTables).toHaveLength(0);
+    expect(database.state.callSessionPatches).toHaveLength(0);
+  });
+});
+
 describe("DrizzleActivityRepository timeline ordering", () => {
   it("keeps a newer dated call visible beyond ten undated imported activities", async () => {
     const imported = Array.from({ length: 11 }, (_, index) =>

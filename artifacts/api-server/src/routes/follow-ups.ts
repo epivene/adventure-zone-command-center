@@ -45,8 +45,10 @@ export function createFollowUpsRouter(
       }
       res.json({ ok: true, followUp: result.value });
     } catch (error) {
-      req.log.error({ error }, "Failed to update follow-up");
-      res.status(500).json({ ok: false, error: "Could not update follow-up." });
+      try { req.log?.error({ error }, "Failed to update follow-up"); } catch {}
+      if (!res.headersSent) {
+        res.status(500).json({ ok: false, error: "Could not update follow-up." });
+      }
     }
   });
 
@@ -63,8 +65,10 @@ export function createFollowUpsRouter(
       }
       res.json({ ok: true });
     } catch (error) {
-      req.log.error({ error }, "Failed to delete follow-up");
-      res.status(500).json({ ok: false, error: "Could not delete follow-up." });
+      try { req.log?.error({ error }, "Failed to delete follow-up"); } catch {}
+      if (!res.headersSent) {
+        res.status(500).json({ ok: false, error: "Could not delete follow-up." });
+      }
     }
   });
 

@@ -8,8 +8,10 @@ import { FollowUpService } from "@/features/follow-ups/follow-up-service";
 import type { FollowUpRepository } from "@/features/follow-ups/follow-up-repository";
 import type {
   EditFollowUpInput,
+  FollowUpError,
   FollowUpRecord,
 } from "@/features/follow-ups/follow-up-types";
+import type { Result } from "@/lib/result";
 import { issueToken, requireOwnerMiddleware } from "@/lib/auth";
 import { createFollowUpsRouter } from "./follow-ups";
 
@@ -152,5 +154,40 @@ describe("follow-up owner routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ ok: true });
+  });
+
+  it("returns 404 when the follow-up is not found on DELETE", async () => {
+    const response = await request(testApp())
+      .delete(`/api/follow-ups/${missingFollowUpId}`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body).toEqual({ ok: false, error: "Follow-up not found." });
+  });
+
+  it("returns 500 and does not hang when the service throws unexpectedly on DELETE", async () => {
+    class ThrowingFollowUpRepository implements FollowUpRepository {
+      async edit(_input: EditFollowUpInput): Promise<Result<FollowUpRecord, FollowUpError>> {
+        throw new Error("Unexpected DB error");
+      }
+      async delete(_followUpId: string): Promise<Result<void, FollowUpError>> {
+        throw new Error("Unexpected DB error");
+      }
+    }
+
+    const throwingApp = express();
+    throwingApp.use(express.json());
+    throwingApp.use(
+      "/api/follow-ups",
+      requireOwnerMiddleware,
+      createFollowUpsRouter(new FollowUpService(new ThrowingFollowUpRepository())),
+    );
+
+    const response = await request(throwingApp)
+      .delete(`/api/follow-ups/${followUpId}`)
+      .set("Authorization", `Bearer ${ownerToken()}`);
+
+    expect(response.status).toBe(500);
+    expect(response.body).toMatchObject({ ok: false, error: expect.any(String) });
   });
 });

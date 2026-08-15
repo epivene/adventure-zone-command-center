@@ -1,4 +1,4 @@
-import { apiFetch, apiPatch } from "@/lib/auth-token";
+import { apiDelete, apiFetch, apiPatch } from "@/lib/auth-token";
 import type {
   EditFollowUpInput,
   FollowUpMutationResult,
@@ -39,24 +39,10 @@ export async function editFollowUpAction(
 
 export async function deleteFollowUpAction(
   followUpId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
-    const response = await apiFetch(`/follow-ups/${followUpId}`, {
-      method: "DELETE",
-    });
-    const result = (await response.json()) as
-      | { ok: true }
-      | { ok: false; error?: string };
-    if (!response.ok || !result.ok) {
-      return {
-        ok: false,
-        error:
-          !result.ok && result.error
-            ? result.error
-            : `API ${response.status}`,
-      };
-    }
-    return result;
+    await apiDelete<{ ok: true }>(`/follow-ups/${followUpId}`);
+    return { ok: true };
   } catch (error: any) {
     return { ok: false, error: error.message ?? "Could not delete follow-up." };
   }

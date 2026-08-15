@@ -402,6 +402,14 @@ export class DrizzleActivityRepository
           message: "Imported activities cannot be deleted.",
         });
       }
+      // Preserve the call session: clear its reference to this activity so the
+      // foreign-key constraint (call_sessions.note_activity_id → activities.id)
+      // is not violated.  The call session itself—and all its business effects
+      // (booking status, contact, follow-up, DNC state)—is kept intact.
+      await transaction
+        .update(callSessions)
+        .set({ noteActivityId: null })
+        .where(eq(callSessions.noteActivityId, id));
       // Delete revisions first (no cascade from activities → activity_revisions)
       await transaction.delete(activityRevisions).where(eq(activityRevisions.activityId, id));
       // activity_associations cascade automatically via FK onDelete: "cascade"
