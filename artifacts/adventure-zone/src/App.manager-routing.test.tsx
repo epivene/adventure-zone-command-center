@@ -4,7 +4,7 @@ import { Router, Route, Switch } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { describe, expect, it } from "vitest";
 
-import { MANAGER_PROTECTED_PATH } from "./App";
+import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 
 describe("manager protected routing", () => {
   it("keeps manager sub-routes inside the manager router", () => {
