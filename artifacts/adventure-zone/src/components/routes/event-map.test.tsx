@@ -65,21 +65,27 @@ describe("route map runtime", () => {
     expect(DEFAULT_MAP_STYLE_URL).toBe("https://tiles.openfreemap.org/styles/liberty");
   });
 
-  it("installs route overlays when the style is ready without waiting for full map load", () => {
+  it("installs route overlays from MapLibre's documented styledata event", () => {
     const handlers = new Map<string, () => void>();
+    let styleLoaded = false;
     const map = {
-      isStyleLoaded: vi.fn(() => false),
+      isStyleLoaded: vi.fn(() => styleLoaded),
       on: vi.fn((event: string, handler: () => void) => handlers.set(event, handler)),
     };
     const install = vi.fn();
 
     installMapOverlaysWhenStyleReady(map as never, install);
 
-    expect(map.on).toHaveBeenCalledWith("style.load", install);
-    expect(map.on).not.toHaveBeenCalledWith("load", install);
+    expect(map.on).toHaveBeenCalledWith("styledata", expect.any(Function));
+    expect(map.on).not.toHaveBeenCalledWith("style.load", expect.any(Function));
+    expect(map.on).not.toHaveBeenCalledWith("load", expect.any(Function));
     expect(install).not.toHaveBeenCalled();
 
-    handlers.get("style.load")?.();
+    handlers.get("styledata")?.();
+    expect(install).not.toHaveBeenCalled();
+
+    styleLoaded = true;
+    handlers.get("styledata")?.();
     expect(install).toHaveBeenCalledTimes(1);
   });
 
