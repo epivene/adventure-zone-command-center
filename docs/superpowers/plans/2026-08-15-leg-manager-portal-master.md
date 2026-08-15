@@ -1,0 +1,91 @@
+# Leg Manager Portal Implementation Roadmap
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Deliver the Leg Manager Portal in three independently testable releases while keeping the existing Command Center, bookings, calendar, routes, trips, and travel legs as the canonical source of truth.
+
+**Architecture:** The portal is a second role-specific frontend experience inside the existing web app, not a second application or database. Owner/admin routes keep the existing owner bearer-token flow; leg-manager routes use leg-scoped password sessions enforced on the server. Manager-created operational data references existing `travelLegs`, `trips`, `tripStops`, and `bookings` by ID and supports offline queueing with idempotent client mutation IDs.
+
+**Tech Stack:** TypeScript, React, Wouter, Express, Drizzle ORM/PostgreSQL, Vitest, Testing Library, browser IndexedDB/service worker, Node `crypto.scrypt`/HMAC.
+
+## Global Constraints
+
+- One manager per leg; no individual employee accounts.
+- Leg managers may see only their own leg's private operational/financial data.
+- Admin retains a master view across all legs and combined totals.
+- Leg manager access is password-based and does not require Clerk.
+- Passwords are stored as secure hashes, never plaintext.
+- Changing a leg password or using Sign Out All Devices invalidates prior manager sessions.
+- The official booking/calendar/route schedule is read-only to leg managers.
+- Schedule changes are reported through a dedicated issue workflow.
+- Mobile-first and usable with unreliable connectivity.
+- Offline writes are queued and never silently discarded.
+- Conflicting edits are surfaced instead of silently overwritten.
+- Travel legs are dynamic and effectively unlimited; nine is not a product limit.
+- Legs are archived/restored rather than removed from normal history.
+- Archived manager access stops immediately.
+- Existing bookings/calendar/routes/trips remain the canonical records; do not duplicate scheduled events into portal-owned tables.
+- Seasons/trips are derived from schedule/route dates and remain admin-overridable.
+- Payroll is out of scope.
+- Real Square API and mandatory receipt OCR are out of scope for the initial portal delivery.
+
+---
+
+## Delivery order
+
+### Release 1 — Portal Foundation
+
+Plan: `docs/superpowers/plans/2026-08-15-leg-manager-portal-foundation.md`
+
+Produces a usable leg-only portal with unlimited/archiveable legs, leg passwords, server-enforced scope, route/calendar read-only data, schedule issue reporting, and the offline queue/sync foundation.
+
+**Exit gate:** A manager can sign in on a phone, see only their leg's current trip/events, report a schedule issue offline, reconnect, sync it once, and the admin can see/resolve it. Archiving the leg or resetting access prevents the old token from continuing to use the portal.
+
+### Release 2 — Money, Receipts, Mileage, and Settlement
+
+Plan: `docs/superpowers/plans/2026-08-15-leg-manager-portal-money.md`
+
+Adds event/place income, manual Square totals, expenses, payment methods, receipt photos, cash flow, owner/manager settlement, mileage, RV park, food, and maintenance data. All records are leg-scoped, can attach to a trip/segment/event, and use the Release 1 offline mutation pipeline.
+
+**Exit gate:** A manager can record income and expenses offline, attach a receipt, classify payment source, record cash turned in, and see a mathematically explainable settlement balance and trip/segment totals after sync. Admin can inspect the same ledger across all legs.
+
+### Release 3 — Crew, Event Reviews, and Incidents
+
+Plan: `docs/superpowers/plans/2026-08-15-leg-manager-portal-crew-aftermath.md`
+
+Adds the shared seasonal-worker directory, location-based crew lookup, work history, rehire warning status, post-event review tasks, 0–5 star ratings, and incident records/attachments.
+
+**Exit gate:** A manager can find prior workers near an upcoming event, add a local worker, record a completed event review and incident offline, and see that history appear on the admin side without gaining access to another leg's private finances.
+
+---
+
+## Dependency rules
+
+Release 2 depends on the leg-manager auth, authorization helper, portal shell, sync queue, and idempotent mutation conventions from Release 1. Release 3 depends on the same foundation but is otherwise independent of Release 2's accounting math; it may start only after Release 1 is merged and stable.
+
+Do not begin the real Square API integration or receipt OCR while these releases are under active construction. Manual Square fields and receipt images must use stable schemas so later integrations can populate existing records rather than force a migration/rewrite.
+
+## Integration strategy
+
+Each release gets its own feature branch, focused tests, production builds, PR, and merge. Do not stack all three releases into one PR. The owner/admin experience must remain deployable after each release.
+
+Recommended branches:
+
+- `feature/leg-manager-foundation`
+- `feature/leg-manager-money`
+- `feature/leg-manager-crew-aftermath`
+
+Before Release 1 implementation starts, merge or rebase onto the latest `main`, including the Today post-event follow-up fix if PR #100 has landed.
+
+## Final acceptance checklist
+
+The portal is considered initially complete only when all three release exit gates pass and these cross-release invariants hold:
+
+- No hard-coded 1–9 leg limit remains in schema, API, service, or UI.
+- Archived legs are hidden by default and visible through a deliberate View Archived control.
+- Leg-manager tokens cannot fetch another leg's private records even with hand-edited URLs or payloads.
+- Official schedule data cannot be changed through manager endpoints.
+- Offline queued mutations are idempotent and duplicate-free after retries.
+- Financial summaries are derived from ledger rows, not editable summary fields.
+- Event reviews and crew histories preserve individual entries over time instead of overwriting one global score/note.
+- Admin can inspect every leg and combined totals while leg managers stay scoped.
