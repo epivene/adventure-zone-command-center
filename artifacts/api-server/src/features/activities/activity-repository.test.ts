@@ -9,6 +9,7 @@ type TimelineRow = {
     timelineSortAt: Date;
   };
   revisionCount: number;
+  callSessionDisposition?: string | null;
 };
 
 function orderedColumn(expression: unknown) {
@@ -74,6 +75,7 @@ function row(id: string, occurredAt: Date | null, timelineSortAt: Date): Timelin
       sourceType: occurredAt ? null : "history",
       createdAt: timelineSortAt,
       updatedAt: timelineSortAt,
+      deletedAt: null,
     },
     revisionCount: 0,
   };
@@ -104,5 +106,41 @@ describe("DrizzleActivityRepository timeline ordering", () => {
     expect(timeline.items).toHaveLength(12);
     expect(timeline.nextPage).toBeNull();
     expect(timeline.items[0]).toMatchObject({ id: "newer-call" });
+  });
+
+  it("projects linked call disposition metadata without marking unlinked calls as linked", async () => {
+    const linkedCall = {
+      ...row(
+        "linked-call",
+        new Date("2026-08-13T16:00:00.000Z"),
+        new Date("2026-08-13T16:00:00.000Z"),
+      ),
+      callSessionDisposition: "left_voicemail",
+    };
+    const unlinkedCall = row(
+      "unlinked-call",
+      new Date("2026-08-13T15:00:00.000Z"),
+      new Date("2026-08-13T15:00:00.000Z"),
+    );
+    const repository = new DrizzleActivityRepository(
+      databaseWithPostgresNullOrdering([linkedCall, unlinkedCall]) as never,
+    );
+
+    const timeline = await repository.listTimeline({
+      organizationId: "10000000-0000-4000-8000-000000000001",
+    });
+
+    expect(timeline.items).toEqual([
+      expect.objectContaining({
+        id: "linked-call",
+        callOutcome: "left_voicemail",
+        hasLinkedCallSession: true,
+      }),
+      expect.objectContaining({
+        id: "unlinked-call",
+        callOutcome: null,
+        hasLinkedCallSession: false,
+      }),
+    ]);
   });
 });
