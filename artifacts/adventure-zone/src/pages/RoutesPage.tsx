@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
+import type { FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
 import { EquipmentHandoffs, type EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
 import { TravelLegEditor, type LegManagerAccessStatus } from "@/components/routes/travel-leg-editor";
 import { TripsSection } from "@/components/routes/trips-section";
@@ -15,32 +16,60 @@ import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-
 
 type TripFocusDetail = {
   trip: {
+    id: string;
+    name: string;
+    startLabel: string;
     startLatitude: number | null;
     startLongitude: number | null;
+    endLabel: string;
     endLatitude: number | null;
     endLongitude: number | null;
   };
-  stops: Array<{ sortOrder: number; latitude: number | null; longitude: number | null }>;
+  stops: Array<{
+    id: string;
+    sortOrder: number;
+    bookingName: string;
+    city: string;
+    region: string;
+    latitude: number | null;
+    longitude: number | null;
+  }>;
 };
 
-function tripCoordinates(detail: TripFocusDetail): [number, number][] {
-  const points: [number, number][] = [];
+function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
+  const points: FocusedTripMapData["points"] = [];
   if (detail.trip.startLatitude !== null && detail.trip.startLongitude !== null) {
-    points.push([detail.trip.startLongitude, detail.trip.startLatitude]);
+    points.push({
+      id: `start:${detail.trip.id}`,
+      label: detail.trip.startLabel,
+      latitude: detail.trip.startLatitude,
+      longitude: detail.trip.startLongitude,
+    });
   }
   for (const stop of [...detail.stops].sort((a, b) => a.sortOrder - b.sortOrder)) {
-    if (stop.latitude !== null && stop.longitude !== null) points.push([stop.longitude, stop.latitude]);
+    if (stop.latitude === null || stop.longitude === null) continue;
+    points.push({
+      id: stop.id,
+      label: `${stop.bookingName} (${stop.city}, ${stop.region})`,
+      latitude: stop.latitude,
+      longitude: stop.longitude,
+    });
   }
   if (detail.trip.endLatitude !== null && detail.trip.endLongitude !== null) {
-    points.push([detail.trip.endLongitude, detail.trip.endLatitude]);
+    points.push({
+      id: `end:${detail.trip.id}`,
+      label: detail.trip.endLabel,
+      latitude: detail.trip.endLatitude,
+      longitude: detail.trip.endLongitude,
+    });
   }
-  return points;
+  return { id: detail.trip.id, name: detail.trip.name, points };
 }
 
 export default function RoutesPage() {
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
-  const [focusedTripCoordinates, setFocusedTripCoordinates] = useState<[number, number][] | null>(null);
+  const [focusedTrip, setFocusedTrip] = useState<FocusedTripMapData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,8 +149,12 @@ export default function RoutesPage() {
 
   async function handleFocusTrip(tripId: string) {
     const detail = await apiGet<TripFocusDetail>(`/trips/${tripId}`);
-    setFocusedTripCoordinates(tripCoordinates(detail));
+    setFocusedTrip(focusedTripMapData(detail));
   }
+
+  const focusedTripCoordinates = focusedTrip?.points.map(
+    (point) => [point.longitude, point.latitude] as [number, number],
+  ) ?? null;
 
   return <div className="mx-auto grid max-w-7xl gap-6">
     <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header>
@@ -143,7 +176,7 @@ export default function RoutesPage() {
       <div className="grid gap-2 sm:grid-cols-2"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
       <TripsSection travelLegs={data.travelLegs} onFocusTrip={(tripId) => { void handleFocusTrip(tripId); }} />
       <EquipmentHandoffs travelLegs={data.travelLegs} onChange={setHandoffs} />
-      <section aria-labelledby="event-map-title" className="grid gap-4"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Bookings with a leg and usable location participate automatically. Suggested and approved equipment meetups are shown separately from events.</p></div><EventMap events={data.events} travelLegs={data.travelLegs} handoffs={handoffs} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTripCoordinates(null)} /></section>
+      <section aria-labelledby="event-map-title" className="grid gap-4"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Bookings with a leg and usable location participate automatically. Suggested and approved equipment meetups are shown separately from events.</p></div><EventMap events={data.events} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} /></section>
     </> : null}
   </div>;
 }
