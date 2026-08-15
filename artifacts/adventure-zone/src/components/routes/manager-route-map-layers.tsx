@@ -14,6 +14,12 @@ export type FocusedTripMapData = {
   points: Array<{ id: string; label: string; latitude: number; longitude: number }>;
 };
 
+export type PlanningRouteLine = {
+  coordinates: [number, number][];
+  color: string;
+  emphasis: "primary" | "dimmed";
+};
+
 type RenderEvent = MapEvent & { planningEmphasis?: "primary" | "dimmed" };
 
 function escapeHtml(value: string) {
@@ -64,9 +70,43 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
   </div>`;
 }
 
+export function ManagerTripNavigationActions({
+  trip,
+  mode,
+}: {
+  trip: FocusedTripMapData | null;
+  mode: ManagerMapMode;
+}) {
+  if (!trip?.points.length) return null;
+  const firstDestination = trip.points.length > 1 ? trip.points[1]! : trip.points[0]!;
+  const finalDestination = trip.points[trip.points.length - 1]!;
+  const fullRouteWaypoints = trip.points.slice(0, -1).map(
+    (point) => [point.longitude, point.latitude] as [number, number],
+  );
+  const nextUrl = googleDirectionsUrl({ destination: [firstDestination.longitude, firstDestination.latitude] });
+  const fullRouteUrl = googleDirectionsUrl({
+    destination: [finalDestination.longitude, finalDestination.latitude],
+    waypoints: fullRouteWaypoints,
+  });
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+      <div className="mr-auto">
+        <p className="text-sm font-bold text-slate-900">{trip.name}</p>
+        <p className="text-xs text-slate-500">{trip.points.length} mapped route points</p>
+      </div>
+      {mode === "on-road" ? (
+        <a className="button-primary" href={nextUrl} rel="noreferrer" target="_blank">Navigate to next stop</a>
+      ) : null}
+      <a className="button-secondary" href={fullRouteUrl} rel="noreferrer" target="_blank">Open full trip route</a>
+    </div>
+  );
+}
+
 export function ManagerRouteMapLayers({
   events,
   handoffs,
+  routeLines = [],
   focusedEventId,
   managerMode,
   focusedTrip,
@@ -74,6 +114,7 @@ export function ManagerRouteMapLayers({
 }: {
   events: RenderEvent[];
   handoffs: EquipmentHandoffView[];
+  routeLines?: PlanningRouteLine[];
   focusedEventId: string | null;
   managerMode: ManagerMapMode;
   focusedTrip?: FocusedTripMapData | null;
@@ -85,10 +126,21 @@ export function ManagerRouteMapLayers({
     if (!map) return;
     const group = L.layerGroup().addTo(map);
 
+    for (const routeLine of routeLines) {
+      L.polyline(
+        routeLine.coordinates.map(([longitude, latitude]) => [latitude, longitude] as [number, number]),
+        {
+          color: routeLine.color,
+          weight: routeLine.emphasis === "dimmed" ? 2 : 4,
+          opacity: routeLine.emphasis === "dimmed" ? 0.2 : 0.7,
+        },
+      ).addTo(group);
+    }
+
     if (focusedTrip && focusedTrip.points.length > 1) {
       L.polyline(
         focusedTrip.points.map((point) => [point.latitude, point.longitude] as [number, number]),
-        { weight: 5, opacity: 0.8 },
+        { color: "#0f172a", weight: 5, opacity: 0.85 },
       ).addTo(group);
       focusedTrip.points.forEach((point, index) => {
         const icon = L.divIcon({
@@ -124,7 +176,7 @@ export function ManagerRouteMapLayers({
     return () => {
       group.remove();
     };
-  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent]);
+  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, routeLines]);
 
   return null;
 }

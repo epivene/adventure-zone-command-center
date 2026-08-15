@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { MapEvent } from "./map-data";
-import {
-  primaryViewportEvents,
-  routeScopeSummary,
-  viewportTarget,
-} from "./map-focus";
+import { UTAH_DEFAULT_VIEW } from "./manager-map-navigation";
+import { primaryViewportEvents, routeScopeSummary, viewportTarget } from "./map-focus";
 
 const baseEvent = (overrides: Partial<MapEvent>): MapEvent => ({
   id: "event-1",
@@ -33,28 +30,24 @@ describe("primaryViewportEvents", () => {
   it("keeps the focused leg primary while other legs stay context", () => {
     const kristy = baseEvent({ id: "kristy", travelLegId: "leg-kristy" });
     const hulk = baseEvent({ id: "hulk", travelLegId: "leg-hulk", travelLegName: "Hulk", longitude: -108.5, latitude: 45.78 });
-
     expect(primaryViewportEvents([kristy, hulk], "full", "leg-kristy").map((event) => event.id)).toEqual(["kristy"]);
   });
 
   it("uses only confirmed primary events in confirmed mode", () => {
     const confirmed = baseEvent({ id: "confirmed", status: "confirmed", routeBucket: "confirmed" });
     const potential = baseEvent({ id: "potential", status: "possible", routeBucket: "potential", longitude: -108.5, latitude: 45.78 });
-
     expect(primaryViewportEvents([confirmed, potential], "confirmed", null).map((event) => event.id)).toEqual(["confirmed"]);
   });
 
   it("uses only potential primary events in potential mode", () => {
     const confirmed = baseEvent({ id: "confirmed", status: "confirmed", routeBucket: "confirmed" });
     const potential = baseEvent({ id: "potential", status: "possible", routeBucket: "potential", longitude: -108.5, latitude: 45.78 });
-
     expect(primaryViewportEvents([confirmed, potential], "potential", null).map((event) => event.id)).toEqual(["potential"]);
   });
 
   it("uses historical events in history mode", () => {
     const history = baseEvent({ id: "history", status: "completed", routeBucket: "history" });
     const active = baseEvent({ id: "active", status: "confirmed", routeBucket: "confirmed" });
-
     expect(primaryViewportEvents([history, active], "history", null).map((event) => event.id)).toEqual(["history"]);
   });
 });
@@ -78,8 +71,12 @@ describe("viewportTarget", () => {
     });
   });
 
-  it("returns none when no mapped primary events remain", () => {
-    expect(viewportTarget({ primaryEvents: [], explicitEventId: null, tripCoordinates: null })).toEqual({ kind: "none" });
+  it("returns the Utah regional fallback when no mapped primary events remain", () => {
+    expect(viewportTarget({ primaryEvents: [], explicitEventId: null, tripCoordinates: null })).toEqual({
+      kind: "center",
+      center: UTAH_DEFAULT_VIEW.center,
+      zoom: UTAH_DEFAULT_VIEW.zoom,
+    });
   });
 
   it("prioritizes explicit event focus over trip focus", () => {

@@ -1,11 +1,7 @@
 "use client";
 
 import { Link } from "wouter";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type {
-  GeoJSONSource,
-  Map as MapLibreMap,
-} from "maplibre-gl";
+import { useMemo, useState } from "react";
 
 import { apiPost } from "@/lib/auth-token";
 import { MapFiltersPanel } from "@/components/routes/map-filters";
@@ -14,7 +10,6 @@ import {
   filterMapEvents,
   toMapDataset,
   type MapEvent,
-  type MapFeatureCollection,
   type MapFilters,
   type RouteMappingState,
 } from "@/features/routes/map-data";
@@ -25,34 +20,15 @@ import {
   type RouteViewMode,
 } from "@/features/routes/route-view";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
-import { primaryViewportEvents, routeScopeSummary, viewportTarget, type MapViewportTarget } from "@/features/routes/map-focus";
-
-export const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
-
-export function resolveMapStyle(configured?: string) {
-  const trimmed = configured?.trim();
-  return trimmed || DEFAULT_MAP_STYLE_URL;
-}
-
-type StyleReadyMap = {
-  isStyleLoaded: () => boolean;
-  on: (event: "styledata" | "load", handler: () => void) => unknown;
-};
-
-export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
-  if (map.isStyleLoaded()) {
-    install();
-    return;
-  }
-  let installed = false;
-  const installOnce = () => {
-    if (installed || !map.isStyleLoaded()) return;
-    installed = true;
-    install();
-  };
-  map.on("styledata", installOnce);
-  map.on("load", installOnce);
-}
+import { primaryViewportEvents, routeScopeSummary, viewportTarget } from "@/features/routes/map-focus";
+import { readManagerMapMode, writeManagerMapMode, type ManagerMapMode } from "@/features/routes/manager-map-navigation";
+import { ManagerMapModeToggle } from "./manager-map-mode";
+import { ManagerRouteMapShell } from "./manager-route-map-shell";
+import {
+  ManagerRouteMapLayers,
+  ManagerTripNavigationActions,
+  type FocusedTripMapData,
+} from "./manager-route-map-layers";
 
 const initialFilters: MapFilters = {
   statuses: [],
@@ -75,14 +51,10 @@ function eventSeasonYear(event: MapEvent) {
 
 function mappingReason(state?: RouteMappingState) {
   switch (state) {
-    case "needs_mapping_no_results":
-      return "No map result found for this location.";
-    case "needs_mapping_provider_unavailable":
-      return "Map lookup is temporarily unavailable.";
-    case "needs_mapping_missing_location":
-      return "Add a city/state or event address.";
-    default:
-      return "This booking could not be placed on the map yet.";
+    case "needs_mapping_no_results": return "No map result found for this location.";
+    case "needs_mapping_provider_unavailable": return "Map lookup is temporarily unavailable.";
+    case "needs_mapping_missing_location": return "Add a city/state or event address.";
+    default: return "This booking could not be placed on the map yet.";
   }
 }
 
@@ -99,11 +71,7 @@ type RouteLineCollection = {
   features: Array<{
     type: "Feature";
     geometry: { type: "LineString"; coordinates: [number, number][] };
-    properties: {
-      legId: string;
-      color: string;
-      emphasis: "primary" | "dimmed";
-    };
+    properties: { legId: string; color: string; emphasis: "primary" | "dimmed" };
   }>;
 };
 
@@ -113,212 +81,9 @@ type HandoffFeatureCollection = {
     type: "Feature";
     id: string;
     geometry: { type: "Point"; coordinates: [number, number] };
-    properties: {
-      id: string;
-      label: string;
-      status: EquipmentHandoffView["status"];
-      band: EquipmentHandoffView["opportunityBand"];
-    };
+    properties: { id: string; label: string; status: EquipmentHandoffView["status"]; band: EquipmentHandoffView["opportunityBand"] };
   }>;
 };
-
-export function visibleMapCoordinates(
-  geoJson: MapFeatureCollection,
-  handoffs: HandoffFeatureCollection,
-): [number, number][] {
-  return [
-    ...geoJson.features.map((feature) => feature.geometry.coordinates),
-    ...handoffs.features.map((feature) => feature.geometry.coordinates),
-  ];
-}
-
-export function viewportMode(coordinates: [number, number][]) {
-  if (coordinates.length === 0) return { kind: "none" as const };
-  if (coordinates.length === 1) {
-    return { kind: "center" as const, center: coordinates[0]!, zoom: 10 };
-  }
-  return { kind: "bounds" as const, coordinates };
-}
-
-export function applyMapViewport(map: Pick<MapLibreMap, "easeTo" | "fitBounds">, target: MapViewportTarget, Bounds: any) {
-  if (target.kind === "none") return;
-  if (target.kind === "center") {
-    map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });
-    return;
-  }
-  const first = target.coordinates[0];
-  if (!first) return;
-  const bounds = new Bounds(first, first);
-  for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);
-  map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });
-}
-
-function MapCanvas({
-  geoJson,
-  routeLines,
-  handoffs,
-  viewport,
-  onError,
-}: {
-  geoJson: MapFeatureCollection;
-  routeLines: RouteLineCollection;
-  handoffs: HandoffFeatureCollection;
-  viewport: MapViewportTarget;
-  onError?: (message: string) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MapLibreMap | null>(null);
-  const eventDataRef = useRef(geoJson);
-  const routeDataRef = useRef(routeLines);
-  const handoffDataRef = useRef(handoffs);
-  const viewportRef = useRef(viewport);
-  const fitVisibleRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    if (!containerRef.current || !("WebGLRenderingContext" in window)) return;
-    let cancelled = false;
-
-    void import("maplibre-gl").then((maplibregl) => {
-      if (cancelled || !containerRef.current) return;
-
-      const map = new maplibregl.Map({
-        container: containerRef.current,
-        center: [-98.5, 39.5],
-        zoom: 3,
-        style: resolveMapStyle(import.meta.env.VITE_MAP_STYLE_URL),
-      });
-      mapRef.current = map;
-      map.addControl(new maplibregl.NavigationControl(), "top-right");
-      map.on("error", () => {
-        onError?.("The map background could not be loaded.");
-      });
-
-      const fitVisibleData = () => {
-        applyMapViewport(map, viewportRef.current, maplibregl.LngLatBounds);
-      };
-      fitVisibleRef.current = fitVisibleData;
-
-      const installLayers = () => {
-        if (cancelled) return;
-        if (map.getSource("events")) {
-          fitVisibleData();
-          return;
-        }
-
-        map.addSource("route-lines", { type: "geojson", data: routeDataRef.current });
-        map.addLayer({
-          id: "route-lines",
-          type: "line",
-          source: "route-lines",
-          paint: {
-            "line-color": ["coalesce", ["get", "color"], "#64748b"],
-            "line-width": ["case", ["==", ["get", "emphasis"], "dimmed"], 2, 4],
-            "line-opacity": ["case", ["==", ["get", "emphasis"], "dimmed"], 0.18, 0.72],
-          },
-        });
-
-        map.addSource("events", { type: "geojson", data: eventDataRef.current });
-        map.addLayer({
-          id: "non-confirmed-events",
-          type: "circle",
-          source: "events",
-          filter: ["!=", ["get", "status"], "confirmed"],
-          paint: {
-            "circle-color": ["coalesce", ["get", "travelLegColor"], "#64748b"],
-            "circle-opacity": ["case", ["==", ["get", "emphasis"], "dimmed"], 0.2, 0.72],
-            "circle-radius": 7,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 1,
-          },
-        });
-        map.addLayer({
-          id: "confirmed-events",
-          type: "circle",
-          source: "events",
-          filter: ["==", ["get", "status"], "confirmed"],
-          paint: {
-            "circle-color": ["coalesce", ["get", "travelLegColor"], "#64748b"],
-            "circle-opacity": ["case", ["==", ["get", "emphasis"], "dimmed"], 0.22, 1],
-            "circle-radius": ["case", ["==", ["get", "emphasis"], "dimmed"], 7, 9],
-            "circle-stroke-color": "#0f172a",
-            "circle-stroke-width": 2,
-          },
-        });
-
-        map.addSource("handoffs", { type: "geojson", data: handoffDataRef.current });
-        map.addLayer({
-          id: "suggested-handoffs",
-          type: "circle",
-          source: "handoffs",
-          filter: ["!=", ["get", "status"], "approved"],
-          paint: {
-            "circle-color": "#f97316",
-            "circle-radius": 10,
-            "circle-opacity": 0.82,
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 3,
-          },
-        });
-        map.addLayer({
-          id: "approved-handoffs",
-          type: "circle",
-          source: "handoffs",
-          filter: ["==", ["get", "status"], "approved"],
-          paint: {
-            "circle-color": "#0ea5e9",
-            "circle-radius": 11,
-            "circle-opacity": 1,
-            "circle-stroke-color": "#0f172a",
-            "circle-stroke-width": 3,
-          },
-        });
-        fitVisibleData();
-      };
-
-      installMapOverlaysWhenStyleReady(map as unknown as StyleReadyMap, installLayers);
-    });
-
-    return () => {
-      cancelled = true;
-      fitVisibleRef.current = null;
-      mapRef.current?.remove();
-      mapRef.current = null;
-    };
-  }, [onError]);
-
-  useEffect(() => {
-    eventDataRef.current = geoJson;
-    const source = mapRef.current?.getSource("events") as GeoJSONSource | undefined;
-    source?.setData(geoJson);
-    if (source) fitVisibleRef.current?.();
-  }, [geoJson]);
-
-  useEffect(() => {
-    routeDataRef.current = routeLines;
-    const source = mapRef.current?.getSource("route-lines") as GeoJSONSource | undefined;
-    source?.setData(routeLines as any);
-  }, [routeLines]);
-
-  useEffect(() => {
-    handoffDataRef.current = handoffs;
-    const source = mapRef.current?.getSource("handoffs") as GeoJSONSource | undefined;
-    source?.setData(handoffs as any);
-  }, [handoffs]);
-
-  useEffect(() => {
-    viewportRef.current = viewport;
-    fitVisibleRef.current?.();
-  }, [viewport]);
-
-  return (
-    <div
-      aria-label="Event and equipment route map"
-      className="h-[24rem] min-h-80 w-full bg-slate-200 sm:h-[34rem]"
-      ref={containerRef}
-      role="img"
-    />
-  );
-}
 
 function EventList({
   events,
@@ -408,16 +173,22 @@ export function EventMap({
   events,
   travelLegs,
   handoffs = [],
+  focusedTrip = null,
   focusedTripCoordinates = null,
   onClearTripFocus,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
   handoffs?: EquipmentHandoffView[];
+  focusedTrip?: FocusedTripMapData | null;
   focusedTripCoordinates?: [number, number][] | null;
   onClearTripFocus?: () => void;
 }) {
   const currentYear = new Date().getFullYear();
+  const [managerMode, setManagerMode] = useState<ManagerMapMode>(() => {
+    if (typeof window === "undefined") return "planning";
+    return readManagerMapMode(window.localStorage);
+  });
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
   const [mode, setMode] = useState<RouteViewMode>("full");
   const [seasonYear, setSeasonYear] = useState(currentYear);
@@ -629,8 +400,24 @@ export function EventMap({
       })),
   }), [handoffs, seasonYear]);
 
+  const planningRouteLines = useMemo(
+    () => routeLines.features.map((feature) => ({
+      coordinates: feature.geometry.coordinates,
+      color: feature.properties.color,
+      emphasis: feature.properties.emphasis,
+    })),
+    [routeLines.features],
+  );
+
   return (
     <div className="grid gap-5">
+      <ManagerMapModeToggle
+        mode={managerMode}
+        onChange={(next) => {
+          setManagerMode(next);
+          if (typeof window !== "undefined") writeManagerMapMode(window.localStorage, next);
+        }}
+      />
       <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Route view</p>
@@ -682,6 +469,8 @@ export function EventMap({
         </div>
       </div>
 
+      <ManagerTripNavigationActions trip={focusedTrip} mode={managerMode} />
+
       {retryError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{retryError}</p> : null}
       {mapError ? <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{mapError}</p> : null}
 
@@ -702,7 +491,17 @@ export function EventMap({
             <span className="inline-flex items-center gap-1.5 opacity-40"><span className="size-3 rounded-full bg-slate-500" />Context (dimmed)</span>
           </div>
         </div>
-        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} viewport={currentViewport} onError={setMapError} />
+        <ManagerRouteMapShell viewport={currentViewport} onTileError={() => setMapError("The map background could not be loaded.")}>
+          <ManagerRouteMapLayers
+            events={planningEvents}
+            handoffs={handoffs.filter((handoff) => new Date(handoff.windowStartsAt).getFullYear() === seasonYear)}
+            routeLines={planningRouteLines}
+            focusedEventId={focusedEventId}
+            managerMode={managerMode}
+            focusedTrip={focusedTrip}
+            onFocusEvent={setFocusedEventId}
+          />
+        </ManagerRouteMapShell>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
