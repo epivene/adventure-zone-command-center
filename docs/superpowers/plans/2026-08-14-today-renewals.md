@@ -10,14 +10,14 @@
 
 ## Global Constraints
 
-- Classification is deterministic: a booking is renewal work only when status is `renewal_due`, or status is `completed` and it has a future incomplete follow-up.
+- Classification is deterministic: a booking is renewal work only when status is `renewal_due`, or status is `completed` and it has an incomplete follow-up.
 - A past event date alone must never classify an active booking as renewal work.
 - A booking must not appear in both **Needs Follow-up Plan** and **Next Season / Renewals**.
 - Existing follow-up records remain the source of truth; Today classification must not create, delete, reschedule, complete, or otherwise mutate them.
 - **Next Season / Renewals** is visible all year and collapsed by default when no dated renewal is overdue or within 30 days.
 - A dated renewal due within 30 business-calendar days, including today, is prominent; overdue dated renewals are also prominent.
 - A `renewal_due` booking with no incomplete follow-up is shown as **Needs renewal plan**, but that undated item does not trigger automatic expansion.
-- Dated renewal items sort overdue first, then future by due date, then stable booking/follow-up identifiers; undated **Needs renewal plan** items sort after dated items.
+- Dated renewal items sort overdue first, then current/future by due date, then stable booking/follow-up identifiers; undated **Needs renewal plan** items sort after dated items.
 - The 30-day calculation uses the existing `America/Chicago` business-date convention.
 - A renewal-load failure must not prevent the primary Today dashboard sections from rendering when those sections loaded successfully.
 - Tests are written and observed failing before production changes.
@@ -44,15 +44,16 @@
 - Create: `artifacts/api-server/src/features/follow-ups/renewal-query.test.ts`
 
 **Interfaces:**
-- Consumes: `bookings`, `followUps`, `BookingStatus`, `Probability`, and `businessDateKey`.
+- Consumes: `bookings`, `followUps`, `BookingStatus`, `Probability`, `BookingOperationsSummary`, `businessDateKey`, and `businessDayBounds`.
 - Produces: `RenewalAttention = "overdue" | "soon" | "later" | "needs_plan"`.
-- Produces: `RenewalItem` with booking/contact/link context, optional `followUpId`, optional `dueAt`, `attention`, and optional operations field added later.
-- Produces: `classifyRenewalAttention(dueAt, now)`.
-- Produces: `listRenewals(db, now)`.
+- Produces: `RenewalItem`.
+- Produces: `classifyRenewalAttention(dueAt: Date | null, now: Date): RenewalAttention`.
+- Produces: `sortRenewalItems(items: RenewalItem[]): RenewalItem[]`.
+- Produces: `listRenewals(db, now): Promise<RenewalItem[]>`.
 
 - [ ] **Step 1: Write failing pure classification tests**
 
-Create `renewal-query.test.ts` with fixed business-calendar dates. The first tests must establish the exact 30-day boundary and the no-date behavior:
+Create `renewal-query.test.ts` with fixed business-calendar dates. The first tests must establish the exact 30-day boundary and no-date behavior:
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -82,7 +83,7 @@ it("keeps a renewal 31 business-calendar days away quiet", () => {
   ).toBe("later");
 });
 
-it("uses needs_plan only for an undated renewal_due item", () => {
+it("uses needs_plan for an undated renewal item", () => {
   expect(classifyRenewalAttention(null, now)).toBe("needs_plan");
 });
 ```
@@ -144,24 +145,24 @@ export function classifyRenewalAttention(
 }
 ```
 
-`today` counts as `soon` so a renewal due today auto-opens with the other near-term work.
+A renewal due today counts as `soon` so it auto-opens with other near-term work.
 
 - [ ] **Step 4: Add failing repository-level classification tests**
 
-In the same test file, use a small PGlite database with only the columns needed by `bookings` and `follow_ups`. Seed these cases:
+In the same test file, use PGlite with only the booking/follow-up columns needed by the query. Seed these cases:
 
 ```text
-A: active `possible`, old event date, no follow-up                 -> not a renewal
-B: `renewal_due`, future incomplete follow-up                     -> renewal, dated
-C: `renewal_due`, overdue incomplete follow-up                    -> renewal, overdue
-D: `renewal_due`, no incomplete follow-up                         -> renewal, needs_plan
-E: `completed`, future incomplete follow-up                       -> renewal, dated
-F: `completed`, completed follow-up only                          -> not a renewal
-G: `completed`, overdue incomplete follow-up only                  -> not a renewal per approved deterministic rule
-H: `declined`, future follow-up                                    -> not a renewal
+A: active `possible`, old event date, no follow-up        -> not a renewal
+B: `renewal_due`, future incomplete follow-up            -> renewal, dated
+C: `renewal_due`, overdue incomplete follow-up           -> renewal, overdue
+D: `renewal_due`, no incomplete follow-up                -> renewal, needs_plan
+E: `completed`, future incomplete follow-up              -> renewal, dated
+F: `completed`, overdue incomplete follow-up             -> renewal, overdue
+G: `completed`, completed follow-up only                 -> not a renewal
+H: `declined`, future incomplete follow-up               -> not a renewal
 ```
 
-Also snapshot the `follow_ups` rows before and after `listRenewals()` and assert they are byte-for-byte equivalent so classification proves read-only behavior.
+Snapshot the `follow_ups` rows before and after `listRenewals()` and assert equality so the query proves read-only behavior.
 
 - [ ] **Step 5: Run repository tests and verify RED**
 
@@ -175,10 +176,9 @@ Expected: pure tests PASS, repository tests FAIL because `listRenewals` is not i
 
 - [ ] **Step 6: Implement `listRenewals` as read-only queries**
 
-Use two bounded reads rather than loading all completed history. The booking-candidate condition is:
+Select only qualifying bookings. A completed booking qualifies only when it has an incomplete follow-up; event date is deliberately absent from this condition:
 
 ```ts
-const { start: startToday } = businessDayBounds(now);
 const candidateCondition = or(
   eq(bookings.status, "renewal_due"),
   and(
@@ -190,22 +190,19 @@ const candidateCondition = or(
         .where(and(
           eq(followUps.bookingId, bookings.id),
           isNull(followUps.completedAt),
-          gte(followUps.dueAt, startToday),
         )),
     ),
   ),
 );
 ```
 
-Load candidate bookings with only the fields needed by `RenewalItem`. Then load all incomplete follow-ups for those candidate booking IDs ordered by `dueAt`, `id`.
+Load candidate bookings with only the fields needed by `RenewalItem`. Then load incomplete follow-ups for those candidate booking IDs ordered by `dueAt`, `id`.
 
-For each booking:
+For each booking, the earliest incomplete follow-up is the renewal date source. A `renewal_due` booking with no incomplete follow-up remains as an undated needs-plan item:
 
 ```ts
 const open = groupedFollowUps.get(booking.id) ?? [];
-const selected = booking.status === "completed"
-  ? open.find((item) => businessDateKey(item.dueAt) >= businessDateKey(now)) ?? null
-  : open[0] ?? null;
+const selected = open[0] ?? null;
 
 const item: RenewalItem = {
   id: booking.id,
@@ -220,11 +217,11 @@ const item: RenewalItem = {
 };
 ```
 
-Do not update booking status, follow-up completion, or follow-up dates.
+Because completed bookings only enter the candidate set when an incomplete follow-up exists, they cannot become undated needs-plan items.
 
 - [ ] **Step 7: Implement stable renewal ordering**
 
-Use an explicit attention rank only to put overdue first and undated last; otherwise dates control order:
+Use an explicit attention rank only to put overdue first and undated last; current/future dated items are ordered together by date:
 
 ```ts
 const attentionRank: Record<RenewalAttention, number> = {
@@ -246,6 +243,8 @@ export function sortRenewalItems(items: RenewalItem[]) {
   });
 }
 ```
+
+Return `sortRenewalItems(items)` from `listRenewals`.
 
 - [ ] **Step 8: Run focused tests and API typecheck**
 
@@ -275,24 +274,31 @@ git commit -m "feat: classify next-season renewal work"
 
 **Interfaces:**
 - Consumes: `RenewalItem`, `listRenewals` from Task 1.
+- Produces: `currentSeasonPlanStatuses`.
 - Produces: `TodayDashboard.renewals: RenewalItem[]`.
 - Produces: `TodayDashboard.renewalTotal: number`.
 - Produces: `TodayDashboard.renewalProminentCount: number`.
 - Produces: `TodayDashboard.renewalError: string | null`.
-- Extends: `TodayDashboardRepository.listRenewals(now): Promise<RenewalItem[]>`.
+- Extends: `TodayDashboardRepository.listRenewals(now: Date): Promise<RenewalItem[]>`.
 
 - [ ] **Step 1: Write failing Today dashboard orchestration tests**
 
-Create a typed fake repository factory whose default methods return empty/current data. Add these tests:
+Import the future public status list directly:
 
 ```ts
-it("keeps renewal_due out of Needs Follow-up Plan", () => {
-  const conditionStatuses = currentSeasonStatusesForTest();
-  expect(conditionStatuses).not.toContain("renewal_due");
+import {
+  currentSeasonPlanStatuses,
+  getTodayDashboard,
+  type TodayDashboardRepository,
+} from "./today-query";
+
+it("keeps renewal_due out of Needs Follow-up Plan statuses", () => {
+  expect(currentSeasonPlanStatuses).not.toContain("renewal_due");
+  expect(currentSeasonPlanStatuses).toContain("new_lead");
 });
 ```
 
-Also test `getTodayDashboard` with a fake repository that returns one current plan booking and two renewals. Assert:
+Create a fake `TodayDashboardRepository` whose methods return one current plan booking and two renewals. Assert:
 
 ```ts
 expect(result.needsFollowUpPlan.map((item) => item.id)).toEqual(["current-booking"]);
@@ -325,15 +331,7 @@ Expected: FAIL because the dashboard has no renewal fields/repository method yet
 
 - [ ] **Step 3: Make `Needs Follow-up Plan` current-season only**
 
-Change the existing active-status list from:
-
-```ts
-const activeStatuses = bookingStatusValues.filter(
-  (status) => !["declined", "cancelled", "completed"].includes(status),
-);
-```
-
-to:
+Replace the existing `activeStatuses` declaration with:
 
 ```ts
 export const currentSeasonPlanStatuses = bookingStatusValues.filter(
@@ -342,30 +340,28 @@ export const currentSeasonPlanStatuses = bookingStatusValues.filter(
 );
 ```
 
-Use `currentSeasonPlanStatuses` in `needsFollowUpPlanCondition`. This is the hard guarantee that a `renewal_due` booking cannot appear in both sections.
+Use `currentSeasonPlanStatuses` in `needsFollowUpPlanCondition`. This guarantees a `renewal_due` booking cannot appear in both sections.
 
-Do not exclude ordinary active bookings merely because `startsAt` is in the past.
+Do not add any `startsAt` exclusion; a past-dated booking with an active non-renewal status remains current-season work.
 
 - [ ] **Step 4: Extend the Today repository and dashboard types**
 
-Add:
+Add this method to `TodayDashboardRepository`:
 
 ```ts
-export interface TodayDashboardRepository {
-  // existing methods stay unchanged
-  listRenewals(now: Date): Promise<RenewalItem[]>;
-}
-
-export type TodayDashboard = {
-  // existing fields stay unchanged
-  renewals: RenewalItem[];
-  renewalTotal: number;
-  renewalProminentCount: number;
-  renewalError: string | null;
-};
+listRenewals(now: Date): Promise<RenewalItem[]>;
 ```
 
-Wire `createDrizzleTodayDashboardRepository(db).listRenewals` directly to Task 1:
+Add these fields to `TodayDashboard`:
+
+```ts
+renewals: RenewalItem[];
+renewalTotal: number;
+renewalProminentCount: number;
+renewalError: string | null;
+```
+
+Wire `createDrizzleTodayDashboardRepository(db)` to Task 1:
 
 ```ts
 listRenewals(now) {
@@ -375,7 +371,7 @@ listRenewals(now) {
 
 - [ ] **Step 5: Load renewals without letting renewal errors sink Today**
 
-Keep the existing primary queries in the main `Promise.all`, but convert renewal loading into a resolved result object:
+Keep the primary dashboard queries in the main `Promise.all`, but convert renewal loading into a resolved result object:
 
 ```ts
 const renewalPromise = source.listRenewals(now)
@@ -403,7 +399,7 @@ const [counts, followUpResult, nextCallRecord, planResult, upcoming, renewalResu
   ]);
 ```
 
-Set:
+Set these fields on the returned dashboard:
 
 ```ts
 renewals: renewalResult.items,
@@ -414,17 +410,17 @@ renewalProminentCount: renewalResult.items.filter(
 renewalError: renewalResult.error,
 ```
 
-`needs_plan` deliberately does not count as prominent because the approved design says undated items do not auto-open.
+`needs_plan` deliberately does not count as prominent because undated items do not auto-open.
 
 - [ ] **Step 6: Enrich renewals with existing booking operations**
 
-Add renewal IDs to the existing deduplicated `bookingIds` input:
+Add renewal booking IDs to the existing deduplicated `bookingIds` array:
 
 ```ts
 ...dashboard.renewals.map(({ id }) => id),
 ```
 
-Then map operations onto renewals in the return object:
+Then add the renewal mapping to the enrichment return object:
 
 ```ts
 renewals: dashboard.renewals.map((renewal) => ({
@@ -437,7 +433,14 @@ Do not change the meaning of `followUpCount`, `newLeadCount`, or `contractCount`
 
 - [ ] **Step 7: Add the operations-enrichment regression**
 
-In `today-query.test.ts`, provide a batch operations provider returning a known summary for a renewal booking. Assert the renewal receives that summary and that `visibleRouteWarningCount` still includes warnings across the visible dashboard booking set.
+In `today-query.test.ts`, provide a batch operations provider returning a known summary for a renewal booking. Assert:
+
+```ts
+expect(result.renewals[0]?.operations).toEqual(renewalSummary);
+expect(result.visibleRouteWarningCount).toBe(expectedDistinctRouteWarnings);
+```
+
+Use two warnings with the same route-warning ID across visible dashboard items and assert the count remains deduplicated.
 
 - [ ] **Step 8: Run Today tests and API typecheck**
 
@@ -466,8 +469,8 @@ git commit -m "feat: separate renewals on today dashboard"
 - Create: `artifacts/adventure-zone/src/components/today/renewals-section.test.tsx`
 
 **Interfaces:**
-- Consumes: `RenewalItem`-shaped serialized data with `dueAt` already coerced to `Date | null` by TodayPage.
-- Consumes: `eventProfileHref` and `BookingOperations`.
+- Consumes: renewal payloads whose `dueAt` has already been coerced to `Date | null` by TodayPage.
+- Consumes: `eventProfileHref`, `BookingOperations`, `BookingOperationsSummary`, and `BUSINESS_TIME_ZONE`.
 - Produces: `RenewalsSection({ renewals, total, prominentCount, error })`.
 
 - [ ] **Step 1: Write failing component tests**
@@ -484,16 +487,20 @@ vi.mock("wouter", () => ({
     <a href={href} {...props}>{children}</a>
   ),
 }));
+
+afterEach(cleanup);
 ```
 
-Cover these exact behaviors:
+Cover these behaviors:
 
-1. `later` only: button text contains `Next Season / Renewals (1)` and `aria-expanded="false"`.
-2. `soon`: section is initially expanded and shows `1 renewal coming up soon`.
-3. `overdue`: initially expanded and item badge says `Overdue`.
-4. `needs_plan` only: remains initially collapsed; when opened it says `Needs renewal plan`.
-5. manual collapse after initial auto-open remains collapsed after a rerender with the same props.
-6. `error` renders an inline `role="alert"` while the rest of the component remains usable.
+```text
+1. later only     -> header says Next Season / Renewals (1), aria-expanded=false
+2. soon           -> initially expanded, shows 1 renewal coming up soon
+3. overdue        -> initially expanded, item badge says Overdue
+4. needs_plan only-> initially collapsed; after opening says Needs renewal plan
+5. manual collapse after auto-open remains collapsed after rerender with same props
+6. error          -> inline role=alert while header remains usable
+```
 
 - [ ] **Step 2: Run component tests and verify RED**
 
@@ -505,7 +512,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/today/ren
 
 Expected: FAIL because the component does not exist.
 
-- [ ] **Step 3: Implement the public component props and local state**
+- [ ] **Step 3: Implement the component props and one-time initial state**
 
 Use:
 
@@ -530,17 +537,17 @@ type RenewalsSectionProps = {
 };
 ```
 
-Initial expansion must be one-time state initialization, not an effect:
+Initial expansion must be state initialization, not an effect:
 
 ```ts
 const [open, setOpen] = useState(() => prominentCount > 0);
 ```
 
-Do not add an effect that reopens the section when props refresh; that would fight a manual collapse.
+Do not add an effect that reopens the section after a manual collapse.
 
-- [ ] **Step 4: Implement collapsed header and attention copy**
+- [ ] **Step 4: Implement the collapsed header and attention copy**
 
-The header button must always exist, including `total === 0`:
+The header button exists even when `total === 0`:
 
 ```tsx
 <button
@@ -554,15 +561,16 @@ The header button must always exist, including `total === 0`:
 </button>
 ```
 
-When `prominentCount > 0`, render:
+Compute overdue and soon counts from `renewals`. If any dated renewal is overdue, use attention copy such as `2 renewals need attention`; otherwise use `2 renewals coming up soon`. The singular form must read naturally.
 
-```tsx
-<p className="mt-1 text-sm font-semibold text-orange-800">
-  {prominentCount} {prominentCount === 1 ? "renewal" : "renewals"} coming up soon
-</p>
+For item badges use:
+
+```text
+overdue    -> Overdue
+soon       -> Within 30 days
+later      -> no urgency badge
+needs_plan -> Needs renewal plan
 ```
-
-For an overdue item, show `Overdue`; for `soon`, show `Within 30 days`; for `needs_plan`, show `Needs renewal plan`.
 
 - [ ] **Step 5: Implement renewal links and dates**
 
@@ -578,7 +586,7 @@ const href = eventProfileHref({
 }) ?? `/bookings/${item.id}`;
 ```
 
-Format dated renewals with `BUSINESS_TIME_ZONE`. Keep the section compact on mobile: one stacked card per renewal, no horizontal table.
+Format dated renewals with `BUSINESS_TIME_ZONE`. Render one stacked card per renewal rather than a horizontal table so the section remains comfortable on Android/mobile widths.
 
 - [ ] **Step 6: Run component tests and frontend typecheck**
 
@@ -607,7 +615,7 @@ git commit -m "feat: add today renewals section"
 - Create: `artifacts/adventure-zone/src/pages/TodayPage.test.tsx`
 
 **Interfaces:**
-- Consumes: `/today` fields from Task 2.
+- Consumes: `/today` fields `renewals`, `renewalTotal`, `renewalProminentCount`, and `renewalError` from Task 2.
 - Consumes: `RenewalsSection` from Task 3.
 - Produces: Today screen with current-season plan work and next-season work visibly separated.
 
@@ -625,9 +633,9 @@ expect(screen.getByRole("button", {
 expect(screen.queryByText("County Fair Renewal")).not.toBeInTheDocument();
 ```
 
-Click the renewal header and assert `County Fair Renewal` appears while `Current Fair Lead` remains in **Needs Follow-up Plan**.
+Click the renewal header and assert `County Fair Renewal` appears while `Current Fair Lead` remains visible in **Needs Follow-up Plan**.
 
-Add a second test with a `soon` renewal and assert the renewal is visible without clicking.
+Add a second test with a `soon` renewal and assert the renewal item is visible without clicking.
 
 - [ ] **Step 2: Run TodayPage test and verify RED**
 
@@ -671,7 +679,7 @@ Import `RenewalsSection` and place it after the existing **Needs Follow-up Plan 
 />
 ```
 
-Do not change the current SummaryCards counts or the calling queue.
+Do not change SummaryCards counts, the calling queue, Today trips, or upcoming-events behavior.
 
 - [ ] **Step 5: Add the independent renewal-error page regression**
 
@@ -684,7 +692,7 @@ renewalProminentCount: 0,
 renewalError: "Could not load next-season renewals.",
 ```
 
-Assert the Today header and **Needs Follow-up Plan** still render, and the renewal section contains a `role="alert"` with that message.
+Assert the Today heading and **Needs Follow-up Plan** still render, and the renewal section contains a `role="alert"` with that message.
 
 - [ ] **Step 6: Run all focused feature tests**
 
@@ -706,18 +714,22 @@ pnpm run typecheck
 pnpm run build
 ```
 
-Expected: both commands exit 0. The build must not require any new environment variable or database migration because this feature is read-only classification/presentation.
+Expected: both commands exit 0. This feature requires no new environment variable and no database migration because it only reads/classifies existing bookings and follow-ups.
 
-- [ ] **Step 8: Manual behavior check on a local/staging Today page**
+- [ ] **Step 8: Manual behavior check on a local or staging Today page**
 
-Verify these five cases before merging:
+Verify:
 
 ```text
 1. Active current-season booking without future action -> Needs Follow-up Plan only.
 2. renewal_due + far future follow-up                -> Renewals collapsed.
 3. renewal_due + due within 30 days                  -> Renewals initially open.
-4. renewal_due + no incomplete follow-up             -> Renewals item says Needs renewal plan; no auto-open by itself.
-5. completed + future incomplete follow-up            -> Renewals only, never Needs Follow-up Plan.
+4. renewal_due + overdue incomplete follow-up        -> Renewals initially open, Overdue.
+5. renewal_due + no incomplete follow-up             -> Needs renewal plan; no auto-open by itself.
+6. completed + future incomplete follow-up           -> Renewals only.
+7. completed + overdue incomplete follow-up          -> Renewals only, remains prominent.
+8. completed + no incomplete follow-up               -> Not shown in Renewals.
+9. past-dated active non-renewal booking              -> stays current-season; date alone does not move it.
 ```
 
 After manually collapsing a prominent renewal section, interact elsewhere on Today and confirm it stays collapsed for the rest of that page visit.
@@ -741,7 +753,7 @@ pnpm run build
 
 Expected: clean working tree; typecheck and build PASS.
 
-Then open a PR summarizing:
+Open a PR with this summary:
 
 ```text
 - Keeps renewal_due work out of Needs Follow-up Plan.
