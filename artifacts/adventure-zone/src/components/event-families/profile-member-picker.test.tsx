@@ -2,19 +2,19 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.fn();
-vi.mock("@/lib/auth-token", () => ({ apiGet }));
+const mocks = vi.hoisted(() => ({ apiGet: vi.fn() }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet }));
 
 import { ProfileMemberPicker } from "./profile-member-picker";
 
 afterEach(() => {
   cleanup();
-  apiGet.mockReset();
+  mocks.apiGet.mockReset();
 });
 
 describe("ProfileMemberPicker", () => {
   it("searches the full profile dataset with grouped members included", async () => {
-    apiGet.mockResolvedValue({
+    mocks.apiGet.mockResolvedValue({
       organizations: {
         records: [{
           id: "profile-1",
@@ -41,19 +41,19 @@ describe("ProfileMemberPicker", () => {
     const onSelect = vi.fn();
 
     render(<ProfileMemberPicker familyId="family-1" onSelect={onSelect} />);
-    await waitFor(() => expect(apiGet).toHaveBeenCalledWith(expect.stringContaining("showMembers=yes")));
+    await waitFor(() => expect(mocks.apiGet).toHaveBeenCalledWith(expect.stringContaining("showMembers=yes")));
 
     fireEvent.change(screen.getByLabelText("Search all profiles"), { target: { value: "Miles City" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
 
-    await waitFor(() => expect(apiGet).toHaveBeenLastCalledWith(expect.stringContaining("q=Miles+City")));
+    await waitFor(() => expect(mocks.apiGet).toHaveBeenLastCalledWith(expect.stringContaining("q=Miles+City")));
     fireEvent.click(await screen.findByRole("button", { name: /Miles City Celebration/ }));
     fireEvent.click(screen.getByRole("button", { name: "Add existing profile" }));
     expect(onSelect).toHaveBeenCalledWith("profile-1");
   });
 
   it("blocks silent reassignment from another family", async () => {
-    apiGet.mockResolvedValue({
+    mocks.apiGet.mockResolvedValue({
       organizations: {
         records: [{
           id: "profile-2",
