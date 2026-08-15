@@ -4,45 +4,42 @@
 
 **Goal:** Fix the blank route map, make Manager Portal sign-in directly reachable from the signed-out experience, and prevent two manager/leg accounts from sharing the same password.
 
-**Architecture:** Keep the existing route geocoding and manager authentication systems, but repair their integration points. The Vite frontend will own map-style selection and viewport fitting, the public landing page will expose the two authentication paths explicitly, and manager-password uniqueness will be enforced server-side by verifying the candidate password against every other stored manager hash/salt before writing a new hash.
+**Architecture:** Keep the existing route-geocoding and manager-authentication systems. Repair the Vite/MapLibre integration and viewport behavior in the frontend, expose two explicit public authentication paths, and enforce password uniqueness server-side by verifying the candidate plaintext against every other stored manager hash/salt before hashing and saving it.
 
-**Tech Stack:** React + TypeScript, Vite, MapLibre GL, Vitest + Testing Library, Express, Drizzle ORM/PostgreSQL, existing manager scrypt password helpers, GitHub Actions.
+**Tech Stack:** React + TypeScript, Vite, MapLibre GL, Vitest + Testing Library, Express, Drizzle ORM/PostgreSQL, existing scrypt manager-password helpers, GitHub Actions.
 
 ## Global Constraints
 
 - Use `import.meta.env.VITE_MAP_STYLE_URL` for custom map-style configuration.
 - If no custom map style is configured, use a real public MapLibre-compatible basemap rather than the current background-only gray fallback.
-- A style-load failure must be visible in the Routes UI.
-- One visible route marker must center at a useful city-level zoom; multiple visible markers must use `fitBounds` with padding.
+- A map/style load failure must be visible in Routes.
+- One visible marker must center at city-level zoom; multiple visible markers must use `fitBounds` with padding.
 - Signed-out users must see separate **Admin / Command Center** and **Manager Portal** actions.
-- **Admin / Command Center** routes to `/sign-in`; **Manager Portal** routes to `/manager/sign-in`.
-- Manager credentials must be submitted only to `/api/manager/auth/login`, never `/api/auth/login`.
+- Admin routes to `/sign-in`; Manager Portal routes to `/manager/sign-in`.
+- Manager credentials must be sent only to `/api/manager/auth/login`, never `/api/auth/login`.
 - Manager passwords must be unique across all configured manager/leg access records, including archived legs.
-- The current manager/leg is excluded when checking its own password change.
+- Exclude the current manager/leg from its own uniqueness comparison.
 - Passwords remain salted/hashed and must never be stored, logged, audited, or returned in plaintext.
-- Duplicate password conflicts return HTTP `409` with copy equivalent to `That password is already assigned to another manager. Choose a different password.` and must not identify the conflicting manager.
-- Preserve existing manager session-version invalidation, token format/expiry, owner/admin authentication, city/state geocoding, Location needs mapping retry behavior, finance, receipts, trips, handoffs, route filters, and travel-leg IDs.
+- Duplicate password conflicts return HTTP `409` with `That password is already assigned to another manager. Choose a different password.` and must not identify the conflicting manager.
+- Preserve manager session invalidation, token format/expiry, owner auth, city/state geocoding, Location needs mapping retry, finance, receipts, trips, handoffs, route filters, and travel-leg IDs.
 
 ---
 
 ## File Structure
 
-**Map reliability**
-- Modify: `artifacts/adventure-zone/src/components/routes/event-map.tsx` — Vite map-style selection, real fallback style, map error state, marker auto-fit.
-- Modify: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx` — verify configured style, fallback style, one-point centering, multi-point fit, and style-error UI.
-
-**Public authentication choice**
-- Modify: `artifacts/adventure-zone/src/App.tsx` — replace the single signed-out `Sign in` action with Admin / Command Center and Manager Portal choices.
-- Modify: `artifacts/adventure-zone/src/pages/ManagerSignInPage.test.tsx` — preserve manager-sign-in behavior and assert manager endpoint usage through the auth context.
-- Modify: `artifacts/adventure-zone/src/lib/manager-auth-context.test.tsx` if present; otherwise create it — verify `signIn()` posts to `/manager/auth/login` and never the owner endpoint.
-
-**Unique manager passwords**
-- Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts` — expose all configured password hash/salt records, including archived legs, without exposing them to HTTP responses.
-- Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts` — perform uniqueness verification before hashing/writing the new password and return `409` on conflict.
-- Modify: `artifacts/api-server/src/routes/leg-manager-admin.test.ts` — active duplicate, archived duplicate, self-password, distinct-password, and non-disclosure coverage.
-
-**Verification**
-- Modify: `.github/workflows/calendar-route-handoff-ci.yml` — include the new focused tests in the existing feature verification job.
+- Modify: `artifacts/adventure-zone/src/components/routes/event-map.tsx` — real Vite-compatible basemap, map-error state, auto-fit.
+- Modify: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx` — style, error, one-marker and multi-marker tests.
+- Modify: `artifacts/adventure-zone/src/App.tsx` — explicit public Admin and Manager entry points; export `Landing` for focused testing.
+- Create: `artifacts/adventure-zone/src/AppLanding.test.tsx` — exact landing-link coverage.
+- Modify: `artifacts/adventure-zone/src/pages/ManagerSignInPage.test.tsx` — preserve manager sign-in UI behavior.
+- Create: `artifacts/adventure-zone/src/lib/manager-auth-context.test.tsx` — verify manager sign-in endpoint isolation.
+- Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts` — internal list of all configured password hash/salt records, including archived legs.
+- Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts` — uniqueness check before hashing/saving.
+- Modify: `artifacts/api-server/src/routes/leg-manager-admin.test.ts` — duplicate/self/distinct/non-disclosure coverage.
+- Modify: `artifacts/adventure-zone/src/pages/RoutesPage.tsx` — preserve server duplicate-password error text.
+- Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.tsx` — card-local portal error state.
+- Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.test.tsx` — inline conflict coverage.
+- Modify: `.github/workflows/calendar-route-handoff-ci.yml` — run all new focused tests.
 
 ---
 
@@ -53,69 +50,51 @@
 - Modify: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx`
 
 **Interfaces:**
-- Consumes: `import.meta.env.VITE_MAP_STYLE_URL`.
-- Produces: `mapStyle()` or equivalent helper returning the configured style URL or the public fallback style URL.
-- Produces: visible `mapError` UI when MapLibre emits a style/map error.
+- Produces `DEFAULT_MAP_STYLE_URL: string`.
+- Produces `resolveMapStyle(configured?: string): string`.
+- `MapCanvas` reports a visible map load error through `onError`.
 
-- [ ] **Step 1: Add failing style-selection tests**
-
-Extract style choice into a small exported helper so it is deterministic in tests:
+- [ ] **Step 1: Add failing map-style tests**
 
 ```ts
-export const DEFAULT_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
-
-export function resolveMapStyle(configured?: string) {
-  const trimmed = configured?.trim();
-  return trimmed || DEFAULT_MAP_STYLE_URL;
-}
-```
-
-Add tests:
-
-```ts
-it("uses a configured Vite map style", () => {
+it("uses the configured Vite map style", () => {
   expect(resolveMapStyle("https://example.com/style.json"))
     .toBe("https://example.com/style.json");
 });
 
-it("uses a real public basemap when no style is configured", () => {
+it("uses a real fallback basemap", () => {
   expect(resolveMapStyle(undefined)).toBe(DEFAULT_MAP_STYLE_URL);
   expect(DEFAULT_MAP_STYLE_URL).toMatch(/^https:\/\//);
 });
 ```
 
-- [ ] **Step 2: Run the focused map test and verify it fails**
+- [ ] **Step 2: Run and confirm failure**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/event-map.test.tsx
 ```
 
-Expected: FAIL because `resolveMapStyle` and `DEFAULT_MAP_STYLE_URL` do not exist and the component still reads `process.env.NEXT_PUBLIC_MAP_STYLE_URL`.
+Expected: FAIL because those exports do not exist and the component still uses `process.env.NEXT_PUBLIC_MAP_STYLE_URL` plus the gray background-only fallback.
 
-- [ ] **Step 3: Replace the Next.js-style environment access and gray fallback**
-
-Remove the background-only `fallbackStyle`. Add:
+- [ ] **Step 3: Implement Vite-compatible style selection**
 
 ```ts
 export const DEFAULT_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 
 export function resolveMapStyle(configured?: string) {
-  const trimmed = configured?.trim();
-  return trimmed || DEFAULT_MAP_STYLE_URL;
+  return configured?.trim() || DEFAULT_MAP_STYLE_URL;
 }
 ```
 
-Construct MapLibre with:
+Construct the map with:
 
 ```ts
 style: resolveMapStyle(import.meta.env.VITE_MAP_STYLE_URL),
 ```
 
-Do not reference `process.env.NEXT_PUBLIC_MAP_STYLE_URL` anywhere in the Vite frontend.
+- [ ] **Step 4: Add failing error-state coverage**
 
-- [ ] **Step 4: Add failing visible-error coverage**
-
-In the MapLibre test mock, capture registered `error` handlers and trigger one after render. Assert:
+Trigger the MapLibre `error` callback in the mock and assert:
 
 ```tsx
 expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -123,31 +102,15 @@ expect(await screen.findByRole("alert")).toHaveTextContent(
 );
 ```
 
-- [ ] **Step 5: Add map error state**
+- [ ] **Step 5: Implement visible map errors**
 
-Inside `MapCanvas`, accept `onError?: (message: string) => void` and register:
-
-```ts
-map.on("error", () => {
-  onError?.("The map background could not be loaded.");
-});
-```
-
-In `EventMap`, keep:
+Add `onError?: (message: string) => void` to `MapCanvas`, register:
 
 ```ts
-const [mapError, setMapError] = useState<string | null>(null);
+map.on("error", () => onError?.("The map background could not be loaded."));
 ```
 
-Render above the canvas:
-
-```tsx
-{mapError ? (
-  <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">
-    {mapError}
-  </p>
-) : null}
-```
+In `EventMap`, keep `mapError` state and render it above the map with `role="alert"`.
 
 - [ ] **Step 6: Run map tests**
 
@@ -157,7 +120,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/ev
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 1**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add artifacts/adventure-zone/src/components/routes/event-map.tsx artifacts/adventure-zone/src/components/routes/event-map.test.tsx
@@ -173,16 +136,13 @@ git commit -m "fix: load a real route basemap"
 - Modify: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx`
 
 **Interfaces:**
-- Consumes: current visible `geoJson.features` and `handoffs.features`.
-- Produces: `visibleCoordinates(...)` or equivalent pure helper returning `[longitude, latitude][]`.
-- One coordinate calls `map.easeTo({ center, zoom: 10 })` or equivalent city-level zoom.
-- Two or more coordinates call `map.fitBounds(bounds, { padding: 48, maxZoom: 10 })`.
+- Produces `visibleCoordinates(geoJson, handoffs): [number, number][]`.
+- One point → `easeTo({ center, zoom: 10, duration: 0 })`.
+- Multiple points → `fitBounds(..., { padding: 48, maxZoom: 10, duration: 0 })`.
 
 - [ ] **Step 1: Add failing viewport tests**
 
-Mock MapLibre instance methods `easeTo` and `fitBounds`.
-
-Single Miles City marker:
+For Miles City:
 
 ```ts
 expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({
@@ -191,7 +151,7 @@ expect(map.easeTo).toHaveBeenCalledWith(expect.objectContaining({
 }));
 ```
 
-Two markers:
+For two points:
 
 ```ts
 expect(map.fitBounds).toHaveBeenCalledWith(
@@ -200,17 +160,15 @@ expect(map.fitBounds).toHaveBeenCalledWith(
 );
 ```
 
-- [ ] **Step 2: Run and verify failure**
+- [ ] **Step 2: Run and confirm failure**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/event-map.test.tsx
 ```
 
-Expected: FAIL because the map currently stays at the hard-coded continental center/zoom.
+Expected: FAIL because the viewport stays at the hard-coded continental center/zoom.
 
-- [ ] **Step 3: Implement visible-coordinate collection**
-
-Add:
+- [ ] **Step 3: Implement coordinate collection**
 
 ```ts
 function visibleCoordinates(
@@ -224,27 +182,17 @@ function visibleCoordinates(
 }
 ```
 
-- [ ] **Step 4: Fit after map load and data updates**
-
-Add a helper inside `MapCanvas`:
+- [ ] **Step 4: Fit after load and when visible data changes**
 
 ```ts
-function fitVisibleData(map: MapLibreMap) {
-  const coordinates = visibleCoordinates(eventDataRef.current, handoffDataRef.current);
-  if (coordinates.length === 0) return;
-  if (coordinates.length === 1) {
-    map.easeTo({ center: coordinates[0], zoom: 10, duration: 0 });
-    return;
-  }
-  const bounds = coordinates.reduce(
-    (current, coordinate) => current.extend(coordinate),
-    new maplibregl.LngLatBounds(coordinates[0], coordinates[0]),
-  );
+if (coordinates.length === 1) {
+  map.easeTo({ center: coordinates[0], zoom: 10, duration: 0 });
+} else if (coordinates.length > 1) {
   map.fitBounds(bounds, { padding: 48, maxZoom: 10, duration: 0 });
 }
 ```
 
-Call it after sources/layers are added on `load`, and after event/handoff source updates when the map is loaded.
+Use MapLibre `LngLatBounds`; run after layer/source setup and after event/handoff source updates.
 
 - [ ] **Step 5: Run map tests**
 
@@ -254,7 +202,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/ev
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 2**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add artifacts/adventure-zone/src/components/routes/event-map.tsx artifacts/adventure-zone/src/components/routes/event-map.test.tsx
@@ -267,39 +215,66 @@ git commit -m "fix: fit route map to visible markers"
 
 **Files:**
 - Modify: `artifacts/adventure-zone/src/App.tsx`
+- Create: `artifacts/adventure-zone/src/AppLanding.test.tsx`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerSignInPage.test.tsx`
-- Create or modify: `artifacts/adventure-zone/src/lib/manager-auth-context.test.tsx`
+- Create: `artifacts/adventure-zone/src/lib/manager-auth-context.test.tsx`
 
 **Interfaces:**
-- Produces: public landing links/buttons to `/sign-in` and `/manager/sign-in`.
-- Preserves: owner sign-in at `/sign-in`.
-- Preserves: manager sign-in at `/manager/sign-in`.
-- Manager auth context `signIn(legId, password)` posts to `${root}/manager/auth/login`.
+- `Landing` is exported from `App.tsx` for focused testing.
+- Admin link → `/sign-in`.
+- Manager link → `/manager/sign-in`.
+- `ManagerAuthProvider.signIn(legId, password)` → `/api/manager/auth/login` only.
 
-- [ ] **Step 1: Add failing landing-page coverage**
+- [ ] **Step 1: Create the failing landing test**
 
-Add or extend an app routing test so the signed-out landing renders:
+`AppLanding.test.tsx`:
 
 ```tsx
-expect(screen.getByRole("link", { name: "Admin / Command Center" }))
-  .toHaveAttribute("href", "/sign-in");
-expect(screen.getByRole("link", { name: "Manager Portal" }))
-  .toHaveAttribute("href", "/manager/sign-in");
+// @vitest-environment jsdom
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
+import { Router } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
+import { Landing } from "./App";
+
+afterEach(cleanup);
+
+describe("signed-out landing", () => {
+  it("offers separate admin and manager entry points", () => {
+    const { hook } = memoryLocation({ path: "/" });
+    render(<Router hook={hook}><Landing /></Router>);
+    expect(screen.getByRole("link", { name: "Admin / Command Center" }))
+      .toHaveAttribute("href", "/sign-in");
+    expect(screen.getByRole("link", { name: "Manager Portal" }))
+      .toHaveAttribute("href", "/manager/sign-in");
+  });
+});
 ```
 
-If the current test harness renders buttons instead of links, assert navigation to those exact paths after click.
+- [ ] **Step 2: Create the manager endpoint test**
 
-- [ ] **Step 2: Run and verify failure**
+`manager-auth-context.test.tsx` must mock `global.fetch`, render a probe under `ManagerAuthProvider`, call `signIn("leg-kristy", "secret")`, and assert the URL ends in `/api/manager/auth/login`, with no call ending in `/api/auth/login`.
+
+Successful response body:
+
+```ts
+{
+  token: "manager-token",
+  manager: { legId: "leg-kristy", legName: "Kristy", managerName: "Kristy" },
+}
+```
+
+- [ ] **Step 3: Run and confirm failure**
 
 ```bash
-pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerSignInPage.test.tsx src/lib/manager-auth-context.test.tsx
+pnpm --filter @workspace/adventure-zone exec vitest run src/AppLanding.test.tsx src/lib/manager-auth-context.test.tsx src/pages/ManagerSignInPage.test.tsx
 ```
 
-Expected: at least the new landing/auth-path coverage fails because the landing only exposes one generic owner `Sign in` action.
+Expected: landing test FAIL because `Landing` is not exported and only the generic owner sign-in action exists. The manager endpoint test documents the already-correct manager request path.
 
-- [ ] **Step 3: Replace the single landing action with two explicit choices**
+- [ ] **Step 4: Implement the two landing choices**
 
-In `Landing()` render:
+Export `Landing` and replace the single button with:
 
 ```tsx
 <div className="mt-8 grid w-full max-w-sm gap-3">
@@ -312,44 +287,24 @@ In `Landing()` render:
 </div>
 ```
 
-Do not make the manager route depend on owner/admin authentication.
-
-- [ ] **Step 4: Add manager endpoint coverage**
-
-In `manager-auth-context.test.tsx`, mock `global.fetch`, call `signIn("leg-kristy", "secret")`, and assert:
-
-```ts
-expect(fetch).toHaveBeenCalledWith(
-  expect.stringMatching(/\/api\/manager\/auth\/login$/),
-  expect.objectContaining({
-    method: "POST",
-    body: JSON.stringify({ legId: "leg-kristy", password: "secret" }),
-  }),
-);
-expect(fetch).not.toHaveBeenCalledWith(
-  expect.stringMatching(/\/api\/auth\/login$/),
-  expect.anything(),
-);
-```
-
 - [ ] **Step 5: Run sign-in tests**
 
 ```bash
-pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerSignInPage.test.tsx src/lib/manager-auth-context.test.tsx
+pnpm --filter @workspace/adventure-zone exec vitest run src/AppLanding.test.tsx src/lib/manager-auth-context.test.tsx src/pages/ManagerSignInPage.test.tsx
 ```
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 3**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/pages/ManagerSignInPage.test.tsx artifacts/adventure-zone/src/lib/manager-auth-context.test.tsx
+git add artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/AppLanding.test.tsx artifacts/adventure-zone/src/lib/manager-auth-context.test.tsx artifacts/adventure-zone/src/pages/ManagerSignInPage.test.tsx
 git commit -m "fix: separate admin and manager sign in"
 ```
 
 ---
 
-### Task 4: Add Server-Side Manager Password Uniqueness Checking
+### Task 4: Enforce Unique Manager Passwords Server-Side
 
 **Files:**
 - Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts`
@@ -357,8 +312,7 @@ git commit -m "fix: separate admin and manager sign in"
 - Modify: `artifacts/api-server/src/routes/leg-manager-admin.test.ts`
 
 **Interfaces:**
-- Consumes: existing `verifyLegManagerPassword(password, hash, salt)`.
-- Produces repository method:
+- Produces:
 
 ```ts
 listConfiguredPasswordRecords(): Promise<Array<{
@@ -368,19 +322,18 @@ listConfiguredPasswordRecords(): Promise<Array<{
 }>>
 ```
 
-- Produces route behavior: duplicate candidate password on another leg → HTTP `409`.
+- Consumes `verifyLegManagerPassword(password, hash, salt)`.
+- Duplicate on another leg → HTTP `409`.
 
 - [ ] **Step 1: Add failing duplicate-password tests**
 
-Extend `leg-manager-admin.test.ts` mocks with `listConfiguredPasswordRecords` and `verifyLegManagerPassword`.
-
-Active-other-leg conflict:
+Other-leg conflict:
 
 ```ts
 mocks.listConfiguredPasswordRecords.mockResolvedValue([
   { legId: "leg-amy", passwordHash: "hash-amy", passwordSalt: "salt-amy" },
 ]);
-mocks.verifyPassword.mockImplementation(async (_password, hash) => hash === "hash-amy");
+mocks.verifyPassword.mockResolvedValue(true);
 
 const response = await request(app())
   .put("/manager-admin/legs/leg-kristy/access")
@@ -390,33 +343,23 @@ expect(response.status).toBe(409);
 expect(response.body.error).toBe(
   "That password is already assigned to another manager. Choose a different password.",
 );
-expect(response.body).not.toHaveProperty("conflictingLegId");
 expect(mocks.setPassword).not.toHaveBeenCalled();
 ```
 
-Self-match must not conflict:
+Add tests proving:
+- same `legId` is skipped and succeeds;
+- distinct password succeeds when verifier returns false;
+- an archived-leg access record still conflicts because all configured access rows are checked.
 
-```ts
-mocks.listConfiguredPasswordRecords.mockResolvedValue([
-  { legId: "leg-kristy", passwordHash: "hash-self", passwordSalt: "salt-self" },
-]);
-```
-
-Assert HTTP `200` and `setPassword` called.
-
-Distinct password must return `200`.
-
-- [ ] **Step 2: Run and verify failure**
+- [ ] **Step 2: Run and confirm failure**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts
 ```
 
-Expected: FAIL because the route currently hashes/writes immediately without comparing other records.
+Expected: FAIL because the route currently hashes/writes immediately.
 
-- [ ] **Step 3: Add repository method that includes archived legs**
-
-Implement:
+- [ ] **Step 3: Implement repository access to all configured hashes**
 
 ```ts
 async listConfiguredPasswordRecords() {
@@ -430,26 +373,18 @@ async listConfiguredPasswordRecords() {
 }
 ```
 
-Do not join with `travelLegs` using `archivedAt IS NULL`; the uniqueness list must include archived manager access rows.
+Do not filter on active travel legs.
 
-- [ ] **Step 4: Add uniqueness check before hashing/writing**
-
-Import the existing verifier:
+- [ ] **Step 4: Check uniqueness before hashing**
 
 ```ts
-import {
-  hashLegManagerPassword,
-  verifyLegManagerPassword,
-} from "@/features/leg-manager/leg-manager-auth";
-```
-
-Before `hashLegManagerPassword(...)`:
-
-```ts
-const existing = await repo.listConfiguredPasswordRecords();
-for (const record of existing) {
+for (const record of await repo.listConfiguredPasswordRecords()) {
   if (record.legId === req.params.legId) continue;
-  if (await verifyLegManagerPassword(p.data.password, record.passwordHash, record.passwordSalt)) {
+  if (await verifyLegManagerPassword(
+    p.data.password,
+    record.passwordHash,
+    record.passwordSalt,
+  )) {
     res.status(409).json({
       error: "That password is already assigned to another manager. Choose a different password.",
     });
@@ -458,24 +393,19 @@ for (const record of existing) {
 }
 ```
 
-Only after this loop passes should the new password be hashed and saved.
+Then hash and save normally.
 
-- [ ] **Step 5: Add archived-password coverage**
-
-The route test does not need a real archived DB row; the repository mock should return a record for another leg that is not present in active login legs. Assert the same `409`. This proves the route checks all configured records, not just active statuses.
-
-- [ ] **Step 6: Add non-disclosure assertion**
-
-For conflict responses:
+- [ ] **Step 5: Add non-disclosure assertions**
 
 ```ts
-expect(JSON.stringify(response.body)).not.toContain("leg-amy");
-expect(JSON.stringify(response.body)).not.toContain("hash-amy");
-expect(JSON.stringify(response.body)).not.toContain("salt-amy");
-expect(JSON.stringify(response.body)).not.toContain("shared-secret");
+const body = JSON.stringify(response.body);
+expect(body).not.toContain("leg-amy");
+expect(body).not.toContain("hash-amy");
+expect(body).not.toContain("salt-amy");
+expect(body).not.toContain("shared-secret");
 ```
 
-- [ ] **Step 7: Run manager admin tests**
+- [ ] **Step 6: Run tests**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts
@@ -483,7 +413,7 @@ pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit Task 4**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts artifacts/api-server/src/routes/leg-manager-admin.ts artifacts/api-server/src/routes/leg-manager-admin.test.ts
@@ -492,7 +422,7 @@ git commit -m "fix: require unique manager passwords"
 
 ---
 
-### Task 5: Show Duplicate-Password Errors in the Unified Manager/Leg Card
+### Task 5: Show Password Conflicts Inside the Correct Manager/Leg Card
 
 **Files:**
 - Modify: `artifacts/adventure-zone/src/pages/RoutesPage.tsx`
@@ -500,52 +430,36 @@ git commit -m "fix: require unique manager passwords"
 - Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.test.tsx`
 
 **Interfaces:**
-- Consumes: `PUT /manager-admin/legs/:legId/access` returning HTTP `409` and `{ error }`.
-- Produces: per-card portal error message without clearing normal leg fields.
+- Consumes API `409` error text from Task 4.
+- Produces per-leg `portalErrors: Record<string, string>`.
 
-- [ ] **Step 1: Add failing unified-card conflict test**
+- [ ] **Step 1: Add a failing inline-conflict test**
 
 Mock `onSetManagerPassword` to reject with:
 
 ```ts
-Object.assign(
-  new Error("That password is already assigned to another manager. Choose a different password."),
-  { status: 409 },
-)
+new Error("That password is already assigned to another manager. Choose a different password.")
 ```
 
-Enter a password and click Change password. Assert:
+After clicking Change password, assert the exact message appears and `Manager / Leg name` still contains `Kristy`.
 
-```tsx
-expect(await screen.findByText(
-  "That password is already assigned to another manager. Choose a different password."
-)).toBeInTheDocument();
-expect(screen.getByLabelText("Manager / Leg name")).toHaveValue("Kristy");
-```
-
-- [ ] **Step 2: Run and verify failure**
+- [ ] **Step 2: Run and confirm failure**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx
 ```
 
-Expected: FAIL if the component currently collapses security errors into the generic travel-leg error state or loses the card-local context.
-
-- [ ] **Step 3: Add per-leg portal error state**
-
-Use:
+- [ ] **Step 3: Implement card-local portal error state**
 
 ```ts
 const [portalErrors, setPortalErrors] = useState<Record<string, string>>({});
 ```
 
-When changing a password, clear only that leg's portal error. On failure, store `error.message` for that leg. Render the message inside the matching manager portal subsection.
+Clear only the current leg's portal error before a password write. On rejection, store the thrown message and render it in that leg's Manager portal subsection. Do not clear normal leg fields or other legs' state.
 
-Do not clear leg name, color, base address, vehicle, MPG, resources, or other legs' passwords/errors.
+- [ ] **Step 4: Preserve API error text in `RoutesPage`**
 
-- [ ] **Step 4: Ensure `RoutesPage` preserves API error text**
-
-`handleSetManagerPassword` must throw the API helper's returned error rather than replacing it with a generic message. If `apiPut` already throws the server `error` body, no additional transformation is needed.
+`handleSetManagerPassword` must let the API helper's server error propagate; do not replace a `409` with generic copy.
 
 - [ ] **Step 5: Run editor tests**
 
@@ -555,7 +469,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/tr
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit Task 5**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add artifacts/adventure-zone/src/pages/RoutesPage.tsx artifacts/adventure-zone/src/components/routes/travel-leg-editor.tsx artifacts/adventure-zone/src/components/routes/travel-leg-editor.test.tsx
@@ -564,31 +478,31 @@ git commit -m "fix: show manager password conflicts inline"
 
 ---
 
-### Task 6: Focused Regression Verification and Delivery
+### Task 6: Regression Verification and Delivery
 
 **Files:**
 - Modify: `.github/workflows/calendar-route-handoff-ci.yml`
-- No other planned production changes unless verification exposes a regression caused by Tasks 1–5.
 
 **Interfaces:**
-- Consumes all prior tasks.
+- Consumes Tasks 1–5.
 - Produces a merge-ready PR against current `main`.
 
-- [ ] **Step 1: Add the new tests to CI**
+- [ ] **Step 1: Add focused tests to CI**
 
-Keep the existing calendar, handoff, manager/route-map, frontend build, API build, and workspace typecheck steps. Expand the focused frontend test step to include:
+Frontend focused step:
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run \
   src/components/routes/travel-leg-editor.test.tsx \
   src/components/routes/event-map.test.tsx \
+  src/AppLanding.test.tsx \
   src/pages/ManagerSignInPage.test.tsx \
   src/lib/manager-auth-context.test.tsx
 ```
 
-Keep `src/routes/leg-manager-admin.test.ts` in the API focused test step.
+Keep `src/routes/leg-manager-admin.test.ts` in the API focused step.
 
-- [ ] **Step 2: Run all feature-focused tests**
+- [ ] **Step 2: Run focused regression tests**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run \
@@ -601,6 +515,7 @@ pnpm --filter @workspace/api-server exec vitest run \
 pnpm --filter @workspace/adventure-zone exec vitest run \
   src/components/routes/travel-leg-editor.test.tsx \
   src/components/routes/event-map.test.tsx \
+  src/AppLanding.test.tsx \
   src/pages/ManagerSignInPage.test.tsx \
   src/lib/manager-auth-context.test.tsx \
   src/features/calendar/month-spans.test.ts
@@ -608,7 +523,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run \
 
 Expected: PASS.
 
-- [ ] **Step 3: Build both production apps**
+- [ ] **Step 3: Build both apps**
 
 ```bash
 pnpm --filter @workspace/adventure-zone run build
@@ -623,27 +538,18 @@ Expected: both exit `0`.
 pnpm run typecheck
 ```
 
-Expected: exit `0`, or if unrelated pre-existing errors reappear, no new errors may originate from files touched by this plan.
+Expected: exit `0`; if unrelated pre-existing failures reappear, no new errors may be in files touched by this plan.
 
-- [ ] **Step 5: Compare against current `main`**
+- [ ] **Step 5: Compare with current `main`**
 
-Confirm the branch is based on the latest `main` before opening the PR. The diff must be limited to:
+Confirm the implementation branch is based on latest `main`. Diff may contain only the map fix, public sign-in choice, password uniqueness/inline error behavior, focused tests/CI, and approved docs. Verify no regressions to finance, receipts, trips, handoffs, calendar, booking data, route geocoding, manager IDs, or session security.
 
-- map style/error/viewport behavior,
-- signed-out authentication choices and manager auth tests,
-- manager password uniqueness and inline error handling,
-- focused CI updates,
-- approved spec/plan docs if included.
+- [ ] **Step 6: Open the PR**
 
-Specifically verify there are no deletions/regressions to finance, receipts, trips, handoffs, calendar, booking data, route geocoding, manager IDs, or session security.
-
-- [ ] **Step 6: Open a PR to `main`**
-
-PR summary must explicitly state:
-
-- the route map now uses a real Vite-compatible basemap and auto-fits to visible markers;
-- signed-out users can choose Admin / Command Center or Manager Portal directly;
-- manager login remains isolated to `/api/manager/auth/login`;
-- duplicate manager passwords are rejected server-side, including archived-manager conflicts;
-- no plaintext passwords are exposed;
-- existing finance, receipts, trips, handoffs, and route geocoding behavior are preserved.
+PR body must state:
+- real Vite-compatible basemap and auto-fit;
+- direct Admin / Command Center and Manager Portal entry points;
+- manager login isolated to `/api/manager/auth/login`;
+- duplicate manager passwords rejected across active and archived manager records;
+- no plaintext password exposure;
+- finance, receipts, trips, handoffs, route geocoding, and session security preserved.
