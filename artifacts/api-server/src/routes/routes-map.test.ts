@@ -30,6 +30,8 @@ const mocks = vi.hoisted(() => ({
   invalidateRouteLocationCache: vi.fn(),
 }));
 
+vi.mock("@workspace/db", () => ({ db: {} }));
+
 vi.mock("@/features/routes/travel-leg-repository", () => ({
   DrizzleTravelLegRepository: class {
     listTravelLegs = mocks.listTravelLegs;
