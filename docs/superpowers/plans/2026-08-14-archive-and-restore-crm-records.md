@@ -169,7 +169,7 @@ Caller matching must exclude an archived contact and an archived parent profile.
 Run the focused command from Step 2, then:
 
 ```bash
-pnpm --filter @workspace/api-server exec vitest run src/routes/today.ts src/routes/caller-finder-zip.integration.test.ts
+pnpm --filter @workspace/api-server exec vitest run src/features/follow-ups/today-query-archive.test.ts src/routes/caller-finder-zip.integration.test.ts
 pnpm --filter @workspace/api-server typecheck
 ```
 
@@ -387,7 +387,7 @@ Apply migrations twice to a fresh PGlite/PostgreSQL test database and assert the
 - [ ] **Step 5: Commit any verified integration corrections**
 
 ```bash
-git add <only-files-changed-to-fix-observed-regressions>
+git add lib/db artifacts/api-server/src/features/record-lifecycle artifacts/api-server/src/features/contacts artifacts/api-server/src/features/event-profiles artifacts/api-server/src/features/bookings artifacts/api-server/src/features/follow-ups artifacts/api-server/src/features/caller-finder artifacts/api-server/src/routes artifacts/adventure-zone/src/actions/record-lifecycle.ts artifacts/adventure-zone/src/features/record-lifecycle artifacts/adventure-zone/src/components/record-lifecycle artifacts/adventure-zone/src/pages artifacts/adventure-zone/src/App.tsx
 git commit -m "fix: integrate CRM record lifecycle controls"
 ```
 
