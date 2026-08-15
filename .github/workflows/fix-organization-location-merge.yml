@@ -1,0 +1,76 @@
+name: Fix organization location merge
+on:
+  push:
+    branches: [agent/fix-organization-location-merge]
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[skip org-merge-hotfix]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Patch organization merge foreign-key handling
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('artifacts/api-server/src/features/organizations/organization-repository.ts')
+          text = path.read_text()
+          old = '''        // Step 10: Delete the now-empty duplicate
+        await tx.delete(organizations).where(eq(organizations.id, dupId));
+'''
+          new = '''        // Step 10: Re-parent saved locations before deleting the duplicate.
+        // organization_locations.organization_id uses ON DELETE RESTRICT, so
+        // leaving even one location attached to dupId makes the merge fail.
+        await tx.update(organizationLocations)
+          .set({ organizationId: primaryId, updatedAt: now })
+          .where(eq(organizationLocations.organizationId, dupId));
+
+        // Step 11: A location can also retain the duplicate as its historical
+        // consolidation source. That FK is RESTRICT as well. The source profile
+        // is being deleted by this plain duplicate merge, so clear that stale
+        // provenance pointer while preserving the location record itself.
+        await tx.update(organizationLocations)
+          .set({ consolidationSourceOrgId: null, updatedAt: now })
+          .where(eq(organizationLocations.consolidationSourceOrgId, dupId));
+
+        // Step 12: If the duplicate had already been used as a canonical parent
+        // for retired location profiles, keep those redirects intact by pointing
+        // the retired profiles at the organization that survives this merge.
+        await tx.update(organizations)
+          .set({ consolidatedIntoId: primaryId, updatedAt: now })
+          .where(eq(organizations.consolidatedIntoId, dupId));
+
+        // Step 13: Delete the now-empty duplicate
+        await tx.delete(organizations).where(eq(organizations.id, dupId));
+'''
+          if old not in text:
+              raise SystemExit('merge delete anchor missing; refusing to patch')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Verify hotfix
+        run: |
+          grep -q 'organizationLocations.organizationId, dupId' artifacts/api-server/src/features/organizations/organization-repository.ts
+          grep -q 'organizationLocations.consolidationSourceOrgId, dupId' artifacts/api-server/src/features/organizations/organization-repository.ts
+          grep -q 'organizations.consolidatedIntoId, dupId' artifacts/api-server/src/features/organizations/organization-repository.ts
+          pnpm --filter @workspace/api-server build
+      - name: Commit hotfix and remove helper workflow
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/organizations/organization-repository.ts
+          git rm .github/workflows/fix-organization-location-merge.yml
+          git commit -m 'fix: preserve locations when merging duplicate organizations [skip org-merge-hotfix]'
+          git push origin HEAD:agent/fix-organization-location-merge
