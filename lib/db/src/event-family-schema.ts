@@ -50,7 +50,10 @@ export const eventFamilySuggestions = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("event_family_suggestions_identity_unique").on(table.normalizedName, table.candidateFingerprint),
+    uniqueIndex("event_family_suggestions_identity_hash_unique").on(
+      table.normalizedName,
+      sql`md5(${table.candidateFingerprint})`,
+    ),
     index("event_family_suggestions_pending_idx").on(table.status, table.createdAt),
     check("event_family_suggestions_candidate_ids_array", sql`jsonb_typeof(${table.candidateIds}) = 'array'`),
     check("event_family_suggestions_source_valid", sql`${table.source} in ('rule','ai')`),
