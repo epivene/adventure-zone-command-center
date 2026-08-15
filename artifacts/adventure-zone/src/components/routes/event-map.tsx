@@ -8,6 +8,7 @@ import type {
   StyleSpecification,
 } from "maplibre-gl";
 
+import { apiPost } from "@/lib/auth-token";
 import { MapFiltersPanel } from "@/components/routes/map-filters";
 import type { EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
 import {
@@ -16,6 +17,7 @@ import {
   type MapEvent,
   type MapFeatureCollection,
   type MapFilters,
+  type RouteMappingState,
 } from "@/features/routes/map-data";
 import {
   classifyRouteBucket,
@@ -54,6 +56,23 @@ function formatLabel(value: string) {
 
 function eventSeasonYear(event: MapEvent) {
   return event.seasonYear ?? event.startsAt?.getUTCFullYear() ?? null;
+}
+
+function mappingReason(state?: RouteMappingState) {
+  switch (state) {
+    case "needs_mapping_no_results":
+      return "No map result found for this location.";
+    case "needs_mapping_provider_unavailable":
+      return "Map lookup is temporarily unavailable.";
+    case "needs_mapping_missing_location":
+      return "Add a city/state or event address.";
+    default:
+      return "This booking could not be placed on the map yet.";
+  }
+}
+
+function canRetryMapping(state?: RouteMappingState) {
+  return state === "needs_mapping_no_results" || state === "needs_mapping_provider_unavailable";
 }
 
 type PlanningEvent = MapEvent & {
@@ -230,10 +249,14 @@ function EventList({
   events,
   title,
   unmapped = false,
+  retryingId = null,
+  onRetry,
 }: {
   events: PlanningEvent[];
   title: string;
   unmapped?: boolean;
+  retryingId?: string | null;
+  onRetry?: (event: PlanningEvent) => void;
 }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -254,15 +277,25 @@ function EventList({
                     {event.name}
                   </Link>
                   <p className="mt-0.5 text-sm text-slate-600">
-                    {event.city}, {event.region}
+                    {[event.city, event.region].filter(Boolean).join(", ")}
                     {event.travelLegName ? ` · ${event.travelLegName}` : ""}
                   </p>
                   {unmapped ? (
-                    <p className="mt-1 text-xs font-semibold text-amber-700">
-                      {event.locationLabel
-                        ? `Could not map ${event.locationLabel}`
-                        : "Needs a city/state or event address"}
-                    </p>
+                    <div className="mt-1 grid gap-2">
+                      <p className="text-xs font-semibold text-amber-700">
+                        {event.locationLabel ? `${event.locationLabel} — ` : ""}{mappingReason(event.mappingState)}
+                      </p>
+                      {canRetryMapping(event.mappingState) && onRetry ? (
+                        <button
+                          className="button-secondary w-fit"
+                          disabled={retryingId === event.id}
+                          onClick={() => onRetry(event)}
+                          type="button"
+                        >
+                          {retryingId === event.id ? "Retrying…" : "Retry location"}
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
                 <span
@@ -301,15 +334,44 @@ export function EventMap({
   const [mode, setMode] = useState<RouteViewMode>("full");
   const [seasonYear, setSeasonYear] = useState(currentYear);
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [eventOverrides, setEventOverrides] = useState<Record<string, MapEvent>>({});
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  const effectiveEvents = useMemo(
+    () => events.map((event) => eventOverrides[event.id] ?? event),
+    [eventOverrides, events],
+  );
+
+  async function retryLocation(event: MapEvent) {
+    setRetryingId(event.id);
+    setRetryError(null);
+    try {
+      const response = await apiPost<{ event: Omit<MapEvent, "startsAt" | "endsAt"> & { startsAt: string | Date | null; endsAt: string | Date | null } }>(
+        `/routes/events/${event.id}/retry-location`,
+        {},
+      );
+      const refreshed: MapEvent = {
+        ...response.event,
+        startsAt: response.event.startsAt ? new Date(response.event.startsAt) : null,
+        endsAt: response.event.endsAt ? new Date(response.event.endsAt) : null,
+      };
+      setEventOverrides((current) => ({ ...current, [event.id]: refreshed }));
+    } catch (error) {
+      setRetryError(error instanceof Error ? error.message : "Could not retry this location.");
+    } finally {
+      setRetryingId(null);
+    }
+  }
 
   const regions = useMemo(
-    () => [...new Set(events.map((event) => event.region).filter(Boolean))].sort(),
-    [events],
+    () => [...new Set(effectiveEvents.map((event) => event.region).filter(Boolean))].sort(),
+    [effectiveEvents],
   );
 
   const seasonYears = useMemo(() => {
     const years = new Set<number>([currentYear]);
-    for (const event of events) {
+    for (const event of effectiveEvents) {
       const year = eventSeasonYear(event);
       if (year !== null) years.add(year);
     }
@@ -317,11 +379,11 @@ export function EventMap({
       years.add(new Date(handoff.windowStartsAt).getFullYear());
     }
     return [...years].sort((a, b) => b - a);
-  }, [currentYear, events, handoffs]);
+  }, [currentYear, effectiveEvents, handoffs]);
 
   const filteredEvents = useMemo(
-    () => filterMapEvents(events, filters),
-    [events, filters],
+    () => filterMapEvents(effectiveEvents, filters),
+    [effectiveEvents, filters],
   );
 
   const planningEvents = useMemo(() => {
@@ -347,9 +409,16 @@ export function EventMap({
           event.locationQuality ??
           (event.latitude !== null && event.longitude !== null
             ? "coordinates"
-            : event.city && event.region
+            : event.city
               ? "city"
               : "missing"),
+        mappingState:
+          event.mappingState ??
+          (event.latitude !== null && event.longitude !== null
+            ? "mapped_coordinates"
+            : event.city || event.region
+              ? "needs_mapping_no_results"
+              : "needs_mapping_missing_location"),
         seasonYear: eventSeasonYear(event),
         planningEmphasis: emphasis,
       });
@@ -483,6 +552,8 @@ export function EventMap({
 
       <MapFiltersPanel filters={filters} onChange={setFilters} onReset={() => setFilters(initialFilters)} regions={regions} />
 
+      {retryError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{retryError}</p> : null}
+
       <p aria-live="polite" className="text-sm text-slate-600">
         {mappedEvents.length} mapped {mappedEvents.length === 1 ? "event" : "events"} · {unmappedEvents.length} needing map location · {handoffFeatures.features.length} equipment meetup {handoffFeatures.features.length === 1 ? "marker" : "markers"}
       </p>
@@ -502,7 +573,13 @@ export function EventMap({
 
       <div className="grid gap-5 xl:grid-cols-2">
         <EventList events={mappedEvents} title="Route events" />
-        <EventList events={unmappedEvents} title="Events needing map location" unmapped />
+        <EventList
+          events={unmappedEvents}
+          title="Location needs mapping"
+          unmapped
+          retryingId={retryingId}
+          onRetry={(event) => { void retryLocation(event); }}
+        />
       </div>
     </div>
   );
