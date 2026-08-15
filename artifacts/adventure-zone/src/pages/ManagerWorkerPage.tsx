@@ -1,2 +1,123 @@
-import { useEffect,useState } from "react";import { useManagerAuth } from "@/lib/manager-auth-context";import { queueManagerMutation,flushManagerMutationQueue } from "@/lib/manager-sync-queue";import { RehireStatus } from "@/components/manager/rehire-status";
-export default function ManagerWorkerPage({workerId}:{workerId:string}){const{manager,managerApi}=useManagerAuth();const[worker,setWorker]=useState<any>(null);const[role,setRole]=useState("");const[note,setNote]=useState("");const[status,setStatus]=useState("");const[editing,setEditing]=useState<any>(null);const[editRole,setEditRole]=useState("");async function load(){const data=await managerApi<any>("/manager/crew");setWorker((data.workers??[]).find((w:any)=>w.id===workerId)??null)}useEffect(()=>{void load()},[workerId]);async function queue(path:string,method:string,body:any){if(!manager)return;const id=crypto.randomUUID();await queueManagerMutation({id,legId:manager.legId,path,method,body:{...body,clientMutationId:id},createdAt:new Date().toISOString()});setStatus("Saved offline");if(navigator.onLine){await flushManagerMutationQueue(managerApi);setStatus("Synced");await load()}}async function saveHistoryEdit(){if(!editing)return;await managerApi(`/manager/crew/${workerId}/work-history/${editing.id}`,{method:"PATCH",body:JSON.stringify({role:editRole})});setEditing(null);setStatus("History updated");await load()}async function deleteHistory(historyId:string){await managerApi(`/manager/crew/${workerId}/work-history/${historyId}`,{method:"DELETE"});setStatus("History deleted");await load()}if(!worker)return <p>Loading worker…</p>;return <div className="grid gap-4"><header><h1 className="text-2xl font-bold">{worker.name}</h1><RehireStatus status={worker.rehireStatus}/><p className="text-sm">{worker.phone||"No phone"} · {worker.locationText||"Location not set"}</p></header><section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Work history</h2>{worker.workHistory?.length?worker.workHistory.map((h:any)=><div key={h.id} className="mt-2 border-t pt-2 text-sm">{editing?.id===h.id?<div className="grid gap-2"><label>Edit role<input aria-label="Edit role" value={editRole} onChange={e=>setEditRole(e.target.value)} /></label><div className="flex gap-2"><button className="button-primary" onClick={()=>void saveHistoryEdit()}>Save history changes</button><button onClick={()=>setEditing(null)}>Cancel</button></div></div>:<><b>{h.role}</b>{h.rating!=null?<span> · {h.rating}/5</span>:null}{h.note?<p>{h.note}</p>:null}<div className="mt-2 flex gap-2"><button onClick={()=>{setEditing(h);setEditRole(h.role)}}>Edit history</button><button onClick={()=>void deleteHistory(h.id)}>Delete history</button></div></>}</div>):<p className="text-sm text-muted-foreground">No work history yet.</p>}</section><form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={e=>{e.preventDefault();void queue(`/manager/crew/${workerId}/work-history`,"POST",{bookingId:null,tripId:null,role,startedAt:new Date().toISOString(),endedAt:null,rating:null,note:null}).then(()=>setRole(""))}}><h2 className="font-bold">Add work history</h2><label>Role<input value={role} onChange={e=>setRole(e.target.value)} required/></label><button className="button-primary">Save history</button></form><section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Manager notes</h2>{worker.managerNotes?.length?worker.managerNotes.map((n:any)=><div key={n.id} className="mt-2 border-t pt-2 text-sm">{n.note}</div>):<p className="text-sm text-muted-foreground">No manager notes yet.</p>}</section><form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={e=>{e.preventDefault();void queue(`/manager/crew/${workerId}/notes`,"POST",{bookingId:null,note}).then(()=>setNote(""))}}><h2 className="font-bold">Add manager note</h2><textarea value={note} onChange={e=>setNote(e.target.value)} required/><button className="button-primary">Save note</button></form><section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Rehire guidance</h2><div className="mt-2 flex flex-wrap gap-2">{["rehirable","undecided","do_not_rehire"].map(value=><button key={value} onClick={()=>void queue(`/manager/crew/${workerId}/rehire-status`,"PATCH",{rehireStatus:value})}>{value.replaceAll("_"," ")}</button>)}</div></section>{status?<p role="status">{status}</p>:null}</div>}
+import { useEffect, useState } from "react";
+import { useManagerAuth } from "@/lib/manager-auth-context";
+import { queueManagerMutation, flushManagerMutationQueue } from "@/lib/manager-sync-queue";
+import { RehireStatus } from "@/components/manager/rehire-status";
+
+const actionButton = "rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold shadow-sm";
+const deleteButton = "rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-semibold text-red-700 shadow-sm";
+
+export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
+  const { manager, managerApi } = useManagerAuth();
+  const [worker, setWorker] = useState<any>(null);
+  const [role, setRole] = useState("");
+  const [note, setNote] = useState("");
+  const [status, setStatus] = useState("");
+  const [editingHistory, setEditingHistory] = useState<any>(null);
+  const [editRole, setEditRole] = useState("");
+  const [editingNote, setEditingNote] = useState<any>(null);
+  const [editNote, setEditNote] = useState("");
+
+  async function load() {
+    const data = await managerApi<any>("/manager/crew");
+    setWorker((data.workers ?? []).find((entry: any) => entry.id === workerId) ?? null);
+  }
+
+  useEffect(() => { void load(); }, [workerId]);
+
+  async function queue(path: string, method: string, body: any) {
+    if (!manager) return;
+    const id = crypto.randomUUID();
+    await queueManagerMutation({ id, legId: manager.legId, path, method, body: { ...body, clientMutationId: id }, createdAt: new Date().toISOString() });
+    setStatus("Saved offline");
+    if (navigator.onLine) {
+      await flushManagerMutationQueue(managerApi);
+      setStatus("Saved");
+      await load();
+    }
+  }
+
+  async function saveHistoryEdit() {
+    if (!editingHistory) return;
+    const historyId = editingHistory.id;
+    const nextRole = editRole;
+    setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).map((entry: any) => entry.id === historyId ? { ...entry, role: nextRole } : entry) } : current);
+    setEditingHistory(null);
+    setStatus("Saving history…");
+    try {
+      const result = await managerApi<any>(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "PATCH", body: JSON.stringify({ role: nextRole }) });
+      if (result.entry) setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).map((entry: any) => entry.id === historyId ? { ...entry, ...result.entry } : entry) } : current);
+      setStatus("History updated");
+    } catch (error) {
+      setStatus("Could not update history");
+      await load();
+    }
+  }
+
+  async function deleteHistory(historyId: string) {
+    setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).filter((entry: any) => entry.id !== historyId) } : current);
+    setStatus("Deleting history…");
+    try {
+      await managerApi(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "DELETE" });
+      setStatus("History deleted");
+    } catch (error) {
+      setStatus("Could not delete history");
+      await load();
+    }
+  }
+
+  async function saveNoteEdit() {
+    if (!editingNote) return;
+    const noteId = editingNote.id;
+    const nextNote = editNote;
+    setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).map((entry: any) => entry.id === noteId ? { ...entry, note: nextNote } : entry) } : current);
+    setEditingNote(null);
+    setStatus("Saving note…");
+    try {
+      const result = await managerApi<any>(`/manager/crew/${workerId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ note: nextNote }) });
+      if (result.note) setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).map((entry: any) => entry.id === noteId ? { ...entry, ...result.note } : entry) } : current);
+      setStatus("Note updated");
+    } catch (error) {
+      setStatus("Could not update note");
+      await load();
+    }
+  }
+
+  async function deleteNote(noteId: string) {
+    setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).filter((entry: any) => entry.id !== noteId) } : current);
+    setStatus("Deleting note…");
+    try {
+      await managerApi(`/manager/crew/${workerId}/notes/${noteId}`, { method: "DELETE" });
+      setStatus("Note deleted");
+    } catch (error) {
+      setStatus("Could not delete note");
+      await load();
+    }
+  }
+
+  if (!worker) return <p>Loading worker…</p>;
+
+  return <div className="grid gap-4">
+    <header><h1 className="text-2xl font-bold">{worker.name}</h1><RehireStatus status={worker.rehireStatus} /><p className="text-sm">{worker.phone || "No phone"} · {worker.locationText || "Location not set"}</p></header>
+
+    <section className="rounded-xl border bg-white p-4">
+      <h2 className="font-bold">Work history</h2>
+      {worker.workHistory?.length ? worker.workHistory.map((history: any) => <div key={history.id} className="mt-2 border-t pt-2 text-sm">
+        {editingHistory?.id === history.id ? <div className="grid gap-2"><label>Edit role<input aria-label="Edit role" value={editRole} onChange={event => setEditRole(event.target.value)} /></label><div className="flex gap-2"><button className="button-primary" onClick={() => void saveHistoryEdit()}>Save</button><button className={actionButton} onClick={() => setEditingHistory(null)}>Cancel</button></div></div> : <><b>{history.role}</b>{history.rating != null ? <span> · {history.rating}/5</span> : null}{history.note ? <p>{history.note}</p> : null}{history.legId === manager?.legId ? <div className="mt-2 flex gap-2"><button className={actionButton} onClick={() => { setEditingHistory(history); setEditRole(history.role); }}>Edit</button><button className={deleteButton} onClick={() => void deleteHistory(history.id)}>Delete</button></div> : null}</>}
+      </div>) : <p className="text-sm text-muted-foreground">No work history yet.</p>}
+    </section>
+
+    <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/work-history`, "POST", { bookingId: null, tripId: null, role, startedAt: new Date().toISOString(), endedAt: null, rating: null, note: null }).then(() => setRole("")); }}><h2 className="font-bold">Add work history</h2><label>Role<input value={role} onChange={event => setRole(event.target.value)} required /></label><button className="button-primary">Save history</button></form>
+
+    <section className="rounded-xl border bg-white p-4">
+      <h2 className="font-bold">Manager notes</h2>
+      {worker.managerNotes?.length ? worker.managerNotes.map((managerNote: any) => <div key={managerNote.id} className="mt-2 border-t pt-2 text-sm">
+        {editingNote?.id === managerNote.id ? <div className="grid gap-2"><label>Edit note<textarea aria-label="Edit note" value={editNote} onChange={event => setEditNote(event.target.value)} /></label><div className="flex gap-2"><button className="button-primary" onClick={() => void saveNoteEdit()}>Save</button><button className={actionButton} onClick={() => setEditingNote(null)}>Cancel</button></div></div> : <><p>{managerNote.note}</p>{managerNote.legId === manager?.legId ? <div className="mt-2 flex gap-2"><button className={actionButton} onClick={() => { setEditingNote(managerNote); setEditNote(managerNote.note); }}>Edit</button><button className={deleteButton} onClick={() => void deleteNote(managerNote.id)}>Delete</button></div> : null}</>}
+      </div>) : <p className="text-sm text-muted-foreground">No manager notes yet.</p>}
+    </section>
+
+    <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/notes`, "POST", { bookingId: null, note }).then(() => setNote("")); }}><h2 className="font-bold">Add manager note</h2><textarea value={note} onChange={event => setNote(event.target.value)} required /><button className="button-primary">Save note</button></form>
+
+    <section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Rehire guidance</h2><div className="mt-2 flex flex-wrap gap-2">{["rehirable", "undecided", "do_not_rehire"].map(value => <button className={actionButton} key={value} onClick={() => void queue(`/manager/crew/${workerId}/rehire-status`, "PATCH", { rehireStatus: value })}>{value.replaceAll("_", " ")}</button>)}</div></section>
+    {status ? <p role="status">{status}</p> : null}
+  </div>;
+}

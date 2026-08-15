@@ -4,6 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ManagerWorkerPage from "./ManagerWorkerPage";
 
 const mocks = vi.hoisted(() => ({
+  historyRole: "Setup crew",
+  noteText: "Bring back next year",
+  historyDeleted: false,
+  noteDeleted: false,
   api: vi.fn(async (path: string, init?: RequestInit) => {
     if (path === "/manager/crew") {
       return {
@@ -13,13 +17,19 @@ const mocks = vi.hoisted(() => ({
           phone: null,
           locationText: "Fargo, ND",
           rehireStatus: "rehirable",
-          workHistory: [{ id: "history-1", role: "Setup crew", rating: 4, note: "Good worker" }],
-          managerNotes: [{ id: "note-1", note: "Bring back next year" }],
+          workHistory: mocks.historyDeleted ? [] : [{ id: "history-1", legId: "leg-a", role: mocks.historyRole, rating: 4, note: "Good worker" }],
+          managerNotes: mocks.noteDeleted ? [] : [{ id: "note-1", legId: "leg-a", note: mocks.noteText }],
         }],
       };
     }
-    if (path.includes("/work-history/") && init?.method === "PATCH") return { entry: { id: "history-1" } };
-    if (path.includes("/work-history/") && init?.method === "DELETE") return {};
+    if (path.includes("/work-history/") && init?.method === "PATCH") {
+      const body = JSON.parse(String(init.body)); mocks.historyRole = body.role; return { entry: { id: "history-1", role: body.role } };
+    }
+    if (path.includes("/work-history/") && init?.method === "DELETE") { mocks.historyDeleted = true; return {}; }
+    if (path.includes("/notes/") && init?.method === "PATCH") {
+      const body = JSON.parse(String(init.body)); mocks.noteText = body.note; return { note: { id: "note-1", note: body.note } };
+    }
+    if (path.includes("/notes/") && init?.method === "DELETE") { mocks.noteDeleted = true; return {}; }
     return {};
   }),
 }));
@@ -36,7 +46,9 @@ vi.mock("@/lib/manager-sync-queue", () => ({
   flushManagerMutationQueue: vi.fn(async () => {}),
 }));
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => {
+  cleanup(); vi.clearAllMocks(); mocks.historyRole = "Setup crew"; mocks.noteText = "Bring back next year"; mocks.historyDeleted = false; mocks.noteDeleted = false;
+});
 
 describe("ManagerWorkerPage", () => {
   it("shows saved manager notes", async () => {
@@ -44,21 +56,27 @@ describe("ManagerWorkerPage", () => {
     expect(await screen.findByText("Bring back next year")).toBeInTheDocument();
   });
 
-  it("edits and deletes work history", async () => {
+  it("updates and removes work history immediately and uses short action labels", async () => {
     render(<ManagerWorkerPage workerId="worker-1" />);
     await screen.findByText("Setup crew");
-    fireEvent.click(screen.getByRole("button", { name: "Edit history" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.change(screen.getByLabelText("Edit role"), { target: { value: "Lead setup" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save history changes" }));
-    await waitFor(() => expect(mocks.api).toHaveBeenCalledWith(
-      "/manager/crew/worker-1/work-history/history-1",
-      expect.objectContaining({ method: "PATCH" }),
-    ));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Lead setup")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => expect(screen.queryByText("Lead setup")).not.toBeInTheDocument());
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Delete history" }));
-    await waitFor(() => expect(mocks.api).toHaveBeenCalledWith(
-      "/manager/crew/worker-1/work-history/history-1",
-      expect.objectContaining({ method: "DELETE" }),
-    ));
+  it("edits and deletes manager notes immediately", async () => {
+    render(<ManagerWorkerPage workerId="worker-1" />);
+    await screen.findByText("Bring back next year");
+    const editButtons = screen.getAllByRole("button", { name: "Edit" });
+    fireEvent.click(editButtons[editButtons.length - 1]);
+    fireEvent.change(screen.getByLabelText("Edit note"), { target: { value: "Call first next year" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Call first next year")).toBeInTheDocument();
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+    await waitFor(() => expect(screen.queryByText("Call first next year")).not.toBeInTheDocument());
   });
 });
