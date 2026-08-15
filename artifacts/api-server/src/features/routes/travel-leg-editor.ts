@@ -1,9 +1,17 @@
-import type { TravelLegConfiguration } from "@/features/routes/travel-leg-input";
+import type {
+  TravelLegConfiguration,
+  TravelLegDetails,
+  TravelLegOrder,
+} from "@/features/routes/travel-leg-input";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 import { err, ok, type Result } from "@/lib/result";
 
 export type TravelLegConfigurationError = {
   code: "LEG_CONFIGURATION_CONFLICT";
+};
+
+export type TravelLegDetailsError = {
+  code: "LEG_NOT_FOUND" | "LEG_ARCHIVED";
 };
 
 export type TravelLegAddError = {
@@ -115,6 +123,67 @@ async function applyOrders(
 
 export class TravelLegService {
   constructor(private readonly repository: TravelLegEditorRepository) {}
+
+  updateLegDetails(
+    id: string,
+    input: TravelLegDetails,
+  ): Promise<Result<TravelLeg, TravelLegDetailsError>> {
+    return this.repository.transaction(async (transaction) => {
+      const current = await transaction.listForUpdate();
+      const target = current.find((leg) => leg.id === id);
+      if (!target) {
+        return err({ code: "LEG_NOT_FOUND" });
+      }
+      if (target.archivedAt) {
+        return err({ code: "LEG_ARCHIVED" });
+      }
+
+      const before = detailValues(target);
+      const next = detailValues(input);
+      if (!detailChanged(before, next)) {
+        return ok(target);
+      }
+
+      const saved = await transaction.update(id, next);
+      await transaction.audit({
+        entityId: id,
+        before: { ...before },
+        after: { ...detailValues(saved) },
+      });
+      return ok(saved);
+    });
+  }
+
+  reorderActiveLegs(
+    input: TravelLegOrder,
+  ): Promise<Result<TravelLeg[], TravelLegConfigurationError>> {
+    return this.repository.transaction(async (transaction) => {
+      const current = await transaction.listForUpdate();
+      const active = current.filter((leg) => !leg.archivedAt);
+      const archived = current.filter((leg) => leg.archivedAt);
+      const activeIds = new Set(active.map((leg) => leg.id));
+
+      if (
+        input.legs.length !== active.length ||
+        input.legs.some((leg) => !activeIds.has(leg.id))
+      ) {
+        return err({ code: "LEG_CONFIGURATION_CONFLICT" });
+      }
+
+      const requestedActive = [...input.legs].sort(
+        (left, right) => left.sortOrder - right.sortOrder,
+      );
+      const orders = normalizedOrders(requestedActive, archived);
+      await applyOrders(transaction, current, orders);
+      const orderById = new Map(orders.map((order) => [order.id, order.sortOrder]));
+
+      return ok(
+        current
+          .map((leg) => ({ ...leg, sortOrder: orderById.get(leg.id)! }))
+          .sort((left, right) => left.sortOrder - right.sortOrder),
+      );
+    });
+  }
 
   updateConfiguration(
     input: TravelLegConfiguration,
