@@ -29,6 +29,46 @@
 - Payroll is out of scope.
 - Real Square API and mandatory receipt OCR are out of scope for the initial portal delivery.
 
+## Implementation-time migration allocation
+
+The child plans use early numeric migration names as logical examples. **Do not create those literal filenames.** Current `main` already has migrations through `036_event_family_suggestion_hash_identity.sql`. If Release 1 starts from the current main line, allocate the portal migrations as follows:
+
+- `037_unlimited_travel_legs.sql`
+- `038_leg_manager_access.sql`
+- `039_leg_schedule_issues.sql`
+- `040_leg_manager_finance.sql`
+- `041_leg_crew.sql`
+- `042_event_manager_reviews.sql`
+- `043_leg_incidents.sql`
+
+Before each release branch begins, fetch latest `main`. If another migration has landed and one of these prefixes is occupied, shift the remaining portal migrations forward together to the next unused sequential prefixes and update that release's plan paths before coding. Never reuse an existing migration filename.
+
+## Settlement event naming invariant
+
+Release 2 settlement math combines personal expenses with cash-ledger entries. The canonical cash-entry kinds are:
+
+```ts
+type LegCashEntryKind =
+  | "event_cash_collected"
+  | "expense_paid_cash"
+  | "advance_received"
+  | "cash_turned_in"
+  | "cash_returned"
+  | "manager_reimbursed"
+  | "adjustment";
+```
+
+`manager_reimbursed` is the canonical name for money Adventure Zone pays back to the manager. Any child-plan example using `manager_repaid` means `manager_reimbursed` and must be implemented with the canonical name above.
+
+Settlement effects are explicit:
+
+- personal expense -> increases owner owes manager;
+- manager reimbursed -> decreases owner owes manager;
+- advance received -> increases manager owes owner/cash to account for;
+- Adventure Zone cash expense -> decreases manager owes owner/cash to account for;
+- cash turned in or returned -> decreases manager owes owner/cash to account for;
+- Adventure Zone debit expense -> no personal settlement effect.
+
 ---
 
 ## Delivery order
