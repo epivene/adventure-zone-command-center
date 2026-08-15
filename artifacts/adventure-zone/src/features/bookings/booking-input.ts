@@ -101,6 +101,7 @@ export const bookingEditInputSchema = z
   .transform((input) => ({
     ...input,
     region: input.region.toUpperCase(),
+    probability: input.status === "confirmed" ? "definite" : input.probability,
   }));
 
 export const bookingInputSchema = z
@@ -132,6 +133,7 @@ export const bookingInputSchema = z
   .transform((input) => ({
     ...input,
     region: input.region.toUpperCase(),
+    probability: input.status === "confirmed" ? "definite" : input.probability,
     nextActionKind: input.nextActionKind.trim(),
     nextActionDueAt: input.nextActionDueAt,
   }));
