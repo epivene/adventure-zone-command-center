@@ -134,6 +134,10 @@ export class HandoffRepository {
     return rows<EquipmentHandoff>(result)[0] ?? null;
   }
 
+  async get(id: string): Promise<EquipmentHandoff | null> {
+    return this.selectOne(id);
+  }
+
   async listForSeason(year: number): Promise<EquipmentHandoff[]> {
     await this.ensureSchema();
     const result = await this.database.execute(sql`
@@ -214,12 +218,13 @@ export class HandoffRepository {
       `);
       return;
     }
-    await this.database.execute(sql`
+    const quoted = fingerprints.map((value) => `'${value.replaceAll("'", "''")}'`).join(",");
+    await this.database.execute(sql.raw(`
       update equipment_handoffs set status = 'needs_review', updated_at = now()
       where status = 'suggested'
-        and extract(year from window_starts_at) = ${year}
-        and not (dependency_fingerprint = any(${fingerprints}::text[]))
-    `);
+        and extract(year from window_starts_at) = ${Number(year)}
+        and dependency_fingerprint not in (${quoted})
+    `));
   }
 
   async approve(id: string): Promise<EquipmentHandoff | null> {
