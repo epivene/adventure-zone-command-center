@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   activities,
   activityRevisions,
+  auditEntries,
   bookingContacts,
   bookings,
   callSessions,
   contacts,
+  followUps,
   organizationContacts,
 } from "@/db/schema";
 
@@ -413,11 +415,21 @@ describe("DrizzleActivityRepository timeline ordering", () => {
     expect(database.state.activity.body).toBe("Corrected note");
     expect(database.state.callSession?.disposition).toBe("spoke_with_contact");
     expect(database.state.revisions).toHaveLength(1);
-    expect(database.state.insertedTables).toEqual([activityRevisions]);
+    expect(database.state.insertedTables).toEqual([
+      activityRevisions,
+      auditEntries,
+      auditEntries,
+    ]);
+    expect(database.state.insertedTables).not.toContain(bookings);
+    expect(database.state.insertedTables).not.toContain(bookingContacts);
+    expect(database.state.insertedTables).not.toContain(contacts);
+    expect(database.state.insertedTables).not.toContain(followUps);
+    expect(database.state.insertedTables).not.toContain(organizationContacts);
     expect(database.state.updatedTables).toEqual([callSessions, activities]);
     expect(database.state.updatedTables).not.toContain(bookings);
     expect(database.state.updatedTables).not.toContain(bookingContacts);
     expect(database.state.updatedTables).not.toContain(contacts);
+    expect(database.state.updatedTables).not.toContain(followUps);
     expect(database.state.updatedTables).not.toContain(organizationContacts);
   });
 
