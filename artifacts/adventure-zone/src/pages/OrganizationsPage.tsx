@@ -7,7 +7,6 @@ import { organizationListQuerySchema } from "@/features/organizations/last-resor
 import { Toaster } from "@/components/ui/toaster";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
-import type { EventFamilyListRecord } from "@/features/event-families/event-family-types";
 
 export default function OrganizationsPage() {
   const search = useSearch();
@@ -30,7 +29,6 @@ export default function OrganizationsPage() {
   });
 
   const [data, setData] = useState<any>(null);
-  const [families, setFamilies] = useState<EventFamilyListRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,16 +37,7 @@ export default function OrganizationsPage() {
   const [dupError, setDupError] = useState<string | null>(null);
   const [dupGroups, setDupGroups] = useState<DuplicateGroup[] | null>(null);
 
-  const loadFamilies = useCallback(async () => {
-    try {
-      const result = await apiGet<{ families: EventFamilyListRecord[] }>("/event-families");
-      setFamilies(result.families);
-    } catch {
-      // Family cards are supplemental; profile search should still work if this request fails.
-    }
-  }, []);
-
-  useEffect(() => {
+  const loadProfiles = useCallback(async () => {
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
     if (query.lastResort !== undefined) qs.set("lastResort", String(query.lastResort));
@@ -63,11 +52,19 @@ export default function OrganizationsPage() {
     if (query.page && query.page > 1) qs.set("page", String(query.page));
 
     setLoading(true);
-    apiGet<any>(`/organizations?${qs.toString()}`)
-      .then((d) => { setData(d); setLoading(false); })
-      .catch((e) => { setError(e.message); setLoading(false); });
-    void loadFamilies();
-  }, [search, loadFamilies]);
+    setError(null);
+    try {
+      setData(await apiGet<any>(`/organizations?${qs.toString()}`));
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load profiles");
+    } finally {
+      setLoading(false);
+    }
+  }, [search]);
+
+  useEffect(() => {
+    void loadProfiles();
+  }, [loadProfiles]);
 
   const loadDuplicates = useCallback(async () => {
     setDupLoading(true);
@@ -93,6 +90,8 @@ export default function OrganizationsPage() {
     setShowDuplicates(false);
     setDupGroups(null);
   }
+
+  const families = data?.families ?? [];
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -162,7 +161,7 @@ export default function OrganizationsPage() {
         </div>
       ) : (
         <>
-          <EventFamilySuggestions onChanged={loadFamilies} />
+          <EventFamilySuggestions onChanged={loadProfiles} />
 
           {families.length > 0 ? (
             <section>
@@ -171,7 +170,7 @@ export default function OrganizationsPage() {
                 <span className="text-sm text-slate-500">Original profiles remain separate and editable.</span>
               </div>
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {families.map((family) => <EventFamilyCard key={family.id} family={family} />)}
+                {families.map((family: any) => <EventFamilyCard key={family.id} family={family} />)}
               </div>
             </section>
           ) : null}
