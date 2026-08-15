@@ -1,0 +1,124 @@
+name: Leg Manager Release 3 Task 3 Green
+on:
+  push:
+    branches: [feature/leg-manager-crew-aftermath]
+jobs:
+  task3:
+    if: "!contains(github.event.head_commit.message, '[skip release3-task3]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Harden crew append mutations for offline retry
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          m=Path('lib/db/migrations/038_leg_crew.sql')
+          s=m.read_text()
+          if 'crew_work_history_leg_mutation_unique' not in s:
+              s=s.replace('            note text,\n            created_at timestamptz', '            note text,\n            client_mutation_id uuid not null,\n            created_at timestamptz', 1)
+              s=s.replace("constraint crew_work_history_rating_valid check (rating is null or rating between 0 and 5)\n          );", "constraint crew_work_history_rating_valid check (rating is null or rating between 0 and 5),\n            constraint crew_work_history_leg_mutation_unique unique (leg_id, client_mutation_id)\n          );")
+              # Replace only the manager-note occurrence after its table header.
+              pre,post=s.split('create table if not exists crew_manager_notes',1)
+              post=post.replace('            note text not null,\n            created_at timestamptz', '            note text not null,\n            client_mutation_id uuid not null,\n            created_at timestamptz',1)
+              post=post.replace("constraint crew_manager_notes_note_nonblank check (nullif(trim(note), '') is not null)\n          );", "constraint crew_manager_notes_note_nonblank check (nullif(trim(note), '') is not null),\n            constraint crew_manager_notes_leg_mutation_unique unique (leg_id, client_mutation_id)\n          );")
+              m.write_text(pre+'create table if not exists crew_manager_notes'+post)
+
+          p=Path('lib/db/src/schema/index.ts');s=p.read_text()
+          if 'crew_work_history_leg_mutation_unique' not in s:
+              pre,post=s.split('export const crewWorkHistory',1)
+              post=post.replace('              note: text("note"),\n              createdAt:', '              note: text("note"),\n              clientMutationId: uuid("client_mutation_id").notNull(),\n              createdAt:',1)
+              post=post.replace('              check("crew_work_history_rating_valid", sql`${table.rating} is null or ${table.rating} between 0 and 5`),', '              check("crew_work_history_rating_valid", sql`${table.rating} is null or ${table.rating} between 0 and 5`),\n              uniqueIndex("crew_work_history_leg_mutation_unique").on(table.legId, table.clientMutationId),',1)
+              pre2,post2=post.split('export const crewManagerNotes',1)
+              post2=post2.replace('              note: text("note").notNull(),\n              createdAt:', '              note: text("note").notNull(),\n              clientMutationId: uuid("client_mutation_id").notNull(),\n              createdAt:',1)
+              post2=post2.replace('              check("crew_manager_notes_note_nonblank", sql`nullif(trim(${table.note}), \'\') is not null`),', '              check("crew_manager_notes_note_nonblank", sql`nullif(trim(${table.note}), \'\') is not null`),\n              uniqueIndex("crew_manager_notes_leg_mutation_unique").on(table.legId, table.clientMutationId),',1)
+              p.write_text(pre+'export const crewWorkHistory'+pre2+'export const crewManagerNotes'+post2)
+          PY
+
+          cat > artifacts/api-server/src/features/leg-manager/crew-repository.ts <<'EOF'
+          import { and, asc, desc, eq } from "drizzle-orm";
+          import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+          import * as schema from "@/db/schema";
+          import { crewManagerNotes, crewWorkers, crewWorkHistory } from "@/db/schema";
+          import { normalizeCrewPhone, type CrewManagerNote, type CrewWorker, type CrewWorkerWithHistory, type CrewWorkHistory, type CrewRehireStatus } from "./crew-types";
+          export type CrewWorkHistoryPatch=Partial<Pick<CrewWorkHistory,"role"|"startedAt"|"endedAt"|"rating"|"note">>;
+          export interface CrewRepositoryStore{listWorkers():Promise<CrewWorker[]>;listWorkHistory():Promise<CrewWorkHistory[]>;listManagerNotes():Promise<CrewManagerNote[]>;getWorkHistory(id:string):Promise<CrewWorkHistory|null>;updateWorkHistory(id:string,patch:CrewWorkHistoryPatch):Promise<CrewWorkHistory|null>}
+          export async function listWorkersForManager(store:CrewRepositoryStore,_managerLegId:string):Promise<CrewWorkerWithHistory[]>{const[workers,history,notes]=await Promise.all([store.listWorkers(),store.listWorkHistory(),store.listManagerNotes()]);return workers.map(worker=>({...worker,workHistory:history.filter(entry=>entry.workerId===worker.id),managerNotes:notes.filter(note=>note.workerId===worker.id)}));}
+          export async function updateWorkHistoryAsManager(store:CrewRepositoryStore,managerLegId:string,historyId:string,patch:CrewWorkHistoryPatch){const existing=await store.getWorkHistory(historyId);if(!existing)return{ok:false as const,code:"NOT_FOUND" as const};if(existing.legId!==managerLegId)return{ok:false as const,code:"FORBIDDEN" as const};const entry=await store.updateWorkHistory(historyId,patch);if(!entry)return{ok:false as const,code:"NOT_FOUND" as const};return{ok:true as const,entry};}
+          export class DrizzleCrewRepository implements CrewRepositoryStore{
+            constructor(private readonly database:NodePgDatabase<typeof schema>){}
+            async listWorkers(){return await this.database.select().from(crewWorkers).orderBy(asc(crewWorkers.name)) as CrewWorker[]}
+            async listWorkHistory(){return await this.database.select().from(crewWorkHistory).orderBy(desc(crewWorkHistory.startedAt)) as CrewWorkHistory[]}
+            async listManagerNotes(){return await this.database.select().from(crewManagerNotes).orderBy(desc(crewManagerNotes.createdAt)) as CrewManagerNote[]}
+            async getWorkHistory(id:string){return ((await this.database.select().from(crewWorkHistory).where(eq(crewWorkHistory.id,id)).limit(1))[0]??null) as CrewWorkHistory|null}
+            async updateWorkHistory(id:string,patch:CrewWorkHistoryPatch){return ((await this.database.update(crewWorkHistory).set({...patch,updatedAt:new Date()}).where(eq(crewWorkHistory.id,id)).returning())[0]??null) as CrewWorkHistory|null}
+            async createWorker(input:{name:string;phone?:string|null;email?:string|null;city?:string|null;region?:string|null;locationText?:string|null;rehireStatus?:CrewRehireStatus}){return (await this.database.insert(crewWorkers).values({name:input.name.trim(),phone:input.phone?.trim()||null,normalizedPhone:normalizeCrewPhone(input.phone),email:input.email?.trim()||null,city:input.city?.trim()||null,region:input.region?.trim()||null,locationText:input.locationText?.trim()||null,rehireStatus:input.rehireStatus??"undecided"}).returning())[0]}
+            async findPossibleMatches(input:{name:string;phone?:string|null}){const phone=normalizeCrewPhone(input.phone),name=input.name.trim().toLocaleLowerCase();return (await this.listWorkers()).filter(w=>(phone&&w.normalizedPhone===phone)||w.name.trim().toLocaleLowerCase()===name)}
+            async createWorkHistory(input:{workerId:string;legId:string;bookingId?:string|null;tripId?:string|null;role:string;startedAt:Date;endedAt?:Date|null;rating?:number|null;note?:string|null;clientMutationId:string}){const rows=await this.database.insert(crewWorkHistory).values({workerId:input.workerId,legId:input.legId,bookingId:input.bookingId??null,tripId:input.tripId??null,role:input.role.trim(),startedAt:input.startedAt,endedAt:input.endedAt??null,rating:input.rating??null,note:input.note?.trim()||null,clientMutationId:input.clientMutationId}).onConflictDoNothing({target:[crewWorkHistory.legId,crewWorkHistory.clientMutationId]}).returning();if(rows[0])return rows[0];return (await this.database.select().from(crewWorkHistory).where(and(eq(crewWorkHistory.legId,input.legId),eq(crewWorkHistory.clientMutationId,input.clientMutationId))).limit(1))[0]}
+            async createManagerNote(input:{workerId:string;legId:string;bookingId?:string|null;note:string;clientMutationId:string}){const rows=await this.database.insert(crewManagerNotes).values({workerId:input.workerId,legId:input.legId,bookingId:input.bookingId??null,note:input.note.trim(),clientMutationId:input.clientMutationId}).onConflictDoNothing({target:[crewManagerNotes.legId,crewManagerNotes.clientMutationId]}).returning();if(rows[0])return rows[0];return (await this.database.select().from(crewManagerNotes).where(and(eq(crewManagerNotes.legId,input.legId),eq(crewManagerNotes.clientMutationId,input.clientMutationId))).limit(1))[0]}
+            async updateRehireStatus(workerId:string,rehireStatus:CrewRehireStatus){return (await this.database.update(crewWorkers).set({rehireStatus,updatedAt:new Date()}).where(eq(crewWorkers.id,workerId)).returning())[0]??null}
+          }
+          EOF
+
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager.ts');s=p.read_text()
+          s=s.replace('const crewHistorySchema=z.object({bookingId:', 'const crewHistorySchema=z.object({clientMutationId:z.string().uuid(),bookingId:')
+          s=s.replace('const crewNoteSchema=z.object({bookingId:', 'const crewNoteSchema=z.object({clientMutationId:z.string().uuid(),bookingId:')
+          s=s.replace('rating:parsed.data.rating??null,note:parsed.data.note??null});', 'rating:parsed.data.rating??null,note:parsed.data.note??null,clientMutationId:parsed.data.clientMutationId});')
+          s=s.replace('bookingId,note:parsed.data.note});', 'bookingId,note:parsed.data.note,clientMutationId:parsed.data.clientMutationId});')
+          p.write_text(s)
+          PY
+      - name: Add Crew UI
+        run: |
+          cat > artifacts/adventure-zone/src/components/manager/rehire-status.tsx <<'EOF'
+          export function RehireStatus({status}:{status:string}){if(status==="do_not_rehire")return <span className="rounded-full bg-rose-100 px-2 py-1 text-xs font-bold text-rose-800">Do Not Rehire</span>;if(status==="rehirable")return <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800">Rehirable</span>;return <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700">Rehire undecided</span>}
+          EOF
+          cat > artifacts/adventure-zone/src/components/manager/worker-form.tsx <<'EOF'
+          import { useState } from "react";
+          export type WorkerFormValue={name:string;phone:string|null;email:string|null;city:string|null;region:string|null;locationText:string|null};
+          export function WorkerForm({onSave,onCancel}:{onSave:(value:WorkerFormValue)=>Promise<void>|void;onCancel?:()=>void}){const[name,setName]=useState("");const[phone,setPhone]=useState("");const[email,setEmail]=useState("");const[city,setCity]=useState("");const[region,setRegion]=useState("");const[saving,setSaving]=useState(false);return <form className="grid gap-3 rounded-xl border bg-white p-4" onSubmit={async e=>{e.preventDefault();if(!name.trim()||saving)return;setSaving(true);try{await onSave({name:name.trim(),phone:phone.trim()||null,email:email.trim()||null,city:city.trim()||null,region:region.trim()||null,locationText:[city.trim(),region.trim()].filter(Boolean).join(", ")||null})}finally{setSaving(false)}}}><h2 className="font-bold">Add seasonal worker</h2><label className="grid gap-1 text-sm font-semibold">Worker name<input aria-label="Worker name" value={name} onChange={e=>setName(e.target.value)} required/></label><label className="grid gap-1 text-sm font-semibold">Phone<input value={phone} onChange={e=>setPhone(e.target.value)}/></label><label className="grid gap-1 text-sm font-semibold">Email<input value={email} onChange={e=>setEmail(e.target.value)}/></label><div className="grid grid-cols-2 gap-2"><label className="grid gap-1 text-sm font-semibold">City<input value={city} onChange={e=>setCity(e.target.value)}/></label><label className="grid gap-1 text-sm font-semibold">Region<input value={region} onChange={e=>setRegion(e.target.value)}/></label></div><div className="flex gap-2"><button className="button-primary" type="submit" disabled={saving}>Save worker</button>{onCancel?<button type="button" onClick={onCancel}>Cancel</button>:null}</div></form>}
+          EOF
+          cat > artifacts/adventure-zone/src/pages/ManagerCrewPage.tsx <<'EOF'
+          import { useEffect,useState } from "react";import { Link } from "wouter";import { useManagerAuth } from "@/lib/manager-auth-context";import { WorkerForm,type WorkerFormValue } from "@/components/manager/worker-form";import { RehireStatus } from "@/components/manager/rehire-status";
+          type Worker={id:string;name:string;phone?:string|null;email?:string|null;city?:string|null;region?:string|null;locationText?:string|null;rehireStatus:string;workHistory:Array<{id:string;role:string;rating?:number|null;note?:string|null;legId:string}>;managerNotes:any[]};
+          export default function ManagerCrewPage(){const{managerApi}=useManagerAuth();const[workers,setWorkers]=useState<Worker[]>([]);const[dashboard,setDashboard]=useState<any>(null);const[city,setCity]=useState("");const[region,setRegion]=useState("");const[showAdd,setShowAdd]=useState(false);const[error,setError]=useState("");async function load(path="/manager/crew"){const data=await managerApi<{workers:Worker[]}>(path);setWorkers(data.workers??[])}useEffect(()=>{void Promise.all([load(),managerApi<any>("/manager/dashboard").then(setDashboard)]).catch(e=>setError(e instanceof Error?e.message:"Could not load crew"))},[managerApi]);const nextEvent=dashboard?.events?.[0];async function search(){const parts=[];if(city.trim())parts.push(`city=${encodeURIComponent(city.trim())}`);if(region.trim())parts.push(`region=${encodeURIComponent(region.trim())}`);await load(`/manager/crew${parts.length?`?${parts.join("&")}`:""}`)}async function saveWorker(value:WorkerFormValue){await managerApi("/manager/crew",{method:"POST",body:JSON.stringify(value)});setShowAdd(false);await load()}return <div className="grid gap-4"><header><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Crew</p><h1 className="text-2xl font-bold">Seasonal workers</h1><p className="text-sm text-slate-600">Shared company directory with prior event history and rehire guidance.</p></header>{nextEvent?.city?<button className="rounded-xl border bg-orange-50 p-3 text-left font-semibold" onClick={()=>{setCity(nextEvent.city);setRegion(nextEvent.region??"");void load(`/manager/crew?city=${encodeURIComponent(nextEvent.city)}${nextEvent.region?`&region=${encodeURIComponent(nextEvent.region)}`:""}`)}}>Find workers near {nextEvent.city}</button>:null}<section className="grid gap-2 rounded-xl border bg-white p-4"><div className="grid grid-cols-2 gap-2"><label className="grid gap-1 text-sm font-semibold">City<input aria-label="Crew city" value={city} onChange={e=>setCity(e.target.value)}/></label><label className="grid gap-1 text-sm font-semibold">Region<input aria-label="Crew region" value={region} onChange={e=>setRegion(e.target.value)}/></label></div><div className="flex gap-2"><button className="button-primary" onClick={()=>void search()}>Search crew</button><button onClick={()=>setShowAdd(true)}>Add worker</button></div></section>{showAdd?<WorkerForm onSave={saveWorker} onCancel={()=>setShowAdd(false)}/>:null}{error?<p role="alert">{error}</p>:null}<section className="grid gap-3">{workers.map(worker=><article key={worker.id} className="rounded-xl border bg-white p-4"><div className="flex items-start justify-between gap-3"><div><Link href={`/manager/crew/${worker.id}`} className="font-bold underline">{worker.name}</Link><p className="text-sm text-slate-600">{worker.locationText||[worker.city,worker.region].filter(Boolean).join(", ")||"Location not set"}</p></div><RehireStatus status={worker.rehireStatus}/></div>{worker.workHistory[0]?<div className="mt-3 border-t pt-3 text-sm"><p className="font-semibold">{worker.workHistory[0].role}</p>{worker.workHistory[0].rating!=null?<p>Prior rating: {worker.workHistory[0].rating}/5</p>:null}{worker.workHistory[0].note?<p>{worker.workHistory[0].note}</p>:null}</div>:<p className="mt-3 text-sm text-slate-500">No prior work recorded.</p>}</article>)}</section></div>}
+          EOF
+          cat > artifacts/adventure-zone/src/pages/ManagerWorkerPage.tsx <<'EOF'
+          import { useEffect,useState } from "react";import { useManagerAuth } from "@/lib/manager-auth-context";import { queueManagerMutation,flushManagerMutationQueue } from "@/lib/manager-sync-queue";import { RehireStatus } from "@/components/manager/rehire-status";
+          export default function ManagerWorkerPage({workerId}:{workerId:string}){const{manager,managerApi}=useManagerAuth();const[worker,setWorker]=useState<any>(null);const[role,setRole]=useState("");const[note,setNote]=useState("");const[status,setStatus]=useState("");async function load(){const data=await managerApi<any>("/manager/crew");setWorker((data.workers??[]).find((w:any)=>w.id===workerId)??null)}useEffect(()=>{void load()},[workerId]);async function queue(path:string,method:string,body:any){if(!manager)return;const id=crypto.randomUUID();await queueManagerMutation({id,legId:manager.legId,path,method,body:{...body,clientMutationId:id},createdAt:new Date().toISOString()});setStatus("Saved offline");if(navigator.onLine){await flushManagerMutationQueue(managerApi);setStatus("Synced");await load()}}if(!worker)return <p>Loading worker…</p>;return <div className="grid gap-4"><header><h1 className="text-2xl font-bold">{worker.name}</h1><RehireStatus status={worker.rehireStatus}/><p className="text-sm">{worker.phone||"No phone"} · {worker.locationText||"Location not set"}</p></header><section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Work history</h2>{worker.workHistory?.map((h:any)=><div key={h.id} className="mt-2 border-t pt-2 text-sm"><b>{h.role}</b>{h.rating!=null?<span> · {h.rating}/5</span>:null}{h.note?<p>{h.note}</p>:null}</div>)}</section><form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={e=>{e.preventDefault();void queue(`/manager/crew/${workerId}/work-history`,"POST",{bookingId:null,tripId:null,role,startedAt:new Date().toISOString(),endedAt:null,rating:null,note:null})}}><h2 className="font-bold">Add work history</h2><label>Role<input value={role} onChange={e=>setRole(e.target.value)} required/></label><button className="button-primary">Save history</button></form><form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={e=>{e.preventDefault();void queue(`/manager/crew/${workerId}/notes`,"POST",{bookingId:null,note})}}><h2 className="font-bold">Manager note</h2><textarea value={note} onChange={e=>setNote(e.target.value)} required/><button className="button-primary">Save note</button></form><section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Rehire guidance</h2><div className="mt-2 flex flex-wrap gap-2">{["rehirable","undecided","do_not_rehire"].map(value=><button key={value} onClick={()=>void queue(`/manager/crew/${workerId}/rehire-status`,"PATCH",{rehireStatus:value})}>{value.replaceAll("_"," ")}</button>)}</div></section>{status?<p role="status">{status}</p>:null}</div>}
+          EOF
+      - name: Wire manager crew routes and navigation
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app=Path('artifacts/adventure-zone/src/App.tsx');s=app.read_text()
+          if 'ManagerCrewPage' not in s:s=s.replace('import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";', 'import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";\nimport ManagerCrewPage from "@/pages/ManagerCrewPage";\nimport ManagerWorkerPage from "@/pages/ManagerWorkerPage";')
+          if '/manager/crew/:workerId' not in s:s=s.replace('<Route path="/manager/operations"><ManagerOperationsPage /></Route>', '<Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>\n        <Route path="/manager/crew"><ManagerCrewPage /></Route>\n        <Route path="/manager/operations"><ManagerOperationsPage /></Route>')
+          app.write_text(s)
+          shell=Path('artifacts/adventure-zone/src/components/manager/manager-shell.tsx');s=shell.read_text()
+          s=s.replace('import { Home, MapPinned, LogOut, WalletCards } from "lucide-react";', 'import { Home, MapPinned, LogOut, WalletCards, UsersRound } from "lucide-react";')
+          s=s.replace('grid-cols-3','grid-cols-4')
+          needle='<Link href="/manager/money" className="flex min-h-16 flex-col items-center justify-center text-xs font-semibold"><WalletCards className="h-5 w-5" />Money</Link>'
+          if 'href="/manager/crew"' not in s:s=s.replace(needle,needle+'\n      <Link href="/manager/crew" className="flex min-h-16 flex-col items-center justify-center text-xs font-semibold"><UsersRound className="h-5 w-5" />Crew</Link>')
+          shell.write_text(s)
+          PY
+      - name: Verify Task 3
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCrewPage.test.tsx
+          pnpm --filter @workspace/adventure-zone typecheck
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/api-server build
+      - name: Commit Task 3 product files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/adventure-zone/src/pages/ManagerCrewPage.tsx artifacts/adventure-zone/src/pages/ManagerWorkerPage.tsx artifacts/adventure-zone/src/pages/ManagerCrewPage.test.tsx artifacts/adventure-zone/src/components/manager/worker-form.tsx artifacts/adventure-zone/src/components/manager/rehire-status.tsx artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/components/manager/manager-shell.tsx artifacts/api-server/src/features/leg-manager/crew-repository.ts artifacts/api-server/src/routes/leg-manager.ts lib/db/migrations/038_leg_crew.sql lib/db/src/schema/index.ts
+          git commit -m 'feat: add manager crew directory [skip release3-task1] [skip release3-task2] [skip release3-task3]'
+          git push
