@@ -35,7 +35,7 @@ export function resolveMapStyle(configured?: string) {
 
 type StyleReadyMap = {
   isStyleLoaded: () => boolean;
-  on: (event: "style.load", handler: () => void) => unknown;
+  on: (event: "styledata", handler: () => void) => unknown;
 };
 
 export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: () => void) {
@@ -43,7 +43,10 @@ export function installMapOverlaysWhenStyleReady(map: StyleReadyMap, install: ()
     install();
     return;
   }
-  map.on("style.load", install);
+  const installWhenLoaded = () => {
+    if (map.isStyleLoaded()) install();
+  };
+  map.on("styledata", installWhenLoaded);
 }
 
 const initialFilters: MapFilters = {
