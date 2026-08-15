@@ -73,3 +73,39 @@ Static checks performed:
 
 - The workspace snapshot is partial and has no `.git`; commits were applied through the GitHub connector.
 - Local focused tests and API typecheck could not complete because the supplied local harness is missing/has incompatible tooling, not because of assertion failures.
+
+## Fix round 1 evidence
+
+Review finding addressed:
+
+- Updated the linked-call outcome repository test to import `auditEntries` and expect the required insert sequence:
+  `[activityRevisions, auditEntries, auditEntries]`.
+- Kept the mutation-boundary checks for the linked outcome edit:
+  - updates remain `[callSessions, activities]`;
+  - booking/contact/follow-up/organization-contact tables are not inserted or updated.
+
+Verification attempted:
+
+```bash
+pnpm --dir repo/artifacts/api-server test src/features/activities/activity-repository.test.ts src/features/activities/activity-service.test.ts
+```
+
+Result: still blocked before assertions by the local Node 24 strip-only TypeScript loader:
+
+- `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX: TypeScript parameter property is not supported in strip-only mode`.
+
+```bash
+pnpm --dir repo/artifacts/api-server typecheck
+```
+
+Result: still blocked because this snapshot does not include `tsc`:
+
+- `sh: 1: tsc: not found`.
+
+Static check:
+
+```bash
+rg "auditEntries|insertedTables|followUps|bookingContacts|organizationContacts" repo/artifacts/api-server/src/features/activities/activity-repository.test.ts -n
+```
+
+Result: confirmed `auditEntries` is imported, the expected audit insert assertions are present, and forbidden booking/contact/follow-up/organization-contact insert/update guards are present.
