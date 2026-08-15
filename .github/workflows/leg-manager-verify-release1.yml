@@ -1,0 +1,48 @@
+name: Verify Leg Manager Release 1
+on:
+  push:
+    branches: [feature/leg-manager-foundation-clean]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused API tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/travel-leg-editor.test.ts src/features/leg-manager
+      - name: Focused web tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerSignInPage.test.tsx src/pages/ManagerRoutePage.test.tsx src/lib/manager-sync-queue.test.ts src/components/manager/report-schedule-issue.test.tsx src/components/routes/leg-manager-access.test.tsx src/components/routes/travel-leg-editor.test.tsx
+      - name: Web typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: Manager API scoped typecheck
+        run: pnpm --filter @workspace/api-server exec tsc -p tsconfig.manager.json --noEmit
+      - name: Full API typecheck diagnostic
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Web build
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Security smoke assertions
+        run: |
+          grep -q 'req.legManager!.legId' artifacts/api-server/src/routes/leg-manager.ts
+          grep -q 'incrementSessionVersion(id)' artifacts/api-server/src/routes/routes-map.ts
+          grep -q 'onConflictDoNothing' artifacts/api-server/src/features/leg-manager/schedule-issue-repository.ts
+          ! grep -q 'passwordHash' artifacts/adventure-zone/src/components/routes/leg-manager-access.tsx
+      - name: Remove verification workflows after success
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git rm -f .github/workflows/leg-manager-verify-release1.yml .github/workflows/leg-manager-clean-build.yml
+          git commit -m 'chore: remove temporary leg manager verification workflows'
+          git push
