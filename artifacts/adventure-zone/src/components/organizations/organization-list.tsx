@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 
+import { profileTypeOptions } from "@/features/organizations/last-resort-input";
 import type {
   OrganizationListQuery,
   OrganizationListPage,
@@ -17,6 +18,7 @@ function listHref(query: OrganizationListQuery) {
   if (query.hasFollowUp) params.set("hasFollowUp", "yes");
   if (query.hasBooking) params.set("hasBooking", "yes");
   if (query.hasLocations) params.set("hasLocations", "yes");
+  if (query.showMembers) params.set("showMembers", "yes");
   if (query.page > 1) params.set("page", String(query.page));
   if (query.pageSize !== 50) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString();
@@ -53,8 +55,22 @@ export function OrganizationList({
             type="search"
           />
         </label>
-        <label className="grid gap-1 text-sm font-semibold">Profile type<select defaultValue={query.placeType ?? ""} name="type"><option value="">All profile types</option><option value="event">Event</option><option value="venue">Venue</option><option value="company">Company</option></select></label>
-        <label className="grid gap-1 text-sm font-semibold">State/region<input defaultValue={query.region ?? ""} name="region" placeholder="Colorado or CO" /></label>
+
+        <label className="grid gap-1 text-sm font-semibold">
+          Profile type
+          <select defaultValue={query.placeType ?? ""} name="type">
+            <option value="">All profile types</option>
+            {profileTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+
+        <label className="grid gap-1 text-sm font-semibold">
+          State/region
+          <input defaultValue={query.region ?? ""} name="region" placeholder="Colorado or CO" />
+        </label>
+
         <fieldset className="grid gap-2 text-sm font-semibold">
           <legend>Contact details</legend>
           <label className="flex items-center gap-2 font-normal">
@@ -66,6 +82,7 @@ export function OrganizationList({
             Has email
           </label>
         </fieldset>
+
         <fieldset className="grid gap-2 text-sm font-semibold">
           <legend>Activity</legend>
           <label className="flex items-center gap-2 font-normal">
@@ -77,7 +94,15 @@ export function OrganizationList({
             Has booking
           </label>
         </fieldset>
-        <label className="grid gap-1 text-sm font-semibold">Locations<select defaultValue={query.hasLocations ? "yes" : ""} name="hasLocations"><option value="">Any location count</option><option value="yes">Has possible locations</option></select></label>
+
+        <label className="grid gap-1 text-sm font-semibold">
+          Locations
+          <select defaultValue={query.hasLocations ? "yes" : ""} name="hasLocations">
+            <option value="">Any location count</option>
+            <option value="yes">Has possible locations</option>
+          </select>
+        </label>
+
         <label className="grid gap-1 text-sm font-semibold">
           Place status
           <select defaultValue={query.lastResort} name="lastResort">
@@ -85,24 +110,25 @@ export function OrganizationList({
             <option value="only">Last Resort only</option>
           </select>
         </label>
+
         <label className="grid gap-1 text-sm font-semibold">
           Travel leg
           <select defaultValue={query.travelLegId ?? ""} name="leg">
             <option value="">All travel legs</option>
             {travelLegs.map((leg) => (
-              <option key={leg.id} value={leg.id}>
-                {leg.name}
-              </option>
+              <option key={leg.id} value={leg.id}>{leg.name}</option>
             ))}
           </select>
         </label>
+
+        <label className="flex items-center gap-2 self-end rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium">
+          <input defaultChecked={query.showMembers} name="showMembers" type="checkbox" value="yes" />
+          Show family/group members
+        </label>
+
         <div className="flex items-end gap-2">
-          <button className="button-primary" type="submit">
-            Search
-          </button>
-          <Link className="button-secondary" href="/profiles">
-            Reset
-          </Link>
+          <button className="button-primary" type="submit">Apply filters</button>
+          <Link className="button-secondary" href="/profiles">Reset</Link>
         </div>
       </form>
 
@@ -113,35 +139,34 @@ export function OrganizationList({
       {organizations.records.length ? (
         <ul className="grid gap-3">
           {organizations.records.map((organization) => (
-            <li
-              className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-              key={organization.id}
-            >
+            <li className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={organization.id}>
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      className="text-lg font-bold hover:text-orange-700"
-                      href={detailHref(organization.id, query)}
-                    >
+                    <Link className="text-lg font-bold hover:text-orange-700" href={detailHref(organization.id, query)}>
                       {organization.name}
                     </Link>
                     {organization.lastResort ? (
-                      <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-                        Last Resort
-                      </span>
+                      <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span>
                     ) : null}
                   </div>
+
+                  {organization.parentContext ? (
+                    <p className="mt-1 text-xs font-semibold text-orange-700">
+                      {organization.parentContext.kind === "event_family" ? "Part of" : "Location of"} {organization.parentContext.name}
+                    </p>
+                  ) : null}
+
                   <p className="mt-1 text-sm text-slate-500">
                     {[organization.city, organization.region].filter(Boolean).join(", ")}
                     {organization.primaryContactName ? (
                       <span className="ml-2 font-medium text-slate-700">· {organization.primaryContactName}</span>
                     ) : null}
                   </p>
+
                   {organization.matchedLocation ? (
                     <p className="mt-0.5 text-xs text-slate-500">
-                      via{" "}
-                      <span className="font-medium text-slate-700">
+                      via <span className="font-medium text-slate-700">
                         {organization.matchedLocation.label}
                         {organization.matchedLocation.city
                           ? ` · ${[organization.matchedLocation.city, organization.matchedLocation.region].filter(Boolean).join(", ")}`
@@ -149,23 +174,22 @@ export function OrganizationList({
                       </span>
                     </p>
                   ) : null}
+
                   {organization.locationCount > 0 ? (
                     <p className="mt-0.5 text-sm font-medium text-slate-600">
                       {organization.locationCount} location{organization.locationCount !== 1 ? "s" : ""}
                     </p>
                   ) : null}
+
                   <p className="mt-0.5 text-sm text-slate-600">
                     {organization.contactCount} contacts · {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
                   </p>
+
                   {organization.lastResortReason ? (
-                    <p className="mt-2 text-sm text-rose-800">
-                      {organization.lastResortReason}
-                    </p>
+                    <p className="mt-2 text-sm text-rose-800">{organization.lastResortReason}</p>
                   ) : null}
                 </div>
-                <Link className="button-secondary text-center" href={detailHref(organization.id, query)}>
-                  View profile
-                </Link>
+                <Link className="button-secondary text-center" href={detailHref(organization.id, query)}>View profile</Link>
               </div>
             </li>
           ))}
@@ -173,25 +197,18 @@ export function OrganizationList({
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <p className="font-semibold">No profiles match these filters.</p>
-          <Link className="button-secondary mt-3 inline-flex" href="/profiles">
-            Reset filters
-          </Link>
+          <Link className="button-secondary mt-3 inline-flex" href="/profiles">Reset filters</Link>
         </div>
       )}
+
       {organizations.pageCount > 1 ? (
         <nav aria-label="Profiles pages" className="flex items-center justify-between gap-3">
           {organizations.page > 1 ? (
-            <Link className="button-secondary" href={listHref({ ...query, page: organizations.page - 1 })}>
-              Previous
-            </Link>
+            <Link className="button-secondary" href={listHref({ ...query, page: organizations.page - 1 })}>Previous</Link>
           ) : <span />}
-          <p className="text-sm font-semibold text-slate-600">
-            Page {organizations.page} of {organizations.pageCount}
-          </p>
+          <p className="text-sm font-semibold text-slate-600">Page {organizations.page} of {organizations.pageCount}</p>
           {organizations.page < organizations.pageCount ? (
-            <Link className="button-secondary" href={listHref({ ...query, page: organizations.page + 1 })}>
-              Next
-            </Link>
+            <Link className="button-secondary" href={listHref({ ...query, page: organizations.page + 1 })}>Next</Link>
           ) : <span />}
         </nav>
       ) : null}
