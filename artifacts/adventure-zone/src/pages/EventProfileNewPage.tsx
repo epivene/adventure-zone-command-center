@@ -13,16 +13,18 @@ export default function EventProfileNewPage() {
   const params = new URLSearchParams(search);
   const initialContactId = params.get("contactId") ?? "";
   const initialPhone = params.get("phone") ?? "";
+  const initialFamilyId = params.get("familyId") ?? "";
 
   const [travelLegs, setTravelLegs] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
+  const [families, setFamilies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       apiGet<any[]>("/routes/travel-legs").catch(() => []),
-      apiGet<any>("/organizations?page=1&pageSize=100").catch(() => null),
+      apiGet<any>("/organizations?page=1&pageSize=100&showMembers=yes").catch(() => null),
       apiGet<any>("/contacts?page=1&pageSize=100").catch(() => null),
     ]).then(([legs, orgs, contactPage]) => {
       setTravelLegs(legs ?? []);
@@ -30,10 +32,11 @@ export default function EventProfileNewPage() {
         (orgs?.organizations?.records ?? orgs?.records ?? orgs?.organizations ?? []).map((event: any) => ({
           id: event.id,
           name: event.name,
-          city: null,
-          region: null,
+          city: event.city ?? null,
+          region: event.region ?? null,
         })),
       );
+      setFamilies((orgs?.families ?? []).map((family: any) => ({ id: family.id, name: family.name })));
       setContacts(
         (contactPage?.records ?? contactPage?.contacts ?? []).map((contact: any) => ({
           id: contact.id,
@@ -51,15 +54,21 @@ export default function EventProfileNewPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="mb-8 text-3xl font-bold tracking-tight">New event profile</h1>
+      <header className="mb-6">
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Profiles & pipeline</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Add Event / Lead</h1>
+        <p className="mt-2 text-slate-600">Start with the name. Contacts, location, family, booking details, and follow-up can be added now or later.</p>
+      </header>
       <EventProfileForm
         events={events}
         contacts={contacts}
+        families={families}
+        initialFamilyId={initialFamilyId}
         travelLegs={travelLegs}
         initialContactId={initialContactId}
         initialPhone={initialPhone}
         loadEventProfile={loadEventProfileAction}
-        onSubmit={async (input: any) => {
+        onSubmit={async (input) => {
           const res = await createEventProfileAction(input);
           if (res.ok) navigate(`/event-profiles/${res.profileId}`);
           return res;
