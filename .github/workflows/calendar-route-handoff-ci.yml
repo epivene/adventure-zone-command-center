@@ -15,72 +15,12 @@ on:
       - "lib/db/**"
       - ".github/workflows/calendar-route-handoff-ci.yml"
 
-permissions:
-  contents: write
-
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-      - name: Apply map focus interaction patch
-        if: github.ref_name == 'feature/map-focus-filter-interactions'
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('artifacts/adventure-zone/src/components/routes/event-map.tsx')
-          s = p.read_text()
-          def rep(old, new, count=1):
-              global s
-              if s.count(old) < count:
-                  raise SystemExit(f'missing expected snippet: {old[:80]!r}')
-              s = s.replace(old, new, count)
-
-          rep('import type { TravelLeg } from "@/features/routes/travel-leg-repository";\n', 'import type { TravelLeg } from "@/features/routes/travel-leg-repository";\nimport { primaryViewportEvents, routeScopeSummary, viewportTarget, type MapViewportTarget } from "@/features/routes/map-focus";\n')
-
-          rep('''function MapCanvas({\n  geoJson,\n  routeLines,\n  handoffs,\n  onError,\n}: {\n  geoJson: MapFeatureCollection;\n  routeLines: RouteLineCollection;\n  handoffs: HandoffFeatureCollection;\n  onError?: (message: string) => void;\n}) {''', '''function MapCanvas({\n  geoJson,\n  routeLines,\n  handoffs,\n  viewport,\n  onError,\n}: {\n  geoJson: MapFeatureCollection;\n  routeLines: RouteLineCollection;\n  handoffs: HandoffFeatureCollection;\n  viewport: MapViewportTarget;\n  onError?: (message: string) => void;\n}) {''')
-
-          rep('''  const handoffDataRef = useRef(handoffs);\n  const fitVisibleRef = useRef<(() => void) | null>(null);''', '''  const handoffDataRef = useRef(handoffs);\n  const viewportRef = useRef(viewport);\n  const fitVisibleRef = useRef<(() => void) | null>(null);''')
-
-          rep('''      const fitVisibleData = () => {\n        const coordinates = visibleMapCoordinates(eventDataRef.current, handoffDataRef.current);\n        const viewport = viewportMode(coordinates);\n        if (viewport.kind === "none") return;\n        if (viewport.kind === "center") {\n          map.easeTo({ center: viewport.center, zoom: viewport.zoom, duration: 0 });\n          return;\n        }\n        const first = viewport.coordinates[0]!;\n        const bounds = new maplibregl.LngLatBounds(first, first);\n        for (const coordinate of viewport.coordinates.slice(1)) bounds.extend(coordinate);\n        map.fitBounds(bounds, { padding: 48, maxZoom: 10, duration: 0 });\n      };''', '''      const fitVisibleData = () => {\n        const target = viewportRef.current;\n        if (target.kind === "none") return;\n        if (target.kind === "center") {\n          map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });\n          return;\n        }\n        const first = target.coordinates[0];\n        if (!first) return;\n        const bounds = new maplibregl.LngLatBounds(first, first);\n        for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);\n        map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });\n      };''')
-
-          rep('''  useEffect(() => {\n    handoffDataRef.current = handoffs;\n    const source = mapRef.current?.getSource("handoffs") as GeoJSONSource | undefined;\n    source?.setData(handoffs as any);\n    if (source) fitVisibleRef.current?.();\n  }, [handoffs]);''', '''  useEffect(() => {\n    handoffDataRef.current = handoffs;\n    const source = mapRef.current?.getSource("handoffs") as GeoJSONSource | undefined;\n    source?.setData(handoffs as any);\n  }, [handoffs]);\n\n  useEffect(() => {\n    viewportRef.current = viewport;\n    if (mapRef.current?.getSource("events")) fitVisibleRef.current?.();\n  }, [viewport]);''')
-
-          rep('''function EventList({\n  events,\n  title,\n  unmapped = false,\n  retryingId = null,\n  onRetry,\n}: {\n  events: PlanningEvent[];\n  title: string;\n  unmapped?: boolean;\n  retryingId?: string | null;\n  onRetry?: (event: PlanningEvent) => void;\n}) {''', '''function EventList({\n  events,\n  title,\n  unmapped = false,\n  retryingId = null,\n  focusedEventId = null,\n  onRetry,\n  onFocus,\n}: {\n  events: PlanningEvent[];\n  title: string;\n  unmapped?: boolean;\n  retryingId?: string | null;\n  focusedEventId?: string | null;\n  onRetry?: (event: PlanningEvent) => void;\n  onFocus?: (event: PlanningEvent) => void;\n}) {''')
-
-          rep('''                  {unmapped ? (\n                    <div className="mt-1 grid gap-2">''', '''                  {!unmapped && onFocus ? (\n                    <button className="button-secondary mt-2" onClick={() => onFocus(event)} type="button">\n                      {focusedEventId === event.id ? "Focused on map" : "Focus on map"}\n                    </button>\n                  ) : null}\n                  {unmapped ? (\n                    <div className="mt-1 grid gap-2">''')
-
-          rep('''export function EventMap({\n  events,\n  travelLegs,\n  handoffs = [],\n}: {\n  events: MapEvent[];\n  travelLegs: TravelLeg[];\n  handoffs?: EquipmentHandoffView[];\n}) {''', '''export function EventMap({\n  events,\n  travelLegs,\n  handoffs = [],\n  focusedTripCoordinates = null,\n  onClearTripFocus,\n}: {\n  events: MapEvent[];\n  travelLegs: TravelLeg[];\n  handoffs?: EquipmentHandoffView[];\n  focusedTripCoordinates?: [number, number][] | null;\n  onClearTripFocus?: () => void;\n}) {''')
-
-          rep('''  const [focusedLegId, setFocusedLegId] = useState<string | null>(null);\n  const [retryingId, setRetryingId] = useState<string | null>(null);''', '''  const [focusedLegId, setFocusedLegId] = useState<string | null>(null);\n  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);\n  const [retryingId, setRetryingId] = useState<string | null>(null);''')
-
-          marker = '''  const dataset = useMemo(() => {'''
-          insert = '''  const primaryEvents = useMemo(\n    () => primaryViewportEvents(planningEvents, mode, focusedLegId),\n    [focusedLegId, mode, planningEvents],\n  );\n\n  const currentViewport = useMemo(\n    () => viewportTarget({ primaryEvents, explicitEventId: focusedEventId, tripCoordinates: focusedTripCoordinates }),\n    [focusedEventId, focusedTripCoordinates, primaryEvents],\n  );\n\n  const focusedLegName = focusedLegId\n    ? travelLegs.find((leg) => leg.id === focusedLegId)?.name ?? null\n    : null;\n  const scopeSummary = routeScopeSummary({\n    mode,\n    seasonYear,\n    focusedLegName,\n    region: filters.regions[0] ?? null,\n    dateFrom: filters.dateFrom,\n    dateTo: filters.dateTo,\n  });\n\n  function resetScope() {\n    setFilters(initialFilters);\n    setMode("full");\n    setSeasonYear(currentYear);\n    setFocusedLegId(null);\n    setFocusedEventId(null);\n    onClearTripFocus?.();\n  }\n\n'''
-          if marker not in s:
-              raise SystemExit('dataset marker missing')
-          s = s.replace(marker, insert + marker, 1)
-
-          rep('''      <MapFiltersPanel filters={filters} onChange={setFilters} onReset={() => setFilters(initialFilters)} regions={regions} />''', '''      <MapFiltersPanel filters={filters} onChange={(next) => { setFilters(next); setFocusedEventId(null); }} onReset={() => { setFilters(initialFilters); setFocusedEventId(null); }} regions={regions} />\n\n      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">\n        <p className="text-sm font-semibold text-slate-700">{scopeSummary}</p>\n        <div className="flex gap-2">\n          {focusedEventId ? <button className="button-secondary" onClick={() => setFocusedEventId(null)} type="button">Clear event focus</button> : null}\n          {focusedTripCoordinates ? <button className="button-secondary" onClick={onClearTripFocus} type="button">Clear trip focus</button> : null}\n          <button className="button-secondary" onClick={resetScope} type="button">Reset map scope</button>\n        </div>\n      </div>''')
-
-          rep('''      <p aria-live="polite" className="text-sm text-slate-600">\n        {mappedEvents.length} mapped {mappedEvents.length === 1 ? "event" : "events"} · {unmappedEvents.length} needing map location · {handoffFeatures.features.length} equipment meetup {handoffFeatures.features.length === 1 ? "marker" : "markers"}\n      </p>''', '''      <p aria-live="polite" className="text-sm text-slate-600">\n        {primaryEvents.length} primary {primaryEvents.length === 1 ? "event" : "events"} · {mappedEvents.length} mapped · {unmappedEvents.length} needing map location · {handoffFeatures.features.length} equipment meetup {handoffFeatures.features.length === 1 ? "marker" : "markers"}\n      </p>\n      {planningEvents.length === 0 ? (\n        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">No matching route events</p>\n      ) : null}''')
-
-          rep('''        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} onError={setMapError} />''', '''        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} viewport={currentViewport} onError={setMapError} />''')
-
-          rep('''        <EventList events={mappedEvents} title="Route events" />''', '''        <EventList events={mappedEvents} title="Route events" focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} />''')
-
-          p.write_text(s)
-          PY
-          if ! git diff --quiet -- artifacts/adventure-zone/src/components/routes/event-map.tsx; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add artifacts/adventure-zone/src/components/routes/event-map.tsx
-            git commit -m "feat: refit map from active planning scope"
-            git push origin HEAD:feature/map-focus-filter-interactions
-            exit 0
-          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -92,7 +32,7 @@ jobs:
       - name: Calendar unit tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts
       - name: Route focus unit tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/map-focus.test.ts
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/map-focus.test.ts src/components/routes/event-map-focus.test.tsx src/components/routes/trips-section.test.tsx
       - name: Handoff unit tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
       - name: Manager and route-map API tests
