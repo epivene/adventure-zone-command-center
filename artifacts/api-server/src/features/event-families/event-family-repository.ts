@@ -1,4 +1,4 @@
-import type { Pool, PoolClient } from "pg";
+import type { Pool } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 import { normalizeFamilyName, type EventFamilyProposal } from "./event-family-classifier";
 
@@ -98,13 +98,13 @@ export class EventFamilyRepository {
       SELECT o.id, o.name, o.city, o.region, o.place_type AS "placeType",
              COALESCE((SELECT COUNT(*)::int FROM organization_contacts oc WHERE oc.organization_id = o.id), 0) AS "contactCount",
              COALESCE((SELECT COUNT(*)::int FROM bookings b WHERE b.organization_id = o.id), 0) AS "bookingCount",
-             (SELECT MIN(a.follow_up_at) FROM activities a WHERE a.organization_id = o.id AND a.deleted_at IS NULL AND a.follow_up_at >= now()) AS "nextFollowUpAt"
+             (SELECT MIN(fu.due_at) FROM follow_ups fu WHERE fu.organization_id = o.id AND fu.completed_at IS NULL AND fu.due_at >= now()) AS "nextFollowUpAt"
       FROM event_family_members m
       JOIN organizations o ON o.id = m.organization_id
       WHERE m.family_id = $1
       ORDER BY o.name
     `, [id]);
-    return { ...family, members: members.rows };
+    return { ...family, memberCount: members.rows.length, members: members.rows };
   }
 
   async listPendingSuggestions(): Promise<EventFamilySuggestionRecord[]> {
