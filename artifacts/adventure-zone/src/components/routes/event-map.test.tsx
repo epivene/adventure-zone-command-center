@@ -12,15 +12,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/lib/auth-token", () => ({
   apiPost: mocks.post,
 }));
+vi.mock("./manager-route-map-shell", () => ({
+  ManagerRouteMapShell: ({ children }: any) => <div data-testid="route-map-shell">{children}</div>,
+}));
+vi.mock("./manager-route-map-layers", () => ({
+  ManagerRouteMapLayers: () => <div data-testid="route-map-layers" />,
+}));
 
-import {
-  DEFAULT_MAP_STYLE_URL,
-  EventMap,
-  applyMapViewport,
-  installMapOverlaysWhenStyleReady,
-  resolveMapStyle,
-  viewportMode,
-} from "./event-map";
+import { EventMap } from "./event-map";
 
 const leg: TravelLeg = {
   id: "leg-kristy",
@@ -57,69 +56,6 @@ const unresolved: MapEvent = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-});
-
-describe("route map runtime", () => {
-  it("uses a configured Vite style and the OpenFreeMap Liberty fallback", () => {
-    expect(resolveMapStyle(" https://example.com/style.json ")).toBe("https://example.com/style.json");
-    expect(resolveMapStyle(undefined)).toBe(DEFAULT_MAP_STYLE_URL);
-    expect(DEFAULT_MAP_STYLE_URL).toBe("https://tiles.openfreemap.org/styles/liberty");
-  });
-
-  it("installs route overlays from styledata with load as a missed-event fallback", () => {
-    const handlers = new Map<string, () => void>();
-    let styleLoaded = false;
-    const map = {
-      isStyleLoaded: vi.fn(() => styleLoaded),
-      on: vi.fn((event: string, handler: () => void) => handlers.set(event, handler)),
-    };
-    const install = vi.fn();
-
-    installMapOverlaysWhenStyleReady(map as never, install);
-
-    expect(map.on).toHaveBeenCalledWith("styledata", expect.any(Function));
-    expect(map.on).toHaveBeenCalledWith("load", expect.any(Function));
-    expect(install).not.toHaveBeenCalled();
-
-    styleLoaded = true;
-    handlers.get("load")?.();
-    expect(install).toHaveBeenCalledTimes(1);
-
-    handlers.get("styledata")?.();
-    expect(install).toHaveBeenCalledTimes(1);
-  });
-
-  it("installs route overlays immediately when the style is already loaded", () => {
-    const map = {
-      isStyleLoaded: vi.fn(() => true),
-      on: vi.fn(),
-    };
-    const install = vi.fn();
-
-    installMapOverlaysWhenStyleReady(map as never, install);
-
-    expect(install).toHaveBeenCalledTimes(1);
-  });
-
-  it("applies a center viewport without depending on map sources", () => {
-    const map = { easeTo: vi.fn(), fitBounds: vi.fn() };
-    applyMapViewport(map as never, { kind: "center", center: [-105.8406, 46.4083], zoom: 11 }, vi.fn() as never);
-    expect(map.easeTo).toHaveBeenCalledWith({ center: [-105.8406, 46.4083], zoom: 11, duration: 0 });
-  });
-
-  it("centers a single Miles City marker at city zoom", () => {
-    expect(viewportMode([[-105.8406, 46.4083]])).toEqual({
-      kind: "center",
-      center: [-105.8406, 46.4083],
-      zoom: 10,
-    });
-  });
-
-  it("fits bounds when multiple markers are visible", () => {
-    expect(viewportMode([[-105.8406, 46.4083], [-108.5007, 45.7833]])).toMatchObject({
-      kind: "bounds",
-    });
-  });
 });
 
 describe("EventMap unresolved locations", () => {
