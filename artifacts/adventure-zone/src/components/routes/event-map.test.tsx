@@ -13,7 +13,12 @@ vi.mock("@/lib/auth-token", () => ({
   apiPost: mocks.post,
 }));
 
-import { EventMap } from "./event-map";
+import {
+  DEFAULT_MAP_STYLE_URL,
+  EventMap,
+  resolveMapStyle,
+  viewportMode,
+} from "./event-map";
 
 const leg: TravelLeg = {
   id: "leg-kristy",
@@ -50,6 +55,28 @@ const unresolved: MapEvent = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("route map runtime", () => {
+  it("uses a configured Vite style and a real public fallback", () => {
+    expect(resolveMapStyle(" https://example.com/style.json ")).toBe("https://example.com/style.json");
+    expect(resolveMapStyle(undefined)).toBe(DEFAULT_MAP_STYLE_URL);
+    expect(DEFAULT_MAP_STYLE_URL).toMatch(/^https:\/\//);
+  });
+
+  it("centers a single Miles City marker at city zoom", () => {
+    expect(viewportMode([[-105.8406, 46.4083]])).toEqual({
+      kind: "center",
+      center: [-105.8406, 46.4083],
+      zoom: 10,
+    });
+  });
+
+  it("fits bounds when multiple markers are visible", () => {
+    expect(viewportMode([[-105.8406, 46.4083], [-108.5007, 45.7833]])).toMatchObject({
+      kind: "bounds",
+    });
+  });
 });
 
 describe("EventMap unresolved locations", () => {
