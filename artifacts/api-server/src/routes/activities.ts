@@ -83,8 +83,8 @@ router.delete("/activities/:id", async (req, res): Promise<void> => {
     }
     res.json({ ok: true });
   } catch (err) {
-    req.log.error({ err }, "Failed to delete activity");
-    res.status(500).json({ ok: false, error: "Server error" });
+    try { req.log?.error({ err }, "Failed to delete activity"); } catch { /* logging unavailable */ }
+    if (!res.headersSent) res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 

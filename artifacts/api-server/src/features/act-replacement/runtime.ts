@@ -25,7 +25,11 @@ export interface ActExtractionRuntime {
 
 type ExtractionLoop = ActExtractionRuntime;
 
-export const actExtractionWorkerConcurrency = 4;
+// Render's free tier (~256 MB) OOM-crashes with 4 concurrent extraction loops
+// each holding open DB connections and in-flight Promise chains.  One loop is
+// enough: the shared ActExtractionWorker serialises claims at the DB level, so
+// additional loops in the same process only add memory overhead, not throughput.
+export const actExtractionWorkerConcurrency = 1;
 
 export function createActExtractionLoopPool(input: {
   concurrency: number;
@@ -34,8 +38,11 @@ export function createActExtractionLoopPool(input: {
   const loops = Array.from({ length: input.concurrency }, (_, index) =>
     input.createLoop(index),
   );
+  let started = false;
   return {
     start() {
+      if (started) return;
+      started = true;
       for (const loop of loops) loop.start();
     },
     async close() {

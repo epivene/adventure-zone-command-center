@@ -10,6 +10,7 @@ import {
   createActExtractionClientAdapter,
   createActExtractionLoopPool,
   createActServerShutdown,
+  actExtractionWorkerConcurrency,
 } from "./runtime";
 
 const actConfig: ActConfig = {
@@ -203,6 +204,31 @@ describe("Act extraction runtime composition", () => {
       "close:2",
       "close:3",
     ]);
+  });
+
+  it("extraction pool concurrency is 1 so Render's 256 MB instance cannot OOM from duplicate workers", () => {
+    // Regression: concurrency was 4, causing 4 identical polling loops per process
+    // on the small Render instance, leading to JavaScript heap out of memory.
+    // Changing it back to > 1 will fail this test as an early warning.
+    expect(actExtractionWorkerConcurrency).toBe(1);
+  });
+
+  it("extraction loop pool cannot double-start workers when start() is called twice", () => {
+    const starts: number[] = [];
+    const pool = createActExtractionLoopPool({
+      concurrency: 1,
+      createLoop(index) {
+        return {
+          start() { starts.push(index); },
+          async close() {},
+        };
+      },
+    });
+
+    pool.start();
+    pool.start(); // second call must be a no-op at the loop level
+    expect(starts).toHaveLength(1);
+    expect(starts[0]).toBe(0);
   });
 
   it("single-flights authorization shared by concurrent extraction loops", async () => {
