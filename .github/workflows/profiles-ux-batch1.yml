@@ -1,0 +1,106 @@
+name: Profiles UX Batch 1
+on:
+  push:
+    branches: [feature/profiles-event-families-ux]
+
+jobs:
+  batch1:
+    if: "!contains(github.event.head_commit.message, '[skip profiles-batch1]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Patch server visibility and family context
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p=Path(path); s=p.read_text()
+              if old not in s:
+                  raise SystemExit(f'anchor missing in {path}: {old[:80]}')
+              p.write_text(s.replace(old,new,1))
+
+          # API route passes the complete filter contract.
+          path='artifacts/api-server/src/routes/organizations.ts'
+          replace(path,
+            '    hasLocations: req.query.hasLocations ?? undefined,\n    contact: req.query.contact ?? undefined,',
+            '    hasLocations: req.query.hasLocations ?? undefined,\n    showMembers: req.query.showMembers ?? undefined,\n    contact: req.query.contact ?? undefined,')
+          replace(path,
+            '    includeRetired: req.query.includeRetired ?? undefined,\n    page: req.query.page ?? undefined,',
+            '    includeRetired: req.query.includeRetired ?? undefined,\n    page: req.query.page ?? undefined,\n    pageSize: req.query.pageSize ?? undefined,')
+
+          # Repository: expose parent context, hide grouped members by default,
+          # allow search/showMembers to surface them.
+          path='artifacts/api-server/src/features/organizations/organization-repository.ts'
+          replace(path,
+            '  organizationFamilyReviews,\n  organizationLocations,',
+            '  organizationFamilyReviews,\n  eventFamilyMembers,\n  organizationLocations,')
+          replace(path,
+            '  hasBooking: boolean;\n  hasLocations: boolean;\n  /** When true, consolidated source profiles are included in results. Defaults to false. */',
+            '  hasBooking: boolean;\n  hasLocations: boolean;\n  showMembers: boolean;\n  /** When true, consolidated source profiles are included in results. Defaults to false. */')
+          replace(path,
+            'export type MatchedOrganizationLocation = {',
+            'export type ProfileParentContext =\n  | { kind: "event_family"; id: string; name: string }\n  | { kind: "organization_group"; id: string; name: string }\n  | null;\n\nexport type MatchedOrganizationLocation = {')
+          replace(path,
+            '  matchedLocation: MatchedOrganizationLocation | null;\n};',
+            '  matchedLocation: MatchedOrganizationLocation | null;\n  parentContext: ProfileParentContext;\n};')
+          replace(path,
+            'export function buildOrganizationListCondition(\n  query: OrganizationListQuery,\n): SQL | undefined {',
+            'export function buildOrganizationListCondition(\n  query: OrganizationListQuery,\n  options: { includeEventFamilyMembers?: boolean } = {},\n): SQL | undefined {')
+          replace(path,
+            '  const notRetiredCondition = query.includeRetired\n    ? undefined\n    : isNull(organizations.consolidatedIntoId);',
+            '  const notRetiredCondition =\n    query.includeRetired || query.showMembers || Boolean(query.search)\n      ? undefined\n      : isNull(organizations.consolidatedIntoId);')
+          replace(path,
+            '  const locationCondition = query.hasLocations\n    ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`\n    : undefined;\n\n  return and(',
+            '  const locationCondition = query.hasLocations\n    ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`\n    : undefined;\n  const familyMemberCondition =\n    options.includeEventFamilyMembers || query.showMembers || Boolean(query.search)\n      ? undefined\n      : sql`not exists (select 1 from ${eventFamilyMembers} efm where efm.organization_id = ${organizations.id})`;\n\n  return and(')
+          replace(path,
+            '    bookingCondition,\n    locationCondition,\n  ) ?? undefined;',
+            '    bookingCondition,\n    locationCondition,\n    familyMemberCondition,\n  ) ?? undefined;')
+          replace(path,
+            '    const organizationIds = organizationRecords.map((organization) => organization.id);\n    const locationSearchPattern = query.search ? `%${query.search}%` : null;',
+            '    const organizationIds = organizationRecords.map((organization) => organization.id);\n    const parentIds = [...new Set(organizationRecords.map((organization) => organization.consolidatedIntoId).filter((id): id is string => Boolean(id)))];\n    const parentRows = parentIds.length\n      ? await this.database.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, parentIds))\n      : [];\n    const parentNameById = new Map(parentRows.map((row) => [row.id, row.name]));\n    const locationSearchPattern = query.search ? `%${query.search}%` : null;')
+          replace(path,
+            '        matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,\n      })),',
+            '        matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,\n        parentContext: organization.consolidatedIntoId\n          ? { kind: "organization_group" as const, id: organization.consolidatedIntoId, name: parentNameById.get(organization.consolidatedIntoId) ?? "Parent profile" }\n          : null,\n      })),')
+
+          # Family aggregation must still inspect hidden members, and list records
+          # get event-family context when they are surfaced by search/showMembers.
+          path='artifacts/api-server/src/features/event-families/event-family-list.ts'
+          replace(path,
+            '  const condition = buildOrganizationListCondition(query);',
+            '  const condition = buildOrganizationListCondition(query, { includeEventFamilyMembers: true });')
+          replace(path,
+            '        .select({\n          organizationId: eventFamilyMembers.organizationId,\n          familyId: eventFamilyMembers.familyId,\n        })\n        .from(eventFamilyMembers)\n        .where(inArray(eventFamilyMembers.organizationId, pageOrganizationIds))',
+            '        .select({\n          organizationId: eventFamilyMembers.organizationId,\n          familyId: eventFamilyMembers.familyId,\n          familyName: eventFamilies.name,\n        })\n        .from(eventFamilyMembers)\n        .innerJoin(eventFamilies, eq(eventFamilies.id, eventFamilyMembers.familyId))\n        .where(inArray(eventFamilyMembers.organizationId, pageOrganizationIds))')
+          replace(path,
+            '  const familyByOrganization = new Map(\n    pageMemberships.map((membership) => [membership.organizationId, membership.familyId]),\n  );',
+            '  const familyByOrganization = new Map(\n    pageMemberships.map((membership) => [membership.organizationId, membership]),\n  );')
+          replace(path,
+            '      records: page.records.map((record) => ({\n        ...record,\n        eventFamilyId: familyByOrganization.get(record.id) ?? null,\n      })),',
+            '      records: page.records.map((record) => {\n        const membership = familyByOrganization.get(record.id);\n        return {\n          ...record,\n          eventFamilyId: membership?.familyId ?? null,\n          parentContext: record.parentContext ?? (membership\n            ? { kind: "event_family" as const, id: membership.familyId, name: membership.familyName }\n            : null),\n        };\n      }),')
+          PY
+      - name: Verify frontend filters and builds
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run src/pages/OrganizationsPage.test.tsx
+          pnpm --filter @workspace/adventure-zone typecheck
+          pnpm --filter @workspace/api-server build
+          pnpm --filter @workspace/adventure-zone build
+      - name: Commit server batch
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/routes/organizations.ts artifacts/api-server/src/features/organizations/organization-repository.ts artifacts/api-server/src/features/event-families/event-family-list.ts
+          git commit -m 'feat: hide grouped profile members by default [skip profiles-batch1]'
+          git push origin HEAD:feature/profiles-event-families-ux
