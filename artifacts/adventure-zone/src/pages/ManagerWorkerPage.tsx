@@ -38,95 +38,86 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
 
   async function saveHistoryEdit() {
     if (!editingHistory) return;
-    const result = await managerApi<any>(`/manager/crew/${workerId}/work-history/${editingHistory.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ role: editRole }),
-    });
-    setWorker((current: any) => current ? {
-      ...current,
-      workHistory: (current.workHistory ?? []).map((entry: any) => entry.id === editingHistory.id ? { ...entry, ...(result.entry ?? {}), role: editRole } : entry),
-    } : current);
+    const historyId = editingHistory.id;
+    const nextRole = editRole;
+    setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).map((entry: any) => entry.id === historyId ? { ...entry, role: nextRole } : entry) } : current);
     setEditingHistory(null);
-    setStatus("History updated");
+    setStatus("Saving history…");
+    try {
+      const result = await managerApi<any>(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "PATCH", body: JSON.stringify({ role: nextRole }) });
+      if (result.entry) setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).map((entry: any) => entry.id === historyId ? { ...entry, ...result.entry } : entry) } : current);
+      setStatus("History updated");
+    } catch (error) {
+      setStatus("Could not update history");
+      await load();
+    }
   }
 
   async function deleteHistory(historyId: string) {
-    await managerApi(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "DELETE" });
     setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).filter((entry: any) => entry.id !== historyId) } : current);
-    setStatus("History deleted");
+    setStatus("Deleting history…");
+    try {
+      await managerApi(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "DELETE" });
+      setStatus("History deleted");
+    } catch (error) {
+      setStatus("Could not delete history");
+      await load();
+    }
   }
 
   async function saveNoteEdit() {
     if (!editingNote) return;
-    const result = await managerApi<any>(`/manager/crew/${workerId}/notes/${editingNote.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ note: editNote }),
-    });
-    setWorker((current: any) => current ? {
-      ...current,
-      managerNotes: (current.managerNotes ?? []).map((entry: any) => entry.id === editingNote.id ? { ...entry, ...(result.note ?? {}), note: editNote } : entry),
-    } : current);
+    const noteId = editingNote.id;
+    const nextNote = editNote;
+    setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).map((entry: any) => entry.id === noteId ? { ...entry, note: nextNote } : entry) } : current);
     setEditingNote(null);
-    setStatus("Note updated");
+    setStatus("Saving note…");
+    try {
+      const result = await managerApi<any>(`/manager/crew/${workerId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ note: nextNote }) });
+      if (result.note) setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).map((entry: any) => entry.id === noteId ? { ...entry, ...result.note } : entry) } : current);
+      setStatus("Note updated");
+    } catch (error) {
+      setStatus("Could not update note");
+      await load();
+    }
   }
 
   async function deleteNote(noteId: string) {
-    await managerApi(`/manager/crew/${workerId}/notes/${noteId}`, { method: "DELETE" });
     setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).filter((entry: any) => entry.id !== noteId) } : current);
-    setStatus("Note deleted");
+    setStatus("Deleting note…");
+    try {
+      await managerApi(`/manager/crew/${workerId}/notes/${noteId}`, { method: "DELETE" });
+      setStatus("Note deleted");
+    } catch (error) {
+      setStatus("Could not delete note");
+      await load();
+    }
   }
 
   if (!worker) return <p>Loading worker…</p>;
 
   return <div className="grid gap-4">
-    <header>
-      <h1 className="text-2xl font-bold">{worker.name}</h1>
-      <RehireStatus status={worker.rehireStatus} />
-      <p className="text-sm">{worker.phone || "No phone"} · {worker.locationText || "Location not set"}</p>
-    </header>
+    <header><h1 className="text-2xl font-bold">{worker.name}</h1><RehireStatus status={worker.rehireStatus} /><p className="text-sm">{worker.phone || "No phone"} · {worker.locationText || "Location not set"}</p></header>
 
     <section className="rounded-xl border bg-white p-4">
       <h2 className="font-bold">Work history</h2>
       {worker.workHistory?.length ? worker.workHistory.map((history: any) => <div key={history.id} className="mt-2 border-t pt-2 text-sm">
-        {editingHistory?.id === history.id ? <div className="grid gap-2">
-          <label>Edit role<input aria-label="Edit role" value={editRole} onChange={event => setEditRole(event.target.value)} /></label>
-          <div className="flex gap-2"><button className="button-primary" onClick={() => void saveHistoryEdit()}>Save</button><button className={actionButton} onClick={() => setEditingHistory(null)}>Cancel</button></div>
-        </div> : <>
-          <b>{history.role}</b>{history.rating != null ? <span> · {history.rating}/5</span> : null}{history.note ? <p>{history.note}</p> : null}
-          {history.legId === manager?.legId ? <div className="mt-2 flex gap-2"><button className={actionButton} onClick={() => { setEditingHistory(history); setEditRole(history.role); }}>Edit</button><button className={deleteButton} onClick={() => void deleteHistory(history.id)}>Delete</button></div> : null}
-        </>}
+        {editingHistory?.id === history.id ? <div className="grid gap-2"><label>Edit role<input aria-label="Edit role" value={editRole} onChange={event => setEditRole(event.target.value)} /></label><div className="flex gap-2"><button className="button-primary" onClick={() => void saveHistoryEdit()}>Save</button><button className={actionButton} onClick={() => setEditingHistory(null)}>Cancel</button></div></div> : <><b>{history.role}</b>{history.rating != null ? <span> · {history.rating}/5</span> : null}{history.note ? <p>{history.note}</p> : null}{history.legId === manager?.legId ? <div className="mt-2 flex gap-2"><button className={actionButton} onClick={() => { setEditingHistory(history); setEditRole(history.role); }}>Edit</button><button className={deleteButton} onClick={() => void deleteHistory(history.id)}>Delete</button></div> : null}</>}
       </div>) : <p className="text-sm text-muted-foreground">No work history yet.</p>}
     </section>
 
-    <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/work-history`, "POST", { bookingId: null, tripId: null, role, startedAt: new Date().toISOString(), endedAt: null, rating: null, note: null }).then(() => setRole("")); }}>
-      <h2 className="font-bold">Add work history</h2>
-      <label>Role<input value={role} onChange={event => setRole(event.target.value)} required /></label>
-      <button className="button-primary">Save history</button>
-    </form>
+    <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/work-history`, "POST", { bookingId: null, tripId: null, role, startedAt: new Date().toISOString(), endedAt: null, rating: null, note: null }).then(() => setRole("")); }}><h2 className="font-bold">Add work history</h2><label>Role<input value={role} onChange={event => setRole(event.target.value)} required /></label><button className="button-primary">Save history</button></form>
 
     <section className="rounded-xl border bg-white p-4">
       <h2 className="font-bold">Manager notes</h2>
       {worker.managerNotes?.length ? worker.managerNotes.map((managerNote: any) => <div key={managerNote.id} className="mt-2 border-t pt-2 text-sm">
-        {editingNote?.id === managerNote.id ? <div className="grid gap-2">
-          <label>Edit note<textarea aria-label="Edit note" value={editNote} onChange={event => setEditNote(event.target.value)} /></label>
-          <div className="flex gap-2"><button className="button-primary" onClick={() => void saveNoteEdit()}>Save</button><button className={actionButton} onClick={() => setEditingNote(null)}>Cancel</button></div>
-        </div> : <>
-          <p>{managerNote.note}</p>
-          {managerNote.legId === manager?.legId ? <div className="mt-2 flex gap-2"><button className={actionButton} onClick={() => { setEditingNote(managerNote); setEditNote(managerNote.note); }}>Edit</button><button className={deleteButton} onClick={() => void deleteNote(managerNote.id)}>Delete</button></div> : null}
-        </>}
+        {editingNote?.id === managerNote.id ? <div className="grid gap-2"><label>Edit note<textarea aria-label="Edit note" value={editNote} onChange={event => setEditNote(event.target.value)} /></label><div className="flex gap-2"><button className="button-primary" onClick={() => void saveNoteEdit()}>Save</button><button className={actionButton} onClick={() => setEditingNote(null)}>Cancel</button></div></div> : <><p>{managerNote.note}</p>{managerNote.legId === manager?.legId ? <div className="mt-2 flex gap-2"><button className={actionButton} onClick={() => { setEditingNote(managerNote); setEditNote(managerNote.note); }}>Edit</button><button className={deleteButton} onClick={() => void deleteNote(managerNote.id)}>Delete</button></div> : null}</>}
       </div>) : <p className="text-sm text-muted-foreground">No manager notes yet.</p>}
     </section>
 
-    <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/notes`, "POST", { bookingId: null, note }).then(() => setNote("")); }}>
-      <h2 className="font-bold">Add manager note</h2>
-      <textarea value={note} onChange={event => setNote(event.target.value)} required />
-      <button className="button-primary">Save note</button>
-    </form>
+    <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/notes`, "POST", { bookingId: null, note }).then(() => setNote("")); }}><h2 className="font-bold">Add manager note</h2><textarea value={note} onChange={event => setNote(event.target.value)} required /><button className="button-primary">Save note</button></form>
 
-    <section className="rounded-xl border bg-white p-4">
-      <h2 className="font-bold">Rehire guidance</h2>
-      <div className="mt-2 flex flex-wrap gap-2">{["rehirable", "undecided", "do_not_rehire"].map(value => <button className={actionButton} key={value} onClick={() => void queue(`/manager/crew/${workerId}/rehire-status`, "PATCH", { rehireStatus: value })}>{value.replaceAll("_", " ")}</button>)}</div>
-    </section>
+    <section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Rehire guidance</h2><div className="mt-2 flex flex-wrap gap-2">{["rehirable", "undecided", "do_not_rehire"].map(value => <button className={actionButton} key={value} onClick={() => void queue(`/manager/crew/${workerId}/rehire-status`, "PATCH", { rehireStatus: value })}>{value.replaceAll("_", " ")}</button>)}</div></section>
     {status ? <p role="status">{status}</p> : null}
   </div>;
 }
