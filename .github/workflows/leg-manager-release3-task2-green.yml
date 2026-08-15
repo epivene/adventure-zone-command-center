@@ -1,0 +1,58 @@
+name: Leg Manager Release 3 Task 2 Green
+on:
+  push:
+    branches: [feature/leg-manager-crew-aftermath]
+jobs:
+  task2:
+    if: "!contains(github.event.head_commit.message, '[skip release3-task2]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Add manager crew APIs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager.ts')
+          s=p.read_text()
+          if 'DrizzleCrewRepository' not in s:
+              s=s.replace('import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";', 'import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";\nimport { DrizzleCrewRepository, listWorkersForManager } from "@/features/leg-manager/crew-repository";\nimport { rankCrewWorkers } from "@/features/leg-manager/crew-search";\nimport { crewRehireStatuses } from "@/features/leg-manager/crew-types";')
+              s=s.replace('const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);', 'const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);const crew=new DrizzleCrewRepository(db);')
+          marker='\nconst issueSchema='
+          block='''\nconst crewWorkerSchema=z.object({name:z.string().trim().min(1).max(160),phone:z.string().trim().max(60).nullable().optional(),email:z.string().trim().email().max(200).nullable().optional(),city:z.string().trim().max(120).nullable().optional(),region:z.string().trim().max(80).nullable().optional(),locationText:z.string().trim().max(240).nullable().optional(),rehireStatus:z.enum(crewRehireStatuses).optional(),confirmCreate:z.boolean().optional().default(false)});\nconst crewHistorySchema=z.object({bookingId:z.string().uuid().nullable().optional(),tripId:z.string().uuid().nullable().optional(),role:z.string().trim().min(1).max(160),startedAt:z.coerce.date(),endedAt:z.coerce.date().nullable().optional(),rating:z.number().int().min(0).max(5).nullable().optional(),note:z.string().trim().max(4000).nullable().optional()}).refine(v=>!v.endedAt||v.endedAt>=v.startedAt,{message:"End date cannot be before start date"});\nconst crewNoteSchema=z.object({bookingId:z.string().uuid().nullable().optional(),note:z.string().trim().min(1).max(4000)});\nfunction routeParam(value:string|string[]|undefined){return Array.isArray(value)?value[0]??"":value??"";}\nrouter.get("/manager/crew",requireManager,async(req,res)=>{const workers=await listWorkersForManager(crew,req.legManager!.legId);res.json({workers:rankCrewWorkers(workers,{query:typeof req.query.query==="string"?req.query.query:null,city:typeof req.query.city==="string"?req.query.city:null,region:typeof req.query.region==="string"?req.query.region:null})});});\nrouter.post("/manager/crew",requireManager,async(req,res):Promise<void>=>{const parsed=crewWorkerSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:parsed.error.issues[0]?.message??"Invalid worker"});return;}const {confirmCreate,...input}=parsed.data;const possibleMatches=await crew.findPossibleMatches(input);if(possibleMatches.length&&!confirmCreate){res.status(409).json({error:"Possible existing worker matches found",possibleMatches});return;}const worker=await crew.createWorker(input);res.status(201).json({worker,possibleMatches});});\nrouter.post("/manager/crew/:workerId/work-history",requireManager,async(req,res):Promise<void>=>{const workerId=routeParam(req.params.workerId);const parsed=crewHistorySchema.safeParse(req.body);if(!workerId||!parsed.success){res.status(400).json({error:parsed.success?"Worker id is required":parsed.error.issues[0]?.message??"Invalid work history"});return;}const bookingId=parsed.data.bookingId??null,tripId=parsed.data.tripId??null;if(!(await finance.refsBelongToLeg(req.legManager!.legId,{bookingId,tripId,tripSegmentId:null}))){res.status(403).json({error:"Booking or trip is outside your leg"});return;}const entry=await crew.createWorkHistory({workerId,legId:req.legManager!.legId,bookingId,tripId,role:parsed.data.role,startedAt:parsed.data.startedAt,endedAt:parsed.data.endedAt??null,rating:parsed.data.rating??null,note:parsed.data.note??null});res.status(201).json({entry});});\nrouter.post("/manager/crew/:workerId/notes",requireManager,async(req,res):Promise<void>=>{const workerId=routeParam(req.params.workerId);const parsed=crewNoteSchema.safeParse(req.body);if(!workerId||!parsed.success){res.status(400).json({error:parsed.success?"Worker id is required":"Invalid worker note"});return;}const bookingId=parsed.data.bookingId??null;if(!(await finance.refsBelongToLeg(req.legManager!.legId,{bookingId,tripId:null,tripSegmentId:null}))){res.status(403).json({error:"Booking is outside your leg"});return;}const note=await crew.createManagerNote({workerId,legId:req.legManager!.legId,bookingId,note:parsed.data.note});res.status(201).json({note});});\nrouter.patch("/manager/crew/:workerId/rehire-status",requireManager,async(req,res):Promise<void>=>{const workerId=routeParam(req.params.workerId);const parsed=z.object({rehireStatus:z.enum(crewRehireStatuses)}).safeParse(req.body);if(!workerId||!parsed.success){res.status(400).json({error:"Invalid rehire status"});return;}const worker=await crew.updateRehireStatus(workerId,parsed.data.rehireStatus);if(!worker){res.status(404).json({error:"Worker not found"});return;}res.json({worker});});\n'''
+          if '/manager/crew"' not in s:
+              s=s.replace(marker,block+marker)
+          p.write_text(s)
+          PY
+      - name: Add owner crew APIs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager-admin.ts')
+          s=p.read_text()
+          if 'DrizzleCrewRepository' not in s:
+              s=s.replace('import { DrizzleFinanceRepository } from "@/features/leg-manager/finance-repository";', 'import { DrizzleFinanceRepository } from "@/features/leg-manager/finance-repository";\nimport { DrizzleCrewRepository, listWorkersForManager } from "@/features/leg-manager/crew-repository";\nimport { crewRehireStatuses } from "@/features/leg-manager/crew-types";')
+              s=s.replace('const router:IRouter=Router(),repo=new DrizzleLegManagerRepository(db);', 'const router:IRouter=Router(),repo=new DrizzleLegManagerRepository(db),crew=new DrizzleCrewRepository(db);')
+          marker='\nexport default router;'
+          block='''\nrouter.get("/manager-admin/crew",async(_req,res)=>{res.json({workers:await listWorkersForManager(crew,"owner")});});\nrouter.post("/manager-admin/crew",async(req,res):Promise<void>=>{const parsed=z.object({name:z.string().trim().min(1).max(160),phone:z.string().trim().max(60).nullable().optional(),email:z.string().trim().email().max(200).nullable().optional(),city:z.string().trim().max(120).nullable().optional(),region:z.string().trim().max(80).nullable().optional(),locationText:z.string().trim().max(240).nullable().optional(),rehireStatus:z.enum(crewRehireStatuses).optional()}).safeParse(req.body);if(!parsed.success){res.status(400).json({error:"Invalid worker"});return;}res.status(201).json({worker:await crew.createWorker(parsed.data)});});\nrouter.patch("/manager-admin/crew/:workerId/rehire-status",async(req,res):Promise<void>=>{const raw=req.params.workerId;const workerId=Array.isArray(raw)?raw[0]??"":raw;const parsed=z.object({rehireStatus:z.enum(crewRehireStatuses)}).safeParse(req.body);if(!workerId||!parsed.success){res.status(400).json({error:"Invalid rehire status"});return;}const worker=await crew.updateRehireStatus(workerId,parsed.data.rehireStatus);if(!worker){res.status(404).json({error:"Worker not found"});return;}res.json({worker});});\nrouter.patch("/manager-admin/crew/work-history/:historyId",async(req,res):Promise<void>=>{const raw=req.params.historyId;const historyId=Array.isArray(raw)?raw[0]??"":raw;const parsed=z.object({role:z.string().trim().min(1).max(160).optional(),startedAt:z.coerce.date().optional(),endedAt:z.coerce.date().nullable().optional(),rating:z.number().int().min(0).max(5).nullable().optional(),note:z.string().trim().max(4000).nullable().optional()}).safeParse(req.body);if(!historyId||!parsed.success){res.status(400).json({error:"Invalid history update"});return;}const entry=await crew.updateWorkHistory(historyId,parsed.data);if(!entry){res.status(404).json({error:"History entry not found"});return;}res.json({entry});});\n'''
+          if '/manager-admin/crew"' not in s:
+              s=s.replace(marker,block+marker)
+          p.write_text(s)
+          PY
+      - name: Verify Task 2
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-search.test.ts src/features/leg-manager/crew-repository.test.ts
+          pnpm --filter @workspace/api-server build
+      - name: Commit Task 2 product files
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/leg-manager/crew-search.ts artifacts/api-server/src/features/leg-manager/crew-search.test.ts artifacts/api-server/src/features/leg-manager/crew-repository.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/api-server/src/routes/leg-manager-admin.ts
+          git commit -m 'feat: add crew lookup and work history APIs [skip release3-task1] [skip release3-task2]'
+          git push
