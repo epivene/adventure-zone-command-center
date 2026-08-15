@@ -2771,3 +2771,108 @@ export const legMileageEntries = pgTable("leg_mileage_entries", {
 export const legReceipts = pgTable("leg_receipts", {
   id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), expenseId: uuid("expense_id").notNull().references(() => legExpenses.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("leg_receipts_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_receipts_leg_expense_idx").on(table.legId, table.expenseId), check("leg_receipts_image_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`), check("leg_receipts_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const crewWorkers = pgTable(
+  "crew_workers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    phone: text("phone"),
+    normalizedPhone: text("normalized_phone"),
+    email: text("email"),
+    city: text("city"),
+    region: text("region"),
+    locationText: text("location_text"),
+    rehireStatus: text("rehire_status").default("undecided").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("crew_workers_location_idx").on(table.region, table.city),
+    index("crew_workers_normalized_phone_idx").on(table.normalizedPhone).where(sql`${table.normalizedPhone} is not null`),
+    check("crew_workers_name_nonblank", sql`nullif(trim(${table.name}), '') is not null`),
+    check("crew_workers_rehire_status_valid", sql`${table.rehireStatus} in ('rehirable','undecided','do_not_rehire')`),
+  ],
+);
+
+export const crewWorkHistory = pgTable(
+  "crew_work_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workerId: uuid("worker_id").notNull().references(() => crewWorkers.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+    role: text("role").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    rating: integer("rating"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("crew_work_history_worker_started_idx").on(table.workerId, table.startedAt.desc()),
+    index("crew_work_history_leg_started_idx").on(table.legId, table.startedAt.desc()),
+    check("crew_work_history_role_nonblank", sql`nullif(trim(${table.role}), '') is not null`),
+    check("crew_work_history_dates_valid", sql`${table.endedAt} is null or ${table.endedAt} >= ${table.startedAt}`),
+    check("crew_work_history_rating_valid", sql`${table.rating} is null or ${table.rating} between 0 and 5`),
+  ],
+);
+
+export const crewManagerNotes = pgTable(
+  "crew_manager_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workerId: uuid("worker_id").notNull().references(() => crewWorkers.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    note: text("note").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("crew_manager_notes_worker_created_idx").on(table.workerId, table.createdAt.desc()),
+    index("crew_manager_notes_leg_created_idx").on(table.legId, table.createdAt.desc()),
+    check("crew_manager_notes_note_nonblank", sql`nullif(trim(${table.note}), '') is not null`),
+  ],
+);
+
+export const eventManagerReviews = pgTable(
+  "event_manager_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    rating: integer("rating").notNull(),
+    feedback: text("feedback"),
+    organizerSiteNotes: text("organizer_site_notes"),
+    crewNotes: text("crew_notes"),
+    recommendReturn: text("recommend_return"),
+    clientMutationId: uuid("client_mutation_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("event_manager_reviews_booking_created_idx").on(table.bookingId, table.createdAt.desc()),
+    index("event_manager_reviews_leg_created_idx").on(table.legId, table.createdAt.desc()),
+    uniqueIndex("event_manager_reviews_leg_mutation_unique").on(table.legId, table.clientMutationId),
+    check("event_manager_reviews_rating_valid", sql`${table.rating} between 0 and 5`),
+    check("event_manager_reviews_recommend_return_valid", sql`${table.recommendReturn} is null or ${table.recommendReturn} in ('yes','no','unsure')`),
+  ],
+);
+
+export const legIncidents = pgTable("leg_incidents", {
+  id: uuid("id").primaryKey(),
+  legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+  type: text("type").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  locationText: text("location_text"), peopleInvolved: text("people_involved"), description: text("description").notNull(), actionTaken: text("action_taken"), followUpNeeded: boolean("follow_up_needed").default(false).notNull(),
+  clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_incidents_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incidents_leg_occurred_idx").on(table.legId, table.occurredAt.desc()), check("leg_incidents_type_nonblank", sql`nullif(trim(${table.type}), '') is not null`), check("leg_incidents_description_nonblank", sql`nullif(trim(${table.description}), '') is not null`), check("leg_incidents_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const legIncidentAttachments = pgTable("leg_incident_attachments", {
+  id: uuid("id").primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), incidentId: uuid("incident_id").notNull().references(() => legIncidents.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_incident_attachments_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incident_attachments_incident_idx").on(table.incidentId), check("leg_incident_attachments_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`)]);

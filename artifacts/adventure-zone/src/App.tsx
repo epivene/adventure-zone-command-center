@@ -4,6 +4,13 @@ import ManagerMoneyPage from "@/pages/ManagerMoneyPage";
 import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";
 import ManagerOperationsPage from "@/pages/ManagerOperationsPage";
 import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";
+import ManagerCrewAdminPage from "@/pages/ManagerCrewAdminPage";
+import ManagerAftermathAdminPage from "@/pages/ManagerAftermathAdminPage";
+import ManagerIncidentPage from "@/pages/ManagerIncidentPage";
+import ManagerIncidentsPage from "@/pages/ManagerIncidentsPage";
+import ManagerCrewPage from "@/pages/ManagerCrewPage";
+import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
+import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
@@ -176,6 +183,11 @@ function ManagerProtectedApp() {
   return (
     <ManagerShell>
       <Switch>
+        <Route path="/manager/incidents/new"><ManagerIncidentPage /></Route>
+        <Route path="/manager/incidents"><ManagerIncidentsPage /></Route>
+        <Route path="/manager/reviews"><ManagerEventReviewPage /></Route>
+        <Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>
+        <Route path="/manager/crew"><ManagerCrewPage /></Route>
         <Route path="/manager/operations"><ManagerOperationsPage /></Route>
         <Route path="/manager/receipts"><ManagerReceiptsPage /></Route>
         <Route path="/manager/money"><ManagerMoneyPage /></Route>
@@ -224,6 +236,8 @@ function AppRoutes() {
               <Route path="/event-families/:familyId" component={EventFamilyPage} />
               <Route path="/calendar" component={CalendarPage} />
               <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
+              <Route path="/manager-crew" component={ManagerCrewAdminPage} />
+              <Route path="/manager-aftermath" component={ManagerAftermathAdminPage} />
               <Route path="/routes" component={RoutesPage} />
               <Route path="/trips/:tripId" component={TripDetailPage} />
               <Route path="/calls/new" component={CallWorkspacePage} />

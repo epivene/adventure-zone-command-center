@@ -10,6 +10,7 @@ import {
   followUps,
   organizationContacts,
   organizations,
+  eventManagerReviews,
 } from "@/db/schema";
 import { DrizzleEventProfileRepository } from "@/features/event-profiles/event-profile-repository";
 import { ensurePlacePersonRelationship } from "@/features/relationships/relationship-writer";
@@ -66,7 +67,11 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
     const repo = new DrizzleEventProfileRepository(db);
     const profile = await repo.getEventProfile(id, contactId);
     if (!profile) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ ...profile, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
+    const bookingIds=profile.bookings.map((booking)=>booking.id);
+    const allReviews=await db.select().from(eventManagerReviews);
+    const managerReviews=allReviews.filter((review)=>bookingIds.includes(review.bookingId));
+    const managerReviewAverage=managerReviews.length?managerReviews.reduce((sum,review)=>sum+review.rating,0)/managerReviews.length:null;
+    res.json({ ...profile, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });
