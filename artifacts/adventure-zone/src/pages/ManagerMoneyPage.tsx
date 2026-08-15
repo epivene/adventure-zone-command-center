@@ -60,6 +60,7 @@ export default function ManagerMoneyPage() {
       </div>
       <SettlementSummary settlement={summary.settlement} />
       <a className="rounded-xl border bg-white p-3 font-semibold" href="/manager/receipts">Receipt photos →</a>
+      <a className="rounded-xl border bg-white p-3 font-semibold" href="/manager/operations">Mileage & operations →</a>
       <EventIncomeForm events={events} />
       <ExpenseForm />
       <CashEntryForm />
