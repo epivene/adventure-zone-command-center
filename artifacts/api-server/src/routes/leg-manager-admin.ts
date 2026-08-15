@@ -1,7 +1,10 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { hashLegManagerPassword } from "@/features/leg-manager/leg-manager-auth";
+import {
+  hashLegManagerPassword,
+  verifyLegManagerPassword,
+} from "@/features/leg-manager/leg-manager-auth";
 import { DrizzleLegManagerRepository } from "@/features/leg-manager/leg-manager-repository";
 import { DrizzleScheduleIssueRepository } from "@/features/leg-manager/schedule-issue-repository";
 import { DrizzleFinanceRepository } from "@/features/leg-manager/finance-repository";
@@ -16,6 +19,8 @@ const crew = new DrizzleCrewRepository(db);
 const incidents = new DrizzleIncidentRepository(db);
 const reviews = new DrizzleEventReviewRepository(db);
 const access = z.object({ password: z.string().min(1) });
+const duplicatePasswordMessage =
+  "That password is already assigned to another manager. Choose a different password.";
 
 router.get("/manager-admin/legs/access", async (_req, res) => {
   res.json({ legs: await repo.listAdminStatuses() });
@@ -26,6 +31,21 @@ router.put("/manager-admin/legs/:legId/access", async (req, res): Promise<void> 
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid manager access" });
     return;
+  }
+
+  const existing = await repo.listConfiguredPasswordRecords();
+  for (const record of existing) {
+    if (record.legId === req.params.legId) continue;
+    if (
+      await verifyLegManagerPassword(
+        parsed.data.password,
+        record.passwordHash,
+        record.passwordSalt,
+      )
+    ) {
+      res.status(409).json({ error: duplicatePasswordMessage });
+      return;
+    }
   }
 
   const { hash, salt } = await hashLegManagerPassword(parsed.data.password);

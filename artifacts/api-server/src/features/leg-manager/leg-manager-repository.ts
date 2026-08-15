@@ -11,6 +11,12 @@ export type LegManagerAccessRecord = {
   sessionVersion: number;
 };
 
+export type LegManagerPasswordRecord = {
+  legId: string;
+  passwordHash: string;
+  passwordSalt: string;
+};
+
 export type LegManagerAdminStatus = {
   legId: string;
   legName: string;
@@ -36,6 +42,16 @@ export class DrizzleLegManagerRepository {
       .where(and(eq(legManagerAccess.legId, legId), isNull(travelLegs.archivedAt)))
       .limit(1);
     return rows[0] ?? null;
+  }
+
+  async listConfiguredPasswordRecords(): Promise<LegManagerPasswordRecord[]> {
+    return this.database
+      .select({
+        legId: legManagerAccess.legId,
+        passwordHash: legManagerAccess.passwordHash,
+        passwordSalt: legManagerAccess.passwordSalt,
+      })
+      .from(legManagerAccess);
   }
 
   async listLoginLegs() {
