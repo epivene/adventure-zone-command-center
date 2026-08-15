@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const organizationIdSchema = z.uuid();
+export const organizationIdSchema = z.string().uuid();
 
 export const profileTypeValues = [
   "fair",
@@ -65,7 +65,7 @@ export const organizationListQuerySchema = z
   .transform(({ q, lastResort, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, page, pageSize }) => ({
     search: q.trim().replace(/\s+/g, " "),
     lastResort,
-    travelLegId: z.uuid().safeParse(leg).success ? leg : null,
+    travelLegId: z.string().uuid().safeParse(leg).success ? leg : null,
     placeType: type || null,
     region: region.trim() || null,
     hasPhone: hasPhone === "yes" || contact === "phone",
