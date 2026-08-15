@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
+import { EquipmentHandoffs, type EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
 import { LegManagerAccess } from "@/components/routes/leg-manager-access";
 import { TravelLegEditor } from "@/components/routes/travel-leg-editor";
 import { TripsSection } from "@/components/routes/trips-section";
@@ -15,6 +16,7 @@ import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-
 
 export default function RoutesPage() {
   const [data, setData] = useState<any>(null);
+  const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,12 +58,13 @@ export default function RoutesPage() {
   async function handleRestore(id: string) { const result = await restoreTravelLegAction(id); if (!result.ok) throw new Error(result.error); await loadData(); }
 
   return <div className="mx-auto grid max-w-7xl gap-6">
-    <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Filter event locations across configurable travel legs.</p></header>
+    <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header>
     {loading ? <p className="text-slate-500">Loading routes…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <>
       <TravelLegEditor key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
       <LegManagerAccess />
       <TripsSection travelLegs={data.travelLegs} />
-      <section aria-labelledby="event-map-title" className="grid gap-4"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Edit a booking to set dates, coordinates, and its travel-leg assignment.</p></div><EventMap events={data.events} travelLegs={data.travelLegs} /></section>
+      <EquipmentHandoffs travelLegs={data.travelLegs} onChange={setHandoffs} />
+      <section aria-labelledby="event-map-title" className="grid gap-4"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Bookings with a leg and usable location participate automatically. Suggested and approved equipment meetups are shown separately from events.</p></div><EventMap events={data.events} travelLegs={data.travelLegs} handoffs={handoffs} /></section>
     </> : null}
   </div>;
 }
