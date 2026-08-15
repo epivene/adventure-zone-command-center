@@ -1,0 +1,330 @@
+name: Leg Manager Money Task 1
+on:
+  push:
+    branches: [feature/leg-manager-money]
+
+jobs:
+  task1:
+    if: "!contains(github.event.head_commit.message, '[skip money-task1]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: RED — add finance math tests first
+        run: |
+          mkdir -p artifacts/api-server/src/features/leg-manager
+          cat > artifacts/api-server/src/features/leg-manager/finance-math.test.ts <<'EOF'
+          import { describe, expect, it } from "vitest";
+          import { calculateCashPosition, calculateSettlement } from "./finance-math";
+
+          describe("calculateSettlement", () => {
+            it("tracks personal expenses and manager reimbursement", () => {
+              expect(calculateSettlement([
+                { kind: "personal_expense", amountCents: 5000 },
+                { kind: "manager_reimbursed", amountCents: 2000 },
+              ])).toEqual({ ownerOwesManagerCents: 3000, managerOwesOwnerCents: 0, netCents: 3000 });
+            });
+
+            it("does not treat company debit expenses as personal settlement", () => {
+              expect(calculateSettlement([
+                { kind: "company_debit_expense", amountCents: 7250 },
+              ])).toEqual({ ownerOwesManagerCents: 0, managerOwesOwnerCents: 0, netCents: 0 });
+            });
+
+            it("holds advances and event cash until they are accounted for", () => {
+              expect(calculateSettlement([
+                { kind: "advance_received", amountCents: 10000 },
+                { kind: "event_cash_collected", amountCents: 4000 },
+                { kind: "expense_paid_cash", amountCents: 2500 },
+                { kind: "cash_turned_in", amountCents: 7000 },
+                { kind: "cash_returned", amountCents: 1000 },
+              ])).toEqual({ ownerOwesManagerCents: 0, managerOwesOwnerCents: 3500, netCents: -3500 });
+            });
+          });
+
+          describe("calculateCashPosition", () => {
+            it("derives cash on hand from append-only cash entries", () => {
+              expect(calculateCashPosition([
+                { kind: "advance_received", amountCents: 10000 },
+                { kind: "event_cash_collected", amountCents: 4000 },
+                { kind: "expense_paid_cash", amountCents: 2500 },
+                { kind: "cash_turned_in", amountCents: 7000 },
+                { kind: "cash_returned", amountCents: 1000 },
+                { kind: "adjustment", amountCents: -500 },
+              ])).toEqual({ cashOnHandCents: 3000 });
+            });
+          });
+          EOF
+          set +e
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/finance-math.test.ts > /tmp/red.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/red.log
+          if [ "$code" -eq 0 ]; then
+            echo 'Expected RED test to fail before implementation' >&2
+            exit 1
+          fi
+          grep -Eq 'finance-math|Cannot find|Failed to resolve' /tmp/red.log
+      - name: GREEN — add finance domain, schema, migration, and math
+        run: |
+          cat > artifacts/api-server/src/features/leg-manager/finance-types.ts <<'EOF'
+          export const legExpenseCategories = [
+            "fuel", "food", "rv_park", "vehicle_maintenance", "trailer_maintenance",
+            "supplies", "employee_related", "other",
+          ] as const;
+          export type LegExpenseCategory = (typeof legExpenseCategories)[number];
+
+          export const legPaymentSources = ["adventure_zone_cash", "adventure_zone_debit", "personal"] as const;
+          export type LegPaymentSource = (typeof legPaymentSources)[number];
+
+          export const legCashEntryKinds = [
+            "event_cash_collected", "expense_paid_cash", "advance_received", "cash_turned_in",
+            "cash_returned", "manager_reimbursed", "adjustment",
+          ] as const;
+          export type LegCashEntryKind = (typeof legCashEntryKinds)[number];
+
+          export type SettlementEffect =
+            | { kind: "personal_expense"; amountCents: number }
+            | { kind: "company_debit_expense"; amountCents: number }
+            | { kind: LegCashEntryKind; amountCents: number };
+
+          export type CashPositionEntry = { kind: LegCashEntryKind; amountCents: number };
+          EOF
+
+          cat > artifacts/api-server/src/features/leg-manager/finance-math.ts <<'EOF'
+          import type { CashPositionEntry, SettlementEffect } from "./finance-types";
+
+          export function calculateCashPosition(entries: CashPositionEntry[]) {
+            let cashOnHandCents = 0;
+            for (const entry of entries) {
+              switch (entry.kind) {
+                case "advance_received":
+                case "event_cash_collected":
+                  cashOnHandCents += entry.amountCents;
+                  break;
+                case "expense_paid_cash":
+                case "cash_turned_in":
+                case "cash_returned":
+                  cashOnHandCents -= entry.amountCents;
+                  break;
+                case "adjustment":
+                  cashOnHandCents += entry.amountCents;
+                  break;
+                case "manager_reimbursed":
+                  break;
+              }
+            }
+            return { cashOnHandCents };
+          }
+
+          export function calculateSettlement(effects: SettlementEffect[]) {
+            let ownerOwesManagerCents = 0;
+            let managerOwesOwnerCents = 0;
+            for (const effect of effects) {
+              switch (effect.kind) {
+                case "personal_expense":
+                  ownerOwesManagerCents += effect.amountCents;
+                  break;
+                case "manager_reimbursed":
+                  ownerOwesManagerCents = Math.max(0, ownerOwesManagerCents - effect.amountCents);
+                  break;
+                case "advance_received":
+                case "event_cash_collected":
+                  managerOwesOwnerCents += effect.amountCents;
+                  break;
+                case "expense_paid_cash":
+                case "cash_turned_in":
+                case "cash_returned":
+                  managerOwesOwnerCents = Math.max(0, managerOwesOwnerCents - effect.amountCents);
+                  break;
+                case "adjustment":
+                  if (effect.amountCents >= 0) managerOwesOwnerCents += effect.amountCents;
+                  else managerOwesOwnerCents = Math.max(0, managerOwesOwnerCents + effect.amountCents);
+                  break;
+                case "company_debit_expense":
+                  break;
+              }
+            }
+            return {
+              ownerOwesManagerCents,
+              managerOwesOwnerCents,
+              netCents: ownerOwesManagerCents - managerOwesOwnerCents,
+            };
+          }
+          EOF
+
+          cat > lib/db/migrations/037_leg_manager_finance.sql <<'EOF'
+          create table if not exists leg_event_income (
+            id uuid primary key default gen_random_uuid(),
+            leg_id uuid not null references travel_legs(id) on delete restrict,
+            booking_id uuid references bookings(id) on delete set null,
+            trip_id uuid references trips(id) on delete set null,
+            trip_segment_id uuid references trip_segments(id) on delete set null,
+            cash_cents integer not null default 0 check (cash_cents >= 0),
+            square_cents integer not null default 0 check (square_cents >= 0),
+            other_cents integer not null default 0 check (other_cents >= 0),
+            other_label text,
+            occurred_at timestamptz not null,
+            notes text,
+            client_mutation_id uuid not null,
+            revision integer not null default 1 check (revision >= 1),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (leg_id, client_mutation_id)
+          );
+
+          create table if not exists leg_expenses (
+            id uuid primary key default gen_random_uuid(),
+            leg_id uuid not null references travel_legs(id) on delete restrict,
+            booking_id uuid references bookings(id) on delete set null,
+            trip_id uuid references trips(id) on delete set null,
+            trip_segment_id uuid references trip_segments(id) on delete set null,
+            category text not null check (category in ('fuel','food','rv_park','vehicle_maintenance','trailer_maintenance','supplies','employee_related','other')),
+            merchant text,
+            amount_cents integer not null check (amount_cents >= 0),
+            tax_cents integer not null default 0 check (tax_cents >= 0),
+            payment_source text not null check (payment_source in ('adventure_zone_cash','adventure_zone_debit','personal')),
+            occurred_at timestamptz not null,
+            notes text,
+            employee_note text,
+            detail_json jsonb,
+            client_mutation_id uuid not null,
+            revision integer not null default 1 check (revision >= 1),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (leg_id, client_mutation_id)
+          );
+
+          create table if not exists leg_cash_entries (
+            id uuid primary key default gen_random_uuid(),
+            leg_id uuid not null references travel_legs(id) on delete restrict,
+            booking_id uuid references bookings(id) on delete set null,
+            trip_id uuid references trips(id) on delete set null,
+            trip_segment_id uuid references trip_segments(id) on delete set null,
+            kind text not null check (kind in ('event_cash_collected','expense_paid_cash','advance_received','cash_turned_in','cash_returned','manager_reimbursed','adjustment')),
+            amount_cents integer not null,
+            occurred_at timestamptz not null,
+            notes text,
+            client_mutation_id uuid not null,
+            revision integer not null default 1 check (revision >= 1),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            constraint leg_cash_entries_amount_valid check (kind = 'adjustment' or amount_cents >= 0),
+            unique (leg_id, client_mutation_id)
+          );
+
+          create table if not exists leg_mileage_entries (
+            id uuid primary key default gen_random_uuid(),
+            leg_id uuid not null references travel_legs(id) on delete restrict,
+            booking_id uuid references bookings(id) on delete set null,
+            trip_id uuid references trips(id) on delete set null,
+            trip_segment_id uuid references trip_segments(id) on delete set null,
+            miles double precision,
+            odometer_start double precision,
+            odometer_end double precision,
+            vehicle_label text,
+            occurred_at timestamptz not null,
+            notes text,
+            client_mutation_id uuid not null,
+            revision integer not null default 1 check (revision >= 1),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            constraint leg_mileage_entries_distance_valid check (
+              (miles is not null and miles >= 0)
+              or (odometer_start is not null and odometer_end is not null and odometer_end >= odometer_start)
+            ),
+            unique (leg_id, client_mutation_id)
+          );
+
+          create table if not exists leg_receipts (
+            id uuid primary key default gen_random_uuid(),
+            leg_id uuid not null references travel_legs(id) on delete restrict,
+            expense_id uuid not null references leg_expenses(id) on delete cascade,
+            object_key text,
+            image_status text not null default 'image_pending' check (image_status in ('image_pending','image_uploaded','image_failed')),
+            mime_type text,
+            client_mutation_id uuid not null,
+            revision integer not null default 1 check (revision >= 1),
+            created_at timestamptz not null default now(),
+            updated_at timestamptz not null default now(),
+            unique (leg_id, client_mutation_id)
+          );
+
+          create index if not exists leg_event_income_leg_trip_idx on leg_event_income(leg_id, trip_id);
+          create index if not exists leg_expenses_leg_trip_idx on leg_expenses(leg_id, trip_id);
+          create index if not exists leg_cash_entries_leg_trip_idx on leg_cash_entries(leg_id, trip_id);
+          create index if not exists leg_mileage_entries_leg_trip_idx on leg_mileage_entries(leg_id, trip_id);
+          create index if not exists leg_receipts_leg_expense_idx on leg_receipts(leg_id, expense_id);
+          EOF
+
+          cat >> /tmp/finance-schema.txt <<'EOF'
+
+          export const legEventIncome = pgTable("leg_event_income", {
+            id: uuid("id").defaultRandom().primaryKey(),
+            legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+            bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+            tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+            tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+            cashCents: integer("cash_cents").default(0).notNull(),
+            squareCents: integer("square_cents").default(0).notNull(),
+            otherCents: integer("other_cents").default(0).notNull(),
+            otherLabel: text("other_label"), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"),
+            clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+            createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+          }, (table) => [uniqueIndex("leg_event_income_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_event_income_leg_trip_idx").on(table.legId, table.tripId), check("leg_event_income_cash_nonnegative", sql`${table.cashCents} >= 0`), check("leg_event_income_square_nonnegative", sql`${table.squareCents} >= 0`), check("leg_event_income_other_nonnegative", sql`${table.otherCents} >= 0`), check("leg_event_income_revision_positive", sql`${table.revision} >= 1`)]);
+
+          export const legExpenses = pgTable("leg_expenses", {
+            id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+            bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+            category: text("category").notNull(), merchant: text("merchant"), amountCents: integer("amount_cents").notNull(), taxCents: integer("tax_cents").default(0).notNull(), paymentSource: text("payment_source").notNull(),
+            occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), employeeNote: text("employee_note"), detailJson: jsonb("detail_json"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+            createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+          }, (table) => [uniqueIndex("leg_expenses_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_expenses_leg_trip_idx").on(table.legId, table.tripId), check("leg_expenses_amount_nonnegative", sql`${table.amountCents} >= 0`), check("leg_expenses_tax_nonnegative", sql`${table.taxCents} >= 0`), check("leg_expenses_category_valid", sql`${table.category} in ('fuel','food','rv_park','vehicle_maintenance','trailer_maintenance','supplies','employee_related','other')`), check("leg_expenses_payment_source_valid", sql`${table.paymentSource} in ('adventure_zone_cash','adventure_zone_debit','personal')`), check("leg_expenses_revision_positive", sql`${table.revision} >= 1`)]);
+
+          export const legCashEntries = pgTable("leg_cash_entries", {
+            id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+            kind: text("kind").notNull(), amountCents: integer("amount_cents").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+          }, (table) => [uniqueIndex("leg_cash_entries_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_cash_entries_leg_trip_idx").on(table.legId, table.tripId), check("leg_cash_entries_kind_valid", sql`${table.kind} in ('event_cash_collected','expense_paid_cash','advance_received','cash_turned_in','cash_returned','manager_reimbursed','adjustment')`), check("leg_cash_entries_amount_valid", sql`${table.kind} = 'adjustment' or ${table.amountCents} >= 0`), check("leg_cash_entries_revision_positive", sql`${table.revision} >= 1`)]);
+
+          export const legMileageEntries = pgTable("leg_mileage_entries", {
+            id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }), miles: doublePrecision("miles"), odometerStart: doublePrecision("odometer_start"), odometerEnd: doublePrecision("odometer_end"), vehicleLabel: text("vehicle_label"), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+          }, (table) => [uniqueIndex("leg_mileage_entries_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_mileage_entries_leg_trip_idx").on(table.legId, table.tripId), check("leg_mileage_entries_distance_valid", sql`(${table.miles} is not null and ${table.miles} >= 0) or (${table.odometerStart} is not null and ${table.odometerEnd} is not null and ${table.odometerEnd} >= ${table.odometerStart})`), check("leg_mileage_entries_revision_positive", sql`${table.revision} >= 1`)]);
+
+          export const legReceipts = pgTable("leg_receipts", {
+            id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), expenseId: uuid("expense_id").notNull().references(() => legExpenses.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+          }, (table) => [uniqueIndex("leg_receipts_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_receipts_leg_expense_idx").on(table.legId, table.expenseId), check("leg_receipts_image_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`), check("leg_receipts_revision_positive", sql`${table.revision} >= 1`)]);
+          EOF
+          cat /tmp/finance-schema.txt >> lib/db/src/schema/index.ts
+
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('lib/db/src/migrations.ts')
+          s=p.read_text()
+          marker='] as const;'
+          if '037_leg_manager_finance.sql' not in s:
+              block='''  {\n    name: "037_leg_manager_finance.sql",\n    markerSql: "SELECT to_regclass(current_schema() || '.leg_event_income') IS NOT NULL AND to_regclass(current_schema() || '.leg_expenses') IS NOT NULL AND to_regclass(current_schema() || '.leg_cash_entries') IS NOT NULL AND to_regclass(current_schema() || '.leg_mileage_entries') IS NOT NULL AND to_regclass(current_schema() || '.leg_receipts') IS NOT NULL AS ready",\n  },\n'''
+              p.write_text(s.replace(marker, block+marker))
+          PY
+      - name: Verify Task 1 green
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/finance-math.test.ts
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/api-server exec tsc -p tsconfig.manager.json --noEmit
+      - name: Commit Task 1
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/leg-manager/finance-types.ts artifacts/api-server/src/features/leg-manager/finance-math.ts artifacts/api-server/src/features/leg-manager/finance-math.test.ts lib/db/src/schema/index.ts lib/db/migrations/037_leg_manager_finance.sql lib/db/src/migrations.ts
+          git commit -m 'feat: add leg finance ledger model [skip money-task1]'
+          git push
