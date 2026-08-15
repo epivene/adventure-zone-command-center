@@ -21,6 +21,7 @@ export const travelLegConfigurationSchema = z
             .trim()
             .max(300, "Base address is too long")
             .optional()
+            .nullable()
             .default("")
             .transform((value) => (value === "" ? null : value)),
           defaultVehicleName: z
@@ -28,6 +29,7 @@ export const travelLegConfigurationSchema = z
             .trim()
             .max(100, "Default vehicle name is too long")
             .optional()
+            .nullable()
             .default("")
             .transform((value) => (value === "" ? null : value)),
           defaultMpg: z.preprocess(
