@@ -1,0 +1,37 @@
+name: Calendar Route Handoff CI
+
+on:
+  push:
+    branches: [feature/leg-manager-foundation]
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/**"
+      - "artifacts/api-server/**"
+      - "lib/db/**"
+      - ".github/workflows/calendar-route-handoff-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Calendar unit tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts
+      - name: Handoff unit tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
+      - name: Build frontend
+        run: pnpm --filter @workspace/adventure-zone run build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Full workspace typecheck (informational; repo has pre-existing errors)
+        continue-on-error: true
+        run: pnpm run typecheck

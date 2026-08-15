@@ -7,6 +7,8 @@ import type {
   Probability,
 } from "@/features/bookings/booking-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { classifyRouteBucket, type RouteBucket } from "@/features/routes/route-view";
+import { businessDateKey } from "@/lib/business-date";
 import type {
   TravelLegAuditChange,
   TravelLegEditorTransaction,
@@ -45,6 +47,10 @@ export type MapEventRecord = {
   travelLegColor: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  routeBucket: RouteBucket;
+  locationQuality: "coordinates" | "address" | "city" | "missing";
+  locationLabel: string | null;
+  seasonYear: number | null;
 };
 
 export interface TravelLegRepository {
@@ -76,21 +82,44 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
       .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
       .orderBy(asc(bookings.startsAt), asc(bookings.name), asc(bookings.id));
 
-    return records.map(({ booking, travelLeg }) => ({
-      id: booking.id,
-      name: booking.name,
-      city: booking.city,
-      region: booking.region,
-      latitude: booking.latitude,
-      longitude: booking.longitude,
-      status: booking.status,
-      probability: booking.probability,
-      travelLegId: travelLeg?.id ?? null,
-      travelLegName: travelLeg?.name ?? null,
-      travelLegColor: travelLeg?.color ?? null,
-      startsAt: booking.startsAt,
-      endsAt: booking.endsAt,
-    }));
+    return records.map(({ booking, travelLeg }) => {
+      const cityRegion = [booking.city?.trim(), booking.region?.trim()].filter(Boolean).join(", ");
+      const address = booking.address1?.trim();
+      const locationLabel = address
+        ? [booking.venueName?.trim(), address, cityRegion].filter(Boolean).join(", ")
+        : cityRegion || null;
+      const coordinatesValid =
+        booking.latitude !== null &&
+        booking.longitude !== null &&
+        Number.isFinite(booking.latitude) &&
+        Number.isFinite(booking.longitude);
+      const locationQuality = coordinatesValid
+        ? "coordinates" as const
+        : address
+          ? "address" as const
+          : cityRegion
+            ? "city" as const
+            : "missing" as const;
+      return {
+        id: booking.id,
+        name: booking.name,
+        city: booking.city,
+        region: booking.region,
+        latitude: booking.latitude,
+        longitude: booking.longitude,
+        status: booking.status,
+        probability: booking.probability,
+        travelLegId: travelLeg?.id ?? null,
+        travelLegName: travelLeg?.name ?? null,
+        travelLegColor: travelLeg?.color ?? null,
+        startsAt: booking.startsAt,
+        endsAt: booking.endsAt,
+        routeBucket: classifyRouteBucket(booking.status),
+        locationQuality,
+        locationLabel,
+        seasonYear: booking.startsAt ? Number(businessDateKey(booking.startsAt).slice(0, 4)) : null,
+      };
+    });
   }
 
   async listTravelLegs(options?: {
@@ -154,14 +183,6 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
         },
         reorderLegs: async (orders) => {
           if (orders.length === 0) return;
-          // Temporarily drop the unique constraint so the CASE UPDATE can move
-          // rows through intermediate positions without hitting a per-row
-          // collision (e.g. swapping 1↔2 or any cyclic reorder).  DDL is fully
-          // transactional in PostgreSQL: if this transaction rolls back the
-          // constraint is restored automatically.  The constraint is recreated
-          // DEFERRABLE INITIALLY IMMEDIATE to match the state set by migration
-          // 001_sort_order_deferrable, and to keep future SET-CONSTRAINTS-based
-          // callers working without another schema change.
           await transaction.execute(
             sql`ALTER TABLE travel_legs DROP CONSTRAINT travel_legs_sort_order_unique`,
           );
@@ -191,13 +212,11 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
           return inserted;
         },
         delete: async (id) => {
-          // Find the leg's current sort order before deleting
           const [target] = await transaction
             .select({ sortOrder: travelLegs.sortOrder })
             .from(travelLegs)
             .where(eq(travelLegs.id, id));
 
-          // Null out any bookings and resources referencing this leg before deleting
           await transaction
             .update(bookings)
             .set({ travelLegId: null })
@@ -211,8 +230,6 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
             .delete(travelLegs)
             .where(eq(travelLegs.id, id));
 
-          // Renumber legs that came after the deleted one, processing in
-          // ascending order so we never create a unique-constraint collision
           if (target) {
             const affected = await transaction
               .select({ id: travelLegs.id, sortOrder: travelLegs.sortOrder })
