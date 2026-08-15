@@ -21,6 +21,22 @@ export type RoutePoint = {
   coordinates: LatLng | null;
 };
 
+export type TripHandoffPoint = {
+  id: string;
+  tripId: string;
+  direction: "release" | "receive";
+  label: string;
+  latitude: number;
+  longitude: number;
+  windowStartsAt: Date;
+  windowEndsAt: Date;
+  resourceName: string;
+};
+
+export interface TripHandoffProvider {
+  listApprovedForTrip(tripId: string): Promise<TripHandoffPoint[]>;
+}
+
 export type TripSegmentView = TripSegmentRecord & {
   effectiveMiles: number | null;
   effectiveMinutes: number | null;
@@ -32,6 +48,7 @@ export type TripSegmentView = TripSegmentRecord & {
 export type TripDetail = {
   trip: TripRecord;
   stops: TripStopRecord[];
+  handoffs: TripHandoffPoint[];
   segments: TripSegmentView[];
   totals: TripTotals;
 };
@@ -63,12 +80,28 @@ function point(
   };
 }
 
+function handoffPoint(handoff: TripHandoffPoint): RoutePoint {
+  return point(
+    `Equipment handoff: ${handoff.resourceName} — ${handoff.label}`,
+    handoff.latitude,
+    handoff.longitude,
+  );
+}
+
 export function buildRoutePoints(
   trip: TripRecord,
   stops: readonly TripStopRecord[],
+  handoffs: readonly TripHandoffPoint[] = [],
 ): RoutePoint[] {
+  const receiving = handoffs
+    .filter((handoff) => handoff.direction === "receive")
+    .sort((a, b) => a.windowStartsAt.getTime() - b.windowStartsAt.getTime());
+  const releasing = handoffs
+    .filter((handoff) => handoff.direction === "release")
+    .sort((a, b) => a.windowStartsAt.getTime() - b.windowStartsAt.getTime());
   return [
     point(trip.startLabel, trip.startLatitude, trip.startLongitude),
+    ...receiving.map(handoffPoint),
     ...stops.map((stop) =>
       point(
         `${stop.bookingName} (${stop.city}, ${stop.region})`,
@@ -76,6 +109,7 @@ export function buildRoutePoints(
         stop.longitude,
       ),
     ),
+    ...releasing.map(handoffPoint),
     point(trip.endLabel, trip.endLatitude, trip.endLongitude),
   ];
 }
@@ -84,6 +118,7 @@ export class TripService {
   constructor(
     private readonly repository: TripRepository,
     private readonly estimator: RoutingEstimator,
+    private readonly handoffProvider?: TripHandoffProvider,
   ) {}
 
   async createTrip(input: {
@@ -185,7 +220,6 @@ export class TripService {
     return true;
   }
 
-  /** Manual reorder confirms the route — it is never rearranged automatically after this. */
   async reorderStops(
     tripId: string,
     orderedStopIds: readonly string[],
@@ -203,11 +237,6 @@ export class TripService {
     return true;
   }
 
-  /**
-   * Applies the suggested order. Refused for confirmed routes unless `force`
-   * (an explicit user action) — a confirmed route is never rearranged
-   * automatically. Suggestion-applied routes stay unconfirmed.
-   */
   async applySuggestedOrder(
     tripId: string,
     options: { force: boolean },
@@ -236,7 +265,6 @@ export class TripService {
     );
     await this.repository.setStopOrder(tripId, orderedIds);
     if (options.force) {
-      // Explicit user choice on a confirmed route clears confirmation.
       await this.repository.updateTrip(tripId, { routeConfirmedAt: null });
     }
     await this.repository.audit({
@@ -283,9 +311,10 @@ export class TripService {
   async getTripDetail(tripId: string): Promise<TripDetail | null> {
     const trip = await this.repository.getTrip(tripId);
     if (!trip) return null;
-    const [stops, segments] = await Promise.all([
+    const [stops, segments, handoffs] = await Promise.all([
       this.repository.listStops(tripId),
       this.repository.listSegments(tripId),
+      this.handoffProvider?.listApprovedForTrip(tripId) ?? Promise.resolve([]),
     ]);
     const segmentViews = segments.map((segment) => {
       const effective = effectiveSegmentEstimate(segment);
@@ -302,27 +331,22 @@ export class TripService {
     return {
       trip,
       stops,
+      handoffs,
       segments: segmentViews,
       totals: tripTotals(segments, trip.mpg, trip.fuelPricePerGallon),
     };
   }
 
-  /**
-   * Rebuilds the segment chain start → stops → end. Live estimates are
-   * fetched (falling back to labeled cached values); when neither is
-   * available the segment is left blank for labeled manual entry — never an
-   * unlabeled straight-line distance. Manual overrides are preserved across
-   * recalculation when the segment endpoints are unchanged.
-   */
   async recalculateSegments(
     tripId: string,
     options: { preferLive: boolean },
   ): Promise<void> {
     const trip = await this.repository.getTrip(tripId);
     if (!trip) return;
-    const [stops, previousSegments] = await Promise.all([
+    const [stops, previousSegments, handoffs] = await Promise.all([
       this.repository.listStops(tripId),
       this.repository.listSegments(tripId),
+      this.handoffProvider?.listApprovedForTrip(tripId) ?? Promise.resolve([]),
     ]);
     const previousByEndpoints = new Map(
       previousSegments.map((segment) => [
@@ -330,7 +354,7 @@ export class TripService {
         segment,
       ]),
     );
-    const points = buildRoutePoints(trip, stops);
+    const points = buildRoutePoints(trip, stops, handoffs);
     const segments: NewTripSegment[] = [];
     for (let index = 0; index < points.length - 1; index += 1) {
       const from = points[index]!;
@@ -352,8 +376,6 @@ export class TripService {
           source = estimate.source;
           estimatedAt = estimate.estimatedAt;
         } else if (previous && previous.miles !== null) {
-          // Provider down and nothing cached under this key any more —
-          // keep the previous stored value, labeled as cached.
           miles = previous.miles;
           minutes = previous.minutes;
           source = "cached";

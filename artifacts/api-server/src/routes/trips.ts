@@ -6,6 +6,7 @@ import { db } from "@workspace/db";
 import { travelLegs } from "@/db/schema";
 import { DrizzleTripRepository } from "@/features/trips/trip-repository";
 import { TripService } from "@/features/trips/trip-service";
+import { HandoffRepository } from "@/features/routes/handoff-repository";
 import {
   DrizzleRoutingCacheStore,
   OsrmRoutingProvider,
@@ -25,6 +26,7 @@ function tripService(): TripService {
       new OsrmRoutingProvider(),
       new DrizzleRoutingCacheStore(db),
     ),
+    new HandoffRepository(db),
   );
 }
 
@@ -128,7 +130,6 @@ router.post("/trips", async (req, res): Promise<void> => {
   }
 });
 
-// Must be defined BEFORE /:id so "geocode" isn't treated as a trip id.
 const geocoder = new NominatimGeocodingProvider();
 
 router.get("/trips/geocode", async (req, res): Promise<void> => {
