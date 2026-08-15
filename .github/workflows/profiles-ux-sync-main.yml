@@ -1,0 +1,57 @@
+name: Profiles UX Sync Main
+on:
+  push:
+    branches: [feature/profiles-event-families-ux]
+
+jobs:
+  sync:
+    if: "!contains(github.event.head_commit.message, '[skip profiles-sync]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Merge latest main
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git fetch origin main
+          git merge --no-commit --no-ff origin/main
+          unresolved="$(git diff --name-only --diff-filter=U)"
+          if [ -n "$unresolved" ]; then
+            echo "Unresolved conflicts:" >&2
+            echo "$unresolved" >&2
+            exit 1
+          fi
+          rm -f .github/workflows/profiles-ux-batch1.yml
+          git add -A
+      - name: Verify merged profiles UX and latest main
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run \
+            src/pages/OrganizationsPage.test.tsx \
+            src/components/organizations/organization-list.test.tsx \
+            src/components/event-families/profile-member-picker.test.tsx \
+            src/components/event-profiles/event-profile-form.test.tsx \
+            src/components/organizations/possible-locations-drawer.test.tsx \
+            src/components/routes/event-map.test.tsx
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-repository-idempotency.test.ts
+          pnpm --filter @workspace/adventure-zone typecheck
+          pnpm --filter @workspace/api-server build
+          pnpm --filter @workspace/adventure-zone build
+          test ! -f .github/workflows/profiles-ux-batch1.yml
+          test ! -f .github/workflows/profiles-ux-finalize.yml
+          test ! -f .github/workflows/profiles-ux-final-check.yml
+      - name: Commit and push merged branch
+        run: |
+          git commit -m 'merge: sync profiles ux with latest main [skip profiles-sync]'
+          git push origin HEAD:feature/profiles-event-families-ux
