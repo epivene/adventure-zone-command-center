@@ -6,8 +6,8 @@ import "leaflet/dist/leaflet.css";
 
 import type { MapViewportTarget } from "@/features/routes/map-focus";
 
-const DEFAULT_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
-const DEFAULT_TILE_ATTRIBUTION = "&copy; OpenStreetMap contributors";
+export const DEFAULT_ROUTE_TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+export const DEFAULT_ROUTE_TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 const US_MAX_BOUNDS: L.LatLngBoundsExpression = [
   [18, -130],
@@ -56,8 +56,8 @@ export function ManagerRouteMapShell({
       worldCopyJump: false,
     });
 
-    const tileUrl = import.meta.env.VITE_ROUTE_TILE_URL?.trim() || DEFAULT_TILE_URL;
-    const attribution = import.meta.env.VITE_ROUTE_TILE_ATTRIBUTION?.trim() || DEFAULT_TILE_ATTRIBUTION;
+    const tileUrl = import.meta.env.VITE_ROUTE_TILE_URL?.trim() || DEFAULT_ROUTE_TILE_URL;
+    const attribution = import.meta.env.VITE_ROUTE_TILE_ATTRIBUTION?.trim() || DEFAULT_ROUTE_TILE_ATTRIBUTION;
     const tiles = L.tileLayer(tileUrl, {
       attribution,
       noWrap: true,
