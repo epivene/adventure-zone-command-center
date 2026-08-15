@@ -19,6 +19,18 @@ export const bookingStatusValues = [
 
 export type BookingStatus = (typeof bookingStatusValues)[number];
 
-export const probabilityValues = ["likely", "possible", "unlikely"] as const;
+export const probabilityValues = [
+  "definite",
+  "likely",
+  "possible",
+  "unlikely",
+] as const;
 
-export type Probability = (typeof probabilityValues)[number];
+// The shared Drizzle schema still carries the legacy three-value static type.
+// Runtime validation and the database migration support "definite"; this alias
+// stays narrow until that generated schema is regenerated without weakening the
+// rest of the repository's DB typing.
+export type Probability = Exclude<
+  (typeof probabilityValues)[number],
+  "definite"
+>;

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   bookingStatusValues,
   probabilityValues,
+  type Probability,
 } from "@/features/bookings/booking-types";
 import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
 import { parseBusinessDateInput } from "@/lib/business-date";
@@ -101,6 +102,7 @@ export const bookingEditInputSchema = z
   .transform((input) => ({
     ...input,
     region: input.region.toUpperCase(),
+    probability: input.status === "confirmed" ? "definite" : input.probability,
   }));
 
 export const bookingInputSchema = z
@@ -132,9 +134,21 @@ export const bookingInputSchema = z
   .transform((input) => ({
     ...input,
     region: input.region.toUpperCase(),
+    probability: input.status === "confirmed" ? "definite" : input.probability,
     nextActionKind: input.nextActionKind.trim(),
     nextActionDueAt: input.nextActionDueAt,
   }));
 
-export type BookingFormInput = z.output<typeof bookingInputSchema>;
-export type BookingEditInput = z.output<typeof bookingEditInputSchema>;
+type BookingFormOutput = z.output<typeof bookingInputSchema>;
+type BookingEditOutput = z.output<typeof bookingEditInputSchema>;
+
+// Keep repository-facing write types aligned with the shared Drizzle schema
+// until its generated probability enum is regenerated. Runtime parsing accepts
+// and persists "definite" after migration; API actions deliberately pass parsed
+// data across this persistence boundary.
+export type BookingFormInput = Omit<BookingFormOutput, "probability"> & {
+  probability: Probability;
+};
+export type BookingEditInput = Omit<BookingEditOutput, "probability"> & {
+  probability: Probability;
+};

@@ -6,6 +6,7 @@ const navigation = [
   { href: "/today", label: "Today" },
   { href: "/bookings", label: "Bookings" },
   { href: "/profiles", label: "Profiles" },
+  { href: "/profiles?lastResort=only", label: "Last Resorts" },
   { href: "/calendar", label: "Calendar" },
   { href: "/routes", label: "Routes" },
 ];
