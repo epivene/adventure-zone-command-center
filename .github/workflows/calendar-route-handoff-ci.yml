@@ -16,17 +16,12 @@ on:
       - "lib/db/**"
       - ".github/workflows/calendar-route-handoff-ci.yml"
 
-permissions:
-  contents: write
-
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: feature/leaflet-manager-route-map
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -34,17 +29,9 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - name: Remove stale MapLibre stylesheet import
-        run: |
-          if grep -q "maplibre-gl/dist/maplibre-gl.css" artifacts/adventure-zone/src/index.css; then
-            sed -i "/maplibre-gl\/dist\/maplibre-gl.css/d" artifacts/adventure-zone/src/index.css
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add artifacts/adventure-zone/src/index.css
-            git commit -m "chore: remove stale MapLibre stylesheet import"
-            git push origin HEAD:feature/leaflet-manager-route-map
-          fi
+      - run: pnpm install --frozen-lockfile
+      - name: Calendar unit tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts
       - name: Leaflet route unit tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/manager-map-navigation.test.ts src/features/routes/map-focus.test.ts src/components/routes/manager-map-mode.test.tsx src/components/routes/manager-route-map-shell.test.tsx src/components/routes/manager-route-map-layers.test.tsx src/components/routes/event-map-focus.test.tsx src/components/routes/event-map.test.tsx src/components/routes/trips-section.test.tsx
       - name: Handoff unit tests
