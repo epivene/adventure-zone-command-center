@@ -101,8 +101,10 @@ jobs:
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add . ':!.github/workflows/leg-manager-clean-build.yml'
-          git commit -m 'feat: complete leg manager portal release 1'
-          git push
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat: complete leg manager portal release 1'
+            git push
+          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 10
