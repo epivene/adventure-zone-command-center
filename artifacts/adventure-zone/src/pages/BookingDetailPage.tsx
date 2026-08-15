@@ -3,6 +3,7 @@ import { Link, useParams } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import { StatusBadge } from "@/components/bookings/status-badge";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
@@ -14,6 +15,7 @@ import {
 } from "@/actions/activities";
 import { completeFollowUpAction } from "@/actions/bookings";
 import type { ReactNode } from "react";
+import type { FollowUpRecord } from "@/features/follow-ups/follow-up-types";
 
 function formatDate(value: string | null) {
   if (!value) return "Not set";
@@ -52,6 +54,24 @@ export default function BookingDetailPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  function changeFollowUp(updated: FollowUpRecord) {
+    setData((current: any) => current ? {
+      ...current,
+      followUps: (current.followUps ?? []).map((followUp: any) =>
+        followUp.id === updated.id ? updated : followUp,
+      ),
+    } : current);
+  }
+
+  function removeFollowUp(followUpId: string) {
+    setData((current: any) => current ? {
+      ...current,
+      followUps: (current.followUps ?? []).filter(
+        (followUp: any) => followUp.id !== followUpId,
+      ),
+    } : current);
+  }
 
   useEffect(() => {
     if (!bookingId) return;
@@ -112,13 +132,38 @@ export default function BookingDetailPage() {
         </DetailSection>
       </div>
 
-      {nextFollowUp && (
-        <FollowUpCompletionDialog
-          bookingStatus={booking.status}
-          followUpId={nextFollowUp.id}
-          onComplete={completeFollowUpAction}
-        />
-      )}
+      {nextFollowUp ? (
+        <DetailSection title="Next follow-up">
+          <div className="grid gap-3">
+            <p className="text-sm font-semibold capitalize text-slate-700">
+              {nextFollowUp.kind.replaceAll("_", " ")} · Due {formatDate(nextFollowUp.dueAt)}
+            </p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <FollowUpCompletionDialog
+                bookingStatus={booking.status}
+                followUpId={nextFollowUp.id}
+                onComplete={completeFollowUpAction}
+              />
+              <FollowUpControls
+                followUp={{
+                  id: nextFollowUp.id,
+                  organizationId: nextFollowUp.organizationId ?? organization?.id ?? null,
+                  contactId: nextFollowUp.contactId ?? contact?.id ?? null,
+                  bookingId: nextFollowUp.bookingId ?? booking.id,
+                  kind: nextFollowUp.kind,
+                  dueAt: new Date(nextFollowUp.dueAt),
+                  completedAt: nextFollowUp.completedAt
+                    ? new Date(nextFollowUp.completedAt)
+                    : null,
+                  outcome: nextFollowUp.outcome ?? null,
+                }}
+                onChanged={changeFollowUp}
+                onDeleted={removeFollowUp}
+              />
+            </div>
+          </div>
+        </DetailSection>
+      ) : null}
 
       <ActivityTimeline
         activities={timeline ?? []}

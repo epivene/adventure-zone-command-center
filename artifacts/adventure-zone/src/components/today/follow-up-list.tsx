@@ -2,7 +2,9 @@ import { Link } from "wouter";
 
 import { followUpHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
+import type { FollowUpRecord } from "@/features/follow-ups/follow-up-types";
 import {
   BUSINESS_TIME_ZONE,
   classifyBusinessDueDate,
@@ -22,9 +24,13 @@ function formatKind(value: string) {
 export function FollowUpList({
   followUps,
   now,
+  onChanged,
+  onDeleted,
 }: {
   followUps: FollowUpSummary[];
   now: Date;
+  onChanged: (updated: FollowUpRecord) => void;
+  onDeleted: (followUpId: string) => void;
 }) {
   const overdueCount = followUps.filter(
     (followUp) =>
@@ -79,6 +85,20 @@ export function FollowUpList({
                 >
                   {overdue ? "Overdue" : "Due"} {formatDate(followUp.dueAt)}
                 </p>
+                <FollowUpControls
+                  followUp={{
+                    id: followUp.id,
+                    organizationId: followUp.organizationId,
+                    contactId: followUp.contactId,
+                    bookingId: followUp.bookingId,
+                    kind: followUp.kind,
+                    dueAt: followUp.dueAt,
+                    completedAt: null,
+                    outcome: null,
+                  }}
+                  onChanged={onChanged}
+                  onDeleted={onDeleted}
+                />
               </li>
             );
           })}

@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Link } from "wouter";
 
 import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
+import type { FollowUpRecord } from "@/features/follow-ups/follow-up-types";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
 const NOTE_PAGE_SIZE = 25;
@@ -53,6 +55,7 @@ export function EventProfileWorkspace({
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
   const [visibleNoteCount, setVisibleNoteCount] = useState(NOTE_PAGE_SIZE);
+  const [followUps, setFollowUps] = useState(profile.followUps);
   const callablePhone = selectedContactId ? callablePhoneByContactId[selectedContactId] ?? null : null;
   const callingSuppressed = Boolean(selectedContactId) && !callablePhone;
   const selectedContact = profile.contacts.find(({ id }) => id === selectedContactId) ?? null;
@@ -60,7 +63,7 @@ export function EventProfileWorkspace({
     ? profile.bookings.find(({ id }) => id === context.bookingId) ?? null
     : null;
   const selectedFollowUp = context.followUpId
-    ? profile.followUps.find(({ id }) => id === context.followUpId) ?? null
+    ? followUps.find(({ id }) => id === context.followUpId) ?? null
     : null;
   const placeLocation = [profile.place.address1, profile.place.city, profile.place.region, profile.place.postalCode]
     .filter(Boolean)
@@ -180,10 +183,28 @@ export function EventProfileWorkspace({
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-follow-ups-title">
             <h2 className="text-xl font-bold" id="event-follow-ups-title">Follow-up</h2>
-            {profile.followUps.length ? <ul className="mt-3 grid gap-3">
-              {profile.followUps.map((followUp) => <li className="text-sm" key={followUp.id}>
+            {followUps.length ? <ul className="mt-3 grid gap-3">
+              {followUps.map((followUp) => <li className="text-sm" key={followUp.id}>
                 <p className="font-semibold capitalize">{titleCase(followUp.kind)} {followUp.id === context.followUpId ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-900">Selected follow-up context</span> : null}</p>
                 <p className="text-slate-600">{followUp.completedAt ? `Completed ${formatDate(followUp.completedAt)}` : `Due ${formatDate(followUp.dueAt)}`}</p>
+                <FollowUpControls
+                  followUp={{
+                    id: followUp.id,
+                    organizationId: profile.id,
+                    contactId: followUp.contactId,
+                    bookingId: followUp.bookingId,
+                    kind: followUp.kind,
+                    dueAt: followUp.dueAt,
+                    completedAt: followUp.completedAt,
+                    outcome: (followUp as { outcome?: string | null }).outcome ?? null,
+                  }}
+                  onChanged={(updated: FollowUpRecord) => setFollowUps((current) =>
+                    current.map((item) => item.id === updated.id ? { ...item, ...updated } : item),
+                  )}
+                  onDeleted={(followUpId) => setFollowUps((current) =>
+                    current.filter((item) => item.id !== followUpId),
+                  )}
+                />
               </li>)}
             </ul> : <p className="mt-3 text-sm text-slate-600">No follow-up is scheduled.</p>}
           </section>

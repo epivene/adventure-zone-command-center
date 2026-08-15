@@ -9,6 +9,7 @@ import { NextCallCard, eventProfileHref } from "@/components/today/next-call-car
 import { SummaryCards } from "@/components/today/summary-cards";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
+import type { FollowUpRecord } from "@/features/follow-ups/follow-up-types";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", {
@@ -53,6 +54,42 @@ export default function TodayPage() {
     disabledCallingConfig,
   );
   const now = new Date();
+
+  function removeFollowUp(followUpId: string) {
+    setDashboard((current: any) => {
+      if (!current) return current;
+      const followUps = (current.followUps ?? []).filter(
+        (followUp: any) => followUp.id !== followUpId,
+      );
+      return {
+        ...current,
+        followUps,
+        followUpCount: Math.max(0, (current.followUpCount ?? 0) - 1),
+        followUpTotal: Math.max(0, (current.followUpTotal ?? 0) - 1),
+        nextCall:
+          current.nextCall?.id === followUpId
+            ? followUps.find((followUp: any) => followUp.kind === "call") ?? null
+            : current.nextCall,
+      };
+    });
+  }
+
+  function changeFollowUp(updated: FollowUpRecord) {
+    if (updated.completedAt) {
+      removeFollowUp(updated.id);
+      return;
+    }
+    setDashboard((current: any) => {
+      if (!current) return current;
+      const replace = (followUp: any) =>
+        followUp.id === updated.id ? { ...followUp, ...updated } : followUp;
+      return {
+        ...current,
+        followUps: (current.followUps ?? []).map(replace),
+        nextCall: current.nextCall ? replace(current.nextCall) : null,
+      };
+    });
+  }
 
   useEffect(() => {
     Promise.all([
@@ -151,7 +188,12 @@ export default function TodayPage() {
       ) : (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(19rem,1fr)] lg:items-start">
           <div className="grid gap-3">
-            <FollowUpList followUps={followUps} now={now} />
+            <FollowUpList
+              followUps={followUps}
+              now={now}
+              onChanged={changeFollowUp}
+              onDeleted={removeFollowUp}
+            />
           </div>
           <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />
         </div>
