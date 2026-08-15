@@ -5,10 +5,24 @@ import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-ma
 import { loadLegManagerDashboard } from "@/features/leg-manager/leg-manager-dashboard";
 import { DrizzleTripRepository } from "@/features/trips/trip-repository";
 import { DrizzleScheduleIssueRepository, scheduleIssueKinds } from "@/features/leg-manager/schedule-issue-repository";
+import { createFinanceMutation, DrizzleFinanceRepository, type FinanceMutationKind } from "@/features/leg-manager/finance-repository";
+import { legCashEntryKinds, legExpenseCategories, legPaymentSources } from "@/features/leg-manager/finance-types";
 import { z } from "zod";
-const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));
+const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);
 async function data(req:any,res:any){const result=await loadLegManagerDashboard(new DrizzleTripRepository(db),req.legManager.legId);res.json(result);}
 router.get("/manager/dashboard",requireManager,data);router.get("/manager/route",requireManager,data);
+
+const refs={bookingId:z.string().uuid().nullable().optional(),tripId:z.string().uuid().nullable().optional(),tripSegmentId:z.string().uuid().nullable().optional(),clientMutationId:z.string().uuid()};
+const income=z.object({...refs,cashCents:z.number().int().nonnegative().default(0),squareCents:z.number().int().nonnegative().default(0),otherCents:z.number().int().nonnegative().default(0),otherLabel:z.string().trim().max(120).nullable().optional(),occurredAt:z.coerce.date(),notes:z.string().max(4000).nullable().optional()});
+const expense=z.object({...refs,category:z.enum(legExpenseCategories),merchant:z.string().trim().max(200).nullable().optional(),amountCents:z.number().int().nonnegative(),taxCents:z.number().int().nonnegative().default(0),paymentSource:z.enum(legPaymentSources),occurredAt:z.coerce.date(),notes:z.string().max(4000).nullable().optional(),employeeNote:z.string().max(1000).nullable().optional(),detailJson:z.record(z.string(),z.unknown()).nullable().optional()});
+const cash=z.object({...refs,kind:z.enum(legCashEntryKinds),amountCents:z.number().int(),occurredAt:z.coerce.date(),notes:z.string().max(4000).nullable().optional()}).refine(v=>v.kind==="adjustment"||v.amountCents>=0,{message:"Amount must be nonnegative unless adjustment"});
+const mileage=z.object({...refs,miles:z.number().nonnegative().nullable().optional(),odometerStart:z.number().nonnegative().nullable().optional(),odometerEnd:z.number().nonnegative().nullable().optional(),vehicleLabel:z.string().max(160).nullable().optional(),occurredAt:z.coerce.date(),notes:z.string().max(4000).nullable().optional()}).refine(v=>v.miles!=null||(v.odometerStart!=null&&v.odometerEnd!=null&&v.odometerEnd>=v.odometerStart),{message:"Enter miles or valid odometer readings"});
+async function post(kind:FinanceMutationKind,schema:any,req:any,res:any){const p=schema.safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.issues[0]?.message??"Invalid finance entry"});return;}const {bookingId=null,tripId=null,tripSegmentId=null,clientMutationId,...payload}=p.data;const result=await createFinanceMutation(finance,kind,{legId:req.legManager.legId,bookingId,tripId,tripSegmentId,clientMutationId,payload});if(!result.ok){res.status(403).json({error:"The referenced booking, trip, or segment is outside your leg"});return;}res.status(result.idempotent?200:201).json(result.row);}
+router.get("/manager/money/summary",requireManager,async(req,res)=>res.json(await finance.summary(req.legManager!.legId,typeof req.query.tripId==="string"?req.query.tripId:null)));
+router.post("/manager/income",requireManager,(req,res)=>post("income",income,req,res));
+router.post("/manager/expenses",requireManager,(req,res)=>post("expense",expense,req,res));
+router.post("/manager/cash",requireManager,(req,res)=>post("cash",cash,req,res));
+router.post("/manager/mileage",requireManager,(req,res)=>post("mileage",mileage,req,res));
 
 const issueSchema=z.object({bookingId:z.string().uuid().nullable().optional(),tripId:z.string().uuid().nullable().optional(),kind:z.enum(scheduleIssueKinds),notes:z.string().trim().min(1).max(4000),clientMutationId:z.string().uuid()});
 router.post("/manager/issues",requireManager,async(req,res):Promise<void>=>{const p=issueSchema.safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.issues[0]?.message??"Invalid issue report"});return;}const result=await new DrizzleScheduleIssueRepository(db).create({legId:req.legManager!.legId,bookingId:p.data.bookingId??null,tripId:p.data.tripId??null,kind:p.data.kind,notes:p.data.notes,clientMutationId:p.data.clientMutationId});if(!result.ok){res.status(403).json({error:"The referenced booking or trip is outside your leg"});return;}res.status(result.idempotent?200:201).json(result.issue);});
