@@ -29,6 +29,27 @@
 - Payroll is out of scope.
 - Real Square API and mandatory receipt OCR are out of scope for the initial portal delivery.
 
+## Season/trip grouping invariant
+
+Do not add a second manager-only season or event system. The portal groups history automatically using the existing route/trip/event dates:
+
+- `trip` remains the existing canonical `trips` record and its `tripStops`.
+- portal `seasonKey` is derived from the business-time-zone calendar year of the trip start date, falling back to the booking/event start date for scheduled events not yet attached to a trip.
+- default display label is `${seasonKey} Season`.
+- scheduled events assigned to a leg but not yet attached to a trip appear in an **Unassigned scheduled events** group rather than disappearing.
+- admin edits the existing trip/stop/leg assignment to correct grouping; the manager portal updates from those canonical records.
+- if a custom season label is later needed, add an admin-only label override to the canonical trip/season presentation rather than copying bookings into a portal-owned season table.
+
+This satisfies “calendar/route/scheduled dates drive it, but admin can edit it” without inventing a duplicate schedule.
+
+## Offline privacy/session invariant
+
+A device may use cached data only for the currently authenticated leg and only while the locally stored manager token has not reached its signed `expiresAt`. Manager sign-out clears leg-private IndexedDB caches and queued blobs from the device. Password reset, Sign Out All Devices, or leg archival is enforced as soon as the device reconnects and the next authenticated request validates the server-side `sessionVersion`/archive state. Never show cached data from one leg after a different leg signs in on the same device.
+
+## Receipt image storage invariant
+
+Release 2 stores receipt metadata separately from image bytes. The server-side receipt service must use the app's configured object-storage mechanism rather than storing image blobs in PostgreSQL. Persist only an object key/storage reference and upload status in `leg_receipts`. If the repository has no reusable object-storage adapter on the implementation branch, create `artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts` as the single adapter boundary and wire it to the deployment's existing object-storage configuration; do not scatter provider-specific upload code through routes/components.
+
 ## Implementation-time migration allocation
 
 The child plans use early numeric migration names as logical examples. **Do not create those literal filenames.** Current `main` already has migrations through `036_event_family_suggestion_hash_identity.sql`. If Release 1 starts from the current main line, allocate the portal migrations as follows:
@@ -79,7 +100,7 @@ Plan: `docs/superpowers/plans/2026-08-15-leg-manager-portal-foundation.md`
 
 Produces a usable leg-only portal with unlimited/archiveable legs, leg passwords, server-enforced scope, route/calendar read-only data, schedule issue reporting, and the offline queue/sync foundation.
 
-**Exit gate:** A manager can sign in on a phone, see only their leg's current trip/events, report a schedule issue offline, reconnect, sync it once, and the admin can see/resolve it. Archiving the leg or resetting access prevents the old token from continuing to use the portal.
+**Exit gate:** A manager can sign in on a phone, see only their leg's current trip/events, see scheduled-but-unassigned events, report a schedule issue offline, reconnect, sync it once, and the admin can see/resolve it. Archiving the leg or resetting access prevents the old token from continuing to use the portal.
 
 ### Release 2 — Money, Receipts, Mileage, and Settlement
 
@@ -125,7 +146,10 @@ The portal is considered initially complete only when all three release exit gat
 - Archived legs are hidden by default and visible through a deliberate View Archived control.
 - Leg-manager tokens cannot fetch another leg's private records even with hand-edited URLs or payloads.
 - Official schedule data cannot be changed through manager endpoints.
+- Scheduled events assigned to the manager's leg remain visible even before they have been attached to a trip.
 - Offline queued mutations are idempotent and duplicate-free after retries.
+- Manager sign-out/leg switching cannot expose the prior leg's cached private data.
 - Financial summaries are derived from ledger rows, not editable summary fields.
+- Receipt-image upload failure cannot delete the expense or receipt metadata.
 - Event reviews and crew histories preserve individual entries over time instead of overwriting one global score/note.
 - Admin can inspect every leg and combined totals while leg managers stay scoped.
