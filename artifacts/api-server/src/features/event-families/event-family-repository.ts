@@ -46,9 +46,13 @@ export async function ensureEventFamilySchema(pool: Pool = defaultPool): Promise
       reason text NOT NULL,
       status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','dismissed')),
       created_at timestamptz NOT NULL DEFAULT now(),
-      updated_at timestamptz NOT NULL DEFAULT now(),
-      UNIQUE (normalized_name, candidate_fingerprint)
+      updated_at timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE event_family_suggestions
+      DROP CONSTRAINT IF EXISTS event_family_suggestions_normalized_name_candidate_fingerpr_key;
+    DROP INDEX IF EXISTS event_family_suggestions_identity_unique;
+    CREATE UNIQUE INDEX IF NOT EXISTS event_family_suggestions_identity_hash_unique
+      ON event_family_suggestions (normalized_name, md5(candidate_fingerprint));
     CREATE INDEX IF NOT EXISTS event_family_members_family_id_idx ON event_family_members(family_id);
     CREATE INDEX IF NOT EXISTS event_family_suggestions_pending_idx ON event_family_suggestions(status, created_at DESC);
   `);
@@ -134,7 +138,7 @@ export class EventFamilyRepository {
           INSERT INTO event_family_suggestions
             (proposed_name, normalized_name, candidate_ids, candidate_fingerprint, source, confidence, reason)
           VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)
-          ON CONFLICT (normalized_name, candidate_fingerprint) DO NOTHING
+          ON CONFLICT DO NOTHING
         `, [proposal.proposedName, proposal.normalizedName, JSON.stringify(ids), fingerprint(ids), proposal.source, proposal.confidence, proposal.reason]);
       }
       await client.query("COMMIT");
