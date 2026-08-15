@@ -1,0 +1,72 @@
+name: Final Leg Manager Money Release 2
+on:
+  push:
+    branches: [feature/leg-manager-money]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build DB declarations first
+        run: pnpm --filter @workspace/db build
+      - name: Release 2 API tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/leg-manager/finance-math.test.ts \
+            src/features/leg-manager/finance-repository.test.ts \
+            src/features/leg-manager/receipt-service.test.ts \
+            src/features/leg-manager/operations-rollup.test.ts \
+            src/features/leg-manager/leg-manager-middleware.test.ts
+      - name: Release 2 web tests
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run \
+            src/pages/ManagerMoneyPage.test.tsx \
+            src/components/manager/expense-form.test.tsx \
+            src/lib/manager-blob-queue.test.ts \
+            src/pages/ManagerFinanceAdminPage.test.tsx \
+            src/lib/manager-sync-queue.test.ts
+      - name: Web typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: Manager API scoped typecheck
+        run: pnpm --filter @workspace/api-server exec tsc -p tsconfig.manager.json --noEmit
+      - name: Full API typecheck baseline guard
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck > /tmp/api-typecheck.log 2>&1
+          code=$?
+          set -e
+          cat /tmp/api-typecheck.log
+          if grep -E '^src/(features/leg-manager|routes/leg-manager).*error TS' /tmp/api-typecheck.log; then
+            echo 'Release 2 introduced a manager-specific full API typecheck error.' >&2
+            exit 1
+          fi
+          echo "Full API typecheck exit: $code (known main baseline may remain nonzero)"
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Web build
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Release 2 security and accounting assertions
+        run: |
+          grep -q '037_leg_manager_finance.sql' lib/db/src/migrations.ts
+          grep -q 'req.legManager!.legId' artifacts/api-server/src/routes/leg-manager.ts
+          grep -q 'event_cash_collected' artifacts/api-server/src/features/leg-manager/finance-repository.ts
+          grep -q 'expense_paid_cash' artifacts/api-server/src/features/leg-manager/finance-repository.ts
+          grep -q 'missingReceiptCount' artifacts/api-server/src/features/leg-manager/finance-repository.ts
+          grep -q 'GoogleCloudLegManagerObjectStorage' artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts
+          grep -q 'capture="environment"' artifacts/adventure-zone/src/components/manager/receipt-capture.tsx
+          grep -q 'id, bookingId' artifacts/adventure-zone/src/components/manager/expense-form.tsx
+          ! grep -R -Ei 'squareup|SquareClient|optical character recognition|\bOCR\b' artifacts/api-server/src/features/leg-manager artifacts/adventure-zone/src/components/manager artifacts/adventure-zone/src/pages/ManagerMoneyPage.tsx
+          ! grep -Ei 'bytea|blob' lib/db/migrations/037_leg_manager_finance.sql
