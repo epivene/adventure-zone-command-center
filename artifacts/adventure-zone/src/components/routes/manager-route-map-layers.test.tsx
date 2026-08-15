@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EquipmentHandoffView } from "./equipment-handoffs";
@@ -42,7 +42,7 @@ vi.mock("./manager-route-map-shell", () => ({
   useManagerRouteMap: () => mocks.map,
 }));
 
-import { ManagerRouteMapLayers } from "./manager-route-map-layers";
+import { ManagerRouteMapLayers, ManagerTripNavigationActions } from "./manager-route-map-layers";
 
 const event: MapEvent & { planningEmphasis: "primary" | "dimmed" } = {
   id: "miles",
@@ -90,6 +90,16 @@ const handoff: EquipmentHandoffView = {
   approvedAt: null,
 };
 
+const focusedTrip = {
+  id: "trip-1",
+  name: "Kristy trip",
+  points: [
+    { id: "start", label: "Start", latitude: 40.7608, longitude: -111.891 },
+    { id: "stop-1", label: "Miles City", latitude: 46.4083, longitude: -105.8406 },
+    { id: "end", label: "End", latitude: 45.7833, longitude: -108.5007 },
+  ],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.markerObject.addTo.mockReturnValue(mocks.markerObject);
@@ -125,28 +135,42 @@ describe("ManagerRouteMapLayers", () => {
     expect(popup).not.toContain("key=");
   });
 
-  it("draws focused trip points in their existing order", () => {
+  it("draws planning route lines and focused trip points in stored order", () => {
     render(
       <ManagerRouteMapLayers
         events={[]}
         handoffs={[]}
+        routeLines={[{
+          coordinates: [[-111.891, 40.7608], [-105.8406, 46.4083]],
+          color: "#ef4444",
+          emphasis: "primary",
+        }]}
         focusedEventId={null}
         managerMode="on-road"
-        focusedTrip={{
-          id: "trip-1",
-          name: "Kristy trip",
-          points: [
-            { id: "start", label: "Start", latitude: 40.7608, longitude: -111.891 },
-            { id: "stop-1", label: "Miles City", latitude: 46.4083, longitude: -105.8406 },
-            { id: "end", label: "End", latitude: 45.7833, longitude: -108.5007 },
-          ],
-        }}
+        focusedTrip={focusedTrip}
       />,
     );
 
     expect(mocks.polyline).toHaveBeenCalledWith(
-      [[40.7608, -111.891], [46.4083, -105.8406], [45.7833, -108.5007]],
-      expect.objectContaining({ weight: 5 }),
+      [[40.7608, -111.891], [46.4083, -105.8406]],
+      expect.objectContaining({ color: "#ef4444", weight: 4 }),
     );
+    expect(mocks.polyline).toHaveBeenCalledWith(
+      [[40.7608, -111.891], [46.4083, -105.8406], [45.7833, -108.5007]],
+      expect.objectContaining({ color: "#0f172a", weight: 5 }),
+    );
+  });
+});
+
+describe("ManagerTripNavigationActions", () => {
+  it("shows next-stop navigation only in On the Road mode and always offers the full route", () => {
+    const { rerender } = render(<ManagerTripNavigationActions trip={focusedTrip} mode="planning" />);
+    expect(screen.queryByRole("link", { name: "Navigate to next stop" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open full trip route" })).toHaveAttribute("href", expect.stringContaining("google.com/maps/dir/"));
+
+    rerender(<ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />);
+    const next = screen.getByRole("link", { name: "Navigate to next stop" });
+    expect(next).toHaveAttribute("href", expect.stringContaining("destination=46.4083%2C-105.8406"));
+    expect(next.getAttribute("href")).not.toContain("key=");
   });
 });
