@@ -12,6 +12,7 @@ import {
   contacts,
   followUps,
   organizationContacts,
+  organizationLocations,
   organizations,
 } from "@/db/schema";
 import {
@@ -45,6 +46,9 @@ export type EventProfileContactRecord = {
   email: string | null;
   source: string;
   actRecordId: string | null;
+  locationName: string | null;
+  locationCity: string | null;
+  locationRegion: string | null;
 };
 
 export type EventProfileBookingRecord = {
@@ -199,6 +203,9 @@ export function buildEventProfile(
     email: contact.email,
     source: contact.source,
     actRecordId: contact.actRecordId,
+    locationName: contact.locationName,
+    locationCity: contact.locationCity,
+    locationRegion: contact.locationRegion,
   }));
   const selectedContactId = contacts.some(({ id }) => id === requestedContactId)
     ? requestedContactId!
@@ -262,8 +269,12 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         email: contacts.email,
         source: organizationContacts.source,
         actRecordId: contacts.actRecordId,
+        locationName: organizationLocations.label,
+        locationCity: organizationLocations.city,
+        locationRegion: organizationLocations.region,
       }).from(organizationContacts)
         .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
+        .leftJoin(organizationLocations, eq(organizationLocations.id, contacts.organizationLocationId))
         .where(activeOrganizationContactCondition(profileId))
         .orderBy(desc(organizationContacts.isPrimary), asc(organizationContacts.role), asc(contacts.lastName), asc(contacts.firstName), asc(contacts.id)),
       this.database.select({

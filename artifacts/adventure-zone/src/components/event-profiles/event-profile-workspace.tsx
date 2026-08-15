@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
 import { PossibleLocationsSection } from "@/components/organizations/possible-locations-section";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
+import { groupEventProfileContacts } from "@/features/event-profiles/group-event-profile-contacts";
 
 const NOTE_PAGE_SIZE = 25;
 
@@ -52,10 +53,14 @@ export function EventProfileWorkspace({
   assistedCallingEnabled?: boolean;
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
+  const [showLocations, setShowLocations] = useState<Record<string, boolean>>({});
   const [visibleNoteCount, setVisibleNoteCount] = useState(NOTE_PAGE_SIZE);
-  const callablePhone = selectedContactId ? callablePhoneByContactId[selectedContactId] ?? null : null;
-  const callingSuppressed = Boolean(selectedContactId) && !callablePhone;
-  const selectedContact = profile.contacts.find(({ id }) => id === selectedContactId) ?? null;
+  const groupedContacts = useMemo(() => groupEventProfileContacts(profile.contacts), [profile.contacts]);
+  const selectedContact = groupedContacts.find(({ id }) => id === selectedContactId) ?? groupedContacts[0] ?? null;
+  const callablePhone = selectedContact
+    ? selectedContact.contactIds.map((id) => callablePhoneByContactId[id]).find((phone): phone is string => Boolean(phone)) ?? null
+    : null;
+  const callingSuppressed = Boolean(selectedContact) && !callablePhone;
   const selectedBooking = context.bookingId
     ? profile.bookings.find(({ id }) => id === context.bookingId) ?? null
     : null;
@@ -117,9 +122,9 @@ export function EventProfileWorkspace({
         <div className="grid gap-5">
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-contacts-title">
             <h2 className="text-xl font-bold" id="event-contacts-title">Contacts</h2>
-            {profile.contacts.length ? (
+            {groupedContacts.length ? (
               <ul className="mt-4 divide-y divide-slate-200">
-                {profile.contacts.map((contact) => (
+                {groupedContacts.map((contact) => (
                   <li className="grid gap-1 py-3" key={contact.id}>
                     <div className="flex flex-wrap items-center gap-2">
                       <Link className="font-semibold hover:text-orange-700" href={`/contacts/${contact.id}`}>{contact.name}</Link>
@@ -131,6 +136,12 @@ export function EventProfileWorkspace({
                     </div>
                     {contact.role ? <p className="text-sm text-slate-600">{contact.role}</p> : null}
                     <p className="text-sm text-slate-600">{contact.phone || "No phone"} · {contact.email || "No email"}</p>
+                    {contact.locations.length ? <div className="text-sm text-slate-600">
+                      <button className="font-semibold text-orange-700 hover:text-orange-900" onClick={() => setShowLocations((current) => ({ ...current, [contact.id]: !current[contact.id] }))} type="button">
+                        Locations: {contact.locations.length}
+                      </button>
+                      {showLocations[contact.id] ? <ul className="mt-1 ml-4 list-disc text-slate-600">{contact.locations.map((location) => <li key={location}>{location}</li>)}</ul> : null}
+                    </div> : null}
                   </li>
                 ))}
               </ul>
@@ -168,14 +179,14 @@ export function EventProfileWorkspace({
               <p aria-live="polite" className="font-semibold">Current caller: {selectedContact.name}</p>
               <div className="flex flex-wrap gap-2">
                 {assistedCallingEnabled && callablePhone && !callingSuppressed ? <a className="button-primary text-center" href={`tel:${callablePhone.replaceAll(/[^+\d]/g, "")}`}>Call {selectedContact.name}</a> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-600">{!assistedCallingEnabled ? "Assisted calling unavailable" : callingSuppressed ? "Calling unavailable" : "No phone recorded"}</span>}
-                {profile.contacts.length > 1 ? <button className="button-secondary" onClick={() => {
-                  const index = profile.contacts.findIndex(({ id }) => id === selectedContactId);
-                  setSelectedContactId(profile.contacts[(index + 1) % profile.contacts.length]!.id);
+                {groupedContacts.length > 1 ? <button className="button-secondary" onClick={() => {
+                  const index = groupedContacts.findIndex(({ id }) => id === selectedContactId);
+                  setSelectedContactId(groupedContacts[(index + 1) % groupedContacts.length]!.id);
                 }} type="button">Next caller</button> : null}
               </div>
             </div> : <p className="mt-3 text-sm text-slate-600">No caller is available for this event.</p>}
-            {profile.contacts.length > 1 ? <ul className="mt-4 grid gap-2" aria-label="Caller queue">
-              {profile.contacts.map((contact) => <li key={contact.id}><button className={contact.id === selectedContactId ? "w-full rounded-lg bg-orange-100 px-3 py-2 text-left font-semibold text-orange-950" : "w-full rounded-lg bg-slate-50 px-3 py-2 text-left font-semibold text-slate-800 hover:bg-slate-100"} onClick={() => setSelectedContactId(contact.id)} type="button">{contact.name}</button></li>)}
+            {groupedContacts.length > 1 ? <ul className="mt-4 grid gap-2" aria-label="Caller queue">
+              {groupedContacts.map((contact) => <li key={contact.id}><button className={contact.id === selectedContactId ? "w-full rounded-lg bg-orange-100 px-3 py-2 text-left font-semibold text-orange-950" : "w-full rounded-lg bg-slate-50 px-3 py-2 text-left font-semibold text-slate-800 hover:bg-slate-100"} onClick={() => setSelectedContactId(contact.id)} type="button">{contact.name}{contact.locations.length > 1 ? <span className="ml-2 text-xs font-normal text-slate-600">({contact.locations.length} locations)</span> : null}</button></li>)}
             </ul> : null}
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-follow-ups-title">
