@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch } from "@/lib/auth-token";
+import { apiGet, apiPost } from "@/lib/auth-token";
 import type {
   ActivityParent,
   CreateActivityInput,
@@ -11,6 +11,38 @@ import type {
   ActivityTimelinePageResult,
 } from "@/components/activities/activity-timeline";
 
+type SerializedActivityTimelineItem = Omit<
+  ActivityTimelineItem,
+  "occurredAt" | "createdAt" | "updatedAt"
+> & {
+  occurredAt: string | Date;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+type SerializedActivityTimelinePageResult =
+  | {
+      ok: true;
+      items: SerializedActivityTimelineItem[];
+      nextPage: number | null;
+    }
+  | { ok: false; error: string };
+
+type SerializedActivityMutationResult =
+  | { ok: true; activity: SerializedActivityTimelineItem }
+  | { ok: false; error: string };
+
+function coerceActivityTimelineItem(
+  item: SerializedActivityTimelineItem,
+): ActivityTimelineItem {
+  return {
+    ...item,
+    occurredAt: new Date(item.occurredAt),
+    createdAt: new Date(item.createdAt),
+    updatedAt: new Date(item.updatedAt),
+  };
+}
+
 export async function loadTimelinePageAction(
   parent: ActivityParent,
   page: number,
@@ -21,16 +53,11 @@ export async function loadTimelinePageAction(
     if (parent.organizationId) qs.set("organizationId", parent.organizationId);
     if (parent.bookingId) qs.set("bookingId", parent.bookingId);
     qs.set("page", String(page));
-    const result = await apiGet<ActivityTimelinePageResult>(`/activities/timeline?${qs.toString()}`);
+    const result = await apiGet<SerializedActivityTimelinePageResult>(`/activities/timeline?${qs.toString()}`);
     if (!result.ok) return result;
     return {
       ...result,
-      items: result.items.map((item: any) => ({
-        ...item,
-        occurredAt: new Date(item.occurredAt),
-        createdAt: new Date(item.createdAt),
-        updatedAt: new Date(item.updatedAt),
-      })),
+      items: result.items.map(coerceActivityTimelineItem),
     };
   } catch (e: any) {
     return { ok: false, error: e.message };
@@ -41,7 +68,9 @@ export async function createActivityAction(
   input: CreateActivityInput,
 ): Promise<ActivityMutationResult> {
   try {
-    return await apiPost<ActivityMutationResult>("/activities", input);
+    const result = await apiPost<SerializedActivityMutationResult>("/activities", input);
+    if (!result.ok) return result;
+    return { ...result, activity: coerceActivityTimelineItem(result.activity) };
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
@@ -51,7 +80,9 @@ export async function editActivityAction(
   input: EditActivityInput,
 ): Promise<ActivityMutationResult> {
   try {
-    return await apiPost<ActivityMutationResult>("/activities/edit", input);
+    const result = await apiPost<SerializedActivityMutationResult>("/activities/edit", input);
+    if (!result.ok) return result;
+    return { ...result, activity: coerceActivityTimelineItem(result.activity) };
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
