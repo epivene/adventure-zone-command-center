@@ -2,7 +2,10 @@ import type {
   BookingStatus,
   Probability,
 } from "@/features/bookings/booking-types";
+import type { RouteBucket } from "@/features/routes/route-view";
 import { businessDateKey, parseBusinessDate } from "@/lib/business-date";
+
+export type LocationQuality = "coordinates" | "address" | "city" | "missing";
 
 export type MapEvent = {
   id: string;
@@ -18,6 +21,10 @@ export type MapEvent = {
   travelLegColor: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  routeBucket?: RouteBucket;
+  locationQuality?: LocationQuality;
+  locationLabel?: string | null;
+  seasonYear?: number | null;
 };
 
 export type MapFilters = {
@@ -37,6 +44,11 @@ export type MapFeatureProperties = {
   travelLegColor: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  routeBucket?: RouteBucket;
+  locationQuality?: LocationQuality;
+  locationLabel?: string | null;
+  seasonYear?: number | null;
+  emphasis?: "primary" | "dimmed";
 };
 
 export type MapFeature = {
@@ -71,6 +83,19 @@ function validBusinessDate(value: string | null): string | null {
   return value && parseBusinessDate(value) ? value : null;
 }
 
+export function eventOverlapsBusinessWindow(
+  event: Pick<MapEvent, "startsAt" | "endsAt">,
+  from: string | null,
+  to: string | null,
+): boolean {
+  if (!event.startsAt) return false;
+  const startsOn = businessDateKey(event.startsAt);
+  const endsOn = businessDateKey(event.endsAt ?? event.startsAt);
+  if (from !== null && endsOn < from) return false;
+  if (to !== null && startsOn > to) return false;
+  return true;
+}
+
 export function filterMapEvents(
   events: MapEvent[],
   filters: MapFilters = emptyFilters,
@@ -91,11 +116,11 @@ export function filterMapEvents(
     if (filters.regions.length && !filters.regions.includes(event.region)) {
       return false;
     }
-    if (from !== null || to !== null) {
-      if (!event.startsAt) return false;
-      const startsOn = businessDateKey(event.startsAt);
-      if (from !== null && startsOn < from) return false;
-      if (to !== null && startsOn > to) return false;
+    if (
+      (from !== null || to !== null) &&
+      !eventOverlapsBusinessWindow(event, from, to)
+    ) {
+      return false;
     }
     return true;
   });
@@ -139,6 +164,10 @@ export function toMapDataset(events: MapEvent[]): MapDataset {
           travelLegColor: event.travelLegColor,
           startsAt: event.startsAt?.toISOString() ?? null,
           endsAt: event.endsAt?.toISOString() ?? null,
+          routeBucket: event.routeBucket,
+          locationQuality: event.locationQuality,
+          locationLabel: event.locationLabel,
+          seasonYear: event.seasonYear,
         },
       })),
     },
