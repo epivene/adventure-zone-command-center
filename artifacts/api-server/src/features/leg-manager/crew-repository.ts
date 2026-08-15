@@ -126,4 +126,56 @@ export class DrizzleCrewRepository implements CrewRepositoryStore {
         worker.name.trim().toLocaleLowerCase() === normalizedName,
     );
   }
+
+  async createWorkHistory(input: {
+    workerId: string;
+    legId: string;
+    bookingId?: string | null;
+    tripId?: string | null;
+    role: string;
+    startedAt: Date;
+    endedAt?: Date | null;
+    rating?: number | null;
+    note?: string | null;
+  }) {
+    return (await this.database
+      .insert(crewWorkHistory)
+      .values({
+        workerId: input.workerId,
+        legId: input.legId,
+        bookingId: input.bookingId ?? null,
+        tripId: input.tripId ?? null,
+        role: input.role.trim(),
+        startedAt: input.startedAt,
+        endedAt: input.endedAt ?? null,
+        rating: input.rating ?? null,
+        note: input.note?.trim() || null,
+      })
+      .returning())[0];
+  }
+
+  async createManagerNote(input: {
+    workerId: string;
+    legId: string;
+    bookingId?: string | null;
+    note: string;
+  }) {
+    return (await this.database
+      .insert(crewManagerNotes)
+      .values({
+        workerId: input.workerId,
+        legId: input.legId,
+        bookingId: input.bookingId ?? null,
+        note: input.note.trim(),
+      })
+      .returning())[0];
+  }
+
+  async updateRehireStatus(workerId: string, rehireStatus: CrewRehireStatus) {
+    return (await this.database
+      .update(crewWorkers)
+      .set({ rehireStatus, updatedAt: new Date() })
+      .where(eq(crewWorkers.id, workerId))
+      .returning())[0] ?? null;
+  }
 }
