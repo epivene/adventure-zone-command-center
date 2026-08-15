@@ -19,6 +19,7 @@ export type EditActivityInput = {
   activityId: string;
   body: string;
   reason: string;
+  callOutcome?: PersistedCallDisposition;
 };
 
 export type ActivityTimelineItem = {
