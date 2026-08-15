@@ -1,8 +1,8 @@
 import type { MapEvent } from "./map-data";
+import { UTAH_DEFAULT_VIEW } from "./manager-map-navigation";
 import { classifyRouteBucket, routeEmphasis, type RouteViewMode } from "./route-view";
 
 export type MapViewportTarget =
-  | { kind: "none" }
   | { kind: "center"; center: [number, number]; zoom: number }
   | { kind: "bounds"; coordinates: [number, number][] };
 
@@ -41,7 +41,9 @@ export function viewportTarget(input: {
     return { kind: "bounds", coordinates: tripCoordinates };
   }
   const mapped = primaryEvents.filter(hasCoordinates);
-  if (mapped.length === 0) return { kind: "none" };
+  if (mapped.length === 0) {
+    return { kind: "center", center: UTAH_DEFAULT_VIEW.center, zoom: UTAH_DEFAULT_VIEW.zoom };
+  }
   if (mapped.length === 1) {
     const event = mapped[0]!;
     return { kind: "center", center: [event.longitude, event.latitude], zoom: 10 };
