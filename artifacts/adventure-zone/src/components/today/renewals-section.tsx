@@ -57,7 +57,9 @@ export function RenewalsSection({
   const attentionCount = overdueCount + soonCount;
   const attentionCopy =
     overdueCount > 0
-      ? `${attentionCount} ${pluralizeRenewal(attentionCount)} need attention`
+      ? `${attentionCount} ${pluralizeRenewal(attentionCount)} ${
+          attentionCount === 1 ? "needs" : "need"
+        } attention`
       : soonCount > 0
         ? `${soonCount} ${pluralizeRenewal(soonCount)} coming up soon`
         : null;
