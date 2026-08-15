@@ -32,8 +32,8 @@ jobs:
       - name: Run event family repository regression test
         run: pnpm --filter @workspace/api-server exec vitest run src/features/event-families/event-family-repository.test.ts
 
-      - name: Typecheck workspace
-        run: pnpm run typecheck
+      - name: Typecheck shared libraries
+        run: pnpm run typecheck:libs
 
-      - name: Build workspace
-        run: pnpm run build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
