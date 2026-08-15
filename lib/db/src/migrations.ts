@@ -399,6 +399,10 @@ const migrationFiles = [
     name: "037_leg_manager_finance.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.leg_event_income') IS NOT NULL AND to_regclass(current_schema() || '.leg_expenses') IS NOT NULL AND to_regclass(current_schema() || '.leg_cash_entries') IS NOT NULL AND to_regclass(current_schema() || '.leg_mileage_entries') IS NOT NULL AND to_regclass(current_schema() || '.leg_receipts') IS NOT NULL AS ready",
   },
+  {
+    name: "038_leg_crew.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.crew_workers') IS NOT NULL AND to_regclass(current_schema() || '.crew_work_history') IS NOT NULL AND to_regclass(current_schema() || '.crew_manager_notes') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

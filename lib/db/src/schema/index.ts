@@ -2771,3 +2771,69 @@ export const legMileageEntries = pgTable("leg_mileage_entries", {
 export const legReceipts = pgTable("leg_receipts", {
   id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), expenseId: uuid("expense_id").notNull().references(() => legExpenses.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("leg_receipts_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_receipts_leg_expense_idx").on(table.legId, table.expenseId), check("leg_receipts_image_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`), check("leg_receipts_revision_positive", sql`${table.revision} >= 1`)]);
+
+export const crewWorkers = pgTable(
+  "crew_workers",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    phone: text("phone"),
+    normalizedPhone: text("normalized_phone"),
+    email: text("email"),
+    city: text("city"),
+    region: text("region"),
+    locationText: text("location_text"),
+    rehireStatus: text("rehire_status").default("undecided").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("crew_workers_location_idx").on(table.region, table.city),
+    index("crew_workers_normalized_phone_idx").on(table.normalizedPhone).where(sql`${table.normalizedPhone} is not null`),
+    check("crew_workers_name_nonblank", sql`nullif(trim(${table.name}), '') is not null`),
+    check("crew_workers_rehire_status_valid", sql`${table.rehireStatus} in ('rehirable','undecided','do_not_rehire')`),
+  ],
+);
+
+export const crewWorkHistory = pgTable(
+  "crew_work_history",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workerId: uuid("worker_id").notNull().references(() => crewWorkers.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+    role: text("role").notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    rating: integer("rating"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("crew_work_history_worker_started_idx").on(table.workerId, table.startedAt.desc()),
+    index("crew_work_history_leg_started_idx").on(table.legId, table.startedAt.desc()),
+    check("crew_work_history_role_nonblank", sql`nullif(trim(${table.role}), '') is not null`),
+    check("crew_work_history_dates_valid", sql`${table.endedAt} is null or ${table.endedAt} >= ${table.startedAt}`),
+    check("crew_work_history_rating_valid", sql`${table.rating} is null or ${table.rating} between 0 and 5`),
+  ],
+);
+
+export const crewManagerNotes = pgTable(
+  "crew_manager_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workerId: uuid("worker_id").notNull().references(() => crewWorkers.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    note: text("note").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("crew_manager_notes_worker_created_idx").on(table.workerId, table.createdAt.desc()),
+    index("crew_manager_notes_leg_created_idx").on(table.legId, table.createdAt.desc()),
+    check("crew_manager_notes_note_nonblank", sql`nullif(trim(${table.note}), '') is not null`),
+  ],
+);
