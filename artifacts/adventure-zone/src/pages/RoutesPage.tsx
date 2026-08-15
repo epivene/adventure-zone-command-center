@@ -13,9 +13,34 @@ import {
 } from "@/actions/routes";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
 
+type TripFocusDetail = {
+  trip: {
+    startLatitude: number | null;
+    startLongitude: number | null;
+    endLatitude: number | null;
+    endLongitude: number | null;
+  };
+  stops: Array<{ sortOrder: number; latitude: number | null; longitude: number | null }>;
+};
+
+function tripCoordinates(detail: TripFocusDetail): [number, number][] {
+  const points: [number, number][] = [];
+  if (detail.trip.startLatitude !== null && detail.trip.startLongitude !== null) {
+    points.push([detail.trip.startLongitude, detail.trip.startLatitude]);
+  }
+  for (const stop of [...detail.stops].sort((a, b) => a.sortOrder - b.sortOrder)) {
+    if (stop.latitude !== null && stop.longitude !== null) points.push([stop.longitude, stop.latitude]);
+  }
+  if (detail.trip.endLatitude !== null && detail.trip.endLongitude !== null) {
+    points.push([detail.trip.endLongitude, detail.trip.endLatitude]);
+  }
+  return points;
+}
+
 export default function RoutesPage() {
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
+  const [focusedTripCoordinates, setFocusedTripCoordinates] = useState<[number, number][] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,14 +76,8 @@ export default function RoutesPage() {
       setData((current: any) => ({
         ...current,
         travelLegs: current.travelLegs.map((leg: any) => leg.id === id ? result.leg : leg),
-        managerAccess: current.managerAccess.map((access: any) =>
-          access.legId === id ? { ...access, legName: result.leg.name } : access,
-        ),
-        events: current.events.map((event: any) =>
-          event.travelLegId === id
-            ? { ...event, travelLegName: result.leg.name, travelLegColor: result.leg.color }
-            : event,
-        ),
+        managerAccess: current.managerAccess.map((access: any) => access.legId === id ? { ...access, legName: result.leg.name } : access),
+        events: current.events.map((event: any) => event.travelLegId === id ? { ...event, travelLegName: result.leg.name, travelLegColor: result.leg.color } : event),
       }));
     }
     return result;
@@ -76,10 +95,7 @@ export default function RoutesPage() {
   }
 
   async function handleSignOutManagerDevices(legId: string) {
-    const response = await apiFetch(`/manager-admin/legs/${legId}/sign-out-all`, {
-      method: "POST",
-      body: "{}",
-    });
+    const response = await apiFetch(`/manager-admin/legs/${legId}/sign-out-all`, { method: "POST", body: "{}" });
     if (!response.ok) throw new Error("Could not sign out manager devices");
     await loadData();
   }
@@ -102,6 +118,11 @@ export default function RoutesPage() {
     await loadData();
   }
 
+  async function handleFocusTrip(tripId: string) {
+    const detail = await apiGet<TripFocusDetail>(`/trips/${tripId}`);
+    setFocusedTripCoordinates(tripCoordinates(detail));
+  }
+
   return <div className="mx-auto grid max-w-7xl gap-6">
     <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header>
     {loading ? <p className="text-slate-500">Loading routes…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <>
@@ -120,9 +141,9 @@ export default function RoutesPage() {
       />
       <a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">View all leg finances →</a>
       <div className="grid gap-2 sm:grid-cols-2"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
-      <TripsSection travelLegs={data.travelLegs} />
+      <TripsSection travelLegs={data.travelLegs} onFocusTrip={(tripId) => { void handleFocusTrip(tripId); }} />
       <EquipmentHandoffs travelLegs={data.travelLegs} onChange={setHandoffs} />
-      <section aria-labelledby="event-map-title" className="grid gap-4"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Bookings with a leg and usable location participate automatically. Suggested and approved equipment meetups are shown separately from events.</p></div><EventMap events={data.events} travelLegs={data.travelLegs} handoffs={handoffs} /></section>
+      <section aria-labelledby="event-map-title" className="grid gap-4"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Bookings with a leg and usable location participate automatically. Suggested and approved equipment meetups are shown separately from events.</p></div><EventMap events={data.events} travelLegs={data.travelLegs} handoffs={handoffs} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTripCoordinates(null)} /></section>
     </> : null}
   </div>;
 }

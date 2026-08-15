@@ -1,0 +1,91 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { EventMap } from "./event-map";
+import type { MapEvent } from "@/features/routes/map-data";
+import type { TravelLeg } from "@/features/routes/travel-leg-repository";
+
+vi.mock("@/lib/auth-token", () => ({ apiPost: vi.fn() }));
+
+const legs: TravelLeg[] = [
+  { id: "leg-kristy", name: "Kristy", color: "#ef4444", sortOrder: 1, archivedAt: null, baseAddress: null, defaultVehicleName: null, defaultMpg: null },
+  { id: "leg-hulk", name: "Hulk", color: "#2563eb", sortOrder: 2, archivedAt: null, baseAddress: null, defaultVehicleName: null, defaultMpg: null },
+];
+
+function event(overrides: Partial<MapEvent>): MapEvent {
+  return {
+    id: "miles",
+    name: "Eastern Montana Fair",
+    city: "Miles City",
+    region: "MT",
+    latitude: 46.4083,
+    longitude: -105.8406,
+    status: "confirmed",
+    probability: "possible",
+    travelLegId: "leg-kristy",
+    travelLegName: "Kristy",
+    travelLegColor: "#ef4444",
+    startsAt: new Date("2026-08-18T12:00:00Z"),
+    endsAt: new Date("2026-08-21T12:00:00Z"),
+    routeBucket: "confirmed",
+    locationQuality: "city",
+    locationLabel: "Miles City, MT",
+    mappingState: "mapped_city",
+    seasonYear: 2026,
+    ...overrides,
+  };
+}
+
+const events = [
+  event({}),
+  event({ id: "billings", name: "Billings Possible", city: "Billings", longitude: -108.5007, latitude: 45.7833, status: "possible", routeBucket: "potential", travelLegId: "leg-hulk", travelLegName: "Hulk", travelLegColor: "#2563eb" }),
+  event({ id: "wyoming", name: "Wyoming Event", city: "Sheridan", region: "WY", longitude: -106.9562, latitude: 44.7972 }),
+];
+
+afterEach(cleanup);
+
+describe("EventMap planning interactions", () => {
+  it("shows an explicit scope summary and refines it as filters change", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    expect(screen.getByText("Showing 2026")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirmed" }));
+    expect(screen.getByText("Showing Confirmed · 2026")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("State"), { target: { value: "MT" } });
+    expect(screen.getByText("Showing Confirmed · 2026 · MT")).toBeInTheDocument();
+    expect(screen.queryByText("Wyoming Event")).not.toBeInTheDocument();
+  });
+
+  it("keeps other legs visible but makes a selected leg the primary scope", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    fireEvent.change(screen.getByLabelText("Leg focus"), { target: { value: "leg-kristy" } });
+    expect(screen.getByText("Showing Kristy · 2026")).toBeInTheDocument();
+    expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
+    expect(screen.getByText("Eastern Montana Fair").closest("li")).toHaveAttribute("data-emphasis", "primary");
+  });
+
+  it("supports explicit event focus without changing the active filters", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    const buttons = screen.getAllByRole("button", { name: "Focus on map" });
+    fireEvent.click(buttons[0]!);
+    expect(screen.getByRole("button", { name: "Clear event focus" })).toBeInTheDocument();
+    expect(screen.getByText("Showing 2026")).toBeInTheDocument();
+  });
+
+  it("shows a clear zero-result state instead of implying the map is still meaningful", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    fireEvent.change(screen.getByLabelText("Overlaps after"), { target: { value: "2027-01-01" } });
+    expect(screen.getByText("No matching route events")).toBeInTheDocument();
+  });
+
+  it("reset map scope restores full/all-leg scope", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    fireEvent.click(screen.getByRole("button", { name: "Potential" }));
+    fireEvent.change(screen.getByLabelText("State"), { target: { value: "MT" } });
+    fireEvent.click(screen.getByRole("button", { name: "Reset map scope" }));
+    expect(screen.getByText("Showing 2026")).toBeInTheDocument();
+    expect(screen.getByLabelText("State")).toHaveValue("");
+  });
+});

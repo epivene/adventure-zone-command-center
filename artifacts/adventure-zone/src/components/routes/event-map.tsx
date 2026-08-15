@@ -25,6 +25,7 @@ import {
   type RouteViewMode,
 } from "@/features/routes/route-view";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
+import { primaryViewportEvents, routeScopeSummary, viewportTarget, type MapViewportTarget } from "@/features/routes/map-focus";
 
 export const DEFAULT_MAP_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
 
@@ -139,11 +140,13 @@ function MapCanvas({
   geoJson,
   routeLines,
   handoffs,
+  viewport,
   onError,
 }: {
   geoJson: MapFeatureCollection;
   routeLines: RouteLineCollection;
   handoffs: HandoffFeatureCollection;
+  viewport: MapViewportTarget;
   onError?: (message: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -151,6 +154,7 @@ function MapCanvas({
   const eventDataRef = useRef(geoJson);
   const routeDataRef = useRef(routeLines);
   const handoffDataRef = useRef(handoffs);
+  const viewportRef = useRef(viewport);
   const fitVisibleRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -173,17 +177,17 @@ function MapCanvas({
       });
 
       const fitVisibleData = () => {
-        const coordinates = visibleMapCoordinates(eventDataRef.current, handoffDataRef.current);
-        const viewport = viewportMode(coordinates);
-        if (viewport.kind === "none") return;
-        if (viewport.kind === "center") {
-          map.easeTo({ center: viewport.center, zoom: viewport.zoom, duration: 0 });
+        const target = viewportRef.current;
+        if (target.kind === "none") return;
+        if (target.kind === "center") {
+          map.easeTo({ center: target.center, zoom: target.zoom, duration: 0 });
           return;
         }
-        const first = viewport.coordinates[0]!;
+        const first = target.coordinates[0];
+        if (!first) return;
         const bounds = new maplibregl.LngLatBounds(first, first);
-        for (const coordinate of viewport.coordinates.slice(1)) bounds.extend(coordinate);
-        map.fitBounds(bounds, { padding: 48, maxZoom: 10, duration: 0 });
+        for (const coordinate of target.coordinates.slice(1)) bounds.extend(coordinate);
+        map.fitBounds(bounds, { padding: 56, maxZoom: 10, duration: 0 });
       };
       fitVisibleRef.current = fitVisibleData;
 
@@ -292,8 +296,12 @@ function MapCanvas({
     handoffDataRef.current = handoffs;
     const source = mapRef.current?.getSource("handoffs") as GeoJSONSource | undefined;
     source?.setData(handoffs as any);
-    if (source) fitVisibleRef.current?.();
   }, [handoffs]);
+
+  useEffect(() => {
+    viewportRef.current = viewport;
+    if (mapRef.current?.getSource("events")) fitVisibleRef.current?.();
+  }, [viewport]);
 
   return (
     <div
@@ -310,13 +318,17 @@ function EventList({
   title,
   unmapped = false,
   retryingId = null,
+  focusedEventId = null,
   onRetry,
+  onFocus,
 }: {
   events: PlanningEvent[];
   title: string;
   unmapped?: boolean;
   retryingId?: string | null;
+  focusedEventId?: string | null;
   onRetry?: (event: PlanningEvent) => void;
+  onFocus?: (event: PlanningEvent) => void;
 }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -340,6 +352,11 @@ function EventList({
                     {[event.city, event.region].filter(Boolean).join(", ")}
                     {event.travelLegName ? ` · ${event.travelLegName}` : ""}
                   </p>
+                  {!unmapped && onFocus ? (
+                    <button className="button-secondary mt-2" onClick={() => onFocus(event)} type="button">
+                      {focusedEventId === event.id ? "Focused on map" : "Focus on map"}
+                    </button>
+                  ) : null}
                   {unmapped ? (
                     <div className="mt-1 grid gap-2">
                       <p className="text-xs font-semibold text-amber-700">
@@ -384,16 +401,21 @@ export function EventMap({
   events,
   travelLegs,
   handoffs = [],
+  focusedTripCoordinates = null,
+  onClearTripFocus,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
   handoffs?: EquipmentHandoffView[];
+  focusedTripCoordinates?: [number, number][] | null;
+  onClearTripFocus?: () => void;
 }) {
   const currentYear = new Date().getFullYear();
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
   const [mode, setMode] = useState<RouteViewMode>("full");
   const [seasonYear, setSeasonYear] = useState(currentYear);
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
+  const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [eventOverrides, setEventOverrides] = useState<Record<string, MapEvent>>({});
   const [retryError, setRetryError] = useState<string | null>(null);
@@ -486,6 +508,37 @@ export function EventMap({
     }
     return result;
   }, [filteredEvents, focusedLegId, mode, seasonYear]);
+
+  const primaryEvents = useMemo(
+    () => primaryViewportEvents(planningEvents, mode, focusedLegId),
+    [focusedLegId, mode, planningEvents],
+  );
+
+  const currentViewport = useMemo(
+    () => viewportTarget({ primaryEvents, explicitEventId: focusedEventId, tripCoordinates: focusedTripCoordinates }),
+    [focusedEventId, focusedTripCoordinates, primaryEvents],
+  );
+
+  const focusedLegName = focusedLegId
+    ? travelLegs.find((leg) => leg.id === focusedLegId)?.name ?? null
+    : null;
+  const scopeSummary = routeScopeSummary({
+    mode,
+    seasonYear,
+    focusedLegName,
+    region: filters.regions[0] ?? null,
+    dateFrom: filters.dateFrom,
+    dateTo: filters.dateTo,
+  });
+
+  function resetScope() {
+    setFilters(initialFilters);
+    setMode("full");
+    setSeasonYear(currentYear);
+    setFocusedLegId(null);
+    setFocusedEventId(null);
+    onClearTripFocus?.();
+  }
 
   const dataset = useMemo(() => {
     const base = toMapDataset(planningEvents);
@@ -611,14 +664,26 @@ export function EventMap({
         </p>
       </section>
 
-      <MapFiltersPanel filters={filters} onChange={setFilters} onReset={() => setFilters(initialFilters)} regions={regions} />
+      <MapFiltersPanel filters={filters} onChange={(next) => { setFilters(next); setFocusedEventId(null); }} onReset={() => { setFilters(initialFilters); setFocusedEventId(null); }} regions={regions} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
+        <p className="text-sm font-semibold text-slate-700">{scopeSummary}</p>
+        <div className="flex gap-2">
+          {focusedEventId ? <button className="button-secondary" onClick={() => setFocusedEventId(null)} type="button">Clear event focus</button> : null}
+          {focusedTripCoordinates ? <button className="button-secondary" onClick={onClearTripFocus} type="button">Clear trip focus</button> : null}
+          <button className="button-secondary" onClick={resetScope} type="button">Reset map scope</button>
+        </div>
+      </div>
 
       {retryError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{retryError}</p> : null}
       {mapError ? <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{mapError}</p> : null}
 
       <p aria-live="polite" className="text-sm text-slate-600">
-        {mappedEvents.length} mapped {mappedEvents.length === 1 ? "event" : "events"} · {unmappedEvents.length} needing map location · {handoffFeatures.features.length} equipment meetup {handoffFeatures.features.length === 1 ? "marker" : "markers"}
+        {primaryEvents.length} primary {primaryEvents.length === 1 ? "event" : "events"} · {mappedEvents.length} mapped · {unmappedEvents.length} needing map location · {handoffFeatures.features.length} equipment meetup {handoffFeatures.features.length === 1 ? "marker" : "markers"}
       </p>
+      {planningEvents.length === 0 ? (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">No matching route events</p>
+      ) : null}
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -630,11 +695,11 @@ export function EventMap({
             <span className="inline-flex items-center gap-1.5 opacity-40"><span className="size-3 rounded-full bg-slate-500" />Context (dimmed)</span>
           </div>
         </div>
-        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} onError={setMapError} />
+        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} viewport={currentViewport} onError={setMapError} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <EventList events={mappedEvents} title="Route events" />
+        <EventList events={mappedEvents} title="Route events" focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} />
         <EventList
           events={unmappedEvents}
           title="Location needs mapping"
