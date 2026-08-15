@@ -5,6 +5,7 @@ on:
     branches:
       - feature/leg-manager-foundation
       - feature/manager-leg-map-reliability
+      - feature/map-login-password-fixes
   pull_request:
     paths:
       - "artifacts/adventure-zone/**"
@@ -33,11 +34,10 @@ jobs:
       - name: Manager and route-map API tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
       - name: Manager and route-map frontend tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx src/components/routes/event-map.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx src/components/routes/event-map.test.tsx src/lib/manager-auth-context.test.tsx
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
-      - name: Full workspace typecheck (informational; repo has pre-existing errors)
-        continue-on-error: true
+      - name: Full workspace typecheck
         run: pnpm run typecheck
