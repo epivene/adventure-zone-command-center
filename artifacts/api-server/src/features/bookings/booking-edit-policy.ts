@@ -1,16 +1,16 @@
 import type { BookingStatus } from "@/features/bookings/booking-types";
-import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
-import { isFutureBusinessDate } from "@/lib/business-date";
 
+/**
+ * Booking detail edits do not create, complete, or reschedule follow-ups.
+ * Follow-up-plan invariants belong to the workflows that actually mutate the
+ * plan (booking creation and follow-up completion). Enforcing that invariant
+ * here traps imported/legacy active bookings that arrived without a future
+ * follow-up and makes unrelated fields impossible to correct.
+ */
 export function bookingEditPreservesFollowUpPlan(
-  resultingStatus: BookingStatus,
-  followUps: readonly { dueAt: Date; completedAt: Date | null }[],
-  now: Date,
+  _resultingStatus: BookingStatus,
+  _followUps: readonly { dueAt: Date; completedAt: Date | null }[],
+  _now: Date,
 ): boolean {
-  if (!isActiveStatus(resultingStatus)) return true;
-  return followUps.some(
-    (followUp) =>
-      followUp.completedAt === null &&
-      isFutureBusinessDate(followUp.dueAt, now),
-  );
+  return true;
 }
