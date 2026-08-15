@@ -4,13 +4,17 @@ import { EventMap } from "@/components/routes/event-map";
 import { TravelLegEditor } from "@/components/routes/travel-leg-editor";
 import { TripsSection } from "@/components/routes/trips-section";
 import {
-  updateTravelLegsAction,
+  updateTravelLegAction,
+  reorderTravelLegsAction,
   addTravelLegAction,
   deleteTravelLegAction,
   archiveTravelLegAction,
   restoreTravelLegAction,
 } from "@/actions/routes";
-import type { TravelLeg } from "@/features/routes/travel-leg-repository";
+import type {
+  TravelLegDetails,
+  TravelLegOrder,
+} from "@/features/routes/travel-leg-input";
 
 export default function RoutesPage() {
   const [data, setData] = useState<any>(null);
@@ -38,12 +42,44 @@ export default function RoutesPage() {
     loadData();
   }, []);
 
+  async function handleSaveLeg(id: string, input: TravelLegDetails) {
+    const result = await updateTravelLegAction(id, input);
+    if (result.ok) {
+      setData((current: any) => ({
+        ...current,
+        travelLegs: current.travelLegs.map((leg: any) =>
+          leg.id === id ? result.leg : leg,
+        ),
+        events: current.events.map((event: any) =>
+          event.travelLegId === id
+            ? {
+                ...event,
+                travelLegName: result.leg.name,
+                travelLegColor: result.leg.color,
+              }
+            : event,
+        ),
+      }));
+    }
+    return result;
+  }
+
+  async function handleSaveOrder(input: TravelLegOrder) {
+    const result = await reorderTravelLegsAction(input);
+    if (result.ok) {
+      setData((current: any) => ({
+        ...current,
+        travelLegs: result.legs,
+      }));
+    }
+    return result;
+  }
+
   async function handleAdd() {
     const result = await addTravelLegAction();
     if (!result.ok) {
       throw new Error(result.error);
     }
-    // Reload to get fresh leg list
     await loadData();
   }
 
@@ -93,11 +129,13 @@ export default function RoutesPage() {
         <>
           <TravelLegEditor
             key={data.travelLegs
-              .map((l: any) => `${l.id}:${l.archivedAt ? "a" : ""}`)
+              .map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`)
+              .sort()
               .join(",")}
             legs={data.travelLegs}
             legResources={data.legResources}
-            onSubmit={updateTravelLegsAction}
+            onSaveLeg={handleSaveLeg}
+            onSaveOrder={handleSaveOrder}
             onAdd={handleAdd}
             onDelete={handleDelete}
             onArchive={handleArchive}
