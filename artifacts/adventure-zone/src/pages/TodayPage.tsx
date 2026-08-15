@@ -194,7 +194,7 @@ export default function TodayPage() {
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-xl font-bold">Needs Follow-up Plan</h2>
           <p className="mt-1 text-sm text-slate-600">
-            Active leads without a future, incomplete action.
+            Active leads and post-event wrap-ups without a future action.
           </p>
           {(dashboard.needsFollowUpPlan ?? []).length ? (
             <ul className="mt-4 grid gap-2">
@@ -213,9 +213,20 @@ export default function TodayPage() {
                   >
                     {booking.name}
                   </Link>
-                  <span className="ml-2 text-sm capitalize text-slate-600">
-                    {booking.status.replaceAll("_", " ")}
-                  </span>
+                  {booking.planReason === "post_event" ? (
+                    <div className="mt-1 text-sm text-slate-600">
+                      <span className="font-semibold text-slate-700">
+                        Post-event follow-up
+                      </span>
+                      <span>
+                        {" · "}Add the aftermath summary and notes, record how it went, and decide whether/when to contact them for next year.
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="ml-2 text-sm capitalize text-slate-600">
+                      {booking.status.replaceAll("_", " ")}
+                    </span>
+                  )}
                   <BookingOperations operations={booking.operations} />
                 </li>
               ))}
