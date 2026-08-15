@@ -27,5 +27,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run post-event classification test
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/follow-ups/today-upcoming-post-event.test.ts
+      - name: Run post-event API tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/follow-ups/today-upcoming-post-event.test.ts src/features/follow-ups/today-query.test.ts
+
+      - name: Run Today UI tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/TodayPage.test.tsx
