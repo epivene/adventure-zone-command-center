@@ -23,3 +23,23 @@ describe("ActivityService deletion", () => {
     expect(repository.delete).not.toHaveBeenCalled();
   });
 });
+
+describe("ActivityService editing", () => {
+  it("rejects an invalid call disposition before reaching the repository", async () => {
+    const repository = { edit: vi.fn() };
+    const service = new ActivityService(repository as never);
+
+    const result = await service.edit({
+      activityId: "40000000-0000-4000-8000-000000000001",
+      body: "Corrected note",
+      reason: "Corrected the saved call",
+      callOutcome: "not_a_disposition",
+    } as never);
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "INVALID_ACTIVITY_INPUT" }),
+    });
+    expect(repository.edit).not.toHaveBeenCalled();
+  });
+});
