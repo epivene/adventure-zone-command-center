@@ -20,7 +20,18 @@ const currentBooking = {
   name: "Current Fair Lead",
   status: "new_lead",
   probability: "possible",
+  planReason: "needs_action",
   operations: null,
+};
+
+const postEventBooking = {
+  ...currentBooking,
+  id: "30000000-0000-4000-8000-000000000004",
+  organizationId: "10000000-0000-4000-8000-000000000004",
+  primaryContactId: "20000000-0000-4000-8000-000000000004",
+  name: "Eastern Montana Fair",
+  status: "confirmed",
+  planReason: "post_event",
 };
 
 const laterRenewal = {
@@ -141,5 +152,23 @@ describe("TodayPage renewals", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load next-season renewals.",
     );
+  });
+
+  it("explains post-event follow-up work while keeping normal lead status copy", async () => {
+    mockDashboard(
+      dashboard({
+        needsFollowUpPlan: [currentBooking, postEventBooking],
+        needsFollowUpPlanTotal: 2,
+      }),
+    );
+    render(<TodayPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Post-event follow-up")).toBeInTheDocument();
+    expect(screen.getByText(/aftermath summary/i)).toBeInTheDocument();
+    expect(screen.getByText("new lead")).toBeInTheDocument();
   });
 });

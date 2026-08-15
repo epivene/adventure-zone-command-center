@@ -3,7 +3,6 @@ import {
   asc,
   count,
   eq,
-  gte,
   inArray,
   isNull,
   lt,
@@ -69,6 +68,7 @@ export type TodayDashboardBookingRecord = {
   city: string;
   region: string;
   startsAt: Date | null;
+  endsAt?: Date | null;
   status: BookingStatus;
   probability: Probability;
   createdAt: Date;
@@ -135,6 +135,7 @@ export type FollowUpPlanItem = {
   name: string;
   status: BookingStatus;
   probability: Probability;
+  planReason: "needs_action" | "post_event";
   operations?: BookingOperationsSummary | null;
 };
 
@@ -401,10 +402,20 @@ export function openFollowUpsCondition() {
   return isNull(followUps.completedAt);
 }
 
-export function needsFollowUpPlanCondition(futureBoundary: Date) {
+export function needsFollowUpPlanCondition(
+  futureBoundary: Date,
+  startToday: Date,
+) {
   const serializedFutureBoundary = futureBoundary.toISOString();
+  const serializedStartToday = startToday.toISOString();
+  const effectiveEventEnd = sql<Date | null>`coalesce(${bookings.endsAt}, ${bookings.startsAt})`;
   return and(
     inArray(bookings.status, currentSeasonPlanStatuses),
+    sql`(
+      ${bookings.status} <> 'confirmed'
+      or ${effectiveEventEnd} is null
+      or ${effectiveEventEnd} < ${serializedStartToday}
+    )`,
     notExists(sql`(
       select 1 from ${followUps}
       where ${followUps.bookingId} = ${bookings.id}
@@ -415,7 +426,8 @@ export function needsFollowUpPlanCondition(futureBoundary: Date) {
 }
 
 export function upcomingEventsCondition(startToday: Date) {
-  return gte(bookings.startsAt, startToday);
+  const serializedStartToday = startToday.toISOString();
+  return sql`coalesce(${bookings.endsAt}, ${bookings.startsAt}) >= ${serializedStartToday}`;
 }
 
 export function todayFollowUpPriorityOrder(now: Date) {
@@ -523,7 +535,10 @@ export function createDrizzleTodayDashboardRepository(
     },
 
     async listNeedsFollowUpPlan(futureBoundary, { page, pageSize }) {
-      const condition = needsFollowUpPlanCondition(futureBoundary);
+      const startToday = businessDayBounds(
+        new Date(futureBoundary.getTime() - 1),
+      ).start;
+      const condition = needsFollowUpPlanCondition(futureBoundary, startToday);
       const [totalRecord] = await db
         .select({ value: count() })
         .from(bookings)
@@ -622,14 +637,23 @@ export async function getTodayDashboard(
     followUpTotal: followUpResult.total,
     followUpPage: followUpResult.page,
     followUpPageCount,
-    needsFollowUpPlan: planResult.records.map((booking) => ({
-      id: booking.id,
-      organizationId: booking.organizationId,
-      primaryContactId: booking.primaryContactId,
-      name: booking.name,
-      status: booking.status,
-      probability: booking.probability,
-    })),
+    needsFollowUpPlan: planResult.records.map((booking) => {
+      const effectiveEventEnd = booking.endsAt ?? booking.startsAt;
+      return {
+        id: booking.id,
+        organizationId: booking.organizationId,
+        primaryContactId: booking.primaryContactId,
+        name: booking.name,
+        status: booking.status,
+        probability: booking.probability,
+        planReason:
+          booking.status === "confirmed" &&
+          effectiveEventEnd !== null &&
+          effectiveEventEnd < startToday
+            ? "post_event"
+            : "needs_action",
+      };
+    }),
     needsFollowUpPlanTotal: planResult.total,
     needsFollowUpPlanPage: planResult.page,
     needsFollowUpPlanPageCount,
