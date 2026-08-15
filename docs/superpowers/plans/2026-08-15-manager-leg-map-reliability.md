@@ -4,14 +4,14 @@
 
 **Goal:** Merge travel-leg and manager-portal setup into one manager/leg card, and make leg-assigned bookings with city/state locations reliably visible on Routes even when geocoding fails.
 
-**Architecture:** Keep `travel_legs.name` as the canonical manager/leg identity and preserve manager password/session records as a separate security concern. Extend route-location resolution to return an explicit mapping state and retry behavior, then render unresolved bookings beside the map instead of silently omitting them.
+**Architecture:** Keep `travel_legs.name` as the canonical manager/leg identity and keep manager password/session records as a separate security concern. Extend route-location resolution to return an explicit mapping state and retry behavior, then render unresolved bookings beside the map instead of silently omitting them.
 
 **Tech Stack:** React + TypeScript, Vitest + Testing Library, Express, Drizzle ORM/PostgreSQL, MapLibre GL, Nominatim geocoding, existing Adventure Zone API/auth helpers.
 
 ## Global Constraints
 
 - A travel leg and its manager are the same operational unit; one canonical travel-leg name controls both identities.
-- Do not introduce a second manager-name source of truth.
+- Do not introduce a second editable manager-name source of truth.
 - Existing portal passwords and session-version security must remain intact.
 - A leg rename must not require the user to re-enter or reset the portal password.
 - Existing travel-leg IDs remain unchanged so bookings, trips, equipment, finance, receipts, and handoffs keep their links.
@@ -27,72 +27,120 @@
 ## File Structure
 
 **Manager/leg identity and UI**
-- Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.tsx` — absorb manager portal status/password/sign-out controls into each travel-leg card.
-- Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.test.tsx` — verify unified card behavior.
-- Delete: `artifacts/adventure-zone/src/components/routes/leg-manager-access.tsx` — remove the separate manager-access section after its behavior is absorbed.
-- Delete/replace coverage: `artifacts/adventure-zone/src/components/routes/leg-manager-access.test.tsx` — move its password/sign-out assertions into the unified editor test.
-- Modify: `artifacts/adventure-zone/src/pages/RoutesPage.tsx` — stop rendering the separate `LegManagerAccess` section and pass manager-access data/actions into `TravelLegEditor`.
-- Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts` — treat travel-leg name as the manager-facing identity and support name synchronization without touching password material.
-- Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts` — remove editable `managerName` input from password changes and expose access state keyed by leg ID/name.
-- Add/modify tests near manager repository/admin routes as needed to verify rename/password/session semantics.
+- Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts`
+- Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts`
+- Create: `artifacts/api-server/src/routes/leg-manager-admin.test.ts`
+- Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.tsx`
+- Modify: `artifacts/adventure-zone/src/components/routes/travel-leg-editor.test.tsx`
+- Delete: `artifacts/adventure-zone/src/components/routes/leg-manager-access.tsx`
+- Delete: `artifacts/adventure-zone/src/components/routes/leg-manager-access.test.tsx`
+- Modify: `artifacts/adventure-zone/src/pages/RoutesPage.tsx`
 
 **Route location reliability**
-- Modify: `artifacts/api-server/src/features/routes/location-resolver.ts` — return explicit mapping states, failed-query metadata, and retry/cache invalidation support.
-- Modify: `artifacts/api-server/src/features/routes/location-resolver.test.ts` — cover Miles City, address priority, no-results, provider outage, cache bypass, and location edits.
-- Modify: `artifacts/api-server/src/features/routes/map-data.ts` — carry mapping-state metadata to the API response.
-- Modify: `artifacts/api-server/src/features/routes/travel-leg-repository.ts` — continue building the preferred location query and expose location text for diagnostics.
-- Modify: `artifacts/api-server/src/routes/routes-map.ts` — keep `/routes` resilient per event and add a retry endpoint for one booking location.
-- Modify: `artifacts/adventure-zone/src/features/routes/map-data.ts` — mirror mapping-state types on the frontend.
-- Modify: `artifacts/adventure-zone/src/components/routes/event-map.tsx` — render `Location needs mapping` with reason, Retry, and booking link while preserving existing Full/Confirmed/Potential/History and leg-emphasis behavior.
-- Add/modify frontend tests for unresolved event rendering and retry behavior.
+- Modify: `artifacts/api-server/src/features/routes/location-resolver.ts`
+- Modify: `artifacts/api-server/src/features/routes/location-resolver.test.ts`
+- Modify: `artifacts/api-server/src/features/routes/map-data.ts`
+- Modify: `artifacts/api-server/src/features/routes/travel-leg-repository.ts`
+- Modify: `artifacts/api-server/src/routes/routes-map.ts`
+- Create: `artifacts/api-server/src/routes/routes-map.test.ts`
+- Modify: `artifacts/adventure-zone/src/features/routes/map-data.ts`
+- Modify: `artifacts/adventure-zone/src/components/routes/event-map.tsx`
+- Create: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx`
 
 ---
 
-### Task 1: Make the Travel-Leg Name the Only Manager Identity
+### Task 1: Make Travel-Leg Name the Only Manager Identity
 
 **Files:**
 - Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts`
 - Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts`
-- Test: `artifacts/api-server/src/features/leg-manager/leg-manager-repository.test.ts` or the nearest existing manager repository test file
-- Test: `artifacts/api-server/src/routes/leg-manager-admin.test.ts` if route-level manager-admin coverage exists; otherwise create it
+- Create: `artifacts/api-server/src/routes/leg-manager-admin.test.ts`
 
 **Interfaces:**
 - Consumes: `travel_legs.id`, `travel_legs.name`, `leg_manager_access.password_hash`, `password_salt`, `session_version`.
-- Produces: admin access status shaped as `{ legId, legName, archivedAt, enabled, sessionVersion }` with no independently editable manager name.
-- Produces: password update `setPassword({ legId, passwordHash, passwordSalt })` that preserves manager identity because display identity comes from `travel_legs.name`.
+- Produces: admin status `{ legId, legName, archivedAt, enabled, sessionVersion }`.
+- Produces: `setPassword({ legId, passwordHash, passwordSalt })` with no caller-controlled manager name.
 
-- [ ] **Step 1: Write a failing repository test proving a leg rename changes manager-facing identity without changing access credentials**
+- [ ] **Step 1: Write the failing manager-admin route test**
+
+Create `artifacts/api-server/src/routes/leg-manager-admin.test.ts` with a mocked repository so the test does not depend on production data:
 
 ```ts
-it("derives manager identity from the travel-leg name after a rename", async () => {
-  const legId = await seedTravelLeg({ name: "Kristy" });
-  await repo.setPassword({
-    legId,
-    passwordHash: "hash-a",
-    passwordSalt: "salt-a",
+import express from "express";
+import request from "supertest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  listAdminStatuses: vi.fn(),
+  setPassword: vi.fn(),
+  incrementSessionVersion: vi.fn(),
+}));
+
+vi.mock("@/features/leg-manager/leg-manager-repository", () => ({
+  DrizzleLegManagerRepository: class {
+    listAdminStatuses = mocks.listAdminStatuses;
+    setPassword = mocks.setPassword;
+    incrementSessionVersion = mocks.incrementSessionVersion;
+  },
+}));
+
+vi.mock("@/features/leg-manager/leg-manager-auth", () => ({
+  hashLegManagerPassword: vi.fn(async () => ({ hash: "hash", salt: "salt" })),
+}));
+
+import router from "./leg-manager-admin";
+
+function app() {
+  const instance = express();
+  instance.use(express.json());
+  instance.use(router);
+  return instance;
+}
+
+beforeEach(() => vi.clearAllMocks());
+
+describe("manager admin access identity", () => {
+  it("returns the travel-leg name and accepts password changes without managerName", async () => {
+    mocks.setPassword.mockResolvedValue({
+      legId: "leg-kristy",
+      legName: "Kristy",
+      passwordHash: "hash",
+      passwordSalt: "salt",
+      sessionVersion: 4,
+    });
+
+    const response = await request(app())
+      .put("/manager-admin/legs/leg-kristy/access")
+      .send({ password: "new-secret" });
+
+    expect(response.status).toBe(200);
+    expect(mocks.setPassword).toHaveBeenCalledWith({
+      legId: "leg-kristy",
+      passwordHash: "hash",
+      passwordSalt: "salt",
+    });
+    expect(response.body.access).toMatchObject({
+      legId: "leg-kristy",
+      legName: "Kristy",
+      enabled: true,
+      sessionVersion: 4,
+    });
+    expect(response.body.access).not.toHaveProperty("managerName");
   });
-
-  await renameTravelLeg(legId, "Kris");
-
-  const access = await repo.getActiveAccess(legId);
-  expect(access).toMatchObject({ legId, legName: "Kris" });
-  expect(access?.passwordHash).toBe("hash-a");
-  expect(access?.passwordSalt).toBe("salt-a");
 });
 ```
 
-- [ ] **Step 2: Run the focused repository test and verify it fails**
+- [ ] **Step 2: Run the test and verify it fails**
 
-Run:
 ```bash
-pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/leg-manager-repository.test.ts
+pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts
 ```
 
-Expected: FAIL because current admin/access records still expose and update a separate `managerName` field.
+Expected: FAIL because the current schema/repository still accepts and returns `managerName`.
 
-- [ ] **Step 3: Update repository types and queries so `travelLegs.name` is the display identity**
+- [ ] **Step 3: Remove the independent manager-name field from application-facing repository types**
 
-Use shapes equivalent to:
+Change the repository types to:
 
 ```ts
 export type LegManagerAccessRecord = {
@@ -112,7 +160,9 @@ export type LegManagerAdminStatus = {
 };
 ```
 
-Change `setPassword` to accept only security material:
+Update `getActiveAccess()` and `listAdminStatuses()` to select `travelLegs.name` as `legName` and omit `managerName` from returned application types.
+
+Change:
 
 ```ts
 async setPassword(input: {
@@ -122,38 +172,11 @@ async setPassword(input: {
 }): Promise<LegManagerAccessRecord | null>
 ```
 
-The write may leave the legacy `manager_name` column null or synchronize it internally to the current travel-leg name for compatibility, but callers must not control it.
+When writing the legacy `leg_manager_access.manager_name` column, set it internally from the current travel-leg name or leave the existing compatible value untouched; do not accept it from the HTTP caller. Password hash/salt and session-version behavior stay unchanged.
 
-- [ ] **Step 4: Write a failing route test proving password changes no longer accept or require a separate manager name**
+- [ ] **Step 4: Remove `managerName` from the manager-admin request schema and response**
 
-```ts
-it("changes a manager password using the travel-leg name as identity", async () => {
-  const response = await request(app)
-    .put(`/api/manager-admin/legs/${legId}/access`)
-    .send({ password: "new-secret" });
-
-  expect(response.status).toBe(200);
-  expect(response.body.access).toMatchObject({
-    legId,
-    legName: "Kristy",
-    enabled: true,
-  });
-  expect(response.body.access).not.toHaveProperty("managerName");
-});
-```
-
-- [ ] **Step 5: Update the manager-admin access schema and response**
-
-Replace:
-
-```ts
-const access = z.object({
-  password: z.string().min(1),
-  managerName: z.string().trim().max(100).optional().nullable(),
-});
-```
-
-with:
+Use:
 
 ```ts
 const access = z.object({
@@ -161,20 +184,30 @@ const access = z.object({
 });
 ```
 
-Pass only `{ legId, passwordHash, passwordSalt }` to `repo.setPassword(...)` and return the canonical `legName`.
+Call:
 
-- [ ] **Step 6: Run manager repository/admin tests**
+```ts
+repo.setPassword({
+  legId: req.params.legId,
+  passwordHash: hash,
+  passwordSalt: salt,
+});
+```
+
+Return only `legId`, `legName`, `enabled`, and `sessionVersion` in the access summary.
+
+- [ ] **Step 5: Run the focused test**
 
 ```bash
-pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/leg-manager-repository.test.ts src/routes/leg-manager-admin.test.ts
+pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts
 ```
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 1**
+- [ ] **Step 6: Commit Task 1**
 
 ```bash
-git add artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts artifacts/api-server/src/features/leg-manager/leg-manager-repository.test.ts artifacts/api-server/src/routes/leg-manager-admin.ts artifacts/api-server/src/routes/leg-manager-admin.test.ts
+git add artifacts/api-server/src/features/leg-manager/leg-manager-repository.ts artifacts/api-server/src/routes/leg-manager-admin.ts artifacts/api-server/src/routes/leg-manager-admin.test.ts
 git commit -m "refactor: unify manager and travel leg identity"
 ```
 
@@ -190,43 +223,69 @@ git commit -m "refactor: unify manager and travel leg identity"
 - Modify: `artifacts/adventure-zone/src/pages/RoutesPage.tsx`
 
 **Interfaces:**
-- Consumes: travel-leg records plus manager access statuses from `/manager-admin/legs/access`.
-- Produces: one `TravelLegEditor` card per active leg with manager/leg details and portal controls.
-- Security mutations remain `PUT /manager-admin/legs/:legId/access` and `POST /manager-admin/legs/:legId/sign-out-all`.
+- Consumes: `/manager-admin/legs/access` statuses.
+- Produces: one unified active-leg card with identity, travel settings, resources, portal status/password, sign-out, and archive controls.
+- Security writes remain `PUT /manager-admin/legs/:legId/access` and `POST /manager-admin/legs/:legId/sign-out-all`.
 
-- [ ] **Step 1: Extend the travel-leg editor test fixture with access state and write the failing unified-card test**
+- [ ] **Step 1: Add failing unified-card tests to the existing editor test file**
+
+Extend the existing `leg()` fixture so callers can override the name:
+
+```ts
+function leg(id: string, sortOrder: number, archivedAt: Date | null = null, name = `Leg ${sortOrder}`): TravelLeg {
+  return {
+    id,
+    name,
+    color: "#6B7280",
+    sortOrder,
+    archivedAt,
+    baseAddress: null,
+    defaultVehicleName: null,
+    defaultMpg: null,
+  };
+}
+```
+
+Add:
 
 ```tsx
-it("shows one Manager / Leg name and portal controls in the same card", async () => {
-  renderEditor({
-    legs: [leg({ id: "leg-a", name: "Kristy" })],
-    access: [{
-      legId: "leg-a",
-      legName: "Kristy",
-      archivedAt: null,
-      enabled: true,
-      sessionVersion: 3,
-    }],
-  });
+it("shows manager access inside the matching travel-leg card", () => {
+  render(
+    <TravelLegEditor
+      legs={[leg("leg-kristy", 1, null, "Kristy")]}
+      managerAccess={[{
+        legId: "leg-kristy",
+        legName: "Kristy",
+        archivedAt: null,
+        enabled: true,
+        sessionVersion: 3,
+      }]}
+      onSaveLeg={vi.fn()}
+      onSaveOrder={vi.fn()}
+      onSetManagerPassword={vi.fn(async () => undefined)}
+      onSignOutManagerDevices={vi.fn(async () => undefined)}
+    />,
+  );
 
   expect(screen.getByLabelText("Manager / Leg name")).toHaveValue("Kristy");
   expect(screen.getByLabelText("New password")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sign Out All Devices" })).toBeInTheDocument();
-  expect(screen.queryByText("Leg Manager Portal Access")).not.toBeInTheDocument();
 });
 ```
 
-- [ ] **Step 2: Run the focused frontend test and verify it fails**
+Add a rename test proving `onSaveLeg` is called without requiring password entry, and move the existing write-only password and sign-out confirmation assertions from `leg-manager-access.test.tsx` into this file.
+
+- [ ] **Step 2: Run the editor test and verify it fails**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx
 ```
 
-Expected: FAIL because the editor currently has only travel-leg fields and Routes renders `LegManagerAccess` separately.
+Expected: FAIL because `TravelLegEditor` does not yet accept manager access props.
 
-- [ ] **Step 3: Add access props and local write-only password state to `TravelLegEditor`**
+- [ ] **Step 3: Add manager-access props and local password state to `TravelLegEditor`**
 
-Add types like:
+Add:
 
 ```ts
 export type LegManagerAccessStatus = {
@@ -246,63 +305,32 @@ onSetManagerPassword?: (legId: string, password: string) => Promise<void>;
 onSignOutManagerDevices?: (legId: string) => Promise<void>;
 ```
 
-Inside each active card:
+Add local write-only password state keyed by leg ID:
 
-```tsx
-<label className="grid gap-1 text-sm font-semibold">
-  Manager / Leg name
-  <input
-    aria-label="Manager / Leg name"
-    value={leg.name}
-    onChange={(event) => changeLeg(leg.id, "name", event.currentTarget.value)}
-  />
-</label>
+```ts
+const [passwords, setPasswords] = useState<Record<string, string>>({});
 ```
 
-Render status, write-only password, and Sign Out All Devices in the same fieldset. Do not load a saved password value.
+Rename the existing `Name` label to `Manager / Leg name`; this remains the same `leg.name` value and the same normal leg save action.
 
-- [ ] **Step 4: Write the failing test that renaming does not require a password**
+Inside each active leg fieldset, render portal status, password input, Change password/Enable portal, and Sign Out All Devices. Clear the local password field after a successful password update. Keep archive, resource summary, vehicle, MPG, color, and base address controls in the same card.
 
-```tsx
-it("saves a manager/leg rename without requiring a portal password", async () => {
-  renderEditor({ legs: [leg({ id: "leg-a", name: "Kristy" })] });
+- [ ] **Step 4: Update `RoutesPage` to load manager access and pass security actions into the editor**
 
-  fireEvent.change(screen.getByLabelText("Manager / Leg name"), {
-    target: { value: "Kris" },
-  });
-  fireEvent.click(screen.getByRole("button", { name: "Save leg" }));
+Import `apiFetch` and `apiPut` in addition to `apiGet`.
 
-  await waitFor(() => expect(onSaveLeg).toHaveBeenCalledWith(
-    "leg-a",
-    expect.objectContaining({ name: "Kris" }),
-  ));
-  expect(onSetManagerPassword).not.toHaveBeenCalled();
-});
+Load both datasets in `loadData()`:
+
+```ts
+const [routes, access] = await Promise.all([
+  apiGet<any>("/routes"),
+  apiGet<{ legs: LegManagerAccessStatus[] }>("/manager-admin/legs/access"),
+]);
 ```
 
-- [ ] **Step 5: Write the password/sign-out tests moved from `leg-manager-access.test.tsx`**
+Store `managerAccess: access.legs` in `data`.
 
-```tsx
-it("keeps portal passwords write-only", async () => {
-  renderEditor({ access: [enabledAccess("leg-a", "Kristy")] });
-  const input = screen.getByLabelText("New password") as HTMLInputElement;
-  fireEvent.change(input, { target: { value: "new-secret" } });
-  fireEvent.click(screen.getByRole("button", { name: "Change password" }));
-  await waitFor(() => expect(onSetManagerPassword).toHaveBeenCalledWith("leg-a", "new-secret"));
-  expect(input.value).toBe("");
-});
-
-it("requires confirmation before signing out all devices", async () => {
-  vi.spyOn(window, "confirm").mockReturnValue(false);
-  renderEditor({ access: [enabledAccess("leg-a", "Kristy")] });
-  fireEvent.click(screen.getByRole("button", { name: "Sign Out All Devices" }));
-  expect(onSignOutManagerDevices).not.toHaveBeenCalled();
-});
-```
-
-- [ ] **Step 6: Update `RoutesPage` to load access state and provide the security actions to the editor**
-
-Load `/manager-admin/legs/access` alongside `/routes` or in a second request, then pass access state to the editor. Use existing auth helpers:
+Implement:
 
 ```ts
 async function handleSetManagerPassword(legId: string, password: string) {
@@ -320,21 +348,15 @@ async function handleSignOutManagerDevices(legId: string) {
 }
 ```
 
-Remove:
+Pass these props to `TravelLegEditor` and remove the separate `<LegManagerAccess />` render/import. Preserve the existing `View all leg finances` link, trips, handoffs, and map.
 
-```tsx
-<LegManagerAccess />
-```
-
-Keep the current finance link, trips section, handoff section, and map section unchanged.
-
-- [ ] **Step 7: Delete the obsolete separate access component and its standalone test**
+- [ ] **Step 5: Delete the obsolete separate manager-access component and test**
 
 ```bash
 git rm artifacts/adventure-zone/src/components/routes/leg-manager-access.tsx artifacts/adventure-zone/src/components/routes/leg-manager-access.test.tsx
 ```
 
-- [ ] **Step 8: Run the frontend tests**
+- [ ] **Step 6: Run the editor test**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx
@@ -342,7 +364,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/tr
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit Task 2**
+- [ ] **Step 7: Commit Task 2**
 
 ```bash
 git add artifacts/adventure-zone/src/components/routes/travel-leg-editor.tsx artifacts/adventure-zone/src/components/routes/travel-leg-editor.test.tsx artifacts/adventure-zone/src/pages/RoutesPage.tsx
@@ -351,7 +373,7 @@ git commit -m "feat: combine manager access with travel leg setup"
 
 ---
 
-### Task 3: Return Explicit Per-Booking Mapping State From the Location Resolver
+### Task 3: Return Explicit Per-Booking Mapping State
 
 **Files:**
 - Modify: `artifacts/api-server/src/features/routes/location-resolver.ts`
@@ -360,7 +382,7 @@ git commit -m "feat: combine manager access with travel leg setup"
 - Modify: `artifacts/api-server/src/features/routes/travel-leg-repository.ts`
 
 **Interfaces:**
-- Produces `RouteMappingState`:
+- Produces:
 
 ```ts
 export type RouteMappingState =
@@ -372,37 +394,27 @@ export type RouteMappingState =
   | "needs_mapping_missing_location";
 ```
 
-- Produces resolved event metadata: `mappingState`, `locationLabel`, `latitude`, `longitude`.
-- Produces cache invalidation helper for one location query.
+- Produces `mappingState` on every route-map event.
+- Produces `invalidateRouteLocationCache(label: string)` for one-query retry.
 
-- [ ] **Step 1: Expand the Miles City test to assert the explicit success state**
+- [ ] **Step 1: Add failing resolver tests for success and failure states**
+
+Extend the existing `Miles City, MT` test:
 
 ```ts
-it("maps Miles City, MT and reports mapped_city", async () => {
-  const geocoder = new FakeGeocodingProvider({
-    "miles city, mt": [{
-      latitude: 46.4083,
-      longitude: -105.8406,
-      displayName: "Miles City, Montana",
-    }],
-  });
-
-  const result = await resolveMapLocation(base, geocoder);
-
-  expect(result).toMatchObject({
-    latitude: 46.4083,
-    longitude: -105.8406,
-    label: "Miles City, MT",
-    quality: "city",
-    mappingState: "mapped_city",
-  });
+expect(result).toMatchObject({
+  latitude: 46.4083,
+  longitude: -105.8406,
+  label: "Miles City, MT",
+  quality: "city",
+  mappingState: "mapped_city",
 });
 ```
 
-- [ ] **Step 2: Add failing tests for no-results, provider outage, address priority, and missing text**
+Add:
 
 ```ts
-it("returns retryable no-results state without coordinates", async () => {
+it("returns an explicit no-results state", async () => {
   const geocoder = new FakeGeocodingProvider({});
   const result = await resolveMapLocation(base, geocoder);
   expect(result).toMatchObject({
@@ -413,47 +425,32 @@ it("returns retryable no-results state without coordinates", async () => {
   });
 });
 
-it("does not permanently cache provider outages", async () => {
+it("does not cache provider outages permanently", async () => {
   const unavailable = new FakeGeocodingProvider({}, false);
-  const first = await resolveMapLocation(base, unavailable);
-  expect(first.mappingState).toBe("needs_mapping_provider_unavailable");
+  expect((await resolveMapLocation(base, unavailable)).mappingState)
+    .toBe("needs_mapping_provider_unavailable");
 
   const available = new FakeGeocodingProvider({
     "miles city, mt": [{ latitude: 46.4083, longitude: -105.8406, displayName: "Miles City" }],
   });
-  const second = await resolveMapLocation(base, available);
-  expect(second.mappingState).toBe("mapped_city");
-});
-
-it("prefers the full address query over city/state", async () => {
-  const event = {
-    ...base,
-    locationLabel: "Eastern Montana Fair, 42 Garryowen Rd, Miles City, MT",
-    locationQuality: "address" as const,
-  };
-  const geocoder = new FakeGeocodingProvider({
-    "eastern montana fair, 42 garryowen rd, miles city, mt": [{
-      latitude: 46.4,
-      longitude: -105.8,
-      displayName: "Eastern Montana Fair",
-    }],
-  });
-  const result = await resolveMapLocation(event, geocoder);
-  expect(result.mappingState).toBe("mapped_address");
+  expect((await resolveMapLocation(base, available)).mappingState)
+    .toBe("mapped_city");
 });
 ```
 
-- [ ] **Step 3: Run resolver tests and verify they fail**
+Also add tests for saved coordinates → `mapped_coordinates`, full-address quality → `mapped_address`, and no usable text → `needs_mapping_missing_location`.
+
+- [ ] **Step 2: Run the resolver tests and verify they fail**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/routes/location-resolver.test.ts
 ```
 
-Expected: FAIL because the current resolver only returns `quality` and collapses all failures into `missing`.
+Expected: FAIL because the current resolver collapses failures into `quality: "missing"`.
 
-- [ ] **Step 4: Add `mappingState` to resolver and map-data types**
+- [ ] **Step 3: Add explicit mapping state to resolver and map event types**
 
-Implement:
+Update `ResolvedMapLocation`:
 
 ```ts
 export type ResolvedMapLocation = {
@@ -466,19 +463,18 @@ export type ResolvedMapLocation = {
 ```
 
 Rules:
+- valid saved coordinates → `mapped_coordinates`
+- geocoded `locationQuality === "address"` → `mapped_address`
+- other successful text geocode → `mapped_city`
+- no text → `needs_mapping_missing_location`
+- `GeocodingUnavailableError("no_results")` → `needs_mapping_no_results`
+- provider error/timeout → `needs_mapping_provider_unavailable`
 
-```ts
-if (validCoordinatePair(event)) mappingState = "mapped_coordinates";
-else if (!label) mappingState = "needs_mapping_missing_location";
-else if (geocode succeeds && event.locationQuality === "address") mappingState = "mapped_address";
-else if (geocode succeeds) mappingState = "mapped_city";
-else if (error.code === "no_results") mappingState = "needs_mapping_no_results";
-else mappingState = "needs_mapping_provider_unavailable";
-```
+Add `mappingState` to backend `MapEvent`/`MapEventRecord` shapes and ensure `resolveRouteMapEvents()` copies it onto every event.
 
-- [ ] **Step 5: Store enough failed-cache metadata to distinguish no-results from provider outages**
+- [ ] **Step 4: Make failed caching retry-safe**
 
-Use a cache shape like:
+Change the cache to distinguish success from no-results:
 
 ```ts
 type CachedLocation =
@@ -486,7 +482,7 @@ type CachedLocation =
   | { kind: "no_results" };
 ```
 
-Never cache `provider_error`.
+Never cache provider outages.
 
 Add:
 
@@ -496,14 +492,12 @@ export function invalidateRouteLocationCache(label: string) {
 }
 ```
 
-Keep `clearRouteLocationCacheForTests()` for whole-cache test setup.
+Keep `clearRouteLocationCacheForTests()` for tests.
 
-- [ ] **Step 6: Ensure a changed booking location naturally uses a new cache key**
-
-Add a test:
+- [ ] **Step 5: Add and pass the changed-location test**
 
 ```ts
-it("re-geocodes when the booking location text changes", async () => {
+it("performs a fresh lookup when location text changes", async () => {
   const geocoder = new FakeGeocodingProvider({
     "miles city, mt": [{ latitude: 46.4, longitude: -105.8, displayName: "Miles City" }],
     "billings, mt": [{ latitude: 45.78, longitude: -108.5, displayName: "Billings" }],
@@ -514,7 +508,7 @@ it("re-geocodes when the booking location text changes", async () => {
 });
 ```
 
-- [ ] **Step 7: Run resolver tests**
+- [ ] **Step 6: Run resolver tests**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/routes/location-resolver.test.ts
@@ -522,7 +516,7 @@ pnpm --filter @workspace/api-server exec vitest run src/features/routes/location
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit Task 3**
+- [ ] **Step 7: Commit Task 3**
 
 ```bash
 git add artifacts/api-server/src/features/routes/location-resolver.ts artifacts/api-server/src/features/routes/location-resolver.test.ts artifacts/api-server/src/features/routes/map-data.ts artifacts/api-server/src/features/routes/travel-leg-repository.ts
@@ -531,66 +525,65 @@ git commit -m "feat: expose route mapping status per booking"
 
 ---
 
-### Task 4: Add One-Booking Location Retry Without Failing the Routes Page
+### Task 4: Add One-Booking Location Retry
 
 **Files:**
 - Modify: `artifacts/api-server/src/routes/routes-map.ts`
-- Test: `artifacts/api-server/src/routes/routes-map.test.ts` or create focused route tests if absent
+- Create: `artifacts/api-server/src/routes/routes-map.test.ts`
 
 **Interfaces:**
-- Consumes: `invalidateRouteLocationCache(label)` and `resolveMapLocation(...)` from Task 3.
-- Produces: `POST /routes/events/:bookingId/retry-location` returning the refreshed event mapping state.
-- `/routes` must continue returning all events even if individual geocodes fail.
+- Consumes: `invalidateRouteLocationCache()` and `resolveRouteMapEvents()` from Task 3.
+- Produces: `POST /routes/events/:bookingId/retry-location` returning `{ event }`.
+- `/routes` remains HTTP 200 when individual events cannot be geocoded.
 
-- [ ] **Step 1: Write the failing endpoint test for Miles City retry**
+- [ ] **Step 1: Create a failing retry route test with mocked repository/resolver**
 
-```ts
-it("retries one booking location and returns its refreshed mapping state", async () => {
-  const response = await request(app)
-    .post(`/api/routes/events/${bookingId}/retry-location`)
-    .send({});
-
-  expect(response.status).toBe(200);
-  expect(response.body.event).toMatchObject({
-    id: bookingId,
-    locationLabel: "Miles City, MT",
-  });
-  expect([
-    "mapped_city",
-    "needs_mapping_no_results",
-    "needs_mapping_provider_unavailable",
-  ]).toContain(response.body.event.mappingState);
-});
-```
-
-Use an injected/fake geocoder in the route test so the expected mapping state is deterministic.
-
-- [ ] **Step 2: Write a failing test proving one bad geocode does not fail `/routes`**
+Create `routes-map.test.ts` using module mocks for `DrizzleTravelLegRepository` and `resolveRouteMapEvents`. The deterministic test should set the repository to return one event:
 
 ```ts
-it("returns routes data when one booking cannot be geocoded", async () => {
-  const response = await request(app).get("/api/routes");
-  expect(response.status).toBe(200);
-  expect(response.body.events).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      id: failingBookingId,
-      mappingState: "needs_mapping_provider_unavailable",
-    }),
-  ]));
-});
+const milesCityEvent = {
+  id: "booking-1",
+  name: "Eastern Montana Fair",
+  city: "Miles City",
+  region: "MT",
+  locationLabel: "Miles City, MT",
+  travelLegId: "leg-kristy",
+  travelLegName: "Kristy",
+  latitude: null,
+  longitude: null,
+};
 ```
 
-- [ ] **Step 3: Run the route tests and verify they fail**
+Mock `resolveRouteMapEvents([milesCityEvent], ...)` to return the same event with coordinates and `mappingState: "mapped_city"`.
+
+Assert:
+
+```ts
+const response = await request(app())
+  .post("/routes/events/booking-1/retry-location")
+  .send({});
+
+expect(response.status).toBe(200);
+expect(response.body.event).toMatchObject({
+  id: "booking-1",
+  latitude: 46.4083,
+  longitude: -105.8406,
+  mappingState: "mapped_city",
+});
+expect(invalidateRouteLocationCache).toHaveBeenCalledWith("Miles City, MT");
+```
+
+- [ ] **Step 2: Run the route test and verify it fails**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/routes/routes-map.test.ts
 ```
 
-Expected: FAIL because the retry endpoint does not exist and mapping failures are not explicit.
+Expected: FAIL with 404 because the retry route does not exist.
 
-- [ ] **Step 4: Implement the retry endpoint**
+- [ ] **Step 3: Implement the retry endpoint**
 
-Flow:
+Use the existing repository:
 
 ```ts
 router.post("/routes/events/:bookingId/retry-location", async (req, res): Promise<void> => {
@@ -607,13 +600,13 @@ router.post("/routes/events/:bookingId/retry-location", async (req, res): Promis
 });
 ```
 
-If repository support for one booking is easy and already patterned, prefer `getMapEventById(id)` instead of reading the full list; otherwise keep the smallest safe change and plan a repository optimization separately only if needed.
+Do not turn `needs_mapping_no_results` or `needs_mapping_provider_unavailable` into HTTP 500; return the refreshed unresolved event normally.
 
-- [ ] **Step 5: Keep `/routes` per-event resilient**
+- [ ] **Step 4: Add a route test proving a failed geocode remains part of `/routes`**
 
-Do not wrap all geocoding in a single failure path that turns one provider error into HTTP 500. `resolveRouteMapEvents` must return an unresolved state for the affected event and allow the endpoint to return `200` with the rest of the dataset.
+Mock `resolveRouteMapEvents()` to return an event with `mappingState: "needs_mapping_provider_unavailable"` and null coordinates, then assert `GET /routes` returns HTTP 200 and includes that event.
 
-- [ ] **Step 6: Run API tests**
+- [ ] **Step 5: Run route and resolver tests**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
@@ -621,7 +614,7 @@ pnpm --filter @workspace/api-server exec vitest run src/features/routes/location
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit Task 4**
+- [ ] **Step 6: Commit Task 4**
 
 ```bash
 git add artifacts/api-server/src/routes/routes-map.ts artifacts/api-server/src/routes/routes-map.test.ts
@@ -630,19 +623,19 @@ git commit -m "feat: retry unresolved route locations"
 
 ---
 
-### Task 5: Show `Location Needs Mapping` With Retry in the Route UI
+### Task 5: Show `Location Needs Mapping` and Retry in the Route UI
 
 **Files:**
 - Modify: `artifacts/adventure-zone/src/features/routes/map-data.ts`
 - Modify: `artifacts/adventure-zone/src/components/routes/event-map.tsx`
-- Test: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx` or create it if absent
+- Create: `artifacts/adventure-zone/src/components/routes/event-map.test.tsx`
 
 **Interfaces:**
-- Consumes: event `mappingState` from Tasks 3–4.
+- Consumes: `mappingState` from Tasks 3–4.
 - Consumes: `POST /routes/events/:bookingId/retry-location`.
-- Produces: visible unresolved-booking rows with reason, booking link, leg identity, and Retry action.
+- Produces: unresolved booking rows governed by the same Full/Confirmed/Potential/History and focused-leg emphasis logic as mapped events.
 
-- [ ] **Step 1: Add the frontend mapping-state type**
+- [ ] **Step 1: Mirror the mapping-state type on the frontend**
 
 ```ts
 export type RouteMappingState =
@@ -654,40 +647,46 @@ export type RouteMappingState =
   | "needs_mapping_missing_location";
 ```
 
-Add `mappingState: RouteMappingState` to `MapEvent`.
+Add `mappingState: RouteMappingState` to frontend `MapEvent`.
 
-- [ ] **Step 2: Write the failing UI test for an unresolved Miles City booking**
+- [ ] **Step 2: Create a failing UI test for unresolved Miles City**
 
-```tsx
-it("shows a leg-assigned unresolved booking instead of silently losing it", () => {
-  render(
-    <EventMap
-      events={[event({
-        id: "booking-1",
-        name: "Eastern Montana Fair",
-        city: "Miles City",
-        region: "MT",
-        travelLegId: "leg-kristy",
-        travelLegName: "Kristy",
-        latitude: null,
-        longitude: null,
-        mappingState: "needs_mapping_provider_unavailable",
-      })]}
-      travelLegs={[leg({ id: "leg-kristy", name: "Kristy" })]}
-    />,
-  );
+In `event-map.test.tsx`, mock `maplibre-gl`/WebGL as the existing frontend test conventions require and render an unresolved event with:
 
-  expect(screen.getByText("Location needs mapping")).toBeInTheDocument();
-  expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
-  expect(screen.getByText(/Miles City, MT/)).toBeInTheDocument();
-  expect(screen.getByText(/Kristy/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Retry location" })).toBeInTheDocument();
-});
+```ts
+{
+  id: "booking-1",
+  name: "Eastern Montana Fair",
+  city: "Miles City",
+  region: "MT",
+  travelLegId: "leg-kristy",
+  travelLegName: "Kristy",
+  latitude: null,
+  longitude: null,
+  mappingState: "needs_mapping_provider_unavailable",
+}
 ```
 
-- [ ] **Step 3: Write failing reason-label tests**
+Assert:
 
-Expected user-facing copy:
+```tsx
+expect(screen.getByText("Location needs mapping")).toBeInTheDocument();
+expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
+expect(screen.getByText(/Miles City, MT/)).toBeInTheDocument();
+expect(screen.getByText(/Kristy/)).toBeInTheDocument();
+expect(screen.getByText("Map lookup is temporarily unavailable.")).toBeInTheDocument();
+expect(screen.getByRole("button", { name: "Retry location" })).toBeInTheDocument();
+```
+
+- [ ] **Step 3: Run the UI test and verify it fails**
+
+```bash
+pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/event-map.test.tsx
+```
+
+Expected: FAIL because the current unmapped list has generic copy and no retry action.
+
+- [ ] **Step 4: Add explicit reason copy**
 
 ```ts
 function mappingReason(state: RouteMappingState) {
@@ -704,39 +703,13 @@ function mappingReason(state: RouteMappingState) {
 }
 ```
 
-Test each unresolved state.
+Rename the unresolved section heading to `Location needs mapping`. Keep booking link, leg name, and attempted `locationLabel` visible.
 
-- [ ] **Step 4: Run the frontend map test and verify it fails**
+Only show Retry for `needs_mapping_no_results` and `needs_mapping_provider_unavailable`; missing-location rows direct the user to the booking link instead.
 
-```bash
-pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/event-map.test.tsx
-```
+- [ ] **Step 5: Add retry state and immediate event override**
 
-Expected: FAIL because current UI only says `Could not map ...` and has no explicit reason/retry action.
-
-- [ ] **Step 5: Replace the generic unmapped copy with `Location needs mapping` rows**
-
-Keep the current `planningEvents` filtering/emphasis pipeline. Build unresolved rows from the same filtered planning dataset so Full/Confirmed/Potential/History and focused-leg dimming apply identically.
-
-Render:
-
-```tsx
-<h2 className="text-lg font-bold">Location needs mapping</h2>
-```
-
-For each unresolved booking include:
-
-```tsx
-<Link href={`/bookings/${event.id}`}>{event.name}</Link>
-<p>{event.locationLabel ?? "No usable location"} · {event.travelLegName}</p>
-<p>{mappingReason(event.mappingState)}</p>
-```
-
-For `needs_mapping_no_results` and `needs_mapping_provider_unavailable`, render `Retry location`. For `needs_mapping_missing_location`, omit Retry and direct the user to edit the booking.
-
-- [ ] **Step 6: Implement retry state in `EventMap`**
-
-Use `apiPost`:
+Import `apiPost`. Add:
 
 ```ts
 const [retryingId, setRetryingId] = useState<string | null>(null);
@@ -756,36 +729,19 @@ async function retryLocation(event: MapEvent) {
 }
 ```
 
-Merge overrides before filtering:
+Before the existing filter pipeline:
 
 ```ts
 const effectiveEvents = events.map((event) => eventOverrides[event.id] ?? event);
 ```
 
-This makes a successful retry immediately move a booking from the unresolved list into the map dataset without a page reload.
+Use `effectiveEvents` for region, season, filtering, planning events, mapped/unmapped split, and route lines. This guarantees a successful retry immediately moves the booking into the mapped dataset.
 
-- [ ] **Step 7: Add the retry success test**
+- [ ] **Step 6: Add the successful retry test**
 
-```tsx
-it("moves a booking out of Location needs mapping after a successful retry", async () => {
-  mocks.post.mockResolvedValueOnce({
-    event: mappedMilesCityEvent(),
-  });
+Mock `apiPost` to return a mapped Miles City event and assert the retry endpoint is called. After the promise resolves, assert the provider-unavailable reason disappears from the unresolved section.
 
-  renderMapWithUnresolvedMilesCity();
-  fireEvent.click(screen.getByRole("button", { name: "Retry location" }));
-
-  await waitFor(() => {
-    expect(screen.queryByText(/Map lookup is temporarily unavailable/)).not.toBeInTheDocument();
-  });
-  expect(mocks.post).toHaveBeenCalledWith(
-    "/routes/events/booking-1/retry-location",
-    {},
-  );
-});
-```
-
-- [ ] **Step 8: Run frontend map tests**
+- [ ] **Step 7: Run frontend route tests**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/event-map.test.tsx src/components/routes/travel-leg-editor.test.tsx
@@ -793,7 +749,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/ev
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit Task 5**
+- [ ] **Step 8: Commit Task 5**
 
 ```bash
 git add artifacts/adventure-zone/src/features/routes/map-data.ts artifacts/adventure-zone/src/components/routes/event-map.tsx artifacts/adventure-zone/src/components/routes/event-map.test.tsx
@@ -802,77 +758,50 @@ git commit -m "feat: surface unresolved route locations"
 
 ---
 
-### Task 6: Regression Verification Across Routes and Leg Manager
+### Task 6: Regression Verification and Delivery
 
 **Files:**
-- Modify only if verification reveals a feature-specific regression.
-- Verify existing route/handoff/manager finance behavior without broad unrelated refactors.
+- No planned production-file changes. Only fix files from Tasks 1–5 if verification exposes a regression caused by this feature.
 
 **Interfaces:**
 - Consumes all prior tasks.
-- Produces a branch safe to merge without removing current manager finance, receipt, trip, handoff, or booking behavior.
+- Produces a merge-ready branch with no manager-finance/receipt/trip/handoff regressions.
 
-- [ ] **Step 1: Run the focused manager/leg tests**
+- [ ] **Step 1: Run all feature-focused tests**
 
 ```bash
-pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/leg-manager-repository.test.ts src/routes/leg-manager-admin.test.ts
-pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx
+pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
+pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx src/components/routes/event-map.test.tsx
 ```
 
 Expected: PASS.
 
-- [ ] **Step 2: Run the focused route-location tests**
-
-```bash
-pnpm --filter @workspace/api-server exec vitest run src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
-pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/event-map.test.tsx
-```
-
-Expected: PASS.
-
-- [ ] **Step 3: Re-run existing handoff and trip route integration tests**
-
-```bash
-pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
-```
-
-Expected: PASS.
-
-- [ ] **Step 4: Build both production applications**
+- [ ] **Step 2: Build both production apps**
 
 ```bash
 pnpm --filter @workspace/adventure-zone run build
 pnpm --filter @workspace/api-server run build
 ```
 
-Expected: both commands exit `0`.
+Expected: both exit `0`.
 
-- [ ] **Step 5: Run workspace typecheck as an informational regression check**
+- [ ] **Step 3: Run workspace typecheck as an informational regression check**
 
 ```bash
 pnpm run typecheck
 ```
 
-Expected: no new errors in files touched by this plan. Pre-existing unrelated repository errors may remain and must be called out separately instead of “fixed” as scope creep.
+Expected: no new errors in files touched by this plan. Pre-existing unrelated errors may remain and must be reported separately rather than fixed as scope creep.
 
-- [ ] **Step 6: Compare the implementation branch against current `main` before opening a PR**
+- [ ] **Step 4: Compare the implementation branch against current `main`**
 
-Verify the diff contains only the unified manager/leg setup, route-location reliability changes, focused tests, and any necessary plan/spec docs. Specifically confirm that current manager finance/receipt pages and routes are not deleted.
+Use GitHub compare and confirm the diff contains only the manager/leg unification, map-reliability changes, their tests, and the approved docs. Specifically verify that `ManagerFinanceAdminPage`, money/receipt pages, trip code, handoff code, and existing manager routes are not deleted except where explicitly modified by this plan.
 
-- [ ] **Step 7: Commit any final feature-specific verification fix**
+- [ ] **Step 5: Open a PR targeting `main`**
 
-```bash
-git add <only-files-fixed-by-verification>
-git commit -m "fix: complete manager leg map reliability verification"
-```
-
-Skip this commit if no code changes were required.
-
-- [ ] **Step 8: Open a PR targeting `main`**
-
-PR summary must explicitly mention:
+The PR body must state:
 - one Manager / Leg name controls both identities;
-- manager passwords/session security are preserved;
-- Miles City/state fallback mapping;
-- unresolved bookings remain visible with Retry;
-- newer manager finance/receipt/trip/handoff functionality is preserved.
+- portal passwords and session security are preserved;
+- Miles City/state fallback mapping is tested;
+- failed lookups remain visible under `Location needs mapping` with Retry;
+- current manager finance/receipt/trip/handoff functionality is preserved.
