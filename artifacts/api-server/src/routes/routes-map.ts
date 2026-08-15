@@ -137,6 +137,12 @@ router.post("/routes/travel-legs/:id/archive", async (req, res): Promise<void> =
     }
     // Archiving permanently invalidates every manager token, including after a later restore.
     await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
+    // Archiving permanently invalidates every manager token, including after a later restore.
+    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
+    // Archiving permanently invalidates every manager token, including after a later restore.
+    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
+    // Archiving permanently invalidates every manager token, including after a later restore.
+    await new DrizzleLegManagerRepository(db).incrementSessionVersion(id);
     res.json({ ok: true, leg: result.value });
   } catch (err) {
     req.log.error({ err }, "Failed to archive travel leg");

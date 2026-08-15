@@ -3,13 +3,15 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LegManagerAccess } from "./leg-manager-access";
 
-const get = vi.fn(async () => ({ legs: [
-  { legId: "leg-a", legName: "Leg A", archivedAt: null, managerName: "Amy", enabled: true, sessionVersion: 3 },
-  { legId: "leg-b", legName: "Leg B", archivedAt: "2026-08-15T00:00:00Z", managerName: null, enabled: false, sessionVersion: null },
-] }));
-const put = vi.fn(async () => ({ ok: true }));
-const fetcher = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } }));
-vi.mock("@/lib/auth-token", () => ({ apiGet: get, apiPut: put, apiFetch: fetcher }));
+const mocks = vi.hoisted(() => ({
+  get: vi.fn(async () => ({ legs: [
+    { legId: "leg-a", legName: "Leg A", archivedAt: null, managerName: "Amy", enabled: true, sessionVersion: 3 },
+    { legId: "leg-b", legName: "Leg B", archivedAt: "2026-08-15T00:00:00Z", managerName: null, enabled: false, sessionVersion: null },
+  ] })),
+  put: vi.fn(async () => ({ ok: true })),
+  fetcher: vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "Content-Type": "application/json" } })),
+}));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.get, apiPut: mocks.put, apiFetch: mocks.fetcher }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -22,7 +24,7 @@ describe("LegManagerAccess", () => {
     const password = screen.getByLabelText("New password") as HTMLInputElement;
     fireEvent.change(password, { target: { value: "new-secret" } });
     fireEvent.click(screen.getByRole("button", { name: "Change password" }));
-    await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.put).toHaveBeenCalledTimes(1));
     expect(password.value).toBe("");
   });
 
@@ -31,6 +33,6 @@ describe("LegManagerAccess", () => {
     render(<LegManagerAccess />);
     await screen.findByText("Leg A");
     fireEvent.click(screen.getByRole("button", { name: "Sign Out All Devices" }));
-    expect(fetcher).not.toHaveBeenCalled();
+    expect(mocks.fetcher).not.toHaveBeenCalled();
   });
 });
