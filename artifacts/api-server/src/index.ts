@@ -5,6 +5,7 @@ import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
+import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -28,6 +29,9 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
+// Ensure probability migrations 034/035 are present even on Render services
+// whose configured start command bypasses the standalone custom migration runner.
+await ensureBookingProbabilitySchema();
 const appliedMigrations = await runActReviewMigrations();
 await ensureEventFamilySchema();
 logger.info(
@@ -91,7 +95,7 @@ const shutdown = createActServerShutdown({
   },
   closeServer() {
     return new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+      server.close((error) => (error ? reject(error) : resolve());
     });
   },
   async closePool() {
