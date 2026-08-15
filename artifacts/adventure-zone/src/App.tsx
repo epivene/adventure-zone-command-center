@@ -1,5 +1,6 @@
 import ManagerIssuesAdminPage from "@/pages/ManagerIssuesAdminPage";
 import ManagerRoutePage from "@/pages/ManagerRoutePage";
+import ManagerMoneyPage from "@/pages/ManagerMoneyPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
@@ -169,7 +170,7 @@ function ManagerProtectedApp() {
   const { manager, loading } = useManagerAuth();
   if (loading) return <div className="p-6">Loading manager portal…</div>;
   if (!manager) return <Redirect to="/manager/sign-in" />;
-  return <ManagerShell><Switch><Route path="/manager/route"><ManagerRoutePage /></Route><Route path="/manager"><ManagerHomePage /></Route></Switch></ManagerShell>;
+  return <ManagerShell><Switch><Route path="/manager/money"><ManagerMoneyPage /></Route><Route path="/manager/route"><ManagerRoutePage /></Route><Route path="/manager"><ManagerHomePage /></Route></Switch></ManagerShell>;
 }
 
 function AppRoutes() {
@@ -177,6 +178,9 @@ function AppRoutes() {
     <Switch>
       <Route path="/" component={HomeRoute} />
       <Route path="/sign-in" component={SignInPage} />
+      <Route path="/manager/sign-in"><ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider></Route>
+      <Route path="/manager/{*rest}"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+      <Route path="/manager"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
       <Route>
         <Protected>
           <AppShell>
