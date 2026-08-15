@@ -1,4 +1,5 @@
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { err, ok, type Result } from "@/lib/result";
 import type { db as database } from "@/db/client";
 import {
   auditEntries,
@@ -9,6 +10,7 @@ import {
   bookingSpecialRequests,
   bookings,
   contacts,
+  callSessions,
   followUps,
   organizations,
   packageTemplates,
@@ -43,6 +45,18 @@ export type FollowUp = {
   completedAt: Date | null;
   outcome: string | null;
   nextFollowUpId: string | null;
+};
+
+export type FollowUpError =
+  | { code: "FOLLOW_UP_NOT_FOUND" }
+  | { code: "FOLLOW_UP_ALREADY_COMPLETED" }
+  | { code: "FOLLOW_UP_HAS_CALL" };
+
+export type FollowUpRecord = {
+  id: string;
+  kind: string;
+  dueAt: Date;
+  completedAt: Date | null;
 };
 
 export type AuditEntry = {
@@ -292,6 +306,54 @@ export class DrizzleBookingRepository implements BookingRepository {
     return this.database.transaction((transaction) =>
       operation(new DrizzleBookingTransaction(transaction)),
     );
+  }
+
+  async updateFollowUp(
+    followUpId: string,
+    input: { kind: string; dueAt: Date },
+  ): Promise<Result<FollowUpRecord, FollowUpError>> {
+    return this.database.transaction(async (transaction) => {
+      const [followUp] = await transaction
+        .select()
+        .from(followUps)
+        .where(eq(followUps.id, followUpId))
+        .limit(1)
+        .for("update");
+      if (!followUp) return err({ code: "FOLLOW_UP_NOT_FOUND" });
+      if (followUp.completedAt) return err({ code: "FOLLOW_UP_ALREADY_COMPLETED" });
+      const [updated] = await transaction
+        .update(followUps)
+        .set({ kind: input.kind, dueAt: input.dueAt, updatedAt: new Date() })
+        .where(eq(followUps.id, followUpId))
+        .returning();
+      if (!updated) throw new Error("Follow-up disappeared while being edited.");
+      return ok({ id: updated.id, kind: updated.kind, dueAt: updated.dueAt, completedAt: updated.completedAt });
+    });
+  }
+
+  async deleteFollowUp(followUpId: string): Promise<Result<void, FollowUpError>> {
+    return this.database.transaction(async (transaction) => {
+      const [followUp] = await transaction
+        .select()
+        .from(followUps)
+        .where(eq(followUps.id, followUpId))
+        .limit(1)
+        .for("update");
+      if (!followUp) return err({ code: "FOLLOW_UP_NOT_FOUND" });
+      if (followUp.completedAt) return err({ code: "FOLLOW_UP_ALREADY_COMPLETED" });
+      const [session] = await transaction
+        .select({ id: callSessions.id })
+        .from(callSessions)
+        .where(eq(callSessions.followUpId, followUpId))
+        .limit(1);
+      if (session) return err({ code: "FOLLOW_UP_HAS_CALL" });
+      await transaction
+        .update(followUps)
+        .set({ nextFollowUpId: null, updatedAt: new Date() })
+        .where(eq(followUps.nextFollowUpId, followUpId));
+      await transaction.delete(followUps).where(eq(followUps.id, followUpId));
+      return ok(undefined);
+    });
   }
 
   async listBookings(): Promise<BookingListRecord[]> {

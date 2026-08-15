@@ -55,6 +55,7 @@ export function ActivityTimeline({
   parent,
   createActivity,
   editActivity,
+  deleteActivity,
   loadRevisions,
   initialNextPage = null,
   loadPage,
@@ -63,6 +64,7 @@ export function ActivityTimeline({
   parent?: ActivityParent;
   createActivity?: (input: CreateActivityInput) => Promise<ActivityMutationResult>;
   editActivity?: (input: EditActivityInput) => Promise<ActivityMutationResult>;
+  deleteActivity?: (activityId: string) => Promise<{ ok: boolean; error?: string }>;
   loadRevisions: (
     activityId: string,
     page?: number,
@@ -85,6 +87,23 @@ export function ActivityTimeline({
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [editForms, setEditForms] = useState<Record<string, EditFormState>>({});
+
+  type DeleteConfirmState = { open: boolean; deleting: boolean; error: string };
+  const [deleteConfirm, setDeleteConfirm] = useState<Record<string, DeleteConfirmState>>({});
+
+  function deleteConfirmState(activity: ActivityTimelineItem): DeleteConfirmState {
+    return deleteConfirm[activity.id] ?? { open: false, deleting: false, error: "" };
+  }
+
+  function updateDeleteConfirm(
+    activity: ActivityTimelineItem,
+    patch: Partial<DeleteConfirmState>,
+  ) {
+    setDeleteConfirm((current) => {
+      const existing: DeleteConfirmState = current[activity.id] ?? { open: false, deleting: false, error: "" };
+      return { ...current, [activity.id]: { ...existing, ...patch } };
+    });
+  }
 
   function editForm(activity: ActivityTimelineItem): EditFormState {
     return editForms[activity.id] ?? {
@@ -226,6 +245,28 @@ export function ActivityTimeline({
       updateEditForm(activity, {
         saving: false,
         error: "The activity edit could not be saved. Please try again.",
+      });
+    }
+  }
+
+  async function submitDelete(activity: ActivityTimelineItem) {
+    if (!deleteActivity) return;
+    if (deleteConfirmState(activity).deleting) return;
+    updateDeleteConfirm(activity, { deleting: true, error: "" });
+    try {
+      const result = await deleteActivity(activity.id);
+      if (!result.ok) {
+        updateDeleteConfirm(activity, {
+          deleting: false,
+          error: result.error ?? "Could not delete. Please try again.",
+        });
+        return;
+      }
+      setItems((current) => current.filter((item) => item.id !== activity.id));
+    } catch {
+      updateDeleteConfirm(activity, {
+        deleting: false,
+        error: "Could not delete. Please try again.",
       });
     }
   }
@@ -392,6 +433,50 @@ export function ActivityTimeline({
                         </button>
                       </div>
                     ) : null}
+                  </div>
+                ) : null}
+
+                {deleteActivity ? (
+                  <div className="mt-3">
+                    {!deleteConfirmState(activity).open ? (
+                      <button
+                        className="text-sm font-semibold text-rose-700 underline-offset-2 hover:underline"
+                        onClick={() => updateDeleteConfirm(activity, { open: true })}
+                        type="button"
+                      >
+                        Delete activity
+                      </button>
+                    ) : (
+                      <div className="rounded-md border border-rose-200 bg-rose-50 p-3">
+                        <p className="text-sm font-semibold text-rose-900">Delete this activity?</p>
+                        <p className="mt-1 text-sm text-rose-700">This cannot be undone.</p>
+                        {deleteConfirmState(activity).error ? (
+                          <p className="mt-1 text-sm text-rose-800" role="alert">
+                            {deleteConfirmState(activity).error}
+                          </p>
+                        ) : null}
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            className="rounded bg-rose-600 px-2 py-1 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                            disabled={deleteConfirmState(activity).deleting}
+                            onClick={() => void submitDelete(activity)}
+                            type="button"
+                          >
+                            {deleteConfirmState(activity).deleting ? "Deleting…" : "Yes, delete"}
+                          </button>
+                          <button
+                            className="rounded border border-slate-300 bg-white px-2 py-1 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            disabled={deleteConfirmState(activity).deleting}
+                            onClick={() =>
+                              updateDeleteConfirm(activity, { open: false, error: "" })
+                            }
+                            type="button"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : null}
 

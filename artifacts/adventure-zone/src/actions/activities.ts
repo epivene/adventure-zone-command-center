@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPost, apiPatch } from "@/lib/auth-token";
 import type {
   ActivityParent,
   CreateActivityInput,
@@ -64,5 +64,15 @@ export async function listActivityRevisionsAction(
     return await apiPost<ActivityRevisionResult>("/activities/revisions", { activityId });
   } catch (e: any) {
     return { ok: false, error: e.message };
+  }
+}
+
+export async function deleteActivityAction(
+  activityId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    return await apiDelete<{ ok: boolean; error?: string }>(`/activities/${activityId}`);
+  } catch (e: any) {
+    return { ok: false, error: e.message ?? "Could not delete activity." };
   }
 }

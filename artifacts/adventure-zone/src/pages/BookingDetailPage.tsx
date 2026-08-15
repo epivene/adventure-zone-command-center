@@ -8,10 +8,13 @@ import { LastResortWarning } from "@/components/organizations/last-resort-warnin
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import {
   createActivityAction,
+  deleteActivityAction,
   editActivityAction,
   listActivityRevisionsAction,
 } from "@/actions/activities";
 import { completeFollowUpAction } from "@/actions/bookings";
+import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import type { ReactNode } from "react";
 
 function formatDate(value: string | null) {
@@ -51,19 +54,20 @@ export default function BookingDetailPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [followUpItems, setFollowUpItems] = useState<any[]>([]);
 
   useEffect(() => {
     if (!bookingId) return;
     apiGet<any>(`/bookings/${bookingId}`)
-      .then((d) => { setData(d); setLoading(false); })
+      .then((d) => { setData(d); setFollowUpItems(d.followUps ?? []); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [bookingId]);
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading booking…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
-  const { booking, organization, contact, travelLeg, followUps, timeline } = data;
-  const nextFollowUp = (followUps ?? []).find((f: any) => !f.completedAt) ?? null;
+  const { booking, organization, contact, travelLeg, timeline } = data;
+  const nextFollowUp = followUpItems.find((f: any) => !f.completedAt) ?? null;
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -111,6 +115,54 @@ export default function BookingDetailPage() {
         </DetailSection>
       </div>
 
+      {followUpItems.length > 0 && (
+        <DetailSection title="Follow-up plan">
+          <ul className="grid gap-3">
+            {followUpItems.map((followUp: any) => (
+              <li className="rounded-lg border border-slate-100 p-3 text-sm" key={followUp.id}>
+                <p className="font-semibold capitalize">
+                  {String(followUp.kind).replaceAll("_", " ")}
+                </p>
+                <p className="text-slate-600">
+                  {followUp.completedAt
+                    ? `Completed ${formatDate(followUp.completedAt)}`
+                    : `Due ${formatDate(followUp.dueAt)}`}
+                </p>
+                {followUp.outcome ? (
+                  <p className="mt-1 text-slate-700">Outcome: {followUp.outcome}</p>
+                ) : null}
+                <FollowUpControls
+                  followUp={{
+                    id: followUp.id,
+                    kind: followUp.kind,
+                    dueAt: new Date(followUp.dueAt),
+                    completedAt: followUp.completedAt ? new Date(followUp.completedAt) : null,
+                  }}
+                  onEdit={async (id, input) => {
+                    const result = await editFollowUpAction(id, input);
+                    if (result.ok && result.followUp) {
+                      setFollowUpItems((items) =>
+                        items.map((f) =>
+                          f.id === id
+                            ? { ...f, kind: result.followUp!.kind, dueAt: result.followUp!.dueAt }
+                            : f,
+                        ),
+                      );
+                    }
+                    return result;
+                  }}
+                  onDelete={async (id) => {
+                    const result = await deleteFollowUpAction(id);
+                    if (result.ok) setFollowUpItems((items) => items.filter((f) => f.id !== id));
+                    return result;
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
+        </DetailSection>
+      )}
+
       {nextFollowUp && (
         <FollowUpCompletionDialog
           bookingStatus={booking.status}
@@ -124,6 +176,7 @@ export default function BookingDetailPage() {
         parent={{ bookingId: bookingId! }}
         createActivity={createActivityAction}
         editActivity={editActivityAction}
+        deleteActivity={deleteActivityAction}
         loadRevisions={listActivityRevisionsAction}
       />
     </div>

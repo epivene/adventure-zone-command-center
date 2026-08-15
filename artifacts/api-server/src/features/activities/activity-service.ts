@@ -69,4 +69,11 @@ export class ActivityService {
     }
     return this.repository.edit(parsed.data);
   }
+
+  async delete(id: string): Promise<Result<void, ActivityError>> {
+    if (!id) {
+      return err({ code: "INVALID_ACTIVITY_INPUT", message: "Activity ID is required." });
+    }
+    return this.repository.delete(id);
+  }
 }
