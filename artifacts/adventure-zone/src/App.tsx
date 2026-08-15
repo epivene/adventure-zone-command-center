@@ -4,6 +4,8 @@ import ManagerMoneyPage from "@/pages/ManagerMoneyPage";
 import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";
 import ManagerOperationsPage from "@/pages/ManagerOperationsPage";
 import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";
+import ManagerCrewPage from "@/pages/ManagerCrewPage";
+import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
@@ -176,6 +178,8 @@ function ManagerProtectedApp() {
   return (
     <ManagerShell>
       <Switch>
+        <Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>
+        <Route path="/manager/crew"><ManagerCrewPage /></Route>
         <Route path="/manager/operations"><ManagerOperationsPage /></Route>
         <Route path="/manager/receipts"><ManagerReceiptsPage /></Route>
         <Route path="/manager/money"><ManagerMoneyPage /></Route>

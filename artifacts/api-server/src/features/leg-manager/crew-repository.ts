@@ -1,181 +1,22 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import { crewManagerNotes, crewWorkers, crewWorkHistory } from "@/db/schema";
-import {
-  normalizeCrewPhone,
-  type CrewManagerNote,
-  type CrewWorker,
-  type CrewWorkerWithHistory,
-  type CrewWorkHistory,
-  type CrewRehireStatus,
-} from "./crew-types";
-
-export type CrewWorkHistoryPatch = Partial<
-  Pick<CrewWorkHistory, "role" | "startedAt" | "endedAt" | "rating" | "note">
->;
-
-export interface CrewRepositoryStore {
-  listWorkers(): Promise<CrewWorker[]>;
-  listWorkHistory(): Promise<CrewWorkHistory[]>;
-  listManagerNotes(): Promise<CrewManagerNote[]>;
-  getWorkHistory(id: string): Promise<CrewWorkHistory | null>;
-  updateWorkHistory(id: string, patch: CrewWorkHistoryPatch): Promise<CrewWorkHistory | null>;
-}
-
-export async function listWorkersForManager(
-  store: CrewRepositoryStore,
-  _managerLegId: string,
-): Promise<CrewWorkerWithHistory[]> {
-  const [workers, history, notes] = await Promise.all([
-    store.listWorkers(),
-    store.listWorkHistory(),
-    store.listManagerNotes(),
-  ]);
-  return workers.map((worker) => ({
-    ...worker,
-    workHistory: history.filter((entry) => entry.workerId === worker.id),
-    managerNotes: notes.filter((note) => note.workerId === worker.id),
-  }));
-}
-
-export async function updateWorkHistoryAsManager(
-  store: CrewRepositoryStore,
-  managerLegId: string,
-  historyId: string,
-  patch: CrewWorkHistoryPatch,
-) {
-  const existing = await store.getWorkHistory(historyId);
-  if (!existing) return { ok: false as const, code: "NOT_FOUND" as const };
-  if (existing.legId !== managerLegId) {
-    return { ok: false as const, code: "FORBIDDEN" as const };
-  }
-  const entry = await store.updateWorkHistory(historyId, patch);
-  if (!entry) return { ok: false as const, code: "NOT_FOUND" as const };
-  return { ok: true as const, entry };
-}
-
-export class DrizzleCrewRepository implements CrewRepositoryStore {
-  constructor(private readonly database: NodePgDatabase<typeof schema>) {}
-
-  async listWorkers() {
-    return (await this.database.select().from(crewWorkers).orderBy(asc(crewWorkers.name))) as CrewWorker[];
-  }
-
-  async listWorkHistory() {
-    return (await this.database
-      .select()
-      .from(crewWorkHistory)
-      .orderBy(desc(crewWorkHistory.startedAt))) as CrewWorkHistory[];
-  }
-
-  async listManagerNotes() {
-    return (await this.database
-      .select()
-      .from(crewManagerNotes)
-      .orderBy(desc(crewManagerNotes.createdAt))) as CrewManagerNote[];
-  }
-
-  async getWorkHistory(id: string) {
-    return ((await this.database
-      .select()
-      .from(crewWorkHistory)
-      .where(eq(crewWorkHistory.id, id))
-      .limit(1))[0] ?? null) as CrewWorkHistory | null;
-  }
-
-  async updateWorkHistory(id: string, patch: CrewWorkHistoryPatch) {
-    return ((await this.database
-      .update(crewWorkHistory)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(eq(crewWorkHistory.id, id))
-      .returning())[0] ?? null) as CrewWorkHistory | null;
-  }
-
-  async createWorker(input: {
-    name: string;
-    phone?: string | null;
-    email?: string | null;
-    city?: string | null;
-    region?: string | null;
-    locationText?: string | null;
-    rehireStatus?: CrewRehireStatus;
-  }) {
-    return (await this.database
-      .insert(crewWorkers)
-      .values({
-        name: input.name.trim(),
-        phone: input.phone?.trim() || null,
-        normalizedPhone: normalizeCrewPhone(input.phone),
-        email: input.email?.trim() || null,
-        city: input.city?.trim() || null,
-        region: input.region?.trim() || null,
-        locationText: input.locationText?.trim() || null,
-        rehireStatus: input.rehireStatus ?? "undecided",
-      })
-      .returning())[0];
-  }
-
-  async findPossibleMatches(input: { name: string; phone?: string | null }) {
-    const normalizedPhone = normalizeCrewPhone(input.phone);
-    const workers = await this.listWorkers();
-    const normalizedName = input.name.trim().toLocaleLowerCase();
-    return workers.filter(
-      (worker) =>
-        (normalizedPhone && worker.normalizedPhone === normalizedPhone) ||
-        worker.name.trim().toLocaleLowerCase() === normalizedName,
-    );
-  }
-
-  async createWorkHistory(input: {
-    workerId: string;
-    legId: string;
-    bookingId?: string | null;
-    tripId?: string | null;
-    role: string;
-    startedAt: Date;
-    endedAt?: Date | null;
-    rating?: number | null;
-    note?: string | null;
-  }) {
-    return (await this.database
-      .insert(crewWorkHistory)
-      .values({
-        workerId: input.workerId,
-        legId: input.legId,
-        bookingId: input.bookingId ?? null,
-        tripId: input.tripId ?? null,
-        role: input.role.trim(),
-        startedAt: input.startedAt,
-        endedAt: input.endedAt ?? null,
-        rating: input.rating ?? null,
-        note: input.note?.trim() || null,
-      })
-      .returning())[0];
-  }
-
-  async createManagerNote(input: {
-    workerId: string;
-    legId: string;
-    bookingId?: string | null;
-    note: string;
-  }) {
-    return (await this.database
-      .insert(crewManagerNotes)
-      .values({
-        workerId: input.workerId,
-        legId: input.legId,
-        bookingId: input.bookingId ?? null,
-        note: input.note.trim(),
-      })
-      .returning())[0];
-  }
-
-  async updateRehireStatus(workerId: string, rehireStatus: CrewRehireStatus) {
-    return (await this.database
-      .update(crewWorkers)
-      .set({ rehireStatus, updatedAt: new Date() })
-      .where(eq(crewWorkers.id, workerId))
-      .returning())[0] ?? null;
-  }
+import { normalizeCrewPhone, type CrewManagerNote, type CrewWorker, type CrewWorkerWithHistory, type CrewWorkHistory, type CrewRehireStatus } from "./crew-types";
+export type CrewWorkHistoryPatch=Partial<Pick<CrewWorkHistory,"role"|"startedAt"|"endedAt"|"rating"|"note">>;
+export interface CrewRepositoryStore{listWorkers():Promise<CrewWorker[]>;listWorkHistory():Promise<CrewWorkHistory[]>;listManagerNotes():Promise<CrewManagerNote[]>;getWorkHistory(id:string):Promise<CrewWorkHistory|null>;updateWorkHistory(id:string,patch:CrewWorkHistoryPatch):Promise<CrewWorkHistory|null>}
+export async function listWorkersForManager(store:CrewRepositoryStore,_managerLegId:string):Promise<CrewWorkerWithHistory[]>{const[workers,history,notes]=await Promise.all([store.listWorkers(),store.listWorkHistory(),store.listManagerNotes()]);return workers.map(worker=>({...worker,workHistory:history.filter(entry=>entry.workerId===worker.id),managerNotes:notes.filter(note=>note.workerId===worker.id)}));}
+export async function updateWorkHistoryAsManager(store:CrewRepositoryStore,managerLegId:string,historyId:string,patch:CrewWorkHistoryPatch){const existing=await store.getWorkHistory(historyId);if(!existing)return{ok:false as const,code:"NOT_FOUND" as const};if(existing.legId!==managerLegId)return{ok:false as const,code:"FORBIDDEN" as const};const entry=await store.updateWorkHistory(historyId,patch);if(!entry)return{ok:false as const,code:"NOT_FOUND" as const};return{ok:true as const,entry};}
+export class DrizzleCrewRepository implements CrewRepositoryStore{
+  constructor(private readonly database:NodePgDatabase<typeof schema>){}
+  async listWorkers(){return await this.database.select().from(crewWorkers).orderBy(asc(crewWorkers.name)) as CrewWorker[]}
+  async listWorkHistory(){return await this.database.select().from(crewWorkHistory).orderBy(desc(crewWorkHistory.startedAt)) as CrewWorkHistory[]}
+  async listManagerNotes(){return await this.database.select().from(crewManagerNotes).orderBy(desc(crewManagerNotes.createdAt)) as CrewManagerNote[]}
+  async getWorkHistory(id:string){return ((await this.database.select().from(crewWorkHistory).where(eq(crewWorkHistory.id,id)).limit(1))[0]??null) as CrewWorkHistory|null}
+  async updateWorkHistory(id:string,patch:CrewWorkHistoryPatch){return ((await this.database.update(crewWorkHistory).set({...patch,updatedAt:new Date()}).where(eq(crewWorkHistory.id,id)).returning())[0]??null) as CrewWorkHistory|null}
+  async createWorker(input:{name:string;phone?:string|null;email?:string|null;city?:string|null;region?:string|null;locationText?:string|null;rehireStatus?:CrewRehireStatus}){return (await this.database.insert(crewWorkers).values({name:input.name.trim(),phone:input.phone?.trim()||null,normalizedPhone:normalizeCrewPhone(input.phone),email:input.email?.trim()||null,city:input.city?.trim()||null,region:input.region?.trim()||null,locationText:input.locationText?.trim()||null,rehireStatus:input.rehireStatus??"undecided"}).returning())[0]}
+  async findPossibleMatches(input:{name:string;phone?:string|null}){const phone=normalizeCrewPhone(input.phone),name=input.name.trim().toLocaleLowerCase();return (await this.listWorkers()).filter(w=>(phone&&w.normalizedPhone===phone)||w.name.trim().toLocaleLowerCase()===name)}
+  async createWorkHistory(input:{workerId:string;legId:string;bookingId?:string|null;tripId?:string|null;role:string;startedAt:Date;endedAt?:Date|null;rating?:number|null;note?:string|null;clientMutationId:string}){const rows=await this.database.insert(crewWorkHistory).values({workerId:input.workerId,legId:input.legId,bookingId:input.bookingId??null,tripId:input.tripId??null,role:input.role.trim(),startedAt:input.startedAt,endedAt:input.endedAt??null,rating:input.rating??null,note:input.note?.trim()||null,clientMutationId:input.clientMutationId}).onConflictDoNothing({target:[crewWorkHistory.legId,crewWorkHistory.clientMutationId]}).returning();if(rows[0])return rows[0];return (await this.database.select().from(crewWorkHistory).where(and(eq(crewWorkHistory.legId,input.legId),eq(crewWorkHistory.clientMutationId,input.clientMutationId))).limit(1))[0]}
+  async createManagerNote(input:{workerId:string;legId:string;bookingId?:string|null;note:string;clientMutationId:string}){const rows=await this.database.insert(crewManagerNotes).values({workerId:input.workerId,legId:input.legId,bookingId:input.bookingId??null,note:input.note.trim(),clientMutationId:input.clientMutationId}).onConflictDoNothing({target:[crewManagerNotes.legId,crewManagerNotes.clientMutationId]}).returning();if(rows[0])return rows[0];return (await this.database.select().from(crewManagerNotes).where(and(eq(crewManagerNotes.legId,input.legId),eq(crewManagerNotes.clientMutationId,input.clientMutationId))).limit(1))[0]}
+  async updateRehireStatus(workerId:string,rehireStatus:CrewRehireStatus){return (await this.database.update(crewWorkers).set({rehireStatus,updatedAt:new Date()}).where(eq(crewWorkers.id,workerId)).returning())[0]??null}
 }
