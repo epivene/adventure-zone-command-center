@@ -13,6 +13,15 @@ export default function OrganizationsPage() {
     q: params.get("q") ?? undefined,
     lastResort: params.get("lastResort") ?? undefined,
     leg: params.get("leg") ?? undefined,
+    type: params.get("type") ?? undefined,
+    region: params.get("region") ?? undefined,
+    hasPhone: params.get("hasPhone") ?? undefined,
+    hasEmail: params.get("hasEmail") ?? undefined,
+    hasFollowUp: params.get("hasFollowUp") ?? undefined,
+    hasBooking: params.get("hasBooking") ?? undefined,
+    hasLocations: params.get("hasLocations") ?? undefined,
+    contact: params.get("contact") ?? undefined,
+    activity: params.get("activity") ?? undefined,
     page: params.get("page") ?? undefined,
     pageSize: params.get("pageSize") ?? undefined,
   });
@@ -31,6 +40,13 @@ export default function OrganizationsPage() {
     if (query.search) qs.set("q", query.search);
     if (query.lastResort !== undefined) qs.set("lastResort", String(query.lastResort));
     if (query.travelLegId) qs.set("leg", query.travelLegId);
+    if (query.placeType) qs.set("type", query.placeType);
+    if (query.region) qs.set("region", query.region);
+    if (query.hasPhone) qs.set("hasPhone", "yes");
+    if (query.hasEmail) qs.set("hasEmail", "yes");
+    if (query.hasFollowUp) qs.set("hasFollowUp", "yes");
+    if (query.hasBooking) qs.set("hasBooking", "yes");
+    if (query.hasLocations) qs.set("hasLocations", "yes");
     if (query.page && query.page > 1) qs.set("page", String(query.page));
 
     apiGet<any>(`/organizations?${qs.toString()}`)

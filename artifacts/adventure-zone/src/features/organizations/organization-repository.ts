@@ -29,6 +29,13 @@ export type OrganizationListQuery = {
   search: string;
   lastResort: "all" | "only";
   travelLegId: string | null;
+  placeType: string | null;
+  region: string | null;
+  hasPhone: boolean;
+  hasEmail: boolean;
+  hasFollowUp: boolean;
+  hasBooking: boolean;
+  hasLocations: boolean;
   includeRetired?: boolean;
   page: number;
   pageSize: number;

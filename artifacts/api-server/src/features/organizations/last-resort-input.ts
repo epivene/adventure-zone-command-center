@@ -25,6 +25,10 @@ export const organizationListQuerySchema = z
     q: z.string().catch("").default(""),
     lastResort: z.enum(["all", "only"]).catch("all").default("all"),
     leg: z.string().catch("").default(""),
+    type: z.string().catch("").default(""), region: z.string().catch("").default(""),
+    hasPhone: z.enum(["", "yes"]).catch("").default(""), hasEmail: z.enum(["", "yes"]).catch("").default(""),
+    hasFollowUp: z.enum(["", "yes"]).catch("").default(""), hasBooking: z.enum(["", "yes"]).catch("").default(""), hasLocations: z.enum(["", "yes"]).catch("").default(""),
+    contact: z.enum(["", "phone", "email"]).catch("").default(""), activity: z.enum(["", "followup", "booking"]).catch("").default(""),
     includeRetired: z
       .union([z.literal("true"), z.literal("1")])
       .transform(() => true)
@@ -33,10 +37,13 @@ export const organizationListQuerySchema = z
     page: z.coerce.number().int().min(1).max(10_000).catch(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).catch(50).default(50),
   })
-  .transform(({ q, lastResort, leg, includeRetired, page, pageSize }) => ({
+  .transform(({ q, lastResort, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, contact, activity, includeRetired, page, pageSize }) => ({
     search: q.trim().replace(/\s+/g, " "),
     lastResort,
     travelLegId: z.uuid().safeParse(leg).success ? leg : null,
+    placeType: type.trim() || null, region: region.trim() || null,
+    hasPhone: hasPhone === "yes" || contact === "phone", hasEmail: hasEmail === "yes" || contact === "email",
+    hasFollowUp: hasFollowUp === "yes" || activity === "followup", hasBooking: hasBooking === "yes" || activity === "booking", hasLocations: hasLocations === "yes",
     includeRetired: includeRetired as boolean,
     page,
     pageSize,

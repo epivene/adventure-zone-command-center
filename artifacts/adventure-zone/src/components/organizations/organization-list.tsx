@@ -10,6 +10,13 @@ function listHref(query: OrganizationListQuery) {
   if (query.search) params.set("q", query.search);
   if (query.lastResort === "only") params.set("lastResort", "only");
   if (query.travelLegId) params.set("leg", query.travelLegId);
+  if (query.placeType) params.set("type", query.placeType);
+  if (query.region) params.set("region", query.region);
+  if (query.hasPhone) params.set("hasPhone", "yes");
+  if (query.hasEmail) params.set("hasEmail", "yes");
+  if (query.hasFollowUp) params.set("hasFollowUp", "yes");
+  if (query.hasBooking) params.set("hasBooking", "yes");
+  if (query.hasLocations) params.set("hasLocations", "yes");
   if (query.page > 1) params.set("page", String(query.page));
   if (query.pageSize !== 50) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString();
@@ -34,7 +41,7 @@ export function OrganizationList({
     <div className="grid gap-5">
       <form
         action="/profiles"
-        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_12rem_14rem_auto]"
+        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4"
         method="get"
       >
         <label className="grid gap-1 text-sm font-semibold">
@@ -46,6 +53,31 @@ export function OrganizationList({
             type="search"
           />
         </label>
+        <label className="grid gap-1 text-sm font-semibold">Profile type<select defaultValue={query.placeType ?? ""} name="type"><option value="">All profile types</option><option value="event">Event</option><option value="venue">Venue</option><option value="company">Company</option></select></label>
+        <label className="grid gap-1 text-sm font-semibold">State/region<input defaultValue={query.region ?? ""} name="region" placeholder="Colorado or CO" /></label>
+        <fieldset className="grid gap-2 text-sm font-semibold">
+          <legend>Contact details</legend>
+          <label className="flex items-center gap-2 font-normal">
+            <input defaultChecked={query.hasPhone} name="hasPhone" type="checkbox" value="yes" />
+            Has phone
+          </label>
+          <label className="flex items-center gap-2 font-normal">
+            <input defaultChecked={query.hasEmail} name="hasEmail" type="checkbox" value="yes" />
+            Has email
+          </label>
+        </fieldset>
+        <fieldset className="grid gap-2 text-sm font-semibold">
+          <legend>Activity</legend>
+          <label className="flex items-center gap-2 font-normal">
+            <input defaultChecked={query.hasFollowUp} name="hasFollowUp" type="checkbox" value="yes" />
+            Has follow-up
+          </label>
+          <label className="flex items-center gap-2 font-normal">
+            <input defaultChecked={query.hasBooking} name="hasBooking" type="checkbox" value="yes" />
+            Has booking
+          </label>
+        </fieldset>
+        <label className="grid gap-1 text-sm font-semibold">Locations<select defaultValue={query.hasLocations ? "yes" : ""} name="hasLocations"><option value="">Any location count</option><option value="yes">Has possible locations</option></select></label>
         <label className="grid gap-1 text-sm font-semibold">
           Place status
           <select defaultValue={query.lastResort} name="lastResort">
@@ -141,7 +173,7 @@ export function OrganizationList({
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
           <p className="font-semibold">No profiles match these filters.</p>
-          <Link className="button-secondary mt-3 inline-flex" href={listHref({ search: "", lastResort: "all", travelLegId: null, page: 1, pageSize: 50 })}>
+          <Link className="button-secondary mt-3 inline-flex" href="/profiles">
             Reset filters
           </Link>
         </div>
