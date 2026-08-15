@@ -114,7 +114,18 @@ export function parseBusinessDate(value: string): Date | null {
 }
 
 export function parseBusinessDateInput(value: unknown): Date | null {
-  if (typeof value === "string") return parseBusinessDate(value);
+  if (typeof value === "string") {
+    const calendarDate = parseBusinessDate(value);
+    if (calendarDate) return calendarDate;
+
+    // API clients serialize Date objects as ISO timestamps. Accept those too,
+    // then normalize them back to the business calendar date in Chicago.
+    const instant = new Date(value);
+    if (Number.isFinite(instant.getTime())) {
+      return parseBusinessDate(businessDateKey(instant));
+    }
+    return null;
+  }
   if (value instanceof Date && Number.isFinite(value.getTime())) {
     return parseBusinessDate(businessDateKey(value));
   }
