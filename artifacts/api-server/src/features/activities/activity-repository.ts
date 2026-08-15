@@ -141,6 +141,13 @@ function activitySnapshot(activity: typeof activities.$inferSelect) {
   };
 }
 
+function callSessionSnapshot(callSession: typeof callSessions.$inferSelect) {
+  return {
+    noteActivityId: callSession.noteActivityId,
+    disposition: callSession.disposition,
+  };
+}
+
 function timelineCondition(database: DrizzleDatabase, parent: ActivityParent) {
   if (parent.bookingId) return eq(activities.bookingId, parent.bookingId);
   if (parent.contactId) {
@@ -317,6 +324,21 @@ export class DrizzleActivityRepository
         .for("update");
       if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
 
+      const [linkedCallSession] = input.callOutcome
+        ? await transaction
+          .select()
+          .from(callSessions)
+          .where(eq(callSessions.noteActivityId, before.id))
+          .limit(1)
+          .for("update")
+        : [];
+      if (input.callOutcome && !linkedCallSession) {
+        return err({
+          code: "INVALID_ACTIVITY_INPUT",
+          message: "A call outcome can only be edited for a linked call activity.",
+        });
+      }
+
       const now = new Date();
       await transaction.insert(activityRevisions).values({
         activityId: before.id,
@@ -325,6 +347,13 @@ export class DrizzleActivityRepository
         reason: input.reason,
         createdAt: now,
       });
+      const [updatedCallSession] = input.callOutcome && linkedCallSession
+        ? await transaction
+          .update(callSessions)
+          .set({ disposition: input.callOutcome })
+          .where(eq(callSessions.id, linkedCallSession.id))
+          .returning()
+        : [];
       const [updated] = await transaction
         .update(activities)
         .set({ body: input.body, updatedAt: now })
@@ -332,3 +361,56 @@ export class DrizzleActivityRepository
         .returning();
       if (!updated) throw new Error("Activity disappeared while being edited.");
 
+      await recordAuditEntry(transaction, {
+        entityType: "activity",
+        entityId: updated.id,
+        action: "update",
+        before: activitySnapshot(before),
+        after: activitySnapshot(updated),
+      });
+      if (linkedCallSession && updatedCallSession) {
+        await recordAuditEntry(transaction, {
+          entityType: "call_session",
+          entityId: updatedCallSession.id,
+          action: "update",
+          before: callSessionSnapshot(linkedCallSession),
+          after: callSessionSnapshot(updatedCallSession),
+        });
+      }
+
+      const [revisionTotal] = await transaction
+        .select({ value: count() })
+        .from(activityRevisions)
+        .where(eq(activityRevisions.activityId, updated.id));
+      const projected = await loadTimelineItemById(transaction as DrizzleDatabase, updated.id);
+      return ok(projected ?? toTimelineItem(updated, revisionTotal?.value ?? 0));
+    });
+  }
+
+  async delete(activityId: string): Promise<Result<void, ActivityError>> {
+    return this.database.transaction(async (transaction) => {
+      const [before] = await transaction
+        .select()
+        .from(activities)
+        .where(and(eq(activities.id, activityId), isNull(activities.deletedAt)))
+        .limit(1)
+        .for("update");
+      if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
+
+      const now = new Date();
+      await transaction
+        .update(activities)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(activities.id, activityId));
+
+      await recordAuditEntry(transaction, {
+        entityType: "activity",
+        entityId: activityId,
+        action: "delete",
+        before: activitySnapshot(before),
+        after: null,
+      });
+      return ok(undefined);
+    });
+  }
+}
