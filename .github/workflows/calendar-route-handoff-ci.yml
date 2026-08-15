@@ -35,32 +35,24 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --no-frozen-lockfile
-      - name: Repair Leaflet orchestration helpers
+      - name: Remove superseded MapLibre dependency
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('artifacts/adventure-zone/src/components/routes/event-map.tsx')
-          s = p.read_text()
-          if 'const initialFilters: MapFilters' not in s:
-              helpers = '''const initialFilters: MapFilters = {\n  statuses: [],\n  travelLegIds: [],\n  dateFrom: null,\n  dateTo: null,\n  regions: [],\n};\n\nfunction formatLabel(value: string) {\n  return value\n    .split("_")\n    .map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`)\n    .join(" ");\n}\n\nfunction eventSeasonYear(event: MapEvent) {\n  return event.seasonYear ?? event.startsAt?.getUTCFullYear() ?? null;\n}\n\nfunction mappingReason(state?: RouteMappingState) {\n  switch (state) {\n    case "needs_mapping_no_results": return "No map result found for this location.";\n    case "needs_mapping_provider_unavailable": return "Map lookup is temporarily unavailable.";\n    case "needs_mapping_missing_location": return "Add a city/state or event address.";\n    default: return "This booking could not be placed on the map yet.";\n  }\n}\n\nfunction canRetryMapping(state?: RouteMappingState) {\n  return state === "needs_mapping_no_results" || state === "needs_mapping_provider_unavailable";\n}\n\ntype PlanningEvent = MapEvent & {\n  planningEmphasis: Exclude<RouteEmphasis, "hidden">;\n};\n\ntype RouteLineCollection = {\n  type: "FeatureCollection";\n  features: Array<{\n    type: "Feature";\n    geometry: { type: "LineString"; coordinates: [number, number][] };\n    properties: { legId: string; color: string; emphasis: "primary" | "dimmed" };\n  }>;\n};\n\ntype HandoffFeatureCollection = {\n  type: "FeatureCollection";\n  features: Array<{\n    type: "Feature";\n    id: string;\n    geometry: { type: "Point"; coordinates: [number, number] };\n    properties: { id: string; label: string; status: EquipmentHandoffView["status"]; band: EquipmentHandoffView["opportunityBand"] };\n  }>;\n};\n\n'''
-              s = s.replace('function EventList(', helpers + 'function EventList(', 1)
-              p.write_text(s)
-          PY
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/adventure-zone/src/components/routes/event-map.tsx
-          if ! git diff --cached --quiet; then
-            git commit -m "fix: preserve route orchestration helpers in Leaflet migration"
+          if grep -q '"maplibre-gl"' artifacts/adventure-zone/package.json; then
+            pnpm --filter @workspace/adventure-zone remove maplibre-gl
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add artifacts/adventure-zone/package.json pnpm-lock.yaml
+            git commit -m "chore: remove superseded MapLibre dependency"
             git push origin HEAD:feature/leaflet-manager-route-map
           fi
       - name: Leaflet route unit tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/manager-map-navigation.test.ts src/features/routes/map-focus.test.ts src/components/routes/manager-map-mode.test.tsx src/components/routes/event-map-focus.test.tsx src/components/routes/trips-section.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/manager-map-navigation.test.ts src/features/routes/map-focus.test.ts src/components/routes/manager-map-mode.test.tsx src/components/routes/manager-route-map-shell.test.tsx src/components/routes/manager-route-map-layers.test.tsx src/components/routes/event-map-focus.test.tsx src/components/routes/event-map.test.tsx src/components/routes/trips-section.test.tsx
       - name: Handoff unit tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
       - name: Manager and route-map API tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts src/features/leg-manager/crew-repository-idempotency.test.ts src/features/leg-manager/crew-repository.test.ts src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
       - name: Manager and route-map frontend tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx src/components/routes/event-map.test.tsx src/lib/manager-auth-context.test.tsx src/lib/manager-back-target.test.ts src/App.manager-routing.test.tsx src/pages/ManagerHomePage.test.tsx src/pages/ManagerCrewPage.test.tsx src/pages/ManagerWorkerPage.test.tsx src/pages/ManagerOperationsPage.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx src/lib/manager-auth-context.test.tsx src/lib/manager-back-target.test.ts src/App.manager-routing.test.tsx src/pages/ManagerHomePage.test.tsx src/pages/ManagerCrewPage.test.tsx src/pages/ManagerWorkerPage.test.tsx src/pages/ManagerOperationsPage.test.tsx
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server
