@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TravelLegEditor } from "./travel-leg-editor";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
-function leg(id: string, sortOrder: number, archivedAt: Date | null = null): TravelLeg {
+function leg(
+  id: string,
+  sortOrder: number,
+  archivedAt: Date | null = null,
+  name = `Leg ${sortOrder}`,
+): TravelLeg {
   return {
     id,
-    name: `Leg ${sortOrder}`,
+    name,
     color: "#6B7280",
     sortOrder,
     archivedAt,
@@ -18,7 +23,10 @@ function leg(id: string, sortOrder: number, archivedAt: Date | null = null): Tra
   };
 }
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 describe("TravelLegEditor lifecycle", () => {
   it("allows adding after nine active legs", () => {
@@ -67,5 +75,115 @@ describe("TravelLegEditor lifecycle", () => {
 
     expect(screen.queryByRole("button", { name: /Delete leg/ })).not.toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Archive leg/ })).toHaveLength(2);
+  });
+
+  it("shows manager access inside the matching travel-leg card", () => {
+    render(
+      <TravelLegEditor
+        legs={[leg("leg-kristy", 1, null, "Kristy")]}
+        managerAccess={[{
+          legId: "leg-kristy",
+          legName: "Kristy",
+          archivedAt: null,
+          enabled: true,
+          sessionVersion: 3,
+        }]}
+        onSaveLeg={vi.fn()}
+        onSaveOrder={vi.fn()}
+        onSetManagerPassword={vi.fn(async () => undefined)}
+        onSignOutManagerDevices={vi.fn(async () => undefined)}
+      />,
+    );
+
+    expect(screen.getByLabelText("Manager / Leg name")).toHaveValue("Kristy");
+    expect(screen.getByLabelText("New password")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign Out All Devices" })).toBeInTheDocument();
+  });
+
+  it("saves a manager/leg rename without requiring a portal password", async () => {
+    const onSaveLeg = vi.fn(async (_id, input) => ({
+      ok: true as const,
+      leg: {
+        ...leg("leg-kristy", 1, null, "Kris"),
+        name: input.name,
+      },
+    }));
+    const onSetManagerPassword = vi.fn(async () => undefined);
+
+    render(
+      <TravelLegEditor
+        legs={[leg("leg-kristy", 1, null, "Kristy")]}
+        managerAccess={[{
+          legId: "leg-kristy",
+          legName: "Kristy",
+          archivedAt: null,
+          enabled: true,
+          sessionVersion: 3,
+        }]}
+        onSaveLeg={onSaveLeg}
+        onSaveOrder={vi.fn()}
+        onSetManagerPassword={onSetManagerPassword}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Manager / Leg name"), {
+      target: { value: "Kris" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save leg" }));
+
+    await waitFor(() => expect(onSaveLeg).toHaveBeenCalledWith(
+      "leg-kristy",
+      expect.objectContaining({ name: "Kris" }),
+    ));
+    expect(onSetManagerPassword).not.toHaveBeenCalled();
+  });
+
+  it("keeps portal passwords write-only", async () => {
+    const onSetManagerPassword = vi.fn(async () => undefined);
+    render(
+      <TravelLegEditor
+        legs={[leg("leg-kristy", 1, null, "Kristy")]}
+        managerAccess={[{
+          legId: "leg-kristy",
+          legName: "Kristy",
+          archivedAt: null,
+          enabled: true,
+          sessionVersion: 3,
+        }]}
+        onSaveLeg={vi.fn()}
+        onSaveOrder={vi.fn()}
+        onSetManagerPassword={onSetManagerPassword}
+      />,
+    );
+
+    const password = screen.getByLabelText("New password") as HTMLInputElement;
+    fireEvent.change(password, { target: { value: "new-secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() => expect(onSetManagerPassword).toHaveBeenCalledWith("leg-kristy", "new-secret"));
+    expect(password.value).toBe("");
+  });
+
+  it("requires confirmation before signing out all devices", async () => {
+    const onSignOutManagerDevices = vi.fn(async () => undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(
+      <TravelLegEditor
+        legs={[leg("leg-kristy", 1, null, "Kristy")]}
+        managerAccess={[{
+          legId: "leg-kristy",
+          legName: "Kristy",
+          archivedAt: null,
+          enabled: true,
+          sessionVersion: 3,
+        }]}
+        onSaveLeg={vi.fn()}
+        onSaveOrder={vi.fn()}
+        onSignOutManagerDevices={onSignOutManagerDevices}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign Out All Devices" }));
+    expect(onSignOutManagerDevices).not.toHaveBeenCalled();
   });
 });
