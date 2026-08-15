@@ -28,7 +28,37 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run post-event API tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/follow-ups/today-upcoming-post-event.test.ts src/features/follow-ups/today-query.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/follow-ups/today-upcoming-post-event.test.ts src/features/follow-ups/today-query.test.ts src/features/follow-ups/renewal-query.test.ts
 
       - name: Run Today UI tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/TodayPage.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/TodayPage.test.tsx src/components/today/renewals-section.test.tsx
+
+      - name: Typecheck follow-up API slice
+        working-directory: artifacts/api-server
+        run: |
+          cat > tsconfig.post-event.json <<'EOF'
+          {
+            "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "incremental": false,
+              "noEmit": true
+            },
+            "include": [
+              "src/features/follow-ups/renewal-query.ts",
+              "src/features/follow-ups/renewal-query.test.ts",
+              "src/features/follow-ups/today-query.ts",
+              "src/features/follow-ups/today-query.test.ts",
+              "src/features/follow-ups/today-upcoming-post-event.test.ts"
+            ]
+          }
+          EOF
+          pnpm exec tsc -p tsconfig.post-event.json --noEmit
+
+      - name: Typecheck web app
+        run: pnpm --filter @workspace/adventure-zone typecheck
+
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Build web app
+        run: pnpm --filter @workspace/adventure-zone build
