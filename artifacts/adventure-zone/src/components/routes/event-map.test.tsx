@@ -150,7 +150,7 @@ describe("EventMap unresolved locations", () => {
     ));
     await waitFor(() => {
       expect(screen.queryByText(/Map lookup is temporarily unavailable/)).not.toBeInTheDocument();
-      expect(screen.getByText("1 mapped event · 0 needing map location · 0 equipment meetup markers")).toBeInTheDocument();
+      expect(screen.getByText("1 primary event · 1 mapped · 0 needing map location · 0 equipment meetup markers")).toBeInTheDocument();
     });
   });
 });
