@@ -1,0 +1,16 @@
+name: Verify Leg Manager Money Task 4
+on:
+  push:
+    branches: [feature/leg-manager-money]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/expense-form.test.tsx src/pages/ManagerMoneyPage.test.tsx
+      - run: pnpm --filter @workspace/adventure-zone typecheck
