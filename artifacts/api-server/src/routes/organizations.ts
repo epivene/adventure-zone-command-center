@@ -9,6 +9,7 @@ import {
   organizationListQuerySchema,
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
+import { setOrganizationLastResort } from "@/features/organizations/last-resort-service";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
@@ -183,7 +184,7 @@ router.post("/organizations/last-resort", async (req, res): Promise<void> => {
     return;
   }
   try {
-    await orgRepo().setLastResort(parsed.data, new Date());
+    await setOrganizationLastResort(db, parsed.data, new Date());
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to update last resort");
