@@ -7,6 +7,7 @@ on:
       - feature/manager-leg-map-reliability
       - feature/map-login-password-fixes
       - fix/map-layer-style-ready
+      - fix/map-styledata-overlay
   pull_request:
     paths:
       - "artifacts/adventure-zone/**"
