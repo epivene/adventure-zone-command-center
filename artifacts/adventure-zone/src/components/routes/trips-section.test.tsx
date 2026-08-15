@@ -4,8 +4,8 @@ import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { describe, expect, it, vi } from "vitest";
 
-const get = vi.fn();
-vi.mock("@/lib/auth-token", () => ({ apiGet: get }));
+const mocks = vi.hoisted(() => ({ get: vi.fn() }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.get }));
 vi.mock("@/actions/trips", () => ({ createTripAction: vi.fn() }));
 
 import { TripsSection } from "./trips-section";
@@ -23,7 +23,7 @@ const leg = {
 
 describe("TripsSection map focus", () => {
   it("exposes Focus route separately from the trip detail link", async () => {
-    get.mockResolvedValue({ trips: [{
+    mocks.get.mockResolvedValue({ trips: [{
       id: "trip-1",
       name: "August run",
       travelLegId: "leg-kristy",
