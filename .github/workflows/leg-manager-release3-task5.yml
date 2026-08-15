@@ -1,0 +1,71 @@
+name: Leg Manager Release 3 Task 5
+on:
+  push:
+    branches: [feature/leg-manager-crew-aftermath]
+jobs:
+  task5:
+    if: "!contains(github.event.head_commit.message, '[skip release3-task5]')"
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Wire review APIs
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/leg-manager.ts');s=p.read_text()
+          if 'DrizzleEventReviewRepository' not in s:
+              s=s.replace('import { crewRehireStatuses } from "@/features/leg-manager/crew-types";', 'import { crewRehireStatuses } from "@/features/leg-manager/crew-types";\nimport { createReviewForManager, DrizzleEventReviewRepository, listDueReviewsForManager } from "@/features/leg-manager/event-review-repository";')
+              s=s.replace('const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);const crew=new DrizzleCrewRepository(db);', 'const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);const crew=new DrizzleCrewRepository(db);const reviews=new DrizzleEventReviewRepository(db);')
+          marker='\nconst issueSchema='
+          block='''\nconst eventReviewSchema=z.object({bookingId:z.string().uuid(),rating:z.number().int().min(0).max(5),feedback:z.string().trim().max(8000).nullable().optional(),organizerSiteNotes:z.string().trim().max(8000).nullable().optional(),crewNotes:z.string().trim().max(8000).nullable().optional(),recommendReturn:z.enum(["yes","no","unsure"]).nullable().optional(),clientMutationId:z.string().uuid()});\nrouter.get("/manager/reviews/due",requireManager,async(req,res)=>{res.json({reviewsDue:await listDueReviewsForManager(reviews,req.legManager!.legId,new Date())});});\nrouter.post("/manager/reviews",requireManager,async(req,res):Promise<void>=>{const parsed=eventReviewSchema.safeParse(req.body);if(!parsed.success){res.status(400).json({error:parsed.error.issues[0]?.message??"Invalid event review"});return;}const result=await createReviewForManager(reviews,req.legManager!.legId,{...parsed.data,feedback:parsed.data.feedback??null,organizerSiteNotes:parsed.data.organizerSiteNotes??null,crewNotes:parsed.data.crewNotes??null,recommendReturn:parsed.data.recommendReturn??null});if(!result.ok){res.status(403).json({error:"Booking is outside your leg"});return;}res.status(result.idempotent?200:201).json({review:result.review});});\n'''
+          if '/manager/reviews/due' not in s:s=s.replace(marker,block+marker)
+          p.write_text(s)
+          PY
+      - name: Add review UI and home task count
+        run: |
+          cat > artifacts/adventure-zone/src/pages/ManagerEventReviewPage.tsx <<'EOF'
+          import { useEffect,useState } from "react";import { useManagerAuth } from "@/lib/manager-auth-context";import { queueManagerMutation,flushManagerMutationQueue } from "@/lib/manager-sync-queue";import { ManagerSyncStatus } from "@/components/manager/manager-sync-status";
+          export default function ManagerEventReviewPage(){const{manager,managerApi}=useManagerAuth();const[due,setDue]=useState<any[]>([]);const[selected,setSelected]=useState("");const[rating,setRating]=useState("5");const[feedback,setFeedback]=useState("");const[site,setSite]=useState("");const[crew,setCrew]=useState("");const[recommend,setRecommend]=useState("unsure");const[state,setState]=useState<any>(null);useEffect(()=>{managerApi<any>("/manager/reviews/due").then(d=>{setDue(d.reviewsDue??[]);setSelected(d.reviewsDue?.[0]?.id??"")})},[managerApi]);async function submit(e:React.FormEvent){e.preventDefault();if(!manager||!selected)return;const id=crypto.randomUUID();const body={bookingId:selected,rating:Number(rating),feedback:feedback.trim()||null,organizerSiteNotes:site.trim()||null,crewNotes:crew.trim()||null,recommendReturn:recommend,clientMutationId:id};await queueManagerMutation({id,legId:manager.legId,path:"/manager/reviews",method:"POST",body,createdAt:new Date().toISOString()});setState("saved_offline");if(navigator.onLine){setState("syncing");const rows=await flushManagerMutationQueue(managerApi);setState(rows.find(r=>r.id===id)?.state??"synced")}}return <div className="grid gap-4"><h1 className="text-2xl font-bold">Event reviews</h1>{due.length?<form onSubmit={submit} className="grid gap-3 rounded-xl border bg-white p-4"><label className="grid gap-1 font-semibold">Event<select value={selected} onChange={e=>setSelected(e.target.value)}>{due.map(event=><option key={event.id} value={event.id}>{event.name}</option>)}</select></label><label className="grid gap-1 font-semibold">Event rating<select aria-label="Event rating" value={rating} onChange={e=>setRating(e.target.value)}>{[0,1,2,3,4,5].map(v=><option key={v} value={v}>{v} stars</option>)}</select></label><label className="grid gap-1 font-semibold">Feedback<textarea aria-label="Feedback" value={feedback} onChange={e=>setFeedback(e.target.value)}/></label><label className="grid gap-1 font-semibold">Organizer / site notes<textarea value={site} onChange={e=>setSite(e.target.value)}/></label><label className="grid gap-1 font-semibold">Crew notes<textarea value={crew} onChange={e=>setCrew(e.target.value)}/></label><label className="grid gap-1 font-semibold">Recommend return<select aria-label="Recommend return" value={recommend} onChange={e=>setRecommend(e.target.value)}><option value="yes">Yes</option><option value="no">No</option><option value="unsure">Unsure</option></select></label><button className="button-primary">Save review</button>{state?<ManagerSyncStatus state={state}/>:null}</form>:<p>No event reviews are due.</p>}</div>}
+          EOF
+          cat > artifacts/adventure-zone/src/pages/ManagerHomePage.tsx <<'EOF'
+          import { useEffect,useState } from "react";import { Link } from "wouter";import { useManagerAuth } from "@/lib/manager-auth-context";
+          export default function ManagerHomePage(){const{manager,managerApi}=useManagerAuth();const[count,setCount]=useState(0);useEffect(()=>{managerApi<any>("/manager/reviews/due").then(d=>setCount(d.reviewsDue?.length??0)).catch(()=>setCount(0))},[managerApi]);return <div className="grid gap-4"><div><p className="text-sm text-slate-600">Signed in for</p><h1 className="text-2xl font-bold">{manager?.legName}</h1></div>{count>0?<section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">{count} {count===1?"event still needs":"events still need"} reviews</h2><Link href="/manager/reviews" className="button-primary mt-3 inline-flex">Complete reviews</Link></section>:null}<section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Schedule & route</h2><p className="mt-1 text-sm text-slate-600">Official schedule information is view-only here.</p><Link href="/manager/route" className="button-primary mt-4 inline-flex">View events & route</Link></section></div>}
+          EOF
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/adventure-zone/src/App.tsx');s=p.read_text()
+          if 'ManagerEventReviewPage' not in s:s=s.replace('import ManagerWorkerPage from "@/pages/ManagerWorkerPage";', 'import ManagerWorkerPage from "@/pages/ManagerWorkerPage";\nimport ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";')
+          if '/manager/reviews' not in s:s=s.replace('<Route path="/manager/crew/:workerId">', '<Route path="/manager/reviews"><ManagerEventReviewPage /></Route>\n        <Route path="/manager/crew/:workerId">')
+          p.write_text(s)
+          PY
+      - name: Add review history to event profile API
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/api-server/src/routes/event-profiles.ts');s=p.read_text()
+          if 'eventManagerReviews' not in s:s=s.replace('  organizations,\n} from "@/db/schema";', '  organizations,\n  eventManagerReviews,\n} from "@/db/schema";')
+          old='res.json({ ...profile, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });'
+          new='''const bookingIds=profile.bookings.map((booking)=>booking.id);\n    const reviewRows=bookingIds.length?await db.select().from(eventManagerReviews):[];\n    const relevantReviews=reviewRows.filter((review)=>bookingIds.includes(review.bookingId));\n    const averageRating=relevantReviews.length?relevantReviews.reduce((sum,review)=>sum+review.rating,0)/relevantReviews.length:null;\n    res.json({ ...profile, managerReviews: relevantReviews, managerReviewAverage: averageRating, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });'''
+          if 'managerReviewAverage' not in s:s=s.replace(old,new)
+          p.write_text(s)
+          PY
+      - name: Verify Task 5
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/event-review-repository.test.ts src/features/leg-manager/event-review-service.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerEventReviewPage.test.tsx
+          pnpm --filter @workspace/adventure-zone typecheck
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/api-server build
+      - name: Commit Task 5
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/leg-manager/event-review-repository.ts artifacts/api-server/src/features/leg-manager/event-review-repository.test.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/api-server/src/routes/event-profiles.ts artifacts/adventure-zone/src/pages/ManagerEventReviewPage.tsx artifacts/adventure-zone/src/pages/ManagerEventReviewPage.test.tsx artifacts/adventure-zone/src/pages/ManagerHomePage.tsx artifacts/adventure-zone/src/App.tsx
+          git commit -m 'feat: add event aftermath review workflow [skip release3-task1] [skip release3-task2] [skip release3-task3] [skip release3-task4] [skip release3-task5]'
+          git push
