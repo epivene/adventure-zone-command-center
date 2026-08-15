@@ -27,6 +27,14 @@ export type LegResourceSummary = {
   category: string;
 };
 
+export type LegManagerAccessStatus = {
+  legId: string;
+  legName: string;
+  archivedAt: string | Date | null;
+  enabled: boolean;
+  sessionVersion: number | null;
+};
+
 type LegFormValues = {
   id: string;
   name: string;
@@ -70,14 +78,18 @@ function sameDetails(left: ReturnType<typeof details>, right: ReturnType<typeof 
 export function TravelLegEditor({
   legs,
   legResources = [],
+  managerAccess = [],
   onSaveLeg,
   onSaveOrder,
   onAdd,
   onArchive,
   onRestore,
+  onSetManagerPassword,
+  onSignOutManagerDevices,
 }: {
   legs: TravelLeg[];
   legResources?: LegResourceSummary[];
+  managerAccess?: LegManagerAccessStatus[];
   onSaveLeg: (
     id: string,
     input: TravelLegDetails,
@@ -90,6 +102,8 @@ export function TravelLegEditor({
   onDelete?: (id: string) => Promise<void>;
   onArchive?: (id: string) => Promise<void>;
   onRestore?: (id: string) => Promise<void>;
+  onSetManagerPassword?: (legId: string, password: string) => Promise<void>;
+  onSignOutManagerDevices?: (legId: string) => Promise<void>;
 }) {
   const activeLegs = legs.filter((leg) => !leg.archivedAt);
   const archivedLegs = legs.filter((leg) => leg.archivedAt);
@@ -103,9 +117,12 @@ export function TravelLegEditor({
     })),
   );
   const [savedOrder, setSavedOrder] = useState(() => activeLegs.map((leg) => leg.id));
+  const [passwords, setPasswords] = useState<Record<string, string>>({});
   const [showArchived, setShowArchived] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [savingLegId, setSavingLegId] = useState<string | null>(null);
+  const [savingAccessId, setSavingAccessId] = useState<string | null>(null);
   const [savedLegIds, setSavedLegIds] = useState<Set<string>>(() => new Set());
   const [isSavingOrder, setIsSavingOrder] = useState(false);
   const [orderSaved, setOrderSaved] = useState(false);
@@ -153,6 +170,7 @@ export function TravelLegEditor({
       return;
     }
     setError("");
+    setMessage("");
     setSavingLegId(id);
     try {
       const result = await onSaveLeg(id, parsed.data);
@@ -168,10 +186,45 @@ export function TravelLegEditor({
         ),
       );
       setSavedLegIds((current) => new Set(current).add(id));
+      setMessage(`${saved.name} saved.`);
     } catch {
       setError("Travel leg could not be saved. Try again.");
     } finally {
       setSavingLegId(null);
+    }
+  }
+
+  async function handleSavePassword(legId: string, enabled: boolean) {
+    if (!onSetManagerPassword) return;
+    const password = passwords[legId] ?? "";
+    if (!password) return;
+    setError("");
+    setMessage("");
+    setSavingAccessId(legId);
+    try {
+      await onSetManagerPassword(legId, password);
+      setPasswords((current) => ({ ...current, [legId]: "" }));
+      setMessage(enabled ? "Manager portal password changed." : "Manager portal enabled.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not update manager portal access.");
+    } finally {
+      setSavingAccessId(null);
+    }
+  }
+
+  async function handleSignOutDevices(legId: string, legName: string) {
+    if (!onSignOutManagerDevices) return;
+    if (!window.confirm(`Sign out all manager devices for ${legName}?`)) return;
+    setError("");
+    setMessage("");
+    setSavingAccessId(legId);
+    try {
+      await onSignOutManagerDevices(legId);
+      setMessage(`${legName} manager devices signed out.`);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not sign out manager devices.");
+    } finally {
+      setSavingAccessId(null);
     }
   }
 
@@ -242,10 +295,9 @@ export function TravelLegEditor({
   return (
     <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div>
-        <h2 className="text-xl font-bold">Configure travel legs</h2>
+        <h2 className="text-xl font-bold">Managers & travel legs</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Active legs are used for current planning. Archive a historical leg instead of deleting it;
-          archived legs remain attached to old bookings and can be restored later.
+          Each manager and travel leg share one name. Configure route defaults, assigned equipment, and manager portal access together.
         </p>
       </div>
 
@@ -254,11 +306,17 @@ export function TravelLegEditor({
           {error}
         </p>
       ) : null}
+      {message ? <p role="status" className="text-sm font-semibold text-emerald-700">{message}</p> : null}
 
       <div className="grid gap-3 lg:grid-cols-2">
         {values.map((leg, index) => {
           const dirty = isLegDirty(leg);
           const resources = legResources.filter((resource) => resource.legId === leg.id);
+          const access = managerAccess.find((row) => row.legId === leg.id);
+          const accessEnabled = Boolean(access?.enabled);
+          const password = passwords[leg.id] ?? "";
+          const accessBusy = savingAccessId === leg.id;
+
           return (
             <fieldset key={leg.id} aria-label={`Travel leg ${leg.sortOrder}`} className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
               <legend className="flex items-center gap-2 px-1 text-sm font-bold">
@@ -277,8 +335,8 @@ export function TravelLegEditor({
               </legend>
 
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
-                <label className="grid gap-1 text-sm font-semibold">Name
-                  <input aria-label={`Travel leg ${leg.sortOrder} name`} type="text" value={leg.name} onChange={(event) => changeLeg(leg.id, "name", event.currentTarget.value)} />
+                <label className="grid gap-1 text-sm font-semibold">Manager / Leg name
+                  <input aria-label="Manager / Leg name" type="text" value={leg.name} onChange={(event) => changeLeg(leg.id, "name", event.currentTarget.value)} />
                 </label>
                 <label className="grid gap-1 text-sm font-semibold">Color
                   <input aria-label={`Travel leg ${leg.sortOrder} color`} className="h-11 w-full" type="color" value={leg.color} onChange={(event) => changeLeg(leg.id, "color", event.currentTarget.value)} />
@@ -286,7 +344,7 @@ export function TravelLegEditor({
               </div>
 
               <label className="grid gap-1 text-sm font-semibold">Base address
-                <input aria-label={`Travel leg ${leg.sortOrder} base address`} type="text" value={leg.baseAddress} onChange={(event) => changeLeg(leg.id, "baseAddress", event.currentTarget.value)} placeholder="Where this leg is based" />
+                <input aria-label={`Travel leg ${leg.sortOrder} base address`} type="text" value={leg.baseAddress} onChange={(event) => changeLeg(leg.id, "baseAddress", event.currentTarget.value)} placeholder="Where this manager/leg is based" />
               </label>
 
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]">
@@ -304,6 +362,37 @@ export function TravelLegEditor({
                   <p className="mt-1 text-slate-700">{resources.map((resource) => resource.name).join(", ")}</p>
                 </div>
               ) : null}
+
+              <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold">Manager portal</p>
+                    <p className="text-xs text-slate-500">{accessEnabled ? "Portal enabled" : "Portal not configured"}</p>
+                  </div>
+                  {accessEnabled && onSignOutManagerDevices ? (
+                    <button type="button" className="button-secondary" disabled={accessBusy} onClick={() => handleSignOutDevices(leg.id, leg.name)}>
+                      Sign Out All Devices
+                    </button>
+                  ) : null}
+                </div>
+                {onSetManagerPassword ? (
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    <label className="grid gap-1 text-sm font-semibold">{accessEnabled ? "New password" : "Password"}
+                      <input
+                        aria-label={accessEnabled ? "New password" : "Password"}
+                        autoComplete="new-password"
+                        type="password"
+                        value={password}
+                        placeholder={accessEnabled ? "Leave blank to keep current" : "Set password"}
+                        onChange={(event) => setPasswords((current) => ({ ...current, [leg.id]: event.currentTarget.value }))}
+                      />
+                    </label>
+                    <button type="button" className="button-primary" disabled={!password || accessBusy} onClick={() => handleSavePassword(leg.id, accessEnabled)}>
+                      {accessBusy ? "Saving…" : accessEnabled ? "Change password" : "Enable portal"}
+                    </button>
+                  </div>
+                ) : null}
+              </div>
 
               <div className="flex items-center justify-end gap-3 border-t border-slate-100 pt-3">
                 {savedLegIds.has(leg.id) && !dirty ? <span role="status" className="text-sm font-semibold text-emerald-700">Saved</span> : null}
@@ -335,7 +424,7 @@ export function TravelLegEditor({
 
       {showArchived && archivedLegs.length > 0 ? (
         <section aria-label="Archived travel legs" className="grid gap-2">
-          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Archived legs</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wide text-slate-500">Archived managers / legs</h3>
           <div className="grid gap-2 lg:grid-cols-2">
             {archivedLegs.map((leg) => (
               <div key={leg.id} className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
@@ -352,7 +441,7 @@ export function TravelLegEditor({
                 <p className="text-slate-600">
                   {[leg.baseAddress, leg.defaultVehicleName, leg.defaultMpg != null ? `${leg.defaultMpg} MPG` : null].filter(Boolean).join(" · ") || "No trip defaults set"}
                 </p>
-                <p className="text-xs text-slate-500">Restore this leg to edit it. Historical bookings stay attached while it is archived.</p>
+                <p className="text-xs text-slate-500">Restore this manager/leg to edit it or use manager portal access. Historical bookings stay attached while archived.</p>
               </div>
             ))}
           </div>
