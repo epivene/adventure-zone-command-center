@@ -7,7 +7,7 @@
 Make Routes match how Adventure Zone actually operates:
 
 1. A travel leg and its manager are the same operational unit, so one name should control both.
-2. A booking with a leg and a usable city/state, such as `Miles City, MT`, must not silently disappear from the route map when coordinates are missing or geocoding fails.
+2. A leg-assigned booking, such as an event in `Miles City, MT`, must not silently disappear from the Routes experience when coordinates are missing or geocoding fails.
 
 This change should simplify setup without creating a second source of truth for managers or locations.
 
@@ -43,7 +43,7 @@ Each travel leg has one canonical `name` field. That same value is used as:
 
 There is no separately editable manager-name field in the Routes setup UI.
 
-Existing manager access records may continue to store a legacy `managerName` column for compatibility, but the application should derive/synchronize it from the travel-leg name. A leg rename must update the manager-facing name automatically so the two cannot drift apart.
+Existing manager access records may continue to store a legacy `managerName` column for compatibility, but the application must derive/synchronize it from the travel-leg name. A leg rename updates the manager-facing name automatically so the two cannot drift apart.
 
 ## 2. Unified Manager/Leg Card
 
@@ -76,42 +76,41 @@ The travel-leg configuration remains the master record for name/color/base/vehic
 
 Portal password changes remain a separate security mutation because passwords are write-only and should not be mixed into normal leg-detail persistence.
 
-The UI can present these in one card while performing the correct underlying mutations independently.
+The UI presents these settings in one card while performing the correct underlying mutations independently.
 
-A leg rename should not require the user to re-enter the portal password.
+A leg rename does not require the user to re-enter the portal password and does not reset that password.
 
 ## 3. Route Map Location Resolution
 
-A booking participates in route mapping when it has:
+A booking can be plotted when it has a travel leg assignment and at least one usable location source.
 
-- A travel leg assignment; and
-- At least one usable location source.
-
-Location priority remains:
+Location priority is:
 
 1. Valid saved latitude/longitude.
 2. Full booking/venue address.
 3. City + state/region.
 4. City alone if state is unavailable.
 
-Example: a Kristy booking with `Miles City` + `MT` and no coordinates should attempt to resolve `Miles City, MT` automatically.
+Example: a Kristy booking with `Miles City` + `MT` and no coordinates must attempt to resolve `Miles City, MT` automatically.
 
 ## 4. Never Silently Lose a Booking
 
-Every leg-assigned booking that has location text must appear in the Routes experience even if it cannot currently be plotted.
+Every leg-assigned booking included by the current route view must remain represented in the Routes experience, even if it cannot currently be plotted.
 
 Map-capable events appear as normal markers.
 
-Unresolved events appear in a visible `Location needs mapping` list directly associated with the map. Each row shows:
+Unresolved events appear in a visible `Location needs mapping` list directly associated with the map. This includes bookings where location text is missing entirely.
+
+Each row shows:
 
 - Booking name.
 - Manager/leg name.
-- Location text that was attempted.
+- Location text that was attempted, or `No location saved`.
 - Reason category: no result, geocoder unavailable, or missing usable location.
 - `Retry location` action when retry is meaningful.
 - Link to the booking so the address/city can be corrected.
 
-The user should never have to infer that an event is missing because a third-party geocoder failed.
+The user should never have to infer that an event is missing because a third-party geocoder failed or location data is incomplete.
 
 ## 5. Retry and Cache Behavior
 
@@ -121,26 +120,24 @@ Provider outages must not be cached as permanent failures.
 
 A `no results` outcome may be cached temporarily, but the explicit Retry action must bypass or invalidate that failed cache entry so a corrected booking or improved query can be tried immediately.
 
-If a booking location changes, its previous location resolution must be treated as stale and recalculated.
+If a booking location changes, its previous location resolution is stale and must be recalculated.
 
 ## 6. Map View Behavior
 
 The existing Full / Confirmed / Potential / History and leg-focus behavior remains unchanged.
 
-Unresolved bookings should respect the same route-view and leg-focus rules as mapped bookings:
+Unresolved bookings obey the same route-view and leg-focus rules as mapped bookings:
 
 - If the selected view hides the booking category, it is not shown in the unresolved list.
 - If another leg is merely dimmed, its unresolved booking remains visible but visually subdued.
 
-This keeps the map and the fallback list describing the same planning dataset.
+This keeps the map and fallback list describing the same planning dataset.
 
 ## 7. Error Handling
 
-The `/routes` endpoint should not fail the whole Routes page just because one location cannot be geocoded.
+The `/routes` endpoint must not fail the whole Routes page because one location cannot be geocoded.
 
-Each event returns its own mapping state.
-
-Suggested mapping states:
+Each event returns one required mapping state:
 
 - `mapped_coordinates`
 - `mapped_address`
@@ -149,7 +146,7 @@ Suggested mapping states:
 - `needs_mapping_provider_unavailable`
 - `needs_mapping_missing_location`
 
-The frontend may display simpler user-facing labels while retaining specific states for diagnostics and retry behavior.
+The frontend may display simpler user-facing labels while retaining these specific states for diagnostics and retry behavior.
 
 ## 8. Data Flow
 
@@ -163,12 +160,13 @@ The frontend may display simpler user-facing labels while retaining specific sta
 ### Location
 
 1. Routes loads bookings from the booking table.
-2. Saved coordinates are accepted immediately when valid.
-3. Otherwise the backend builds the best available location query.
-4. Geocoder attempts resolution.
-5. Success returns coordinates plus quality.
-6. Failure returns the booking with an explicit unresolved mapping state rather than removing it from the planning experience.
-7. Retry requests a fresh lookup.
+2. Route-view rules determine which bookings currently participate.
+3. Saved coordinates are accepted immediately when valid.
+4. Otherwise the backend builds the best available location query.
+5. Geocoder attempts resolution when there is usable location text.
+6. Success returns coordinates plus mapping state.
+7. Failure or missing location returns the booking with an explicit unresolved mapping state rather than removing it from the planning experience.
+8. Retry requests a fresh lookup.
 
 ## 9. Compatibility
 
@@ -200,6 +198,7 @@ At minimum, automated tests cover:
 - City-only location can still be attempted.
 - No geocoder result returns an explicit unresolved event instead of silently dropping it.
 - Provider outage returns an explicit retryable unresolved state and is not cached permanently.
+- Missing location returns an explicit unresolved event with a booking-edit path.
 - Retry bypasses a failed lookup cache.
 - Editing location causes a fresh lookup.
 - A failed lookup for one booking does not fail the whole `/routes` request.
@@ -214,4 +213,5 @@ The change is complete when:
 - Existing portal passwords and session security continue working.
 - A leg-assigned booking with `Miles City, MT` can be plotted without manually entering coordinates when the geocoder succeeds.
 - If that lookup fails, the booking remains visibly represented as `Location needs mapping` with a retry/correction path.
+- A leg-assigned booking with no usable location is also visibly flagged rather than silently omitted.
 - No unrelated Leg Manager finance, receipt, trip, handoff, or booking functionality is removed.
