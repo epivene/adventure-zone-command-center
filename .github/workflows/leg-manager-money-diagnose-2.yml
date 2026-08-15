@@ -1,0 +1,51 @@
+name: Compare Leg Manager Money Typecheck
+on:
+  push:
+    branches: [feature/leg-manager-money]
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Feature typecheck after DB build
+        run: |
+          pnpm --filter @workspace/db build
+          set +e
+          pnpm --filter @workspace/api-server typecheck > /tmp/feature.log 2>&1
+          code=$?
+          set -e
+          echo "FEATURE_EXIT=$code"
+          grep '^src/.*error TS' /tmp/feature.log | sort > /tmp/feature-errors.txt || true
+          cat /tmp/feature-errors.txt
+          echo '--- RELEASE 2 ERRORS ---'
+          grep -E '^src/(features/leg-manager|routes/leg-manager).*error TS' /tmp/feature.log || true
+      - name: Main baseline typecheck after DB build
+        run: |
+          git worktree add /tmp/main origin/main
+          cd /tmp/main
+          pnpm install --frozen-lockfile
+          pnpm --filter @workspace/db build
+          set +e
+          pnpm --filter @workspace/api-server typecheck > /tmp/main.log 2>&1
+          code=$?
+          set -e
+          echo "MAIN_EXIT=$code"
+          grep '^src/.*error TS' /tmp/main.log | sort > /tmp/main-errors.txt || true
+          cat /tmp/main-errors.txt
+      - name: Show feature-only compiler errors
+        run: |
+          echo '--- FEATURE ONLY ERRORS ---'
+          comm -23 /tmp/feature-errors.txt /tmp/main-errors.txt || true
