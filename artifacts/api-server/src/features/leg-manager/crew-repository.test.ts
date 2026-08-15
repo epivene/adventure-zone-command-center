@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  deleteWorkHistoryAsManager,
   listWorkersForManager,
   updateWorkHistoryAsManager,
   type CrewRepositoryStore,
@@ -44,23 +45,21 @@ function fakeStore(): CrewRepositoryStore {
   ];
 
   return {
-    async listWorkers() {
-      return workers;
-    },
-    async listWorkHistory() {
-      return history;
-    },
-    async listManagerNotes() {
-      return notes;
-    },
-    async getWorkHistory(id) {
-      return history.find((entry) => entry.id === id) ?? null;
-    },
+    async listWorkers() { return workers; },
+    async listWorkHistory() { return history; },
+    async listManagerNotes() { return notes; },
+    async getWorkHistory(id) { return history.find((entry) => entry.id === id) ?? null; },
     async updateWorkHistory(id, patch) {
       const row = history.find((entry) => entry.id === id);
       if (!row) return null;
       Object.assign(row, patch);
       return row;
+    },
+    async deleteWorkHistory(id) {
+      const index = history.findIndex((entry) => entry.id === id);
+      if (index < 0) return false;
+      history.splice(index, 1);
+      return true;
     },
   };
 }
@@ -68,38 +67,32 @@ function fakeStore(): CrewRepositoryStore {
 describe("shared crew directory scope", () => {
   it("lets Leg B see a worker and history created by Leg A", async () => {
     const result = await listWorkersForManager(fakeStore(), "leg-b");
-    expect(result).toContainEqual(
-      expect.objectContaining({
-        id: "worker-a",
-        workHistory: expect.arrayContaining([
-          expect.objectContaining({ id: "history-a", legId: "leg-a" }),
-        ]),
-      }),
-    );
+    expect(result).toContainEqual(expect.objectContaining({
+      id: "worker-a",
+      workHistory: expect.arrayContaining([expect.objectContaining({ id: "history-a", legId: "leg-a" })]),
+      managerNotes: expect.arrayContaining([expect.objectContaining({ id: "note-a", note: "Would call again" })]),
+    }));
   });
 
   it("does not let Leg B modify Leg A work history", async () => {
-    const result = await updateWorkHistoryAsManager(
-      fakeStore(),
-      "leg-b",
-      "history-a",
-      { note: "Changed by wrong leg" },
-    );
+    const result = await updateWorkHistoryAsManager(fakeStore(), "leg-b", "history-a", { note: "Changed by wrong leg" });
     expect(result).toEqual({ ok: false, code: "FORBIDDEN" });
   });
 
   it("lets the originating leg modify its own history", async () => {
-    const result = await updateWorkHistoryAsManager(
-      fakeStore(),
-      "leg-a",
-      "history-a",
-      { note: "Updated by owning leg" },
-    );
-    expect(result).toEqual(
-      expect.objectContaining({
-        ok: true,
-        entry: expect.objectContaining({ note: "Updated by owning leg" }),
-      }),
-    );
+    const result = await updateWorkHistoryAsManager(fakeStore(), "leg-a", "history-a", { note: "Updated by owning leg" });
+    expect(result).toEqual(expect.objectContaining({ ok: true, entry: expect.objectContaining({ note: "Updated by owning leg" }) }));
+  });
+
+  it("does not let another leg delete work history", async () => {
+    const result = await deleteWorkHistoryAsManager(fakeStore(), "leg-b", "history-a");
+    expect(result).toEqual({ ok: false, code: "FORBIDDEN" });
+  });
+
+  it("lets the originating leg delete its own work history", async () => {
+    const store = fakeStore();
+    const result = await deleteWorkHistoryAsManager(store, "leg-a", "history-a");
+    expect(result).toEqual({ ok: true });
+    expect(await store.getWorkHistory("history-a")).toBeNull();
   });
 });
