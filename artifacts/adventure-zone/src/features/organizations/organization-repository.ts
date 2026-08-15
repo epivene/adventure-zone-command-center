@@ -2,6 +2,11 @@ import { and, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
 import { organizationContacts } from "@/db/schema";
 
+export type ProfileParentContext =
+  | { kind: "event_family"; id: string; name: string }
+  | { kind: "organization_group"; id: string; name: string }
+  | null;
+
 export type OrganizationListRecord = {
   id: string;
   name: string;
@@ -15,6 +20,8 @@ export type OrganizationListRecord = {
   primaryContactName: string | null;
   locationCount: number;
   matchedLocation: { id: string; label: string; city: string | null; region: string | null } | null;
+  eventFamilyId?: string | null;
+  parentContext?: ProfileParentContext;
 };
 
 export type OrganizationListPage = {
@@ -36,6 +43,7 @@ export type OrganizationListQuery = {
   hasFollowUp: boolean;
   hasBooking: boolean;
   hasLocations: boolean;
+  showMembers: boolean;
   includeRetired?: boolean;
   page: number;
   pageSize: number;

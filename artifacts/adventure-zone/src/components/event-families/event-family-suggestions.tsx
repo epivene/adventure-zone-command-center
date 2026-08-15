@@ -2,12 +2,19 @@ import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/auth-token";
 import type { EventFamilySuggestion } from "@/features/event-families/event-family-types";
 
-export function EventFamilySuggestions({ onChanged }: { onChanged?: () => void }) {
+export function EventFamilySuggestions({
+  onChanged,
+  compact = false,
+}: {
+  onChanged?: () => void;
+  compact?: boolean;
+}) {
   const [suggestions, setSuggestions] = useState<EventFamilySuggestion[]>([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(!compact);
 
   async function load() {
     try {
@@ -53,6 +60,21 @@ export function EventFamilySuggestions({ onChanged }: { onChanged?: () => void }
     }
   }
 
+  if (compact && !open) {
+    return (
+      <div className="flex justify-end">
+        <button className="button-secondary text-sm" onClick={() => setOpen(true)} type="button">
+          Review family suggestions
+          {!loading && suggestions.length > 0 ? (
+            <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-800">
+              {suggestions.length}
+            </span>
+          ) : null}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -62,9 +84,14 @@ export function EventFamilySuggestions({ onChanged }: { onChanged?: () => void }
             Suggestions never merge or delete the original profiles. You approve every grouping.
           </p>
         </div>
-        <button className="button-secondary" disabled={analyzing || savingId !== null} onClick={analyze} type="button">
-          {analyzing ? "Analyzing…" : "Analyze event names"}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button className="button-secondary" disabled={analyzing || savingId !== null} onClick={analyze} type="button">
+            {analyzing ? "Analyzing…" : "Analyze event names"}
+          </button>
+          {compact ? (
+            <button className="button-secondary" onClick={() => setOpen(false)} type="button">Close</button>
+          ) : null}
+        </div>
       </div>
 
       {error ? (
