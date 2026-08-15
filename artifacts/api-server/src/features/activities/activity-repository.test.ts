@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { activities, activityRevisions, callSessions } from "@/db/schema";
+import {
+  activities,
+  activityRevisions,
+  bookingContacts,
+  bookings,
+  callSessions,
+  contacts,
+  organizationContacts,
+} from "@/db/schema";
 
 import { DrizzleActivityRepository } from "./activity-repository";
 
@@ -14,8 +22,9 @@ type TimelineRow = {
 };
 
 type CallSessionRow = {
+  id: string;
   noteActivityId: string;
-  disposition: "left_voicemail";
+  disposition: "left_voicemail" | "spoke_with_contact";
 };
 
 function orderedColumn(expression: unknown) {
@@ -136,10 +145,13 @@ function databaseWithLinkedCallSessions(
 
 function databaseWithEditableLinkedCall(
   initialActivity: TimelineRow["activity"],
-  linkedCallSession: CallSessionRow,
+  linkedCallSession: CallSessionRow | null,
 ) {
   const revisions: unknown[] = [];
+  const insertedTables: unknown[] = [];
+  const updatedTables: unknown[] = [];
   let activity = initialActivity;
+  let callSession = linkedCallSession;
   function select(selection?: Record<string, unknown>) {
     let selectedTable: unknown;
     let hasCallSessionNoteActivityJoin = false;
@@ -162,6 +174,11 @@ function databaseWithEditableLinkedCall(
       orderBy() { return this; },
       limit() { return this; },
       for() {
+        if (selectedTable === callSessions) {
+          return Promise.resolve(
+            callSession?.noteActivityId === activity.id ? [callSession] : [],
+          );
+        }
         return Promise.resolve([activity]);
       },
       then(resolve: (value: unknown[]) => unknown) {
@@ -175,8 +192,8 @@ function databaseWithEditableLinkedCall(
               revisionCount: revisions.length,
               callSessionDisposition:
                 hasCallSessionNoteActivityJoin &&
-                linkedCallSession.noteActivityId === activity.id
-                  ? linkedCallSession.disposition
+                callSession?.noteActivityId === activity.id
+                  ? callSession.disposition
                   : null,
             },
           ]).then(resolve);
@@ -191,6 +208,7 @@ function databaseWithEditableLinkedCall(
     insert(table: unknown) {
       return {
         values(value: unknown) {
+          insertedTables.push(table);
           if (table === activityRevisions) revisions.push(value);
           return Promise.resolve();
         },
@@ -199,11 +217,16 @@ function databaseWithEditableLinkedCall(
     update(table: unknown) {
       return {
         set(patch: Record<string, unknown>) {
+          updatedTables.push(table);
           return {
             where() {
               return {
                 returning() {
                   if (table === activities) activity = { ...activity, ...patch };
+                  if (table === callSessions && callSession) {
+                    callSession = { ...callSession, ...patch };
+                    return Promise.resolve([callSession]);
+                  }
                   return Promise.resolve([activity]);
                 },
               };
@@ -216,6 +239,13 @@ function databaseWithEditableLinkedCall(
   return {
     transaction(callback: (tx: typeof transaction) => unknown) {
       return callback(transaction);
+    },
+    state: {
+      get activity() { return activity; },
+      get callSession() { return callSession; },
+      get insertedTables() { return insertedTables; },
+      get revisions() { return revisions; },
+      get updatedTables() { return updatedTables; },
     },
   };
 }
@@ -288,7 +318,11 @@ describe("DrizzleActivityRepository timeline ordering", () => {
     const repository = new DrizzleActivityRepository(
       databaseWithLinkedCallSessions(
         [linkedCall, unlinkedCall],
-        [{ noteActivityId: "linked-call", disposition: "left_voicemail" }],
+        [{
+          id: "50000000-0000-4000-8000-000000000001",
+          noteActivityId: "linked-call",
+          disposition: "left_voicemail",
+        }],
       ) as never,
     );
 
@@ -319,7 +353,11 @@ describe("DrizzleActivityRepository timeline ordering", () => {
     const repository = new DrizzleActivityRepository(
       databaseWithEditableLinkedCall(
         linkedCall.activity,
-        { noteActivityId: "linked-call", disposition: "left_voicemail" },
+        {
+          id: "50000000-0000-4000-8000-000000000001",
+          noteActivityId: "linked-call",
+          disposition: "left_voicemail",
+        },
       ) as never,
     );
 
@@ -338,5 +376,73 @@ describe("DrizzleActivityRepository timeline ordering", () => {
       callOutcome: "left_voicemail",
       hasLinkedCallSession: true,
     });
+  });
+
+  it("atomically updates only the note body and linked call disposition", async () => {
+    const linkedCall = row(
+      "linked-call",
+      new Date("2026-08-13T16:00:00.000Z"),
+      new Date("2026-08-13T16:00:00.000Z"),
+    );
+    const database = databaseWithEditableLinkedCall(
+      linkedCall.activity,
+      {
+        id: "50000000-0000-4000-8000-000000000001",
+        noteActivityId: "linked-call",
+        disposition: "left_voicemail",
+      },
+    );
+    const repository = new DrizzleActivityRepository(database as never);
+
+    const result = await repository.edit({
+      activityId: "linked-call",
+      body: "Corrected note",
+      reason: "Corrected the saved call",
+      callOutcome: "spoke_with_contact",
+    });
+
+    expect(result).toEqual(expect.objectContaining({ ok: true }));
+    if (!result.ok) throw new Error("Expected edit to succeed.");
+    expect(result.value).toMatchObject({
+      id: "linked-call",
+      body: "Corrected note",
+      revisionCount: 1,
+      callOutcome: "spoke_with_contact",
+      hasLinkedCallSession: true,
+    });
+    expect(database.state.activity.body).toBe("Corrected note");
+    expect(database.state.callSession?.disposition).toBe("spoke_with_contact");
+    expect(database.state.revisions).toHaveLength(1);
+    expect(database.state.insertedTables).toEqual([activityRevisions]);
+    expect(database.state.updatedTables).toEqual([callSessions, activities]);
+    expect(database.state.updatedTables).not.toContain(bookings);
+    expect(database.state.updatedTables).not.toContain(bookingContacts);
+    expect(database.state.updatedTables).not.toContain(contacts);
+    expect(database.state.updatedTables).not.toContain(organizationContacts);
+  });
+
+  it("rejects call outcome edits for unlinked activities without changing the note", async () => {
+    const unlinkedActivity = row(
+      "unlinked-activity",
+      new Date("2026-08-13T16:00:00.000Z"),
+      new Date("2026-08-13T16:00:00.000Z"),
+    );
+    const database = databaseWithEditableLinkedCall(unlinkedActivity.activity, null);
+    const repository = new DrizzleActivityRepository(database as never);
+
+    const result = await repository.edit({
+      activityId: "unlinked-activity",
+      body: "Corrected note",
+      reason: "Corrected the saved call",
+      callOutcome: "spoke_with_contact",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "INVALID_ACTIVITY_INPUT" }),
+    });
+    expect(database.state.activity.body).toBe("unlinked-activity");
+    expect(database.state.revisions).toHaveLength(0);
+    expect(database.state.updatedTables).toEqual([]);
   });
 });
