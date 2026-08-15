@@ -29,7 +29,10 @@ if (Number.isNaN(port) || port <= 0) {
 
 const appliedMigrations = await runActReviewMigrations();
 logger.info(
-  { appliedMigrations },
+  {
+    appliedMigrations,
+    releaseCommit: process.env["RENDER_GIT_COMMIT"] ?? "local",
+  },
   appliedMigrations.length > 0
     ? "Database migrations applied"
     : "Database schema is current",
