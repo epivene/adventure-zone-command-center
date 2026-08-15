@@ -24,12 +24,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Calendar and handoff unit tests
-        run: |
-          pnpm exec vitest run \
-            artifacts/adventure-zone/src/features/calendar/month-spans.test.ts \
-            artifacts/api-server/src/features/routes/handoff-scoring.test.ts \
-            artifacts/api-server/src/features/trips/trip-service-handoff.test.ts
+      - name: Calendar unit tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts
+      - name: Handoff unit tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server
