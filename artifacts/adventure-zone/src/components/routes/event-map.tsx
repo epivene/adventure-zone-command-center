@@ -5,7 +5,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   GeoJSONSource,
   Map as MapLibreMap,
-  StyleSpecification,
 } from "maplibre-gl";
 
 import { apiPost } from "@/lib/auth-token";
@@ -27,24 +26,19 @@ import {
 } from "@/features/routes/route-view";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
+export const DEFAULT_MAP_STYLE_URL = "https://demotiles.maplibre.org/style.json";
+
+export function resolveMapStyle(configured?: string) {
+  const trimmed = configured?.trim();
+  return trimmed || DEFAULT_MAP_STYLE_URL;
+}
+
 const initialFilters: MapFilters = {
   statuses: [],
   travelLegIds: [],
   dateFrom: null,
   dateTo: null,
   regions: [],
-};
-
-const fallbackStyle: StyleSpecification = {
-  version: 8,
-  sources: {},
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: { "background-color": "#e2e8f0" },
-    },
-  ],
 };
 
 function formatLabel(value: string) {
@@ -107,20 +101,41 @@ type HandoffFeatureCollection = {
   }>;
 };
 
+export function visibleMapCoordinates(
+  geoJson: MapFeatureCollection,
+  handoffs: HandoffFeatureCollection,
+): [number, number][] {
+  return [
+    ...geoJson.features.map((feature) => feature.geometry.coordinates),
+    ...handoffs.features.map((feature) => feature.geometry.coordinates),
+  ];
+}
+
+export function viewportMode(coordinates: [number, number][]) {
+  if (coordinates.length === 0) return { kind: "none" as const };
+  if (coordinates.length === 1) {
+    return { kind: "center" as const, center: coordinates[0]!, zoom: 10 };
+  }
+  return { kind: "bounds" as const, coordinates };
+}
+
 function MapCanvas({
   geoJson,
   routeLines,
   handoffs,
+  onError,
 }: {
   geoJson: MapFeatureCollection;
   routeLines: RouteLineCollection;
   handoffs: HandoffFeatureCollection;
+  onError?: (message: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const eventDataRef = useRef(geoJson);
   const routeDataRef = useRef(routeLines);
   const handoffDataRef = useRef(handoffs);
+  const fitVisibleRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || !("WebGLRenderingContext" in window)) return;
@@ -133,10 +148,28 @@ function MapCanvas({
         container: containerRef.current,
         center: [-98.5, 39.5],
         zoom: 3,
-        style: process.env.NEXT_PUBLIC_MAP_STYLE_URL || fallbackStyle,
+        style: resolveMapStyle(import.meta.env.VITE_MAP_STYLE_URL),
       });
       mapRef.current = map;
       map.addControl(new maplibregl.NavigationControl(), "top-right");
+      map.on("error", () => {
+        onError?.("The map background could not be loaded.");
+      });
+
+      const fitVisibleData = () => {
+        const coordinates = visibleMapCoordinates(eventDataRef.current, handoffDataRef.current);
+        const viewport = viewportMode(coordinates);
+        if (viewport.kind === "none") return;
+        if (viewport.kind === "center") {
+          map.easeTo({ center: viewport.center, zoom: viewport.zoom, duration: 0 });
+          return;
+        }
+        const first = viewport.coordinates[0]!;
+        const bounds = new maplibregl.LngLatBounds(first, first);
+        for (const coordinate of viewport.coordinates.slice(1)) bounds.extend(coordinate);
+        map.fitBounds(bounds, { padding: 48, maxZoom: 10, duration: 0 });
+      };
+      fitVisibleRef.current = fitVisibleData;
 
       map.on("load", () => {
         if (cancelled) return;
@@ -207,20 +240,23 @@ function MapCanvas({
             "circle-stroke-width": 3,
           },
         });
+        fitVisibleData();
       });
     });
 
     return () => {
       cancelled = true;
+      fitVisibleRef.current = null;
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [onError]);
 
   useEffect(() => {
     eventDataRef.current = geoJson;
     const source = mapRef.current?.getSource("events") as GeoJSONSource | undefined;
     source?.setData(geoJson);
+    if (source) fitVisibleRef.current?.();
   }, [geoJson]);
 
   useEffect(() => {
@@ -233,6 +269,7 @@ function MapCanvas({
     handoffDataRef.current = handoffs;
     const source = mapRef.current?.getSource("handoffs") as GeoJSONSource | undefined;
     source?.setData(handoffs as any);
+    if (source) fitVisibleRef.current?.();
   }, [handoffs]);
 
   return (
@@ -337,6 +374,7 @@ export function EventMap({
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [eventOverrides, setEventOverrides] = useState<Record<string, MapEvent>>({});
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   const effectiveEvents = useMemo(
     () => events.map((event) => eventOverrides[event.id] ?? event),
@@ -553,6 +591,7 @@ export function EventMap({
       <MapFiltersPanel filters={filters} onChange={setFilters} onReset={() => setFilters(initialFilters)} regions={regions} />
 
       {retryError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{retryError}</p> : null}
+      {mapError ? <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{mapError}</p> : null}
 
       <p aria-live="polite" className="text-sm text-slate-600">
         {mappedEvents.length} mapped {mappedEvents.length === 1 ? "event" : "events"} · {unmappedEvents.length} needing map location · {handoffFeatures.features.length} equipment meetup {handoffFeatures.features.length === 1 ? "marker" : "markers"}
@@ -568,7 +607,7 @@ export function EventMap({
             <span className="inline-flex items-center gap-1.5 opacity-40"><span className="size-3 rounded-full bg-slate-500" />Context (dimmed)</span>
           </div>
         </div>
-        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} />
+        <MapCanvas geoJson={dataset.geoJson} routeLines={routeLines} handoffs={handoffFeatures} onError={setMapError} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
