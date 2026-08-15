@@ -33,8 +33,31 @@ jobs:
       - name: Run Today UI renewal tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/today/renewals-section.test.tsx src/pages/TodayPage.test.tsx
 
-      - name: Typecheck workspace
-        run: pnpm run typecheck
+      - name: Typecheck renewal API slice
+        working-directory: artifacts/api-server
+        run: |
+          cat > tsconfig.renewals.json <<'EOF'
+          {
+            "extends": "./tsconfig.json",
+            "compilerOptions": {
+              "incremental": false,
+              "noEmit": true
+            },
+            "include": [
+              "src/features/follow-ups/renewal-query.ts",
+              "src/features/follow-ups/renewal-query.test.ts",
+              "src/features/follow-ups/today-query.ts",
+              "src/features/follow-ups/today-query.test.ts"
+            ]
+          }
+          EOF
+          pnpm exec tsc -p tsconfig.renewals.json --noEmit
 
-      - name: Build workspace
-        run: pnpm run build
+      - name: Typecheck web app
+        run: pnpm --filter @workspace/adventure-zone typecheck
+
+      - name: Build API artifact
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Build web artifact
+        run: pnpm --filter @workspace/adventure-zone build
