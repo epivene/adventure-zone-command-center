@@ -125,7 +125,7 @@ export interface TodayDashboardRepository {
     startToday: Date,
     limit: number,
   ): Promise<TodayDashboardBookingRecord[]>;
-  listRenewals(now: Date): Promise<RenewalItem[]>;
+  listRenewals?(now: Date): Promise<RenewalItem[]>;
 }
 
 export type FollowUpPlanItem = {
@@ -570,13 +570,15 @@ export async function getTodayDashboard(
   const { start: startToday, end: endToday } = businessDayBounds(now);
   const followUpPage = Math.max(1, pages.followUps ?? 1);
   const planPage = Math.max(1, pages.needsFollowUpPlan ?? 1);
-  const renewalPromise = source
-    .listRenewals(now)
-    .then((items) => ({ items, error: null as string | null }))
-    .catch(() => ({
-      items: [] as RenewalItem[],
-      error: "Could not load next-season renewals.",
-    }));
+  const renewalPromise = source.listRenewals
+    ? source
+        .listRenewals(now)
+        .then((items) => ({ items, error: null as string | null }))
+        .catch(() => ({
+          items: [] as RenewalItem[],
+          error: "Could not load next-season renewals.",
+        }))
+    : Promise.resolve({ items: [] as RenewalItem[], error: null as string | null });
 
   const [
     counts,
