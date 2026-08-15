@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
-import * as schema from "./schema";
+import * as coreSchema from "./schema";
+import * as eventFamilySchema from "./event-family-schema";
 
 const { Pool } = pg;
 
@@ -21,6 +22,8 @@ const finalConnectionString =
     : connectionString;
 
 export const pool = new Pool({ connectionString: finalConnectionString });
+const schema = { ...coreSchema, ...eventFamilySchema };
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
+export * from "./event-family-schema";
