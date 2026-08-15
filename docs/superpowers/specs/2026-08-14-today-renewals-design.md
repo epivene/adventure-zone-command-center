@@ -13,7 +13,7 @@ Renewal work must not be mixed into **Needs Follow-up Plan** in a way that makes
 
 The Today dashboard currently has one **Needs Follow-up Plan** section for bookings that do not have a future incomplete follow-up. This is appropriate for active current-season leads, but it becomes confusing when a booking is finished for this year and the only remaining work is to contact the customer about next year.
 
-Bookings with status `completed` are already excluded from the active-status follow-up-plan query. However, bookings in `renewal_due`, past-dated bookings still carrying another active status, or other next-season follow-up cases can still surface in a way that looks like current-season work.
+Bookings with status `completed` are already excluded from the active-status follow-up-plan query. However, bookings in `renewal_due` or past-dated bookings still carrying another active status can still surface in a way that looks like current-season work.
 
 ## Design
 
@@ -21,7 +21,7 @@ Bookings with status `completed` are already excluded from the active-status fol
 
 **Needs Follow-up Plan** should represent work that is still active for the current event or current season.
 
-It should not include bookings that are clearly in a next-season or renewal phase.
+It should not include bookings that are in a next-season or renewal phase.
 
 The section copy should continue to communicate that these are active bookings that still need a future action.
 
@@ -39,15 +39,18 @@ Opening the section shows the renewal items and their next follow-up dates.
 
 ### 3. Classification rules
 
-A booking belongs in **Next Season / Renewals** when any of these conditions applies:
+Classification must be deterministic and based on data the app already has. The dashboard must not guess that a booking is for next season from the event date alone.
 
-- the booking status is `renewal_due`;
-- the booking is `completed` and has a future incomplete follow-up intended for another season/year;
-- the event date has passed and its remaining future follow-up is clearly post-event or next-season work rather than unresolved work for the completed event.
+A booking belongs in **Next Season / Renewals** when either of these conditions applies:
+
+- the booking status is `renewal_due`; or
+- the booking status is `completed` and it has a future incomplete follow-up.
+
+A completed booking with no future incomplete follow-up does not appear in the renewal section merely because it is completed.
+
+A past-dated booking that still has an active, non-renewal status remains current-season work until it is explicitly moved to `renewal_due` or completed with a future follow-up. Passing the event date by itself is not sufficient to move it into renewals.
 
 A booking must not appear in both **Needs Follow-up Plan** and **Next Season / Renewals** at the same time.
-
-Where classification could be ambiguous, the explicit booking status and the actual follow-up record should take precedence over guessing from dates alone.
 
 The existing follow-up record is the source of truth for when renewal work should surface. This feature must not create, delete, reschedule, or otherwise mutate a follow-up merely because the dashboard classifies it as renewal work.
 
@@ -71,11 +74,13 @@ Overdue renewal follow-ups are also considered prominent and should remain visib
 
 The 30-day calculation must use the same business timezone/date utilities already used by the Today dashboard.
 
+A `renewal_due` booking that has no future incomplete follow-up is still listed as **needs renewal plan**. Because it has no due date yet, it is not included in the 30-day automatic-open count until a follow-up is scheduled.
+
 ### 5. Ordering
 
-Within **Next Season / Renewals**, order items by follow-up due date, earliest first.
+Within **Next Season / Renewals**, overdue renewal follow-ups come first, followed by future renewal follow-ups ordered by due date, earliest first.
 
-Overdue renewal items come before future renewal items.
+`renewal_due` bookings that still need a renewal plan and have no follow-up date appear after dated renewal items.
 
 Ties should use a stable secondary ordering so the list does not jump between reloads.
 
@@ -96,19 +101,21 @@ The renewal payload should include enough information to render:
 - booking/event name;
 - booking status;
 - organization/contact context used by existing Today links;
-- next renewal follow-up due date;
+- next renewal follow-up due date when one exists;
 - whether that follow-up is overdue or within the 30-day attention window;
+- whether the booking needs a renewal plan because no future follow-up exists;
 - existing booking operations summary where applicable.
 
 Existing Today counts for active leads and follow-ups should retain their current meanings unless a count explicitly represents renewal work.
 
 ### 8. Edge cases
 
-- A completed booking with no future renewal follow-up does not need to appear in the renewal section merely because it is completed.
-- A `renewal_due` booking with no future follow-up should appear in the renewal section as needing a renewal plan rather than being pushed back into current-season **Needs Follow-up Plan**.
-- A past-dated booking that is genuinely unfinished for the current event should remain current-season work; passing the event date alone is not sufficient to classify it as renewal work.
-- Completing or deleting a renewal follow-up should immediately remove or reclassify the item on the next Today refresh according to the remaining data.
+- A completed booking with no future renewal follow-up is not surfaced unnecessarily.
+- A `renewal_due` booking with no future follow-up appears in the renewal section as needing a renewal plan rather than being pushed back into current-season **Needs Follow-up Plan**.
+- A past-dated booking that is genuinely unfinished for the current event remains current-season work; passing the event date alone is not sufficient to classify it as renewal work.
+- Completing or deleting a renewal follow-up should remove or reclassify the item on the next Today refresh according to the remaining data.
 - Rescheduling a renewal follow-up across the 30-day boundary should update its prominence on refresh.
+- Changing a booking from `renewal_due` back to an active current-season status should move it out of the renewal bucket on refresh.
 
 ## Error handling
 
@@ -122,15 +129,16 @@ Implementation should include focused regression tests covering:
 
 1. active current-season booking without a future action appears in **Needs Follow-up Plan**;
 2. `renewal_due` booking is excluded from current-season **Needs Follow-up Plan** and appears in **Next Season / Renewals**;
-3. completed booking with a future renewal follow-up appears only in the renewal section;
-4. completed booking with no renewal follow-up is not surfaced unnecessarily;
-5. ambiguous past-dated but still-current work remains in the current-season bucket;
+3. completed booking with a future incomplete follow-up appears only in the renewal section;
+4. completed booking with no future follow-up is not surfaced unnecessarily;
+5. past-dated but still-active non-renewal work remains in the current-season bucket;
 6. renewal more than 30 days away is non-prominent/collapsed by default;
 7. renewal within 30 days is prominent and initially expanded;
 8. overdue renewal is prominent;
-9. items are ordered by due date with stable tie-breaking;
-10. classification never changes or deletes the underlying follow-up;
-11. frontend manual collapse remains respected after initial auto-open.
+9. `renewal_due` with no follow-up is shown as needing a renewal plan but does not trigger the 30-day auto-open count;
+10. items are ordered by due date with stable tie-breaking;
+11. classification never changes or deletes the underlying follow-up;
+12. frontend manual collapse remains respected after initial auto-open.
 
 ## Non-goals
 
