@@ -36,7 +36,7 @@ jobs:
       - name: Handoff unit tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
       - name: Manager and route-map API tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-admin.test.ts src/features/leg-manager/crew-repository-idempotency.test.ts src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
       - name: Manager and route-map frontend tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/travel-leg-editor.test.tsx src/components/routes/event-map.test.tsx src/lib/manager-auth-context.test.tsx src/App.manager-routing.test.tsx src/pages/ManagerHomePage.test.tsx
       - name: Build frontend
