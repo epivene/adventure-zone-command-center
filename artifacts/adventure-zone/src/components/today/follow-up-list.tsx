@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { Link } from "wouter";
 
+import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import { followUpHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
+import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
 import {
   BUSINESS_TIME_ZONE,
@@ -26,7 +29,9 @@ export function FollowUpList({
   followUps: FollowUpSummary[];
   now: Date;
 }) {
-  const overdueCount = followUps.filter(
+  const [items, setItems] = useState(followUps);
+
+  const overdueCount = items.filter(
     (followUp) =>
       classifyBusinessDueDate(followUp.dueAt, now) === "overdue",
   ).length;
@@ -50,17 +55,17 @@ export function FollowUpList({
         </span>
       </div>
 
-      {followUps.length ? (
+      {items.length ? (
         <ol className="mt-4 grid gap-3">
-          {followUps.map((followUp) => {
+          {items.map((followUp) => {
             const overdue =
               classifyBusinessDueDate(followUp.dueAt, now) === "overdue";
             return (
               <li
-                className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between"
                 key={followUp.id}
               >
-                <div>
+                <div className="flex-1">
                   <Link
                     className="font-bold text-slate-950 hover:text-orange-700"
                     href={followUpHref(followUp)}
@@ -71,9 +76,37 @@ export function FollowUpList({
                     {formatKind(followUp.kind)}
                   </p>
                   <BookingOperations operations={followUp.operations} />
+                  <FollowUpControls
+                    followUp={{
+                      id: followUp.id,
+                      kind: followUp.kind,
+                      dueAt: followUp.dueAt,
+                      completedAt: null,
+                    }}
+                    onEdit={async (id, input) => {
+                      const result = await editFollowUpAction({ followUpId: id, kind: input.kind, dueAt: new Date(input.dueAt), completed: false, outcome: null });
+                      if (result.ok) {
+                        setItems((current) =>
+                          current.map((f) =>
+                            f.id === id
+                              ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt }
+                              : f,
+                          ),
+                        );
+                      }
+                      return result;
+                    }}
+                    onDelete={async (id) => {
+                      const result = await deleteFollowUpAction(id);
+                      if (result.ok) {
+                        setItems((current) => current.filter((f) => f.id !== id));
+                      }
+                      return result;
+                    }}
+                  />
                 </div>
                 <p
-                  className={`text-sm font-semibold ${
+                  className={`shrink-0 text-sm font-semibold ${
                     overdue ? "text-rose-700" : "text-slate-700"
                   }`}
                 >

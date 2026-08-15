@@ -68,25 +68,23 @@ router.post("/activities/edit", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/activities/delete", async (req, res): Promise<void> => {
-  const parsed = deleteActivityInputSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
-    return;
-  }
+router.delete("/activities/:id", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  if (!id) { res.status(400).json({ ok: false, error: "Activity ID required" }); return; }
   try {
-    const result = await activityService().delete(parsed.data.activityId);
+    const result = await activityService().delete(id);
     if (!result.ok) {
-      res.status(result.error.code === "ACTIVITY_NOT_FOUND" ? 404 : 400).json({
-        ok: false,
-        error: result.error.code === "ACTIVITY_NOT_FOUND" ? "Activity not found" : result.error.message,
-      });
+      const msg =
+        result.error.code === "ACTIVITY_NOT_FOUND" ? "Activity not found." :
+        result.error.code === "INVALID_ACTIVITY_INPUT" ? result.error.message :
+        "Could not delete activity.";
+      res.status(result.error.code === "ACTIVITY_NOT_FOUND" ? 404 : 400).json({ ok: false, error: msg });
       return;
     }
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to delete activity");
-    res.status(500).json({ ok: false, error: "Could not delete activity" });
+    res.status(500).json({ ok: false, error: "Server error" });
   }
 });
 
