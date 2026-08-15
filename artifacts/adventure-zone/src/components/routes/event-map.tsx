@@ -26,6 +26,61 @@ import { ManagerMapModeToggle } from "./manager-map-mode";
 import { ManagerRouteMapShell } from "./manager-route-map-shell";
 import { ManagerRouteMapLayers } from "./manager-route-map-layers";
 
+const initialFilters: MapFilters = {
+  statuses: [],
+  travelLegIds: [],
+  dateFrom: null,
+  dateTo: null,
+  regions: [],
+};
+
+function formatLabel(value: string) {
+  return value
+    .split("_")
+    .map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`)
+    .join(" ");
+}
+
+function eventSeasonYear(event: MapEvent) {
+  return event.seasonYear ?? event.startsAt?.getUTCFullYear() ?? null;
+}
+
+function mappingReason(state?: RouteMappingState) {
+  switch (state) {
+    case "needs_mapping_no_results": return "No map result found for this location.";
+    case "needs_mapping_provider_unavailable": return "Map lookup is temporarily unavailable.";
+    case "needs_mapping_missing_location": return "Add a city/state or event address.";
+    default: return "This booking could not be placed on the map yet.";
+  }
+}
+
+function canRetryMapping(state?: RouteMappingState) {
+  return state === "needs_mapping_no_results" || state === "needs_mapping_provider_unavailable";
+}
+
+type PlanningEvent = MapEvent & {
+  planningEmphasis: Exclude<RouteEmphasis, "hidden">;
+};
+
+type RouteLineCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    geometry: { type: "LineString"; coordinates: [number, number][] };
+    properties: { legId: string; color: string; emphasis: "primary" | "dimmed" };
+  }>;
+};
+
+type HandoffFeatureCollection = {
+  type: "FeatureCollection";
+  features: Array<{
+    type: "Feature";
+    id: string;
+    geometry: { type: "Point"; coordinates: [number, number] };
+    properties: { id: string; label: string; status: EquipmentHandoffView["status"]; band: EquipmentHandoffView["opportunityBand"] };
+  }>;
+};
+
 function EventList({
   events,
   title,
