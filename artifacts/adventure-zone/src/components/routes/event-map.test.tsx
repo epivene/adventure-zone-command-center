@@ -58,8 +58,8 @@ describe("EventMap unresolved locations", () => {
 
     expect(screen.getByText("Location needs mapping")).toBeInTheDocument();
     expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
-    expect(screen.getByText(/Miles City, MT/)).toBeInTheDocument();
-    expect(screen.getByText(/Kristy/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Miles City, MT/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Miles City, MT · Kristy/)).toBeInTheDocument();
     expect(screen.getByText(/Map lookup is temporarily unavailable/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry location" })).toBeInTheDocument();
   });
