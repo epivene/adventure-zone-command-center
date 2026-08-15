@@ -11,6 +11,7 @@ vi.mock("./manager-route-map-shell", () => ({
 }));
 vi.mock("./manager-route-map-layers", () => ({
   ManagerRouteMapLayers: () => <div data-testid="route-map-layers" />,
+  ManagerTripNavigationActions: () => null,
 }));
 
 import { EventMap } from "./event-map";
