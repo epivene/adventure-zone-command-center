@@ -2,8 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.fn();
-vi.mock("@/lib/auth-token", () => ({ apiGet }));
+const mocks = vi.hoisted(() => ({ apiGet: vi.fn() }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet }));
 vi.mock("./possible-locations-section", () => ({
   PossibleLocationsSection: ({ orgId }: { orgId: string }) => <div>Locations for {orgId}</div>,
 }));
@@ -12,12 +12,12 @@ import { PossibleLocationsDrawer } from "./possible-locations-drawer";
 
 afterEach(() => {
   cleanup();
-  apiGet.mockReset();
+  mocks.apiGet.mockReset();
 });
 
 describe("PossibleLocationsDrawer", () => {
   it("keeps the full locations list out of the profile until opened", async () => {
-    apiGet.mockResolvedValue({ rollup: { locationCount: 14 } });
+    mocks.apiGet.mockResolvedValue({ rollup: { locationCount: 14 } });
     render(<PossibleLocationsDrawer orgId="profile-1" />);
 
     await waitFor(() => expect(screen.getByRole("button", { name: "Possible locations (14)" })).toBeInTheDocument());
