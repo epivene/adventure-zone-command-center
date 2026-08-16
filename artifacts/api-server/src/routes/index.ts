@@ -23,6 +23,7 @@ import managerMapRouter from "./leg-manager-map";
 import managerRouter from "./leg-manager";
 import managerTravelRouter from "./leg-manager-travel";
 import managerAdminRouter from "./leg-manager-admin";
+import managerTravelAdminRouter from "./manager-travel-admin";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -39,6 +40,7 @@ router.use(managerTravelRouter);
 // Owner-only app and manager-admin routes require the owner's bearer token.
 router.use(requireOwnerMiddleware);
 router.use(managerAdminRouter);
+router.use(managerTravelAdminRouter);
 router.use(todayRouter);
 router.use(bookingsRouter);
 router.use(contactsRouter);

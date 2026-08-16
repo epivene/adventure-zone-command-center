@@ -9,7 +9,7 @@ export function ManagerMapModeToggle({
 }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Manager map mode</p>
+      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Travel mode</p>
       <div className="mt-2 flex flex-wrap gap-2">
         <button
           aria-pressed={mode === "planning"}
@@ -30,8 +30,8 @@ export function ManagerMapModeToggle({
       </div>
       <p className="mt-2 text-xs text-slate-500">
         {mode === "planning"
-          ? "Plan route order, mileage, handoffs, and fuel context."
-          : "Keep the next destination and Google Maps navigation close at hand."}
+          ? "Plan your leg, update fuel and mileage context, and suggest itinerary changes for admin approval."
+          : "Keep the next destination, navigation, mileage, fuel, and meetups close at hand."}
       </p>
     </section>
   );
