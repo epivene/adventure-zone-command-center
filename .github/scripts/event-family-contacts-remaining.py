@@ -10,7 +10,7 @@ p.write_text(s)
 p = Path('artifacts/api-server/src/routes/event-families.ts')
 s = p.read_text()
 anchor = 'const noteBodySchema = z.object({ body: z.string().trim().min(1, "Add note text.").max(4000) });\n'
-addition = anchor + '''const websiteSchema = z.object({ website: z.string().trim().max(500).nullable().or(z.literal("")) });\nconst contactSearchSchema = z.object({ q: z.string().trim().max(160).catch("").default("") });\nconst familyContactSchema = z.object({\n  contactId: z.string().uuid(),\n  role: z.string().trim().max(160).nullable().optional(),\n  makePrimary: z.boolean().optional().default(false),\n});\nconst newFamilyContactSchema = z.object({\n  name: z.string().trim().min(1).max(200),\n  phone: z.string().trim().max(80).nullable().optional(),\n  email: z.union([z.string().trim().email(), z.literal(""), z.null()]).optional(),\n  role: z.string().trim().max(160).nullable().optional(),\n  makePrimary: z.boolean().optional().default(false),\n});\nconst familyContactUpdateSchema = z.object({ role: z.string().trim().max(160).nullable(), isPrimary: z.boolean() });\n'''
+addition = anchor + '''const websiteSchema = z.object({ website: z.string().trim().max(500).nullable().or(z.literal("")) });\nconst contactSearchSchema = z.object({ q: z.string().trim().max(160).optional().default("") });\nconst familyContactSchema = z.object({\n  contactId: z.string().uuid(),\n  role: z.string().trim().max(160).nullable().optional(),\n  makePrimary: z.boolean().optional().default(false),\n});\nconst newFamilyContactSchema = z.object({\n  name: z.string().trim().min(1).max(200),\n  phone: z.string().trim().max(80).nullable().optional(),\n  email: z.union([z.string().trim().email(), z.literal(""), z.null()]).optional(),\n  role: z.string().trim().max(160).nullable().optional(),\n  makePrimary: z.boolean().optional().default(false),\n});\nconst familyContactUpdateSchema = z.object({ role: z.string().trim().max(160).nullable(), isPrimary: z.boolean() });\n'''
 if 'const websiteSchema' not in s:
     if anchor not in s: raise SystemExit('event-family schema anchor missing')
     s = s.replace(anchor, addition, 1)
@@ -66,14 +66,12 @@ if imp not in s:
     anchor = 'import { ScopedNotes } from "@/components/notes/scoped-notes";\n'
     if anchor not in s: raise SystemExit('workspace import anchor missing')
     s = s.replace(anchor, anchor + imp, 1)
-# Add destructured prop after assistedCallingEnabled.
 s = s.replace('  assistedCallingEnabled = false,\n  familyNotes = [],', '  assistedCallingEnabled = false,\n  familySharedContact = null,\n  familyNotes = [],', 1)
 s = s.replace('  assistedCallingEnabled?: boolean;\n  familyNotes?: ScopedNoteView[];', '  assistedCallingEnabled?: boolean;\n  familySharedContact?: FamilySharedContact | null;\n  familyNotes?: ScopedNoteView[];', 1)
 family_context_block = '''        {profile.familyContext ? (\n          <p className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm font-semibold text-orange-950">'''
 if '<FamilyContactSummary shared={familySharedContact}' not in s:
     if family_context_block not in s: raise SystemExit('workspace family context anchor missing')
-    # Insert summary immediately before existing family context paragraph; remains outside Contacts section.
-    s = s.replace('        {profile.familyContext ? (', '        <div className="mt-4"><FamilyContactSummary shared={familySharedContact} /></div>\n        {profile.familyContext ? (', 1)
+    s = s.replace('        {profile.familyContext ? (', '        {familySharedContact ? <div className="mt-4"><FamilyContactSummary shared={familySharedContact} /></div> : null}\n        {profile.familyContext ? (', 1)
 p.write_text(s)
 
 # 6. EventProfilePage passes the shared summary.
