@@ -420,6 +420,18 @@ const migrationFiles = [
         AND column_name = 'parent_organization_id'
     ) AS ready`,
   },
+  {
+    name: "043_event_family_website_contacts.sql",
+    markerSql: `SELECT
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'event_families'
+          AND column_name = 'website'
+      )
+      AND to_regclass(current_schema() || '.event_family_contacts') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_family_contacts_one_primary_per_family') IS NOT NULL AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
