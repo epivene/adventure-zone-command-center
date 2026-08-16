@@ -12,31 +12,113 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Merge latest main and preserve route mounts
+      - name: Merge latest main and preserve both feature sets
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git fetch origin main
           git merge --no-edit origin/main || true
-          git checkout --ours artifacts/api-server/src/routes/index.ts
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('artifacts/api-server/src/routes/index.ts')
-          s = p.read_text()
-          imp_anchor = 'import managerRouter from "./leg-manager";'
-          imp = 'import managerTravelRouter from "./leg-manager-travel";'
-          if imp not in s:
-              if imp_anchor not in s: raise SystemExit('manager router import anchor missing')
-              s = s.replace(imp_anchor, imp_anchor + '\n' + imp, 1)
-          use_anchor = 'router.use(managerRouter);'
-          use = 'router.use(managerTravelRouter);'
-          if use not in s:
-              if use_anchor not in s: raise SystemExit('manager router mount anchor missing')
-              s = s.replace(use_anchor, use_anchor + '\n' + use, 1)
-          p.write_text(s)
-          PY
-          git add -A
+
+          cat > artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts <<'EOF'
+          import { Storage } from "@google-cloud/storage";
+          export interface LegManagerObjectStorage {
+            put(key:string,bytes:Uint8Array,contentType:string):Promise<void>;
+            getSignedReadUrl(key:string,expiresInSeconds?:number):Promise<string>;
+            getSignedUrl?(key:string):Promise<string>;
+          }
+          export class GoogleCloudLegManagerObjectStorage implements LegManagerObjectStorage {
+            private readonly storage = new Storage();
+            private readonly bucketName = process.env.LEG_MANAGER_RECEIPT_BUCKET ?? process.env.GOOGLE_CLOUD_STORAGE_BUCKET ?? "";
+            private bucket() {
+              if (!this.bucketName) throw new Error("Leg manager object storage bucket is not configured");
+              return this.storage.bucket(this.bucketName);
+            }
+            async put(key:string,bytes:Uint8Array,contentType:string) {
+              await this.bucket().file(key).save(Buffer.from(bytes), { resumable:false, contentType, metadata:{ cacheControl:"private, max-age=0, no-store" } });
+            }
+            async getSignedReadUrl(key:string,expiresInSeconds=900) {
+              const [url] = await this.bucket().file(key).getSignedUrl({ action:"read", expires:Date.now()+expiresInSeconds*1000 });
+              return url;
+            }
+            async getSignedUrl(key:string) {
+              return this.getSignedReadUrl(key, 15 * 60);
+            }
+          }
+          EOF
+
+          cat > artifacts/api-server/src/routes/index.ts <<'EOF'
+          import { Router, type IRouter } from "express";
+          import healthRouter from "./health";
+          import todayRouter from "./today";
+          import bookingsRouter from "./bookings";
+          import contactsRouter from "./contacts";
+          import organizationsRouter from "./organizations";
+          import calendarRouter from "./calendar";
+          import routesMapRouter from "./routes-map";
+          import tripsRouter from "./trips";
+          import handoffsRouter from "./handoffs";
+          import activitiesRouter from "./activities";
+          import callsRouter from "./calls";
+          import eventProfilesRouter from "./event-profiles";
+          import eventFamiliesRouter from "./event-families";
+          import settingsRouter from "./settings";
+          import actMigrationRouter from "./act-migration";
+          import actReplacementRouter from "./act-replacement";
+          import aiSuggestionsRouter from "./ai-suggestions";
+          import followUpsRouter from "./follow-ups";
+          import authRouter from "./auth";
+          import managerAuthRouter from "./leg-manager-auth";
+          import managerMapRouter from "./leg-manager-map";
+          import managerRouter from "./leg-manager";
+          import managerTravelRouter from "./leg-manager-travel";
+          import managerCommunicationsRouter from "./manager-communications";
+          import managerMeetupsRouter from "./manager-meetups";
+          import managerAdminRouter from "./leg-manager-admin";
+          import managerTravelAdminRouter from "./manager-travel-admin";
+          import managerCommunicationsAdminRouter from "./manager-communications-admin";
+          import managerMeetupsAdminRouter from "./manager-meetups-admin";
+          import { requireOwnerMiddleware } from "../lib/auth";
+
+          const router: IRouter = Router();
+
+          router.use(healthRouter);
+          router.use(authRouter);
+          router.use(managerAuthRouter);
+          router.use(managerMapRouter);
+          router.use(managerRouter);
+          router.use(managerTravelRouter);
+          router.use(managerCommunicationsRouter);
+          router.use(managerMeetupsRouter);
+
+          router.use(requireOwnerMiddleware);
+          router.use(managerAdminRouter);
+          router.use(managerTravelAdminRouter);
+          router.use(managerCommunicationsAdminRouter);
+          router.use(managerMeetupsAdminRouter);
+          router.use(todayRouter);
+          router.use(bookingsRouter);
+          router.use(contactsRouter);
+          router.use(organizationsRouter);
+          router.use(calendarRouter);
+          router.use(routesMapRouter);
+          router.use(tripsRouter);
+          router.use(handoffsRouter);
+          router.use(activitiesRouter);
+          router.use(callsRouter);
+          router.use(eventProfilesRouter);
+          router.use(eventFamiliesRouter);
+          router.use(settingsRouter);
+          router.use(actReplacementRouter);
+          router.use(actMigrationRouter);
+          router.use(aiSuggestionsRouter);
+          router.use("/follow-ups", followUpsRouter);
+
+          export default router;
+          EOF
+
+          git add artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts artifacts/api-server/src/routes/index.ts
           test -z "$(git diff --name-only --diff-filter=U)"
-          git diff --cached --check -- artifacts/api-server/src/routes/index.ts
+          git diff --cached --check -- artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts artifacts/api-server/src/routes/index.ts
+          git add -A
           git commit --no-edit
           git push origin HEAD:feature/manager-communications-acknowledgments
