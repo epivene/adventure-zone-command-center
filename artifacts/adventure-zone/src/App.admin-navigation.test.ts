@@ -8,6 +8,10 @@ describe("admin sidebar route contracts", () => {
     expect(appSource).toContain('<Route path="/profiles" component={OrganizationsPage} />');
   });
 
+  it("routes profile cards to the existing profile detail page", () => {
+    expect(appSource).toContain('<Route path="/profiles/:profileId" component={EventProfilePage} />');
+  });
+
   it("routes the nested Act import sidebar URL to the import page", () => {
     expect(appSource).toContain('<Route path="/settings/act-migration" component={ActMigrationPage} />');
   });
