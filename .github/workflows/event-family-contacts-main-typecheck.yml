@@ -1,0 +1,40 @@
+name: Event Family Contacts Main Typecheck Baseline
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  compare:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-main-typecheck]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Safety guards on feature
+        run: |
+          git fetch origin main
+          git diff --check origin/main...HEAD
+          grep -q 'familySharedContact' artifacts/api-server/src/routes/event-profiles.ts
+          grep -q 'EventFamilyWebsiteContacts' artifacts/adventure-zone/src/pages/EventFamilyPage.tsx
+          grep -q 'FamilyContactSummary' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
+          grep -q 'ON DELETE RESTRICT' lib/db/migrations/043_event_family_website_contacts.sql
+          grep -q 'ON DELETE CASCADE' lib/db/migrations/043_event_family_website_contacts.sql
+          ! grep -q 'apiDelete(`/contacts/' artifacts/adventure-zone/src/components/event-families/event-family-website-contacts.tsx
+      - name: Typecheck current main baseline
+        run: |
+          git checkout --detach origin/main
+          set +e
+          pnpm --filter @workspace/adventure-zone typecheck 2>&1 | tee /tmp/main-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          test $status -ne 0
+          grep -q 'src/App.tsx(228,76)' /tmp/main-typecheck.log
+          grep -q 'src/components/routes/travel-leg-manager-cards.tsx(15,10)' /tmp/main-typecheck.log
+          if grep -E 'event-family-website-contacts|family-contact-summary|event-profile-workspace|EventFamilyPage|EventProfilePage' /tmp/main-typecheck.log; then
+            echo 'Unexpected feature-touched typecheck error on main baseline' >&2
+            exit 1
+          fi
