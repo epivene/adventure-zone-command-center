@@ -11,4 +11,9 @@ describe("admin sidebar route contracts", () => {
   it("routes the nested Act import sidebar URL to the import page", () => {
     expect(appSource).toContain('<Route path="/settings/act-migration" component={ActMigrationPage} />');
   });
+
+  it("keeps the legacy direct URLs available too", () => {
+    expect(appSource).toContain('<Route path="/organizations" component={OrganizationsPage} />');
+    expect(appSource).toContain('<Route path="/act-migration" component={ActMigrationPage} />');
+  });
 });
