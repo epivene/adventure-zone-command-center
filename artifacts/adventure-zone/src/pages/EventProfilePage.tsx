@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
+import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
@@ -31,10 +32,12 @@ export default function EventProfilePage() {
     if (contactId) qs.set("contactId", contactId);
     apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`)
       .then(async (d) => {
+        const ratingSummary = await apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 }));
         // JSON dates arrive as strings — the workspace formats Date objects.
         const toDate = (v: any) => (v ? new Date(v) : null);
         const normalized = {
           ...d,
+          wrapUpRatingSummary: ratingSummary,
           notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt), createdAt: toDate(n.createdAt), updatedAt: toDate(n.updatedAt) })),
           followUps: (d.followUps ?? []).map((f: any) => ({
             ...f,
@@ -74,7 +77,8 @@ export default function EventProfilePage() {
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto grid max-w-7xl gap-4">
+      <EventRatingSummary average={data.wrapUpRatingSummary?.average ?? null} count={data.wrapUpRatingSummary?.count ?? 0} />
       <EventProfileWorkspace
         profile={data}
         assistedCallingEnabled={data.assistedCallingEnabled === true}
