@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   actContactSyncStates,
   bookingContacts,
@@ -15,6 +15,7 @@ import {
   eventFamilyMembers,
 } from "@/db/schema";
 import { DrizzleEventProfileRepository } from "@/features/event-profiles/event-profile-repository";
+import { getFamilySharedContact } from "@/features/event-families/family-shared-contact";
 import { getOrganizationMembershipContext } from "@/features/organizations/organization-membership-query";
 import { ensurePlacePersonRelationship } from "@/features/relationships/relationship-writer";
 import { parseBusinessDateInput } from "@/lib/business-date";
@@ -96,7 +97,8 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
     const allReviews=await db.select().from(eventManagerReviews);
     const managerReviews=allReviews.filter((review)=>bookingIds.includes(review.bookingId));
     const managerReviewAverage=managerReviews.length?managerReviews.reduce((sum,review)=>sum+review.rating,0)/managerReviews.length:null;
-    res.json({ ...profile, familyContext, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
+    const familySharedContact = await getFamilySharedContact(pool, familyContext);
+    res.json({ ...profile, familyContext, familySharedContact, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });

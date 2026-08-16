@@ -140,7 +140,7 @@ export class EventFamilyRepository {
       ORDER BY o.name
     `, [id]);
     const familyContacts = await this.pool.query(`
-      SELECT efc.contact_id AS "contactId",
+      SELECT efc.id, efc.contact_id AS "contactId",
              concat_ws(' ', c.first_name, c.last_name) AS name,
              c.first_name AS "firstName", c.last_name AS "lastName",
              c.phone, c.email, efc.role, efc.is_primary AS "isPrimary"
@@ -298,7 +298,7 @@ export class EventFamilyRepository {
       if (makePrimary) await client.query(`UPDATE event_family_contacts SET is_primary = false, updated_at = now() WHERE family_id = $1 AND is_primary = true`, [familyId]);
       await client.query(`INSERT INTO event_family_contacts (family_id, contact_id, role, is_primary) VALUES ($1,$2,$3,$4)`, [familyId, contactId, role?.trim() || null, makePrimary]);
       const linked = await client.query(`
-        SELECT efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
+        SELECT efc.id, efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
                c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email,
                efc.role, efc.is_primary AS "isPrimary"
         FROM event_family_contacts efc JOIN contacts c ON c.id = efc.contact_id
@@ -327,7 +327,7 @@ export class EventFamilyRepository {
       if (input.makePrimary) await client.query(`UPDATE event_family_contacts SET is_primary = false, updated_at = now() WHERE family_id = $1 AND is_primary = true`, [familyId]);
       await client.query(`INSERT INTO event_family_contacts (family_id, contact_id, role, is_primary) VALUES ($1,$2,$3,$4)`, [familyId, contactId, input.role?.trim() || null, input.makePrimary]);
       const linked = await client.query(`
-        SELECT efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
+        SELECT efc.id, efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
                c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email,
                efc.role, efc.is_primary AS "isPrimary"
         FROM event_family_contacts efc JOIN contacts c ON c.id = efc.contact_id
@@ -350,7 +350,7 @@ export class EventFamilyRepository {
       if (input.isPrimary) await client.query(`UPDATE event_family_contacts SET is_primary = false, updated_at = now() WHERE family_id = $1 AND is_primary = true`, [familyId]);
       await client.query(`UPDATE event_family_contacts SET role = $3, is_primary = $4, updated_at = now() WHERE family_id = $1 AND contact_id = $2`, [familyId, contactId, input.role?.trim() || null, input.isPrimary]);
       const result = await client.query(`
-        SELECT efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
+        SELECT efc.id, efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
                c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email,
                efc.role, efc.is_primary AS "isPrimary"
         FROM event_family_contacts efc JOIN contacts c ON c.id = efc.contact_id

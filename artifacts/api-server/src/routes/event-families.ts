@@ -20,12 +20,31 @@ const createFamilySchema = z.object({
   organizationIds: z.array(z.string().uuid()).min(2).max(50),
 });
 const noteBodySchema = z.object({ body: z.string().trim().min(1, "Add note text.").max(4000) });
+const websiteSchema = z.object({ website: z.string().trim().max(500).nullable().or(z.literal("")) });
+const contactSearchSchema = z.object({ q: z.string().trim().max(160).optional().default("") });
+const familyContactSchema = z.object({
+  contactId: z.string().uuid(),
+  role: z.string().trim().max(160).nullable().optional(),
+  makePrimary: z.boolean().optional().default(false),
+});
+const newFamilyContactSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  phone: z.string().trim().max(80).nullable().optional(),
+  email: z.union([z.string().trim().email(), z.literal(""), z.null()]).optional(),
+  role: z.string().trim().max(160).nullable().optional(),
+  makePrimary: z.boolean().optional().default(false),
+});
+const familyContactUpdateSchema = z.object({ role: z.string().trim().max(160).nullable(), isPrimary: z.boolean() });
 
 function repo() {
   return new EventFamilyRepository();
 }
 function noteRepo() {
   return new ScopedNoteRepository(db);
+}
+function splitName(name: string) {
+  const [firstName, ...rest] = name.trim().split(/\s+/);
+  return { firstName: firstName ?? "", lastName: rest.join(" ") };
 }
 
 function sendError(req: Request, res: Response, error: unknown): void {
@@ -131,6 +150,65 @@ router.get("/event-families/:id", async (req, res): Promise<void> => {
   } catch (error) {
     sendError(req, res, error);
   }
+});
+
+router.patch("/event-families/:id/website", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const parsed = websiteSchema.parse(req.body);
+    const changed = await repo().updateWebsite(familyId, parsed.website || null);
+    if (!changed) { res.status(404).json({ ok: false, error: "Event family not found" }); return; }
+    res.json({ ok: true });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.get("/event-families/:id/contact-candidates", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const { q } = contactSearchSchema.parse(req.query);
+    res.json({ contacts: await repo().listContactCandidates(familyId, q.trim()) });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.post("/event-families/:id/contacts", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const input = familyContactSchema.parse(req.body);
+    const contact = await repo().attachContact(familyId, input.contactId, input.role ?? null, input.makePrimary);
+    res.status(201).json({ ok: true, contact });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.post("/event-families/:id/contacts/new", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const input = newFamilyContactSchema.parse(req.body);
+    const { firstName, lastName } = splitName(input.name);
+    const contact = await repo().createAndAttachContact(familyId, {
+      firstName, lastName, phone: input.phone || null, email: input.email || null, role: input.role ?? null, makePrimary: input.makePrimary,
+    });
+    res.status(201).json({ ok: true, contact });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.patch("/event-families/:id/contacts/:contactId", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const contactId = idSchema.parse(req.params.contactId);
+    const input = familyContactUpdateSchema.parse(req.body);
+    const contact = await repo().updateFamilyContact(familyId, contactId, input);
+    res.json({ ok: true, contact });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.delete("/event-families/:id/contacts/:contactId", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const contactId = idSchema.parse(req.params.contactId);
+    const changed = await repo().removeFamilyContact(familyId, contactId);
+    if (!changed) { res.status(404).json({ ok: false, error: "Family contact not found" }); return; }
+    res.json({ ok: true });
+  } catch (error) { sendError(req, res, error); }
 });
 
 router.get("/event-family-suggestions", async (req, res): Promise<void> => {

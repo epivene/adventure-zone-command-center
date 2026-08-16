@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 import { ProfileMemberPicker } from "@/components/event-families/profile-member-picker";
+import { EventFamilyWebsiteContacts } from "@/components/event-families/event-family-website-contacts";
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import type { EventFamilyDetail } from "@/features/event-families/event-family-types";
 import { ScopedNotes } from "@/components/notes/scoped-notes";
@@ -115,6 +116,7 @@ export default function EventFamilyPage() {
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
       <EventRatingSummary average={ratingSummary.average} count={ratingSummary.count} />
+      <EventFamilyWebsiteContacts family={family} onChanged={load} />
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {familyNotesError ? (

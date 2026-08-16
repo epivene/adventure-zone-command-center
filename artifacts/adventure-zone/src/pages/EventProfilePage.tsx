@@ -117,6 +117,7 @@ export default function EventProfilePage() {
         profile={data}
         assistedCallingEnabled={data.assistedCallingEnabled === true}
         callablePhoneByContactId={callablePhoneByContactId}
+        familySharedContact={data.familySharedContact ?? null}
         context={{ bookingId, followUpId, action, mode }}
         familyNotes={familyNotes}
         familyNotesError={familyNotesError}

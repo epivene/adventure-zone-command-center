@@ -19,6 +19,7 @@ import type { EventProfile } from "@/features/event-profiles/event-profile-repos
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { groupEventProfileContacts } from "@/features/event-profiles/group-event-profile-contacts";
 import { ScopedNotes } from "@/components/notes/scoped-notes";
+import { FamilyContactSummary, type FamilySharedContact } from "@/components/event-profiles/family-contact-summary";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
 function formatDate(value: Date | null) {
@@ -57,6 +58,7 @@ export function EventProfileWorkspace({
   context = {},
   callablePhoneByContactId = {},
   assistedCallingEnabled = false,
+  familySharedContact = null,
   familyNotes = [],
   familyNotesError = null,
   retryFamilyNotes,
@@ -67,6 +69,7 @@ export function EventProfileWorkspace({
   context?: EventProfileWorkspaceContext;
   callablePhoneByContactId?: Record<string, string | null>;
   assistedCallingEnabled?: boolean;
+  familySharedContact?: FamilySharedContact | null;
   familyNotes?: ScopedNoteView[];
   familyNotesError?: string | null;
   retryFamilyNotes?: () => void;
@@ -132,6 +135,7 @@ export function EventProfileWorkspace({
             {selectedFollowUp ? <span className="rounded-full bg-rose-100 px-2.5 py-1 font-semibold text-rose-900">Selected follow-up context: {titleCase(selectedFollowUp.kind)}</span> : null}
           </div>
         ) : null}
+        {familySharedContact ? <div className="mt-4"><FamilyContactSummary shared={familySharedContact} /></div> : null}
         {profile.familyContext ? (
           <p className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm font-semibold text-orange-950">
             {profile.familyContext.kind === "event_family" ? "Part of" : "Location of"}{" "}
