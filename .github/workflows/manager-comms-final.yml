@@ -60,6 +60,7 @@ jobs:
       - name: Route and simplicity guards
         run: |
           grep -q 'managerTravelRouter' artifacts/api-server/src/routes/index.ts
+          grep -q 'managerTravelAdminRouter' artifacts/api-server/src/routes/index.ts
           grep -q 'managerCommunicationsRouter' artifacts/api-server/src/routes/index.ts
           grep -q 'managerMeetupsRouter' artifacts/api-server/src/routes/index.ts
           grep -q 'Request meetup / equipment swap' artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx
@@ -69,7 +70,8 @@ jobs:
       - name: Private storage response guards
         run: |
           ! grep -R 'objectKey' artifacts/adventure-zone/src/pages/ManagerMessagesPage.tsx artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx artifacts/adventure-zone/src/components/manager-admin/attachment-file-menu.tsx
+          grep -q 'getSignedReadUrl' artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts
+          grep -q 'getSignedUrl' artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts
           grep -q 'publicAttachment' artifacts/api-server/src/routes/manager-communications.ts
           grep -q 'publicWithoutObjectKey' artifacts/api-server/src/routes/manager-communications-admin.ts
           grep -q '_privateObjectKey' artifacts/api-server/src/features/manager-comms/message-view.ts
-# rerun on storage-key-sanitized head
