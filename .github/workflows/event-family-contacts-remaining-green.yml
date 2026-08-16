@@ -1,12 +1,11 @@
-name: Event Family Contacts Remaining Green
+name: Event Family Contacts Final Verification
 on:
   push:
     branches: [feature/event-family-website-contacts]
 jobs:
-  green:
+  verify:
     if: contains(github.event.head_commit.message, '[event-family-contacts-remaining-green]')
     runs-on: ubuntu-latest
-    permissions: { contents: write }
     services:
       postgres:
         image: postgres:16
@@ -24,39 +23,24 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: python .github/scripts/event-family-contacts-remaining.py
-      - name: Repository + route + shared-context tests
-        run: >-
-          pnpm --filter @workspace/api-server exec vitest run
-          src/features/event-families/event-family-contacts.test.ts
-          src/features/event-families/family-shared-contact.test.ts
-          src/routes/event-family-contacts.test.ts
-      - name: Family website/contact UI tests
-        run: >-
-          pnpm --filter @workspace/adventure-zone exec vitest run
-          src/components/event-families/event-family-website-contacts.test.tsx
-          src/components/event-profiles/family-contact-summary.test.tsx
+      - name: Event Family backend regressions
+        run: |
+          files=$(find artifacts/api-server/src -type f \( -name '*event-family*.test.ts' -o -name '*event-families*.test.ts' -o -name 'family-shared-contact.test.ts' \) | sed 's#artifacts/api-server/##')
+          pnpm --filter @workspace/api-server exec vitest run $files
+      - name: Event Family frontend regressions
+        run: |
+          files=$(find artifacts/adventure-zone/src -type f \( -name '*event-family*.test.ts' -o -name '*event-family*.test.tsx' -o -name '*EventFamily*.test.tsx' -o -name 'family-contact-summary.test.tsx' \) | sed 's#artifacts/adventure-zone/##')
+          pnpm --filter @workspace/adventure-zone exec vitest run $files
       - run: pnpm --filter @workspace/db build
       - run: pnpm --filter @workspace/api-server build
       - run: pnpm --filter @workspace/adventure-zone build
-      - name: Integration guards
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: Diff and safety guards
         run: |
+          git fetch origin main
+          git diff --check origin/main...HEAD
           grep -q 'familySharedContact' artifacts/api-server/src/routes/event-profiles.ts
           grep -q 'EventFamilyWebsiteContacts' artifacts/adventure-zone/src/pages/EventFamilyPage.tsx
           grep -q 'FamilyContactSummary' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
-      - name: Commit verified product changes
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add artifacts/api-server/src/features/event-families/event-family-repository.ts \
-                  artifacts/api-server/src/routes/event-families.ts \
-                  artifacts/api-server/src/routes/event-profiles.ts \
-                  artifacts/adventure-zone/src/pages/EventFamilyPage.tsx \
-                  artifacts/adventure-zone/src/pages/EventProfilePage.tsx \
-                  artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
-          git diff --cached --check
-          git commit -m "feat: wire event family website and contacts" || true
-          git fetch origin feature/event-family-website-contacts
-          git rebase origin/feature/event-family-website-contacts
-          git push origin HEAD:feature/event-family-website-contacts
-# trigger 3
+          grep -q 'ON DELETE RESTRICT' lib/db/migrations/043_event_family_website_contacts.sql
+          grep -q 'ON DELETE CASCADE' lib/db/migrations/043_event_family_website_contacts.sql
