@@ -28,6 +28,10 @@ const serviceStore = {
   listMemberLegIds: (conversationId: string) => participants.listMemberLegIds(conversationId),
 };
 function param(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
+function publicWithoutObjectKey<T extends { objectKey?: unknown }>(value: T) {
+  const { objectKey: _privateObjectKey, ...publicValue } = value;
+  return publicValue;
+}
 
 const conversationInput = z.object({
   kind: z.enum(["all_managers", "leg_admin", "direct", "group"]),
@@ -72,7 +76,7 @@ router.post("/manager-admin/messages/conversations/:conversationId/attachments",
   const parsed = attachmentInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid attachment" }); return; }
   const attachment = await communication.createAttachment({ id: parsed.data.id, conversationId, actor: adminActor, fileName: parsed.data.fileName ?? null, mimeType: parsed.data.mimeType ?? null, sizeBytes: parsed.data.sizeBytes ?? null, clientMutationId: parsed.data.clientMutationId });
-  res.status(201).json({ attachment });
+  res.status(201).json({ attachment: publicWithoutObjectKey(attachment) });
 });
 router.put("/manager-admin/messages/attachments/:attachmentId/file", express.raw({ type: () => true, limit: "12mb" }), async (req, res): Promise<void> => {
   const attachment = await communication.getAttachment(param(req.params.attachmentId));
@@ -83,11 +87,15 @@ router.put("/manager-admin/messages/attachments/:attachmentId/file", express.raw
   const mimeType = Array.isArray(rawType) ? rawType[0] ?? "application/octet-stream" : rawType ?? "application/octet-stream";
   const key = `manager-messages/${attachment.conversationId}/${attachment.id}`;
   await storage.put(key, bytes, mimeType);
-  res.json({ attachment: await communication.setAttachmentUploaded(attachment.id, key, mimeType) });
+  const uploaded = await communication.setAttachmentUploaded(attachment.id, key, mimeType);
+  res.json({ attachment: uploaded ? publicWithoutObjectKey(uploaded) : null });
 });
 router.post("/manager-admin/messages/attachments/:attachmentId/file-to-leg", async (req,res):Promise<void>=>{
   const parsed=filingInput.safeParse(req.body);if(!parsed.success){res.status(400).json({error:parsed.error.issues[0]?.message??"Invalid filing request"});return;}
-  try{const filingResult=await fileMessageAttachment(filingStores,{attachmentId:param(req.params.attachmentId),destination:parsed.data.destination,destinationMetadata:parsed.data.destinationMetadata,adminActor:"Admin",clientMutationId:parsed.data.clientMutationId});res.status(201).json({filing:filingResult});}
+  try{
+    const filingResult=await fileMessageAttachment(filingStores,{attachmentId:param(req.params.attachmentId),destination:parsed.data.destination,destinationMetadata:parsed.data.destinationMetadata,adminActor:"Admin",clientMutationId:parsed.data.clientMutationId});
+    res.status(201).json({filing:publicWithoutObjectKey(filingResult)});
+  }
   catch(error){const code=(error as any)?.code;res.status(code==="NOT_FOUND"?404:code==="FORBIDDEN"?403:400).json({error:(error as Error).message});}
 });
 
