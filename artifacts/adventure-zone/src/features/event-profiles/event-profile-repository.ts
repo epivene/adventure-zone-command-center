@@ -71,6 +71,8 @@ export type EventProfileActivityRecord = {
   kind: string;
   body: string;
   occurredAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type EventProfileFollowUpRecord = {
@@ -330,6 +332,8 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         kind: activities.kind,
         body: activities.body,
         occurredAt: activities.timelineSortAt,
+        createdAt: activities.createdAt,
+        updatedAt: activities.updatedAt,
       }).from(activities).where(profileCondition)
         .orderBy(desc(activities.timelineSortAt), desc(activities.id)),
       this.database.select({

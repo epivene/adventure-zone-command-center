@@ -7,6 +7,7 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
+import { ScopedNoteRepository } from "@/features/notes/scoped-note-repository";
 import {
   DrizzleLocationRepository,
 } from "@/features/organization-locations/location-repository";
@@ -20,6 +21,8 @@ const router = Router({ mergeParams: true });
 function locationRepo() {
   return new DrizzleLocationRepository(db);
 }
+function noteRepo() { return new ScopedNoteRepository(db); }
+const noteBodySchema = z.object({ body: z.string().trim().min(1, "Add note text.").max(4000) });
 
 //  Input schemas
 
@@ -150,6 +153,56 @@ router.post("/", async (req: OrgLocationsRequest, res): Promise<void> => {
     req.log.error({ err }, "Failed to create organization location");
     res.status(500).json({ ok: false, error: "Failed to create location" });
   }
+});
+
+//  Location notes
+
+router.get("/:locationId/notes", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  const locationId = extractId(req.params.locationId);
+  try {
+    if (!(await locationRepo().findById(organizationId, locationId))) { res.status(404).json({ error: "Location not found" }); return; }
+    res.json({ notes: await noteRepo().list({ kind: "organization_location", id: locationId }) });
+  } catch (err) { req.log.error({ err }, "Failed to list location notes"); res.status(500).json({ error: "Failed to list location notes" }); }
+});
+
+router.post("/:locationId/notes", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  const locationId = extractId(req.params.locationId);
+  const parsed = noteBodySchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid note" }); return; }
+  try {
+    if (!(await locationRepo().findById(organizationId, locationId))) { res.status(404).json({ error: "Location not found" }); return; }
+    const result = await noteRepo().create({ kind: "organization_location", id: locationId }, parsed.data.body);
+    if (!result.ok) { res.status(404).json({ ok: false, error: "Note owner not found" }); return; }
+    res.status(201).json({ ok: true, note: result.note });
+  } catch (err) { req.log.error({ err }, "Failed to create location note"); res.status(500).json({ error: "Failed to create location note" }); }
+});
+
+router.patch("/:locationId/notes/:noteId", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  const locationId = extractId(req.params.locationId);
+  const noteId = extractId((req.params as any).noteId);
+  const parsed = noteBodySchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid note" }); return; }
+  try {
+    if (!(await locationRepo().findById(organizationId, locationId))) { res.status(404).json({ error: "Location not found" }); return; }
+    const result = await noteRepo().update({ kind: "organization_location", id: locationId }, noteId, parsed.data.body);
+    if (!result.ok) { res.status(404).json({ ok: false, error: "Note not found for this owner" }); return; }
+    res.json({ ok: true, note: result.note });
+  } catch (err) { req.log.error({ err }, "Failed to update location note"); res.status(500).json({ error: "Failed to update location note" }); }
+});
+
+router.delete("/:locationId/notes/:noteId", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  const locationId = extractId(req.params.locationId);
+  const noteId = extractId((req.params as any).noteId);
+  try {
+    if (!(await locationRepo().findById(organizationId, locationId))) { res.status(404).json({ error: "Location not found" }); return; }
+    const result = await noteRepo().remove({ kind: "organization_location", id: locationId }, noteId);
+    if (!result.ok) { res.status(404).json({ ok: false, error: "Note not found for this owner" }); return; }
+    res.json({ ok: true });
+  } catch (err) { req.log.error({ err }, "Failed to delete location note"); res.status(500).json({ error: "Failed to delete location note" }); }
 });
 
 //  Activities page (cursor-keyed)

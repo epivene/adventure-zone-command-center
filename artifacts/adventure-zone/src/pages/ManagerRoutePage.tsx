@@ -21,6 +21,8 @@ export default function ManagerRoutePage() {
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading schedule…</p>;
 
+  const scheduledEvents = map.data?.events ?? data.events;
+
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -53,9 +55,9 @@ export default function ManagerRoutePage() {
 
       <section className="grid gap-2">
         <h2 className="text-lg font-bold">Scheduled events</h2>
-        {data.events.length ? data.events.map((event: any) => (
+        {scheduledEvents.length ? scheduledEvents.map((event: any) => (
           <button
-            key={`${event.tripId}-${event.bookingId}`}
+            key={event.bookingId}
             className={`rounded-xl border bg-white p-4 text-left ${focusedBookingId === event.bookingId ? "ring-2 ring-orange-400" : ""}`}
             onClick={() => setFocusedBookingId(event.bookingId)}
             type="button"

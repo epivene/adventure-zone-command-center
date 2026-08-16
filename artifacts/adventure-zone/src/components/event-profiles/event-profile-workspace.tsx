@@ -17,6 +17,8 @@ import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { groupEventProfileContacts } from "@/features/event-profiles/group-event-profile-contacts";
+import { ScopedNotes } from "@/components/notes/scoped-notes";
+import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
 function formatDate(value: Date | null) {
   if (!value) return "Not set";
@@ -54,11 +56,17 @@ export function EventProfileWorkspace({
   context = {},
   callablePhoneByContactId = {},
   assistedCallingEnabled = false,
+  familyNotes = [],
+  familyNotesError = null,
+  retryFamilyNotes,
 }: {
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
   callablePhoneByContactId?: Record<string, string | null>;
   assistedCallingEnabled?: boolean;
+  familyNotes?: ScopedNoteView[];
+  familyNotesError?: string | null;
+  retryFamilyNotes?: () => void;
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
   const [showLocations, setShowLocations] = useState<Record<string, boolean>>({});
@@ -166,6 +174,7 @@ export function EventProfileWorkspace({
             <h2 className="text-xl font-bold" id="event-notes-title">Notes &amp; call outcomes</h2>
             <div className="mt-4">
               <ActivityTimeline
+                noteComposer
                 activities={profile.notes.map((note) => ({
                   id: note.id,
                   organizationId: profile.id,
@@ -174,8 +183,8 @@ export function EventProfileWorkspace({
                   kind: note.kind as any,
                   body: note.body,
                   occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
-                  createdAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
-                  updatedAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+                  createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
+                  updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
                   revisionCount: 0,
                   callOutcome: null,
                   hasLinkedCallSession: false,
@@ -189,6 +198,20 @@ export function EventProfileWorkspace({
               />
             </div>
           </section>
+          {profile.familyContext?.kind === "event_family" ? (
+            <section className="rounded-xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
+              {familyNotesError ? (
+                <div className="grid gap-2">
+                  <h2 className="text-xl font-bold">Family notes — {profile.familyContext.name}</h2>
+                  <p className="text-sm text-rose-700" role="alert">{familyNotesError}</p>
+                  {retryFamilyNotes ? <button className="button-secondary w-fit" type="button" onClick={retryFamilyNotes}>Retry family notes</button> : null}
+                  <Link className="text-sm font-semibold text-orange-800 hover:underline" href={`/event-families/${profile.familyContext.id}`}>Open event family</Link>
+                </div>
+              ) : (
+                <ScopedNotes title={`Family notes — ${profile.familyContext.name}`} notes={familyNotes} readOnly footer={<Link className="font-semibold text-orange-800 hover:underline" href={`/event-families/${profile.familyContext.id}`}>Open event family</Link>} />
+              )}
+            </section>
+          ) : null}
         </div>
 
         <aside className="grid gap-5">

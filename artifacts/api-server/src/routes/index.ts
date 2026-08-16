@@ -21,6 +21,7 @@ import authRouter from "./auth";
 import managerAuthRouter from "./leg-manager-auth";
 import managerMapRouter from "./leg-manager-map";
 import managerRouter from "./leg-manager";
+import managerTravelRouter from "./leg-manager-travel";
 import managerCommunicationsRouter from "./manager-communications";
 import managerMeetupsRouter from "./manager-meetups";
 import managerAdminRouter from "./leg-manager-admin";
@@ -35,6 +36,7 @@ router.use(authRouter);
 router.use(managerAuthRouter);
 router.use(managerMapRouter);
 router.use(managerRouter);
+router.use(managerTravelRouter);
 router.use(managerCommunicationsRouter);
 router.use(managerMeetupsRouter);
 
