@@ -27,6 +27,7 @@ const creationSchema = z.object({
   contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string(), primary: z.boolean().optional() })).default([]),
   booking: z.object({ enabled: z.boolean(), name: z.string(), nextActionKind: z.string(), nextActionDueAt: z.string(), travelLegId: z.string().uuid().nullable() }),
   familyId: z.string().uuid().nullable().optional().default(null),
+  parentOrganizationId: z.string().uuid().nullable().optional().default(null),
 }).superRefine((input, context) => {
   const selectedIds = input.contacts.map((contact) => contact.id).filter((id): id is string => Boolean(id));
   if (new Set(selectedIds).size !== selectedIds.length) context.addIssue({ code: "custom", message: "Choose each existing contact only once." });
@@ -170,13 +171,21 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
       let organizationId = parsed.data.event.id;
       let eventCity = parsed.data.event.city.trim();
       let eventRegion = parsed.data.event.region.trim().toUpperCase();
+      if (organizationId && parsed.data.parentOrganizationId) {
+        throw new Error("ORGANIZATION_CREATE_REQUIRES_NEW_PROFILE");
+      }
       if (organizationId) {
         const [found] = await transaction.select({ id: organizations.id, city: organizations.city, region: organizations.region, consolidatedIntoId: organizations.consolidatedIntoId }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
         if (!found) throw new Error("EVENT_NOT_FOUND");
         eventCity = found.city?.trim() ?? "";
         eventRegion = found.region?.trim().toUpperCase() ?? "";
       } else {
-        const [created] = await transaction.insert(organizations).values({ name: parsed.data.event.name.trim(), city: eventCity || null, region: eventRegion || null, placeType: "festival_event", createdAt: now, updatedAt: now }).returning({ id: organizations.id });
+        if (parsed.data.parentOrganizationId) {
+          const [parent] = await transaction.select({ id: organizations.id, consolidatedIntoId: organizations.consolidatedIntoId, parentOrganizationId: organizations.parentOrganizationId }).from(organizations).where(eq(organizations.id, parsed.data.parentOrganizationId)).limit(1);
+          if (!parent) throw new Error("PARENT_ORGANIZATION_NOT_FOUND");
+          if (parent.consolidatedIntoId || parent.parentOrganizationId) throw new Error("PARENT_ORGANIZATION_INVALID");
+        }
+        const [created] = await transaction.insert(organizations).values({ name: parsed.data.event.name.trim(), city: eventCity || null, region: eventRegion || null, placeType: "festival_event", parentOrganizationId: parsed.data.parentOrganizationId, createdAt: now, updatedAt: now }).returning({ id: organizations.id });
         if (!created) throw new Error("EVENT_CREATE_FAILED");
         organizationId = created.id;
       }
@@ -235,6 +244,10 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
     res.status(201).json({ ok: true, profileId });
   } catch (error) {
     req.log.error({ err: error }, "Failed to create event profile");
+    if (error instanceof Error && ["PARENT_ORGANIZATION_NOT_FOUND", "PARENT_ORGANIZATION_INVALID", "ORGANIZATION_CREATE_REQUIRES_NEW_PROFILE"].includes(error.message)) {
+      res.status(error.message === "PARENT_ORGANIZATION_NOT_FOUND" ? 400 : 409).json({ ok: false, error: "That organization can no longer accept this event. Refresh and try again." });
+      return;
+    }
     if (error instanceof Error && ["EVENT_NOT_FOUND", "CONTACT_NOT_FOUND", "EVENT_FAMILY_NOT_FOUND"].includes(error.message)) {
       res.status(400).json({ ok: false, error: "That event or contact no longer exists. Refresh and try again." });
       return;

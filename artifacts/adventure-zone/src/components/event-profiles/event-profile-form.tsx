@@ -8,6 +8,7 @@ export type EventProfileCreationInput = {
   contacts: { id: string | null; name: string; phone: string; email: string; role: string; primary?: boolean }[];
   booking: { enabled: boolean; name: string; nextActionKind: string; nextActionDueAt: string; travelLegId: string | null };
   familyId: string | null;
+  parentOrganizationId: string | null;
 };
 
 type EventOption = { id: string; name: string; city: string | null; region: string | null };
@@ -28,6 +29,8 @@ type Props = {
   contacts: ContactOption[];
   families?: FamilyOption[];
   initialFamilyId?: string;
+  initialOrganizationId?: string;
+  initialOrganizationName?: string;
   eventProfiles?: Record<string, EventProfileSeed>;
   loadEventProfile?: (id: string) => Promise<EventProfileSeed | null>;
   travelLegs?: { id: string; name: string; color: string }[];
@@ -49,6 +52,8 @@ export function EventProfileForm({
   contacts,
   families = [],
   initialFamilyId = "",
+  initialOrganizationId = "",
+  initialOrganizationName = "",
   eventProfiles = {},
   loadEventProfile,
   travelLegs = [],
@@ -128,6 +133,7 @@ export function EventProfileForm({
           travelLegId: String(data.get("travelLegId") ?? "") || null,
         },
         familyId: familyId || null,
+        parentOrganizationId: initialOrganizationId || null,
       });
       if (!result.ok) {
         setError(result.error);
@@ -157,13 +163,19 @@ export function EventProfileForm({
           <input autoFocus name="eventName" onChange={(event) => setEventName(event.currentTarget.value)} placeholder="e.g. Dawson County Fair" required value={eventName} />
         </label>
 
-        <label className="grid gap-1.5 font-medium">
-          Or reuse an existing profile
-          <select aria-label="Use an existing profile" onChange={(event) => void selectEvent(event.currentTarget.value)} value={eventId}>
-            <option value="">Create a new profile</option>
-            {events.map((item) => <option key={item.id} value={item.id}>{item.name}{item.city && item.region ? ` — ${item.city}, ${item.region}` : ""}</option>)}
-          </select>
-        </label>
+        {initialOrganizationId ? (
+          <p className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-900">
+            Part of {initialOrganizationName || "selected organization"}
+          </p>
+        ) : (
+          <label className="grid gap-1.5 font-medium">
+            Or reuse an existing profile
+            <select aria-label="Use an existing profile" onChange={(event) => void selectEvent(event.currentTarget.value)} value={eventId}>
+              <option value="">Create a new profile</option>
+              {events.map((item) => <option key={item.id} value={item.id}>{item.name}{item.city && item.region ? ` — ${item.city}, ${item.region}` : ""}</option>)}
+            </select>
+          </label>
+        )}
 
         {!eventId ? (
           <div className="grid gap-4 sm:grid-cols-3">
