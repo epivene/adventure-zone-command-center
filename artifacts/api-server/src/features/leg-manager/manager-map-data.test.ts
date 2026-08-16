@@ -37,6 +37,18 @@ const kristyStop = {
   status: "confirmed",
 };
 
+const assignedBookingWithoutTrip = {
+  bookingId: "00000000-0000-4000-8000-000000000202",
+  bookingName: "Assigned directly to Kristy",
+  city: "Dickinson",
+  region: "ND",
+  latitude: 46.8792,
+  longitude: -102.7896,
+  startsAt: new Date("2026-08-23T12:00:00Z"),
+  endsAt: new Date("2026-08-23T20:00:00Z"),
+  status: "confirmed",
+};
+
 function legParticipant(legId: string, legName: string) {
   return { kind: "leg" as const, legId, legName };
 }
@@ -76,7 +88,7 @@ function meetup(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function deps(handoffs: any[]) {
+function deps(handoffs: any[], assignedBookings: any[] = []) {
   return {
     tripRepository: {
       async listTrips(options?: { travelLegId?: string }) {
@@ -89,6 +101,11 @@ function deps(handoffs: any[]) {
         return tripId === kristyTripId
           ? [{ id: "seg-1", tripId, sequence: 1, fromKey: "a", toKey: "b", fromLabel: "Utah base", toLabel: "Miles City", miles: 610, minutes: 570, source: "fallback" as const, estimatedAt: null, overrideMiles: null, overrideMinutes: null }]
           : [];
+      },
+    },
+    bookingRepository: {
+      async listForLeg(legId: string) {
+        return legId === kristyLegId ? assignedBookings : [];
       },
     },
     handoffRepository: {
@@ -106,6 +123,16 @@ describe("loadManagerScopedMapData", () => {
     expect(result.events.map((event) => event.bookingId)).toEqual([kristyStop.bookingId]);
     expect(result.route?.trip.id).toBe(kristyTripId);
     expect(JSON.stringify(result)).not.toContain("Hulk private stop");
+  });
+
+  it("includes a booking assigned to the manager leg even before it is added to a trip", async () => {
+    const result = await loadManagerScopedMapData(
+      deps([], [assignedBookingWithoutTrip]),
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events).toContainEqual(assignedBookingWithoutTrip);
   });
 
   it("includes a shared meetup but only the counterpart leg identity", async () => {
