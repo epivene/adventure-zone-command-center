@@ -13,5 +13,10 @@ describe("duplicate organization merge location ordering", () => {
     expect(locationMove).toBeGreaterThanOrEqual(0);
     expect(contactMove).toBeGreaterThanOrEqual(0);
     expect(locationMove).toBeLessThan(contactMove);
+    const activityMove = mergeSource.indexOf(".where(eq(activities.organizationId, dupId))");
+    const organizationDelete = mergeSource.indexOf("tx.delete(organizations)");
+    expect(activityMove).toBeGreaterThanOrEqual(0);
+    expect(organizationDelete).toBeGreaterThanOrEqual(0);
+    expect(activityMove).toBeLessThan(organizationDelete);
   });
 });

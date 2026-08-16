@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
+import { listFamilyNotes } from "@/actions/scoped-notes";
+import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
 export default function EventProfilePage() {
   const { profileId } = useParams<{ profileId: string }>();
@@ -10,6 +12,8 @@ export default function EventProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
+  const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
+  const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
 
   const params = new URLSearchParams(search);
   const contactId = params.get("contactId") ?? undefined;
@@ -31,7 +35,7 @@ export default function EventProfilePage() {
         const toDate = (v: any) => (v ? new Date(v) : null);
         const normalized = {
           ...d,
-          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt) })),
+          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt), createdAt: toDate(n.createdAt), updatedAt: toDate(n.updatedAt) })),
           followUps: (d.followUps ?? []).map((f: any) => ({
             ...f,
             dueAt: toDate(f.dueAt),
@@ -49,11 +53,22 @@ export default function EventProfilePage() {
           return [contact.id as string, callablePhone?.number ?? null] as const;
         }));
         setCallablePhoneByContactId(Object.fromEntries(callablePhones));
+        setFamilyNotes([]);
+        setFamilyNotesError(null);
+        if (normalized.familyContext?.kind === "event_family") {
+          listFamilyNotes(normalized.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
+        }
         setData(normalized);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [profileId, contactId]);
+
+  function retryFamilyNotes() {
+    if (data?.familyContext?.kind !== "event_family") return;
+    setFamilyNotesError(null);
+    void listFamilyNotes(data.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
+  }
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading profile…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
@@ -65,6 +80,9 @@ export default function EventProfilePage() {
         assistedCallingEnabled={data.assistedCallingEnabled === true}
         callablePhoneByContactId={callablePhoneByContactId}
         context={{ bookingId, followUpId, action, mode }}
+        familyNotes={familyNotes}
+        familyNotesError={familyNotesError}
+        retryFamilyNotes={retryFamilyNotes}
       />
     </div>
   );

@@ -83,6 +83,7 @@ export function ActivityTimeline({
   loadRevisions,
   initialNextPage = null,
   loadPage,
+  noteComposer = false,
 }: {
   activities: ActivityTimelineItem[];
   parent?: ActivityParent;
@@ -97,6 +98,7 @@ export function ActivityTimeline({
   ) => Promise<ActivityRevisionResult>;
   initialNextPage?: number | null;
   loadPage?: (page: number) => Promise<ActivityTimelinePageResult>;
+  noteComposer?: boolean;
 }) {
   const [items, setItems] = useState(activities);
   const [timelineNextPage, setTimelineNextPage] = useState<number | null>(
@@ -202,7 +204,7 @@ export function ActivityTimeline({
     try {
       const result = await createActivity({
         ...parent,
-        kind: newKind,
+        kind: noteComposer ? "note" : newKind,
         body: newBody,
         occurredAt: new Date(),
       });
@@ -333,28 +335,20 @@ export function ActivityTimeline({
             onClick={() => setAddOpen((current) => !current)}
             type="button"
           >
-            {addOpen ? "Cancel activity" : "Add activity"}
+            {addOpen ? (noteComposer ? "Cancel note" : "Cancel activity") : (noteComposer ? "Add note" : "Add activity")}
           </button>
           {addOpen ? (
             <div className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-white p-3">
+              {!noteComposer ? (
+                <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                  Activity type
+                  <select className="rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" onChange={(event) => setNewKind(event.target.value as ActivityKind)} value={newKind}>
+                    {manualActivityKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </select>
+                </label>
+              ) : null}
               <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Activity type
-                <select
-                  className="rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"
-                  onChange={(event) =>
-                    setNewKind(event.target.value as ActivityKind)
-                  }
-                  value={newKind}
-                >
-                  {manualActivityKinds.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Activity text
+                {noteComposer ? "Note" : "Activity text"}
                 <textarea
                   className="min-h-24 rounded-md border border-slate-300 px-3 py-2 font-normal"
                   maxLength={4000}
@@ -373,7 +367,7 @@ export function ActivityTimeline({
                 onClick={() => void submitCreate()}
                 type="button"
               >
-                {creating ? "Saving…" : "Save activity"}
+                {creating ? "Saving…" : (noteComposer ? "Save note" : "Save activity")}
               </button>
             </div>
           ) : null}
@@ -381,7 +375,7 @@ export function ActivityTimeline({
       ) : null}
 
       {!items.length ? (
-        <p className="text-sm text-slate-600">No recent activity recorded.</p>
+        <p className="text-sm text-slate-600">{noteComposer ? "No notes or call history recorded." : "No recent activity recorded."}</p>
       ) : (
         <ol className="grid gap-3" aria-label="Recent activity">
           {items.map((activity) => {
@@ -401,12 +395,12 @@ export function ActivityTimeline({
                   <p className="text-sm font-semibold capitalize">
                     {activity.kind.replaceAll("_", " ")}
                   </p>
-                  <time
-                    className="text-xs text-slate-500"
-                    dateTime={activity.occurredAt.toISOString()}
-                  >
-                    {formatDate(activity.occurredAt)}
-                  </time>
+                  <div className="text-right text-xs text-slate-500">
+                    <time dateTime={activity.occurredAt.toISOString()}>{formatDate(activity.occurredAt)}</time>
+                    {noteComposer && activity.kind === "note" ? (
+                      <p>Created {formatDate(activity.createdAt)}{activity.updatedAt.getTime() !== activity.createdAt.getTime() ? ` · Updated ${formatDate(activity.updatedAt)}` : ""}</p>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {activity.body}

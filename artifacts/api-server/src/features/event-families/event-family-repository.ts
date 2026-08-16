@@ -55,6 +55,21 @@ export async function ensureEventFamilySchema(pool: Pool = defaultPool): Promise
       ON event_family_suggestions (normalized_name, md5(candidate_fingerprint));
     CREATE INDEX IF NOT EXISTS event_family_members_family_id_idx ON event_family_members(family_id);
     CREATE INDEX IF NOT EXISTS event_family_suggestions_pending_idx ON event_family_suggestions(status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS scoped_notes (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      organization_location_id uuid REFERENCES organization_locations(id) ON DELETE RESTRICT,
+      event_family_id uuid REFERENCES event_families(id) ON DELETE RESTRICT,
+      body text NOT NULL,
+      source text NOT NULL DEFAULT 'local' CHECK (source = 'local'),
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      CONSTRAINT scoped_notes_exactly_one_owner CHECK (
+        (organization_location_id IS NOT NULL)::int + (event_family_id IS NOT NULL)::int = 1
+      ),
+      CONSTRAINT scoped_notes_body_nonblank CHECK (nullif(trim(body), '') IS NOT NULL)
+    );
+    CREATE INDEX IF NOT EXISTS scoped_notes_location_created_idx ON scoped_notes(organization_location_id, created_at DESC) WHERE organization_location_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS scoped_notes_family_created_idx ON scoped_notes(event_family_id, created_at DESC) WHERE event_family_id IS NOT NULL;
   `);
 }
 
