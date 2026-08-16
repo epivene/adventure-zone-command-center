@@ -12,12 +12,15 @@ import { DrizzleCrewRepository, listWorkersForManager } from "@/features/leg-man
 import { crewRehireStatuses } from "@/features/leg-manager/crew-types";
 import { DrizzleIncidentRepository } from "@/features/leg-manager/incident-repository";
 import { DrizzleEventReviewRepository } from "@/features/leg-manager/event-review-repository";
+import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
+import { attachIncidentPhotoUrls } from "@/features/leg-manager/incident-photo-service";
 
 const router: IRouter = Router();
 const repo = new DrizzleLegManagerRepository(db);
 const crew = new DrizzleCrewRepository(db);
 const incidents = new DrizzleIncidentRepository(db);
 const reviews = new DrizzleEventReviewRepository(db);
+const incidentStorage = new GoogleCloudLegManagerObjectStorage();
 const access = z.object({ password: z.string().min(1) });
 const duplicatePasswordMessage =
   "That password is already assigned to another manager. Choose a different password.";
@@ -32,7 +35,6 @@ router.put("/manager-admin/legs/:legId/access", async (req, res): Promise<void> 
     res.status(400).json({ error: "Invalid manager access" });
     return;
   }
-
   const existing = await repo.listConfiguredPasswordRecords();
   for (const record of existing) {
     if (record.legId === req.params.legId) continue;
@@ -168,7 +170,9 @@ router.patch("/manager-admin/crew/work-history/:historyId", async (req, res): Pr
 });
 
 router.get("/manager-admin/incidents", async (_req, res) => {
-  res.json({ incidents: await incidents.listAll() });
+  const rows = await incidents.listAll();
+  const attachments = await incidents.listAttachmentsForIncidents(rows.map((row) => row.id));
+  res.json({ incidents: await attachIncidentPhotoUrls(rows, attachments, incidentStorage) });
 });
 
 router.get("/manager-admin/reviews", async (_req, res) => {

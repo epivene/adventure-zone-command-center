@@ -68,6 +68,54 @@ function MergeDialog({ group, primaryId, onConfirm, onCancel, merging }: MergeDi
   );
 }
 
+function EventFamilyDialog({
+  group,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  group: DuplicateGroup;
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: (name: string) => void;
+}) {
+  const [name, setName] = useState(group.normalizedName || group.organizations[0]?.name || "");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div aria-modal="true" className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl" role="dialog">
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-orange-700">Event family</p>
+        <h2 className="mt-1 text-lg font-bold">Group these as an Event Family</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Each profile stays separate with its own city, contacts, bookings, notes, and history. They will simply appear together under one Event Family.
+        </p>
+        <label className="mt-4 grid gap-1 text-sm font-semibold">
+          Family name
+          <input
+            autoFocus
+            disabled={pending}
+            onChange={(event) => setName(event.currentTarget.value)}
+            placeholder="e.g. Field of Honor"
+            value={name}
+          />
+        </label>
+        <div className="mt-6 flex gap-3">
+          <button
+            className="button-primary flex-1"
+            disabled={pending || !name.trim()}
+            onClick={() => onConfirm(name.trim())}
+            type="button"
+          >
+            {pending ? "Creating…" : "Create Event Family"}
+          </button>
+          <button className="button-secondary flex-1" disabled={pending} onClick={onCancel} type="button">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BulkMergeDialog({
   groupCount,
   onConfirm,
@@ -170,6 +218,7 @@ function DuplicateGroupCard({
   const locationCandidate = isLocationCandidate(group);
   const [showMerge, setShowMerge] = useState(false);
   const [showConsolidate, setShowConsolidate] = useState(false);
+  const [showEventFamily, setShowEventFamily] = useState(false);
   const [pending, setPending] = useState(false);
   const { toast } = useToast();
 
@@ -188,6 +237,22 @@ function DuplicateGroupCard({
       toast({ title: "Merge failed", description: error?.message ?? "Unknown error", variant: "destructive" });
       setPending(false);
       setShowMerge(false);
+    }
+  }
+
+  async function createEventFamily(name: string) {
+    setPending(true);
+    try {
+      await apiPost("/event-families", {
+        name,
+        organizationIds: sourceOrgIds,
+      });
+      toast({ title: `Created Event Family: ${name}` });
+      setShowEventFamily(false);
+      onResolved();
+    } catch (error: any) {
+      toast({ title: "Could not create Event Family", description: error?.message ?? "Unknown error", variant: "destructive" });
+      setPending(false);
     }
   }
 
@@ -210,6 +275,14 @@ function DuplicateGroupCard({
   return (
     <>
       {showMerge ? <MergeDialog group={group} merging={pending} onCancel={() => setShowMerge(false)} onConfirm={merge} primaryId={primaryId} /> : null}
+      {showEventFamily ? (
+        <EventFamilyDialog
+          group={group}
+          onCancel={() => setShowEventFamily(false)}
+          onConfirm={createEventFamily}
+          pending={pending}
+        />
+      ) : null}
       {showConsolidate ? (
         <ConsolidationDialog
           onCancel={() => setShowConsolidate(false)}
@@ -228,8 +301,8 @@ function DuplicateGroupCard({
               <>
                 <p className="mt-1 text-sm text-sky-900">
                   {group.classification === "ambiguous_location_candidate"
-                    ? "Ambiguous location match -- review these profiles manually."
-                    : "These may be locations of the same organization."}
+                    ? "Ambiguous match -- choose whether these are one organization's locations or separate events in an Event Family."
+                    : "These may be locations of the same organization or separate events in one Event Family."}
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {(group.evidence ?? []).map((item) => (
@@ -251,9 +324,17 @@ function DuplicateGroupCard({
                   className="button-primary text-sm"
                   disabled={disabled || pending}
                   onClick={() => setShowConsolidate(true)}
-                  title="Consolidate: keep each profile as a named location with its own history"
+                  title="Same organization: keep each profile as a named location with its own history"
                 >
-                  Consolidate as locations
+                  Organization locations
+                </button>
+                <button
+                  className="button-secondary text-sm"
+                  disabled={disabled || pending}
+                  onClick={() => setShowEventFamily(true)}
+                  title="Separate event profiles: keep each profile separate and group them under one Event Family"
+                >
+                  Group as Event Family
                 </button>
                 <button className="button-secondary text-sm" disabled={disabled || pending} onClick={notRelated}>Not related</button>
               </>

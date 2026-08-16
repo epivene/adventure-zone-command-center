@@ -25,6 +25,7 @@ import managerTravelRouter from "./leg-manager-travel";
 import managerCommunicationsRouter from "./manager-communications";
 import managerMeetupsRouter from "./manager-meetups";
 import managerAdminRouter from "./leg-manager-admin";
+import managerTravelAdminRouter from "./manager-travel-admin";
 import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
 import { requireOwnerMiddleware } from "../lib/auth";
@@ -42,6 +43,7 @@ router.use(managerMeetupsRouter);
 
 router.use(requireOwnerMiddleware);
 router.use(managerAdminRouter);
+router.use(managerTravelAdminRouter);
 router.use(managerCommunicationsAdminRouter);
 router.use(managerMeetupsAdminRouter);
 router.use(todayRouter);

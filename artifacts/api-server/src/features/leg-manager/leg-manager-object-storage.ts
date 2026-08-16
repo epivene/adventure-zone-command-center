@@ -2,6 +2,7 @@ import { Storage } from "@google-cloud/storage";
 export interface LegManagerObjectStorage {
   put(key:string,bytes:Uint8Array,contentType:string):Promise<void>;
   getSignedReadUrl(key:string,expiresInSeconds?:number):Promise<string>;
+  getSignedUrl?(key:string):Promise<string>;
 }
 export class GoogleCloudLegManagerObjectStorage implements LegManagerObjectStorage {
   private readonly storage = new Storage();
@@ -16,5 +17,8 @@ export class GoogleCloudLegManagerObjectStorage implements LegManagerObjectStora
   async getSignedReadUrl(key:string,expiresInSeconds=900) {
     const [url] = await this.bucket().file(key).getSignedUrl({ action:"read", expires:Date.now()+expiresInSeconds*1000 });
     return url;
+  }
+  async getSignedUrl(key:string) {
+    return this.getSignedReadUrl(key, 15 * 60);
   }
 }
