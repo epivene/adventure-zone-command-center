@@ -1,0 +1,36 @@
+name: Manager Comms Task3 Wire
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  wire:
+    if: contains(github.event.head_commit.message, '[task3-wire]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Add ManagerMessagesPage route
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('artifacts/adventure-zone/src/App.tsx')
+          s = p.read_text()
+          import_anchor = 'import ManagerHomePage from "@/pages/ManagerHomePage";'
+          route_anchor = '        <Route path="/manager/route"><ManagerRoutePage /></Route>'
+          if 'import ManagerMessagesPage from "@/pages/ManagerMessagesPage";' not in s:
+              if import_anchor not in s: raise SystemExit('manager page import anchor missing')
+              s = s.replace(import_anchor, import_anchor + '\nimport ManagerMessagesPage from "@/pages/ManagerMessagesPage";', 1)
+          if '<Route path="/manager/messages"><ManagerMessagesPage /></Route>' not in s:
+              if route_anchor not in s: raise SystemExit('manager route anchor missing')
+              s = s.replace(route_anchor, route_anchor + '\n        <Route path="/manager/messages"><ManagerMessagesPage /></Route>', 1)
+          p.write_text(s)
+          PY
+          git diff --check
+          grep -q 'ManagerMessagesPage' artifacts/adventure-zone/src/App.tsx
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/adventure-zone/src/App.tsx
+          git commit -m 'feat: route manager messages page [skip-task3-wire]'
+          git push origin HEAD:feature/manager-communications-acknowledgments
