@@ -420,6 +420,14 @@ const migrationFiles = [
         AND column_name = 'parent_organization_id'
     ) AS ready`,
   },
+  {
+    name: "043_act_archive_full_recovery.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.act_archive_recovery_runs') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_recovery_items') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_recovery_decisions') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
