@@ -1,5 +1,6 @@
 import { check, index, jsonb, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import { organizationLocations } from "./schema";
 
 export const eventFamilies = pgTable(
   "event_families",
@@ -59,5 +60,34 @@ export const eventFamilySuggestions = pgTable(
     check("event_family_suggestions_source_valid", sql`${table.source} in ('rule','ai')`),
     check("event_family_suggestions_status_valid", sql`${table.status} in ('pending','approved','dismissed')`),
     check("event_family_suggestions_confidence_valid", sql`${table.confidence} >= 0 and ${table.confidence} <= 1`),
+  ],
+);
+
+export const scopedNotes = pgTable(
+  "scoped_notes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationLocationId: uuid("organization_location_id").references(
+      () => organizationLocations.id,
+      { onDelete: "restrict" },
+    ),
+    eventFamilyId: uuid("event_family_id").references(
+      () => eventFamilies.id,
+      { onDelete: "restrict" },
+    ),
+    body: text("body").notNull(),
+    source: text("source").default("local").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check(
+      "scoped_notes_exactly_one_owner",
+      sql`(${table.organizationLocationId} is not null)::int + (${table.eventFamilyId} is not null)::int = 1`,
+    ),
+    check("scoped_notes_body_nonblank", sql`nullif(trim(${table.body}), '') is not null`),
+    check("scoped_notes_source_local", sql`${table.source} = 'local'`),
+    index("scoped_notes_location_created_idx").on(table.organizationLocationId, table.createdAt),
+    index("scoped_notes_family_created_idx").on(table.eventFamilyId, table.createdAt),
   ],
 );
