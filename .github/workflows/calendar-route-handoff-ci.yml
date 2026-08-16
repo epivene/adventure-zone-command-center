@@ -9,7 +9,6 @@ on:
       - feature/map-focus-filter-interactions
       - fix/map-layer-style-ready
       - feature/leaflet-manager-route-map
-      - feature/manager-scoped-route-maps
   pull_request:
     paths:
       - "artifacts/adventure-zone/**"
