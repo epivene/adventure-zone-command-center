@@ -4,6 +4,7 @@ import { ArrowLeft, Home, MapPinned, LogOut, MessageCircle, WalletCards, UsersRo
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
+import { ManagerActionCenter } from "./manager-action-center";
 
 export function ManagerShell({ children }: { children: React.ReactNode }) {
   const { manager, signOut, managerApi } = useManagerAuth();
@@ -43,6 +44,7 @@ export function ManagerShell({ children }: { children: React.ReactNode }) {
         <button className="rounded-lg p-2" aria-label="Sign out" onClick={signOut}><LogOut className="h-5 w-5" /></button>
       </div>
     </header>
+    <ManagerActionCenter />
     <main className="mx-auto max-w-3xl p-4">{children}</main>
     <nav className="fixed inset-x-0 bottom-0 z-20 border-t bg-white"><div className="mx-auto grid max-w-3xl grid-cols-5">
       <Link href="/manager" className="flex min-h-16 flex-col items-center justify-center text-xs font-semibold"><Home className="h-5 w-5" />Home</Link>
