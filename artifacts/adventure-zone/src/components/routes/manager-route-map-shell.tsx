@@ -42,7 +42,12 @@ export function ManagerRouteMapShell({
   onTileError?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const tileErrorRef = useRef(onTileError);
   const [map, setMap] = useState<LeafletMap | null>(null);
+
+  useEffect(() => {
+    tileErrorRef.current = onTileError;
+  }, [onTileError]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -64,7 +69,7 @@ export function ManagerRouteMapShell({
       noWrap: true,
       maxZoom: 19,
     });
-    tiles.on("tileerror", () => onTileError?.());
+    tiles.on("tileerror", () => tileErrorRef.current?.());
     tiles.addTo(instance);
     setMap(instance);
     applyLeafletViewport(instance, viewport);
@@ -73,7 +78,7 @@ export function ManagerRouteMapShell({
       instance.remove();
       setMap(null);
     };
-  }, [onTileError]);
+  }, []);
 
   useEffect(() => {
     if (!map) return;
