@@ -16,8 +16,20 @@ export type ManagerNotification = {
   createdAt: Date;
 };
 
+type RawManagerNotification = Omit<ManagerNotification, "readAt" | "createdAt"> & {
+  readAt: Date | string | null;
+  createdAt: Date | string;
+};
+
 function rows<T>(value: unknown): T[] {
   return ((value as { rows?: T[] }).rows ?? []) as T[];
+}
+function normalize(row: RawManagerNotification): ManagerNotification {
+  return {
+    ...row,
+    readAt: row.readAt ? new Date(row.readAt) : null,
+    createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
+  };
 }
 
 const ensureSql = sql.raw(`
@@ -54,9 +66,9 @@ export class NotificationRepository {
       returning id, leg_id as "legId", kind, title, body, action_required as "actionRequired",
         source_type as "sourceType", source_id as "sourceId", read_at as "readAt", created_at as "createdAt"
     `);
-    const notice = rows<ManagerNotification>(result)[0];
-    if (!notice) throw new Error("Notification could not be created");
-    return notice;
+    const raw = rows<RawManagerNotification>(result)[0];
+    if (!raw) throw new Error("Notification could not be created");
+    return normalize(raw);
   }
 
   async listForLeg(legId: string) {
@@ -69,7 +81,7 @@ export class NotificationRepository {
       order by action_required desc, (read_at is null) desc, created_at desc
       limit 100
     `);
-    return rows<ManagerNotification>(result);
+    return rows<RawManagerNotification>(result).map(normalize);
   }
 
   async markRead(id: string, legId: string) {
