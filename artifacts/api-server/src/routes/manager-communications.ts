@@ -30,6 +30,10 @@ function actor(req: any): MessageActor {
   return { kind: "manager", legId: req.legManager.legId, name: req.legManager.managerName ?? null };
 }
 function param(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
+function publicAttachment<T extends { objectKey?: unknown }>(attachment: T) {
+  const { objectKey: _privateObjectKey, ...publicValue } = attachment;
+  return publicValue;
+}
 function routeError(res: any, error: unknown) {
   const code = (error as any)?.code;
   if (code === "FORBIDDEN") return res.status(403).json({ error: (error as Error).message });
@@ -97,7 +101,7 @@ router.post("/manager/messages/conversations/:conversationId/attachments", requi
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid attachment" }); return; }
   try {
     const attachment = await communication.createAttachment({ id: parsed.data.id, conversationId, actor: actor(req), fileName: parsed.data.fileName ?? null, mimeType: parsed.data.mimeType ?? null, sizeBytes: parsed.data.sizeBytes ?? null, clientMutationId: parsed.data.clientMutationId });
-    res.status(201).json({ attachment });
+    res.status(201).json({ attachment: publicAttachment(attachment) });
   } catch (error) { routeError(res, error); }
 });
 router.put("/manager/messages/attachments/:attachmentId/file", requireManager, express.raw({ type: () => true, limit: "12mb" }), async (req, res): Promise<void> => {
@@ -110,7 +114,8 @@ router.put("/manager/messages/attachments/:attachmentId/file", requireManager, e
   const mimeType = Array.isArray(rawType) ? rawType[0] ?? "application/octet-stream" : rawType ?? "application/octet-stream";
   const key = `manager-messages/${attachment.conversationId}/${attachment.id}`;
   await storage.put(key, bytes, mimeType);
-  res.json({ attachment: await communication.setAttachmentUploaded(attachment.id, key, mimeType) });
+  const uploaded = await communication.setAttachmentUploaded(attachment.id, key, mimeType);
+  res.json({ attachment: uploaded ? publicAttachment(uploaded) : null });
 });
 
 router.get("/manager/notifications", requireManager, async (req, res) => { res.json({ notifications: await notifications.listForLeg(req.legManager!.legId) }); });
