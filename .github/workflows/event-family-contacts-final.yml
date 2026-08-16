@@ -1,0 +1,73 @@
+name: Event Family Contacts Final
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  final:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-final]')
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: adventure_zone_test }
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - name: Sync latest main
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git fetch origin main
+          git merge --no-edit origin/main
+      - run: pnpm install --frozen-lockfile
+      - name: Focused backend verification
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/event-families/event-family-contacts.test.ts
+          src/features/event-families/family-shared-contact.test.ts
+          src/features/event-families/event-family-repository.test.ts
+          src/routes/event-family-contacts.test.ts
+      - name: Focused frontend verification
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/components/event-families/event-family-website-contacts.test.tsx
+          src/components/event-profiles/family-contact-summary.test.tsx
+      - run: pnpm --filter @workspace/db build
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: Safety guards
+        run: |
+          grep -q '043_event_family_website_contacts.sql' lib/db/src/migrations.ts
+          grep -q 'eventFamilyContacts' lib/db/src/event-family-schema.ts
+          grep -q 'familySharedContact' artifacts/api-server/src/routes/event-profiles.ts
+          grep -q 'EventFamilyWebsiteContacts' artifacts/adventure-zone/src/pages/EventFamilyPage.tsx
+          grep -q 'FamilyContactSummary' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
+          grep -q 'ON DELETE RESTRICT' lib/db/migrations/043_event_family_website_contacts.sql
+          grep -q 'ON DELETE CASCADE' lib/db/migrations/043_event_family_website_contacts.sql
+      - name: Remove development-only helpers
+        run: |
+          rm -f .github/workflows/event-family-contacts-*.yml
+          rm -f .github/scripts/event-family-contacts-*.py
+          git add -A .github
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: remove event family contacts verification helpers"
+          fi
+      - name: Final diff checks and push
+        run: |
+          git diff --check origin/main...HEAD
+          if git ls-files '.github/workflows/event-family-contacts-*' '.github/scripts/event-family-contacts-*' | grep -q .; then
+            echo 'Temporary event-family-contacts helpers remain tracked' >&2
+            exit 1
+          fi
+          git push origin HEAD:feature/event-family-website-contacts
