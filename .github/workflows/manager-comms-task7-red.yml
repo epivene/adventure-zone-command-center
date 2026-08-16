@@ -1,0 +1,17 @@
+name: Manager Comms Task7 Red
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  red:
+    if: contains(github.event.head_commit.message, '[task7-red]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms/admin-change-recorder.test.ts
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/manager-action-center.test.tsx src/components/manager-admin/acknowledgment-review.test.tsx

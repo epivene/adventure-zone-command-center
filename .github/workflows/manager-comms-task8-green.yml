@@ -1,0 +1,25 @@
+name: Manager Comms Task8 Green
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[task8-green]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms/attachment-filing-service.test.ts
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager-admin/attachment-file-menu.test.tsx
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - run: grep -q 'file-to-leg' artifacts/api-server/src/routes/manager-communications-admin.ts
+      - run: grep -q 'manager_attachment_filings' artifacts/api-server/src/features/manager-comms/attachment-filing-service.ts
+      - name: Ensure UI does not expose private object keys
+        run: |
+          ! grep -R 'objectKey' artifacts/adventure-zone/src/components/manager-admin/attachment-file-menu.tsx

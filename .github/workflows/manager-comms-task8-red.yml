@@ -1,0 +1,16 @@
+name: Manager Comms Task8 UI Red
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  red:
+    if: contains(github.event.head_commit.message, '[task8-ui-red]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager-admin/attachment-file-menu.test.tsx

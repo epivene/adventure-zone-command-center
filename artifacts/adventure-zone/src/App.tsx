@@ -4,6 +4,7 @@ import ManagerMoneyPage from "@/pages/ManagerMoneyPage";
 import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";
 import ManagerOperationsPage from "@/pages/ManagerOperationsPage";
 import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";
+import ManagerCommunicationsAdminPage from "@/pages/ManagerCommunicationsAdminPage";
 import ManagerCrewAdminPage from "@/pages/ManagerCrewAdminPage";
 import ManagerAftermathAdminPage from "@/pages/ManagerAftermathAdminPage";
 import ManagerIncidentPage from "@/pages/ManagerIncidentPage";
@@ -12,6 +13,7 @@ import ManagerCrewPage from "@/pages/ManagerCrewPage";
 import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
 import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
+import ManagerMessagesPage from "@/pages/ManagerMessagesPage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
@@ -192,6 +194,7 @@ function ManagerProtectedApp() {
         <Route path="/manager/receipts"><ManagerReceiptsPage /></Route>
         <Route path="/manager/money"><ManagerMoneyPage /></Route>
         <Route path="/manager/route"><ManagerRoutePage /></Route>
+        <Route path="/manager/messages"><ManagerMessagesPage /></Route>
         <Route path="/manager"><ManagerHomePage /></Route>
       </Switch>
     </ManagerShell>
@@ -235,6 +238,7 @@ function AppRoutes() {
               <Route path="/organizations" component={OrganizationsPage} />
               <Route path="/event-families/:familyId" component={EventFamilyPage} />
               <Route path="/calendar" component={CalendarPage} />
+              <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
               <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
               <Route path="/manager-crew" component={ManagerCrewAdminPage} />
               <Route path="/manager-aftermath" component={ManagerAftermathAdminPage} />

@@ -8,6 +8,7 @@ const navigation = [
   { href: "/profiles", label: "Profiles" },
   { href: "/calendar", label: "Calendar" },
   { href: "/routes", label: "Routes" },
+  { href: "/manager-communications", label: "Communications" },
 ];
 
 function CreateEventButton({ className }: { className: string }) {

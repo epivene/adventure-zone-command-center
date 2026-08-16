@@ -1,0 +1,25 @@
+name: Manager Comms Task9 Green
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[task9-green]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx src/pages/ManagerMessagesPage.test.tsx src/components/manager/messages/meetup-request-drawer.test.tsx src/components/manager-admin/meetup-request-review.test.tsx src/components/manager/manager-action-center.test.tsx src/components/manager-admin/acknowledgment-review.test.tsx src/components/manager-admin/attachment-file-menu.test.tsx
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - run: grep -q '/manager-communications' artifacts/adventure-zone/src/App.tsx
+      - run: grep -q 'Communications' artifacts/adventure-zone/src/components/navigation/app-shell.tsx
+      - run: grep -q 'Messages' artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx
+      - run: grep -q 'Requests' artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx
+      - run: grep -q 'Needs review' artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx
+# rerun after asserting editable meetup-place value

@@ -1,0 +1,39 @@
+name: Manager Comms Task7 Green
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[task7-green]')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adventure_zone_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms/acknowledgment-service.test.ts src/features/manager-comms/admin-change-recorder.test.ts src/features/manager-comms/meetup-request-service.test.ts
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/manager-action-center.test.tsx src/components/manager-admin/acknowledgment-review.test.tsx
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - run: grep -q '/manager/acknowledgments' artifacts/api-server/src/routes/manager-communications.ts
+      - run: grep -q '/manager-admin/acknowledgments' artifacts/api-server/src/routes/manager-communications-admin.ts
+      - run: grep -q 'recordMeetupApprovalAcknowledgment' artifacts/api-server/src/routes/manager-meetups-admin.ts
+      - run: grep -q 'ManagerActionCenter' artifacts/adventure-zone/src/components/manager/manager-shell.tsx
