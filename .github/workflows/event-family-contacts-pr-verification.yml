@@ -1,0 +1,41 @@
+name: Event Family Contacts PR Verification
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-pr-final]')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: adventure_zone_test }
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Backend Event Family suite
+        run: |
+          files=$(find artifacts/api-server/src -type f \( -name '*event-family*.test.ts' -o -name '*event-families*.test.ts' -o -name 'family-shared-contact.test.ts' \) | sed 's#artifacts/api-server/##')
+          pnpm --filter @workspace/api-server exec vitest run $files
+      - name: Frontend Event Family suite
+        run: |
+          files=$(find artifacts/adventure-zone/src -type f \( -name '*event-family*.test.ts' -o -name '*event-family*.test.tsx' -o -name '*EventFamily*.test.tsx' -o -name 'family-contact-summary.test.tsx' \) | sed 's#artifacts/adventure-zone/##')
+          pnpm --filter @workspace/adventure-zone exec vitest run $files
+      - run: pnpm --filter @workspace/db build
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - name: Final diff guards
+        run: |
+          git fetch origin main
+          git diff --check origin/main...HEAD
+          test -z "$(git diff --name-only origin/main...HEAD | grep '^\.github/.*event-family-contacts' || true)" || { echo 'temporary helper leaked into diff'; exit 1; }
