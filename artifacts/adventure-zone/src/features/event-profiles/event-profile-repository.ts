@@ -73,6 +73,8 @@ export type EventProfileActivityRecord = {
   occurredAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  importedFromAct?: boolean;
+  actSourceType?: string | null;
 };
 
 export type EventProfileFollowUpRecord = {
