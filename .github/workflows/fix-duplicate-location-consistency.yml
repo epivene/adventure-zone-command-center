@@ -1,0 +1,72 @@
+name: Fix duplicate location consistency
+on:
+  push:
+    branches: [fix/duplicate-location-consistency]
+
+jobs:
+  fix:
+    if: "!contains(github.event.head_commit.message, '[skip duplicate-location-fix]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Add regression test
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          test = Path('artifacts/api-server/src/features/organizations/organization-merge-location-order.test.ts')
+          test.write_text('''import { readFileSync } from "node:fs";\nimport { fileURLToPath } from "node:url";\nimport { describe, expect, it } from "vitest";\n\ndescribe("duplicate organization merge location ordering", () => {\n  it("moves duplicate locations to the survivor before re-parenting location-linked contacts", () => {\n    const repositoryPath = fileURLToPath(new URL("./organization-repository.ts", import.meta.url));\n    const source = readFileSync(repositoryPath, "utf8");\n    const mergeStart = source.indexOf("async mergeOrganizations(primaryId: string");\n    const mergeSource = source.slice(mergeStart);\n    const locationMove = mergeSource.indexOf(".where(eq(organizationLocations.organizationId, dupId))");\n    const contactMove = mergeSource.indexOf(".where(eq(contacts.organizationId, dupId))");\n    expect(locationMove).toBeGreaterThanOrEqual(0);\n    expect(contactMove).toBeGreaterThanOrEqual(0);\n    expect(locationMove).toBeLessThan(contactMove);\n  });\n});\n''')
+          PY
+      - name: Confirm regression is red
+        run: |
+          if pnpm --filter @workspace/api-server exec vitest run src/features/organizations/organization-merge-location-order.test.ts; then
+            echo "Regression unexpectedly passed before the fix"
+            exit 1
+          fi
+      - name: Fix merge ordering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/organizations/organization-repository.ts')
+          text = path.read_text()
+          late = '''        // Step 10: Re-parent saved locations before deleting the duplicate.\n        // organization_locations.organization_id uses ON DELETE RESTRICT, so\n        // leaving even one location attached to dupId makes the merge fail.\n        await tx.update(organizationLocations)\n          .set({ organizationId: primaryId, updatedAt: now })\n          .where(eq(organizationLocations.organizationId, dupId));\n\n'''
+          if late not in text:
+              raise SystemExit('late location-move block missing; refusing to patch')
+          text = text.replace(late, '', 1)
+          anchor = '''        // Step 2: Re-parent contacts -- now safe because every contact that had\n        // organization_id = dupId has a matching organization_contacts row for\n        // primaryId (inserted above or already present).\n'''
+          early = '''        // Step 2: Move saved locations to the surviving organization first.\n        // Contacts can retain organization_location_id while their organization_id\n        // changes only when that location already belongs to the survivor. The DB\n        // consistency trigger enforces this relationship on every contact update.\n        await tx.update(organizationLocations)\n          .set({ organizationId: primaryId, updatedAt: now })\n          .where(eq(organizationLocations.organizationId, dupId));\n\n        // Step 3: Re-parent contacts -- now safe because every contact has both\n        // a matching organization_contacts row and, when present, a saved location\n        // that already belongs to primaryId.\n'''
+          if anchor not in text:
+              raise SystemExit('contact move anchor missing; refusing to patch')
+          text = text.replace(anchor, early, 1)
+          text = text.replace('// Step 3: Remove the now-redundant organization_contacts rows', '// Step 4: Remove the now-redundant organization_contacts rows', 1)
+          text = text.replace('// Step 4: Re-parent bookings', '// Step 5: Re-parent bookings', 1)
+          text = text.replace('// Step 5: Re-parent follow_ups', '// Step 6: Re-parent follow_ups', 1)
+          text = text.replace('// Step 6: Re-parent activities', '// Step 7: Re-parent activities', 1)
+          text = text.replace('// Step 7: Re-parent call_sessions', '// Step 8: Re-parent call_sessions', 1)
+          text = text.replace('// Step 8: Re-parent act_external_links.', '// Step 9: Re-parent act_external_links.', 1)
+          text = text.replace('// Step 9: Re-parent act_migration_records matched/applied entity pointers', '// Step 10: Re-parent act_migration_records matched/applied entity pointers', 1)
+          path.write_text(text)
+          PY
+      - name: Verify regression and API build
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run src/features/organizations/organization-merge-location-order.test.ts
+          pnpm --filter @workspace/api-server build
+      - name: Commit verified fix
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/organizations/organization-repository.ts artifacts/api-server/src/features/organizations/organization-merge-location-order.test.ts
+          git rm .github/workflows/fix-duplicate-location-consistency.yml
+          git commit -m 'fix: move locations before duplicate contacts [skip duplicate-location-fix]'
+          git push origin HEAD:fix/duplicate-location-consistency
