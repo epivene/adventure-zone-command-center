@@ -32,49 +32,19 @@ jobs:
           git merge --no-commit --no-ff origin/main
           merge_status=$?
           set -e
-
-          # main now owns migration 043 for ACT archive recovery. Renumber this feature to 044.
           if [ -f lib/db/migrations/043_event_family_website_contacts.sql ]; then
             git mv lib/db/migrations/043_event_family_website_contacts.sql lib/db/migrations/044_event_family_website_contacts.sql
           fi
-          sed -i 's/043_event_family_website_contacts/044_event_family_website_contacts/g' artifacts/api-server/src/features/event-families/event-family-contacts.test.ts
-
-          # migrations.ts is the only expected merge conflict. Keep newest main registry and add our 044 entry.
           if git ls-files -u -- lib/db/src/migrations.ts | grep -q .; then
             git checkout --theirs lib/db/src/migrations.ts
           fi
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('lib/db/src/migrations.ts')
-          s = p.read_text()
-          if '044_event_family_website_contacts.sql' not in s:
-              marker = '] as const;'
-              entry = '''  {
-    name: "044_event_family_website_contacts.sql",
-    markerSql: `SELECT
-      EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'event_families'
-          AND column_name = 'website'
-      )
-      AND to_regclass(current_schema() || '.event_family_contacts') IS NOT NULL
-      AND to_regclass(current_schema() || '.event_family_contacts_one_primary_per_family') IS NOT NULL AS ready`,
-  },
-'''
-              if marker not in s:
-                  raise SystemExit('migration registry terminator missing')
-              s = s.replace(marker, entry + marker, 1)
-              p.write_text(s)
-          PY
+          python .github/scripts/event-family-contacts-final-sync.py
           git add lib/db/src/migrations.ts lib/db/migrations/044_event_family_website_contacts.sql artifacts/api-server/src/features/event-families/event-family-contacts.test.ts
-
           if git ls-files -u | grep -q .; then
             echo 'Unexpected merge conflicts remain:' >&2
             git diff --name-only --diff-filter=U >&2
             exit 1
           fi
-
           if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
             git commit -m "Merge latest main into event family website contacts"
           elif ! git diff --cached --quiet; then
