@@ -5,6 +5,8 @@ import ManagerMessagesPage from "./ManagerMessagesPage";
 
 const mocks = vi.hoisted(() => ({
   api: vi.fn(async (path: string, options?: RequestInit) => {
+    if (path === "/manager/messages/conversations/all" && options?.method === "POST") return { message: { id: "m2" } };
+    if (path === "/manager/messages/conversations" && options?.method === "POST") return { conversation: { id: "new" } };
     if (path === "/manager/messages/conversations") return { conversations: [
       { id: "all", kind: "all_managers", title: "All Managers", unreadCount: 2 },
       { id: "leg", kind: "leg_admin", title: "Kristy + Admin", unreadCount: 0 },
@@ -12,8 +14,6 @@ const mocks = vi.hoisted(() => ({
     if (path === "/manager/messages/conversations/all") return { messages: [
       { id: "m1", actorKind: "manager", actorName: "Hulk", body: "Where are you headed next?", attachments: [] },
     ] };
-    if (path === "/manager/messages/conversations/all" && options?.method === "POST") return { message: { id: "m2" } };
-    if (path === "/manager/messages/conversations" && options?.method === "POST") return { conversation: { id: "new" } };
     return {};
   }),
   legs: vi.fn(async () => [{ id: "leg-b", name: "Hulk" }, { id: "leg-a", name: "Kristy" }]),
