@@ -1,0 +1,79 @@
+name: Finalize profile notes
+on:
+  push:
+    branches: [feature/profile-family-notes-impl]
+permissions:
+  contents: write
+jobs:
+  finalize:
+    if: ${{ !contains(github.event.head_commit.message, '[profile-notes-finalized]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Apply final correctness edits
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          def edit(path, old, new, count=1):
+              p=Path(path); s=p.read_text()
+              if old not in s: raise SystemExit(f"missing pattern in {path}: {old[:100]!r}")
+              p.write_text(s.replace(old,new,count))
+
+          edit('artifacts/api-server/src/features/activities/activity-repository.ts',
+               'loadTimelineItemById(transaction as DrizzleDatabase, updated.id)',
+               'loadTimelineItemById(transaction as unknown as DrizzleDatabase, updated.id)')
+
+          edit('artifacts/adventure-zone/src/features/event-profiles/event-profile-repository.ts',
+               '  occurredAt: Date;\n};',
+               '  occurredAt: Date;\n  createdAt: Date;\n  updatedAt: Date;\n};')
+          edit('artifacts/adventure-zone/src/features/event-profiles/event-profile-repository.ts',
+               '        occurredAt: activities.timelineSortAt,\n      }).from(activities)',
+               '        occurredAt: activities.timelineSortAt,\n        createdAt: activities.createdAt,\n        updatedAt: activities.updatedAt,\n      }).from(activities)')
+
+          edit('artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx',
+               '                  createdAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),\n                  updatedAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),',
+               '                  createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),\n                  updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),')
+
+          edit('artifacts/adventure-zone/src/pages/EventProfilePage.tsx',
+               '          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt) })),',
+               '          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt), createdAt: toDate(n.createdAt), updatedAt: toDate(n.updatedAt) })),')
+
+          edit('artifacts/adventure-zone/src/components/activities/activity-timeline.tsx',
+               '''                  <time\n                    className="text-xs text-slate-500"\n                    dateTime={activity.occurredAt.toISOString()}\n                  >\n                    {formatDate(activity.occurredAt)}\n                  </time>''',
+               '''                  <div className="text-right text-xs text-slate-500">\n                    <time dateTime={activity.occurredAt.toISOString()}>{formatDate(activity.occurredAt)}</time>\n                    {noteComposer && activity.kind === "note" ? (\n                      <p>Created {formatDate(activity.createdAt)}{activity.updatedAt.getTime() !== activity.createdAt.getTime() ? ` · Updated ${formatDate(activity.updatedAt)}` : ""}</p>\n                    ) : null}\n                  </div>''')
+
+          # Merge regression: organization activities must move before deleting duplicate.
+          p=Path('artifacts/api-server/src/features/organizations/organization-merge-location-order.test.ts')
+          s=p.read_text()
+          needle='    expect(locationMove).toBeLessThan(contactMove);\n'
+          if 'activityMove' not in s:
+              s=s.replace(needle, needle + '''    const activityMove = mergeSource.indexOf(".where(eq(activities.organizationId, dupId))");\n    const organizationDelete = mergeSource.indexOf("tx.delete(organizations)");\n    expect(activityMove).toBeGreaterThanOrEqual(0);\n    expect(organizationDelete).toBeGreaterThanOrEqual(0);\n    expect(activityMove).toBeLessThan(organizationDelete);\n''')
+              p.write_text(s)
+          PY
+      - name: Focused API notes tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/notes/scoped-note-repository.test.ts src/features/organizations/organization-merge-location-order.test.ts
+      - name: Focused frontend notes tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/notes/scoped-notes.test.tsx src/components/activities/activity-timeline.test.tsx src/pages/EventProfilePage.test.tsx
+      - name: Production builds
+        run: |
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/api-server build
+          pnpm --filter @workspace/adventure-zone build
+      - name: Commit verified final edits
+        run: |
+          git config user.name epivene
+          git config user.email Desieleighc@gmail.com
+          git add artifacts/api-server artifacts/adventure-zone
+          if ! git diff --cached --quiet; then
+            git commit -m "test: finalize profile location and family notes [profile-notes-finalized]"
+            git push
+          fi
