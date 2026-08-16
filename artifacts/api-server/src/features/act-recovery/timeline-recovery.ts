@@ -66,7 +66,14 @@ export class ActTimelineRecovery {
     const sourceDatabaseKey = text(sourceScope?.sourceDatabaseKey);
     if (!sourceDatabaseKey) return { state: "needs_review", targetSummary: { reason: "source_scope_missing" } };
 
-    const parents = await this.resolveParents(sourceDatabaseKey, sourceType, candidate.actRecordId);
+    const exactParents = await this.resolveParents(sourceDatabaseKey, sourceType, candidate.actRecordId);
+    const manualParent = await this.resolveManualParent(candidate);
+    const parentMap = new Map<string, Parent>();
+    for (const parent of exactParents) parentMap.set(`${parent.entityType}:${parent.entityId}`, parent);
+    if (manualParent) parentMap.set(`${manualParent.entityType}:${manualParent.entityId}`, manualParent);
+    const parents = [...parentMap.values()].sort((left, right) =>
+      left.entityType.localeCompare(right.entityType) || left.entityId.localeCompare(right.entityId),
+    );
     if (!parents.length) {
       return {
         state: "needs_review",
@@ -138,6 +145,7 @@ export class ActTimelineRecovery {
         provenanceRepaired,
         associationsAdded,
         parentCount: parents.length,
+        manuallyAssigned: Boolean(manualParent),
       },
     };
   }
@@ -170,6 +178,34 @@ export class ActTimelineRecovery {
     return [...found.values()].sort((left, right) =>
       left.entityType.localeCompare(right.entityType) || left.entityId.localeCompare(right.entityId),
     );
+  }
+
+  private async resolveManualParent(candidate: RecoveryCandidate): Promise<Parent | null> {
+    try {
+      const decisions = await this.query(sql`
+        select target_entity_type as "targetEntityType", target_entity_id as "targetEntityId"
+        from act_archive_recovery_decisions
+        where run_id = ${candidate.runId}
+          and source_record_id = ${candidate.sourceRecordId}
+          and source_version_id = ${candidate.sourceVersionId}
+          and decision = 'assign_parent'
+        order by created_at desc, id desc
+        limit 1
+      `);
+      const entityType = text(decisions[0]?.targetEntityType);
+      const entityId = text(decisions[0]?.targetEntityId);
+      if (!entityId || (entityType !== "organization" && entityType !== "contact" && entityType !== "booking")) {
+        return null;
+      }
+      return { entityType, entityId };
+    } catch (error) {
+      // Focused unit fixtures created before the recovery-review table exists should
+      // still exercise exact relationship recovery. Production always has migration 043.
+      if (error && typeof error === "object" && "code" in error && String((error as { code?: unknown }).code) === "42P01") {
+        return null;
+      }
+      throw error;
+    }
   }
 
   private async ensureAssociation(activityId: string, parent: Parent): Promise<number> {
