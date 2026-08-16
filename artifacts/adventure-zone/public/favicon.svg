@@ -1,3 +1,29 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <defs>
+    <linearGradient id="bounceGradient" x1="20" y1="28" x2="160" y2="154" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E92F1D"/>
+      <stop offset="0.52" stop-color="#F4511E"/>
+      <stop offset="1" stop-color="#FF8A00"/>
+    </linearGradient>
+    <mask id="bounceMask" maskUnits="userSpaceOnUse" x="14" y="16" width="152" height="148">
+      <rect x="14" y="16" width="152" height="148" fill="black"/>
+
+      <!-- Inflatable castle / bounce-house body -->
+      <path d="M22 75C22 69.4772 26.4772 65 32 65H54C59.5228 65 64 69.4772 64 75V128H116V75C116 69.4772 120.477 65 126 65H148C153.523 65 158 69.4772 158 75V139C158 146.18 152.18 152 145 152H35C27.8203 152 22 146.18 22 139V75Z" fill="white"/>
+      <path d="M61 59C61 53.4772 65.4772 49 71 49H109C114.523 49 119 53.4772 119 59V135H61V59Z" fill="white"/>
+
+      <!-- Puffy tower caps -->
+      <path d="M18.1067 64.3529L38.0612 34.5094C40.4382 30.954 45.5618 30.954 47.9388 34.5094L67.8933 64.3529C70.559 68.3395 67.701 73.6875 62.9045 73.6875H23.0955C18.299 73.6875 15.441 68.3395 18.1067 64.3529Z" fill="white"/>
+      <path d="M61.2265 50.0244L84.8777 19.8122C87.4777 16.4912 92.5223 16.4912 95.1223 19.8122L118.774 50.0244C121.91 54.0301 119.055 59.8864 113.968 59.8864H66.032C60.9452 59.8864 58.0899 54.0301 61.2265 50.0244Z" fill="white"/>
+      <path d="M112.107 64.3529L132.061 34.5094C134.438 30.954 139.562 30.954 141.939 34.5094L161.893 64.3529C164.559 68.3395 161.701 73.6875 156.905 73.6875H117.095C112.299 73.6875 109.441 68.3395 112.107 64.3529Z" fill="white"/>
+
+      <!-- Inflated floor / base -->
+      <rect x="14" y="129" width="152" height="35" rx="17.5" fill="white"/>
+
+      <!-- Cut-out entrance -->
+      <path d="M72 151V126C72 116.059 80.0589 108 90 108C99.9411 108 108 116.059 108 126V151H72Z" fill="black"/>
+    </mask>
+  </defs>
+
+  <rect x="14" y="16" width="152" height="148" fill="url(#bounceGradient)" mask="url(#bounceMask)"/>
 </svg>
