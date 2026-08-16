@@ -2,9 +2,13 @@ import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import {
+  assertOrganizationsMergeable,
   DrizzleOrganizationRepository,
   reviewOrganizationFamily,
 } from "@/features/organizations/organization-repository";
+import {
+  prepareOrganizationMergeReferences,
+} from "@/features/organizations/organization-merge-reference-preparation";
 import {
   organizationListQuerySchema,
   setLastResortInputSchema,
@@ -201,6 +205,12 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
     return;
   }
   try {
+    // Do the same family/location safety check before moving dependent rows so
+    // a known conflict cannot partially prepare a merge that will be rejected.
+    await db.transaction((transaction) =>
+      assertOrganizationsMergeable(transaction, [primaryId, ...duplicateIds]),
+    );
+    await prepareOrganizationMergeReferences(db, primaryId, duplicateIds);
     await orgRepo().mergeOrganizations(primaryId, duplicateIds);
     res.json({ ok: true });
   } catch (err) {
