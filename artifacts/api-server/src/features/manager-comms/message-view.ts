@@ -13,7 +13,8 @@ export async function attachFilesToMessages(
     if (attachment.uploadStatus === "uploaded" && attachment.objectKey) {
       try { downloadUrl = await storage.getSignedReadUrl(attachment.objectKey); } catch { downloadUrl = null; }
     }
-    const view = { ...attachment, downloadUrl };
+    const { objectKey: _privateObjectKey, ...publicAttachment } = attachment;
+    const view = { ...publicAttachment, downloadUrl };
     byMessage.set(attachment.messageId, [...(byMessage.get(attachment.messageId) ?? []), view]);
   }
   return messages.map((message) => ({ ...message, attachments: byMessage.get(message.id) ?? [] }));
