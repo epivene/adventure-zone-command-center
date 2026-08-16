@@ -1,9 +1,9 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { ScopedNoteRepository } from "@/features/notes/scoped-note-repository";
 import { createAiClient, NOT_CONFIGURED_ERROR } from "@/features/ai-suggestions/ai-client";
-import { classifyObviousEventFamilies } from "@/features/event-families/event-family-classifier";
+import { classifyObviousEventFamilies, normalizeFamilyName } from "@/features/event-families/event-family-classifier";
 import { suggestEventFamiliesWithAi } from "@/features/event-families/event-family-ai";
 import {
   EventFamilyConflictError,
@@ -15,6 +15,10 @@ const router: IRouter = Router();
 const idSchema = z.string().uuid();
 const renameSchema = z.object({ name: z.string().trim().min(1).max(160) });
 const memberSchema = z.object({ organizationId: z.string().uuid() });
+const createFamilySchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  organizationIds: z.array(z.string().uuid()).min(2).max(50),
+});
 const noteBodySchema = z.object({ body: z.string().trim().min(1, "Add note text.").max(4000) });
 
 function repo() {
@@ -44,6 +48,72 @@ function sendError(req: Request, res: Response, error: unknown): void {
 router.get("/event-families", async (req, res): Promise<void> => {
   try {
     res.json({ families: await repo().listFamilies() });
+  } catch (error) {
+    sendError(req, res, error);
+  }
+});
+
+router.post("/event-families", async (req, res): Promise<void> => {
+  try {
+    const input = createFamilySchema.parse(req.body);
+    const organizationIds = [...new Set(input.organizationIds)];
+    if (organizationIds.length < 2) {
+      res.status(400).json({ ok: false, error: "Choose at least 2 different profiles." });
+      return;
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const candidates = await client.query(
+        `SELECT o.id, o.consolidated_into_id, m.family_id
+         FROM organizations o
+         LEFT JOIN event_family_members m ON m.organization_id = o.id
+         WHERE o.id = ANY($1::uuid[])
+         FOR UPDATE OF o`,
+        [organizationIds],
+      );
+      if (candidates.rows.length !== organizationIds.length) {
+        throw new EventFamilyConflictError("One or more profiles no longer exist");
+      }
+      if (candidates.rows.some((row) => row.consolidated_into_id)) {
+        throw new EventFamilyConflictError("A retired profile cannot be grouped");
+      }
+      if (candidates.rows.some((row) => row.family_id)) {
+        throw new EventFamilyConflictError("A profile already belongs to another event family");
+      }
+
+      const normalizedName = normalizeFamilyName(input.name);
+      const existing = await client.query(
+        `SELECT id FROM event_families WHERE normalized_name = $1 FOR UPDATE`,
+        [normalizedName],
+      );
+      if (existing.rows[0]) {
+        throw new EventFamilyConflictError("An event family with that name already exists");
+      }
+
+      const created = await client.query(
+        `INSERT INTO event_families (name, normalized_name)
+         VALUES ($1, $2)
+         RETURNING id`,
+        [input.name.trim(), normalizedName],
+      );
+      const familyId = created.rows[0].id as string;
+      for (const organizationId of organizationIds) {
+        await client.query(
+          `INSERT INTO event_family_members (family_id, organization_id, source)
+           VALUES ($1, $2, 'manual')`,
+          [familyId, organizationId],
+        );
+      }
+      await client.query("COMMIT");
+      res.status(201).json({ ok: true, familyId });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     sendError(req, res, error);
   }
