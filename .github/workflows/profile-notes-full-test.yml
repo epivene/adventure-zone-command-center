@@ -1,0 +1,21 @@
+name: Profile notes full branch tests
+on:
+  push:
+    branches: [feature/profile-family-notes-impl]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: API full test suite
+        run: pnpm --filter @workspace/api-server test
+      - name: Frontend full test suite
+        run: pnpm --filter @workspace/adventure-zone exec vitest run
