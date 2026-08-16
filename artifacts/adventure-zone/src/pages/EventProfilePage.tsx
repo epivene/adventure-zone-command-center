@@ -26,12 +26,13 @@ export default function EventProfilePage() {
     : undefined;
   const mode = params.get("mode") === "prospect" ? "prospect" as const : undefined;
 
-  useEffect(() => {
+  async function loadProfile() {
     if (!profileId) return;
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
-    apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`)
-      .then(async (d) => {
+    try {
+      const d = await apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`);
+      {
         const ratingSummary = await apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 }));
         // JSON dates arrive as strings — the workspace formats Date objects.
         const toDate = (v: any) => (v ? new Date(v) : null);
@@ -62,9 +63,17 @@ export default function EventProfilePage() {
           listFamilyNotes(normalized.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
         }
         setData(normalized);
+        setError(null);
         setLoading(false);
-      })
-      .catch((e) => { setError(e.message); setLoading(false); });
+      }
+    } catch (e: any) {
+      setError(e.message);
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadProfile();
   }, [profileId, contactId]);
 
   function retryFamilyNotes() {
@@ -112,6 +121,8 @@ export default function EventProfilePage() {
         familyNotes={familyNotes}
         familyNotesError={familyNotesError}
         retryFamilyNotes={retryFamilyNotes}
+        organizationContext={data.organizationContext ?? { parent: null, children: [] }}
+        onOrganizationChanged={() => void loadProfile()}
       />
     </div>
   );

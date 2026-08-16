@@ -6,6 +6,7 @@ import { Link } from "wouter";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import { PossibleLocationsDrawer } from "@/components/organizations/possible-locations-drawer";
+import { OrganizationMembershipDrawer } from "@/components/organizations/organization-membership-drawer";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -59,6 +60,8 @@ export function EventProfileWorkspace({
   familyNotes = [],
   familyNotesError = null,
   retryFamilyNotes,
+  organizationContext = { parent: null, children: [] },
+  onOrganizationChanged = () => {},
 }: {
   profile: EventProfile;
   context?: EventProfileWorkspaceContext;
@@ -67,10 +70,13 @@ export function EventProfileWorkspace({
   familyNotes?: ScopedNoteView[];
   familyNotesError?: string | null;
   retryFamilyNotes?: () => void;
+  organizationContext?: { parent: { id: string; name: string; city: string | null; region: string | null } | null; children: { id: string; name: string; city: string | null; region: string | null }[] };
+  onOrganizationChanged?: () => void;
 }) {
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
   const [showLocations, setShowLocations] = useState<Record<string, boolean>>({});
   const [followUpItems, setFollowUpItems] = useState(profile.followUps);
+  const [membershipDrawer, setMembershipDrawer] = useState<"add-child" | "choose-parent" | null>(null);
   const groupedContacts = useMemo(() => groupEventProfileContacts(profile.contacts), [profile.contacts]);
   const selectedContact = groupedContacts.find(({ id }) => id === selectedContactId) ?? groupedContacts[0] ?? null;
   const callablePhone = selectedContact
@@ -87,6 +93,7 @@ export function EventProfileWorkspace({
     .filter(Boolean)
     .join(", ");
   const websiteHref = normalizeExternalWebsite(profile.place.website);
+  const organizationLike = organizationContext.children.length > 0 || ["company", "association", "city_government", "tribe", "school"].includes(profile.place.placeType);
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -130,6 +137,47 @@ export function EventProfileWorkspace({
             {profile.familyContext.kind === "event_family" ? "Part of" : "Location of"}{" "}
             <Link className="underline" href={profile.familyContext.kind === "event_family" ? `/event-families/${profile.familyContext.id}` : `/event-profiles/${profile.familyContext.id}`}>{profile.familyContext.name}</Link>
           </p>
+        ) : null}
+        <div className="mt-4 grid gap-3">
+          {organizationContext.parent ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">
+              <p className="font-semibold text-sky-950">Part of <Link className="underline" href={`/event-profiles/${organizationContext.parent.id}`}>{organizationContext.parent.name}</Link></p>
+              <button className="button-secondary" onClick={() => setMembershipDrawer("choose-parent")} type="button">Change organization…</button>
+            </div>
+          ) : !organizationLike ? (
+            <button className="button-secondary justify-self-start" onClick={() => setMembershipDrawer("choose-parent")} type="button">Add to organization…</button>
+          ) : null}
+
+          {organizationLike ? (
+            <section className="rounded-lg border border-slate-200 bg-slate-50 p-4" aria-labelledby="locations-events-title">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-bold" id="locations-events-title">Locations &amp; Events</h2>
+                <button className="button-secondary" onClick={() => setMembershipDrawer("add-child")} type="button">+ Add location/event</button>
+              </div>
+              {organizationContext.children.length ? (
+                <ul className="mt-3 grid gap-2">
+                  {organizationContext.children.map((child) => (
+                    <li key={child.id}>
+                      <Link className="block rounded-lg bg-white px-3 py-2 font-semibold hover:text-orange-700" href={`/event-profiles/${child.id}`}>
+                        {child.name}{child.city || child.region ? ` — ${[child.city, child.region].filter(Boolean).join(", ")}` : ""}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="mt-2 text-sm text-slate-600">No locations or events have been added yet.</p>}
+            </section>
+          ) : null}
+        </div>
+        {membershipDrawer ? (
+          <OrganizationMembershipDrawer
+            mode={membershipDrawer}
+            profileId={profile.id}
+            parentOrganization={membershipDrawer === "add-child" ? { id: profile.id, name: profile.place.name } : null}
+            currentParent={organizationContext.parent ? { id: organizationContext.parent.id, name: organizationContext.parent.name } : null}
+            open
+            onClose={() => setMembershipDrawer(null)}
+            onChanged={onOrganizationChanged}
+          />
         ) : null}
         {profile.place.lastResort ? (
           <p className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-950" role="alert">
