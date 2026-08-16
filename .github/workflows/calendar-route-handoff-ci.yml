@@ -40,7 +40,7 @@ jobs:
       - name: Manager and route-map API tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/manager-map-data.test.ts src/routes/leg-manager-admin.test.ts src/features/leg-manager/crew-repository-idempotency.test.ts src/features/leg-manager/crew-repository.test.ts src/features/routes/location-resolver.test.ts src/routes/routes-map.test.ts
       - name: Manager and route-map frontend tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/manager-scoped-map.test.tsx src/components/routes/travel-leg-editor.test.tsx src/lib/manager-auth-context.test.tsx src/lib/manager-back-target.test.ts src/App.manager-routing.test.tsx src/pages/ManagerHomePage.test.tsx src/pages/ManagerRoutePage.test.tsx src/pages/ManagerCrewPage.test.tsx src/pages/ManagerWorkerPage.test.tsx src/pages/ManagerOperationsPage.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/manager-scoped-map.test.tsx src/components/routes/manual-handoff-form.test.tsx src/components/routes/travel-leg-editor.test.tsx src/lib/manager-auth-context.test.tsx src/lib/manager-back-target.test.ts src/App.manager-routing.test.tsx src/pages/ManagerHomePage.test.tsx src/pages/ManagerRoutePage.test.tsx src/pages/ManagerCrewPage.test.tsx src/pages/ManagerWorkerPage.test.tsx src/pages/ManagerOperationsPage.test.tsx
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server
