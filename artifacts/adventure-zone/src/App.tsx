@@ -4,6 +4,7 @@ import ManagerMoneyPage from "@/pages/ManagerMoneyPage";
 import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";
 import ManagerOperationsPage from "@/pages/ManagerOperationsPage";
 import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";
+import ManagerCommunicationsAdminPage from "@/pages/ManagerCommunicationsAdminPage";
 import ManagerCrewAdminPage from "@/pages/ManagerCrewAdminPage";
 import ManagerAftermathAdminPage from "@/pages/ManagerAftermathAdminPage";
 import ManagerIncidentPage from "@/pages/ManagerIncidentPage";
@@ -237,6 +238,7 @@ function AppRoutes() {
               <Route path="/organizations" component={OrganizationsPage} />
               <Route path="/event-families/:familyId" component={EventFamilyPage} />
               <Route path="/calendar" component={CalendarPage} />
+              <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
               <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
               <Route path="/manager-crew" component={ManagerCrewAdminPage} />
               <Route path="/manager-aftermath" component={ManagerAftermathAdminPage} />
