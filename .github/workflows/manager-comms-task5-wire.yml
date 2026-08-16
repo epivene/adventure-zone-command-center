@@ -1,0 +1,37 @@
+name: Manager Comms Task5 Wire
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  wire:
+    if: contains(github.event.head_commit.message, '[task5-wire]')
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('artifacts/adventure-zone/src/pages/ManagerMessagesPage.tsx');s=p.read_text()
+          a='import { listManagerLoginLegs, useManagerAuth } from "@/lib/manager-auth-context";'
+          if 'meetup-request-drawer' not in s:s=s.replace(a,a+'\nimport { MeetupRequestDrawer } from "@/components/manager/messages/meetup-request-drawer";',1)
+          a='  const [showNew, setShowNew] = useState(false);'
+          if 'showMeetup' not in s:s=s.replace(a,a+'\n  const [showMeetup, setShowMeetup] = useState(() => typeof window !== "undefined" && window.location.search.includes("meetup=1"));',1)
+          a='<div><h1 className="text-xl font-bold">{selected.title || "Conversation"}</h1><p className="text-xs text-slate-500">Messages are visible to admins.</p></div>'
+          if 'Request meetup / equipment swap</button>' not in s:s=s.replace(a,a+'<button className="button-secondary ml-auto" onClick={() => setShowMeetup(true)} type="button">Request meetup / equipment swap</button>',1)
+          a='      {error ? <p className="text-sm font-semibold text-red-600" role="alert">{error}</p> : null}\n    </div>;'
+          s=s.replace(a,'      {error ? <p className="text-sm font-semibold text-red-600" role="alert">{error}</p> : null}\n      <MeetupRequestDrawer open={showMeetup} onClose={() => setShowMeetup(false)} linkedConversationId={selectedId} />\n    </div>;',1)
+          a='<header className="flex items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">Messages</h1><p className="mt-1 text-sm text-slate-600">Messages in this app are visible to admins.</p></div><button className="button-primary whitespace-nowrap" onClick={openNew} type="button"><Plus className="mr-1 inline h-4 w-4"/>New message</button></header>'
+          if a in s:s=s.replace(a,'<header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-2xl font-bold">Messages</h1><p className="mt-1 text-sm text-slate-600">Messages in this app are visible to admins.</p></div><div className="flex flex-wrap gap-2"><button className="button-secondary" onClick={() => setShowMeetup(true)} type="button">Request meetup / equipment swap</button><button className="button-primary whitespace-nowrap" onClick={openNew} type="button"><Plus className="mr-1 inline h-4 w-4"/>New message</button></div></header>',1)
+          a='    {error ? <p className="text-sm font-semibold text-red-600" role="alert">{error}</p> : null}\n  </div>;'
+          s=s.replace(a,'    {error ? <p className="text-sm font-semibold text-red-600" role="alert">{error}</p> : null}\n    <MeetupRequestDrawer open={showMeetup} onClose={() => setShowMeetup(false)} linkedConversationId={null} />\n  </div>;',1)
+          p.write_text(s)
+          PY
+          git diff --check
+          grep -q 'MeetupRequestDrawer' artifacts/adventure-zone/src/pages/ManagerMessagesPage.tsx
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/adventure-zone/src/pages/ManagerMessagesPage.tsx
+          git commit -m 'feat: add meetup requests to messages [skip-task5-wire]'
+          git push origin HEAD:feature/manager-communications-acknowledgments
