@@ -19,8 +19,8 @@ describe("EventWrapUpReviewQueue", () => {
     expect(screen.getByText(/Kristy/)).toBeInTheDocument();
     expect(screen.getByText("★★★★")).toBeInTheDocument();
     expect(screen.getByText("$25.00 short")).toBeInTheDocument();
-    expect(screen.getByText(/Direct profit: \$2,515.00/)).toBeInTheDocument();
-    expect(screen.getByText(/Estimated true profit: unavailable/)).toBeInTheDocument();
+    expect(screen.getByText("$2,515.00")).toBeInTheDocument();
+    expect(screen.getByText("unavailable")).toBeInTheDocument();
     expect(screen.getByText(/1 receipt/)).toBeInTheDocument();
     expect(screen.getByText(/Crew wage cost is incomplete/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review wrap-up/i })).toHaveAttribute("href", "/manager-aftermath?wrapUp=b1");
