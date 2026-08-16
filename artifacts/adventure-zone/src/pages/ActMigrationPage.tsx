@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { ExtractionProgress } from "@/components/act-replacement/extraction-progress";
 import {
   bulkSelectionSignature,
@@ -1308,6 +1309,12 @@ export default function ActMigrationPage() {
         Automatic review uses the saved archive, followed by a separate safe
         import. Uncertain data stays preserved in the archive.
       </p>
+      <Link
+        className="button-secondary mt-4 inline-flex min-h-11 items-center justify-center"
+        href="/settings/act-recovery"
+      >
+        Recover archived ACT data
+      </Link>
 
       <StageProgress active={stage} />
 

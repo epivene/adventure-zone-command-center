@@ -302,7 +302,7 @@ export default function ActRecoveryPage() {
                     {subject ? <h3 className="mt-1 text-lg font-bold text-slate-950">{subject}</h3> : null}
                     <p className="mt-1 text-sm text-slate-500">{formatDate(sourceDate(item))}</p>
                   </div>
-                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">Needs review</span>
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">Review required</span>
                 </div>
 
                 <p className="whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{sourceBody(item)}</p>
