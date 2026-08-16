@@ -1,17 +1,20 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { apiGet } from "@/lib/auth-token";
+import { AddExistingProfile } from "./add-existing-profile";
 import { PossibleLocationsSection } from "./possible-locations-section";
 
 export function PossibleLocationsDrawer({ orgId }: { orgId: string }) {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState<number | null>(null);
 
-  useEffect(() => {
+  const refreshCount = useCallback(() => {
     apiGet<{ rollup: { locationCount: number } }>(`/organizations/${orgId}/locations/rollup`)
       .then((result) => setCount(result.rollup?.locationCount ?? 0))
       .catch(() => setCount(null));
   }, [orgId]);
+
+  useEffect(() => { refreshCount(); }, [refreshCount]);
 
   return (
     <>
@@ -40,7 +43,10 @@ export function PossibleLocationsDrawer({ orgId }: { orgId: string }) {
               </div>
               <button className="button-secondary" onClick={() => setOpen(false)} type="button">Close</button>
             </div>
-            <PossibleLocationsSection orgId={orgId} />
+            <div className="grid gap-4">
+              <AddExistingProfile orgId={orgId} onAdded={refreshCount} />
+              <PossibleLocationsSection orgId={orgId} />
+            </div>
           </aside>
         </div>
       ) : null}

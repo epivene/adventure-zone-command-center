@@ -11,6 +11,7 @@ import {
 } from "@/features/organizations/last-resort-input";
 import { setOrganizationLastResort } from "@/features/organizations/last-resort-service";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
+import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
@@ -47,6 +48,11 @@ const familyReviewInputSchema = z.discriminatedUnion("action", [
     candidateIds: familyCandidateIdsSchema,
   }),
 ]);
+
+const addProfileInputSchema = z.object({
+  sourceOrgId: z.string().uuid(),
+  label: z.string().trim().min(1).max(240).optional(),
+});
 
 router.get("/organizations", async (req, res): Promise<void> => {
   const query = organizationListQuerySchema.parse({
@@ -127,6 +133,30 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
 // Location CRUD routes nested under /organizations/:id/locations.
 // Must be registered before /:id to prevent Express matching "locations" as a param.
 router.use("/organizations/:id/locations", locationRoutes);
+
+router.post("/organizations/:id/add-profile", async (req, res): Promise<void> => {
+  const canonicalOrgId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = addProfileInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  try {
+    const result = await addProfileAsLocation(db, {
+      canonicalOrgId,
+      sourceOrgId: parsed.data.sourceOrgId,
+      label: parsed.data.label,
+    }, new Date());
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err instanceof OrganizationConflictError) {
+      res.status(409).json({ ok: false, error: err.message });
+      return;
+    }
+    req.log.error({ err }, "Failed to add existing profile as organization location");
+    res.status(500).json({ ok: false, error: "Could not add profile to organization" });
+  }
+});
 
 router.get("/organizations/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
