@@ -62,7 +62,7 @@ describe("event family website/contact routes", () => {
 
   it("creates and attaches a new CRM contact", async () => {
     mocks.createAndAttachContact.mockResolvedValue({ contactId, name: "Jane Smith", role: "Director", isPrimary: false });
-    await request(app).post(`/event-families/${familyId}/contacts/new`).send({ firstName: "Jane", lastName: "Smith", phone: "701-555-0101", email: "jane@example.com", role: "Director", makePrimary: false }).expect(201);
+    await request(app).post(`/event-families/${familyId}/contacts/new`).send({ name: "Jane Smith", phone: "701-555-0101", email: "jane@example.com", role: "Director", makePrimary: false }).expect(201);
     expect(mocks.createAndAttachContact).toHaveBeenCalledWith(familyId, expect.objectContaining({ firstName: "Jane", lastName: "Smith", role: "Director", makePrimary: false }));
   });
 
