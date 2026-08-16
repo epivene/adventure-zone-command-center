@@ -7,6 +7,9 @@ import { Link } from "wouter";
 
 import { apiDelete, apiFetch, apiGet } from "@/lib/auth-token";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
+import { ScopedNotes } from "@/components/notes/scoped-notes";
+import { createLocationNote, deleteLocationNote, listLocationNotes, updateLocationNote } from "@/actions/scoped-notes";
+import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 import type { LocationFormInitial } from "./location-form";
 
 //  Types (matching api-server OrgLocationSummary / OrgLocationDetail)
@@ -157,6 +160,9 @@ export function LocationCard({
   const [detail, setDetail] = useState<LocationDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [locationNotes, setLocationNotes] = useState<ScopedNoteView[]>([]);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const [notesLoaded, setNotesLoaded] = useState(false);
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -188,6 +194,10 @@ export function LocationCard({
     if (detail) return; // already loaded
     setDetailLoading(true);
     setDetailError(null);
+    if (!notesLoaded) {
+      setNotesError(null);
+      void listLocationNotes(orgId, location.id).then((notes) => { setLocationNotes(notes); setNotesLoaded(true); }).catch(() => setNotesError("Could not load location notes."));
+    }
     try {
       const data = await apiGet<{ location: LocationDetail }>(
         `/organizations/${orgId}/locations/${location.id}`,
@@ -349,6 +359,23 @@ export function LocationCard({
                     </a>
                   </p>
                 ) : null}
+              </div>
+
+              <div>
+                {notesError ? (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+                    <p>{notesError}</p>
+                    <button className="mt-2 font-semibold underline" type="button" onClick={() => { setNotesError(null); void listLocationNotes(orgId, location.id).then((notes) => { setLocationNotes(notes); setNotesLoaded(true); }).catch(() => setNotesError("Could not load location notes.")); }}>Retry location notes</button>
+                  </div>
+                ) : (
+                  <ScopedNotes
+                    title="Location notes"
+                    notes={locationNotes}
+                    onCreate={(body) => createLocationNote(orgId, location.id, body)}
+                    onUpdate={(noteId, body) => updateLocationNote(orgId, location.id, noteId, body)}
+                    onDelete={(noteId) => deleteLocationNote(orgId, location.id, noteId)}
+                  />
+                )}
               </div>
 
               {/* Contacts */}

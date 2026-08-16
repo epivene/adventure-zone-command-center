@@ -1,5 +1,7 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
+import { db } from "@workspace/db";
+import { ScopedNoteRepository } from "@/features/notes/scoped-note-repository";
 import { createAiClient, NOT_CONFIGURED_ERROR } from "@/features/ai-suggestions/ai-client";
 import { classifyObviousEventFamilies } from "@/features/event-families/event-family-classifier";
 import { suggestEventFamiliesWithAi } from "@/features/event-families/event-family-ai";
@@ -13,9 +15,13 @@ const router: IRouter = Router();
 const idSchema = z.string().uuid();
 const renameSchema = z.object({ name: z.string().trim().min(1).max(160) });
 const memberSchema = z.object({ organizationId: z.string().uuid() });
+const noteBodySchema = z.object({ body: z.string().trim().min(1, "Add note text.").max(4000) });
 
 function repo() {
   return new EventFamilyRepository();
+}
+function noteRepo() {
+  return new ScopedNoteRepository(db);
 }
 
 function sendError(req: Request, res: Response, error: unknown): void {
@@ -144,6 +150,48 @@ router.patch("/event-families/:id", async (req, res): Promise<void> => {
   } catch (error) {
     sendError(req, res, error);
   }
+});
+
+router.get("/event-families/:id/notes", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    if (!(await noteRepo().ownerExists({ kind: "event_family", id: familyId }))) {
+      res.status(404).json({ ok: false, error: "Event family not found" });
+      return;
+    }
+    res.json({ notes: await noteRepo().list({ kind: "event_family", id: familyId }) });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.post("/event-families/:id/notes", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const { body } = noteBodySchema.parse(req.body);
+    const result = await noteRepo().create({ kind: "event_family", id: familyId }, body);
+    if (!result.ok) { res.status(404).json({ ok: false, error: "Note owner not found" }); return; }
+    res.status(201).json({ ok: true, note: result.note });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.patch("/event-families/:id/notes/:noteId", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const noteId = idSchema.parse(req.params.noteId);
+    const { body } = noteBodySchema.parse(req.body);
+    const result = await noteRepo().update({ kind: "event_family", id: familyId }, noteId, body);
+    if (!result.ok) { res.status(404).json({ ok: false, error: result.code === "OWNER_NOT_FOUND" ? "Note owner not found" : "Note not found for this owner" }); return; }
+    res.json({ ok: true, note: result.note });
+  } catch (error) { sendError(req, res, error); }
+});
+
+router.delete("/event-families/:id/notes/:noteId", async (req, res): Promise<void> => {
+  try {
+    const familyId = idSchema.parse(req.params.id);
+    const noteId = idSchema.parse(req.params.noteId);
+    const result = await noteRepo().remove({ kind: "event_family", id: familyId }, noteId);
+    if (!result.ok) { res.status(404).json({ ok: false, error: result.code === "OWNER_NOT_FOUND" ? "Note owner not found" : "Note not found for this owner" }); return; }
+    res.json({ ok: true });
+  } catch (error) { sendError(req, res, error); }
 });
 
 router.post("/event-families/:id/members", async (req, res): Promise<void> => {

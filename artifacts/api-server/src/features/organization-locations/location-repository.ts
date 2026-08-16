@@ -9,6 +9,7 @@ import {
   organizationContacts,
   organizationLocations,
   organizations,
+  scopedNotes,
   travelLegs,
 } from "@/db/schema";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
@@ -501,7 +502,7 @@ export class DrizzleLocationRepository {
       .limit(1);
     if (!loc) return "not_found";
 
-    const [[contactCount], [activityCount], [bookingCount], [followUpCount], [callSessionCount]] =
+    const [[contactCount], [activityCount], [bookingCount], [followUpCount], [callSessionCount], [noteCount]] =
       await Promise.all([
         this.database
           .select({ value: count() })
@@ -523,6 +524,10 @@ export class DrizzleLocationRepository {
           .select({ value: count() })
           .from(callSessions)
           .where(eq(callSessions.organizationLocationId, locationId)),
+        this.database
+          .select({ value: count() })
+          .from(scopedNotes)
+          .where(eq(scopedNotes.organizationLocationId, locationId)),
       ]);
 
     const hasDependents =
@@ -530,7 +535,8 @@ export class DrizzleLocationRepository {
       (activityCount?.value ?? 0) > 0 ||
       (bookingCount?.value ?? 0) > 0 ||
       (followUpCount?.value ?? 0) > 0 ||
-      (callSessionCount?.value ?? 0) > 0;
+      (callSessionCount?.value ?? 0) > 0 ||
+      (noteCount?.value ?? 0) > 0;
 
     if (hasDependents) return "has_dependents";
 

@@ -3,6 +3,9 @@ import { Link, useRoute } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 import { ProfileMemberPicker } from "@/components/event-families/profile-member-picker";
 import type { EventFamilyDetail } from "@/features/event-families/event-family-types";
+import { ScopedNotes } from "@/components/notes/scoped-notes";
+import { createFamilyNote, deleteFamilyNote, listFamilyNotes, updateFamilyNote } from "@/actions/scoped-notes";
+import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
 export default function EventFamilyPage() {
   const [, params] = useRoute("/event-families/:familyId");
@@ -12,6 +15,8 @@ export default function EventFamilyPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
+  const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
 
   async function load() {
     if (!familyId) return;
@@ -28,8 +33,15 @@ export default function EventFamilyPage() {
     }
   }
 
+  async function loadNotes() {
+    if (!familyId) return;
+    setFamilyNotesError(null);
+    try { setFamilyNotes(await listFamilyNotes(familyId)); } catch { setFamilyNotesError("Could not load family notes."); }
+  }
+
   useEffect(() => {
     void load();
+    void loadNotes();
   }, [familyId]);
 
   async function rename() {
@@ -96,6 +108,25 @@ export default function EventFamilyPage() {
       </header>
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
+
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        {familyNotesError ? (
+          <div className="grid gap-2">
+            <h2 className="text-lg font-bold">Family notes</h2>
+            <p className="text-sm text-rose-700" role="alert">{familyNotesError}</p>
+            <button className="button-secondary w-fit" type="button" onClick={() => void loadNotes()}>Retry family notes</button>
+          </div>
+        ) : (
+          <ScopedNotes
+            title="Family notes"
+            notes={familyNotes}
+            onCreate={(body) => createFamilyNote(family.id, body)}
+            onUpdate={(noteId, body) => updateFamilyNote(family.id, noteId, body)}
+            onDelete={(noteId) => deleteFamilyNote(family.id, noteId)}
+          />
+        )}
+      </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
