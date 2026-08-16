@@ -32,3 +32,4 @@ jobs:
       - run: pnpm --filter @workspace/api-server build
       - run: grep -q 'managerCommunicationsRouter' artifacts/api-server/src/routes/index.ts
       - run: grep -q 'getSignedReadUrl' artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts
+# rerun after timestamp normalization
