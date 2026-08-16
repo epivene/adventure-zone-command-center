@@ -2,10 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import EventWrapUpAdminPage from "./EventWrapUpAdminPage";
 
-const apiGet = vi.fn();
-const apiPut = vi.fn();
-const apiPost = vi.fn();
-vi.mock("@/lib/auth-token", () => ({ apiGet, apiPut, apiPost }));
+const mocks = vi.hoisted(() => ({ apiGet: vi.fn(), apiPut: vi.fn(), apiPost: vi.fn() }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet, apiPut: mocks.apiPut, apiPost: mocks.apiPost }));
 
 const payload = {
   event: { bookingId: "b1", name: "Dickinson Fair", legName: "Kristy", tripId: "11111111-1111-4111-8111-111111111111", startsAt: "2026-08-15T12:00:00.000Z" },
@@ -25,9 +23,9 @@ const payload = {
 describe("EventWrapUpAdminPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    apiGet.mockResolvedValue(payload);
-    apiPut.mockResolvedValue(payload);
-    apiPost.mockResolvedValue({ wrapUp: { ...payload.wrapUp, status: "reviewed" } });
+    mocks.apiGet.mockResolvedValue(payload);
+    mocks.apiPut.mockResolvedValue(payload);
+    mocks.apiPost.mockResolvedValue({ wrapUp: { ...payload.wrapUp, status: "reviewed" } });
   });
 
   it("lets admin review a submitted wrap-up and requires reasons for accounting overrides", async () => {
@@ -40,14 +38,14 @@ describe("EventWrapUpAdminPage", () => {
     expect(screen.getByLabelText("Adjustment reason")).toBeRequired();
 
     fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith("/event-wrap-up-admin/b1/review", {}));
+    await waitFor(() => expect(mocks.apiPost).toHaveBeenCalledWith("/event-wrap-up-admin/b1/review", {}));
   });
 
   it("warns and offers reopen when reviewed source data changed", async () => {
-    apiGet.mockResolvedValue({ ...payload, sourceDataChanged: true, wrapUp: { ...payload.wrapUp, status: "reviewed" } });
+    mocks.apiGet.mockResolvedValue({ ...payload, sourceDataChanged: true, wrapUp: { ...payload.wrapUp, status: "reviewed" } });
     render(<EventWrapUpAdminPage bookingId="b1" />);
     expect(await screen.findByText(/Source finance\/travel data changed after review/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reopen wrap-up" }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith("/event-wrap-up-admin/b1/reopen", {}));
+    await waitFor(() => expect(mocks.apiPost).toHaveBeenCalledWith("/event-wrap-up-admin/b1/reopen", {}));
   });
 });
