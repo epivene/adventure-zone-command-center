@@ -201,9 +201,16 @@ export class ActTimelineRecovery {
     } catch (error) {
       // Focused unit fixtures created before the recovery-review table exists should
       // still exercise exact relationship recovery. Production always has migration 043.
-      if (error && typeof error === "object" && "code" in error && String((error as { code?: unknown }).code) === "42P01") {
-        return null;
-      }
+      const directCode = error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code ?? "")
+        : "";
+      const cause = error && typeof error === "object" && "cause" in error
+        ? (error as { cause?: unknown }).cause
+        : null;
+      const causeCode = cause && typeof cause === "object" && "code" in cause
+        ? String((cause as { code?: unknown }).code ?? "")
+        : "";
+      if (directCode === "42P01" || causeCode === "42P01") return null;
       throw error;
     }
   }
