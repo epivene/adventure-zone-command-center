@@ -23,12 +23,66 @@ jobs:
         with: { version: 10 }
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: pnpm }
-      - name: Sync latest main
+      - name: Sync latest main and resolve migration number
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
           git fetch origin main
-          git merge --no-edit origin/main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          merge_status=$?
+          set -e
+
+          # main now owns migration 043 for ACT archive recovery. Renumber this feature to 044.
+          if [ -f lib/db/migrations/043_event_family_website_contacts.sql ]; then
+            git mv lib/db/migrations/043_event_family_website_contacts.sql lib/db/migrations/044_event_family_website_contacts.sql
+          fi
+          sed -i 's/043_event_family_website_contacts/044_event_family_website_contacts/g' artifacts/api-server/src/features/event-families/event-family-contacts.test.ts
+
+          # migrations.ts is the only expected merge conflict. Keep newest main registry and add our 044 entry.
+          if git ls-files -u -- lib/db/src/migrations.ts | grep -q .; then
+            git checkout --theirs lib/db/src/migrations.ts
+          fi
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('lib/db/src/migrations.ts')
+          s = p.read_text()
+          if '044_event_family_website_contacts.sql' not in s:
+              marker = '] as const;'
+              entry = '''  {
+    name: "044_event_family_website_contacts.sql",
+    markerSql: `SELECT
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'event_families'
+          AND column_name = 'website'
+      )
+      AND to_regclass(current_schema() || '.event_family_contacts') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_family_contacts_one_primary_per_family') IS NOT NULL AS ready`,
+  },
+'''
+              if marker not in s:
+                  raise SystemExit('migration registry terminator missing')
+              s = s.replace(marker, entry + marker, 1)
+              p.write_text(s)
+          PY
+          git add lib/db/src/migrations.ts lib/db/migrations/044_event_family_website_contacts.sql artifacts/api-server/src/features/event-families/event-family-contacts.test.ts
+
+          if git ls-files -u | grep -q .; then
+            echo 'Unexpected merge conflicts remain:' >&2
+            git diff --name-only --diff-filter=U >&2
+            exit 1
+          fi
+
+          if git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+            git commit -m "Merge latest main into event family website contacts"
+          elif ! git diff --cached --quiet; then
+            git commit -m "chore: renumber event family contacts migration to 044"
+          elif [ "$merge_status" -ne 0 ]; then
+            echo 'Merge failed without a resolvable conflict' >&2
+            exit 1
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Focused backend verification
         run: >-
@@ -48,13 +102,14 @@ jobs:
       - run: pnpm --filter @workspace/adventure-zone typecheck
       - name: Safety guards
         run: |
-          grep -q '043_event_family_website_contacts.sql' lib/db/src/migrations.ts
+          grep -q '043_act_archive_full_recovery.sql' lib/db/src/migrations.ts
+          grep -q '044_event_family_website_contacts.sql' lib/db/src/migrations.ts
           grep -q 'eventFamilyContacts' lib/db/src/event-family-schema.ts
           grep -q 'familySharedContact' artifacts/api-server/src/routes/event-profiles.ts
           grep -q 'EventFamilyWebsiteContacts' artifacts/adventure-zone/src/pages/EventFamilyPage.tsx
           grep -q 'FamilyContactSummary' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
-          grep -q 'ON DELETE RESTRICT' lib/db/migrations/043_event_family_website_contacts.sql
-          grep -q 'ON DELETE CASCADE' lib/db/migrations/043_event_family_website_contacts.sql
+          grep -q 'ON DELETE RESTRICT' lib/db/migrations/044_event_family_website_contacts.sql
+          grep -q 'ON DELETE CASCADE' lib/db/migrations/044_event_family_website_contacts.sql
       - name: Remove development-only helpers
         run: |
           rm -f .github/workflows/event-family-contacts-*.yml
