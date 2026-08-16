@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db, pool } from "@/db/client";
 import { CommunicationRepository } from "./communication-repository";
@@ -10,7 +11,7 @@ const repo = new CommunicationRepository(db);
 
 beforeAll(async () => {
   await repo.ensureSchema();
-  await db.execute(`truncate manager_message_reads, manager_message_attachments, manager_messages, manager_conversation_members, manager_conversations cascade` as any);
+  await db.execute(sql.raw("truncate manager_message_reads, manager_message_attachments, manager_messages, manager_conversation_members, manager_conversations cascade"));
 });
 
 afterAll(async () => {
