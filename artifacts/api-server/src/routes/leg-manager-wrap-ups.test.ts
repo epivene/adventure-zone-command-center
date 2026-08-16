@@ -1,6 +1,9 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@workspace/db", () => ({ db: {} }));
+
 import { createManagerWrapUpRouter } from "./leg-manager-wrap-ups";
 
 function app(service: any, payload = vi.fn(async (_bookingId: string, wrapUp: any) => ({ wrapUp, calculation: null, warnings: [] }))) {
