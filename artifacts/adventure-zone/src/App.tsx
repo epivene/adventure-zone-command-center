@@ -12,6 +12,7 @@ import ManagerCrewPage from "@/pages/ManagerCrewPage";
 import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
 import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
+import ManagerMessagesPage from "@/pages/ManagerMessagesPage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
@@ -192,6 +193,7 @@ function ManagerProtectedApp() {
         <Route path="/manager/receipts"><ManagerReceiptsPage /></Route>
         <Route path="/manager/money"><ManagerMoneyPage /></Route>
         <Route path="/manager/route"><ManagerRoutePage /></Route>
+        <Route path="/manager/messages"><ManagerMessagesPage /></Route>
         <Route path="/manager"><ManagerHomePage /></Route>
       </Switch>
     </ManagerShell>
