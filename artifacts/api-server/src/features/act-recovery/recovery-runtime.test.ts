@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 
 import { createActArchiveRecoveryLoop } from "@/features/act-replacement/runtime";
@@ -37,5 +39,19 @@ describe("ACT archive recovery runtime", () => {
 
     await runtime.close();
     expect(cancelled).toHaveLength(1);
+  });
+
+  it("composes the production archive runtime from profile import plus full recovery", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../act-replacement/runtime.ts", import.meta.url)),
+      "utf8",
+    );
+
+    expect(source).toContain("DrizzleActArchiveRecoveryRepository");
+    expect(source).toContain("ActArchiveRecoveryWorker");
+    expect(source).toContain("createActArchiveRecoveryLoop");
+    expect(source).toContain("archiveProfileImportLoop.start()");
+    expect(source).toContain("archiveRecoveryLoop.start()");
+    expect(source).toContain("archiveRecoveryLoop.close()");
   });
 });
