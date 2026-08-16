@@ -1,6 +1,6 @@
-import { check, index, jsonb, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, index, jsonb, numeric, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { organizationLocations } from "./schema";
+import { contacts, organizationLocations } from "./schema";
 
 export const eventFamilies = pgTable(
   "event_families",
@@ -9,12 +9,34 @@ export const eventFamilies = pgTable(
     name: text("name").notNull(),
     normalizedName: text("normalized_name").notNull(),
     description: text("description"),
+    website: text("website"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex("event_families_normalized_name_unique").on(table.normalizedName),
     index("event_families_normalized_name_idx").on(table.normalizedName),
+  ],
+);
+
+export const eventFamilyContacts = pgTable(
+  "event_family_contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    familyId: uuid("family_id").notNull().references(() => eventFamilies.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+    role: text("role"),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("event_family_contacts_family_contact_unique").on(table.familyId, table.contactId),
+    index("event_family_contacts_family_idx").on(table.familyId),
+    index("event_family_contacts_contact_idx").on(table.contactId),
+    uniqueIndex("event_family_contacts_one_primary_per_family")
+      .on(table.familyId)
+      .where(sql`${table.isPrimary} = true`),
   ],
 );
 
