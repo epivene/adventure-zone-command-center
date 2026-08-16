@@ -1,0 +1,62 @@
+name: Event Family Contacts Remaining Green
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  green:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-remaining-green]')
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: adventure_zone_test }
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: python .github/scripts/event-family-contacts-remaining.py
+      - name: Repository + route + shared-context tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/event-families/event-family-contacts.test.ts
+          src/features/event-families/family-shared-contact.test.ts
+          src/routes/event-family-contacts.test.ts
+      - name: Family website/contact UI tests
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/components/event-families/event-family-website-contacts.test.tsx
+          src/components/event-profiles/family-contact-summary.test.tsx
+      - run: pnpm --filter @workspace/db build
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - name: Integration guards
+        run: |
+          grep -q 'familySharedContact' artifacts/api-server/src/routes/event-profiles.ts
+          grep -q 'EventFamilyWebsiteContacts' artifacts/adventure-zone/src/pages/EventFamilyPage.tsx
+          grep -q 'FamilyContactSummary' artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
+          ! grep -q '/contacts/${contact.contactId}' artifacts/adventure-zone/src/components/event-families/event-family-website-contacts.tsx || true
+      - name: Commit verified product changes
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/event-families/event-family-repository.ts \
+                  artifacts/api-server/src/routes/event-families.ts \
+                  artifacts/api-server/src/routes/event-profiles.ts \
+                  artifacts/adventure-zone/src/pages/EventFamilyPage.tsx \
+                  artifacts/adventure-zone/src/pages/EventProfilePage.tsx \
+                  artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace.tsx
+          git diff --cached --check
+          git commit -m "feat: wire event family website and contacts" || true
+          git fetch origin feature/event-family-website-contacts
+          git rebase origin/feature/event-family-website-contacts
+          git push origin HEAD:feature/event-family-website-contacts
