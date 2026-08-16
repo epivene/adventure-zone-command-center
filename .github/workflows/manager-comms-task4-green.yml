@@ -36,3 +36,4 @@ jobs:
       - run: grep -q 'managerMeetupsRouter' artifacts/api-server/src/routes/index.ts
       - run: grep -q 'createApprovedManual' artifacts/api-server/src/features/manager-comms/manual-handoff-repository.ts
       - run: grep -q 'Request meetup / equipment swap' artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx
+# rerun after preserving admin adjustment note
