@@ -1,0 +1,48 @@
+name: Manager Comms Task9 Wire
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  wire:
+    if: contains(github.event.head_commit.message, '[task9-wire]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Wire owner communications page
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          app=Path('artifacts/adventure-zone/src/App.tsx')
+          s=app.read_text()
+          ia='import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";'
+          imp='import ManagerCommunicationsAdminPage from "@/pages/ManagerCommunicationsAdminPage";'
+          if imp not in s:
+            if ia not in s: raise SystemExit('App import anchor missing')
+            s=s.replace(ia,ia+'\n'+imp,1)
+          ra='              <Route path="/manager-finance" component={ManagerFinanceAdminPage} />'
+          route='              <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />'
+          if route not in s:
+            if ra not in s: raise SystemExit('App route anchor missing')
+            s=s.replace(ra,route+'\n'+ra,1)
+          app.write_text(s)
+
+          shell=Path('artifacts/adventure-zone/src/components/navigation/app-shell.tsx')
+          s=shell.read_text()
+          anchor='  { href: "/routes", label: "Routes" },'
+          item='  { href: "/manager-communications", label: "Communications" },'
+          if item not in s:
+            if anchor not in s: raise SystemExit('navigation anchor missing')
+            s=s.replace(anchor,anchor+'\n'+item,1)
+          shell.write_text(s)
+          PY
+          git diff --check
+          grep -q 'ManagerCommunicationsAdminPage' artifacts/adventure-zone/src/App.tsx
+          grep -q '/manager-communications' artifacts/adventure-zone/src/components/navigation/app-shell.tsx
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/components/navigation/app-shell.tsx
+          git commit -m 'feat: add manager communications admin destination [skip-task9-wire]'
+          git push origin HEAD:feature/manager-communications-acknowledgments
