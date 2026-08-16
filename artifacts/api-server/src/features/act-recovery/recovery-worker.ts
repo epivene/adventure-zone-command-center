@@ -1,5 +1,6 @@
 import type { RecoveryCandidate } from "./recovery-types";
 import type { RecoveryApplyResult } from "./entity-recovery";
+import { hasReadableActReviewText } from "./recovery-readable-content";
 
 type RecoveryRepository = {
   claimNext(input: { workerId: string; now: Date }): Promise<RecoveryCandidate | null>;
@@ -56,6 +57,22 @@ function safeErrorCode(error: unknown) {
   return "act_recovery_step_failed";
 }
 
+function dropUnreadableReview(
+  candidate: RecoveryCandidate,
+  result: RecoveryApplyResult,
+): RecoveryApplyResult {
+  if (result.state !== "needs_review" || hasReadableActReviewText(candidate.rawSnapshot)) {
+    return result;
+  }
+  return {
+    state: "dropped_unusable",
+    targetSummary: {
+      reason: "no_readable_act_text",
+      previousReason: result.targetSummary?.reason ?? null,
+    },
+  };
+}
+
 export class ActArchiveRecoveryWorker {
   constructor(private readonly dependencies: {
     repository: RecoveryRepository;
@@ -69,7 +86,7 @@ export class ActArchiveRecoveryWorker {
     if (!candidate) return { kind: "idle" };
 
     try {
-      const result = await this.recover(candidate);
+      const result = dropUnreadableReview(candidate, await this.recover(candidate));
       await this.dependencies.repository.complete({
         itemId: candidate.itemId,
         leaseToken: candidate.leaseToken,
