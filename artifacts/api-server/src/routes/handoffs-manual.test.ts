@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { manualHandoffSchema } from "./handoffs";
+import { manualHandoffSchema } from "@/features/routes/manual-handoff-input";
 
 const leg = { kind: "leg" as const, legId: "00000000-0000-4000-8000-000000000010" };
 const external = { kind: "external_contact" as const, externalContactId: null, displayName: "Jordan Smith", phone: "555-0100", email: null };
