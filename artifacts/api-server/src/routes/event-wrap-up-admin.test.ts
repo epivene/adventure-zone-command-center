@@ -1,6 +1,9 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@workspace/db", () => ({ db: {} }));
+
 import { createEventWrapUpAdminRouter } from "./event-wrap-up-admin";
 
 function app(deps: any) {
