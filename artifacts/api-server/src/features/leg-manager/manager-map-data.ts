@@ -1,3 +1,4 @@
+import type { ManagerMapBookingRecord } from "@/features/leg-manager/manager-map-booking-repository";
 import type { TripSegmentRecord, TripStopRecord } from "@/features/trips/trip-repository";
 import type { EquipmentHandoff, HandoffRepository, HandoffStatus, MeetupParticipant } from "@/features/routes/handoff-repository";
 
@@ -21,6 +22,10 @@ export interface ManagerMapTripRepository {
   listTrips(options: { travelLegId: string }): Promise<ManagerMapTrip[]>;
   listStops(tripId: string): Promise<TripStopRecord[]>;
   listSegments(tripId: string): Promise<TripSegmentRecord[]>;
+}
+
+export interface ManagerMapBookingRepository {
+  listForLeg(legId: string): Promise<ManagerMapBookingRecord[]>;
 }
 
 export interface ManagerMapHandoffRepository {
@@ -108,17 +113,44 @@ function eventFromStop(stop: TripStopRecord): ManagerScopedMapData["events"][num
   };
 }
 
+function eventFromBooking(booking: ManagerMapBookingRecord): ManagerScopedMapData["events"][number] {
+  return {
+    bookingId: booking.bookingId,
+    bookingName: booking.bookingName,
+    city: booking.city,
+    region: booking.region,
+    latitude: booking.latitude,
+    longitude: booking.longitude,
+    startsAt: booking.startsAt,
+    endsAt: booking.endsAt,
+    status: booking.status,
+  };
+}
+
+function isCurrentOrUpcomingBooking(booking: ManagerMapBookingRecord, now: Date): boolean {
+  if (["declined", "cancelled", "completed"].includes(booking.status)) return false;
+  const relevantAt = booking.endsAt ?? booking.startsAt;
+  return relevantAt === null || relevantAt.getTime() >= now.getTime() - 86_400_000;
+}
+
 export async function loadManagerScopedMapData(
   dependencies: {
     tripRepository: ManagerMapTripRepository;
+    bookingRepository: ManagerMapBookingRepository;
     handoffRepository: ManagerMapHandoffRepository;
   },
   legId: string,
   now = new Date(),
 ): Promise<ManagerScopedMapData> {
-  const allTrips = (await dependencies.tripRepository.listTrips({ travelLegId: legId }))
+  const [listedTrips, listedBookings] = await Promise.all([
+    dependencies.tripRepository.listTrips({ travelLegId: legId }),
+    dependencies.bookingRepository.listForLeg(legId),
+  ]);
+
+  const allTrips = listedTrips
     .filter((trip) => trip.travelLegId === legId)
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
+  const assignedBookings = listedBookings.filter((booking) => isCurrentOrUpcomingBooking(booking, now));
 
   const activeTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
   const details = await Promise.all(
@@ -130,8 +162,14 @@ export async function loadManagerScopedMapData(
   );
 
   const current = details.find(({ trip }) => trip.startDate <= now && trip.endDate >= now) ?? details[0] ?? null;
-  const events = details
-    .flatMap(({ stops }) => stops.map(eventFromStop))
+  const eventsByBookingId = new Map<string, ManagerScopedMapData["events"][number]>();
+  for (const booking of assignedBookings) {
+    eventsByBookingId.set(booking.bookingId, eventFromBooking(booking));
+  }
+  for (const event of details.flatMap(({ stops }) => stops.map(eventFromStop))) {
+    if (!eventsByBookingId.has(event.bookingId)) eventsByBookingId.set(event.bookingId, event);
+  }
+  const events = [...eventsByBookingId.values()]
     .sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0));
 
   const rawMeetups = await dependencies.handoffRepository.listForLeg(legId, { approvedOnly: true });
@@ -152,6 +190,7 @@ export async function loadManagerScopedMapData(
   });
 
   const firstTrip = allTrips[0];
+  const firstAssignedBooking = assignedBookings[0];
   const route = current
     ? {
         trip: {
@@ -189,8 +228,8 @@ export async function loadManagerScopedMapData(
   return {
     leg: {
       id: legId,
-      name: firstTrip?.legName ?? "Your leg",
-      color: firstTrip?.legColor ?? null,
+      name: firstTrip?.legName ?? firstAssignedBooking?.legName ?? "Your leg",
+      color: firstTrip?.legColor ?? firstAssignedBooking?.legColor ?? null,
     },
     route,
     events,
