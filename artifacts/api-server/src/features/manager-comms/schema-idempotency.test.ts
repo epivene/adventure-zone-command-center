@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { sql } from "drizzle-orm";
 import { db, pool } from "@/db/client";
 import { CommunicationRepository } from "./communication-repository";
 import { CommunicationParticipantRepository } from "./communication-participant-repository";
@@ -11,6 +12,16 @@ afterAll(async () => { await pool.end(); });
 
 describe("manager communications schema initialization", () => {
   it("is safe to run every schema initializer twice", async () => {
+    // The meetup schema references the app's pre-existing resources table.
+    // Seed only that dependency so this test exercises our initializers in the
+    // same order/shape they run in a deployed Adventure Zone database.
+    await db.execute(sql.raw(`
+      create table if not exists resources (
+        id uuid primary key default gen_random_uuid(),
+        name text not null default 'Test resource'
+      );
+    `));
+
     const communication = new CommunicationRepository(db);
     const participants = new CommunicationParticipantRepository(db);
     const notifications = new NotificationRepository(db);
