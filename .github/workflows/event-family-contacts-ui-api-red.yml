@@ -1,0 +1,28 @@
+name: Event Family Contacts API UI Red
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  red:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-ui-api-red]')
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/unused
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: API RED
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/event-family-contacts.test.ts src/features/event-families/family-shared-contact.test.ts
+      - name: Frontend RED
+        continue-on-error: true
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/event-families/event-family-website-contacts.test.tsx src/components/event-profiles/family-contact-summary.test.tsx
+      - name: Require missing-feature failures
+        run: |
+          test ! -f artifacts/api-server/src/features/event-families/family-shared-contact.ts
+          test ! -f artifacts/adventure-zone/src/components/event-families/event-family-website-contacts.tsx
+          test ! -f artifacts/adventure-zone/src/components/event-profiles/family-contact-summary.tsx
