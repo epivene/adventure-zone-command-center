@@ -1,0 +1,74 @@
+name: Manager Comms Final
+on:
+  push:
+    branches: [feature/manager-communications-acknowledgments]
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[manager-comms-final]')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adventure_zone_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Manager communications backend suite
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms
+      - name: Manager and handoff regression suite
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/routes/handoff-repository-participants.test.ts
+          src/features/routes/handoff-scoring.test.ts
+          src/features/leg-manager/leg-manager-auth.test.ts
+          src/features/leg-manager/leg-manager-middleware.test.ts
+          src/features/leg-manager/receipt-service.test.ts
+          src/features/leg-manager/incident-repository.test.ts
+          src/features/leg-manager/crew-repository-idempotency.test.ts
+          src/features/leg-manager/manager-map-data.test.ts
+      - name: Manager communications frontend suite
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/pages/ManagerMessagesPage.test.tsx
+          src/pages/ManagerCommunicationsAdminPage.test.tsx
+          src/components/manager/messages/meetup-request-drawer.test.tsx
+          src/components/manager-admin/meetup-request-review.test.tsx
+          src/components/manager/manager-action-center.test.tsx
+          src/components/manager-admin/acknowledgment-review.test.tsx
+          src/components/manager-admin/attachment-file-menu.test.tsx
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+      - name: Route and simplicity guards
+        run: |
+          grep -q 'managerTravelRouter' artifacts/api-server/src/routes/index.ts
+          grep -q 'managerCommunicationsRouter' artifacts/api-server/src/routes/index.ts
+          grep -q 'managerMeetupsRouter' artifacts/api-server/src/routes/index.ts
+          grep -q 'Request meetup / equipment swap' artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx
+          grep -q '/manager-communications' artifacts/adventure-zone/src/App.tsx
+          grep -q '/manager/messages' artifacts/adventure-zone/src/App.tsx
+          test "$(grep -o 'href="/manager/messages"' artifacts/adventure-zone/src/components/manager/manager-shell.tsx | wc -l)" -eq 1
+      - name: Private storage response guards
+        run: |
+          ! grep -R 'objectKey' artifacts/adventure-zone/src/pages/ManagerMessagesPage.tsx artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx artifacts/adventure-zone/src/components/manager-admin/attachment-file-menu.tsx
+          grep -q 'publicAttachment' artifacts/api-server/src/routes/manager-communications.ts
+          grep -q 'publicWithoutObjectKey' artifacts/api-server/src/routes/manager-communications-admin.ts
+          grep -q '_privateObjectKey' artifacts/api-server/src/features/manager-comms/message-view.ts
