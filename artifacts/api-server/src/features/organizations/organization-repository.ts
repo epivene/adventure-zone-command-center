@@ -1273,39 +1273,47 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           ON CONFLICT (organization_id, contact_id) DO NOTHING
         `);
 
-        // Step 2: Re-parent contacts -- now safe because every contact that had
-        // organization_id = dupId has a matching organization_contacts row for
-        // primaryId (inserted above or already present).
+        // Step 2: Move saved locations to the surviving organization first.
+        // Contacts can retain organization_location_id while their organization_id
+        // changes only when that location already belongs to the survivor. The DB
+        // consistency trigger enforces this relationship on every contact update.
+        await tx.update(organizationLocations)
+          .set({ organizationId: primaryId, updatedAt: now })
+          .where(eq(organizationLocations.organizationId, dupId));
+
+        // Step 3: Re-parent contacts -- now safe because every contact has both
+        // a matching organization_contacts row and, when present, a saved location
+        // that already belongs to primaryId.
         await tx.update(contacts)
           .set({ organizationId: primaryId, updatedAt: now })
           .where(eq(contacts.organizationId, dupId));
 
-        // Step 3: Remove the now-redundant organization_contacts rows for the
+        // Step 4: Remove the now-redundant organization_contacts rows for the
         // duplicate. Contacts no longer point to dupId, so no FK is violated.
         await tx.delete(organizationContacts)
           .where(eq(organizationContacts.organizationId, dupId));
 
-        // Step 4: Re-parent bookings
+        // Step 5: Re-parent bookings
         await tx.update(bookings)
           .set({ organizationId: primaryId, updatedAt: now })
           .where(eq(bookings.organizationId, dupId));
 
-        // Step 5: Re-parent follow_ups
+        // Step 6: Re-parent follow_ups
         await tx.update(followUps)
           .set({ organizationId: primaryId })
           .where(eq(followUps.organizationId, dupId));
 
-        // Step 6: Re-parent activities
+        // Step 7: Re-parent activities
         await tx.update(activities)
           .set({ organizationId: primaryId, updatedAt: now })
           .where(eq(activities.organizationId, dupId));
 
-        // Step 7: Re-parent call_sessions
+        // Step 8: Re-parent call_sessions
         await tx.update(callSessions)
           .set({ organizationId: primaryId })
           .where(eq(callSessions.organizationId, dupId));
 
-        // Step 8: Re-parent act_external_links.
+        // Step 9: Re-parent act_external_links.
         // Clear isPrimary first to avoid the one-primary-per-local-source
         // partial unique index conflict before changing entityId.
         await tx.update(actExternalLinks)
@@ -1321,7 +1329,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             eq(actExternalLinks.entityType, "organization"),
           ));
 
-        // Step 9: Re-parent act_migration_records matched/applied entity pointers
+        // Step 10: Re-parent act_migration_records matched/applied entity pointers
         await tx.update(actMigrationRecords)
           .set({ matchedEntityId: primaryId, updatedAt: now })
           .where(and(
@@ -1334,13 +1342,6 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             eq(actMigrationRecords.appliedEntityId, dupId),
             eq(actMigrationRecords.matchedEntityType, "organization"),
           ));
-
-        // Step 10: Re-parent saved locations before deleting the duplicate.
-        // organization_locations.organization_id uses ON DELETE RESTRICT, so
-        // leaving even one location attached to dupId makes the merge fail.
-        await tx.update(organizationLocations)
-          .set({ organizationId: primaryId, updatedAt: now })
-          .where(eq(organizationLocations.organizationId, dupId));
 
         // Step 11: A location can also retain the duplicate as its historical
         // consolidation source. That FK is RESTRICT as well. The source profile
