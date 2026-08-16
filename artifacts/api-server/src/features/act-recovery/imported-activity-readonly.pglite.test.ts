@@ -99,4 +99,21 @@ describe("imported ACT activity immutability", () => {
     );
     expect(rows.rows).toEqual([{ body: "Original ACT history" }]);
   });
+
+  it("rejects deletion of source-backed ACT history and keeps the original", async () => {
+    const repository = new DrizzleActivityRepository(database as never);
+
+    const result = await repository.delete(
+      "40000000-0000-4000-8000-000000000001",
+    );
+
+    expect(result).toEqual({
+      ok: false,
+      error: expect.objectContaining({ code: "INVALID_ACTIVITY_INPUT" }),
+    });
+    const rows = await client.query<{ body: string }>(
+      "SELECT body FROM activities WHERE id = '40000000-0000-4000-8000-000000000001'",
+    );
+    expect(rows.rows).toEqual([{ body: "Original ACT history" }]);
+  });
 });
