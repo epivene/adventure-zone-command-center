@@ -61,7 +61,7 @@ describe("meetup request service", () => {
       adminNotes: "Adjusted to fit both routes",
     });
     expect(handoffs.createApprovedManual).toHaveBeenCalledWith(expect.objectContaining({ toLegId: "leg-c", resourceId: "resource-2", meetupLabel: "Dickinson" }));
-    expect(requests.markApproved).toHaveBeenCalledWith("request-1", "handoff-1");
+    expect(requests.markApproved).toHaveBeenCalledWith("request-1", "handoff-1", "Adjusted to fit both routes");
     expect(result.handoff.id).toBe("handoff-1");
     expect(notifications.create).toHaveBeenCalledWith(expect.objectContaining({ kind: "request_update", title: "Meetup approved" }));
   });
