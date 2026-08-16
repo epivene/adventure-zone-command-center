@@ -3,7 +3,8 @@ import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
 import type { FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
 import { EquipmentHandoffs, type EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
-import { TravelLegEditor, type LegManagerAccessStatus } from "@/components/routes/travel-leg-editor";
+import type { LegManagerAccessStatus } from "@/components/routes/travel-leg-editor";
+import { TravelLegManagerCards } from "@/components/routes/travel-leg-manager-cards";
 import { TripsSection } from "@/components/routes/trips-section";
 import { AdminMapViewToggle, type AdminMapView } from "@/components/routes/admin-map-view-toggle";
 import { ManagerPreviewMap } from "@/components/routes/manager-preview-map";
@@ -76,7 +77,7 @@ export default function RoutesPage() {
   return <div className="mx-auto grid max-w-7xl gap-6">
     <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header>
     {loading ? <p className="text-slate-500">Loading routes…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <>
-      <TravelLegEditor key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
+      <TravelLegManagerCards key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
       <a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">View all leg finances →</a>
       <div className="grid gap-2 sm:grid-cols-2"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
       <TripsSection travelLegs={data.travelLegs} onFocusTrip={(tripId) => { void handleFocusTrip(tripId); }} />
