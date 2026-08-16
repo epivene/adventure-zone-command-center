@@ -7,6 +7,7 @@ import { CommunicationParticipantRepository } from "@/features/manager-comms/com
 import { NotificationRepository } from "@/features/manager-comms/notification-repository";
 import { AcknowledgmentRepository } from "@/features/manager-comms/acknowledgment-repository";
 import { AcknowledgmentService } from "@/features/manager-comms/acknowledgment-service";
+import { AttachmentFilingDestinationRepository, AttachmentFilingRepository, fileMessageAttachment } from "@/features/manager-comms/attachment-filing-service";
 import { createConversationForActor, sendMessageForActor } from "@/features/manager-comms/communication-service";
 import { attachFilesToMessages } from "@/features/manager-comms/message-view";
 
@@ -16,6 +17,9 @@ const participants = new CommunicationParticipantRepository(db);
 const notifications = new NotificationRepository(db);
 const acknowledgmentRepository = new AcknowledgmentRepository(db);
 const acknowledgments = new AcknowledgmentService(acknowledgmentRepository);
+const filing = new AttachmentFilingRepository(db);
+const filingDestinations = new AttachmentFilingDestinationRepository(db);
+const filingStores = { source: communication, filing, destinations: filingDestinations, notifications };
 const storage = new GoogleCloudLegManagerObjectStorage();
 const adminActor: MessageActor = { kind: "admin", name: "Admin" };
 const serviceStore = {
@@ -32,6 +36,11 @@ const conversationInput = z.object({
 });
 const messageInput = z.object({ body: z.string().trim().min(1).max(12000), clientMutationId: z.string().uuid(), attachmentIds: z.array(z.string().uuid()).max(10).optional().default([]) });
 const attachmentInput = z.object({ id: z.string().uuid(), fileName: z.string().trim().max(240).nullable().optional(), mimeType: z.string().trim().max(160).nullable().optional(), sizeBytes: z.number().int().nonnegative().max(12 * 1024 * 1024).nullable().optional(), clientMutationId: z.string().uuid() });
+const filingInput = z.object({
+  destination: z.enum(["expense_receipt","incident_photo","equipment_handoff_photo","general_leg_document"]),
+  destinationMetadata: z.record(z.string(), z.string()),
+  clientMutationId: z.string().uuid(),
+});
 
 router.get("/manager-admin/messages/conversations", async (_req, res) => { await communication.ensureSchema(); res.json({ conversations: await communication.listAllForAdmin() }); });
 router.post("/manager-admin/messages/conversations", async (req, res): Promise<void> => {
@@ -76,10 +85,13 @@ router.put("/manager-admin/messages/attachments/:attachmentId/file", express.raw
   await storage.put(key, bytes, mimeType);
   res.json({ attachment: await communication.setAttachmentUploaded(attachment.id, key, mimeType) });
 });
-
-router.get("/manager-admin/acknowledgments", async (_req,res)=>{
-  res.json({acknowledgments:await acknowledgmentRepository.listNeedsAdminReview()});
+router.post("/manager-admin/messages/attachments/:attachmentId/file-to-leg", async (req,res):Promise<void>=>{
+  const parsed=filingInput.safeParse(req.body);if(!parsed.success){res.status(400).json({error:parsed.error.issues[0]?.message??"Invalid filing request"});return;}
+  try{const filingResult=await fileMessageAttachment(filingStores,{attachmentId:param(req.params.attachmentId),destination:parsed.data.destination,destinationMetadata:parsed.data.destinationMetadata,adminActor:"Admin",clientMutationId:parsed.data.clientMutationId});res.status(201).json({filing:filingResult});}
+  catch(error){const code=(error as any)?.code;res.status(code==="NOT_FOUND"?404:code==="FORBIDDEN"?403:400).json({error:(error as Error).message});}
 });
+
+router.get("/manager-admin/acknowledgments", async (_req,res)=>{ res.json({acknowledgments:await acknowledgmentRepository.listNeedsAdminReview()}); });
 router.post("/manager-admin/acknowledgments/:id/resolve",async(req,res):Promise<void>=>{
   const parsed=z.object({response:z.string().trim().max(4000).nullable().optional()}).safeParse(req.body);
   if(!parsed.success){res.status(400).json({error:"Invalid admin response"});return;}
