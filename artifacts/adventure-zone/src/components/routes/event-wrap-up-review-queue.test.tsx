@@ -23,6 +23,6 @@ describe("EventWrapUpReviewQueue", () => {
     expect(screen.getByText(/Estimated true profit: unavailable/)).toBeInTheDocument();
     expect(screen.getByText(/1 receipt/)).toBeInTheDocument();
     expect(screen.getByText(/Crew wage cost is incomplete/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Review wrap-up/i })).toHaveAttribute("href", "/manager-aftermath/wrap-ups/b1");
+    expect(screen.getByRole("link", { name: /Review wrap-up/i })).toHaveAttribute("href", "/manager-aftermath?wrapUp=b1");
   });
 });
