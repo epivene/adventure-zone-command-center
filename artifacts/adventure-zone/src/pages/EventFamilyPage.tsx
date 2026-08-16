@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useRoute } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 import { ProfileMemberPicker } from "@/components/event-families/profile-member-picker";
+import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import type { EventFamilyDetail } from "@/features/event-families/event-family-types";
 import { ScopedNotes } from "@/components/notes/scoped-notes";
 import { createFamilyNote, deleteFamilyNote, listFamilyNotes, updateFamilyNote } from "@/actions/scoped-notes";
@@ -11,6 +12,7 @@ export default function EventFamilyPage() {
   const [, params] = useRoute("/event-families/:familyId");
   const familyId = params?.familyId ?? "";
   const [family, setFamily] = useState<EventFamilyDetail | null>(null);
+  const [ratingSummary, setRatingSummary] = useState<{ average: number | null; count: number }>({ average: null, count: 0 });
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,9 +25,13 @@ export default function EventFamilyPage() {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiGet<{ family: EventFamilyDetail }>(`/event-families/${familyId}`);
+      const [result, rating] = await Promise.all([
+        apiGet<{ family: EventFamilyDetail }>(`/event-families/${familyId}`),
+        apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/family/${familyId}`).catch(() => ({ average: null, count: 0 })),
+      ]);
       setFamily(result.family);
       setName(result.family.name);
+      setRatingSummary(rating);
     } catch (err: any) {
       setError(err?.message ?? "Could not load event family");
     } finally {
@@ -108,7 +114,7 @@ export default function EventFamilyPage() {
       </header>
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
-
+      <EventRatingSummary average={ratingSummary.average} count={ratingSummary.count} />
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         {familyNotesError ? (
