@@ -15,3 +15,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/organizations/organization-membership-drawer.test.tsx
       - run: pnpm --filter @workspace/adventure-zone build
+# green trigger
