@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
 import { normalizeTimeline } from "@/features/act-replacement/normalizers/timeline-normalizer";
+import { parseInlineRelationshipRecords } from "@/features/act-replacement/source-record-parser";
 import type { RecoveryCandidate } from "./recovery-types";
 import type { RecoveryApplyResult } from "./entity-recovery";
 import { ActRecoverySourceLinkResolver } from "./source-link-resolver";
@@ -11,6 +12,8 @@ type Row = Record<string, unknown>;
 type TimelineSourceType = "note" | "history" | "activity";
 type Parent = { entityType: "organization" | "contact" | "booking"; entityId: string };
 
+type InlineTargetKind = "company" | "contact" | "opportunity";
+
 function rows(value: unknown): Row[] {
   if (Array.isArray(value)) return value as Row[];
   const result = (value as { rows?: unknown })?.rows;
@@ -19,6 +22,12 @@ function rows(value: unknown): Row[] {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : value == null ? "" : String(value);
+}
+
+function inlineTargetKind(value: unknown): InlineTargetKind | null {
+  return value === "company" || value === "contact" || value === "opportunity"
+    ? value
+    : null;
 }
 
 function actTimelineKey(sourceType: TimelineSourceType, actRecordId: string | null) {
@@ -66,7 +75,12 @@ export class ActTimelineRecovery {
     const sourceDatabaseKey = text(sourceScope?.sourceDatabaseKey);
     if (!sourceDatabaseKey) return { state: "needs_review", targetSummary: { reason: "source_scope_missing" } };
 
-    const exactParents = await this.resolveParents(sourceDatabaseKey, sourceType, candidate.actRecordId);
+    const exactParents = await this.resolveParents(
+      sourceDatabaseKey,
+      sourceType,
+      candidate.actRecordId,
+      candidate.rawSnapshot,
+    );
     const manualParent = await this.resolveManualParent(candidate);
     const parentMap = new Map<string, Parent>();
     for (const parent of exactParents) parentMap.set(`${parent.entityType}:${parent.entityId}`, parent);
@@ -154,30 +168,63 @@ export class ActTimelineRecovery {
     sourceDatabaseKey: string,
     sourceType: TimelineSourceType,
     actRecordId: string | null,
+    rawSnapshot: Record<string, unknown>,
   ): Promise<Parent[]> {
-    if (!actRecordId) return [];
-    const relationships = await this.query(sql`
-      select id
-      from act_source_records
-      where source_database_key = ${sourceDatabaseKey}
-        and stream_type in (${`${sourceType}_company`}, ${`${sourceType}_contact`}, ${`${sourceType}_opportunity`})
-        and relationship_evidence->>'parentActRecordId' = ${actRecordId}
-      order by id
-    `);
     const found = new Map<string, Parent>();
-    for (const row of relationships) {
-      const relationship = await this.resolver.resolveRelationship(text(row.id));
-      if (relationship.kind !== "resolved" || relationship.target.kind !== "resolved") continue;
-      const target = relationship.target;
-      if (target.entityType !== "organization" && target.entityType !== "contact" && target.entityType !== "booking") continue;
-      found.set(`${target.entityType}:${target.entityId}`, {
-        entityType: target.entityType,
-        entityId: target.entityId,
-      });
+
+    if (actRecordId) {
+      const relationships = await this.query(sql`
+        select id
+        from act_source_records
+        where source_database_key = ${sourceDatabaseKey}
+          and stream_type in (${`${sourceType}_company`}, ${`${sourceType}_contact`}, ${`${sourceType}_opportunity`})
+          and relationship_evidence->>'parentActRecordId' = ${actRecordId}
+        order by id
+      `);
+      for (const row of relationships) {
+        const relationship = await this.resolver.resolveRelationship(text(row.id));
+        if (relationship.kind !== "resolved" || relationship.target.kind !== "resolved") continue;
+        this.addResolvedParent(found, relationship.target);
+      }
     }
+
+    const inlineRelationships = parseInlineRelationshipRecords({
+      parentKind: sourceType,
+      parentRecord: rawSnapshot,
+    });
+    for (const item of inlineRelationships.items) {
+      const targetKind = inlineTargetKind(item.relationshipEvidence.targetKind);
+      const targetActRecordId = text(item.relationshipEvidence.targetActRecordId).trim();
+      if (!targetKind || !targetActRecordId) continue;
+      const sourceRows = await this.query(sql`
+        select id
+        from act_source_records
+        where source_database_key = ${sourceDatabaseKey}
+          and stream_type = ${targetKind}
+          and act_record_id = ${targetActRecordId}
+        order by id
+        limit 2
+      `);
+      if (sourceRows.length !== 1) continue;
+      const target = await this.resolver.resolveLocalSource(text(sourceRows[0]?.id));
+      if (target.kind !== "resolved") continue;
+      this.addResolvedParent(found, target);
+    }
+
     return [...found.values()].sort((left, right) =>
       left.entityType.localeCompare(right.entityType) || left.entityId.localeCompare(right.entityId),
     );
+  }
+
+  private addResolvedParent(
+    found: Map<string, Parent>,
+    target: { entityType: string; entityId: string },
+  ) {
+    if (target.entityType !== "organization" && target.entityType !== "contact" && target.entityType !== "booking") return;
+    found.set(`${target.entityType}:${target.entityId}`, {
+      entityType: target.entityType,
+      entityId: target.entityId,
+    });
   }
 
   private async resolveManualParent(candidate: RecoveryCandidate): Promise<Parent | null> {
