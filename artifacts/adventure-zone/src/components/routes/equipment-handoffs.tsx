@@ -1,12 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiGet, apiPost } from "@/lib/auth-token";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
+import { ManualHandoffForm, type ManualHandoffResource } from "./manual-handoff-form";
+
+export type HandoffParticipantView =
+  | { kind: "leg"; legId: string; legName: string }
+  | { kind: "external_contact"; externalContactId: string | null; displayName: string; phone: string | null; email: string | null };
 
 export type EquipmentHandoffView = {
   id: string;
   status: "suggested" | "dismissed" | "approved" | "needs_review";
-  fromLegId: string;
-  toLegId: string;
+  fromLegId: string | null;
+  toLegId: string | null;
+  fromParticipant?: HandoffParticipantView;
+  toParticipant?: HandoffParticipantView;
   fromTripId: string | null;
   toTripId: string | null;
   resourceId: string;
@@ -56,11 +63,19 @@ function bandClass(band: EquipmentHandoffView["opportunityBand"] | "infeasible")
   return "bg-slate-100 text-slate-700";
 }
 
+function participantLabel(participant: HandoffParticipantView | undefined, fallbackLegId: string | null, legNames: Map<string, string>) {
+  if (participant?.kind === "leg") return participant.legName;
+  if (participant?.kind === "external_contact") return participant.displayName;
+  return fallbackLegId ? legNames.get(fallbackLegId) ?? "Leg" : "Outside runner";
+}
+
 export function EquipmentHandoffs({
   travelLegs,
+  resources = [],
   onChange,
 }: {
   travelLegs: TravelLeg[];
+  resources?: ManualHandoffResource[];
   onChange?: (handoffs: EquipmentHandoffView[]) => void;
 }) {
   const [year, setYear] = useState(new Date().getFullYear());
@@ -75,6 +90,11 @@ export function EquipmentHandoffs({
     () => new Map(travelLegs.map((leg) => [leg.id, leg.name])),
     [travelLegs],
   );
+  const uniqueResources = useMemo(() => {
+    const byId = new Map<string, ManualHandoffResource>();
+    resources.forEach((resource) => byId.set(resource.id, resource));
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [resources]);
 
   async function load(targetYear = year) {
     const response = await apiGet<{ handoffs: EquipmentHandoffView[] }>(
@@ -180,7 +200,7 @@ export function EquipmentHandoffs({
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">Equipment routing</p>
           <h2 className="mt-1 text-2xl font-bold" id="handoff-title">Equipment handoff suggestions</h2>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            The planner compares movable equipment across legs, driving time, distance, schedule buffer, and between-event meetup areas. Nothing changes an official route until you approve it.
+            The planner compares movable equipment across legs, driving time, distance, schedule buffer, and between-event meetup areas. You can also schedule a known swap with another leg or an outside runner.
           </p>
         </div>
         <div className="flex items-end gap-2">
@@ -193,6 +213,8 @@ export function EquipmentHandoffs({
           </button>
         </div>
       </div>
+
+      {uniqueResources.length ? <ManualHandoffForm travelLegs={travelLegs} resources={uniqueResources} onCreated={() => load()} /> : <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Assign movable equipment to a leg before scheduling a manual meetup.</p>}
 
       {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 
@@ -211,7 +233,7 @@ export function EquipmentHandoffs({
                   </div>
                   <h3 className="mt-2 text-lg font-bold">{handoff.resourceName ?? handoff.resourceCode ?? "Movable equipment"}</h3>
                   <p className="text-sm font-semibold text-slate-700">
-                    {legNames.get(handoff.fromLegId) ?? "Leg"} → {legNames.get(handoff.toLegId) ?? "Leg"}
+                    {participantLabel(handoff.fromParticipant, handoff.fromLegId, legNames)} → {participantLabel(handoff.toParticipant, handoff.toLegId, legNames)}
                   </p>
                 </div>
                 <div className="text-right text-sm text-slate-600">
@@ -239,7 +261,7 @@ export function EquipmentHandoffs({
         </div>
       ) : (
         <div className="rounded-lg border border-dashed border-slate-300 p-5 text-sm text-slate-600">
-          No handoff suggestions for {year} yet. Click <strong>Find handoffs</strong> after assigning movable equipment to trips.
+          No handoff suggestions for {year} yet. Use the form above for a known swap or click <strong>Find handoffs</strong> after assigning movable equipment to trips.
         </div>
       )}
 

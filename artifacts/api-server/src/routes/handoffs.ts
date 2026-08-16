@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { HandoffRepository } from "@/features/routes/handoff-repository";
 import { HandoffService } from "@/features/routes/handoff-service";
+import { manualHandoffSchema } from "@/features/routes/manual-handoff-input";
 import { DrizzleTripRepository } from "@/features/trips/trip-repository";
 import { TripService } from "@/features/trips/trip-service";
 import {
@@ -60,6 +61,21 @@ router.post("/handoffs/suggestions/recalculate", async (req, res): Promise<void>
   } catch (err) {
     req.log.error({ err }, "Failed to recalculate equipment handoffs");
     res.status(500).json({ error: "Could not calculate equipment handoff suggestions" });
+  }
+});
+
+router.post("/handoffs/manual", async (req, res): Promise<void> => {
+  const parsed = manualHandoffSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid manual meetup" });
+    return;
+  }
+  try {
+    const handoff = await new HandoffRepository(db).createManual(parsed.data);
+    res.status(201).json({ handoff });
+  } catch (err) {
+    req.log.error({ err }, "Failed to create manual equipment handoff");
+    res.status(500).json({ error: err instanceof Error ? err.message : "Could not create manual equipment meetup" });
   }
 });
 

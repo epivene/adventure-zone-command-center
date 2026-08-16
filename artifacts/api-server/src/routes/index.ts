@@ -19,6 +19,7 @@ import aiSuggestionsRouter from "./ai-suggestions";
 import followUpsRouter from "./follow-ups";
 import authRouter from "./auth";
 import managerAuthRouter from "./leg-manager-auth";
+import managerMapRouter from "./leg-manager-map";
 import managerRouter from "./leg-manager";
 import managerAdminRouter from "./leg-manager-admin";
 import { requireOwnerMiddleware } from "../lib/auth";
@@ -30,6 +31,7 @@ router.use(healthRouter);
 // middleware. Manager data routes enforce their own manager-session middleware.
 router.use(authRouter);
 router.use(managerAuthRouter);
+router.use(managerMapRouter);
 router.use(managerRouter);
 
 // Owner-only app and manager-admin routes require the owner's bearer token.

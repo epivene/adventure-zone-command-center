@@ -1,0 +1,147 @@
+import { describe, expect, it } from "vitest";
+import { loadManagerScopedMapData } from "./manager-map-data";
+
+const kristyLegId = "00000000-0000-4000-8000-000000000010";
+const hulkLegId = "00000000-0000-4000-8000-000000000020";
+const kristyTripId = "00000000-0000-4000-8000-000000000100";
+
+const kristyTrip = {
+  id: kristyTripId,
+  travelLegId: kristyLegId,
+  name: "Kristy route",
+  startDate: new Date("2026-08-18T00:00:00Z"),
+  endDate: new Date("2026-08-28T00:00:00Z"),
+  startLabel: "Utah base",
+  startLatitude: 40.2,
+  startLongitude: -111.9,
+  endLabel: "Utah base",
+  endLatitude: 40.2,
+  endLongitude: -111.9,
+  legName: "Kristy",
+  legColor: "#f97316",
+  stopCount: 1,
+};
+
+const kristyStop = {
+  id: "00000000-0000-4000-8000-000000000101",
+  tripId: kristyTripId,
+  bookingId: "00000000-0000-4000-8000-000000000201",
+  sortOrder: 1,
+  bookingName: "Eastern Montana Fair",
+  city: "Miles City",
+  region: "MT",
+  latitude: 46.4083,
+  longitude: -105.8406,
+  startsAt: new Date("2026-08-20T12:00:00Z"),
+  endsAt: new Date("2026-08-20T20:00:00Z"),
+  status: "confirmed",
+};
+
+function legParticipant(legId: string, legName: string) {
+  return { kind: "leg" as const, legId, legName };
+}
+
+function meetup(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "00000000-0000-4000-8000-000000000301",
+    status: "approved" as const,
+    fromLegId: kristyLegId,
+    toLegId: hulkLegId,
+    fromParticipant: legParticipant(kristyLegId, "Kristy"),
+    toParticipant: legParticipant(hulkLegId, "Hulk"),
+    fromTripId: kristyTripId,
+    toTripId: null,
+    resourceId: "00000000-0000-4000-8000-000000000401",
+    resourceCode: "PB",
+    resourceName: "Paintball trailer",
+    meetupLabel: "Billings transfer",
+    meetupLatitude: 45.7833,
+    meetupLongitude: -108.5007,
+    windowStartsAt: new Date("2026-08-21T12:00:00Z"),
+    windowEndsAt: new Date("2026-08-21T14:00:00Z"),
+    directMiles: null,
+    directMinutes: null,
+    fromDetourMiles: 0,
+    fromDetourMinutes: 0,
+    toDetourMiles: 0,
+    toDetourMinutes: 0,
+    combinedDetourMiles: 0,
+    availableBufferMinutes: 120,
+    opportunityBand: "possible" as const,
+    explanation: "Approved meetup",
+    dependencyFingerprint: "manual:test",
+    approvedAt: new Date("2026-08-15T00:00:00Z"),
+    dismissedAt: null,
+    ...overrides,
+  };
+}
+
+function deps(handoffs: any[]) {
+  return {
+    tripRepository: {
+      async listTrips(options?: { travelLegId?: string }) {
+        return options?.travelLegId === kristyLegId ? [kristyTrip] : [];
+      },
+      async listStops(tripId: string) {
+        return tripId === kristyTripId ? [kristyStop] : [];
+      },
+      async listSegments(tripId: string) {
+        return tripId === kristyTripId
+          ? [{ id: "seg-1", tripId, sequence: 1, fromKey: "a", toKey: "b", fromLabel: "Utah base", toLabel: "Miles City", miles: 610, minutes: 570, source: "fallback" as const, estimatedAt: null, overrideMiles: null, overrideMinutes: null }]
+          : [];
+      },
+    },
+    handoffRepository: {
+      async listForLeg(legId: string) {
+        return legId === kristyLegId ? handoffs : [];
+      },
+    },
+  } as any;
+}
+
+describe("loadManagerScopedMapData", () => {
+  it("returns only the authenticated leg's events and route geometry", async () => {
+    const result = await loadManagerScopedMapData(deps([]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
+
+    expect(result.events.map((event) => event.bookingId)).toEqual([kristyStop.bookingId]);
+    expect(result.route?.trip.id).toBe(kristyTripId);
+    expect(JSON.stringify(result)).not.toContain("Hulk private stop");
+  });
+
+  it("includes a shared meetup but only the counterpart leg identity", async () => {
+    const result = await loadManagerScopedMapData(deps([meetup()]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
+
+    expect(result.meetups[0]?.counterpart).toEqual(legParticipant(hulkLegId, "Hulk"));
+    expect(JSON.stringify(result.meetups[0])).not.toContain("Hulk private stop");
+  });
+
+  it("includes an assigned outside runner meetup", async () => {
+    const external = {
+      kind: "external_contact" as const,
+      externalContactId: null,
+      displayName: "Jordan Smith",
+      phone: "555-0100",
+      email: null,
+    };
+    const result = await loadManagerScopedMapData(
+      deps([meetup({ toLegId: null, toParticipant: external })]),
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.meetups[0]?.counterpart).toEqual(external);
+  });
+
+  it("filters out a meetup unrelated to the authenticated leg even if a repository returns it", async () => {
+    const unrelated = meetup({
+      id: "00000000-0000-4000-8000-000000000399",
+      fromLegId: hulkLegId,
+      toLegId: "00000000-0000-4000-8000-000000000099",
+      fromParticipant: legParticipant(hulkLegId, "Hulk"),
+      toParticipant: legParticipant("00000000-0000-4000-8000-000000000099", "Other"),
+    });
+    const result = await loadManagerScopedMapData(deps([unrelated]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
+
+    expect(result.meetups).toEqual([]);
+  });
+});
