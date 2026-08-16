@@ -14,6 +14,7 @@ const requests=new MeetupRequestRepository(db);const notifications=new Notificat
 function param(v:string|string[]|undefined){return Array.isArray(v)?v[0]??"":v??"";}
 function rows<T>(value:unknown):T[]{return ((value as {rows?:T[]}).rows??[]) as T[];}
 const approval=z.object({fromLegId:z.string().uuid(),toLegId:z.string().uuid(),resourceId:z.string().uuid(),meetupLabel:z.string().trim().min(1).max(240),meetupLatitude:z.number().min(-90).max(90),meetupLongitude:z.number().min(-180).max(180),windowStartsAt:z.coerce.date(),windowEndsAt:z.coerce.date(),adminNotes:z.string().trim().max(4000).nullable().optional()}).refine(v=>v.fromLegId!==v.toLegId,{message:"Meetup must use two different legs"}).refine(v=>v.windowEndsAt>=v.windowStartsAt,{message:"End time must be after start time"});
+router.get("/manager-admin/meetup-options",async(_req,res)=>{const result=await db.execute(sql`select id,name from resources where movable=true order by name`);res.json({resources:rows(result)});});
 router.get("/manager-admin/meetup-requests",async(req,res)=>{const status=typeof req.query.status==="string"?req.query.status:undefined;res.json({requests:await requests.list(status==="pending_admin"||status==="approved"||status==="dismissed"?status:undefined)});});
 router.post("/manager-admin/meetup-requests/:id/approve",async(req,res):Promise<void>=>{
   const p=approval.safeParse(req.body);if(!p.success){res.status(400).json({error:p.error.issues[0]?.message??"Invalid meetup approval"});return;}
