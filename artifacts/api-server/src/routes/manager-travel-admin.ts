@@ -1,17 +1,36 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
+import { DrizzleManagerMapBookingRepository } from "@/features/leg-manager/manager-map-booking-repository";
+import { loadManagerScopedMapData } from "@/features/leg-manager/manager-map-data";
 import { DrizzleManagerRouteSuggestionRepository } from "@/features/leg-manager/route-suggestion-repository";
 import { ManagerRouteSuggestionService } from "@/features/leg-manager/route-suggestion-service";
 import { DrizzleRouteSuggestionDomain } from "@/features/leg-manager/route-suggestion-domain";
+import { HandoffRepository } from "@/features/routes/handoff-repository";
+import { DrizzleTripRepository } from "@/features/trips/trip-repository";
 
 const router: IRouter = Router();
 const repository = new DrizzleManagerRouteSuggestionRepository(db);
 const domain = new DrizzleRouteSuggestionDomain(db);
 const service = new ManagerRouteSuggestionService(repository, domain, domain);
 const rejectSchema = z.object({ adminResponse: z.string().trim().max(2000).nullable().optional() });
+const legIdSchema = z.string().uuid();
 
 function param(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
+
+router.get("/manager-travel-admin/preview/:legId", async (req, res): Promise<void> => {
+  const parsed = legIdSchema.safeParse(param(req.params.legId));
+  if (!parsed.success) { res.status(400).json({ error: "Valid leg id is required" }); return; }
+  const payload = await loadManagerScopedMapData(
+    {
+      tripRepository: new DrizzleTripRepository(db),
+      bookingRepository: new DrizzleManagerMapBookingRepository(db),
+      handoffRepository: new HandoffRepository(db),
+    },
+    parsed.data,
+  );
+  res.json(payload);
+});
 
 router.get("/manager-travel-admin/suggestions", async (_req, res) => {
   res.json({ suggestions: await service.listPendingForAdmin() });
