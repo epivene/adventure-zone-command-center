@@ -21,9 +21,7 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run
           src/features/organizations/imported-location-family-consolidation.test.ts
           src/features/organizations/organization-family-lock.test.ts
-      - name: Event profile regressions
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/event-profiles
       - run: pnpm --filter @workspace/adventure-zone typecheck
       - run: pnpm --filter @workspace/api-server build
       - run: pnpm --filter @workspace/adventure-zone build
-# DB-backed consolidation tests require a pre-provisioned full app schema and are verified in their existing environment.
+# DB-backed consolidation tests require a pre-provisioned full app schema; event-profiles has no existing test files on current main.
