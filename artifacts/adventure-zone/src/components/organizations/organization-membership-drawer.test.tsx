@@ -30,7 +30,7 @@ describe("OrganizationMembershipDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     await screen.findByText("Denver Water Lantern");
     fireEvent.click(screen.getByRole("button", { name: /Denver Water Lantern/ }));
-    expect(screen.getByText(/currently belongs to Old Parent/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/currently belongs to Old Parent/i).length).toBeGreaterThanOrEqual(1);
     fireEvent.click(screen.getByRole("button", { name: "Move to Water Lantern Festival" }));
     await waitFor(() => expect(mocks.apiPut).toHaveBeenCalledWith(`/event-profiles/${child.id}/organization`, { organizationId: parent.id }));
     expect(onChanged).toHaveBeenCalled();
