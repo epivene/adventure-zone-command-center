@@ -1,0 +1,30 @@
+name: Verify profile notes implementation
+on:
+  push:
+    branches: [feature/profile-family-notes-impl]
+
+jobs:
+  verify:
+    if: ${{ !contains(github.event.head_commit.message, '[skip profile-notes-verify]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --no-frozen-lockfile
+      - name: Database build
+        run: pnpm --filter @workspace/db build
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Frontend build
+        run: pnpm --filter @workspace/adventure-zone build
