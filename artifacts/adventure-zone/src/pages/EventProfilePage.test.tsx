@@ -157,3 +157,37 @@ describe("EventProfilePage call actions", () => {
     expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
   });
 });
+
+describe("EventProfilePage recovered ACT history", () => {
+  it("shows migration notes that were preserved during profile merges", async () => {
+    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
+      ? Promise.resolve({
+          ...profile,
+          migrationHistory: {
+            contactSourceIds: [],
+            phones: [],
+            notes: ["Called in 2023 — interested in the full package.", "Old ACT history: sent pricing."],
+            bookingSourceIds: [],
+            groupSourceIds: [],
+          },
+        })
+      : Promise.resolve(contactDetail(null)));
+
+    render(<EventProfilePage />);
+
+    expect(await screen.findByRole("heading", { name: "Recovered ACT notes & history" })).toBeVisible();
+    expect(screen.getByText("Called in 2023 — interested in the full package.")).toBeVisible();
+    expect(screen.getByText("Old ACT history: sent pricing.")).toBeVisible();
+  });
+
+  it("does not show a recovered section when no preserved ACT notes exist", async () => {
+    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
+      ? Promise.resolve(profile)
+      : Promise.resolve(contactDetail(null)));
+
+    render(<EventProfilePage />);
+
+    expect(await screen.findByText("Prairie Days")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Recovered ACT notes & history" })).not.toBeInTheDocument();
+  });
+});
