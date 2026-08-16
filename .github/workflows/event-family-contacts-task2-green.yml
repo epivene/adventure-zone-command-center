@@ -1,0 +1,36 @@
+name: Event Family Contacts Task2 Green
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  green:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-task2-green]')
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: adventure_zone_test }
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: python .github/scripts/event-family-contacts-task2.py
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/event-families/event-family-contacts.test.ts
+      - run: pnpm --filter @workspace/api-server build
+      - name: Commit repository behavior
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/event-families/event-family-repository.ts
+          git diff --cached --check
+          git commit -m "feat: manage event family website and contacts" || true
+          git push origin HEAD:feature/event-family-website-contacts
