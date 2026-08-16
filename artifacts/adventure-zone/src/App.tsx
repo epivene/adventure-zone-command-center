@@ -231,6 +231,7 @@ function AppRoutes() {
               <Route path="/contacts/:id/edit">{(params)=><ContactEditPage contactId={params.id}/>}</Route>
               <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
               <Route path="/contacts" component={ContactsPage} />
+              <Route path="/profiles/:profileId" component={EventProfilePage} />
               <Route path="/profiles" component={OrganizationsPage} />
               <Route path="/organizations" component={OrganizationsPage} />
               <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
