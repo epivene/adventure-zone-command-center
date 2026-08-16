@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useSearch } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
@@ -9,6 +9,7 @@ import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 export default function EventProfilePage() {
   const { profileId } = useParams<{ profileId: string }>();
   const search = useSearch();
+  const [, setLocation] = useLocation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +83,14 @@ export default function EventProfilePage() {
     void listFamilyNotes(data.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
   }
 
+  function goBack() {
+    if (window.history.length > 1) {
+      window.history.back();
+      return;
+    }
+    setLocation("/profiles");
+  }
+
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading profile…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
@@ -94,6 +103,14 @@ export default function EventProfilePage() {
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
+      <button
+        aria-label="Back"
+        className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+        onClick={goBack}
+        type="button"
+      >
+        <span aria-hidden="true">←</span> Back
+      </button>
       <EventRatingSummary average={data.wrapUpRatingSummary?.average ?? null} count={data.wrapUpRatingSummary?.count ?? 0} />
       {recoveredActNotes.length ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm" aria-labelledby="recovered-act-history-title">

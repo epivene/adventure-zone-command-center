@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiGet = vi.hoisted(() => vi.fn());
+const setLocation = vi.hoisted(() => vi.fn());
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const contactId = "20000000-0000-4000-8000-000000000001";
 const bookingId = "30000000-0000-4000-8000-000000000001";
@@ -10,6 +11,7 @@ vi.mock("@/lib/auth-token", () => ({ apiGet }));
 vi.mock("wouter", () => ({
   useParams: () => ({ profileId: organizationId }),
   useSearch: () => `?contactId=${contactId}&bookingId=${bookingId}`,
+  useLocation: () => [`/profiles/${organizationId}`, setLocation],
   Link: ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>,
 }));
 
@@ -72,6 +74,19 @@ function contactDetail(doNotCallAt: string | null) {
 afterEach(() => {
   cleanup();
   apiGet.mockReset();
+  setLocation.mockReset();
+});
+
+describe("EventProfilePage navigation", () => {
+  it("shows a Back button on a loaded profile", async () => {
+    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
+      ? Promise.resolve(profile)
+      : Promise.resolve(contactDetail(null)));
+
+    render(<EventProfilePage />);
+
+    expect(await screen.findByRole("button", { name: "Back" })).toBeVisible();
+  });
 });
 
 describe("EventProfilePage call actions", () => {
