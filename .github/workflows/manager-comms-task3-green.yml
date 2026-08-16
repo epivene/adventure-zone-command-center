@@ -18,3 +18,4 @@ jobs:
       - run: pnpm --filter @workspace/adventure-zone build
       - run: grep -q '/manager/messages' artifacts/adventure-zone/src/App.tsx
       - run: grep -q '>Messages</Link>' artifacts/adventure-zone/src/components/manager/manager-shell.tsx
+# rerun after test mock correction
