@@ -18,6 +18,7 @@ jobs:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: pnpm/action-setup@v4
         with: { version: 10 }
       - uses: actions/setup-node@v4
@@ -33,5 +34,7 @@ jobs:
           git add artifacts/api-server/src/features/event-families/event-family-repository.ts
           git diff --cached --check
           git commit -m "feat: manage event family website and contacts" || true
+          git fetch origin feature/event-family-website-contacts
+          git rebase origin/feature/event-family-website-contacts
           git push origin HEAD:feature/event-family-website-contacts
-# trigger 2
+# trigger 3
