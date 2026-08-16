@@ -14,3 +14,4 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/EventProfilePage.organization-membership.test.tsx
+# red trigger
