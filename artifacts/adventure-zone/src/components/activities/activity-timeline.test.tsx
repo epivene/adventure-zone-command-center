@@ -46,7 +46,7 @@ describe("ActivityTimeline call editing", () => {
     const editedCall = {
       ...linkedCall,
       body: "Talked with Amy",
-      callOutcome: "spoke_with_contact",
+      callOutcome: "spoke_with_contact" as const,
     };
     const editActivity = vi.fn().mockResolvedValue({
       ok: true,
@@ -163,5 +163,43 @@ describe("ActivityTimeline deletion", () => {
 
     expect(screen.getByText("Keep this history item")).toBeInTheDocument();
     expect(deleteActivity).not.toHaveBeenCalled();
+  });
+});
+
+describe("ActivityTimeline imported ACT provenance", () => {
+  it("labels imported ACT history and hides mutation controls while local notes remain editable", () => {
+    const imported = activityTimelineItem({
+      id: "40000000-0000-4000-8000-000000000010",
+      kind: "act_history",
+      body: "Proposal package sent",
+      importedFromAct: true,
+      actSourceType: "history",
+    } as Partial<ActivityTimelineItem> & Record<string, unknown>);
+    const local = activityTimelineItem({
+      id: "40000000-0000-4000-8000-000000000011",
+      body: "Local correction note",
+    });
+
+    render(
+      <ActivityTimeline
+        activities={[imported, local]}
+        editActivity={vi.fn()}
+        deleteActivity={vi.fn()}
+        loadRevisions={vi
+          .fn()
+          .mockResolvedValue({ ok: true, revisions: [], nextPage: null })}
+      />,
+    );
+
+    expect(screen.getByText("Imported from ACT · History")).toBeInTheDocument();
+    const importedCard = screen.getByText("Proposal package sent").closest("li");
+    expect(importedCard).not.toBeNull();
+    expect(importedCard).not.toHaveTextContent("Edit activity");
+    expect(importedCard).not.toHaveTextContent("Delete activity");
+
+    const localCard = screen.getByText("Local correction note").closest("li");
+    expect(localCard).not.toBeNull();
+    expect(localCard).toHaveTextContent("Edit activity");
+    expect(localCard).toHaveTextContent("Delete activity");
   });
 });

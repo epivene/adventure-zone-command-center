@@ -87,6 +87,13 @@ function toTimelineItem(
     revisionCount,
     callOutcome,
     hasLinkedCallSession: callOutcome !== null,
+    importedFromAct: Boolean(activity.sourceRecordId),
+    actSourceType:
+      activity.sourceType === "note" ||
+      activity.sourceType === "history" ||
+      activity.sourceType === "activity"
+        ? activity.sourceType
+        : null,
   };
 }
 
@@ -323,6 +330,12 @@ export class DrizzleActivityRepository
         .limit(1)
         .for("update");
       if (!before) return err({ code: "ACTIVITY_NOT_FOUND" });
+      if (before.sourceRecordId) {
+        return err({
+          code: "INVALID_ACTIVITY_INPUT",
+          message: "Imported ACT history is read-only. Add a new note to record a correction.",
+        });
+      }
 
       const [linkedCallSession] = input.callOutcome
         ? await transaction

@@ -15,6 +15,7 @@ import { ArchiveProfileImportWorker } from "./archive-profile-import-worker";
 import {
   ActOrganizerWorkerLoop,
   systemWorkerLoopScheduler,
+  type OrganizerLoopWorker,
   type WorkerLoopScheduler,
 } from "./worker-loop";
 
@@ -88,6 +89,19 @@ export function createArchiveProfileImportLoop(input: {
       clock: input.clock,
     }),
     workerId: `act-archive-profile-import-${process.pid}-${randomUUID()}`,
+    clock: input.clock,
+    scheduler: input.scheduler ?? systemWorkerLoopScheduler,
+  });
+}
+
+export function createActArchiveRecoveryLoop(input: {
+  worker: OrganizerLoopWorker;
+  clock: { now(): Date };
+  scheduler?: WorkerLoopScheduler;
+}): ActExtractionRuntime {
+  return new ActOrganizerWorkerLoop({
+    worker: input.worker,
+    workerId: `act-archive-recovery-${process.pid}-${randomUUID()}`,
     clock: input.clock,
     scheduler: input.scheduler ?? systemWorkerLoopScheduler,
   });
@@ -175,10 +189,22 @@ async function createProductionArchiveRuntime(): Promise<ActExtractionRuntime> {
     { db },
     { DrizzleArchiveProfileImportRepository },
     { createAiClient },
+    { DrizzleActArchiveRecoveryRepository },
+    { ActRecoverySourceLinkResolver },
+    { ActEntityRecovery },
+    { ActRelationshipRecovery },
+    { ActTimelineRecovery },
+    { ActArchiveRecoveryWorker },
   ] = await Promise.all([
     import("@/db/client"),
     import("./archive-profile-import-repository"),
     import("../ai-suggestions/ai-client"),
+    import("../act-recovery/recovery-repository"),
+    import("../act-recovery/source-link-resolver"),
+    import("../act-recovery/entity-recovery"),
+    import("../act-recovery/relationship-recovery"),
+    import("../act-recovery/timeline-recovery"),
+    import("../act-recovery/recovery-worker"),
   ]);
   const clock = { now: () => new Date() };
   const archiveProfileImportLoop = createArchiveProfileImportLoop({
@@ -186,7 +212,25 @@ async function createProductionArchiveRuntime(): Promise<ActExtractionRuntime> {
     createAiClient,
     clock,
   });
-  return archiveProfileImportLoop;
+  const resolver = new ActRecoverySourceLinkResolver(db);
+  const archiveRecoveryLoop = createActArchiveRecoveryLoop({
+    worker: new ActArchiveRecoveryWorker({
+      repository: new DrizzleActArchiveRecoveryRepository(db),
+      entityRecovery: new ActEntityRecovery(db, resolver),
+      relationshipRecovery: new ActRelationshipRecovery(db, resolver),
+      timelineRecovery: new ActTimelineRecovery(db, resolver),
+    }),
+    clock,
+  });
+  return {
+    start() {
+      archiveProfileImportLoop.start();
+      archiveRecoveryLoop.start();
+    },
+    async close() {
+      await Promise.all([archiveRecoveryLoop.close(), archiveProfileImportLoop.close()]);
+    },
+  };
 }
 
 async function createProductionConfiguredRuntime(

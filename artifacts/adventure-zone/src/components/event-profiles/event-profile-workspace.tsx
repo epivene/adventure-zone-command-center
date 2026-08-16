@@ -240,6 +240,13 @@ export function EventProfileWorkspace({
                   revisionCount: 0,
                   callOutcome: null,
                   hasLinkedCallSession: false,
+                  importedFromAct: Boolean(note.importedFromAct),
+                  actSourceType:
+                    note.actSourceType === "note" ||
+                    note.actSourceType === "history" ||
+                    note.actSourceType === "activity"
+                      ? note.actSourceType
+                      : null,
                 }))}
                 parent={{ organizationId: profile.id }}
                 createActivity={createActivityAction}

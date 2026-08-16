@@ -421,7 +421,15 @@ const migrationFiles = [
     ) AS ready`,
   },
   {
-    name: "043_event_family_website_contacts.sql",
+    name: "043_act_archive_full_recovery.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.act_archive_recovery_runs') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_recovery_items') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_recovery_decisions') IS NOT NULL
+      AS ready`,
+  },
+  {
+    name: "044_event_family_website_contacts.sql",
     markerSql: `SELECT
       EXISTS (
         SELECT 1 FROM information_schema.columns

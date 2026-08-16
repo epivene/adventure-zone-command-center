@@ -11,7 +11,7 @@ describe("event family website/contact schema", () => {
     expect(familyColumns).toHaveProperty("website");
     expect(eventFamilyContacts).toBeDefined();
 
-    const migrationPath = resolve(process.cwd(), "../../lib/db/migrations/043_event_family_website_contacts.sql");
+    const migrationPath = resolve(process.cwd(), "../../lib/db/migrations/044_event_family_website_contacts.sql");
     expect(existsSync(migrationPath)).toBe(true);
     if (existsSync(migrationPath)) {
       const sql = readFileSync(migrationPath, "utf8");
@@ -24,7 +24,7 @@ describe("event family website/contact schema", () => {
     }
 
     const registry = readFileSync(resolve(process.cwd(), "../../lib/db/src/migrations.ts"), "utf8");
-    expect(registry).toContain('name: "043_event_family_website_contacts.sql"');
+    expect(registry).toContain('name: "044_event_family_website_contacts.sql"');
   });
 });
 
