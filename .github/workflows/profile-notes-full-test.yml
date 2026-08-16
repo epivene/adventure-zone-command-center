@@ -17,10 +17,10 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - name: API full test suite
         run: |
-          pnpm --filter @workspace/api-server exec vitest run --reporter=basic > /tmp/api-tests.log 2>&1 || { tail -160 /tmp/api-tests.log; exit 1; }
+          pnpm --filter @workspace/api-server exec vitest run > /tmp/api-tests.log 2>&1 || { tail -160 /tmp/api-tests.log; exit 1; }
           tail -30 /tmp/api-tests.log
       - name: Frontend full test suite
         if: always()
         run: |
-          pnpm --filter @workspace/adventure-zone exec vitest run --reporter=basic > /tmp/frontend-tests.log 2>&1 || { tail -160 /tmp/frontend-tests.log; exit 1; }
+          pnpm --filter @workspace/adventure-zone exec vitest run > /tmp/frontend-tests.log 2>&1 || { tail -160 /tmp/frontend-tests.log; exit 1; }
           tail -30 /tmp/frontend-tests.log
