@@ -31,6 +31,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Initialize application schema
+        run: pnpm --filter @workspace/db push
       - name: Organization hierarchy regressions
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
@@ -42,4 +44,4 @@ jobs:
       - run: pnpm --filter @workspace/adventure-zone typecheck
       - run: pnpm --filter @workspace/api-server build
       - run: pnpm --filter @workspace/adventure-zone build
-# postgres-backed baseline
+# initialize the same schema real deployments use
