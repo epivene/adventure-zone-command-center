@@ -36,15 +36,18 @@
 - Modify `artifacts/api-server/src/features/routes/handoff-service.ts`
   - keep automatic suggestions leg-to-leg;
   - normalize participant output for approved/manual handoffs.
+- Create `artifacts/api-server/src/features/routes/handoff-repository-participants.test.ts`
+  - participant persistence and validation tests.
 - Create `artifacts/api-server/src/features/leg-manager/manager-map-data.ts`
   - build the manager-scoped map payload from the authenticated leg only.
 - Create `artifacts/api-server/src/features/leg-manager/manager-map-data.test.ts`
   - authorization/privacy tests for events, route geometry, and meetups.
 - Modify `artifacts/api-server/src/routes/leg-manager.ts`
   - add `GET /manager/map` using `req.legManager.legId` only.
-- Modify the existing handoff route file that owns `/handoffs` endpoints (locate before implementation; currently consumed by `equipment-handoffs.tsx`)
+- Modify `artifacts/api-server/src/routes/handoffs.ts`
   - add admin manual handoff create/update support with participant validation.
-- Add/modify handoff repository/service tests next to existing route/handoff tests.
+- Create `artifacts/api-server/src/routes/handoffs-manual.test.ts`
+  - manual handoff API validation tests.
 
 ### Shared manager client
 
@@ -59,7 +62,7 @@
 - Create `artifacts/adventure-zone/src/components/manager/manager-scoped-map.test.tsx`
   - privacy/rendering/navigation tests.
 - Reuse `artifacts/adventure-zone/src/components/routes/manager-route-map-shell.tsx`
-  - Leaflet shell only; do not reuse the admin all-legs data orchestration.
+  - Leaflet shell only; do not reuse admin all-legs data orchestration.
 - Reuse `artifacts/adventure-zone/src/features/routes/manager-map-navigation.ts`
   - Google Maps URL creation and Planning / On the Road persistence where applicable.
 
@@ -68,7 +71,7 @@
 - Modify `artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx`
   - compact manager-scoped map above the scheduled event list;
   - event-list selection focuses own-leg marker.
-- Create or modify `artifacts/adventure-zone/src/pages/ManagerRoutePage.test.tsx`
+- Create `artifacts/adventure-zone/src/pages/ManagerRoutePage.test.tsx`
   - compact map and own-leg-only behavior.
 - Modify `artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx`
   - full operational manager map with own route, ordered stops, meetups, and Planning / On the Road actions.
@@ -92,10 +95,9 @@
 **Files:**
 - Modify: `artifacts/api-server/src/features/routes/handoff-repository.ts`
 - Modify: `artifacts/api-server/src/features/routes/handoff-service.ts`
-- Test: existing handoff repository/service test files plus a new focused participant-model test if no suitable file exists
+- Create: `artifacts/api-server/src/features/routes/handoff-repository-participants.test.ts`
 
 **Interfaces:**
-- Produces:
 
 ```ts
 export type MeetupParticipant =
@@ -108,34 +110,29 @@ export type MeetupParticipant =
       email: string | null;
     };
 
-export type EquipmentHandoff = {
-  id: string;
-  status: HandoffStatus;
-  fromParticipant: MeetupParticipant;
-  toParticipant: MeetupParticipant;
+export type ManualHandoffInput = {
+  fromParticipant:
+    | { kind: "leg"; legId: string }
+    | { kind: "external_contact"; externalContactId: string | null; displayName: string; phone: string | null; email: string | null };
+  toParticipant:
+    | { kind: "leg"; legId: string }
+    | { kind: "external_contact"; externalContactId: string | null; displayName: string; phone: string | null; email: string | null };
   fromTripId: string | null;
   toTripId: string | null;
   resourceId: string;
-  resourceCode: string | null;
-  resourceName: string | null;
   meetupLabel: string;
   meetupLatitude: number;
   meetupLongitude: number;
   windowStartsAt: Date;
   windowEndsAt: Date;
-  // existing route-impact/status fields retained
 };
 ```
 
-- Automatic suggestion input remains leg-to-leg and can still accept `fromLegId` / `toLegId` internally; repository normalization turns those into participant objects on read.
-
-- [ ] **Step 1: Write failing participant-model tests**
-
-Cover these cases explicitly:
+- [ ] **Step 1: Write the failing participant persistence tests**
 
 ```ts
 it("reads an existing leg-to-leg handoff as two leg participants", async () => {
-  const handoff = await repository.get(seedLegToLegHandoff());
+  const handoff = await repository.get(existingId);
   expect(handoff?.fromParticipant).toMatchObject({ kind: "leg", legId: legA.id, legName: "Kristy" });
   expect(handoff?.toParticipant).toMatchObject({ kind: "leg", legId: legB.id, legName: "Hulk" });
 });
@@ -143,13 +140,9 @@ it("reads an existing leg-to-leg handoff as two leg participants", async () => {
 it("stores an outside-runner handoff without creating a fake leg", async () => {
   const saved = await repository.createManual({
     fromParticipant: { kind: "leg", legId: legA.id },
-    toParticipant: {
-      kind: "external_contact",
-      externalContactId: null,
-      displayName: "Jordan Smith",
-      phone: "555-0100",
-      email: null,
-    },
+    toParticipant: { kind: "external_contact", externalContactId: null, displayName: "Jordan Smith", phone: "555-0100", email: null },
+    fromTripId: tripA.id,
+    toTripId: null,
     resourceId,
     meetupLabel: "Billings transfer",
     meetupLatitude: 45.7833,
@@ -165,21 +158,17 @@ it("rejects a meetup with no Adventure Zone leg participant", async () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and verify RED**
-
-Run the exact handoff test file(s), e.g.:
+- [ ] **Step 2: Run the test and verify RED**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-repository-participants.test.ts
 ```
 
-Expected: FAIL because participant-aware fields/manual creation do not exist yet.
+Expected: FAIL because participant-aware fields and `createManual` do not exist.
 
-- [ ] **Step 3: Evolve the existing `equipment_handoffs` table idempotently**
+- [ ] **Step 3: Evolve `equipment_handoffs` idempotently inside `ensureSchema()`**
 
-Use the repository's existing `ensureSchema()` migration pattern; do not create a second table for the same concept. Preserve existing rows.
-
-Required database changes:
+Use the existing repository schema-upgrade pattern; preserve existing rows.
 
 ```sql
 alter table equipment_handoffs alter column from_leg_id drop not null;
@@ -197,36 +186,29 @@ alter table equipment_handoffs add column if not exists to_external_phone text;
 alter table equipment_handoffs add column if not exists to_external_email text;
 ```
 
-Add idempotent check constraints so:
-- participant kind is `leg` or `external_contact`;
-- a `leg` participant has the corresponding leg ID;
-- an `external_contact` participant has a nonblank external name and no leg ID;
-- at least one side is `leg`;
-- when both sides are legs they are not the same leg;
-- existing window constraint remains.
+Add idempotent checks so participant kinds are `leg` or `external_contact`, external participants have a nonblank display name, leg participants have a leg ID, at least one side is a leg, two leg participants cannot be the same leg, and the existing time-window check remains.
 
-- [ ] **Step 4: Implement normalization and manual create/update methods**
+- [ ] **Step 4: Implement row normalization and manual persistence**
 
-Add helpers such as:
+Add:
 
 ```ts
 function participantFromRow(row: HandoffRow, side: "from" | "to"): MeetupParticipant;
-
 async createManual(input: ManualHandoffInput): Promise<EquipmentHandoff>;
-async updateParticipants(id: string, input: ManualHandoffParticipantsInput): Promise<EquipmentHandoff | null>;
+async updateParticipants(id: string, input: Pick<ManualHandoffInput, "fromParticipant" | "toParticipant">): Promise<EquipmentHandoff | null>;
 async listForLeg(legId: string, options?: { approvedOnly?: boolean }): Promise<EquipmentHandoff[]>;
 ```
 
-`listForLeg` must match the authenticated leg against either leg participant and must not infer visibility from trip IDs alone.
+`listForLeg` must match the authenticated leg against either participant's leg ID; it must not infer visibility from trip IDs.
 
-- [ ] **Step 5: Keep automatic suggestions leg-to-leg**
+- [ ] **Step 5: Keep automatic suggestion generation leg-to-leg**
 
-`HandoffService` suggestion generation continues producing real leg-to-leg candidates. When stored, explicitly write both participant kinds as `leg`. Do not make the automatic scoring engine invent external runners.
+Automatic scoring continues to produce real `fromLegId`/`toLegId` suggestions. When persisted, write participant kind `leg` on both sides. Do not involve external runners in the automatic scoring engine.
 
-- [ ] **Step 6: Run handoff tests and verify GREEN**
+- [ ] **Step 6: Run the handoff suite and verify GREEN**
 
 ```bash
-pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts src/features/routes/handoff-repository-participants.test.ts
+pnpm --filter @workspace/api-server exec vitest run src/features/routes/handoff-repository-participants.test.ts src/features/routes/handoff-scoring.test.ts src/features/trips/trip-service-handoff.test.ts
 ```
 
 Expected: PASS.
@@ -234,8 +216,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add artifacts/api-server/src/features/routes/handoff-repository.ts artifacts/api-server/src/features/routes/handoff-service.ts artifacts/api-server/src/features/routes/*handoff*.test.ts
-
+git add artifacts/api-server/src/features/routes/handoff-repository.ts artifacts/api-server/src/features/routes/handoff-service.ts artifacts/api-server/src/features/routes/handoff-repository-participants.test.ts
 git commit -m "feat: support external equipment handoff participants"
 ```
 
@@ -249,8 +230,6 @@ git commit -m "feat: support external equipment handoff participants"
 - Modify: `artifacts/api-server/src/routes/leg-manager.ts`
 
 **Interfaces:**
-- Consumes: `DrizzleTripRepository`, `HandoffRepository.listForLeg`, existing manager dashboard/route data patterns.
-- Produces:
 
 ```ts
 export type ManagerScopedMapData = {
@@ -305,9 +284,7 @@ export type ManagerScopedMapData = {
 };
 ```
 
-- [ ] **Step 1: Write failing authorization/privacy tests**
-
-Use repository fakes so assertions inspect the returned payload, not SQL internals.
+- [ ] **Step 1: Write failing privacy tests**
 
 ```ts
 it("returns only the authenticated leg's events and route geometry", async () => {
@@ -325,18 +302,16 @@ it("includes a shared meetup but only the counterpart leg identity", async () =>
 
 it("includes an assigned outside runner meetup", async () => {
   const result = await loadManagerScopedMapData(deps, kristyLegId);
-  expect(result.meetups).toContainEqual(expect.objectContaining({
-    counterpart: expect.objectContaining({ kind: "external_contact", displayName: "Jordan Smith" }),
-  }));
+  expect(result.meetups).toContainEqual(expect.objectContaining({ counterpart: expect.objectContaining({ kind: "external_contact", displayName: "Jordan Smith" }) }));
 });
 
-it("does not return a meetup unrelated to the authenticated leg", async () => {
+it("does not return an unrelated meetup", async () => {
   const result = await loadManagerScopedMapData(deps, kristyLegId);
   expect(result.meetups.map((meetup) => meetup.id)).not.toContain(unrelatedMeetupId);
 });
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [ ] **Step 2: Run and verify RED**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/manager-map-data.test.ts
@@ -347,16 +322,13 @@ Expected: FAIL because `loadManagerScopedMapData` does not exist.
 - [ ] **Step 3: Implement `loadManagerScopedMapData`**
 
 Rules:
-- take `legId` as a server-side parameter only;
-- query only that leg's current/upcoming trip and stops through existing trip repository methods;
-- build `events` from that leg's route/dashboard data only;
-- call `handoffs.listForLeg(legId, { approvedOnly: true })` for manager-visible meetups;
-- compute `counterpart` by choosing the participant that is not the authenticated leg;
-- never query/append another leg's events or trip details for context.
+- accept `legId` as a server-side parameter only;
+- reuse the existing manager dashboard/trip repository patterns to load that leg's current/upcoming trip, stops, events, and segments;
+- call `handoffRepository.listForLeg(legId, { approvedOnly: true })`;
+- compute each meetup `counterpart` by selecting the participant that is not the authenticated leg;
+- never query or append another leg's event list or trip detail for context.
 
 - [ ] **Step 4: Add `GET /manager/map`**
-
-In `leg-manager.ts`:
 
 ```ts
 router.get("/manager/map", requireManager, async (req, res) => {
@@ -375,7 +347,7 @@ Do not read `req.query.legId` or request-body leg IDs.
 
 - [ ] **Step 5: Add route-level authorization regression**
 
-Extend the existing manager route test suite to prove `GET /manager/map?legId=<other>` still returns the authenticated leg's data and never the requested other leg.
+Extend `artifacts/api-server/src/routes/leg-manager-admin.test.ts` so `GET /manager/map?legId=<other-leg-id>` still returns the authenticated leg's map data and never the requested other leg's data.
 
 - [ ] **Step 6: Run API tests and verify GREEN**
 
@@ -388,8 +360,7 @@ Expected: PASS.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add artifacts/api-server/src/features/leg-manager/manager-map-data.ts artifacts/api-server/src/features/leg-manager/manager-map-data.test.ts artifacts/api-server/src/routes/leg-manager.ts
-
+git add artifacts/api-server/src/features/leg-manager/manager-map-data.ts artifacts/api-server/src/features/leg-manager/manager-map-data.test.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/api-server/src/routes/leg-manager-admin.test.ts
 git commit -m "feat: add manager-scoped map API"
 ```
 
@@ -419,11 +390,9 @@ export function ManagerScopedMap(props: {
 }): JSX.Element;
 ```
 
-- [ ] **Step 1: Write failing map rendering/privacy tests**
+- [ ] **Step 1: Write failing rendering/privacy tests**
 
-Mock only Leaflet primitives; assert on the data passed into markers/polyline.
-
-```ts
+```tsx
 it("renders own-leg events and route but never another leg route", () => {
   render(<ManagerScopedMap data={scopedData} variant="operations" />);
   expect(markerCalls()).toContainEqual(expect.objectContaining({ title: "Eastern Montana Fair" }));
@@ -451,28 +420,31 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/m
 
 Expected: FAIL because the components do not exist.
 
-- [ ] **Step 3: Implement the data hook**
+- [ ] **Step 3: Implement `useManagerScopedMap()`**
 
-`useManagerScopedMap()` uses `useManagerAuth().managerApi` and calls only `/manager/map`.
-
-Return:
+Use `useManagerAuth().managerApi` and call only `/manager/map`.
 
 ```ts
-{ data: ManagerScopedMapData | null; loading: boolean; error: string | null; reload: () => Promise<void> }
+return {
+  data: ManagerScopedMapData | null,
+  loading: boolean,
+  error: string | null,
+  reload: () => Promise<void>,
+};
 ```
 
-Normalize ISO date strings into `Date` objects only where the renderer needs date methods.
+Normalize ISO date strings into `Date` objects where the renderer needs date methods.
 
 - [ ] **Step 4: Implement manager-only layers**
 
-`manager-scoped-map-layers.tsx` must render exactly three layer groups:
+Render exactly three groups:
 1. own-leg events;
-2. own-leg trip route/stops;
-3. assigned meetup points.
+2. own-leg route/stops;
+3. assigned meetups.
 
-Do not accept `allEvents`, `travelLegs`, `focusedLegId`, or an arbitrary leg selector prop. The component API itself should make other-leg rendering impossible.
+Do not accept `allEvents`, `travelLegs`, `focusedLegId`, or an arbitrary leg selector prop. The component API must make other-leg path rendering impossible.
 
-Meetup popup text:
+Use:
 
 ```ts
 const counterpartLabel = counterpart.kind === "leg"
@@ -480,27 +452,27 @@ const counterpartLabel = counterpart.kind === "leg"
   : `Meet ${counterpart.displayName}`;
 ```
 
-Add the resource name, meetup time/location, and Google Maps Directions URL.
+Popup includes resource, meetup time/location, and a Google Maps Directions URL.
 
 - [ ] **Step 5: Implement compact/full variants**
 
 `events` variant:
-- shorter container (about 18–22rem);
-- fit own mapped events plus assigned meetup points;
-- own event marker popup + Directions;
+- compact height around 20rem;
+- fit own mapped events plus assigned meetups;
+- own event popup + Directions;
 - no Planning/On the Road controls.
 
 `operations` variant:
 - full existing map height;
-- fit own route/trip points plus assigned meetup points;
-- show Planning / On the Road toggle using existing persisted mode helper;
-- route polyline + numbered stops;
+- fit own route/trip points plus assigned meetups;
+- persisted Planning / On the Road toggle;
+- route polyline + ordered stops;
 - meetup Directions;
-- trip navigation actions remain own-trip only.
+- trip navigation actions use own trip only.
 
-When there are no mapped own-leg points, use the existing Utah/base fallback instead of a world view.
+With no mapped own-leg points, use the existing Utah/base fallback instead of a world view.
 
-- [ ] **Step 6: Run map tests and existing Leaflet regressions**
+- [ ] **Step 6: Run manager-map + Leaflet regressions**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/manager-scoped-map.test.tsx src/components/routes/manager-route-map-shell.test.tsx src/features/routes/manager-map-navigation.test.ts
@@ -512,7 +484,6 @@ Expected: PASS.
 
 ```bash
 git add artifacts/adventure-zone/src/features/manager/manager-map-types.ts artifacts/adventure-zone/src/features/manager/use-manager-scoped-map.ts artifacts/adventure-zone/src/components/manager/manager-scoped-map.tsx artifacts/adventure-zone/src/components/manager/manager-scoped-map-layers.tsx artifacts/adventure-zone/src/components/manager/manager-scoped-map.test.tsx
-
 git commit -m "feat: add shared manager-scoped route map"
 ```
 
@@ -522,10 +493,7 @@ git commit -m "feat: add shared manager-scoped route map"
 
 **Files:**
 - Modify: `artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx`
-- Create or modify: `artifacts/adventure-zone/src/pages/ManagerRoutePage.test.tsx`
-
-**Interfaces:**
-- Consumes: `useManagerScopedMap()`, `ManagerScopedMap variant="events"`.
+- Create: `artifacts/adventure-zone/src/pages/ManagerRoutePage.test.tsx`
 
 - [ ] **Step 1: Write failing page tests**
 
@@ -551,11 +519,9 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerRoutePa
 
 Expected: FAIL because the page has no manager map.
 
-- [ ] **Step 3: Refactor the page away from `any` map data**
+- [ ] **Step 3: Add the compact map and typed focus state**
 
-Keep the existing official schedule/event cards, but use typed scoped map data for the map. If the existing `/manager/route` response remains useful for the list, it may stay temporarily; do not duplicate other-leg data.
-
-Add near the top of the page:
+Keep the existing `Events & Route` schedule cards and `ReportScheduleIssue`. Add:
 
 ```tsx
 <ManagerScopedMap
@@ -566,13 +532,9 @@ Add near the top of the page:
 />
 ```
 
-Event-card click/focus may set `focusedBookingId` only for the manager's own event.
+Event-card focus may set `focusedBookingId` only for an event already present in the authorized manager payload.
 
-- [ ] **Step 4: Preserve the existing schedule issue action**
-
-`ReportScheduleIssue` continues using the manager's own route trip ID only.
-
-- [ ] **Step 5: Run page + routing regressions**
+- [ ] **Step 4: Run page + routing regressions**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerRoutePage.test.tsx src/App.manager-routing.test.tsx src/pages/ManagerHomePage.test.tsx
@@ -580,11 +542,10 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerRoutePa
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx artifacts/adventure-zone/src/pages/ManagerRoutePage.test.tsx
-
 git commit -m "feat: show scoped map on manager events route page"
 ```
 
@@ -596,9 +557,6 @@ git commit -m "feat: show scoped map on manager events route page"
 - Modify: `artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerOperationsPage.test.tsx`
 
-**Interfaces:**
-- Consumes: `useManagerScopedMap()`, `ManagerScopedMap variant="operations"`.
-
 - [ ] **Step 1: Write failing operations-page tests**
 
 ```tsx
@@ -607,11 +565,11 @@ it("shows the full manager route map above trip operations", async () => {
   expect(await screen.findByLabelText("Manager operations map")).toBeInTheDocument();
 });
 
-it("keeps mileage and maintenance forms after the map is added", async () => {
+it("keeps the operations rollup after the map is added", async () => {
   render(<ManagerOperationsPage />);
   await screen.findByLabelText("Manager operations map");
   expect(screen.getByText(/Route miles:/)).toBeInTheDocument();
-  expect(screen.getByRole("form", { name: /mileage/i })).toBeInTheDocument();
+  expect(screen.getByText(/Recorded miles:/)).toBeInTheDocument();
 });
 ```
 
@@ -625,21 +583,21 @@ Expected: FAIL because the map is not present.
 
 - [ ] **Step 3: Add the full map without replacing operations tools**
 
-Page ordering:
+Page order:
 1. `Trip operations` heading;
 2. `ManagerScopedMap variant="operations"`;
 3. route-mile / recorded-mile / expense rollup;
-4. no-current-trip message when relevant;
-5. mileage form;
-6. maintenance form.
+4. no-current-trip notice when relevant;
+5. `MileageForm`;
+6. `MaintenanceForm`.
 
-The map and rollup must use the manager's own trip only.
+Map and rollup both use the manager's own trip only.
 
 - [ ] **Step 4: Verify Planning / On the Road persistence**
 
-Add a page/component regression proving mode survives a remount through the existing local-storage key from `manager-map-navigation.ts`.
+Add a regression in `ManagerOperationsPage.test.tsx` or `manager-scoped-map.test.tsx` that switches modes, remounts, and verifies the existing manager-map local-storage key restores the prior mode.
 
-- [ ] **Step 5: Run manager regressions**
+- [ ] **Step 5: Run manager operations regressions**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerOperationsPage.test.tsx src/components/manager/manager-scoped-map.test.tsx src/lib/manager-auth-context.test.tsx
@@ -651,7 +609,6 @@ Expected: PASS.
 
 ```bash
 git add artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx artifacts/adventure-zone/src/pages/ManagerOperationsPage.test.tsx
-
 git commit -m "feat: add scoped map to manager operations"
 ```
 
@@ -660,15 +617,13 @@ git commit -m "feat: add scoped map to manager operations"
 ### Task 6: Add admin manual meetup creation for another leg or outside runner
 
 **Files:**
+- Modify: `artifacts/api-server/src/routes/handoffs.ts`
+- Create: `artifacts/api-server/src/routes/handoffs-manual.test.ts`
 - Create: `artifacts/adventure-zone/src/components/routes/manual-handoff-form.tsx`
 - Create: `artifacts/adventure-zone/src/components/routes/manual-handoff-form.test.tsx`
 - Modify: `artifacts/adventure-zone/src/components/routes/equipment-handoffs.tsx`
-- Modify: the API route file owning `/handoffs` endpoints
-- Test: corresponding handoff API route tests
 
-**Interfaces:**
-
-Admin request shape:
+**Admin request:**
 
 ```ts
 type ManualHandoffRequest = {
@@ -678,6 +633,8 @@ type ManualHandoffRequest = {
   toParticipant:
     | { kind: "leg"; legId: string }
     | { kind: "external_contact"; externalContactId: string | null; displayName: string; phone: string | null; email: string | null };
+  fromTripId: string | null;
+  toTripId: string | null;
   resourceId: string;
   meetupLabel: string;
   meetupLatitude: number;
@@ -689,7 +646,7 @@ type ManualHandoffRequest = {
 
 - [ ] **Step 1: Write failing API validation tests**
 
-Prove:
+In `handoffs-manual.test.ts`, prove:
 - leg-to-leg accepted;
 - leg-to-external accepted;
 - external-to-leg accepted;
@@ -698,62 +655,53 @@ Prove:
 - same leg on both sides rejected;
 - end time before start time rejected.
 
-- [ ] **Step 2: Run API test and verify RED**
+- [ ] **Step 2: Run and verify RED**
 
-Run the existing handoff route test file or create one if absent.
-
-- [ ] **Step 3: Add admin manual-create endpoint**
-
-Use an owner/admin-authenticated handoff route, not a manager route:
-
-```http
-POST /handoffs/manual
+```bash
+pnpm --filter @workspace/api-server exec vitest run src/routes/handoffs-manual.test.ts
 ```
+
+Expected: FAIL because `POST /handoffs/manual` does not exist.
+
+- [ ] **Step 3: Implement `POST /handoffs/manual` in `handoffs.ts`**
 
 Validate with Zod and call `HandoffRepository.createManual()`.
 
-Manual handoffs should start as `approved` or an explicitly chosen admin-ready status according to existing handoff approval semantics; recommended implementation is to create as `approved` because the admin is explicitly scheduling the swap rather than accepting an AI suggestion. Record `approvedAt` immediately.
+Because the owner/admin is explicitly scheduling the exchange, save manual handoffs as `approved` and set `approvedAt` immediately. Automatic suggestions keep their existing suggested/approve workflow.
 
 - [ ] **Step 4: Write failing form tests**
 
 ```tsx
-it("switches counterpart from Adventure Zone leg to Outside person", () => {
+it("switches a participant to Outside person / runner", () => {
   render(<ManualHandoffForm travelLegs={legs} resources={resources} />);
   fireEvent.click(screen.getByLabelText("Outside person / runner"));
   expect(screen.getByLabelText("Runner name")).toBeInTheDocument();
 });
 
-it("submits an external participant without creating a fake leg", async () => {
+it("submits an external participant without a fabricated leg id", async () => {
   // fill Kristy + Jordan + Paintball + meetup location/time
-  // assert POST /handoffs/manual payload contains kind: external_contact and no fabricated legId
+  // assert the POST payload contains kind: external_contact and no legId for Jordan
 });
 ```
 
 - [ ] **Step 5: Implement `ManualHandoffForm`**
 
-Required controls:
-- From participant type and identity;
-- To participant type and identity;
+Controls:
+- participant type for each side;
 - leg selector when `kind=leg`;
 - runner name required when `kind=external_contact`;
 - optional runner phone/email;
 - equipment/resource selector;
 - meetup label;
-- latitude/longitude using the current admin map/geocoding patterns where available;
+- latitude/longitude using existing admin location-entry conventions;
 - start/end window;
 - Save meetup.
 
-Keep one side a leg at all times in the UI where practical, but rely on server validation as the real authority.
+The UI should keep at least one side as a leg where practical, while the server remains the final authority.
 
-- [ ] **Step 6: Update `EquipmentHandoffs` display**
+- [ ] **Step 6: Update `EquipmentHandoffs` display and entry point**
 
-Replace assumptions like:
-
-```tsx
-legNames.get(handoff.fromLegId) → legNames.get(handoff.toLegId)
-```
-
-with participant labels:
+Replace `fromLegId -> toLegId` display assumptions with:
 
 ```ts
 function participantLabel(participant: MeetupParticipant) {
@@ -761,13 +709,13 @@ function participantLabel(participant: MeetupParticipant) {
 }
 ```
 
-Keep automatic suggestions, approval, adjustment, and dismissal flows intact.
+Add the manual form above or beside the existing suggestion list. Keep recalculate, approve, adjust, dismiss, and route-impact preview behavior intact for automatic suggestions.
 
-- [ ] **Step 7: Run admin handoff UI/API tests**
+- [ ] **Step 7: Run admin UI/API tests**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/routes/manual-handoff-form.test.tsx
-pnpm --filter @workspace/api-server exec vitest run <handoff-route-test-file>
+pnpm --filter @workspace/api-server exec vitest run src/routes/handoffs-manual.test.ts src/features/routes/handoff-repository-participants.test.ts
 ```
 
 Expected: PASS.
@@ -775,8 +723,7 @@ Expected: PASS.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add artifacts/adventure-zone/src/components/routes/manual-handoff-form.tsx artifacts/adventure-zone/src/components/routes/manual-handoff-form.test.tsx artifacts/adventure-zone/src/components/routes/equipment-handoffs.tsx artifacts/api-server/src/routes artifacts/api-server/src/features/routes
-
+git add artifacts/api-server/src/routes/handoffs.ts artifacts/api-server/src/routes/handoffs-manual.test.ts artifacts/adventure-zone/src/components/routes/manual-handoff-form.tsx artifacts/adventure-zone/src/components/routes/manual-handoff-form.test.tsx artifacts/adventure-zone/src/components/routes/equipment-handoffs.tsx
 git commit -m "feat: schedule equipment swaps with outside runners"
 ```
 
@@ -785,21 +732,17 @@ git commit -m "feat: schedule equipment swaps with outside runners"
 ### Task 7: End-to-end privacy, build, and live-verification hardening
 
 **Files:**
-- Modify tests only as needed; no unrelated production refactors.
-- Modify `.github/workflows/calendar-route-handoff-ci.yml` only if new focused tests are not already covered by pull-request path execution.
-
-**Interfaces:**
-- Validates all previous tasks as one system.
+- Modify only the tests/CI files required by the checks below; no unrelated production refactors.
+- Modify `.github/workflows/calendar-route-handoff-ci.yml` only if the new focused tests are not already exercised by PR path triggers.
 
 - [ ] **Step 1: Add the cross-boundary privacy regression**
 
-At API level, construct two legs with separate events/routes plus one shared meetup. Assert the manager payload contains:
+At API level, create two legs with separate events/routes plus one shared meetup. Assert the manager payload contains:
 - manager A route/event coordinates;
 - shared meetup coordinates;
 - manager B leg name as counterpart;
-- **no manager B event coordinate or route-stop coordinate**.
-
-This is the highest-priority regression in the feature.
+- no manager B event coordinate;
+- no manager B route-stop coordinate.
 
 - [ ] **Step 2: Run the complete manager/map focused test set**
 
@@ -816,8 +759,10 @@ pnpm --filter @workspace/adventure-zone exec vitest run \
 
 pnpm --filter @workspace/api-server exec vitest run \
   src/features/leg-manager/manager-map-data.test.ts \
+  src/features/routes/handoff-repository-participants.test.ts \
   src/features/routes/handoff-scoring.test.ts \
   src/features/trips/trip-service-handoff.test.ts \
+  src/routes/handoffs-manual.test.ts \
   src/routes/leg-manager-admin.test.ts
 ```
 
@@ -838,27 +783,39 @@ Expected: both exit 0.
 pnpm run typecheck
 ```
 
-If the repository has unrelated pre-existing errors, record them separately; no new manager-map/handoff type errors are acceptable.
+No new manager-map/handoff type errors are acceptable. If unrelated pre-existing errors remain, list them separately in the PR.
 
 - [ ] **Step 5: Verify the final diff is scoped**
 
 ```bash
 git diff --stat main...HEAD
-git diff main...HEAD -- artifacts/api-server/src/features/leg-manager artifacts/api-server/src/features/routes artifacts/api-server/src/routes/leg-manager.ts artifacts/adventure-zone/src/components/manager artifacts/adventure-zone/src/components/routes artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx
+git diff main...HEAD -- \
+  artifacts/api-server/src/features/leg-manager \
+  artifacts/api-server/src/features/routes \
+  artifacts/api-server/src/routes/leg-manager.ts \
+  artifacts/api-server/src/routes/handoffs.ts \
+  artifacts/adventure-zone/src/features/manager \
+  artifacts/adventure-zone/src/components/manager \
+  artifacts/adventure-zone/src/components/routes \
+  artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx \
+  artifacts/adventure-zone/src/pages/ManagerRoutePage.test.tsx \
+  artifacts/adventure-zone/src/pages/ManagerOperationsPage.tsx \
+  artifacts/adventure-zone/src/pages/ManagerOperationsPage.test.tsx
 ```
 
-Confirm no unrelated CRM/profile/importer work was changed.
+Confirm no unrelated CRM/profile/importer work changed.
 
-- [ ] **Step 6: Commit any final test-only hardening**
+- [ ] **Step 6: Commit final privacy-test hardening if Step 1 introduced uncommitted test changes**
 
 ```bash
-git add <only-files-changed-for-final-hardening>
+git add artifacts/api-server/src/features/leg-manager/manager-map-data.test.ts artifacts/adventure-zone/src/components/manager/manager-scoped-map.test.tsx
 git commit -m "test: lock down manager route map privacy"
 ```
 
-- [ ] **Step 7: Open PR with live verification checklist**
+Skip this commit only if those files are already clean because their final privacy assertions were committed in earlier tasks.
 
-Live checks after deploy:
+- [ ] **Step 7: Open the PR with this live verification checklist**
+
 1. Sign in as Kristy manager; Manager Events & Route shows Kristy's mapped events and no other-leg routes/events.
 2. Manager Operations shows Kristy's route/trip stops and no other-leg geometry.
 3. A Kristy ↔ Hulk approved meetup appears on both relevant manager maps as a meetup point labeled with Hulk's leg name.
