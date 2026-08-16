@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { ManagerScopedMap } from "@/components/manager/manager-scoped-map";
 import { ReportScheduleIssue } from "@/components/manager/report-schedule-issue";
 import { useManagerScopedMap } from "@/features/manager/use-manager-scoped-map";
@@ -22,9 +23,12 @@ export default function ManagerRoutePage() {
 
   return (
     <div className="grid gap-4">
-      <div>
-        <p className="text-sm font-bold uppercase tracking-wider text-orange-700">Official schedule · view only</p>
-        <h1 className="text-2xl font-bold">Events & Route</h1>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-wider text-orange-700">Official schedule · view only</p>
+          <h1 className="text-2xl font-bold">Events & Route</h1>
+        </div>
+        <Link className="button-secondary" href="/manager/messages?meetup=1">Request meetup / equipment swap</Link>
       </div>
 
       {map.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{map.error}</p> : null}
