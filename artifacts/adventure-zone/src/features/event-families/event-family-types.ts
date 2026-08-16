@@ -36,6 +36,20 @@ export type EventFamilyMember = {
   nextFollowUpAt: string | null;
 };
 
+export type EventFamilyContact = {
+  id: string;
+  contactId: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  phone: string | null;
+  email: string | null;
+  role: string | null;
+  isPrimary: boolean;
+};
+
 export type EventFamilyDetail = EventFamilyListRecord & {
+  website: string | null;
+  contacts: EventFamilyContact[];
   members: EventFamilyMember[];
 };
