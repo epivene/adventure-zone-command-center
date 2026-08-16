@@ -61,6 +61,7 @@ export function ProfileMemberPicker({
 
   return (
     <div className="grid gap-3">
+      <p className="text-sm text-slate-600">Add any active existing profile or duplicate without creating another record.</p>
       <form
         className="flex flex-col gap-2 sm:flex-row"
         onSubmit={(event) => {
@@ -129,7 +130,7 @@ export function ProfileMemberPicker({
           onClick={() => selected && void onSelect(selected.id)}
           type="button"
         >
-          Add existing profile
+          Add existing profile / duplicate
         </button>
         {selectedBlocked ? (
           <span className="text-sm font-medium text-amber-700">
