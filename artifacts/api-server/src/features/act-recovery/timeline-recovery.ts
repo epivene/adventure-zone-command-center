@@ -75,14 +75,22 @@ export class ActTimelineRecovery {
     }
 
     const legacyKey = actTimelineKey(sourceType, candidate.actRecordId);
-    const existing = (await this.query(sql`
-      select id, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
-      from activities
-      where source_record_id = ${candidate.sourceRecordId}
-        or (${legacyKey} is not null and act_record_id = ${legacyKey})
-      order by case when source_record_id = ${candidate.sourceRecordId} then 0 else 1 end, id
-      limit 2
-    `));
+    const existing = legacyKey
+      ? await this.query(sql`
+          select id, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
+          from activities
+          where source_record_id = ${candidate.sourceRecordId}
+            or act_record_id = ${legacyKey}
+          order by case when source_record_id = ${candidate.sourceRecordId} then 0 else 1 end, id
+          limit 2
+        `)
+      : await this.query(sql`
+          select id, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
+          from activities
+          where source_record_id = ${candidate.sourceRecordId}
+          order by id
+          limit 2
+        `);
     if (existing.length > 1) {
       return { state: "needs_review", targetSummary: { reason: "duplicate_local_timeline_source" } };
     }
