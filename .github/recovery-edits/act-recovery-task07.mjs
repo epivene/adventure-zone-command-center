@@ -36,6 +36,12 @@ await edit("artifacts/api-server/src/features/activities/activity-repository.ts"
 await edit("artifacts/api-server/src/features/event-profiles/event-profile-repository.ts", (text) => {
   text = replaceRequired(
     text,
+    `import { and, asc, desc, eq, exists, inArray, isNull, or, sql } from "drizzle-orm";`,
+    `import { and, asc, desc, eq, exists, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";`,
+    "isNotNull import",
+  );
+  text = replaceRequired(
+    text,
     `export type EventProfileActivityRecord = {\n  id: string;\n  contactId: string | null;\n  bookingId: string | null;\n  kind: string;\n  body: string;\n  occurredAt: Date;\n};`,
     `export type EventProfileActivityRecord = {\n  id: string;\n  contactId: string | null;\n  bookingId: string | null;\n  kind: string;\n  body: string;\n  occurredAt: Date;\n  createdAt: Date;\n  updatedAt: Date;\n  importedFromAct: boolean;\n  actSourceType: string | null;\n};`,
     "event profile activity type",
@@ -43,7 +49,7 @@ await edit("artifacts/api-server/src/features/event-profiles/event-profile-repos
   text = replaceRequired(
     text,
     `        kind: activities.kind,\n        body: activities.body,\n        occurredAt: activities.timelineSortAt,\n      }).from(activities)`,
-    `        kind: activities.kind,\n        body: activities.body,\n        occurredAt: activities.timelineSortAt,\n        createdAt: activities.createdAt,\n        updatedAt: activities.updatedAt,\n        importedFromAct: sql<boolean>\`${activities.sourceRecordId} is not null\`,\n        actSourceType: activities.sourceType,\n      }).from(activities)`,
+    `        kind: activities.kind,\n        body: activities.body,\n        occurredAt: activities.timelineSortAt,\n        createdAt: activities.createdAt,\n        updatedAt: activities.updatedAt,\n        importedFromAct: isNotNull(activities.sourceRecordId),\n        actSourceType: activities.sourceType,\n      }).from(activities)`,
     "event profile activity provenance select",
   );
   return text;
