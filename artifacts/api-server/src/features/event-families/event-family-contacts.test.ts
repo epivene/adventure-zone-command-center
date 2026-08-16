@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { getTableColumns } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { pool, eventFamilies, eventFamilyContacts } from "@workspace/db";
-import * as workspaceDb from "@workspace/db";
 import { ensureEventFamilySchema, EventFamilyConflictError, EventFamilyNotFoundError, EventFamilyRepository } from "./event-family-repository";
 
 describe("event family website/contact schema", () => {
@@ -44,6 +43,9 @@ describe.sequential("event family contact repository", () => {
       DROP TABLE IF EXISTS event_family_suggestions CASCADE;
       DROP TABLE IF EXISTS event_family_members CASCADE;
       DROP TABLE IF EXISTS event_families CASCADE;
+      DROP TABLE IF EXISTS follow_ups CASCADE;
+      DROP TABLE IF EXISTS bookings CASCADE;
+      DROP TABLE IF EXISTS organization_contacts CASCADE;
       DROP TABLE IF EXISTS act_contact_sync_states CASCADE;
       DROP TABLE IF EXISTS contacts CASCADE;
       DROP TABLE IF EXISTS organization_locations CASCADE;
@@ -52,8 +54,11 @@ describe.sequential("event family contact repository", () => {
       CREATE TABLE organization_locations (id uuid PRIMARY KEY, organization_id uuid NOT NULL REFERENCES organizations(id));
       CREATE TABLE contacts (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid, first_name text NOT NULL, last_name text NOT NULL,
-        email text, phone text, normalized_phone text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+        email text, phone text, normalized_phone text, job_title text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
       );
+      CREATE TABLE organization_contacts (organization_id uuid NOT NULL, contact_id uuid NOT NULL);
+      CREATE TABLE bookings (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid);
+      CREATE TABLE follow_ups (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid, due_at timestamptz, completed_at timestamptz);
       CREATE TABLE act_contact_sync_states (
         contact_id uuid PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
         local_dirty boolean NOT NULL DEFAULT false, state text NOT NULL DEFAULT 'waiting', created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
@@ -65,7 +70,7 @@ describe.sequential("event family contact repository", () => {
   });
 
   afterAll(async () => {
-    await pool.query(`DROP TABLE IF EXISTS scoped_notes, event_family_contacts, event_family_suggestions, event_family_members, event_families, act_contact_sync_states, contacts, organization_locations, organizations CASCADE`);
+    await pool.query(`DROP TABLE IF EXISTS scoped_notes, event_family_contacts, event_family_suggestions, event_family_members, event_families, follow_ups, bookings, organization_contacts, act_contact_sync_states, contacts, organization_locations, organizations CASCADE`);
   });
 
   it("saves, returns, and clears the family website", async () => {
