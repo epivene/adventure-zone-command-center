@@ -72,3 +72,4 @@ jobs:
           grep -q 'publicAttachment' artifacts/api-server/src/routes/manager-communications.ts
           grep -q 'publicWithoutObjectKey' artifacts/api-server/src/routes/manager-communications-admin.ts
           grep -q '_privateObjectKey' artifacts/api-server/src/features/manager-comms/message-view.ts
+# rerun on storage-key-sanitized head
