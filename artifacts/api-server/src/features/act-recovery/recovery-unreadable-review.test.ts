@@ -17,24 +17,31 @@ function candidate(rawSnapshot: Record<string, unknown>): RecoveryCandidate {
   };
 }
 
+function workerFor(rawSnapshot: Record<string, unknown>, complete: ReturnType<typeof vi.fn>) {
+  return new ActArchiveRecoveryWorker({
+    repository: {
+      claimNext: vi.fn().mockResolvedValue(candidate(rawSnapshot)),
+      complete,
+      failRetryable: vi.fn().mockResolvedValue(undefined),
+    },
+    entityRecovery: {
+      recoverEntity: vi.fn().mockResolvedValue({
+        state: "needs_review",
+        targetSummary: { reason: "ambiguous_exact_match" },
+      }),
+    },
+    relationshipRecovery: { recoverRelationship: vi.fn() },
+    timelineRecovery: { recoverTimeline: vi.fn() },
+  });
+}
+
 describe("recovery review readability", () => {
-  it("automatically drops a needs-review item that has no human-readable ACT content", async () => {
+  it("automatically drops a needs-review item that would show 'No readable ACT text'", async () => {
     const complete = vi.fn().mockResolvedValue(undefined);
-    const worker = new ActArchiveRecoveryWorker({
-      repository: {
-        claimNext: vi.fn().mockResolvedValue(candidate({ id: "act-contact-1", createDate: "2024-02-23T00:00:00Z" })),
-        complete,
-        failRetryable: vi.fn().mockResolvedValue(undefined),
-      },
-      entityRecovery: {
-        recoverEntity: vi.fn().mockResolvedValue({
-          state: "needs_review",
-          targetSummary: { reason: "ambiguous_exact_match" },
-        }),
-      },
-      relationshipRecovery: { recoverRelationship: vi.fn() },
-      timelineRecovery: { recoverTimeline: vi.fn() },
-    });
+    const worker = workerFor(
+      { id: "act-contact-1", createDate: "2024-02-23T00:00:00Z" },
+      complete,
+    );
 
     await worker.runOne({ workerId: "test-worker", now: new Date("2026-08-16T18:00:00Z") });
 
@@ -44,28 +51,12 @@ describe("recovery review readability", () => {
     }));
   });
 
-  it("keeps a needs-review contact when its archived identity is readable", async () => {
+  it("keeps a needs-review item when ACT preserved text that the review card can show", async () => {
     const complete = vi.fn().mockResolvedValue(undefined);
-    const worker = new ActArchiveRecoveryWorker({
-      repository: {
-        claimNext: vi.fn().mockResolvedValue(candidate({
-          id: "act-contact-1",
-          firstName: "Downtown",
-          lastName: "Denver",
-          emailAddress: "coloradoevents@gmail.com",
-        })),
-        complete,
-        failRetryable: vi.fn().mockResolvedValue(undefined),
-      },
-      entityRecovery: {
-        recoverEntity: vi.fn().mockResolvedValue({
-          state: "needs_review",
-          targetSummary: { reason: "ambiguous_exact_match" },
-        }),
-      },
-      relationshipRecovery: { recoverRelationship: vi.fn() },
-      timelineRecovery: { recoverTimeline: vi.fn() },
-    });
+    const worker = workerFor(
+      { id: "act-contact-1", details: "Useful archived context" },
+      complete,
+    );
 
     await worker.runOne({ workerId: "test-worker", now: new Date("2026-08-16T18:00:00Z") });
 
