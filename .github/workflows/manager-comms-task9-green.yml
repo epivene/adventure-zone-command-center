@@ -22,3 +22,4 @@ jobs:
       - run: grep -q 'Messages' artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx
       - run: grep -q 'Requests' artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx
       - run: grep -q 'Needs review' artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx
+# rerun after asserting editable meetup-place value
