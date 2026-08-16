@@ -66,7 +66,7 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
     setBusy(true); setError(""); setMessage("");
     try {
       const next = await managerApi<Payload>(`/manager/wrap-ups/${bookingId}/submit`, { method: "POST", body: "{}" });
-      apply(next); setMessage("Submitted for admin review");
+      apply(next); setMessage("Wrap-up submitted.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not submit wrap-up"); }
     finally { setBusy(false); }
   }
@@ -75,6 +75,9 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
   if (!payload) return <p>Loading event wrap-up…</p>;
 
   const nonCashCents = payload.finance.squareCents + Math.max(0, payload.finance.otherCents);
+  const profitabilityWarnings = new Set<string>(payload.calculation.trueProfit.incompleteReasons ?? []);
+  const closeoutWarnings = (payload.warnings ?? []).filter((warning: string) => !profitabilityWarnings.has(warning));
+
   return <div className="mx-auto grid max-w-4xl gap-4">
     <header className="grid gap-1">
       <p className="text-sm font-bold uppercase tracking-wider text-orange-700">Post-event closeout</p>
@@ -94,7 +97,7 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
     <EventWrapUpFinanceCheck payload={payload} />
     <EventWrapUpProfitability calculation={payload.calculation} />
 
-    {payload.warnings?.length ? <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">Before you finish</h2><ul className="mt-2 list-disc pl-5 text-sm">{payload.warnings.map((warning: string) => <li key={warning}>{warning}</li>)}</ul></section> : null}
+    {closeoutWarnings.length ? <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">Before you finish</h2><ul className="mt-2 list-disc pl-5 text-sm">{closeoutWarnings.map((warning: string) => <li key={warning}>{warning}</li>)}</ul></section> : null}
 
     <section className="flex flex-wrap gap-2 rounded-xl border bg-white p-4">
       <button type="button" className="button-secondary" disabled={!editable || busy} onClick={() => void saveDraft()}>{busy ? "Saving…" : "Save draft"}</button>
