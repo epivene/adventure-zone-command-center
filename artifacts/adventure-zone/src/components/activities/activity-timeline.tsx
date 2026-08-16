@@ -55,6 +55,11 @@ function formatCallOutcome(outcome: PersistedCallDisposition) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
+function formatActSourceType(sourceType: ActivityTimelineItem["actSourceType"]) {
+  if (!sourceType) return "History";
+  return sourceType.charAt(0).toUpperCase() + sourceType.slice(1);
+}
+
 function defaultEditForm(activity: ActivityTimelineItem): EditFormState {
   return {
     open: false,
@@ -392,9 +397,16 @@ export function ActivityTimeline({
                 key={activity.id}
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold capitalize">
-                    {activity.kind.replaceAll("_", " ")}
-                  </p>
+                  <div>
+                    <p className="text-sm font-semibold capitalize">
+                      {activity.kind.replaceAll("_", " ")}
+                    </p>
+                    {activity.importedFromAct ? (
+                      <p className="mt-1 text-xs font-semibold text-amber-800">
+                        Imported from ACT · {formatActSourceType(activity.actSourceType)}
+                      </p>
+                    ) : null}
+                  </div>
                   <div className="text-right text-xs text-slate-500">
                     <time dateTime={activity.occurredAt.toISOString()}>{formatDate(activity.occurredAt)}</time>
                     {noteComposer && activity.kind === "note" ? (
@@ -414,7 +426,7 @@ export function ActivityTimeline({
                   </p>
                 ) : null}
 
-                {editActivity ? (
+                {editActivity && !activity.importedFromAct ? (
                   <div className="mt-3">
                     <button
                       aria-controls={editId}
@@ -516,7 +528,7 @@ export function ActivityTimeline({
                   </div>
                 ) : null}
 
-                {deleteActivity ? (
+                {deleteActivity && !activity.importedFromAct ? (
                   <div className="mt-3">
                     {!deleteConfirmState(activity).open ? (
                       <button

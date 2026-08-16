@@ -2,6 +2,7 @@ import { activityKindValues } from "@/db/schema";
 import type { PersistedCallDisposition } from "@/features/calls/call-types";
 
 export type ActivityKind = (typeof activityKindValues)[number];
+export type ActActivitySourceType = "note" | "history" | "activity";
 
 export type ActivityParent = {
   organizationId?: string;
@@ -35,6 +36,10 @@ export type ActivityTimelineItem = {
   revisionCount: number;
   callOutcome: PersistedCallDisposition | null;
   hasLinkedCallSession: boolean;
+  /** True only for an immutable source-backed ACT original. */
+  importedFromAct?: boolean;
+  /** Original ACT timeline stream when importedFromAct is true. */
+  actSourceType?: ActActivitySourceType | null;
 };
 
 export type ActivityRevision = {
