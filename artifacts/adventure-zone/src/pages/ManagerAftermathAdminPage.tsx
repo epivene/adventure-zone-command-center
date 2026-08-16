@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { EventWrapUpReviewQueue } from "@/components/routes/event-wrap-up-review-queue";
+import EventWrapUpAdminPage from "@/pages/EventWrapUpAdminPage";
 
 function Detail({ label, value }: { label: string; value: any }) {
   if (value === null || value === undefined || value === "") return null;
@@ -8,6 +10,8 @@ function Detail({ label, value }: { label: string; value: any }) {
 }
 
 export default function ManagerAftermathAdminPage() {
+  const search = useSearch();
+  const selectedWrapUp = new URLSearchParams(search).get("wrapUp");
   const [wrapUps, setWrapUps] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
@@ -16,6 +20,7 @@ export default function ManagerAftermathAdminPage() {
   const [openIncident, setOpenIncident] = useState<string | null>(null);
 
   useEffect(() => {
+    if (selectedWrapUp) return;
     Promise.all([
       apiGet<any>("/event-wrap-up-admin"),
       apiGet<any>("/manager-admin/reviews"),
@@ -25,7 +30,9 @@ export default function ManagerAftermathAdminPage() {
       setReviews(reviewData.reviews ?? []);
       setIncidents(incidentData.incidents ?? []);
     });
-  }, []);
+  }, [selectedWrapUp]);
+
+  if (selectedWrapUp) return <EventWrapUpAdminPage bookingId={selectedWrapUp} />;
 
   const visibleIncidents = incidents.filter((incident) => !followOnly || incident.followUpNeeded);
 
