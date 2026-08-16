@@ -9,7 +9,7 @@ import { ManagerScopedMapLayers } from "./manager-scoped-map-layers";
 
 const UTAH: MapViewportTarget = { kind: "center", center: [-111.9, 40.2], zoom: 6 };
 
-function initialMode(): ManagerMapMode {
+export function initialManagerTravelMode(): ManagerMapMode {
   if (typeof window === "undefined") return "planning";
   return window.localStorage.getItem(MANAGER_MAP_MODE_KEY) === "on-road" ? "on-road" : "planning";
 }
@@ -42,25 +42,30 @@ function tripData(data: ManagerScopedMapData): FocusedTripMapData | null {
   return { id: trip.id, name: trip.name, points };
 }
 
-export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFocusBooking }: {
+export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFocusBooking, mode: controlledMode, onModeChange, readOnlyPreview = false }: {
   data: ManagerScopedMapData;
   variant: ManagerMapVariant;
   focusedBookingId?: string | null;
   onFocusBooking?: (bookingId: string) => void;
+  mode?: ManagerMapMode;
+  onModeChange?: (mode: ManagerMapMode) => void;
+  readOnlyPreview?: boolean;
 }) {
-  const [mode, setMode] = useState<ManagerMapMode>(initialMode);
+  const [localMode, setLocalMode] = useState<ManagerMapMode>(initialManagerTravelMode);
+  const mode = controlledMode ?? localMode;
   const viewport = useMemo(() => viewportFor(data, variant), [data, variant]);
   const focusedTrip = useMemo(() => tripData(data), [data]);
-  const label = variant === "events" ? "Manager events map" : "Manager operations map";
+  const label = readOnlyPreview ? "Manager preview map" : variant === "events" ? "Manager events map" : "Manager operations map";
+
+  function changeMode(next: ManagerMapMode) {
+    if (controlledMode === undefined) setLocalMode(next);
+    onModeChange?.(next);
+    if (typeof window !== "undefined") window.localStorage.setItem(MANAGER_MAP_MODE_KEY, next);
+  }
 
   return (
     <section className="grid gap-3" aria-label={label}>
-      {variant === "operations" ? (
-        <ManagerMapModeToggle mode={mode} onChange={(next) => {
-          setMode(next);
-          if (typeof window !== "undefined") window.localStorage.setItem(MANAGER_MAP_MODE_KEY, next);
-        }} />
-      ) : null}
+      {variant === "operations" ? <ManagerMapModeToggle mode={mode} onChange={changeMode} /> : null}
       {variant === "operations" ? <ManagerTripNavigationActions trip={focusedTrip} mode={mode} /> : null}
       <div className={variant === "events" ? "max-h-[24rem] overflow-hidden rounded-xl border border-slate-200" : "overflow-hidden rounded-xl border border-slate-200"}>
         <ManagerRouteMapShell viewport={viewport}>
