@@ -20,7 +20,7 @@ describe("FamilyContactSummary", () => {
     expect(screen.getByText("Corporate Events")).toBeInTheDocument();
     expect(screen.getByText(/701-555-0101/)).toBeInTheDocument();
     expect(screen.getByText(/jane@example.com/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Family website" })).toHaveAttribute("href", "https://waterlanternfestival.com");
+    expect(screen.getByRole("link", { name: "Family website" })).toHaveAttribute("href", "https://waterlanternfestival.com/");
     expect(screen.getByRole("link", { name: "Open family" })).toHaveAttribute("href", "/event-families/family-1");
     expect(screen.queryByRole("button", { name: /Edit|Remove|Primary/ })).not.toBeInTheDocument();
   });
