@@ -45,6 +45,11 @@ beforeEach(async () => {
       source_entity_type text NOT NULL, act_record_id text NOT NULL, source_database_key text,
       source_record_id uuid
     );
+    CREATE TABLE act_archive_recovery_decisions (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(), run_id uuid NOT NULL, source_record_id uuid NOT NULL,
+      source_version_id uuid NOT NULL, decision text NOT NULL, target_entity_type text,
+      target_entity_id uuid, decided_by text NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+    );
     CREATE TABLE organizations (id uuid PRIMARY KEY);
     CREATE TABLE contacts (id uuid PRIMARY KEY);
     CREATE TABLE bookings (id uuid PRIMARY KEY);
@@ -147,6 +152,37 @@ describe("ActTimelineRecovery", () => {
     }));
     expect(result.state).toBe("recovered");
     expect((await client.query(`SELECT count(*)::int AS count FROM activity_associations WHERE activity_id = $1`, [activity!.id])).rows).toEqual([{ count: 2 }]);
+  });
+
+  it("uses an explicit Recovery Review parent assignment on retry without inventing fuzzy ownership", async () => {
+    const sourceId = "10000000-0000-4000-8000-000000000040";
+    await client.query(
+      `INSERT INTO act_source_records (id, source_database_key, stream_type, act_record_id) VALUES ($1, $2, 'history', 'act-history-reviewed')`,
+      [sourceId, databaseKey],
+    );
+    const reviewed = candidate(sourceId, "history", "act-history-reviewed", {
+      id: "act-history-reviewed", regarding: "Called office", details: "Asked for spring follow-up", startTime: "2025-03-01T12:00:00Z",
+    });
+    await client.query(
+      `INSERT INTO act_archive_recovery_decisions
+        (run_id, source_record_id, source_version_id, decision, target_entity_type, target_entity_id, decided_by)
+       VALUES ($1, $2, $3, 'assign_parent', 'organization', $4, 'owner')`,
+      [reviewed.runId, reviewed.sourceRecordId, reviewed.sourceVersionId, organizationId],
+    );
+
+    const result = await recovery.recoverTimeline(reviewed);
+
+    expect(result).toEqual(expect.objectContaining({
+      state: "recovered",
+      targetSummary: expect.objectContaining({ manuallyAssigned: true, parentCount: 1 }),
+    }));
+    expect((await client.query(
+      `SELECT association.organization_id
+       FROM activity_associations association
+       JOIN activities activity ON activity.id = association.activity_id
+       WHERE activity.source_record_id = $1`,
+      [sourceId],
+    )).rows).toEqual([{ organization_id: organizationId }]);
   });
 
   it("keeps meaningful unplaceable history for review and drops truly blank history", async () => {
