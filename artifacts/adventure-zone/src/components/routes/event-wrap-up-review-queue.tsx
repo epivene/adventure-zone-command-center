@@ -21,7 +21,7 @@ export function EventWrapUpReviewQueue({ wrapUps }: { wrapUps: any[] }) {
             <p className="text-sm text-slate-600">{item.event.legName}{item.event.startsAt ? ` · ${new Date(item.event.startsAt).toLocaleDateString()}` : ""}</p>
             <p className="mt-2 text-xl text-amber-600" aria-label={`${item.wrapUp?.ratingStars ?? 0} stars`}>{"★".repeat(item.wrapUp?.ratingStars ?? 0)}</p>
           </div>
-          <a className="button-primary" href={`/manager-aftermath/wrap-ups/${item.event.bookingId}`}>Review wrap-up</a>
+          <a className="button-primary" href={`/manager-aftermath?wrapUp=${encodeURIComponent(item.event.bookingId)}`}>Review wrap-up</a>
         </div>
         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <p><span className="font-semibold">Cash:</span> {difference(item.calculation?.settlement?.differenceCents)}</p>
