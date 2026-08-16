@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const appSource = readFileSync(new URL("./App.tsx", import.meta.url), "utf8");
+const appSource = readFileSync("src/App.tsx", "utf8");
 
 describe("admin sidebar route contracts", () => {
   it("routes the Profiles sidebar URL to the profiles page", () => {
