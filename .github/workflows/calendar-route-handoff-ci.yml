@@ -45,7 +45,7 @@ jobs:
         run: |
           pnpm --filter @workspace/db exec vitest run src/act-archive-recovery-schema.test.ts
           pnpm --filter @workspace/api-server exec vitest run src/features/act-recovery src/routes/act-recovery.test.ts
-          pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ActRecoveryPage.test.tsx src/components/activities/activity-timeline.test.tsx src/App.admin-navigation.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run src/features/act-recovery/act-recovery-client.test.ts src/pages/ActRecoveryPage.test.tsx src/components/activities/activity-timeline.test.tsx src/App.admin-navigation.test.ts
       - name: Build frontend
         run: pnpm --filter @workspace/adventure-zone run build
       - name: Build API server

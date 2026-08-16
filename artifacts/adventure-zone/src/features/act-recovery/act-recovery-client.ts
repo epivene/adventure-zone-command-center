@@ -60,7 +60,7 @@ export async function getRecoveryStatus(): Promise<ActRecoveryStatus | null> {
 
 export function startRecovery(): Promise<ActRecoveryStatus> {
   return apiPost<ActRecoveryStatus>("/act-recovery/runs", {
-    requestKey: "archive-full-recovery-v1",
+    requestKey: "archive-full-recovery-v2-inline-history",
   });
 }
 
