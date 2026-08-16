@@ -4,13 +4,16 @@ import type { db as applicationDatabase } from "@/db/client";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import { normalizeCompany, type Company } from "@/features/act-replacement/normalizers/company-normalizer";
 import { normalizeContact, type Contact } from "@/features/act-replacement/normalizers/contact-normalizer";
+import { normalizeOpportunity } from "@/features/act-replacement/normalizers/opportunity-normalizer";
+import { normalizeGroup } from "@/features/act-replacement/normalizers/group-normalizer";
 import type { RecoveryCandidate, RecoveryTerminalState } from "./recovery-types";
 import { ActRecoverySourceLinkResolver } from "./source-link-resolver";
 
 type DrizzleDatabase = typeof applicationDatabase;
 type Executor = Pick<DrizzleDatabase, "execute">;
 type Row = Record<string, unknown>;
-type EntityKind = "organization" | "contact";
+type ProfileEntityKind = "organization" | "contact";
+type ProvenanceEntityKind = ProfileEntityKind | "booking" | "calling_list";
 type NormalizedEntity = Company | Contact;
 
 export type RecoveryApplyResult = {
@@ -41,7 +44,7 @@ export function fillMissing<T extends Record<string, unknown>>(
   )) as Partial<T>;
 }
 
-function entityType(candidate: RecoveryCandidate): EntityKind | null {
+function profileEntityType(candidate: RecoveryCandidate): ProfileEntityKind | null {
   return candidate.streamType === "company"
     ? "organization"
     : candidate.streamType === "contact"
@@ -49,7 +52,7 @@ function entityType(candidate: RecoveryCandidate): EntityKind | null {
       : null;
 }
 
-function normalized(candidate: RecoveryCandidate): NormalizedEntity | null {
+function normalizedProfile(candidate: RecoveryCandidate): NormalizedEntity | null {
   const result = candidate.streamType === "company"
     ? normalizeCompany(candidate.rawSnapshot)
     : candidate.streamType === "contact"
@@ -101,16 +104,15 @@ export class ActEntityRecovery {
   }
 
   async recoverEntity(candidate: RecoveryCandidate): Promise<RecoveryApplyResult> {
-    const kind = entityType(candidate);
-    const source = normalized(candidate);
+    if (candidate.streamType === "opportunity") return this.recoverOpportunity(candidate);
+    if (candidate.streamType === "group") return this.recoverGroup(candidate);
+
+    const kind = profileEntityType(candidate);
+    const source = normalizedProfile(candidate);
     if (!kind || !source) {
       return { state: "dropped_unusable", targetSummary: { reason: "source_not_usable" } };
     }
-    const sourceRows = await this.query(sql`
-      select source_database_key as "sourceDatabaseKey"
-      from act_source_records where id = ${candidate.sourceRecordId} limit 1
-    `);
-    const sourceDatabaseKey = text(sourceRows[0]?.sourceDatabaseKey);
+    const sourceDatabaseKey = await this.sourceDatabaseKey(candidate.sourceRecordId);
     if (!sourceDatabaseKey) {
       return { state: "needs_review", targetSummary: { reason: "source_scope_missing" } };
     }
@@ -166,6 +168,204 @@ export class ActEntityRecovery {
       state: changed ? "recovered" : "already_present",
       targetSummary: { entityType: kind, entityId: targetId, created, linked, changedFields },
     };
+  }
+
+  private async recoverOpportunity(candidate: RecoveryCandidate): Promise<RecoveryApplyResult> {
+    if (!candidate.actRecordId) {
+      return { state: "needs_review", targetSummary: { reason: "act_record_id_missing" } };
+    }
+    const sourceDatabaseKey = await this.sourceDatabaseKey(candidate.sourceRecordId);
+    if (!sourceDatabaseKey) {
+      return { state: "needs_review", targetSummary: { reason: "source_scope_missing" } };
+    }
+    const relatedOrganizations = await this.relatedOrganizations(sourceDatabaseKey, candidate.actRecordId);
+    if (relatedOrganizations.length !== 1) {
+      return {
+        state: "needs_review",
+        targetSummary: {
+          reason: relatedOrganizations.length > 1 ? "ambiguous_opportunity_company" : "opportunity_company_unresolved",
+          organizations: relatedOrganizations,
+        },
+      };
+    }
+    const organizationId = relatedOrganizations[0]!;
+    const organization = (await this.query(sql`
+      select city, region from organizations where id = ${organizationId} limit 1
+    `))[0];
+    const city = text(organization?.city);
+    const region = text(organization?.region);
+    if (!city || !region) {
+      return {
+        state: "needs_review",
+        targetSummary: { reason: "opportunity_location_unavailable", organizationId },
+      };
+    }
+
+    const raw = {
+      ...candidate.rawSnapshot,
+      city: candidate.rawSnapshot.city ?? candidate.rawSnapshot.City ?? city,
+      region: candidate.rawSnapshot.region ?? candidate.rawSnapshot.Region ?? candidate.rawSnapshot.state ?? candidate.rawSnapshot.State ?? region,
+    };
+    const normalized = normalizeOpportunity(raw);
+    if (!normalized.ok) {
+      return {
+        state: "dropped_unusable",
+        targetSummary: { reason: normalized.issueCode },
+      };
+    }
+
+    const existing = await this.resolver.resolveLocalSource(candidate.sourceRecordId);
+    if (existing.kind === "ambiguous") {
+      return { state: "needs_review", targetSummary: { reason: "ambiguous_source_link", candidates: existing.candidates } };
+    }
+    let targetId = existing.kind === "resolved" ? existing.entityId : null;
+    let created = false;
+    let linked = false;
+    if (targetId) {
+      const booking = (await this.query(sql`
+        select organization_id as "organizationId" from bookings where id = ${targetId} limit 1
+      `))[0];
+      if (!booking) return { state: "needs_review", targetSummary: { reason: "booking_missing" } };
+      const currentOrganizationId = text(booking.organizationId);
+      if (currentOrganizationId && currentOrganizationId !== organizationId) {
+        return {
+          state: "needs_review",
+          targetSummary: { reason: "booking_organization_conflict", currentOrganizationId, archivedOrganizationId: organizationId },
+        };
+      }
+      if (!currentOrganizationId) {
+        await this.database.execute(sql`
+          update bookings set organization_id = ${organizationId}, updated_at = now()
+          where id = ${targetId} and organization_id is null
+        `);
+      }
+    } else {
+      const matches = await this.query(sql`
+        select id from bookings
+        where organization_id = ${organizationId}
+          and lower(btrim(name)) = lower(btrim(${normalized.value.name}))
+        order by id limit 3
+      `);
+      if (matches.length > 1) {
+        return {
+          state: "needs_review",
+          targetSummary: { reason: "ambiguous_exact_match", candidates: matches.map(({ id }) => id) },
+        };
+      }
+      targetId = matches[0] ? text(matches[0].id) : null;
+      if (!targetId) {
+        const inserted = await this.query(sql`
+          insert into bookings
+            (organization_id, name, city, region, starts_at, ends_at, status, probability, notes,
+             act_record_id, created_at, updated_at)
+          values (${organizationId}, ${normalized.value.name}, ${normalized.value.city ?? city},
+            ${normalized.value.region ?? region}, ${normalized.value.startsAt ? new Date(normalized.value.startsAt) : null},
+            ${normalized.value.endsAt ? new Date(normalized.value.endsAt) : null},
+            ${normalized.value.localStatus ?? "new_lead"}, ${normalized.value.localProbability ?? "possible"},
+            ${normalized.value.notes}, ${candidate.actRecordId}, now(), now())
+          returning id
+        `);
+        targetId = text(inserted[0]?.id);
+        created = true;
+      }
+      await this.ensureLink({
+        entityType: "booking",
+        entityId: targetId,
+        sourceEntityType: "opportunity",
+        actRecordId: candidate.actRecordId,
+        sourceDatabaseKey,
+        sourceRecordId: candidate.sourceRecordId,
+      });
+      linked = true;
+    }
+
+    const changed = created || linked || existing.kind !== "resolved";
+    if (changed) await this.audit("booking", targetId, candidate, { created, linked, organizationId });
+    return {
+      state: changed ? "recovered" : "already_present",
+      targetSummary: { entityType: "booking", entityId: targetId, organizationId, created, linked },
+    };
+  }
+
+  private async recoverGroup(candidate: RecoveryCandidate): Promise<RecoveryApplyResult> {
+    const normalized = normalizeGroup(candidate.rawSnapshot);
+    if (!normalized.ok) {
+      return { state: "dropped_unusable", targetSummary: { reason: normalized.issueCode } };
+    }
+    if (!candidate.actRecordId) {
+      return { state: "needs_review", targetSummary: { reason: "act_record_id_missing" } };
+    }
+    const sourceDatabaseKey = await this.sourceDatabaseKey(candidate.sourceRecordId);
+    if (!sourceDatabaseKey) return { state: "needs_review", targetSummary: { reason: "source_scope_missing" } };
+
+    const existing = await this.resolver.resolveLocalSource(candidate.sourceRecordId);
+    if (existing.kind === "ambiguous") {
+      return { state: "needs_review", targetSummary: { reason: "ambiguous_source_link", candidates: existing.candidates } };
+    }
+    if (existing.kind === "resolved") {
+      return {
+        state: "already_present",
+        targetSummary: { entityType: "calling_list", entityId: existing.entityId },
+      };
+    }
+    const matches = await this.query(sql`
+      select id from calling_lists
+      where lower(btrim(name)) = lower(btrim(${normalized.value.name}))
+      order by id limit 3
+    `);
+    if (matches.length > 1) {
+      return { state: "needs_review", targetSummary: { reason: "ambiguous_exact_match", candidates: matches.map(({ id }) => id) } };
+    }
+    let targetId = matches[0] ? text(matches[0].id) : "";
+    let created = false;
+    if (!targetId) {
+      const inserted = await this.query(sql`
+        insert into calling_lists (name, kind, created_at, updated_at)
+        values (${normalized.value.name}, 'static', now(), now())
+        returning id
+      `);
+      targetId = text(inserted[0]?.id);
+      created = true;
+    }
+    await this.ensureLink({
+      entityType: "calling_list",
+      entityId: targetId,
+      sourceEntityType: "group",
+      actRecordId: candidate.actRecordId,
+      sourceDatabaseKey,
+      sourceRecordId: candidate.sourceRecordId,
+    });
+    await this.audit("calling_list", targetId, candidate, { created, linked: true });
+    return {
+      state: "recovered",
+      targetSummary: { entityType: "calling_list", entityId: targetId, created, linked: true },
+    };
+  }
+
+  private async relatedOrganizations(sourceDatabaseKey: string, opportunityActRecordId: string): Promise<string[]> {
+    const relationships = await this.query(sql`
+      select id from act_source_records
+      where source_database_key = ${sourceDatabaseKey}
+        and stream_type = 'opportunity_company'
+        and relationship_evidence->>'parentActRecordId' = ${opportunityActRecordId}
+      order by id
+    `);
+    const ids = new Set<string>();
+    for (const relationship of relationships) {
+      const resolved = await this.resolver.resolveRelationship(text(relationship.id));
+      if (resolved.kind === "resolved" && resolved.target.kind === "resolved" && resolved.target.entityType === "organization") {
+        ids.add(resolved.target.entityId);
+      }
+    }
+    return [...ids].sort();
+  }
+
+  private async sourceDatabaseKey(sourceRecordId: string): Promise<string> {
+    const sourceRows = await this.query(sql`
+      select source_database_key as "sourceDatabaseKey"
+      from act_source_records where id = ${sourceRecordId} limit 1
+    `);
+    return text(sourceRows[0]?.sourceDatabaseKey);
   }
 
   private async exactMatches(source: NormalizedEntity): Promise<Row[]> {
@@ -239,7 +439,7 @@ export class ActEntityRecovery {
   }
 
   private async ensureLink(input: {
-    entityType: EntityKind;
+    entityType: ProvenanceEntityKind;
     entityId: string;
     sourceEntityType: string;
     actRecordId: string;
@@ -256,7 +456,7 @@ export class ActEntityRecovery {
     `);
   }
 
-  private async fillTarget(kind: EntityKind, entityId: string, source: Record<string, unknown>): Promise<string[]> {
+  private async fillTarget(kind: ProfileEntityKind, entityId: string, source: Record<string, unknown>): Promise<string[]> {
     const table = kind === "organization" ? "organizations" : "contacts";
     const logicalColumns = kind === "organization"
       ? {
@@ -290,7 +490,7 @@ export class ActEntityRecovery {
   }
 
   private async audit(
-    kind: EntityKind,
+    kind: ProvenanceEntityKind,
     entityId: string,
     candidate: RecoveryCandidate,
     summary: Record<string, unknown>,
