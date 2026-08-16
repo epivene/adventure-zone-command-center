@@ -45,7 +45,9 @@ export function createManagerWrapUpRouter(deps: {
   });
 
   router.put("/manager/wrap-ups/:bookingId", deps.requireManager, async (req, res): Promise<void> => {
-    const parsed = draftSchema.safeParse(req.body);
+    const body = req.body && typeof req.body === "object" ? { ...req.body } : req.body;
+    if (body && typeof body === "object") delete (body as Record<string, unknown>).legId;
+    const parsed = draftSchema.safeParse(body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the wrap-up" });
       return;
