@@ -7,6 +7,8 @@ import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-m
 import { CommunicationRepository, type MessageActor } from "@/features/manager-comms/communication-repository";
 import { CommunicationParticipantRepository } from "@/features/manager-comms/communication-participant-repository";
 import { NotificationRepository } from "@/features/manager-comms/notification-repository";
+import { AcknowledgmentRepository } from "@/features/manager-comms/acknowledgment-repository";
+import { AcknowledgmentService } from "@/features/manager-comms/acknowledgment-service";
 import { createConversationForActor, sendMessageForActor } from "@/features/manager-comms/communication-service";
 import { attachFilesToMessages } from "@/features/manager-comms/message-view";
 
@@ -15,6 +17,8 @@ const requireManager = createRequireLegManagerMiddleware(new DrizzleLegManagerRe
 const communication = new CommunicationRepository(db);
 const participants = new CommunicationParticipantRepository(db);
 const notifications = new NotificationRepository(db);
+const acknowledgmentRepository = new AcknowledgmentRepository(db);
+const acknowledgments = new AcknowledgmentService(acknowledgmentRepository);
 const storage = new GoogleCloudLegManagerObjectStorage();
 const serviceStore = {
   createConversation: (input: any) => communication.createConversation(input),
@@ -56,20 +60,14 @@ router.get("/manager/messages/conversations", requireManager, async (req, res) =
   await participants.ensureDefaultConversations(req.legManager!.legId, req.legManager!.managerName);
   res.json({ conversations: await communication.listForManager(req.legManager!.legId) });
 });
-
 router.post("/manager/messages/conversations", requireManager, async (req, res): Promise<void> => {
   const parsed = conversationInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid conversation" }); return; }
   try {
-    const conversation = await createConversationForActor(serviceStore, actor(req), {
-      kind: parsed.data.kind,
-      title: parsed.data.title ?? null,
-      memberLegIds: parsed.data.memberLegIds,
-    });
+    const conversation = await createConversationForActor(serviceStore, actor(req), { kind: parsed.data.kind, title: parsed.data.title ?? null, memberLegIds: parsed.data.memberLegIds });
     res.status(201).json({ conversation });
   } catch (error) { routeError(res, error); }
 });
-
 router.get("/manager/messages/conversations/:conversationId", requireManager, async (req, res): Promise<void> => {
   const conversationId = param(req.params.conversationId);
   try {
@@ -79,17 +77,12 @@ router.get("/manager/messages/conversations/:conversationId", requireManager, as
     res.json({ messages: await attachFilesToMessages(messages, attachments, storage) });
   } catch (error) { routeError(res, error); }
 });
-
 router.post("/manager/messages/conversations/:conversationId", requireManager, async (req, res): Promise<void> => {
   const conversationId = param(req.params.conversationId);
   const parsed = messageInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid message" }); return; }
   try {
-    const message = await sendMessageForActor(serviceStore, notifications, actor(req), {
-      conversationId,
-      body: parsed.data.body,
-      clientMutationId: parsed.data.clientMutationId,
-    });
+    const message = await sendMessageForActor(serviceStore, notifications, actor(req), { conversationId, body: parsed.data.body, clientMutationId: parsed.data.clientMutationId });
     for (const attachmentId of parsed.data.attachmentIds) {
       const attachment = await communication.getAttachment(attachmentId);
       if (!attachment || attachment.conversationId !== conversationId || attachment.uploaderLegId !== req.legManager!.legId) continue;
@@ -98,52 +91,42 @@ router.post("/manager/messages/conversations/:conversationId", requireManager, a
     res.status(201).json({ message });
   } catch (error) { routeError(res, error); }
 });
-
 router.post("/manager/messages/conversations/:conversationId/attachments", requireManager, async (req, res): Promise<void> => {
   const conversationId = param(req.params.conversationId);
   const parsed = attachmentInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid attachment" }); return; }
   try {
-    const attachment = await communication.createAttachment({
-      id: parsed.data.id,
-      conversationId,
-      actor: actor(req),
-      fileName: parsed.data.fileName ?? null,
-      mimeType: parsed.data.mimeType ?? null,
-      sizeBytes: parsed.data.sizeBytes ?? null,
-      clientMutationId: parsed.data.clientMutationId,
-    });
+    const attachment = await communication.createAttachment({ id: parsed.data.id, conversationId, actor: actor(req), fileName: parsed.data.fileName ?? null, mimeType: parsed.data.mimeType ?? null, sizeBytes: parsed.data.sizeBytes ?? null, clientMutationId: parsed.data.clientMutationId });
     res.status(201).json({ attachment });
   } catch (error) { routeError(res, error); }
 });
-
-router.put(
-  "/manager/messages/attachments/:attachmentId/file",
-  requireManager,
-  express.raw({ type: () => true, limit: "12mb" }),
-  async (req, res): Promise<void> => {
-    const attachmentId = param(req.params.attachmentId);
-    const attachment = await communication.getAttachment(attachmentId);
-    if (!attachment || attachment.uploaderLegId !== req.legManager!.legId || !(await participants.canManagerViewConversation(attachment.conversationId, req.legManager!.legId))) {
-      res.status(403).json({ error: "Attachment is outside your access" }); return;
-    }
-    const bytes = req.body instanceof Buffer ? new Uint8Array(req.body) : new Uint8Array();
-    if (!bytes.length) { res.status(400).json({ error: "File is required" }); return; }
-    const rawType = req.headers["content-type"];
-    const mimeType = Array.isArray(rawType) ? rawType[0] ?? "application/octet-stream" : rawType ?? "application/octet-stream";
-    const key = `manager-messages/${attachment.conversationId}/${attachment.id}`;
-    await storage.put(key, bytes, mimeType);
-    res.json({ attachment: await communication.setAttachmentUploaded(attachment.id, key, mimeType) });
-  },
-);
-
-router.get("/manager/notifications", requireManager, async (req, res) => {
-  res.json({ notifications: await notifications.listForLeg(req.legManager!.legId) });
+router.put("/manager/messages/attachments/:attachmentId/file", requireManager, express.raw({ type: () => true, limit: "12mb" }), async (req, res): Promise<void> => {
+  const attachmentId = param(req.params.attachmentId);
+  const attachment = await communication.getAttachment(attachmentId);
+  if (!attachment || attachment.uploaderLegId !== req.legManager!.legId || !(await participants.canManagerViewConversation(attachment.conversationId, req.legManager!.legId))) { res.status(403).json({ error: "Attachment is outside your access" }); return; }
+  const bytes = req.body instanceof Buffer ? new Uint8Array(req.body) : new Uint8Array();
+  if (!bytes.length) { res.status(400).json({ error: "File is required" }); return; }
+  const rawType = req.headers["content-type"];
+  const mimeType = Array.isArray(rawType) ? rawType[0] ?? "application/octet-stream" : rawType ?? "application/octet-stream";
+  const key = `manager-messages/${attachment.conversationId}/${attachment.id}`;
+  await storage.put(key, bytes, mimeType);
+  res.json({ attachment: await communication.setAttachmentUploaded(attachment.id, key, mimeType) });
 });
+
+router.get("/manager/notifications", requireManager, async (req, res) => { res.json({ notifications: await notifications.listForLeg(req.legManager!.legId) }); });
 router.post("/manager/notifications/:id/read", requireManager, async (req, res): Promise<void> => {
   const ok = await notifications.markRead(param(req.params.id), req.legManager!.legId);
   if (!ok) { res.status(404).json({ error: "Notification not found or requires action" }); return; }
   res.json({ ok: true });
+});
+
+router.get("/manager/acknowledgments", requireManager, async (req, res) => {
+  res.json({ acknowledgments: await acknowledgmentRepository.listActiveForLeg(req.legManager!.legId) });
+});
+router.post("/manager/acknowledgments/:id/acknowledge", requireManager, async (req, res): Promise<void> => {
+  const parsed=z.object({comment:z.string().trim().max(4000).nullable().optional()}).safeParse(req.body);
+  if(!parsed.success){res.status(400).json({error:"Invalid acknowledgment comment"});return;}
+  try{res.json({acknowledgment:await acknowledgments.acknowledge(param(req.params.id),req.legManager!.legId,parsed.data.comment??null)});}catch(error){routeError(res,error);}
 });
 
 export default router;
