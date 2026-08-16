@@ -1,0 +1,30 @@
+name: Event Family Contacts Task1 Green
+on:
+  push:
+    branches: [feature/event-family-website-contacts]
+jobs:
+  green:
+    if: contains(github.event.head_commit.message, '[event-family-contacts-task1-green]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/unused
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: python .github/scripts/event-family-contacts-task1.py
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/event-families/event-family-contacts.test.ts
+      - run: pnpm --filter @workspace/db build
+      - name: Commit registry change
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add lib/db/src/migrations.ts
+          git diff --cached --check
+          git commit -m "feat: register event family website contacts migration" || true
+          git push origin HEAD:feature/event-family-website-contacts
