@@ -1,0 +1,47 @@
+name: Manual Org Membership Baseline
+on:
+  push:
+    branches: [feature/manual-organization-membership-ui]
+jobs:
+  verify:
+    if: contains(github.event.head_commit.message, '[manual-org-baseline]')
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adventure_zone_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Initialize application schema
+        run: pnpm --filter @workspace/db push
+      - name: Organization hierarchy regressions
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/organizations/organization-consolidation.test.ts
+          src/features/organizations/imported-location-family-consolidation.test.ts
+          src/features/organizations/organization-family-lock.test.ts
+      - name: Event profile regressions
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/event-profiles
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
+# initialize the same schema real deployments use
