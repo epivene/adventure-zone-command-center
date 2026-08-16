@@ -26,7 +26,11 @@ export interface ActExtractionRuntime {
 
 type ExtractionLoop = ActExtractionRuntime;
 
-export const actExtractionWorkerConcurrency = 4;
+// Render's small production instance has a ~256 MB Node heap. Four concurrent
+// ACT extractors plus organizer/recovery loops can exhaust that heap during bulk
+// recovery. Keep extraction serialized; checkpoint leasing still makes it safe
+// to raise this again later on a larger service.
+export const actExtractionWorkerConcurrency = 1;
 
 export function createActExtractionLoopPool(input: {
   concurrency: number;
