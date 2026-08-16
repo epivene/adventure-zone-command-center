@@ -21,7 +21,7 @@ describe("EventFamilyWebsiteContacts", () => {
     mocks.apiPatch.mockResolvedValue({ ok: true });
     const onChanged = vi.fn();
     render(<EventFamilyWebsiteContacts family={family as any} onChanged={onChanged} />);
-    expect(screen.getByRole("link", { name: "Visit website" })).toHaveAttribute("href", "https://waterlanternfestival.com");
+    expect(screen.getByRole("link", { name: "Visit website" })).toHaveAttribute("href", "https://waterlanternfestival.com/");
     fireEvent.click(screen.getByRole("button", { name: "Edit website" }));
     fireEvent.change(screen.getByLabelText("Family website"), { target: { value: "https://example.org" } });
     fireEvent.click(screen.getByRole("button", { name: "Save website" }));
@@ -44,7 +44,7 @@ describe("EventFamilyWebsiteContacts", () => {
     await waitFor(() => expect(mocks.apiPost).toHaveBeenCalledWith("/event-families/family-1/contacts", expect.objectContaining({ contactId: "contact-2" })));
   });
 
-  it("creates a new name-only CRM contact, updates Primary, and removes only the family link", async () => {
+  it("creates a new name-only CRM contact, preserves Primary, and removes only the family link", async () => {
     mocks.apiPost.mockResolvedValue({ ok: true });
     mocks.apiPatch.mockResolvedValue({ ok: true });
     mocks.apiDelete.mockResolvedValue({ ok: true });
@@ -56,7 +56,7 @@ describe("EventFamilyWebsiteContacts", () => {
     await waitFor(() => expect(mocks.apiPost).toHaveBeenCalledWith("/event-families/family-1/contacts/new", expect.objectContaining({ name: "Morgan Ray" })));
 
     fireEvent.click(screen.getByRole("button", { name: "Edit family contact Jane Smith" }));
-    fireEvent.click(screen.getByLabelText("Primary family contact"));
+    expect(screen.getByLabelText("Primary family contact")).toBeChecked();
     fireEvent.click(screen.getByRole("button", { name: "Save family contact" }));
     await waitFor(() => expect(mocks.apiPatch).toHaveBeenCalledWith("/event-families/family-1/contacts/contact-1", expect.objectContaining({ isPrimary: true })));
 
