@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleEventWrapUpRepository } from "@/features/leg-manager/event-wrap-up-repository";
@@ -143,8 +144,7 @@ export function createEventWrapUpAdminRouter(deps: {
 const store = new DrizzleEventWrapUpRepository(db);
 const source = new DrizzleEventWrapUpSource(db, store);
 const service = new EventWrapUpService(store, source);
-
-export default createEventWrapUpAdminRouter({
+const router = createEventWrapUpAdminRouter({
   service,
   store,
   automaticMiles: (bookingId, tripId) => source.automaticMiles(bookingId, tripId),
@@ -154,3 +154,31 @@ export default createEventWrapUpAdminRouter({
     return { ...payload, sourceDataChanged: Boolean(result?.sourceDataChanged) };
   },
 });
+
+router.get("/event-wrap-up-ratings/family/:familyId", async (req, res): Promise<void> => {
+  try {
+    const familyId = z.string().uuid().parse(param(req.params.familyId));
+    res.json(await store.averageRatingForFamily(familyId));
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not load rating" });
+  }
+});
+
+router.get("/event-wrap-up-ratings/organization/:organizationId", async (req, res): Promise<void> => {
+  try {
+    await store.ensureSchema();
+    const organizationId = z.string().uuid().parse(param(req.params.organizationId));
+    const result = await db.execute(sql`
+      select avg(w.rating_stars)::float as average, count(w.rating_stars)::int as count
+      from event_wrap_ups w
+      inner join bookings b on b.id=w.booking_id
+      where b.organization_id=${organizationId}::uuid and w.rating_stars is not null
+    `);
+    const row = ((result as any).rows ?? [])[0];
+    res.json({ average: row?.average == null ? null : Number(row.average), count: Number(row?.count ?? 0) });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Could not load rating" });
+  }
+});
+
+export default router;
