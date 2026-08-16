@@ -51,13 +51,23 @@ jobs:
                '''                  <time\n                    className="text-xs text-slate-500"\n                    dateTime={activity.occurredAt.toISOString()}\n                  >\n                    {formatDate(activity.occurredAt)}\n                  </time>''',
                '''                  <div className="text-right text-xs text-slate-500">\n                    <time dateTime={activity.occurredAt.toISOString()}>{formatDate(activity.occurredAt)}</time>\n                    {noteComposer && activity.kind === "note" ? (\n                      <p>Created {formatDate(activity.createdAt)}{activity.updatedAt.getTime() !== activity.createdAt.getTime() ? ` · Updated ${formatDate(activity.updatedAt)}` : ""}</p>\n                    ) : null}\n                  </div>''')
 
-          # Merge regression: organization activities must move before deleting duplicate.
           p=Path('artifacts/api-server/src/features/organizations/organization-merge-location-order.test.ts')
           s=p.read_text()
           needle='    expect(locationMove).toBeLessThan(contactMove);\n'
           if 'activityMove' not in s:
               s=s.replace(needle, needle + '''    const activityMove = mergeSource.indexOf(".where(eq(activities.organizationId, dupId))");\n    const organizationDelete = mergeSource.indexOf("tx.delete(organizations)");\n    expect(activityMove).toBeGreaterThanOrEqual(0);\n    expect(organizationDelete).toBeGreaterThanOrEqual(0);\n    expect(activityMove).toBeLessThan(organizationDelete);\n''')
               p.write_text(s)
+
+          # ActivityTimeline now uses an explicit in-UI confirmation instead of window.confirm.
+          p=Path('artifacts/adventure-zone/src/components/activities/activity-timeline.test.tsx')
+          s=p.read_text()
+          old='''    fireEvent.click(screen.getByRole("button", { name: "Delete activity" }));\n\n    await waitFor(() =>\n      expect(screen.queryByText("Old history item")).not.toBeInTheDocument(),\n    );'''
+          new='''    fireEvent.click(screen.getByRole("button", { name: "Delete activity" }));\n    fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }));\n\n    await waitFor(() =>\n      expect(screen.queryByText("Old history item")).not.toBeInTheDocument(),\n    );'''
+          if old in s: s=s.replace(old,new,1)
+          old2='''    fireEvent.click(screen.getByRole("button", { name: "Delete activity" }));\n\n    expect(screen.getByText("Keep this history item")).toBeInTheDocument();\n    expect(deleteActivity).not.toHaveBeenCalled();'''
+          new2='''    fireEvent.click(screen.getByRole("button", { name: "Delete activity" }));\n    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));\n\n    expect(screen.getByText("Keep this history item")).toBeInTheDocument();\n    expect(deleteActivity).not.toHaveBeenCalled();'''
+          if old2 in s: s=s.replace(old2,new2,1)
+          p.write_text(s)
           PY
       - name: Focused API notes tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/notes/scoped-note-repository.test.ts src/features/organizations/organization-merge-location-order.test.ts
