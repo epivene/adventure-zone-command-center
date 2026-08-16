@@ -128,6 +128,7 @@ describe("ActivityTimeline deletion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Delete activity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes, delete" }));
 
     await waitFor(() =>
       expect(screen.queryByText("Old history item")).not.toBeInTheDocument(),
@@ -158,6 +159,7 @@ describe("ActivityTimeline deletion", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Delete activity" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Keep this history item")).toBeInTheDocument();
     expect(deleteActivity).not.toHaveBeenCalled();

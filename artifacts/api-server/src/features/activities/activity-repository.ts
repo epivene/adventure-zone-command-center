@@ -382,7 +382,7 @@ export class DrizzleActivityRepository
         .select({ value: count() })
         .from(activityRevisions)
         .where(eq(activityRevisions.activityId, updated.id));
-      const projected = await loadTimelineItemById(transaction as DrizzleDatabase, updated.id);
+      const projected = await loadTimelineItemById(transaction as unknown as DrizzleDatabase, updated.id);
       return ok(projected ?? toTimelineItem(updated, revisionTotal?.value ?? 0));
     });
   }

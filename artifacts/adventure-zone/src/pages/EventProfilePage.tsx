@@ -35,7 +35,7 @@ export default function EventProfilePage() {
         const toDate = (v: any) => (v ? new Date(v) : null);
         const normalized = {
           ...d,
-          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt) })),
+          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt), createdAt: toDate(n.createdAt), updatedAt: toDate(n.updatedAt) })),
           followUps: (d.followUps ?? []).map((f: any) => ({
             ...f,
             dueAt: toDate(f.dueAt),

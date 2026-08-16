@@ -395,12 +395,12 @@ export function ActivityTimeline({
                   <p className="text-sm font-semibold capitalize">
                     {activity.kind.replaceAll("_", " ")}
                   </p>
-                  <time
-                    className="text-xs text-slate-500"
-                    dateTime={activity.occurredAt.toISOString()}
-                  >
-                    {formatDate(activity.occurredAt)}
-                  </time>
+                  <div className="text-right text-xs text-slate-500">
+                    <time dateTime={activity.occurredAt.toISOString()}>{formatDate(activity.occurredAt)}</time>
+                    {noteComposer && activity.kind === "note" ? (
+                      <p>Created {formatDate(activity.createdAt)}{activity.updatedAt.getTime() !== activity.createdAt.getTime() ? ` · Updated ${formatDate(activity.updatedAt)}` : ""}</p>
+                    ) : null}
+                  </div>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
                   {activity.body}
