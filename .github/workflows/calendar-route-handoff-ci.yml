@@ -1,5 +1,6 @@
 name: Calendar Route Handoff CI
 
+# ACT archive recovery is a permanent PR gate; temporary implementation workflows are retired.
 on:
   push:
     branches:
