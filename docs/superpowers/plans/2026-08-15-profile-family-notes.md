@@ -20,6 +20,7 @@
 - Organization notes survive duplicate merges through the existing `activities.organization_id` re-parenting step.
 - Failed save/delete operations keep the existing note list visible and show an inline error.
 - Family-note fetch failures must not prevent the individual profile from loading.
+- Notes show created time and, after an edit, updated time.
 - No rich text, attachments, reminders, AI rewriting, or global notes search in this release.
 
 ---
@@ -30,6 +31,7 @@
 - Create: `lib/db/migrations/041_profile_family_notes.sql`
 - Modify: `lib/db/src/event-family-schema.ts`
 - Modify: `lib/db/src/migrations.ts`
+- Modify: `artifacts/api-server/src/index.ts`
 - Create: `artifacts/api-server/src/features/notes/scoped-note-repository.ts`
 - Create: `artifacts/api-server/src/features/notes/scoped-note-repository.test.ts`
 
@@ -107,6 +109,17 @@ Register `041_profile_family_notes.sql` in `lib/db/src/migrations.ts` with:
 },
 ```
 
+Because migration 041 references `event_families`, make event-family bootstrap precede the custom migration runner at API startup:
+
+```ts
+await ensureBookingProbabilitySchema();
+await ensureEventFamilySchema();
+const appliedMigrations = await runActReviewMigrations();
+await ensureActivityDeleteSchema();
+```
+
+Do not leave the current later `ensureEventFamilySchema()` call duplicated.
+
 - [ ] **Step 4: Add the Drizzle table and repository**
 
 Define `scopedNotes` in `lib/db/src/event-family-schema.ts`, importing `organizationLocations` from `./schema`. The repository should translate the discriminated owner into the appropriate FK and verify the owner exists before create.
@@ -123,19 +136,20 @@ export type ScopedNoteMutationResult =
 
 For update/delete, include both `noteId` and the selected owner column in the SQL `where`; do not load by note ID and mutate without owner scoping.
 
-- [ ] **Step 5: Run repository tests and database package build**
+- [ ] **Step 5: Run repository tests and database/API builds**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/notes/scoped-note-repository.test.ts
 pnpm --filter @workspace/db build
+pnpm --filter @workspace/api-server build
 ```
 
-Expected: PASS.
+Expected: PASS, including API startup compilation with the revised bootstrap order.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add lib/db/migrations/041_profile_family_notes.sql lib/db/src/event-family-schema.ts lib/db/src/migrations.ts artifacts/api-server/src/features/notes/scoped-note-repository.ts artifacts/api-server/src/features/notes/scoped-note-repository.test.ts
+git add lib/db/migrations/041_profile_family_notes.sql lib/db/src/event-family-schema.ts lib/db/src/migrations.ts artifacts/api-server/src/index.ts artifacts/api-server/src/features/notes/scoped-note-repository.ts artifacts/api-server/src/features/notes/scoped-note-repository.test.ts
 git commit -m "feat: add scoped location and family notes storage"
 ```
 
@@ -171,11 +185,11 @@ Test successful create/list/update/delete for each owner kind plus these guards:
 - note ID owned by another location/family returns 404 and remains unchanged.
 
 ```ts
-expect(await request(app)
+const response = await request(app)
   .patch(`/api/event-families/${FAMILY_ID}/notes/${LOCATION_NOTE_ID}`)
   .set(ownerAuth())
-  .send({ body: "wrong scope" }))
-  .toMatchObject({ status: 404 });
+  .send({ body: "wrong scope" });
+expect(response.status).toBe(404);
 ```
 
 - [ ] **Step 2: Run tests and confirm RED**
@@ -269,10 +283,12 @@ Cover:
 - edit changes only after successful mutation;
 - failed delete leaves the note visible and shows the error;
 - read-only mode displays notes but no Add/Edit/Delete controls;
-- created and updated metadata are visible, with `Updated …` only when timestamps differ.
+- created and updated metadata are visible, with `Updated …` only when timestamps differ;
+- rerendering with a newly loaded `notes` prop replaces the initially empty local list.
 
 ```tsx
-render(<ScopedNotes title="Family notes" notes={[note]} readOnly />);
+const view = render(<ScopedNotes title="Family notes" notes={[]} readOnly />);
+view.rerender(<ScopedNotes title="Family notes" notes={[note]} readOnly />);
 expect(screen.getByText("Shared booking advice")).toBeVisible();
 expect(screen.queryByRole("button", { name: "Add note" })).not.toBeInTheDocument();
 expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
@@ -301,9 +317,18 @@ export async function createFamilyNote(familyId: string, body: string) {
 
 Add equivalent location helpers with both `organizationId` and `locationId` in the path.
 
-- [ ] **Step 4: Implement `ScopedNotes` with conservative mutation state**
+- [ ] **Step 4: Implement `ScopedNotes` with conservative mutation state and prop synchronization**
 
-Keep its displayed list in local state initialized from `notes`. Sort newest first. On delete, wait for `onDelete` to resolve before removing the note.
+Keep its displayed list in local state, but synchronize it whenever async parent loading supplies a new `notes` prop:
+
+```ts
+const sortNotes = (values: ScopedNoteView[]) =>
+  [...values].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+const [items, setItems] = useState(() => sortNotes(notes));
+useEffect(() => setItems(sortNotes(notes)), [notes]);
+```
+
+On delete, wait for `onDelete` to resolve before removing the note.
 
 ```ts
 try {
@@ -346,7 +371,7 @@ git commit -m "feat: add reusable scoped notes UI"
 - Preserves existing `ActivityTimeline` behavior for all other call sites.
 - Organization profile continues using `createActivityAction`, `editActivityAction`, `deleteActivityAction`, and `parent={{ organizationId: profile.id }}`.
 
-- [ ] **Step 1: Add a failing `noteComposer` UI test**
+- [ ] **Step 1: Add failing `noteComposer` UI and metadata tests**
 
 ```tsx
 render(
@@ -365,6 +390,8 @@ fireEvent.click(screen.getByRole("button", { name: "Save note" }));
 await waitFor(() => expect(createActivity).toHaveBeenCalledWith(expect.objectContaining({ kind: "note", body: "Call in January" })));
 ```
 
+Add an existing edited note whose `updatedAt` is later than `createdAt`; expect both Created and Updated metadata plus note-specific `Edit note` and `Delete note` controls.
+
 - [ ] **Step 2: Run and confirm RED**
 
 ```bash
@@ -373,7 +400,7 @@ pnpm --filter @workspace/adventure-zone exec vitest run src/components/activitie
 
 Expected: FAIL because `noteComposer` is not supported.
 
-- [ ] **Step 3: Add note-focused labels while preserving the full timeline**
+- [ ] **Step 3: Add note-focused labels and timestamps while preserving the full timeline**
 
 When `noteComposer` is true:
 - force creation kind to `note`;
@@ -381,13 +408,15 @@ When `noteComposer` is true:
 - show `Add note` / `Cancel note`;
 - label textarea `Note`;
 - save as `Save note`;
+- for `kind === 'note'`, label actions `Edit note`, `Save note edit`, and `Delete note`;
+- show `Created <timestamp>` and, if `updatedAt > createdAt`, `Updated <timestamp>`;
 - use `No notes or call history recorded.` as the empty state.
 
-Do **not** filter existing activities out of the timeline: calls/imported history should still be visible in the existing `Notes & call outcomes` card.
+Do **not** filter existing activities out of the timeline: calls/imported history should still be visible in the existing profile history card.
 
 - [ ] **Step 4: Enable note mode on the event profile workspace**
 
-Change only the profile timeline call:
+Make the card clearly note-led (for example heading `Notes & call history`) and change only the profile timeline call:
 
 ```tsx
 <ActivityTimeline
@@ -557,7 +586,7 @@ Do not fold note failure into the page-wide `error` that currently replaces the 
 ```ts
 const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
 const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
-async function loadNotes() { ... }
+async function loadNotes() { /* call listFamilyNotes and update only note state */ }
 ```
 
 Call `load()` and `loadNotes()` independently when `familyId` changes.
@@ -652,7 +681,7 @@ Reset family-note state when `profileId`/family changes. Provide a retry functio
 
 - [ ] **Step 4: Render read-only shared context beside profile notes**
 
-In `EventProfileWorkspace`, near the `Notes & call outcomes` card:
+In `EventProfileWorkspace`, near the profile notes/history card:
 
 ```tsx
 {profile.familyContext?.kind === "event_family" ? (
@@ -757,6 +786,7 @@ Expected: all PASS.
 
 Verify all of the following before opening/merging a PR:
 - profile has an obvious Add note flow and existing note/call history remains present;
+- profile note entries show created and updated timestamps after edits;
 - profile manual notes still use activities, not `scoped_notes`;
 - each location has editable Location notes inside its own expanded card;
 - family page has editable Family notes;
@@ -780,7 +810,7 @@ git commit -m "test: lock down note preservation behavior"
 
 Implementation is complete only when:
 
-1. A user can add, edit, and delete a manual organization/profile note from the profile workspace.
+1. A user can add, edit, and delete a manual organization/profile note from the profile workspace, with created/updated timestamps.
 2. A user can add, edit, and delete a note scoped to one saved organization location.
 3. A user can add, edit, and delete a family-level note from the event-family page.
 4. A family member profile shows the same family notes read-only without copying them into the profile activity list.
@@ -789,4 +819,5 @@ Implementation is complete only when:
 7. Wrong-owner note mutations are rejected without data loss.
 8. Protected imported activity/history behavior is unchanged.
 9. Note mutation failures do not silently remove or overwrite visible notes.
-10. Focused tests, typechecks, database build, API build, and frontend build all pass.
+10. Async note loading updates the reusable note list after the component has already mounted.
+11. Focused tests, typechecks, database build, API build, and frontend build all pass.
