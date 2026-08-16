@@ -21,6 +21,7 @@ export function useManagerRouteMap() {
 }
 
 export function applyLeafletViewport(map: Pick<LeafletMap, "setView" | "fitBounds">, viewport: MapViewportTarget) {
+  if (viewport.kind === "none") return;
   if (viewport.kind === "center") {
     const [lng, lat] = viewport.center;
     map.setView([lat, lng], viewport.zoom, { animate: false });
