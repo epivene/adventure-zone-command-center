@@ -28,4 +28,4 @@ jobs:
           git diff --cached --check
           git commit -m "feat: register event family website contacts migration" || true
           git push origin HEAD:feature/event-family-website-contacts
-# trigger
+# trigger 2
