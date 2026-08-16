@@ -76,9 +76,34 @@ export default function EventProfilePage() {
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading profile…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
+  const recoveredActNotes = [...new Set(
+    (Array.isArray(data.migrationHistory?.notes) ? data.migrationHistory.notes : [])
+      .filter((note: unknown): note is string => typeof note === "string")
+      .map((note: string) => note.trim())
+      .filter(Boolean),
+  )];
+
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       <EventRatingSummary average={data.wrapUpRatingSummary?.average ?? null} count={data.wrapUpRatingSummary?.count ?? 0} />
+      {recoveredActNotes.length ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm" aria-labelledby="recovered-act-history-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-bold" id="recovered-act-history-title">Recovered ACT notes &amp; history</h2>
+              <p className="mt-1 text-sm text-amber-900">Preserved from merged ACT profiles. These records are read-only so the original imported history stays intact.</p>
+            </div>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">{recoveredActNotes.length} recovered</span>
+          </div>
+          <ul className="mt-4 grid gap-3">
+            {recoveredActNotes.map((note: string) => (
+              <li className="whitespace-pre-wrap rounded-lg border border-amber-200 bg-white/70 p-3 text-sm text-slate-800" key={note}>
+                {note}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <EventProfileWorkspace
         profile={data}
         assistedCallingEnabled={data.assistedCallingEnabled === true}

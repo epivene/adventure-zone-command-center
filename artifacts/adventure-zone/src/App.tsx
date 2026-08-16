@@ -7,6 +7,7 @@ import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";
 import ManagerCommunicationsAdminPage from "@/pages/ManagerCommunicationsAdminPage";
 import ManagerCrewAdminPage from "@/pages/ManagerCrewAdminPage";
 import ManagerAftermathAdminPage from "@/pages/ManagerAftermathAdminPage";
+import EventWrapUpAdminPage from "@/pages/EventWrapUpAdminPage";
 import ManagerIncidentPage from "@/pages/ManagerIncidentPage";
 import ManagerIncidentsPage from "@/pages/ManagerIncidentsPage";
 import ManagerCrewPage from "@/pages/ManagerCrewPage";
@@ -19,6 +20,7 @@ import ManagerSignInPage from "@/pages/ManagerSignInPage";
 import { ManagerShell } from "@/components/manager/manager-shell";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
+import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
 import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
@@ -246,7 +248,8 @@ function AppRoutes() {
               <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
               <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
               <Route path="/manager-crew" component={ManagerCrewAdminPage} />
-              <Route path="/manager-aftermath" component={ManagerAftermathAdminPage} />
+              <Route path={ADMIN_WRAP_UP_PATH}>{(params)=><EventWrapUpAdminPage bookingId={params.bookingId}/>}</Route>
+              <Route path={ADMIN_AFTERMATH_PATH} component={ManagerAftermathAdminPage} />
               <Route path="/manager-issues" component={ManagerIssuesAdminPage} />
               <Route component={NotFound} />
             </Switch>
