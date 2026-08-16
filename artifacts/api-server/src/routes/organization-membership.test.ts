@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 
 const parentId = "11111111-1111-4111-8111-111111111111";
 const childId = "22222222-2222-4222-8222-222222222222";
@@ -61,8 +62,7 @@ describe("organization membership routes", () => {
   });
 
   it("returns 409 for hierarchy conflicts", async () => {
-    const error = Object.assign(new Error("That organization is already a location/event of another organization."), { name: "OrganizationConflictError" });
-    setMembership.mockRejectedValue(error);
+    setMembership.mockRejectedValue(new OrganizationConflictError("That organization is already a location/event of another organization."));
     await request(app).put(`/event-profiles/${childId}/organization`).send({ organizationId: parentId }).expect(409);
   });
 
