@@ -231,6 +231,7 @@ function AppRoutes() {
               <Route path="/contacts/:id/edit">{(params)=><ContactEditPage contactId={params.id}/>}</Route>
               <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
               <Route path="/contacts" component={ContactsPage} />
+              <Route path="/profiles" component={OrganizationsPage} />
               <Route path="/organizations" component={OrganizationsPage} />
               <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
               <Route path="/calendar" component={CalendarPage} />
@@ -242,6 +243,7 @@ function AppRoutes() {
               <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
               <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
               <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
+              <Route path="/settings/act-migration" component={ActMigrationPage} />
               <Route path="/settings" component={SettingsStub} />
               <Route path="/act-migration" component={ActMigrationPage} />
               <Route path="/quick-add" component={QuickAddPage} />
