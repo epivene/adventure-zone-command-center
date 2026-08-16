@@ -18,6 +18,8 @@ export type RecoveryCandidate = {
   actRecordId: string | null;
   rawSnapshot: Record<string, unknown>;
   relationshipEvidence: Record<string, unknown>;
+  /** Durable archive capture time used only when ACT has no usable source date. */
+  capturedAt?: string;
   leaseToken: string;
 };
 
