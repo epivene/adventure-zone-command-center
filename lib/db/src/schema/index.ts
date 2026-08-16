@@ -203,6 +203,11 @@ export const organizations = pgTable("organizations", {
   region: text("region"),
   postalCode: text("postal_code"),
   website: text("website"),
+  /** Optional non-destructive parent organization for manual event/location membership. */
+  parentOrganizationId: uuid("parent_organization_id").references(
+    (): AnyPgColumn => organizations.id,
+    { onDelete: "restrict" },
+  ),
   /** Set when this profile has been retired via the consolidation workflow. */
   consolidatedIntoId: uuid("consolidated_into_id").references(
     (): AnyPgColumn => organizations.id,
@@ -227,6 +232,7 @@ export const organizations = pgTable("organizations", {
     sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
   ),
   index("organizations_normalized_phone_idx").on(table.normalizedPhone),
+  index("organizations_parent_organization_id_idx").on(table.parentOrganizationId),
 ]);
 
 export const organizationFamilyReviews = pgTable(

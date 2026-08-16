@@ -14,11 +14,13 @@ export default function EventProfileNewPage() {
   const initialContactId = params.get("contactId") ?? "";
   const initialPhone = params.get("phone") ?? "";
   const initialFamilyId = params.get("familyId") ?? "";
+  const initialOrganizationId = params.get("organizationId") ?? "";
 
   const [travelLegs, setTravelLegs] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [families, setFamilies] = useState<any[]>([]);
+  const [initialOrganizationName, setInitialOrganizationName] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +28,8 @@ export default function EventProfileNewPage() {
       apiGet<any[]>("/routes/travel-legs").catch(() => []),
       apiGet<any>("/organizations?page=1&pageSize=100&showMembers=yes").catch(() => null),
       apiGet<any>("/contacts?page=1&pageSize=100").catch(() => null),
-    ]).then(([legs, orgs, contactPage]) => {
+      initialOrganizationId ? apiGet<any>(`/organizations/${initialOrganizationId}`).catch(() => null) : Promise.resolve(null),
+    ]).then(([legs, orgs, contactPage, parentDetail]) => {
       setTravelLegs(legs ?? []);
       setEvents(
         (orgs?.organizations?.records ?? orgs?.records ?? orgs?.organizations ?? []).map((event: any) => ({
@@ -37,6 +40,7 @@ export default function EventProfileNewPage() {
         })),
       );
       setFamilies((orgs?.families ?? []).map((family: any) => ({ id: family.id, name: family.name })));
+      setInitialOrganizationName(parentDetail?.organization?.name ?? "");
       setContacts(
         (contactPage?.records ?? contactPage?.contacts ?? []).map((contact: any) => ({
           id: contact.id,
@@ -46,7 +50,7 @@ export default function EventProfileNewPage() {
       );
       setLoading(false);
     });
-  }, []);
+  }, [initialOrganizationId]);
 
   if (loading) {
     return <div className="mx-auto max-w-3xl"><p className="mt-8 text-slate-500">Loading…</p></div>;
@@ -64,6 +68,8 @@ export default function EventProfileNewPage() {
         contacts={contacts}
         families={families}
         initialFamilyId={initialFamilyId}
+        initialOrganizationId={initialOrganizationId}
+        initialOrganizationName={initialOrganizationName}
         travelLegs={travelLegs}
         initialContactId={initialContactId}
         initialPhone={initialPhone}

@@ -411,6 +411,15 @@ const migrationFiles = [
   name: "040_leg_incidents.sql",
   markerSql: "SELECT to_regclass(current_schema() || '.leg_incidents') IS NOT NULL AND to_regclass(current_schema() || '.leg_incident_attachments') IS NOT NULL AS ready",
 },
+  {
+    name: "042_manual_organization_membership.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'organizations'
+        AND column_name = 'parent_organization_id'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

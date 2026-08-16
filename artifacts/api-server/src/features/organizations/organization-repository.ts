@@ -173,6 +173,18 @@ export type OrganizationFamilyReviewRecord = {
   status: "proposed" | "not_related";
 };
 
+export function hasManualOrganizationMembershipConflict(
+  records: { id: string; parentOrganizationId: string | null }[],
+  candidateIds: string[],
+): boolean {
+  const candidates = new Set(candidateIds);
+  return records.some((record) =>
+    candidates.has(record.id)
+    && Boolean(record.parentOrganizationId)
+    && candidates.has(record.parentOrganizationId!),
+  );
+}
+
 export type OrganizationFamilyActRelationship = {
   sourceOrganizationId: string;
   targetOrganizationId: string;
@@ -1105,6 +1117,8 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       groupRows.rows,
       discoveredFamilies,
       reviews,
+    ).filter(
+      (group) => !hasManualOrganizationMembershipConflict(familyRecords, group.candidateIds),
     );
     const visibleFamilies = reviewGroups.filter(
       (group) => group.classification !== "duplicate",
