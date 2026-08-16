@@ -69,7 +69,40 @@ jobs:
       - run: pnpm --filter @workspace/db build
       - run: pnpm --filter @workspace/api-server build
       - run: pnpm --filter @workspace/adventure-zone build
-      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: Compare typecheck with current main
+        run: |
+          set +e
+          pnpm --filter @workspace/adventure-zone typecheck > /tmp/feature-typecheck.log 2>&1
+          feature_status=$?
+          set -e
+          grep 'error TS' /tmp/feature-typecheck.log | sed -E 's#^.*(src/[^(:]+\([^)]*\): error TS[0-9]+:.*)$#\1#' > /tmp/feature-errors.txt || true
+
+          git worktree add --detach /tmp/current-main origin/main
+          (cd /tmp/current-main && pnpm install --frozen-lockfile >/tmp/main-install.log 2>&1)
+          set +e
+          (cd /tmp/current-main && pnpm --filter @workspace/adventure-zone typecheck > /tmp/main-typecheck.log 2>&1)
+          main_status=$?
+          set -e
+          grep 'error TS' /tmp/main-typecheck.log | sed -E 's#^.*(src/[^(:]+\([^)]*\): error TS[0-9]+:.*)$#\1#' > /tmp/main-errors.txt || true
+
+          echo '--- merged feature typecheck errors ---'
+          cat /tmp/feature-errors.txt
+          echo '--- current main typecheck errors ---'
+          cat /tmp/main-errors.txt
+
+          if [ "$feature_status" -eq 0 ]; then
+            echo 'Merged feature typecheck passes.'
+          else
+            if [ "$main_status" -eq 0 ]; then
+              echo 'Feature has TypeScript errors but current main does not.' >&2
+              exit 1
+            fi
+            if ! diff -u /tmp/main-errors.txt /tmp/feature-errors.txt; then
+              echo 'Merged feature TypeScript errors differ from current main.' >&2
+              exit 1
+            fi
+            echo 'Merged feature has exactly the same TypeScript errors as current main; no new errors introduced.'
+          fi
       - name: Safety guards
         run: |
           grep -q '043_act_archive_full_recovery.sql' lib/db/src/migrations.ts
