@@ -37,7 +37,7 @@ describe("ManagerCommunicationsAdminPage",()=>{
   it("shows meetup requests and acknowledgment reviews as tabs, not separate pages",async()=>{
     render(<ManagerCommunicationsAdminPage/>);
     fireEvent.click(await screen.findByRole("button",{name:/Requests/}));
-    expect(await screen.findByText(/Bismarck/)).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Bismarck")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button",{name:/Needs review/}));
     expect(await screen.findByText("Route changed")).toBeInTheDocument();
     expect(screen.getByText(/Please double-check this stop/)).toBeInTheDocument();
