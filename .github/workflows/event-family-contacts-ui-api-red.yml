@@ -26,3 +26,4 @@ jobs:
           test ! -f artifacts/api-server/src/features/event-families/family-shared-contact.ts
           test ! -f artifacts/adventure-zone/src/components/event-families/event-family-website-contacts.tsx
           test ! -f artifacts/adventure-zone/src/components/event-profiles/family-contact-summary.tsx
+# trigger
