@@ -12,6 +12,7 @@ import ManagerIncidentsPage from "@/pages/ManagerIncidentsPage";
 import ManagerCrewPage from "@/pages/ManagerCrewPage";
 import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
 import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
+import ManagerEventWrapUpPage from "@/pages/ManagerEventWrapUpPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerMessagesPage from "@/pages/ManagerMessagesPage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
@@ -187,6 +188,7 @@ function ManagerProtectedApp() {
       <Switch>
         <Route path="/manager/incidents/new"><ManagerIncidentPage /></Route>
         <Route path="/manager/incidents"><ManagerIncidentsPage /></Route>
+        <Route path="/manager/events/:bookingId/wrap-up">{(params)=><ManagerEventWrapUpPage bookingId={params.bookingId}/>}</Route>
         <Route path="/manager/reviews"><ManagerEventReviewPage /></Route>
         <Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>
         <Route path="/manager/crew"><ManagerCrewPage /></Route>
@@ -220,39 +222,32 @@ function AppRoutes() {
           <AppShell>
             <Switch>
               <Route path="/today" component={TodayPage} />
-              <Route path="/bookings/new" component={EventProfileNewPage} />
-              <Route path="/bookings/:bookingId/edit" component={BookingEditPage} />
-              <Route path="/bookings/:bookingId" component={BookingDetailPage} />
               <Route path="/bookings" component={BookingsPage} />
+              <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
+              <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>
               <Route path="/contacts/new" component={ContactNewPage} />
-              <Route path="/contacts/:contactId/edit" component={ContactEditPage} />
-              <Route path="/contacts/:contactId" component={ContactDetailPage} />
+              <Route path="/contacts/:id/edit">{(params)=><ContactEditPage contactId={params.id}/>}</Route>
+              <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
               <Route path="/contacts" component={ContactsPage} />
-              <Route path="/profiles/:profileId">
-                {(params) => <Redirect to={`/event-profiles/${params.profileId}`} />}
-              </Route>
-              <Route path="/profiles" component={OrganizationsPage} />
-              <Route path="/organizations/:organizationId">
-                {(params) => <Redirect to={`/event-profiles/${params.organizationId}`} />}
-              </Route>
               <Route path="/organizations" component={OrganizationsPage} />
-              <Route path="/event-families/:familyId" component={EventFamilyPage} />
+              <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
               <Route path="/calendar" component={CalendarPage} />
-              <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
+              <Route path="/routes" component={RoutesPage} />
+              <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
+              <Route path="/calls/workspace" component={CallWorkspacePage} />
+              <Route path="/calls/mobile" component={MobileCallLogPage} />
+              <Route path="/event-profiles/new" component={EventProfileNewPage} />
+              <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
+              <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
+              <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
+              <Route path="/settings" component={SettingsStub} />
+              <Route path="/act-migration" component={ActMigrationPage} />
+              <Route path="/quick-add" component={QuickAddPage} />
               <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
+              <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
               <Route path="/manager-crew" component={ManagerCrewAdminPage} />
               <Route path="/manager-aftermath" component={ManagerAftermathAdminPage} />
-              <Route path="/routes" component={RoutesPage} />
-              <Route path="/trips/:tripId" component={TripDetailPage} />
-              <Route path="/calls/new" component={CallWorkspacePage} />
-              <Route path="/calls/log"><MobileCallLogPage /></Route>
-              <Route path="/event-profiles/new" component={EventProfileNewPage} />
-              <Route path="/event-profiles/:profileId/edit" component={EventProfileEditPage} />
-              <Route path="/event-profiles/:profileId" component={EventProfilePage} />
-              <Route path="/quick-add" component={QuickAddPage} />
-              <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
-              <Route path="/settings/act-migration" component={ActMigrationPage} />
-              <Route path="/settings/{*rest}" component={SettingsStub} />
+              <Route path="/manager-issues" component={ManagerIssuesAdminPage} />
               <Route component={NotFound} />
             </Switch>
           </AppShell>
@@ -262,17 +257,15 @@ function AppRoutes() {
   );
 }
 
-function App() {
+export default function App() {
   return (
-    <WouterRouter base={basePath}>
-      <AuthProvider>
-        <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <WouterRouter base={basePath}>
+        <AuthProvider>
           <OfflineBanner />
           <AppRoutes />
-        </QueryClientProvider>
-      </AuthProvider>
-    </WouterRouter>
+        </AuthProvider>
+      </WouterRouter>
+    </QueryClientProvider>
   );
 }
-
-export default App;
