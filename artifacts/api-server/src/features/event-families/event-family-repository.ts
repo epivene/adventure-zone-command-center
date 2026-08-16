@@ -24,9 +24,25 @@ export async function ensureEventFamilySchema(pool: Pool = defaultPool): Promise
       name text NOT NULL,
       normalized_name text NOT NULL UNIQUE,
       description text,
+      website text,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     );
+    ALTER TABLE event_families ADD COLUMN IF NOT EXISTS website text;
+    CREATE TABLE IF NOT EXISTS event_family_contacts (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      family_id uuid NOT NULL REFERENCES event_families(id) ON DELETE CASCADE,
+      contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE RESTRICT,
+      role text,
+      is_primary boolean NOT NULL DEFAULT false,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (family_id, contact_id)
+    );
+    CREATE INDEX IF NOT EXISTS event_family_contacts_family_idx ON event_family_contacts(family_id);
+    CREATE INDEX IF NOT EXISTS event_family_contacts_contact_idx ON event_family_contacts(contact_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS event_family_contacts_one_primary_per_family
+      ON event_family_contacts(family_id) WHERE is_primary = true;
     CREATE TABLE IF NOT EXISTS event_family_members (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
       family_id uuid NOT NULL REFERENCES event_families(id) ON DELETE CASCADE,
@@ -108,7 +124,7 @@ export class EventFamilyRepository {
 
   async getFamily(id: string) {
     const familyResult = await this.pool.query(
-      `SELECT id, name, normalized_name AS "normalizedName", description FROM event_families WHERE id = $1`,
+      `SELECT id, name, normalized_name AS "normalizedName", description, website FROM event_families WHERE id = $1`,
       [id],
     );
     const family = familyResult.rows[0];
@@ -123,7 +139,17 @@ export class EventFamilyRepository {
       WHERE m.family_id = $1
       ORDER BY o.name
     `, [id]);
-    return { ...family, memberCount: members.rows.length, members: members.rows };
+    const familyContacts = await this.pool.query(`
+      SELECT efc.contact_id AS "contactId",
+             concat_ws(' ', c.first_name, c.last_name) AS name,
+             c.first_name AS "firstName", c.last_name AS "lastName",
+             c.phone, c.email, efc.role, efc.is_primary AS "isPrimary"
+      FROM event_family_contacts efc
+      JOIN contacts c ON c.id = efc.contact_id
+      WHERE efc.family_id = $1
+      ORDER BY efc.is_primary DESC, c.first_name, c.last_name, c.id
+    `, [id]);
+    return { ...family, contacts: familyContacts.rows, memberCount: members.rows.length, members: members.rows };
   }
 
   async listPendingSuggestions(): Promise<EventFamilySuggestionRecord[]> {
@@ -228,6 +254,115 @@ export class EventFamilyRepository {
       `UPDATE event_families SET name = $2, normalized_name = $3, updated_at = now() WHERE id = $1 RETURNING id`,
       [id, name.trim(), normalizeFamilyName(name)],
     );
+    return result.rowCount === 1;
+  }
+
+  async updateWebsite(id: string, website: string | null): Promise<boolean> {
+    const result = await this.pool.query(
+      `UPDATE event_families SET website = $2, updated_at = now() WHERE id = $1 RETURNING id`,
+      [id, website?.trim() || null],
+    );
+    return result.rowCount === 1;
+  }
+
+  async listContactCandidates(familyId: string, query: string) {
+    const family = await this.pool.query(`SELECT id FROM event_families WHERE id = $1`, [familyId]);
+    if (!family.rows[0]) throw new EventFamilyNotFoundError("Family not found");
+    const term = `%${query.trim()}%`;
+    const result = await this.pool.query(`
+      SELECT c.id, concat_ws(' ', c.first_name, c.last_name) AS name,
+             c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email, c.job_title AS "jobTitle"
+      FROM contacts c
+      WHERE NOT EXISTS (
+        SELECT 1 FROM event_family_contacts efc WHERE efc.family_id = $1 AND efc.contact_id = c.id
+      )
+        AND ($2 = '%%' OR c.first_name ILIKE $2 OR c.last_name ILIKE $2
+             OR concat_ws(' ', c.first_name, c.last_name) ILIKE $2
+             OR COALESCE(c.phone, '') ILIKE $2 OR COALESCE(c.email, '') ILIKE $2)
+      ORDER BY c.first_name, c.last_name, c.id
+      LIMIT 30
+    `, [familyId, term]);
+    return result.rows;
+  }
+
+  async attachContact(familyId: string, contactId: string, role: string | null, makePrimary: boolean) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const family = await client.query(`SELECT id FROM event_families WHERE id = $1 FOR UPDATE`, [familyId]);
+      if (!family.rows[0]) throw new EventFamilyNotFoundError("Family not found");
+      const contact = await client.query(`SELECT id FROM contacts WHERE id = $1`, [contactId]);
+      if (!contact.rows[0]) throw new EventFamilyNotFoundError("Contact not found");
+      const existing = await client.query(`SELECT id FROM event_family_contacts WHERE family_id = $1 AND contact_id = $2`, [familyId, contactId]);
+      if (existing.rows[0]) throw new EventFamilyConflictError("Contact is already attached to this event family");
+      if (makePrimary) await client.query(`UPDATE event_family_contacts SET is_primary = false, updated_at = now() WHERE family_id = $1 AND is_primary = true`, [familyId]);
+      await client.query(`INSERT INTO event_family_contacts (family_id, contact_id, role, is_primary) VALUES ($1,$2,$3,$4)`, [familyId, contactId, role?.trim() || null, makePrimary]);
+      const linked = await client.query(`
+        SELECT efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
+               c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email,
+               efc.role, efc.is_primary AS "isPrimary"
+        FROM event_family_contacts efc JOIN contacts c ON c.id = efc.contact_id
+        WHERE efc.family_id = $1 AND efc.contact_id = $2
+      `, [familyId, contactId]);
+      await client.query("COMMIT");
+      return linked.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async createAndAttachContact(familyId: string, input: { firstName: string; lastName: string; phone: string | null; email: string | null; role: string | null; makePrimary: boolean }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const family = await client.query(`SELECT id FROM event_families WHERE id = $1 FOR UPDATE`, [familyId]);
+      if (!family.rows[0]) throw new EventFamilyNotFoundError("Family not found");
+      const created = await client.query(`
+        INSERT INTO contacts (first_name, last_name, phone, email, organization_id, created_at, updated_at)
+        VALUES ($1,$2,$3,$4,NULL,now(),now()) RETURNING id
+      `, [input.firstName.trim(), input.lastName.trim(), input.phone?.trim() || null, input.email?.trim().toLowerCase() || null]);
+      const contactId = created.rows[0].id as string;
+      await client.query(`INSERT INTO act_contact_sync_states (contact_id, local_dirty, state, created_at, updated_at) VALUES ($1,true,'waiting',now(),now())`, [contactId]);
+      if (input.makePrimary) await client.query(`UPDATE event_family_contacts SET is_primary = false, updated_at = now() WHERE family_id = $1 AND is_primary = true`, [familyId]);
+      await client.query(`INSERT INTO event_family_contacts (family_id, contact_id, role, is_primary) VALUES ($1,$2,$3,$4)`, [familyId, contactId, input.role?.trim() || null, input.makePrimary]);
+      const linked = await client.query(`
+        SELECT efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
+               c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email,
+               efc.role, efc.is_primary AS "isPrimary"
+        FROM event_family_contacts efc JOIN contacts c ON c.id = efc.contact_id
+        WHERE efc.family_id = $1 AND efc.contact_id = $2
+      `, [familyId, contactId]);
+      await client.query("COMMIT");
+      return linked.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
+
+  async updateFamilyContact(familyId: string, contactId: string, input: { role: string | null; isPrimary: boolean }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const linked = await client.query(`SELECT id FROM event_family_contacts WHERE family_id = $1 AND contact_id = $2 FOR UPDATE`, [familyId, contactId]);
+      if (!linked.rows[0]) throw new EventFamilyNotFoundError("Family contact not found");
+      if (input.isPrimary) await client.query(`UPDATE event_family_contacts SET is_primary = false, updated_at = now() WHERE family_id = $1 AND is_primary = true`, [familyId]);
+      await client.query(`UPDATE event_family_contacts SET role = $3, is_primary = $4, updated_at = now() WHERE family_id = $1 AND contact_id = $2`, [familyId, contactId, input.role?.trim() || null, input.isPrimary]);
+      const result = await client.query(`
+        SELECT efc.contact_id AS "contactId", concat_ws(' ', c.first_name, c.last_name) AS name,
+               c.first_name AS "firstName", c.last_name AS "lastName", c.phone, c.email,
+               efc.role, efc.is_primary AS "isPrimary"
+        FROM event_family_contacts efc JOIN contacts c ON c.id = efc.contact_id
+        WHERE efc.family_id = $1 AND efc.contact_id = $2
+      `, [familyId, contactId]);
+      await client.query("COMMIT");
+      return result.rows[0];
+    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  }
+
+  async removeFamilyContact(familyId: string, contactId: string): Promise<boolean> {
+    const result = await this.pool.query(`DELETE FROM event_family_contacts WHERE family_id = $1 AND contact_id = $2 RETURNING id`, [familyId, contactId]);
     return result.rowCount === 1;
   }
 
