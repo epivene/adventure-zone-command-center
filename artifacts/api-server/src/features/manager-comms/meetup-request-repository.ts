@@ -5,7 +5,7 @@ type DrizzleDatabase = typeof database;
 export type MeetupRequestStatus = "pending_admin" | "approved" | "dismissed";
 export type MeetupRequest = {
   id:string;status:MeetupRequestStatus;requestingLegId:string;otherLegIds:string[];resourceId:string;
-  meetupLabel:string;meetupLatitude:number;meetupLongitude:number;preferredStartsAt:Date;preferredEndsAt:Date;
+  meetupLabel:string;meetupLatitude:number|null;meetupLongitude:number|null;preferredStartsAt:Date;preferredEndsAt:Date;
   notes:string|null;linkedConversationId:string|null;linkedMessageId:string|null;clientMutationId:string;
   handoffId:string|null;adminNotes:string|null;dismissedReason:string|null;createdAt:Date;updatedAt:Date;
 };
@@ -18,7 +18,7 @@ create table if not exists manager_meetup_requests(
  requesting_leg_id uuid not null,
  other_leg_ids uuid[] not null,
  resource_id uuid not null references resources(id) on delete restrict,
- meetup_label text not null, meetup_latitude double precision not null, meetup_longitude double precision not null,
+ meetup_label text not null, meetup_latitude double precision, meetup_longitude double precision,
  preferred_starts_at timestamptz not null, preferred_ends_at timestamptz not null,
  notes text, linked_conversation_id uuid references manager_conversations(id) on delete set null,
  linked_message_id uuid references manager_messages(id) on delete set null,
@@ -26,6 +26,8 @@ create table if not exists manager_meetup_requests(
  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
  unique(requesting_leg_id,client_mutation_id), check(preferred_ends_at>=preferred_starts_at)
 );
+alter table manager_meetup_requests alter column meetup_latitude drop not null;
+alter table manager_meetup_requests alter column meetup_longitude drop not null;
 create index if not exists manager_meetup_requests_status_idx on manager_meetup_requests(status,created_at desc);
 `);
 export class MeetupRequestRepository{
