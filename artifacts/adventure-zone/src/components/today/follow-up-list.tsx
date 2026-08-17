@@ -6,47 +6,28 @@ import { followUpHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
-import {
-  BUSINESS_TIME_ZONE,
-  classifyBusinessDueDate,
-} from "@/lib/business-date";
+import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
 
 function formatDate(value: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeZone: BUSINESS_TIME_ZONE,
-  }).format(value);
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
 }
 
 function formatKind(value: string) {
   return value.replaceAll("_", " ");
 }
 
-export function FollowUpList({
-  followUps,
-  now,
-}: {
-  followUps: FollowUpSummary[];
-  now: Date;
-}) {
+export function FollowUpList({ followUps, now }: { followUps: FollowUpSummary[]; now: Date }) {
   const [items, setItems] = useState(followUps);
-
-  const overdueCount = items.filter(
-    (followUp) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue",
-  ).length;
+  const overdueCount = items.filter((followUp) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
 
   return (
-    <section aria-label="Follow-up queue" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section id="follow-ups" aria-label="Follow-up queue" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">Follow-ups</h2>
           <p className="mt-1 text-sm text-slate-600">Work straight down the queue. Overdue items stay first.</p>
         </div>
-        {overdueCount ? (
-          <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-            {overdueCount} overdue
-          </span>
-        ) : null}
+        {overdueCount ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">{overdueCount} overdue</span> : null}
       </div>
 
       {items.length ? (
@@ -56,18 +37,14 @@ export function FollowUpList({
             return (
               <li className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between" key={followUp.id}>
                 <div className="min-w-0 flex-1">
-                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={followUpHref(followUp)}>
-                    {followUp.bookingName}
-                  </Link>
+                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={followUpHref(followUp)}>{followUp.bookingName}</Link>
                   <p className="mt-0.5 text-sm capitalize text-slate-600">{formatKind(followUp.kind)}</p>
                   <BookingOperations operations={followUp.operations} />
                   <FollowUpControls
                     followUp={{ id: followUp.id, kind: followUp.kind, dueAt: followUp.dueAt, completedAt: null }}
                     onEdit={async (id, input) => {
                       const result = await editFollowUpAction({ followUpId: id, kind: input.kind, dueAt: new Date(input.dueAt), completed: false, outcome: null });
-                      if (result.ok) {
-                        setItems((current) => current.map((f) => f.id === id ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt } : f));
-                      }
+                      if (result.ok) setItems((current) => current.map((f) => f.id === id ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt } : f));
                       return result;
                     }}
                     onDelete={async (id) => {
@@ -77,16 +54,12 @@ export function FollowUpList({
                     }}
                   />
                 </div>
-                <p className={`shrink-0 text-sm font-semibold ${overdue ? "text-rose-700" : "text-slate-700"}`}>
-                  {overdue ? "Overdue" : "Due"} {formatDate(followUp.dueAt)}
-                </p>
+                <p className={`shrink-0 text-sm font-semibold ${overdue ? "text-rose-700" : "text-slate-700"}`}>{overdue ? "Overdue" : "Due"} {formatDate(followUp.dueAt)}</p>
               </li>
             );
           })}
         </ol>
-      ) : (
-        <p className="mt-4 text-sm text-slate-600">No open follow-ups.</p>
-      )}
+      ) : <p className="mt-4 text-sm text-slate-600">No open follow-ups.</p>}
     </section>
   );
 }
