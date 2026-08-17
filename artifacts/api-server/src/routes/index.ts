@@ -29,6 +29,7 @@ import managerTravelRouter from "./leg-manager-travel";
 import managerWrapUpsRouter from "./leg-manager-wrap-ups";
 import managerCommunicationsRouter from "./manager-communications";
 import managerMeetupsRouter from "./manager-meetups";
+import managerAssistantRouter from "./manager-assistant";
 import managerAdminRouter from "./leg-manager-admin";
 import managerTravelAdminRouter from "./manager-travel-admin";
 import eventWrapUpAdminRouter from "./event-wrap-up-admin";
@@ -47,6 +48,7 @@ router.use(managerTravelRouter);
 router.use(managerWrapUpsRouter);
 router.use(managerCommunicationsRouter);
 router.use(managerMeetupsRouter);
+router.use(managerAssistantRouter);
 
 router.use(requireOwnerMiddleware);
 router.use(managerAdminRouter);
