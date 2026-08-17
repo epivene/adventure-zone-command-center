@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
+import { getArchivedProfiles } from "@/actions/profile-lifecycle";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import { ArchiveProfileButton } from "@/components/record-lifecycle/archive-profile-button";
@@ -33,6 +34,13 @@ export default function EventProfilePage() {
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     try {
+      const archived = await getArchivedProfiles();
+      if (archived.some((profile) => profile.id === profileId)) {
+        setData(null);
+        setError("This profile is archived. Restore it from Archived records to use it again.");
+        setLoading(false);
+        return;
+      }
       const d = await apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`);
       {
         const ratingSummary = await apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 }));
@@ -92,7 +100,14 @@ export default function EventProfilePage() {
   }
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading profile…</p></div>;
-  if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
+  if (error || !data) return (
+    <div className="mx-auto max-w-7xl">
+      <p className="mt-8 text-rose-700">{error ?? "Not found"}</p>
+      {error?.includes("archived") ? (
+        <button className="button-secondary mt-3" onClick={() => setLocation("/archived")} type="button">Open Archived records</button>
+      ) : null}
+    </div>
+  );
 
   const recoveredActNotes = [...new Set(
     (Array.isArray(data.migrationHistory?.notes) ? data.migrationHistory.notes : [])
