@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import {
   DrizzlePackageIntelligenceSettingsRepository,
+  PackageIntelligenceSettingsValidationError,
 } from "@/features/packages/package-intelligence-settings";
 import { PackageSettingsError } from "@/features/packages/package-repository";
 import {
@@ -38,7 +39,10 @@ router.post("/settings/package-templates", async (req, res): Promise<void> => {
       .updatePackageTemplate(req.body, actorId);
     res.json({ ok: true, record });
   } catch (err) {
-    if (err instanceof PackageSettingsError) {
+    if (
+      err instanceof PackageSettingsError ||
+      err instanceof PackageIntelligenceSettingsValidationError
+    ) {
       res.status(400).json({ ok: false, error: err.message });
       return;
     }
