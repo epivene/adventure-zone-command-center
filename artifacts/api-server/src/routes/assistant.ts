@@ -6,6 +6,7 @@ import {
 } from "@/features/assistant/assistant-input";
 import { AssistantService } from "@/features/assistant/assistant-service";
 import { BookingContextRepository } from "@/features/assistant/booking-context-repository";
+import { ProfileContextRepository } from "@/features/assistant/profile-context-repository";
 import type {
   AssistantContextKind,
   BookingAssistantContextBundle,
@@ -19,7 +20,13 @@ async function loadContext(input: {
 }): Promise<BookingAssistantContextBundle | null> {
   switch (input.contextKind) {
     case "booking":
-      return new BookingContextRepository().getBookingContext(
+      return new BookingContextRepository().getBookingContext(input.contextRecordId);
+    case "organization":
+      return new ProfileContextRepository().getOrganizationContext(
+        input.contextRecordId,
+      );
+    case "event_family":
+      return new ProfileContextRepository().getEventFamilyContext(
         input.contextRecordId,
       );
     default:
