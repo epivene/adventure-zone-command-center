@@ -6,14 +6,15 @@ import type {
   SpecialRequestTreatment,
 } from "./package-types";
 
-type AttractionTotalPolicy = {
+export type AttractionTotalPolicy = {
   suggested: number | null;
   minimum: number | null;
   maximum: number | null;
+  advisoryMessage: string | null;
 };
 
 type SharedAttractionTotalError = {
-  code: "TOTAL_REQUIRED" | "APPROVAL_REASON_REQUIRED";
+  code: "TOTAL_REQUIRED";
 };
 
 type PackageAttribution = {
@@ -25,19 +26,33 @@ export function getAttractionTotalPolicy(
   packages: readonly PackageTemplateSummary[],
 ): AttractionTotalPolicy {
   if (packages.length === 0) {
-    return { suggested: null, minimum: null, maximum: null };
-  }
-
-  if (packages.length === 1) {
-    const baseAttractionCount = packages[0]?.baseAttractionCount ?? null;
     return {
-      suggested: baseAttractionCount,
-      minimum: baseAttractionCount,
-      maximum: baseAttractionCount,
+      suggested: null,
+      minimum: null,
+      maximum: null,
+      advisoryMessage: null,
     };
   }
 
-  return { suggested: 10, minimum: 10, maximum: 12 };
+  const suggested = packages.reduce(
+    (sum, pkg) => sum + pkg.baseAttractionCount,
+    0,
+  );
+  const minimum = packages.reduce(
+    (sum, pkg) => sum + (pkg.minimumAttractionCount ?? pkg.baseAttractionCount),
+    0,
+  );
+  const maximum = packages.reduce(
+    (sum, pkg) => sum + (pkg.maximumAttractionCount ?? pkg.baseAttractionCount),
+    0,
+  );
+
+  return {
+    suggested,
+    minimum,
+    maximum,
+    advisoryMessage: null,
+  };
 }
 
 export function validateSharedAttractionTotal(input: {
@@ -46,16 +61,9 @@ export function validateSharedAttractionTotal(input: {
   approvalReason: string | null;
 }): Result<void, SharedAttractionTotalError> {
   if (input.packages.length === 0 || input.physicalAttractionTotal === null) {
-    return input.packages.length === 0 ? ok(undefined) : err({ code: "TOTAL_REQUIRED" });
-  }
-
-  const policy = getAttractionTotalPolicy(input.packages);
-  const isOutOfRange =
-    input.physicalAttractionTotal < (policy.minimum ?? input.physicalAttractionTotal) ||
-    input.physicalAttractionTotal > (policy.maximum ?? input.physicalAttractionTotal);
-
-  if (isOutOfRange && !input.approvalReason?.trim()) {
-    return err({ code: "APPROVAL_REASON_REQUIRED" });
+    return input.packages.length === 0
+      ? ok(undefined)
+      : err({ code: "TOTAL_REQUIRED" });
   }
 
   return ok(undefined);

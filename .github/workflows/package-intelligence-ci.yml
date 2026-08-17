@@ -1,0 +1,40 @@
+name: Package Intelligence CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/packages/**"
+      - "artifacts/api-server/src/features/resources/**"
+      - "artifacts/api-server/src/routes/booking-package-editor.ts"
+      - "artifacts/api-server/src/routes/bookings.ts"
+      - "artifacts/api-server/src/routes/settings.ts"
+      - "artifacts/adventure-zone/src/features/packages/**"
+      - "artifacts/adventure-zone/src/features/resources/**"
+      - "artifacts/adventure-zone/src/components/packages/**"
+      - "artifacts/adventure-zone/src/components/resources/**"
+      - "artifacts/adventure-zone/src/components/bookings/**"
+      - "artifacts/adventure-zone/src/pages/BookingDetailPage.tsx"
+      - "artifacts/adventure-zone/src/pages/BookingEditPage.tsx"
+      - "lib/db/migrations/044_package_intelligence.sql"
+      - ".github/workflows/package-intelligence-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  package-intelligence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Package intelligence tests
+        run: pnpm exec vitest run artifacts/api-server/src/features/packages/package-policy.test.ts artifacts/api-server/src/features/packages/package-history.test.ts artifacts/adventure-zone/src/components/bookings/package-history-signals.test.tsx
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build

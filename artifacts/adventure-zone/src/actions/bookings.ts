@@ -1,6 +1,7 @@
-import { apiPost, apiPatch, apiFetch } from "@/lib/auth-token";
+import { apiPost, apiPatch } from "@/lib/auth-token";
 import type { BookingFormInput, BookingEditInput } from "@/features/bookings/booking-input";
 import type { CompleteFollowUpInput } from "@/features/bookings/booking-service";
+import type { ConfigureBookingPackagesInput } from "@/features/packages/package-input";
 
 export type BookingActionResult = { ok: true } | { ok: false; error: string };
 
@@ -12,9 +13,7 @@ export async function createBookingAction(
       "/bookings",
       input,
     );
-    if (res.ok) {
-      return { ok: true, bookingId: res.bookingId };
-    }
+    if (res.ok) return { ok: true, bookingId: res.bookingId };
     return { ok: false, error: res.error ?? "Could not create booking." };
   } catch (e: any) {
     return { ok: false, error: e.message ?? "Could not create booking." };
@@ -30,9 +29,7 @@ export async function updateBookingAction(
       `/bookings/${bookingId}`,
       input,
     );
-    if (res.ok) {
-      return { ok: true };
-    }
+    if (res.ok) return { ok: true };
     return { ok: false, error: res.error ?? "Could not update booking." };
   } catch (e: any) {
     return { ok: false, error: e.message ?? "Could not update booking." };
@@ -41,21 +38,15 @@ export async function updateBookingAction(
 
 export async function completeFollowUpAction(input: CompleteFollowUpInput) {
   try {
-    const res = await apiPost<any>("/bookings/complete-follow-up", input);
-    return res;
+    return await apiPost<any>("/bookings/complete-follow-up", input);
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
 }
 
-export async function configureBookingPackagesAction(input: {
-  bookingId: string;
-  packageTemplateIds: string[];
-  physicalAttractionTotal: number | null;
-  attractionTotalApprovalReason: string | null;
-  resourceAttributions: Record<string, string[]>;
-  specialRequestDecisions: Array<{ id: string; status: string; reason: string | null }>;
-}) {
+export async function configureBookingPackagesAction(
+  input: ConfigureBookingPackagesInput,
+): Promise<BookingActionResult> {
   try {
     return await apiPost<BookingActionResult>("/bookings/configure-packages", input);
   } catch (e: any) {
@@ -99,10 +90,9 @@ export async function addSpecialRequestAction(input: {
 }
 
 export async function decideSpecialRequestAction(input: {
-  bookingId: string;
-  requestId: string;
-  status: string;
-  reason: string | null;
+  specialRequestId: string;
+  decision: "approved" | "declined";
+  reason: string;
 }) {
   try {
     return await apiPost<BookingActionResult>("/bookings/decide-special-request", input);

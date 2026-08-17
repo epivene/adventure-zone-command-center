@@ -6,9 +6,22 @@ import {
   packageTemplateInputSchema,
   type PackageTemplateInput,
 } from "@/features/packages/package-input";
-import type { PackageTemplateSettingsRecord } from "@/features/packages/package-repository";
 
 type EditorResult = { ok: true } | { ok: false; error: string };
+
+export type PackageTemplateSettingsRecord = {
+  id: string;
+  code: string;
+  name: string;
+  baseAttractionCount: number;
+  minimumAttractionCount?: number;
+  maximumAttractionCount?: number;
+  customerDescription?: string | null;
+  bookingTalkingPoints?: string | null;
+  operationalRequirements?: string | null;
+  setupNotes?: string | null;
+  active: boolean;
+};
 
 function PackageTemplateForm({
   template,
@@ -23,11 +36,27 @@ function PackageTemplateForm({
     id: template.id,
     name: template.name,
     baseAttractionCount: template.baseAttractionCount,
+    minimumAttractionCount:
+      template.minimumAttractionCount ?? template.baseAttractionCount,
+    maximumAttractionCount:
+      template.maximumAttractionCount ?? template.baseAttractionCount,
+    customerDescription: template.customerDescription ?? null,
+    bookingTalkingPoints: template.bookingTalkingPoints ?? null,
+    operationalRequirements: template.operationalRequirements ?? null,
+    setupNotes: template.setupNotes ?? null,
     active: template.active,
   });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  function update<K extends keyof PackageTemplateInput>(
+    key: K,
+    next: PackageTemplateInput[K],
+  ) {
+    setValue((current) => ({ ...current, [key]: next }));
+    setSaved(false);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,7 +78,6 @@ function PackageTemplateForm({
       }
       setValue(parsed.data);
       setSaved(true);
-      // Data re-fetches on navigation; no client-side refresh needed.
     } catch {
       setError("The package template could not be saved. Try again.");
     } finally {
@@ -63,7 +91,7 @@ function PackageTemplateForm({
       className="grid gap-4 rounded-xl border border-slate-200 p-4"
       onSubmit={handleSubmit}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <label className="grid gap-1 text-sm font-semibold">
           Stable code
           <input
@@ -77,34 +105,91 @@ function PackageTemplateForm({
           Name
           <input
             aria-label={`${template.name} name`}
-            onChange={(event) => {
-              const name = event.currentTarget.value;
-              setValue((current) => ({
-                ...current,
-                name,
-              }));
-              setSaved(false);
-            }}
+            onChange={(event) => update("name", event.currentTarget.value)}
             type="text"
             value={value.name}
           />
         </label>
         <label className="grid gap-1 text-sm font-semibold">
-          Base attraction count
+          Suggested count
           <input
-            aria-label={`${template.name} base attraction count`}
+            aria-label={`${template.name} suggested attraction count`}
             min={1}
-            onChange={(event) => {
-              const baseAttractionCount = Number(event.currentTarget.value);
-              setValue((current) => ({
-                ...current,
-                baseAttractionCount,
-              }));
-              setSaved(false);
-            }}
+            onChange={(event) =>
+              update("baseAttractionCount", Number(event.currentTarget.value))
+            }
             step={1}
             type="number"
             value={value.baseAttractionCount}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Normal minimum
+          <input
+            aria-label={`${template.name} normal minimum`}
+            min={1}
+            onChange={(event) =>
+              update("minimumAttractionCount", Number(event.currentTarget.value))
+            }
+            step={1}
+            type="number"
+            value={value.minimumAttractionCount}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Normal maximum
+          <input
+            aria-label={`${template.name} normal maximum`}
+            min={1}
+            onChange={(event) =>
+              update("maximumAttractionCount", Number(event.currentTarget.value))
+            }
+            step={1}
+            type="number"
+            value={value.maximumAttractionCount}
+          />
+        </label>
+      </div>
+
+      <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+        These are normal guidelines, not limits. Bookings can still go above or below this range.
+      </p>
+
+      <div className="grid gap-3 lg:grid-cols-2">
+        <label className="grid gap-1 text-sm font-semibold">
+          Customer description
+          <textarea
+            onChange={(event) => update("customerDescription", event.currentTarget.value)}
+            placeholder="How we describe this package to customers"
+            rows={3}
+            value={value.customerDescription ?? ""}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Booking talking points
+          <textarea
+            onChange={(event) => update("bookingTalkingPoints", event.currentTarget.value)}
+            placeholder="Useful sales points, common fits, or questions to ask"
+            rows={3}
+            value={value.bookingTalkingPoints ?? ""}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Operational requirements
+          <textarea
+            onChange={(event) => update("operationalRequirements", event.currentTarget.value)}
+            placeholder="Space, water, power, forklift, or site needs"
+            rows={3}
+            value={value.operationalRequirements ?? ""}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Setup notes
+          <textarea
+            onChange={(event) => update("setupNotes", event.currentTarget.value)}
+            placeholder="Typical setup or teardown guidance"
+            rows={3}
+            value={value.setupNotes ?? ""}
           />
         </label>
       </div>
@@ -113,14 +198,7 @@ function PackageTemplateForm({
         <input
           aria-label={`${template.name} active`}
           checked={value.active}
-          onChange={(event) => {
-            const active = event.currentTarget.checked;
-            setValue((current) => ({
-              ...current,
-              active,
-            }));
-            setSaved(false);
-          }}
+          onChange={(event) => update("active", event.currentTarget.checked)}
           type="checkbox"
         />
         Active package
@@ -171,8 +249,7 @@ export function PackageTemplateEditor({
           Package templates
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Update the name and base attraction count. Turn Active off to
-          deactivate a package while preserving booking history.
+          Set the normal package size and keep booking and setup knowledge in one place. Equipment remains editable for each event.
         </p>
       </div>
       <div className="grid gap-4">
