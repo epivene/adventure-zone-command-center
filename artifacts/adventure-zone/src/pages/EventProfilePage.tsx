@@ -6,6 +6,7 @@ import { EventRatingSummary } from "@/components/event-profiles/event-rating-sum
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
+import { DerivedFactsReview } from "@/components/assistant/derived-facts-review";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
@@ -134,6 +135,8 @@ export default function EventProfilePage() {
       </div>
 
       <SimpleFullProfile profile={data} />
+
+      {profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
       {(data.wrapUpRatingSummary?.count ?? 0) > 0 ? (
         <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
