@@ -41,6 +41,14 @@ export async function createAdminQuestionRecord(
 export class PostgresAdminQuestionRepository implements AdminQuestionStore {
   constructor(private readonly pool: Pool = defaultPool) {}
 
+  async getById(id: string): Promise<AdminQuestionRecord | null> {
+    const result = await this.pool.query(
+      `SELECT * FROM manager_admin_questions WHERE id=$1 LIMIT 1`,
+      [id],
+    );
+    return result.rows[0] ? mapQuestion(result.rows[0]) : null;
+  }
+
   async findByClientMutationId(id: string): Promise<AdminQuestionRecord | null> {
     const result = await this.pool.query(
       `SELECT id, client_mutation_id, travel_leg_id, booking_id, trip_id,
