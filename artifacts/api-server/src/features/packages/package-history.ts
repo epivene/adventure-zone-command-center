@@ -101,13 +101,13 @@ export function derivePackageHistoryComparison(input: {
     const priorWithTotal = priorBookings.find(
       (booking) => booking.physicalAttractionTotal !== null,
     );
-    if (priorWithTotal?.physicalAttractionTotal !== null && priorWithTotal) {
+    if (priorWithTotal && priorWithTotal.physicalAttractionTotal !== null) {
+      const previousCount = priorWithTotal.physicalAttractionTotal;
       signals.push({
         kind: "main_attraction_difference",
-        previousCount: priorWithTotal.physicalAttractionTotal,
+        previousCount,
         currentCount: input.currentPhysicalAttractionTotal,
-        difference:
-          input.currentPhysicalAttractionTotal - priorWithTotal.physicalAttractionTotal,
+        difference: input.currentPhysicalAttractionTotal - previousCount,
         sourceBookingId: priorWithTotal.id,
       });
     }
