@@ -9,6 +9,7 @@ import { ensureBookingProbabilitySchema } from "./features/bookings/booking-prob
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
+import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
 import {
   createActExtractionRuntime,
@@ -30,6 +31,7 @@ const appliedMigrations = await runActReviewMigrations();
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
+await ensureEventLegLifecycleSchema();
 await new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
   "system:booking-assistant-seed",
 );
@@ -92,7 +94,7 @@ const shutdown = createActServerShutdown({
   },
   closeServer() {
     return new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+      server.close((error) => (error ? reject(error) : resolve());
     });
   },
   async closePool() {
