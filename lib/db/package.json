@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./migrations": "./src/migrations.ts",
     "./schema": "./src/schema/index.ts",
-    "./event-family-schema": "./src/event-family-schema.ts"
+    "./event-family-schema": "./src/event-family-schema.ts",
+    "./booking-assistant-schema": "./src/booking-assistant-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
