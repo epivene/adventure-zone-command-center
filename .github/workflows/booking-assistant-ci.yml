@@ -1,0 +1,47 @@
+name: Booking Assistant CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/assistant/**"
+      - "artifacts/api-server/src/routes/assistant.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/adventure-zone/src/features/assistant/**"
+      - "artifacts/adventure-zone/src/components/assistant/**"
+      - "artifacts/adventure-zone/src/components/navigation/app-shell.tsx"
+      - "artifacts/adventure-zone/src/pages/BookingDetailPage.tsx"
+      - "artifacts/adventure-zone/src/App.tsx"
+      - "lib/db/src/booking-assistant-schema.ts"
+      - "lib/db/src/booking-assistant-schema.test.ts"
+      - "lib/db/migrations/045_booking_assistant.sql"
+      - ".github/workflows/booking-assistant-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  booking-assistant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Assistant server tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/features/assistant/assistant-contracts.test.ts
+          artifacts/api-server/src/features/assistant/business-knowledge-repository.test.ts
+          artifacts/api-server/src/features/assistant/booking-context-builder.test.ts
+          artifacts/api-server/src/features/assistant/booking-brief.test.ts
+          artifacts/api-server/src/features/assistant/deterministic-answers.test.ts
+          artifacts/api-server/src/features/assistant/assistant-service.test.ts
+          lib/db/src/booking-assistant-schema.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
