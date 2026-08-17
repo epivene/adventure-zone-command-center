@@ -12,6 +12,7 @@ import { ensureBookingAssistantSchema } from "./features/assistant/assistant-sch
 import { ensureCrewWorkerLegMembershipSchema } from "./features/leg-manager/crew-worker-membership-schema";
 import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
+import { ensureManagerAssistantSchema } from "./features/manager-assistant/manager-assistant-schema";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -28,8 +29,10 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 await ensureBookingProbabilitySchema();
 await ensurePackageIntelligenceSchema();
 const assistantSchemaApplied = await ensureBookingAssistantSchema();
+const managerAssistantSchemaApplied = await ensureManagerAssistantSchema();
 const appliedMigrations = await runActReviewMigrations();
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
+if (managerAssistantSchemaApplied) appliedMigrations.push("046_manager_assistant_questions.sql");
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
 await ensureCrewWorkerLegMembershipSchema();
