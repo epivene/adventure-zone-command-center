@@ -15,6 +15,7 @@ const bookingIds = {
   possibleFuture: "30000000-0000-4000-8000-000000000005",
   confirmedUndated: "30000000-0000-4000-8000-000000000006",
   confirmedPastWithFutureAction: "30000000-0000-4000-8000-000000000007",
+  confirmedPastWithSentinelEnd: "30000000-0000-4000-8000-000000000008",
 } as const;
 
 async function createDatabase() {
@@ -72,7 +73,8 @@ async function seedCases(client: PGlite) {
       ('${bookingIds.confirmedPast}', 'Confirmed Past', '2026-08-13T17:00:00Z', '2026-08-14T23:00:00Z', 'confirmed'),
       ('${bookingIds.possibleFuture}', 'Possible Future', '2026-09-20T17:00:00Z', null, 'possible'),
       ('${bookingIds.confirmedUndated}', 'Confirmed Undated', null, null, 'confirmed'),
-      ('${bookingIds.confirmedPastWithFutureAction}', 'Confirmed Past With Action', '2026-08-12T17:00:00Z', '2026-08-13T23:00:00Z', 'confirmed');
+      ('${bookingIds.confirmedPastWithFutureAction}', 'Confirmed Past With Action', '2026-08-12T17:00:00Z', '2026-08-13T23:00:00Z', 'confirmed'),
+      ('${bookingIds.confirmedPastWithSentinelEnd}', 'Confirmed Past Sentinel', '2026-01-05T17:00:00Z', '2100-01-01T00:00:00Z', 'confirmed');
 
     insert into follow_ups (id, booking_id, kind, due_at, completed_at) values
       ('40000000-0000-4000-8000-000000000001', '${bookingIds.confirmedPastWithFutureAction}', 'call', '2026-08-20T17:00:00Z', null);
@@ -100,6 +102,7 @@ describe("Today upcoming/post-event separation", () => {
       expect(needsPlanIds).toContain(bookingIds.possibleFuture);
       expect(needsPlanIds).toContain(bookingIds.confirmedUndated);
       expect(needsPlanIds).not.toContain(bookingIds.confirmedPastWithFutureAction);
+      expect(needsPlanIds).toContain(bookingIds.confirmedPastWithSentinelEnd);
 
       const upcoming = await repository.listUpcomingEvents(start, 20);
       const upcomingIds = upcoming.map(({ id }) => id);
@@ -107,6 +110,7 @@ describe("Today upcoming/post-event separation", () => {
       expect(upcomingIds).toContain(bookingIds.confirmedFuture);
       expect(upcomingIds).toContain(bookingIds.confirmedToday);
       expect(upcomingIds).toContain(bookingIds.confirmedMultiDay);
+      expect(upcomingIds).not.toContain(bookingIds.confirmedPastWithSentinelEnd);
     } finally {
       await client.close();
     }
