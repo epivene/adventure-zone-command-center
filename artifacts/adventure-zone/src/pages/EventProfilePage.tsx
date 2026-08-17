@@ -5,6 +5,8 @@ import { EventProfileWorkspace } from "@/components/event-profiles/event-profile
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
+import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
+import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
@@ -12,6 +14,7 @@ export default function EventProfilePage() {
   const { profileId } = useParams<{ profileId: string }>();
   const search = useSearch();
   const [, setLocation] = useLocation();
+  const { openAssistant } = useAssistantContext();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,17 +104,34 @@ export default function EventProfilePage() {
       .map((note: string) => note.trim())
       .filter(Boolean),
   )];
+  const profileLabel = String(data.name ?? data.organization?.name ?? "Profile");
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
-      <button
-        aria-label="Back"
-        className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-        onClick={goBack}
-        type="button"
-      >
-        <span aria-hidden="true">←</span> Back
-      </button>
+      {profileId ? (
+        <AssistantContextRegistration
+          kind="organization"
+          label={profileLabel}
+          recordId={profileId}
+        />
+      ) : null}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button
+          aria-label="Back"
+          className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+          onClick={goBack}
+          type="button"
+        >
+          <span aria-hidden="true">←</span> Back
+        </button>
+        <button
+          className="button-secondary"
+          onClick={() => openAssistant("What do I need to know before I contact them?")}
+          type="button"
+        >
+          Ask Assistant
+        </button>
+      </div>
 
       <SimpleFullProfile profile={data} />
 
