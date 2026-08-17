@@ -10,7 +10,12 @@ on:
       - "artifacts/adventure-zone/src/features/assistant/**"
       - "artifacts/adventure-zone/src/components/assistant/**"
       - "artifacts/adventure-zone/src/components/navigation/app-shell.tsx"
+      - "artifacts/adventure-zone/src/lib/auth-context.tsx"
       - "artifacts/adventure-zone/src/pages/BookingDetailPage.tsx"
+      - "artifacts/adventure-zone/src/pages/ContactDetailPage.tsx"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage.tsx"
+      - "artifacts/adventure-zone/src/pages/EventFamilyPage.tsx"
+      - "artifacts/adventure-zone/src/pages/CallWorkspacePage.tsx"
       - "artifacts/adventure-zone/src/App.tsx"
       - "lib/db/src/booking-assistant-schema.ts"
       - "lib/db/src/booking-assistant-schema.test.ts"
@@ -40,6 +45,8 @@ jobs:
           artifacts/api-server/src/features/assistant/booking-brief.test.ts
           artifacts/api-server/src/features/assistant/deterministic-answers.test.ts
           artifacts/api-server/src/features/assistant/assistant-service.test.ts
+          artifacts/api-server/src/features/assistant/derived-fact-extractor.test.ts
+          artifacts/adventure-zone/src/features/assistant/assistant-offline-cache.test.ts
           lib/db/src/booking-assistant-schema.test.ts
       - name: Workspace typecheck
         run: pnpm run typecheck
