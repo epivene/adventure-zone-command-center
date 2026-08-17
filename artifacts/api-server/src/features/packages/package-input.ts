@@ -86,11 +86,32 @@ export const packageTemplateInputSchema = z
       .max(100, "Package name is too long."),
     baseAttractionCount: z
       .number()
-      .int("Base attraction count must be a whole number.")
-      .positive("Base attraction count must be at least one."),
+      .int("Suggested attraction count must be a whole number.")
+      .positive("Suggested attraction count must be at least one."),
+    minimumAttractionCount: z
+      .number()
+      .int("Normal minimum must be a whole number.")
+      .positive("Normal minimum must be at least one."),
+    maximumAttractionCount: z
+      .number()
+      .int("Normal maximum must be a whole number.")
+      .positive("Normal maximum must be at least one."),
+    customerDescription: nullableTrimmedString,
+    bookingTalkingPoints: nullableTrimmedString,
+    operationalRequirements: nullableTrimmedString,
+    setupNotes: nullableTrimmedString,
     active: z.boolean(),
   })
-  .strict();
+  .strict()
+  .superRefine((input, context) => {
+    if (input.maximumAttractionCount < input.minimumAttractionCount) {
+      context.addIssue({
+        code: "custom",
+        path: ["maximumAttractionCount"],
+        message: "Maximum must be at least the minimum.",
+      });
+    }
+  });
 
 export type ConfigureBookingPackagesInput = z.output<
   typeof configureBookingPackagesInputSchema
