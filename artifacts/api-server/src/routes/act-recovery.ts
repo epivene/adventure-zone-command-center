@@ -4,6 +4,7 @@ import type {
   ActRecoveryReviewPage,
   ActRecoveryStatus,
 } from "@/features/act-recovery/review-service";
+import type { ActRecoveryCleanupRetrySummary } from "@/features/act-recovery/review-cleanup-service";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const targetEntityTypes = new Set(["organization", "contact", "booking"] as const);
@@ -17,6 +18,7 @@ export interface ActRecoveryRouteService {
   }): Promise<ActRecoveryStatus>;
   status(input?: { runId?: string; sourceDatabaseKey?: string }): Promise<ActRecoveryStatus>;
   reviewPage(input: { page: number; pageSize: number }): Promise<ActRecoveryReviewPage>;
+  cleanupAndRetry(input: { decidedBy: string }): Promise<ActRecoveryCleanupRetrySummary>;
   assign(input: {
     sourceRecordId: string;
     sourceVersionId: string;
@@ -77,15 +79,27 @@ async function productionService(): Promise<ActRecoveryRouteService> {
     { db },
     { DrizzleActArchiveRecoveryRepository },
     { ActRecoveryReviewService },
+    { ActRecoveryReviewCleanupService },
   ] = await Promise.all([
     import("@/db/client"),
     import("@/features/act-recovery/recovery-repository"),
     import("@/features/act-recovery/review-service"),
+    import("@/features/act-recovery/review-cleanup-service"),
   ]);
-  return new ActRecoveryReviewService(
+  const review = new ActRecoveryReviewService(
     db,
     new DrizzleActArchiveRecoveryRepository(db),
   );
+  const cleanup = new ActRecoveryReviewCleanupService(db);
+  return {
+    startRun: (input) => review.startRun(input),
+    status: (input) => review.status(input),
+    reviewPage: (input) => review.reviewPage(input),
+    cleanupAndRetry: (input) => cleanup.cleanupAndRetry(input.decidedBy),
+    assign: (input) => review.assign(input),
+    drop: (input) => review.drop(input),
+    retry: (input) => review.retry(input),
+  };
 }
 
 export function createActRecoveryRouter(input: {
@@ -136,6 +150,17 @@ export function createActRecoveryRouter(input: {
     const pageSize = Math.max(1, Math.min(100, Number.parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
     try {
       res.json(await withService((service) => service.reviewPage({ page, pageSize })));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  router.post("/act-recovery/review/cleanup-retry", async (_req, res) => {
+    try {
+      res.json({
+        ok: true,
+        summary: await withService((service) => service.cleanupAndRetry({ decidedBy: "owner" })),
+      });
     } catch (error) {
       sendError(res, error);
     }
