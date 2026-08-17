@@ -113,7 +113,7 @@ export default function EventProfilePage() {
         <span aria-hidden="true">←</span> Back
       </button>
 
-      <SimpleFullProfile profile={data} />
+      <SimpleFullProfile profile={data} onProfileSaved={loadProfile} />
 
       {(data.wrapUpRatingSummary?.count ?? 0) > 0 ? (
         <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
