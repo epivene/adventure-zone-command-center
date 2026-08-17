@@ -49,6 +49,7 @@ export type ManagerAdminQuestion = {
   urgency: "normal" | "urgent";
   status: "needs_answer" | "answered" | "resolved";
   escalationReason: string;
+  latestAdminResponse?: string | null;
   createdAt?: string;
   answeredAt?: string | null;
 };
