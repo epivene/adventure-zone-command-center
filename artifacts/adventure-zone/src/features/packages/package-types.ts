@@ -19,4 +19,8 @@ export type PackageTemplateSummary = {
   code: string;
   name: string;
   baseAttractionCount: number;
+  /** Advisory lower bound. Optional until the additive DB migration lands. */
+  minimumAttractionCount?: number;
+  /** Advisory upper bound. Optional until the additive DB migration lands. */
+  maximumAttractionCount?: number;
 };
