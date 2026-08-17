@@ -8,6 +8,17 @@ const router: IRouter = Router();
 const requireManager = createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));
 const crew = new DrizzleCrewRepository(db);
 
+router.post("/manager/crew/:workerId/claim", requireManager, async (req, res): Promise<void> => {
+  const raw = req.params.workerId;
+  const workerId = Array.isArray(raw) ? raw[0] ?? "" : raw;
+  if (!workerId || !(await crew.getWorker(workerId))) {
+    res.status(404).json({ error: "Worker not found" });
+    return;
+  }
+  await crew.addWorkerToLeg(workerId, req.legManager!.legId);
+  res.json({ ok: true });
+});
+
 router.delete("/manager/crew/:workerId", requireManager, async (req, res): Promise<void> => {
   const raw = req.params.workerId;
   const workerId = Array.isArray(raw) ? raw[0] ?? "" : raw;
@@ -25,7 +36,7 @@ router.delete("/manager/crew/:workerId", requireManager, async (req, res): Promi
     return;
   }
   await crew.deleteWorker(workerId);
-  res.status(204).end();
+  res.json({ ok: true });
 });
 
 export default router;
