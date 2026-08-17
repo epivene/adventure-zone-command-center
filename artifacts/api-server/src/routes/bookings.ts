@@ -12,6 +12,7 @@ import {
   configureBookingPackagesInputSchema,
   decideSpecialRequestInputSchema,
 } from "@/features/packages/package-input";
+import { PackageHistoryRepository } from "@/features/packages/package-history";
 import { DrizzlePackageRepository } from "@/features/packages/package-repository";
 import { PackageService } from "@/features/packages/package-service";
 import { DrizzleResourceRepository } from "@/features/resources/resource-repository";
@@ -45,7 +46,6 @@ const packageErrorMessages: Record<string, string> = {
   ASSIGNMENT_NOT_OWNED_BY_BOOKING: "A resource assignment changed. Refresh and review package attribution.",
   ATTRIBUTION_PACKAGE_NOT_SELECTED: "Resource attribution can use only selected packages.",
   TOTAL_REQUIRED: "Enter the shared physical attraction total.",
-  APPROVAL_REASON_REQUIRED: "Add an approval reason for an attraction total outside the usual range.",
   SPECIAL_REQUEST_NOT_PENDING: "This request was already decided. Refresh to see its current status.",
 };
 
@@ -83,7 +83,6 @@ router.post("/bookings", async (req, res): Promise<void> => {
   }
 });
 
-// Must be before /:id so Express matches complete-follow-up literally
 router.post("/bookings/complete-follow-up", async (req, res): Promise<void> => {
   try {
     const service = new BookingService(bookingRepo() as any);
@@ -204,13 +203,18 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
     const detail = await bookingRepo().getBookingDetail(id);
     if (!detail) { res.status(404).json({ error: "Not found" }); return; }
     const activitySvc = new ActivityService(new DrizzleActivityRepository(db));
-    // Include archived legs so a booking already assigned to one still renders it;
-    // the picker filters archived legs out of the selectable options client-side.
-    const [allTravelLegs, timelinePage] = await Promise.all([
+    const [allTravelLegs, timelinePage, packageHistoryComparison] = await Promise.all([
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
       activitySvc.listTimeline({ bookingId: id }),
+      new PackageHistoryRepository().compareBooking(id),
     ]);
-    res.json({ ...detail, allTravelLegs, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage });
+    res.json({
+      ...detail,
+      allTravelLegs,
+      timeline: timelinePage.items,
+      timelineNextPage: timelinePage.nextPage,
+      packageHistoryComparison,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to get booking");
     res.status(500).json({ error: "Failed to get booking" });
