@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "artifacts/api-server/src/features/manager-assistant/**"
+      - "artifacts/api-server/src/features/assistant/assistant-types.ts"
       - "artifacts/api-server/src/routes/manager-assistant*.ts"
       - "artifacts/api-server/src/routes/index.ts"
       - "artifacts/api-server/src/index.ts"
@@ -40,6 +41,7 @@ jobs:
           artifacts/api-server/src/features/manager-assistant/manager-assistant-input.test.ts
           artifacts/api-server/src/features/manager-assistant/manager-assistant-context.test.ts
           artifacts/api-server/src/features/manager-assistant/manager-deterministic-answers.test.ts
+          artifacts/api-server/src/features/manager-assistant/manager-assistant-service.test.ts
           artifacts/api-server/src/features/manager-assistant/admin-question-repository.test.ts
           artifacts/api-server/src/features/manager-assistant/admin-question-service.test.ts
           artifacts/adventure-zone/src/features/manager-assistant/manager-assistant-offline-cache.test.ts
