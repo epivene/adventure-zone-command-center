@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { CalendarDays, ContactRound, House } from "lucide-react";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
+import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
+import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 
 const primaryNavigation = [
   { href: "/today", label: "Today", icon: House },
@@ -49,6 +51,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
 
+      <AssistantLauncher />
+      <AssistantDrawer />
       <MobileBottomNav />
     </div>
   );
