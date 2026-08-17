@@ -3,6 +3,7 @@ import { Bot, WifiOff, X } from "lucide-react";
 
 import {
   askBookingAssistant,
+  getLatestAssistantConversation,
   loadAssistantSnapshot,
 } from "@/features/assistant/assistant-api";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
@@ -18,6 +19,7 @@ export function AssistantDrawer() {
   const { activeContext, closeAssistant, isOpen, prefill } = useAssistantContext();
   const [contextBundle, setContextBundle] = useState<AssistantContextBundle | null>(null);
   const [brief, setBrief] = useState<BookingBrief | null>(null);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<AssistantAnswer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,6 +44,7 @@ export function AssistantDrawer() {
   useEffect(() => {
     if (!isOpen) return;
     setAnswers([]);
+    setConversationId(undefined);
     setContextBundle(null);
     setBrief(null);
     setError(null);
@@ -51,13 +54,39 @@ export function AssistantDrawer() {
     if (!activeContext) return;
     let cancelled = false;
     setLoading(true);
-    loadAssistantSnapshot(activeContext)
-      .then((snapshot) => {
+    Promise.all([
+      loadAssistantSnapshot(activeContext),
+      getLatestAssistantConversation(activeContext).catch(() => null),
+    ])
+      .then(([snapshot, conversation]) => {
         if (cancelled) return;
         setContextBundle(snapshot.context);
         setBrief(snapshot.brief);
         setOffline(snapshot.offline);
         setSavedAt(snapshot.savedAt);
+        if (conversation) {
+          setConversationId(conversation.id);
+          setAnswers(
+            conversation.messages.flatMap((message) => {
+              if (
+                message.role !== "assistant" ||
+                !message.answerMode ||
+                !message.confidence
+              ) {
+                return [];
+              }
+              return [
+                {
+                  text: message.body,
+                  mode: message.answerMode,
+                  confidence: message.confidence,
+                  sources: message.sources,
+                  needsAdmin: false as const,
+                },
+              ];
+            }),
+          );
+        }
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -86,10 +115,12 @@ export function AssistantDrawer() {
       const result = await askBookingAssistant({
         context: activeContext,
         question: submitted,
+        conversationId,
       });
       setContextBundle(result.context);
       setBrief(result.brief);
       setOffline(result.answer.mode === "offline_cached");
+      if (result.conversationId) setConversationId(result.conversationId);
       setAnswers((current) => [...current, result.answer]);
     } catch (cause) {
       setError(
@@ -149,6 +180,11 @@ export function AssistantDrawer() {
           ) : (
             <div className="grid gap-4">
               {brief ? <BookingBriefCard brief={brief} context={contextBundle} /> : null}
+              {answers.length > 0 ? (
+                <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                  Conversation
+                </p>
+              ) : null}
               {answers.map((answer, index) => (
                 <AssistantMessage answer={answer} key={`${answer.mode}-${index}`} />
               ))}
