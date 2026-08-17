@@ -8,7 +8,7 @@ describe("ProfileDetailSheet", () => {
   it("keeps the simple profile workspace and full-profile escape hatch", () => {
     expect(source).toContain('type Tab = "overview" | "notes" | "events"');
     expect(source).toContain("ProfileActionsMenu");
-    expect(source).toContain("Open full");
+    expect(source).toContain("fullPageHref");
     expect(source).toContain("More profile details");
   });
 
