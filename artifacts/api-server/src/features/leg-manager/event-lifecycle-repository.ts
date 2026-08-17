@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
-import { bookings } from "@/db/schema";
+import { bookings, travelLegs } from "@/db/schema";
 import { eventLegLifecycle } from "./event-lifecycle-schema";
 
 export const eventLocationStatuses = ["captured","unavailable","denied","error","not_requested"] as const;
@@ -15,6 +15,10 @@ export class EventLifecycleRepository {
 
   async bookingBelongsToLeg(bookingId: string, legId: string) {
     return Boolean((await this.database.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.travelLegId, legId))).limit(1))[0]);
+  }
+
+  async bookingCanCheckIn(bookingId: string, legId: string) {
+    return Boolean((await this.database.select({ id: bookings.id }).from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.travelLegId, legId), eq(bookings.status, "confirmed"))).limit(1))[0]);
   }
 
   async get(bookingId: string, legId: string): Promise<EventLifecycleRecord | null> {
@@ -87,6 +91,28 @@ export class EventLifecycleRepository {
   }
 
   async listAll() {
-    return this.database.select().from(eventLegLifecycle);
+    return this.database
+      .select({
+        id: eventLegLifecycle.id,
+        bookingId: eventLegLifecycle.bookingId,
+        bookingName: bookings.name,
+        city: bookings.city,
+        region: bookings.region,
+        legId: eventLegLifecycle.legId,
+        legName: travelLegs.name,
+        checkedInAt: eventLegLifecycle.checkedInAt,
+        checkInLatitude: eventLegLifecycle.checkInLatitude,
+        checkInLongitude: eventLegLifecycle.checkInLongitude,
+        checkInLocationStatus: eventLegLifecycle.checkInLocationStatus,
+        checkedOutAt: eventLegLifecycle.checkedOutAt,
+        checkOutLatitude: eventLegLifecycle.checkOutLatitude,
+        checkOutLongitude: eventLegLifecycle.checkOutLongitude,
+        checkOutLocationStatus: eventLegLifecycle.checkOutLocationStatus,
+        wrapUpStatus: eventLegLifecycle.wrapUpStatus,
+        wrapUpFinishedAt: eventLegLifecycle.wrapUpFinishedAt,
+      })
+      .from(eventLegLifecycle)
+      .innerJoin(bookings, eq(bookings.id, eventLegLifecycle.bookingId))
+      .innerJoin(travelLegs, eq(travelLegs.id, eventLegLifecycle.legId));
   }
 }
