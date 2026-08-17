@@ -43,6 +43,8 @@ export default function ManagerHomePage() {
     managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
   }, [managerApi]);
 
+  useEffect(() => () => setActiveContext(null), [setActiveContext]);
+
   const location = [nextEvent?.city, nextEvent?.region].filter(Boolean).join(", ");
   const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
   const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
