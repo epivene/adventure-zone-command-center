@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
+import { indexedDbManagerMutationStore } from "@/lib/manager-offline-db";
 import { flushManagerBlobQueue } from "@/lib/manager-blob-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
 import { ManagerActionCenter } from "./manager-action-center";
@@ -17,13 +18,20 @@ export function ManagerShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const flush = () => void (async () => {
       await flushManagerMutationQueue(managerApi);
-      await flushManagerBlobQueue(async row => {
-        await managerApi(`/manager/receipts/${row.receiptId}/image`, {
-          method: "PUT",
-          headers: { "Content-Type": row.blob.type || "image/jpeg" },
-          body: row.blob,
-        });
-      });
+      await flushManagerBlobQueue(
+        async row => {
+          await managerApi(`/manager/receipts/${row.receiptId}/image`, {
+            method: "PUT",
+            headers: { "Content-Type": row.blob.type || "image/jpeg" },
+            body: row.blob,
+          });
+        },
+        undefined,
+        async row => {
+          const mutations = await indexedDbManagerMutationStore.list();
+          return mutations.some((mutation) => mutation.id === row.receiptId && mutation.path === "/manager/receipts" && mutation.state === "synced");
+        },
+      );
     })().catch(() => undefined);
     flush();
     window.addEventListener("online", flush);
