@@ -4,6 +4,7 @@ import {
   askBookingAssistantInputSchema,
   getAssistantContextInputSchema,
 } from "@/features/assistant/assistant-input";
+import { AssistantConversationRepository } from "@/features/assistant/assistant-conversation-repository";
 import { AssistantService } from "@/features/assistant/assistant-service";
 import { BookingContextRepository } from "@/features/assistant/booking-context-repository";
 import { ProfileContextRepository } from "@/features/assistant/profile-context-repository";
@@ -86,7 +87,28 @@ router.get("/assistant/brief", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/assistant/conversation", async (req, res): Promise<void> => {
+  const actorId = (req as any).userId as string;
+  const parsed = getAssistantContextInputSchema.safeParse({
+    contextKind: req.query.kind,
+    contextRecordId: req.query.id,
+  });
+  if (!parsed.success) {
+    res.status(400).json({ error: "Review the assistant context." });
+    return;
+  }
+  try {
+    const conversation = await new AssistantConversationRepository()
+      .getLatestConversation({ actorId, ...parsed.data });
+    res.json({ conversation });
+  } catch (err) {
+    req.log.error({ err }, "Failed to resume assistant conversation");
+    res.status(500).json({ error: "Could not load the assistant conversation." });
+  }
+});
+
 router.post("/assistant/ask", async (req, res): Promise<void> => {
+  const actorId = (req as any).userId as string;
   const parsed = askBookingAssistantInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
@@ -96,10 +118,31 @@ router.post("/assistant/ask", async (req, res): Promise<void> => {
   }
   try {
     const result = await service().ask(parsed.data);
-    res.json(result);
+    const conversations = new AssistantConversationRepository();
+    const conversationId = await conversations.ensureConversation({
+      conversationId: parsed.data.conversationId,
+      actorId,
+      contextKind: parsed.data.contextKind,
+      contextRecordId: parsed.data.contextRecordId,
+      firstQuestion: parsed.data.question,
+    });
+    await conversations.appendExchange({
+      conversationId,
+      actorId,
+      question: parsed.data.question,
+      answer: result.answer,
+    });
+    res.json({ ...result, conversationId });
   } catch (err) {
     if (err instanceof Error && err.message === "ASSISTANT_CONTEXT_NOT_FOUND") {
       res.status(404).json({ error: "Assistant context not found." });
+      return;
+    }
+    if (
+      err instanceof Error &&
+      err.message === "ASSISTANT_CONVERSATION_NOT_FOUND"
+    ) {
+      res.status(404).json({ error: "Assistant conversation not found." });
       return;
     }
     req.log.error({ err }, "Booking Assistant ask failed");
