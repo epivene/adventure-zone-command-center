@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Bot, X } from "lucide-react";
+import { Bot, WifiOff, X } from "lucide-react";
 
 import {
   askBookingAssistant,
-  getAssistantContext,
-  getBookingBrief,
+  loadAssistantSnapshot,
 } from "@/features/assistant/assistant-api";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import type {
@@ -23,6 +22,8 @@ export function AssistantDrawer() {
   const [answers, setAnswers] = useState<AssistantAnswer[]>([]);
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const contextKey = useMemo(
@@ -44,18 +45,19 @@ export function AssistantDrawer() {
     setContextBundle(null);
     setBrief(null);
     setError(null);
+    setOffline(false);
+    setSavedAt(null);
 
     if (!activeContext) return;
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      getAssistantContext(activeContext),
-      getBookingBrief(activeContext),
-    ])
-      .then(([context, nextBrief]) => {
+    loadAssistantSnapshot(activeContext)
+      .then((snapshot) => {
         if (cancelled) return;
-        setContextBundle(context);
-        setBrief(nextBrief);
+        setContextBundle(snapshot.context);
+        setBrief(snapshot.brief);
+        setOffline(snapshot.offline);
+        setSavedAt(snapshot.savedAt);
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -87,6 +89,7 @@ export function AssistantDrawer() {
       });
       setContextBundle(result.context);
       setBrief(result.brief);
+      setOffline(result.answer.mode === "offline_cached");
       setAnswers((current) => [...current, result.answer]);
     } catch (cause) {
       setError(
@@ -128,10 +131,18 @@ export function AssistantDrawer() {
           </button>
         </header>
 
+        {offline ? (
+          <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800">
+            <WifiOff className="h-4 w-4" />
+            Offline — using saved Command Center data
+            {savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.
+          </div>
+        ) : null}
+
         <div className="flex-1 overflow-y-auto p-4">
           {!activeContext ? (
             <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
-              Open a booking first. As more contexts are connected, this same assistant will also follow you through profiles, event families, calls, and routes.
+              Open a booking, profile, or event family for contextual help.
             </div>
           ) : loading ? (
             <p className="py-10 text-center text-sm text-slate-500">Building Booking Brief…</p>
@@ -165,7 +176,9 @@ export function AssistantDrawer() {
           />
           <div className="mt-2 flex items-center justify-between gap-3">
             <p className="text-xs text-slate-500">
-              Routine questions use saved Command Center data first.
+              {offline
+                ? "Offline questions use the saved brief when possible."
+                : "Routine questions use saved Command Center data first."}
             </p>
             <button
               className="button-primary min-w-24"
