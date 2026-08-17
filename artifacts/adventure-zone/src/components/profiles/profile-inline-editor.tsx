@@ -110,6 +110,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
   const [contactValues, setContactValues] = useState<ContactDraft>(() => fallbackContactDraft(selectedContact));
   const [contactPhones, setContactPhones] = useState<ContactDetail["phones"]>([]);
   const [loadingContact, setLoadingContact] = useState(Boolean(selectedContact?.id));
+  const [contactLoaded, setContactLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -120,6 +121,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
   useEffect(() => {
     setContactValues(fallbackContactDraft(selectedContact));
     setContactPhones([]);
+    setContactLoaded(false);
     setError("");
     if (!selectedContact?.id) {
       setLoadingContact(false);
@@ -142,8 +144,9 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
           postalCode: detail.contact.postalCode ?? "",
         });
         setContactPhones(Array.isArray(detail.phones) ? detail.phones : []);
+        setContactLoaded(true);
       })
-      .catch(() => setError("The contact details could not be loaded. You can still edit the profile."))
+      .catch(() => setError("The contact details could not be loaded. You can still edit the profile fields."))
       .finally(() => setLoadingContact(false));
   }, [selectedContact?.id]);
 
@@ -161,7 +164,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
     setError("");
     try {
       await apiPatch(`/event-profiles/${profile.id}`, profileValues);
-      if (selectedContact?.id && !loadingContact) {
+      if (selectedContact?.id && contactLoaded) {
         await apiPut(`/contacts/${selectedContact.id}`, {
           contact: contactValues,
           phones: updatePrimaryPhone(contactPhones, contactValues.phone),
@@ -206,20 +209,20 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
         <section className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-bold">Contact</h2>
-            {loadingContact ? <span className="text-xs text-slate-500">Loading contact…</span> : null}
+            {loadingContact ? <span className="text-xs text-slate-500">Loading contact…</span> : !contactLoaded ? <span className="text-xs text-slate-500">Contact editing unavailable</span> : null}
           </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1.5 text-sm font-medium">First name<input value={contactValues.firstName} onChange={(event) => setContactField("firstName", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Last name<input value={contactValues.lastName} onChange={(event) => setContactField("lastName", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Role<input value={contactValues.jobTitle} onChange={(event) => setContactField("jobTitle", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Organization<input value={contactValues.organizationName} onChange={(event) => setContactField("organizationName", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Phone<input aria-label="Phone" type="tel" value={contactValues.phone} onChange={(event) => setContactField("phone", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Email<input type="email" value={contactValues.email} onChange={(event) => setContactField("email", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 1<input value={contactValues.address1} onChange={(event) => setContactField("address1", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 2<input value={contactValues.address2} onChange={(event) => setContactField("address2", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">City<input value={contactValues.city} onChange={(event) => setContactField("city", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">State<input value={contactValues.region} onChange={(event) => setContactField("region", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">ZIP code<input value={contactValues.postalCode} onChange={(event) => setContactField("postalCode", event.target.value)} /></label>
+          <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${contactLoaded ? "" : "opacity-60"}`} aria-disabled={!contactLoaded}>
+            <label className="grid gap-1.5 text-sm font-medium">First name<input disabled={!contactLoaded} value={contactValues.firstName} onChange={(event) => setContactField("firstName", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">Last name<input disabled={!contactLoaded} value={contactValues.lastName} onChange={(event) => setContactField("lastName", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">Role<input disabled={!contactLoaded} value={contactValues.jobTitle} onChange={(event) => setContactField("jobTitle", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">Organization<input disabled={!contactLoaded} value={contactValues.organizationName} onChange={(event) => setContactField("organizationName", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">Phone<input aria-label="Phone" disabled={!contactLoaded} type="tel" value={contactValues.phone} onChange={(event) => setContactField("phone", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">Email<input disabled={!contactLoaded} type="email" value={contactValues.email} onChange={(event) => setContactField("email", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 1<input disabled={!contactLoaded} value={contactValues.address1} onChange={(event) => setContactField("address1", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 2<input disabled={!contactLoaded} value={contactValues.address2} onChange={(event) => setContactField("address2", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">City<input disabled={!contactLoaded} value={contactValues.city} onChange={(event) => setContactField("city", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">State<input disabled={!contactLoaded} value={contactValues.region} onChange={(event) => setContactField("region", event.target.value)} /></label>
+            <label className="grid gap-1.5 text-sm font-medium">ZIP code<input disabled={!contactLoaded} value={contactValues.postalCode} onChange={(event) => setContactField("postalCode", event.target.value)} /></label>
           </div>
         </section>
       ) : null}
