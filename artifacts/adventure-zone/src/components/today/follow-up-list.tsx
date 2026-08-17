@@ -32,84 +32,52 @@ export function FollowUpList({
   const [items, setItems] = useState(followUps);
 
   const overdueCount = items.filter(
-    (followUp) =>
-      classifyBusinessDueDate(followUp.dueAt, now) === "overdue",
+    (followUp) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue",
   ).length;
 
   return (
-    <section
-      aria-label="Follow-up queue"
-      className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-    >
+    <section aria-label="Follow-up queue" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-xl font-bold">Overdue follow-ups</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            {overdueCount
-              ? `${overdueCount} need attention before the next call.`
-              : "No overdue calls. The next actions remain prioritized below."}
-          </p>
+          <h2 className="text-xl font-bold">Follow-ups</h2>
+          <p className="mt-1 text-sm text-slate-600">Work straight down the queue. Overdue items stay first.</p>
         </div>
-        <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-          {overdueCount} overdue
-        </span>
+        {overdueCount ? (
+          <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
+            {overdueCount} overdue
+          </span>
+        ) : null}
       </div>
 
       {items.length ? (
-        <ol className="mt-4 grid gap-3">
+        <ol className="mt-4 grid gap-2">
           {items.map((followUp) => {
-            const overdue =
-              classifyBusinessDueDate(followUp.dueAt, now) === "overdue";
+            const overdue = classifyBusinessDueDate(followUp.dueAt, now) === "overdue";
             return (
-              <li
-                className="flex flex-col gap-2 rounded-lg border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between"
-                key={followUp.id}
-              >
-                <div className="flex-1">
-                  <Link
-                    className="font-bold text-slate-950 hover:text-orange-700"
-                    href={followUpHref(followUp)}
-                  >
+              <li className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between" key={followUp.id}>
+                <div className="min-w-0 flex-1">
+                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={followUpHref(followUp)}>
                     {followUp.bookingName}
                   </Link>
-                  <p className="mt-0.5 text-sm capitalize text-slate-600">
-                    {formatKind(followUp.kind)}
-                  </p>
+                  <p className="mt-0.5 text-sm capitalize text-slate-600">{formatKind(followUp.kind)}</p>
                   <BookingOperations operations={followUp.operations} />
                   <FollowUpControls
-                    followUp={{
-                      id: followUp.id,
-                      kind: followUp.kind,
-                      dueAt: followUp.dueAt,
-                      completedAt: null,
-                    }}
+                    followUp={{ id: followUp.id, kind: followUp.kind, dueAt: followUp.dueAt, completedAt: null }}
                     onEdit={async (id, input) => {
                       const result = await editFollowUpAction({ followUpId: id, kind: input.kind, dueAt: new Date(input.dueAt), completed: false, outcome: null });
                       if (result.ok) {
-                        setItems((current) =>
-                          current.map((f) =>
-                            f.id === id
-                              ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt }
-                              : f,
-                          ),
-                        );
+                        setItems((current) => current.map((f) => f.id === id ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt } : f));
                       }
                       return result;
                     }}
                     onDelete={async (id) => {
                       const result = await deleteFollowUpAction(id);
-                      if (result.ok) {
-                        setItems((current) => current.filter((f) => f.id !== id));
-                      }
+                      if (result.ok) setItems((current) => current.filter((f) => f.id !== id));
                       return result;
                     }}
                   />
                 </div>
-                <p
-                  className={`shrink-0 text-sm font-semibold ${
-                    overdue ? "text-rose-700" : "text-slate-700"
-                  }`}
-                >
+                <p className={`shrink-0 text-sm font-semibold ${overdue ? "text-rose-700" : "text-slate-700"}`}>
                   {overdue ? "Overdue" : "Due"} {formatDate(followUp.dueAt)}
                 </p>
               </li>
