@@ -17,6 +17,7 @@ export type AdminQuestionCreateInput = {
 export type AdminQuestionRecord = AdminQuestionCreateInput & {
   id: string;
   status: "needs_answer" | "answered" | "resolved";
+  latestAdminResponse?: string | null;
   createdAt?: string;
   answeredAt?: string | null;
   resolvedAt?: string | null;
@@ -43,7 +44,11 @@ export class PostgresAdminQuestionRepository implements AdminQuestionStore {
 
   async getById(id: string): Promise<AdminQuestionRecord | null> {
     const result = await this.pool.query(
-      `SELECT * FROM manager_admin_questions WHERE id=$1 LIMIT 1`,
+      `SELECT q.*,
+              (SELECT r.body FROM manager_admin_question_responses r
+               WHERE r.question_id=q.id AND r.actor_type='admin'
+               ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_admin_response
+       FROM manager_admin_questions q WHERE q.id=$1 LIMIT 1`,
       [id],
     );
     return result.rows[0] ? mapQuestion(result.rows[0]) : null;
@@ -51,12 +56,12 @@ export class PostgresAdminQuestionRepository implements AdminQuestionStore {
 
   async findByClientMutationId(id: string): Promise<AdminQuestionRecord | null> {
     const result = await this.pool.query(
-      `SELECT id, client_mutation_id, travel_leg_id, booking_id, trip_id,
-              manager_session_subject, question, urgency, status,
-              escalation_reason, checked_source_refs, context_snapshot,
-              created_at, answered_at, resolved_at, updated_at
-       FROM manager_admin_questions
-       WHERE client_mutation_id = $1
+      `SELECT q.*,
+              (SELECT r.body FROM manager_admin_question_responses r
+               WHERE r.question_id=q.id AND r.actor_type='admin'
+               ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_admin_response
+       FROM manager_admin_questions q
+       WHERE q.client_mutation_id = $1
        LIMIT 1`,
       [id],
     );
@@ -93,9 +98,13 @@ export class PostgresAdminQuestionRepository implements AdminQuestionStore {
 
   async listForLeg(legId: string): Promise<AdminQuestionRecord[]> {
     const result = await this.pool.query(
-      `SELECT * FROM manager_admin_questions
-       WHERE travel_leg_id = $1
-       ORDER BY created_at DESC, id DESC
+      `SELECT q.*,
+              (SELECT r.body FROM manager_admin_question_responses r
+               WHERE r.question_id=q.id AND r.actor_type='admin'
+               ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_admin_response
+       FROM manager_admin_questions q
+       WHERE q.travel_leg_id = $1
+       ORDER BY q.created_at DESC, q.id DESC
        LIMIT 100`,
       [legId],
     );
@@ -104,9 +113,13 @@ export class PostgresAdminQuestionRepository implements AdminQuestionStore {
 
   async listOpenForAdmin(): Promise<AdminQuestionRecord[]> {
     const result = await this.pool.query(
-      `SELECT * FROM manager_admin_questions
-       WHERE status IN ('needs_answer','answered')
-       ORDER BY CASE WHEN urgency='urgent' THEN 0 ELSE 1 END, created_at ASC, id ASC
+      `SELECT q.*,
+              (SELECT r.body FROM manager_admin_question_responses r
+               WHERE r.question_id=q.id AND r.actor_type='admin'
+               ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_admin_response
+       FROM manager_admin_questions q
+       WHERE q.status IN ('needs_answer','answered')
+       ORDER BY CASE WHEN q.urgency='urgent' THEN 0 ELSE 1 END, q.created_at ASC, q.id ASC
        LIMIT 200`,
     );
     return result.rows.map(mapQuestion);
@@ -188,6 +201,7 @@ function mapQuestion(row: any): AdminQuestionRecord {
     escalationReason: row.escalation_reason,
     checkedSourceRefs: row.checked_source_refs ?? [],
     contextSnapshot: row.context_snapshot ?? {},
+    latestAdminResponse: row.latest_admin_response ?? null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : undefined,
     answeredAt: row.answered_at ? new Date(row.answered_at).toISOString() : null,
     resolvedAt: row.resolved_at ? new Date(row.resolved_at).toISOString() : null,
