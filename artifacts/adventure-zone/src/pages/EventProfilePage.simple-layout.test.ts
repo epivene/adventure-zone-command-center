@@ -23,4 +23,8 @@ describe("simple full profile", () => {
     expect(page).toContain("Imported ACT history");
     expect(page).toContain("<details");
   });
+
+  it("sanitizes imported ACT bodies before either full-profile surface receives them", () => {
+    expect(page).toContain("note.importedFromAct ? simplifyHistoryText");
+  });
 });
