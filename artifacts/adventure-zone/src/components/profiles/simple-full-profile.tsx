@@ -37,11 +37,11 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
 
   const nextFollowUp = useMemo(() => [...profile.followUps]
     .filter((item) => !item.completedAt && item.dueAt)
-    .sort((left, right) => new Date(left.dueAt).getTime() - new Date(right.dueAt).getTime())[0] ?? null, [profile.followUps]);
+    .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime())[0] ?? null, [profile.followUps]);
 
   const nextEvent = useMemo(() => [...profile.bookings]
-    .filter((item) => item.startsAt && new Date(item.startsAt).getTime() >= Date.now())
-    .sort((left, right) => new Date(left.startsAt!).getTime() - new Date(right.startsAt!).getTime())[0] ?? null, [profile.bookings]);
+    .filter((item) => item.startsAt && item.startsAt.getTime() >= Date.now())
+    .sort((left, right) => (left.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER) - (right.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER))[0] ?? null, [profile.bookings]);
 
   const recentNote = profile.notes[0] ?? null;
 
