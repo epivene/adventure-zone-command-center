@@ -225,7 +225,7 @@ export class ActTimelineRecovery {
       select candidate.id
       from activities candidate
       where candidate.source_record_id is not null
-        and candidate.deleted_at is null
+        and (to_jsonb(candidate)->>'deleted_at') is null
         and candidate.body = ${body}
         and candidate.timeline_sort_at = ${timelineSortAt}
         and (${sql.join(parentConditions, sql` or `)})
