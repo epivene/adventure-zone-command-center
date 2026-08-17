@@ -5,6 +5,7 @@ import type {
   ActRecoveryStatus,
 } from "@/features/act-recovery/review-service";
 import type { ActRecoveryCleanupRetrySummary } from "@/features/act-recovery/review-cleanup-service";
+import { cleanReviewSnapshot } from "@/features/act-recovery/review-cleanup";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const targetEntityTypes = new Set(["organization", "contact", "booking"] as const);
@@ -118,11 +119,13 @@ export function createActRecoveryRouter(input: {
     }
     const sourceDatabaseKey = optionalText(body.sourceDatabaseKey);
     try {
-      res.json(await withService((service) => service.startRun({
+      const started = await withService((service) => service.startRun({
         requestKey,
         requestedBy: "owner",
         ...(sourceDatabaseKey ? { sourceDatabaseKey } : {}),
-      })));
+      }));
+      await withService((service) => service.cleanupAndRetry({ decidedBy: "owner" }));
+      res.json(await withService((service) => service.status({ runId: started.runId })));
     } catch (error) {
       sendError(res, error);
     }
@@ -149,7 +152,14 @@ export function createActRecoveryRouter(input: {
     const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
     const pageSize = Math.max(1, Math.min(100, Number.parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
     try {
-      res.json(await withService((service) => service.reviewPage({ page, pageSize })));
+      const result = await withService((service) => service.reviewPage({ page, pageSize }));
+      res.json({
+        ...result,
+        items: result.items.map((item) => ({
+          ...item,
+          rawSnapshot: cleanReviewSnapshot(item.rawSnapshot),
+        })),
+      });
     } catch (error) {
       sendError(res, error);
     }
