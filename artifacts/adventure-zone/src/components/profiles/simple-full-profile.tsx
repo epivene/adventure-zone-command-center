@@ -3,6 +3,7 @@ import { Link } from "wouter";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
+import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import {
   createActivityAction,
@@ -12,6 +13,7 @@ import {
   loadTimelinePageAction,
 } from "@/actions/activities";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
+import { formatPhoneDisplay, phoneHref } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
 type Tab = "overview" | "notes" | "events";
@@ -30,8 +32,9 @@ function formatDateTime(value: Date | string | null | undefined) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Denver" }).format(date);
 }
 
-export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
+export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventProfile; onProfileSaved?: () => Promise<void> | void }) {
   const [tab, setTab] = useState<Tab>("overview");
+  const [editing, setEditing] = useState(false);
   const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
@@ -46,6 +49,9 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
     .sort((left, right) => (left.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER) - (right.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER))[0] ?? null, [profile.bookings]);
 
   const recentNote = meaningfulNotes[0] ?? null;
+  const visiblePhone = primaryContact?.phone ?? profile.place.phone ?? null;
+  const phoneText = formatPhoneDisplay(visiblePhone);
+  const phoneLink = phoneHref(visiblePhone);
 
   async function loadSimpleNotesPage(page: number) {
     const result = await loadTimelinePageAction({ organizationId: profile.id }, page);
@@ -56,6 +62,19 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
         .filter((item) => historyCategory(item) !== "system")
         .map((item) => ({ ...item, body: simplifyHistoryText(item.body) })),
     };
+  }
+
+  async function handleSaved() {
+    await onProfileSaved?.();
+    setEditing(false);
+  }
+
+  if (editing) {
+    return (
+      <div className="grid gap-4">
+        <ProfileInlineEditor profile={profile as any} contactId={primaryContact?.id ?? null} onSaved={handleSaved} onCancel={() => setEditing(false)} />
+      </div>
+    );
   }
 
   return (
@@ -71,18 +90,20 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
               {profile.familyContext ? <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-800">{profile.familyContext.kind === "event_family" ? "Family" : "Organization"}: {profile.familyContext.name}</span> : null}
             </div>
           </div>
-          <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} />
+          <div className="flex shrink-0 items-center gap-2">
+            <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit</button>
+            <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} />
+          </div>
         </div>
 
-        {primaryContact ? (
-          <div className="mt-4 border-t border-slate-100 pt-3">
-            <p className="font-semibold text-slate-900">{primaryContact.name}{primaryContact.role ? <span className="font-normal text-slate-500"> · {primaryContact.role}</span> : null}</p>
-            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-              {primaryContact.phone ? <a className="font-medium text-orange-700" href={`tel:${primaryContact.phone}`}>{primaryContact.phone}</a> : null}
-              {primaryContact.email ? <a className="font-medium text-orange-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
-            </div>
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          {primaryContact ? <p className="font-semibold text-slate-900">{primaryContact.name}{primaryContact.role ? <span className="font-normal text-slate-500"> · {primaryContact.role}</span> : null}</p> : null}
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            {phoneText && phoneLink ? <a className="font-medium text-orange-700" href={phoneLink}>{phoneText}</a> : null}
+            {primaryContact?.email ? <a className="font-medium text-orange-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
+            {websiteHref ? <a className="font-medium text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">{profile.place.website}</a> : null}
           </div>
-        ) : profile.place.phone ? <a className="mt-3 block text-sm font-medium text-orange-700" href={`tel:${profile.place.phone}`}>{profile.place.phone}</a> : null}
+        </div>
       </section>
 
       <div role="tablist" aria-label="Full profile sections" className="grid grid-cols-3 rounded-xl bg-slate-100 p-1">
@@ -105,7 +126,6 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
             <h2 className="font-bold">Profile details</h2>
             <div className="mt-3 grid gap-2 text-sm text-slate-700">
               {profile.place.address1 ? <p>{[profile.place.address1, profile.place.address2, profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(", ")}</p> : null}
-              {websiteHref ? <a className="font-medium text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">Visit website</a> : null}
               <p>{profile.contacts.length} contact{profile.contacts.length === 1 ? "" : "s"} · {profile.bookings.length} event{profile.bookings.length === 1 ? "" : "s"}</p>
             </div>
           </section>
