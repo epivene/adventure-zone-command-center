@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS business_knowledge_entries (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  seed_key text UNIQUE,
   scope text NOT NULL CHECK (scope IN ('global','package','resource','sales','operations')),
   scope_record_id uuid,
   title text NOT NULL CHECK (nullif(trim(title), '') IS NOT NULL),
