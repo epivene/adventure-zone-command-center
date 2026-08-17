@@ -34,7 +34,6 @@ export type PackageConfigurationError =
   | { code: "ASSIGNMENT_NOT_OWNED_BY_BOOKING" }
   | { code: "ATTRIBUTION_PACKAGE_NOT_SELECTED" }
   | { code: "TOTAL_REQUIRED" }
-  | { code: "APPROVAL_REASON_REQUIRED" }
   | { code: "SPECIAL_REQUEST_NOT_PENDING" };
 
 export type BookingPackageAttributionSummary = {
