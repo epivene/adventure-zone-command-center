@@ -1,5 +1,3 @@
-BEGIN;
-
 ALTER TABLE package_templates
   ADD COLUMN IF NOT EXISTS minimum_attraction_count integer,
   ADD COLUMN IF NOT EXISTS maximum_attraction_count integer,
@@ -37,7 +35,7 @@ SET name = 'Pirate''s Rebellion',
     minimum_attraction_count = 3,
     maximum_attraction_count = 3,
     updated_at = now()
-WHERE code IN ('pirates_rebellion', 'pirates_rebellion');
+WHERE code IN ('pirates_rebellion', 'pirate_rebellion');
 
 ALTER TABLE package_templates
   ALTER COLUMN minimum_attraction_count SET NOT NULL,
@@ -80,5 +78,3 @@ ALTER TABLE resources
 ALTER TABLE resources
   ADD CONSTRAINT resources_package_count_category_valid
     CHECK (package_count_category IN ('main_attraction', 'game_extra', 'special_shared'));
-
-COMMIT;
