@@ -12,6 +12,7 @@ import { ContactContextRepository } from "@/features/assistant/contact-context-r
 import { extractDerivedFactsForProfile } from "@/features/assistant/derived-fact-job";
 import { DerivedFactRepository } from "@/features/assistant/derived-fact-repository";
 import { ProfileContextRepository } from "@/features/assistant/profile-context-repository";
+import { RouteContextRepository } from "@/features/assistant/route-context-repository";
 import type {
   AssistantContextKind,
   BookingAssistantContextBundle,
@@ -46,6 +47,8 @@ async function loadContext(input: {
       );
     case "contact":
       return new ContactContextRepository().getContactContext(input.contextRecordId);
+    case "route":
+      return new RouteContextRepository().getRouteContext(input.contextRecordId);
     default:
       return null;
   }
