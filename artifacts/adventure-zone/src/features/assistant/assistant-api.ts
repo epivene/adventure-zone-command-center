@@ -15,6 +15,19 @@ import type {
   BookingBrief,
 } from "./assistant-types";
 
+export type DerivedFactReviewItem = {
+  id: string;
+  factKind: string;
+  summary: string;
+  value: unknown;
+  confidence: "high" | "medium" | "low";
+  sourceActivityId: string | null;
+  sourceRecordId: string | null;
+  sourceVersionId: string | null;
+  status: "proposed" | "confirmed" | "dismissed";
+  createdAt: string;
+};
+
 function params(context: Exclude<ActiveAssistantContext, null>): string {
   return new URLSearchParams({
     kind: context.kind,
@@ -47,6 +60,35 @@ export async function getLatestAssistantConversation(
     `/assistant/conversation?${params(context)}`,
   );
   return response.conversation;
+}
+
+export async function analyzeProfileHistory(organizationId: string) {
+  return apiPost<{
+    ok: true;
+    activityCount: number;
+    candidateCount: number;
+    inserted: number;
+    skipped: number;
+  }>("/assistant/derived-facts/extract", { organizationId });
+}
+
+export async function listProfileDerivedFacts(
+  organizationId: string,
+  status?: "proposed" | "confirmed" | "dismissed",
+): Promise<DerivedFactReviewItem[]> {
+  const query = new URLSearchParams({ organizationId });
+  if (status) query.set("status", status);
+  const response = await apiGet<{ facts: DerivedFactReviewItem[] }>(
+    `/assistant/derived-facts?${query.toString()}`,
+  );
+  return response.facts;
+}
+
+export async function decideDerivedFact(
+  factId: string,
+  status: "confirmed" | "dismissed",
+): Promise<void> {
+  await apiPost(`/assistant/derived-facts/${factId}/decision`, { status });
 }
 
 export type AssistantLoadedSnapshot = {
