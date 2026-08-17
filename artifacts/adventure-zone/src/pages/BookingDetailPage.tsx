@@ -4,9 +4,16 @@ import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
 import { PackageHistorySignals } from "@/components/bookings/package-history-signals";
+import { BookingBriefCard } from "@/components/assistant/booking-brief-card";
 import { StatusBadge } from "@/components/bookings/status-badge";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
+import { getAssistantContext, getBookingBrief } from "@/features/assistant/assistant-api";
+import { useAssistantContext } from "@/features/assistant/assistant-context";
+import type {
+  AssistantContextBundle,
+  BookingBrief,
+} from "@/features/assistant/assistant-types";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -60,11 +67,14 @@ function DetailList({ items }: { items: { label: string; value: ReactNode }[] })
 }
 
 export default function BookingDetailPage({ bookingId }: { bookingId: string }) {
+  const { setActiveContext, openAssistant } = useAssistantContext();
   const [data, setData] = useState<any>(null);
   const [wrapUp, setWrapUp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [followUpItems, setFollowUpItems] = useState<any[]>([]);
+  const [assistantBundle, setAssistantBundle] = useState<AssistantContextBundle | null>(null);
+  const [bookingBrief, setBookingBrief] = useState<BookingBrief | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -74,6 +84,34 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
       .then(([d, wrap]) => { setData(d); setWrapUp(wrap?.wrapUp ? wrap : null); setFollowUpItems(d.followUps ?? []); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [bookingId]);
+
+  useEffect(() => {
+    const context = {
+      kind: "booking" as const,
+      recordId: bookingId,
+      label: data?.booking?.name ?? "Booking",
+    };
+    setActiveContext(context);
+    let cancelled = false;
+    Promise.all([
+      getAssistantContext(context),
+      getBookingBrief(context),
+    ])
+      .then(([bundle, brief]) => {
+        if (cancelled) return;
+        setAssistantBundle(bundle);
+        setBookingBrief(brief);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAssistantBundle(null);
+        setBookingBrief(null);
+      });
+    return () => {
+      cancelled = true;
+      setActiveContext(null);
+    };
+  }, [bookingId, data?.booking?.name, setActiveContext]);
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading booking…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
@@ -92,9 +130,18 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
           </div>
           <p className="mt-1 text-slate-600">{booking.city}, {booking.region}</p>
         </div>
-        <Link className="button-primary text-center" href={`/bookings/${bookingId}/edit`}>
-          Edit booking
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="button-secondary"
+            onClick={() => openAssistant("What should I know before I contact them?")}
+            type="button"
+          >
+            Ask Assistant
+          </button>
+          <Link className="button-primary text-center" href={`/bookings/${bookingId}/edit`}>
+            Edit booking
+          </Link>
+        </div>
       </header>
 
       {organization?.lastResort && (
@@ -103,6 +150,10 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
           reason={organization.lastResortReason ?? ""}
         />
       )}
+
+      {bookingBrief ? (
+        <BookingBriefCard brief={bookingBrief} context={assistantBundle} />
+      ) : null}
 
       {wrapUp ? <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">

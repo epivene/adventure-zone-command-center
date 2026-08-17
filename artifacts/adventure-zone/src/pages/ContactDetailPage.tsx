@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
+import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
+import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
 import {
   createActivityAction,
@@ -39,6 +41,7 @@ function DetailList({ items }: { items: { label: string; value: ReactNode }[] })
 
 export default function ContactDetailPage() {
   const { contactId } = useParams<{ contactId: string }>();
+  const { openAssistant } = useAssistantContext();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +50,6 @@ export default function ContactDetailPage() {
     if (!contactId) return;
     apiGet<any>(`/contacts/${contactId}`)
       .then((d) => {
-        // JSON dates arrive as strings — the timeline formats Date objects.
         const coerced = {
           ...d,
           timeline: (d.timeline ?? []).map((item: any) => ({
@@ -73,6 +75,9 @@ export default function ContactDetailPage() {
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
+      {contactId ? (
+        <AssistantContextRegistration kind="contact" label={fullName} recordId={contactId} />
+      ) : null}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -82,6 +87,7 @@ export default function ContactDetailPage() {
           {contact.jobTitle && <p className="mt-1 text-slate-600">{contact.jobTitle}</p>}
         </div>
         <div className="flex flex-wrap gap-3">
+          <button className="button-secondary" onClick={() => openAssistant("What should I know before I call this person?")} type="button">Ask Assistant</button>
           {!assistedCallingEnabled ? (
             <span className="self-center text-sm font-semibold text-slate-600">Assisted calling is not enabled.</span>
           ) : callSuppressed ? (

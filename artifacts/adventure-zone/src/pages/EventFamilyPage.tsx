@@ -3,6 +3,7 @@ import { Link, useRoute } from "wouter";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 import { ProfileMemberPicker } from "@/components/event-families/profile-member-picker";
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
+import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import type { EventFamilyDetail } from "@/features/event-families/event-family-types";
 import { ScopedNotes } from "@/components/notes/scoped-notes";
 import { createFamilyNote, deleteFamilyNote, listFamilyNotes, updateFamilyNote } from "@/actions/scoped-notes";
@@ -98,6 +99,11 @@ export default function EventFamilyPage() {
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6">
+      <AssistantContextRegistration
+        kind="event_family"
+        label={family.name}
+        recordId={family.id}
+      />
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Event family</p>
         <div className="mt-2 flex flex-wrap items-end gap-2">

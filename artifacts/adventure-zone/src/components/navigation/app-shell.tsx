@@ -3,6 +3,9 @@ import type { ReactNode } from "react";
 import { CalendarDays, ContactRound, House } from "lucide-react";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
+import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
+import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
+import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
 
 const primaryNavigation = [
   { href: "/today", label: "Today", icon: House },
@@ -15,6 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
+      <AssistantNavigationContextSync />
       <header className="sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 backdrop-blur md:block">
         <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
           <Link className="mr-3 min-w-max font-bold tracking-tight" href="/today">
@@ -49,6 +53,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
 
+      <AssistantLauncher />
+      <AssistantDrawer />
       <MobileBottomNav />
     </div>
   );

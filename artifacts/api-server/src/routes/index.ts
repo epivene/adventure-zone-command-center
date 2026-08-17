@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import todayRouter from "./today";
+import assistantRouter from "./assistant";
 import bookingPackageEditorRouter from "./booking-package-editor";
 import bookingsRouter from "./bookings";
 import contactsRouter from "./contacts";
@@ -54,6 +55,7 @@ router.use(eventWrapUpAdminRouter);
 router.use(managerCommunicationsAdminRouter);
 router.use(managerMeetupsAdminRouter);
 router.use(todayRouter);
+router.use(assistantRouter);
 router.use(bookingPackageEditorRouter);
 router.use(bookingsRouter);
 router.use(contactsRouter);
