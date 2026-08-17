@@ -1,3 +1,4 @@
+import { actHtmlToPlainText } from "./act-html-text";
 import {
   bad,
   d,
@@ -127,7 +128,7 @@ export const normalizeTimeline = (
   // (activities). Treat that summary as the subject and accept it as the
   // body when no long-form content exists, instead of rejecting the record.
   const subject = text(r, ["subject", "Subject", "regarding", "Regarding"]);
-  const effectiveBody = body || subject || "";
+  const effectiveBody = actHtmlToPlainText(body || subject || "");
   const category: Timeline["category"] =
     sourceType === "note"
       ? "note"
