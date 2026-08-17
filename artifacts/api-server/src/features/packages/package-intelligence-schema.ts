@@ -6,6 +6,9 @@ import { pool as defaultPool } from "@workspace/db";
  * additive guard beside the feature so the API never serves package-intelligence
  * queries before the columns exist. It fills missing defaults only; it never
  * overwrites values an admin has already edited in Settings.
+ *
+ * Keep startup DDL lightweight: constraints are created only when absent rather
+ * than dropped/recreated on every process restart.
  */
 export async function ensurePackageIntelligenceSchema(
   pool: Pool = defaultPool,
@@ -48,19 +51,30 @@ export async function ensurePackageIntelligenceSchema(
     WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
       AND lower(trim(name)) IN ('pirates rebellion', 'pirate rebellion');
 
-    ALTER TABLE package_templates
-      DROP CONSTRAINT IF EXISTS package_templates_minimum_attraction_count_positive,
-      DROP CONSTRAINT IF EXISTS package_templates_maximum_attraction_count_valid;
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'package_templates_minimum_attraction_count_positive'
+      ) THEN
+        ALTER TABLE package_templates
+          ADD CONSTRAINT package_templates_minimum_attraction_count_positive
+            CHECK (minimum_attraction_count IS NULL OR minimum_attraction_count > 0);
+      END IF;
 
-    ALTER TABLE package_templates
-      ADD CONSTRAINT package_templates_minimum_attraction_count_positive
-        CHECK (minimum_attraction_count IS NULL OR minimum_attraction_count > 0),
-      ADD CONSTRAINT package_templates_maximum_attraction_count_valid
-        CHECK (
-          maximum_attraction_count IS NULL
-          OR minimum_attraction_count IS NULL
-          OR maximum_attraction_count >= minimum_attraction_count
-        );
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'package_templates_maximum_attraction_count_valid'
+      ) THEN
+        ALTER TABLE package_templates
+          ADD CONSTRAINT package_templates_maximum_attraction_count_valid
+            CHECK (
+              maximum_attraction_count IS NULL
+              OR minimum_attraction_count IS NULL
+              OR maximum_attraction_count >= minimum_attraction_count
+            );
+      END IF;
+    END $$;
 
     ALTER TABLE resources
       ADD COLUMN IF NOT EXISTS package_count_category text;
@@ -83,10 +97,16 @@ export async function ensurePackageIntelligenceSchema(
       ALTER COLUMN package_count_category SET DEFAULT 'main_attraction',
       ALTER COLUMN package_count_category SET NOT NULL;
 
-    ALTER TABLE resources
-      DROP CONSTRAINT IF EXISTS resources_package_count_category_valid;
-    ALTER TABLE resources
-      ADD CONSTRAINT resources_package_count_category_valid
-        CHECK (package_count_category IN ('main_attraction', 'game_extra', 'special_shared'));
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'resources_package_count_category_valid'
+      ) THEN
+        ALTER TABLE resources
+          ADD CONSTRAINT resources_package_count_category_valid
+            CHECK (package_count_category IN ('main_attraction', 'game_extra', 'special_shared'));
+      END IF;
+    END $$;
   `);
 }
