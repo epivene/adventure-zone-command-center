@@ -131,6 +131,27 @@ export class AssistantConversationRepository {
     }
   }
 
+  async getLatestConversation(input: {
+    actorId: string;
+    contextKind: AssistantContextKind;
+    contextRecordId: string;
+  }): Promise<AssistantConversationView | null> {
+    const latest = await this.pool.query(
+      `SELECT id
+       FROM assistant_conversations
+       WHERE actor_id = $1
+         AND context_kind = $2
+         AND context_record_id = $3
+       ORDER BY updated_at DESC, id DESC
+       LIMIT 1`,
+      [input.actorId, input.contextKind, input.contextRecordId],
+    );
+    const conversationId = latest.rows[0]?.id as string | undefined;
+    return conversationId
+      ? this.getConversation({ conversationId, actorId: input.actorId })
+      : null;
+  }
+
   async getConversation(input: {
     conversationId: string;
     actorId: string;
