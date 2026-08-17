@@ -42,9 +42,10 @@ export function ResponsiveDetailSheet({
               <Link
                 className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
                 href={fullPageHref}
+                onClick={() => onOpenChange(false)}
               >
                 <ExternalLink className="h-4 w-4" />
-                <span className="hidden sm:inline">Open full</span>
+                <span>Open full</span>
               </Link>
             ) : null}
             <Dialog.Close asChild>

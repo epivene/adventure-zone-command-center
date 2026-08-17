@@ -65,12 +65,15 @@ export default function OrganizationsPage() {
   useEffect(() => { void loadProfiles(); }, [loadProfiles]);
 
   const loadDuplicates = useCallback(async () => {
-    setDupLoading(true); setDupError(null);
+    setDupLoading(true);
+    setDupError(null);
     try {
       const result = await apiGet<{ groups: DuplicateGroup[] }>("/organizations/duplicates");
-      setDupGroups(result.groups); return result.groups;
+      setDupGroups(result.groups);
+      return result.groups;
     } catch (e: any) {
-      setDupError(e.message ?? "Failed to load duplicates"); return null;
+      setDupError(e.message ?? "Failed to load duplicates");
+      return null;
     } finally { setDupLoading(false); }
   }, []);
 
@@ -86,33 +89,52 @@ export default function OrganizationsPage() {
     setProfileTarget({ profileId: decodeURIComponent(match[1]), contactId: linkParams.get("contactId") ?? undefined });
   }
 
+  function openDuplicates() {
+    setShowDuplicates(true);
+    void loadDuplicates();
+  }
+
+  function closeDuplicates() {
+    setShowDuplicates(false);
+    setDupGroups(null);
+  }
+
   const families = data?.families ?? [];
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-6">
+    <div className="mx-auto grid max-w-7xl gap-5">
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Relationships</p>
-        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-3xl font-bold tracking-tight">Profiles</h1>
-          {!showDuplicates ? (
-            <button className="button-secondary flex items-center gap-2" onClick={() => { setShowDuplicates(true); void loadDuplicates(); }}>
-              <span aria-hidden>▣</span> Find Duplicates
-            </button>
-          ) : <button className="button-secondary" onClick={() => { setShowDuplicates(false); setDupGroups(null); }}>← Back to profiles</button>}
-        </div>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
         {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Search places and people, then tap a profile to work it without losing your place.</p> : null}
       </header>
 
       {showDuplicates ? (
         <div className="grid gap-4">
-          <div className="flex items-center gap-3"><h2 className="text-lg font-semibold">Duplicate place profiles</h2>{dupGroups !== null && !dupLoading ? <span className="rounded-full bg-amber-100 px-3 py-0.5 text-sm font-bold text-amber-800">{dupGroups.length} group{dupGroups.length !== 1 ? "s" : ""}</span> : null}</div>
-          {dupLoading && dupGroups === null ? <p className="text-slate-500">Scanning for duplicates…</p> : dupGroups !== null ? <><>{dupError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">Could not refresh duplicate status: {dupError}</p><button className="button-secondary mt-3" onClick={() => void loadDuplicates()}>Retry status refresh</button></div> : null}</><DuplicatesView groups={dupGroups} onRefresh={loadDuplicates} /></> : dupError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{dupError}</p><button className="button-secondary mt-3" onClick={() => void loadDuplicates()}>Retry</button></div> : null}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3"><h2 className="text-lg font-semibold">Duplicate place profiles</h2>{dupGroups !== null && !dupLoading ? <span className="rounded-full bg-amber-100 px-3 py-0.5 text-sm font-bold text-amber-800">{dupGroups.length} group{dupGroups.length !== 1 ? "s" : ""}</span> : null}</div>
+            <button className="button-secondary" onClick={closeDuplicates}>← Back to profiles</button>
+          </div>
+          {dupLoading && dupGroups === null ? <p className="text-slate-500">Scanning for duplicates…</p> : dupGroups !== null ? <>{dupError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">Could not refresh duplicate status: {dupError}</p><button className="button-secondary mt-3" onClick={() => void loadDuplicates()}>Retry status refresh</button></div> : null}<DuplicatesView groups={dupGroups} onRefresh={loadDuplicates} /></> : dupError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{dupError}</p><button className="button-secondary mt-3" onClick={() => void loadDuplicates()}>Retry</button></div> : null}
         </div>
       ) : (
         <div onClickCapture={handleProfileLink}>
-          {families.length > 0 ? <section className="mb-6"><div className="mb-3 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Event families</h2><span className="text-sm text-slate-500">Open a family to manage its events.</span></div><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{families.map((family: any) => <EventFamilyCard key={family.id} family={family} />)}</div></section> : null}
           {loading ? <p className="text-slate-500">Loading places…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={data.organizations ?? data} query={query} travelLegs={data.travelLegs ?? []} /> : null}
-          <div className="mt-6"><EventFamilySuggestions compact onChanged={loadProfiles} /></div>
+
+          {families.length > 0 ? (
+            <details className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <summary className="cursor-pointer font-bold">Event Families <span className="ml-1 text-sm font-normal text-slate-500">({families.length})</span></summary>
+              <p className="mt-1 text-sm text-slate-600">Open a family to manage its related event profiles.</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{families.map((family: any) => <EventFamilyCard key={family.id} family={family} />)}</div>
+            </details>
+          ) : null}
+
+          <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
+            <div className="flex flex-wrap items-center gap-2">
+              <EventFamilySuggestions compact onChanged={loadProfiles} />
+              <button className="button-secondary text-sm" onClick={openDuplicates} type="button">Find duplicates</button>
+            </div>
+          </section>
         </div>
       )}
 

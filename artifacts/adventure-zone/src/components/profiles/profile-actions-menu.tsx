@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ChevronRight, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,14 +33,14 @@ export function ProfileActionsMenu({
         <DropdownMenuLabel>Profile actions</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Add <ChevronRight className="ml-auto h-4 w-4" /></DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>Add</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
             <DropdownMenuItem asChild><Link href={`${withContact}${withContact.includes("?") ? "&" : "?"}action=follow-up`}>Note / Follow-up</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/event-profiles/new">Event</Link></DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Edit <ChevronRight className="ml-auto h-4 w-4" /></DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>Edit</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
             <DropdownMenuItem asChild><Link href={`/event-profiles/${profileId}/edit`}>Profile</Link></DropdownMenuItem>
             {contactId ? <DropdownMenuItem asChild><Link href={`/contacts/${contactId}/edit`}>Contact info</Link></DropdownMenuItem> : null}
@@ -48,7 +48,7 @@ export function ProfileActionsMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Organize <ChevronRight className="ml-auto h-4 w-4" /></DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>Organize</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-60">
             <DropdownMenuItem asChild><Link href={fullProfile}>Add to Organization</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href={fullProfile}>Add to Event Family</Link></DropdownMenuItem>
@@ -56,7 +56,7 @@ export function ProfileActionsMenu({
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>More <ChevronRight className="ml-auto h-4 w-4" /></DropdownMenuSubTrigger>
+          <DropdownMenuSubTrigger>More</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
             <DropdownMenuItem asChild><Link href={fullProfile}>Open Full Profile</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href={fullProfile}>Archive / Delete</Link></DropdownMenuItem>

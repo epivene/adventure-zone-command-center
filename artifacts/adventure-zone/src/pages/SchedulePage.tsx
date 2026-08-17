@@ -36,40 +36,57 @@ export default function SchedulePage() {
     setLocation(value ? `/schedule?${value}` : "/schedule", { replace: true });
   }
 
-  function changeView(next: ScheduleView) { setView(next); syncUrl({ view: next }); }
+  function changeView(next: ScheduleView) {
+    setView(next);
+    syncUrl({ view: next });
+  }
+
+  const extraFilterCount = Number(Boolean(legId)) + Number(status !== "all");
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-5">
-      <header className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+    <div className="mx-auto grid max-w-7xl gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Schedule</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Calendar & Route</h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-600">One workspace for event dates and the route they create.</p>
         </div>
         <ScheduleViewToggle view={view} onChange={changeView} />
       </header>
 
-      <section aria-label="Schedule filters" className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-3">
-        <label className="grid gap-1 text-sm font-semibold">Season
-          <select aria-label="Season" value={season} onChange={(event) => { setSeason(event.target.value); syncUrl({ season: event.target.value }); }}>
-            {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1, new Date().getFullYear() + 2].map((year) => <option key={year} value={year}>{year}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm font-semibold">Leg
-          <select aria-label="Leg" value={legId} onChange={(event) => { setLegId(event.target.value); syncUrl({ legId: event.target.value }); }}>
-            <option value="">All legs</option>
-            {legs.map((leg) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm font-semibold">Status
-          <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); syncUrl({ status: event.target.value }); }}>
-            <option value="all">All statuses</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="tentative">Tentative</option>
-            <option value="pending">Pending</option>
-          </select>
-        </label>
-      </section>
+      <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <span>Season</span>
+            <select aria-label="Season" className="min-h-9 py-1" value={season} onChange={(event) => { setSeason(event.target.value); syncUrl({ season: event.target.value }); }}>
+              {[new Date().getFullYear() - 1, new Date().getFullYear(), new Date().getFullYear() + 1, new Date().getFullYear() + 2].map((year) => <option key={year} value={year}>{year}</option>)}
+            </select>
+          </label>
+          <details className="group ml-auto">
+            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Filters
+              {extraFilterCount ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-800">{extraFilterCount}</span> : null}
+              <span className="text-slate-400 group-open:rotate-180">⌄</span>
+            </summary>
+            <div className="mt-2 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-semibold">Leg
+                <select aria-label="Leg" value={legId} onChange={(event) => { setLegId(event.target.value); syncUrl({ legId: event.target.value }); }}>
+                  <option value="">All legs</option>
+                  {legs.map((leg) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-semibold">Status
+                <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); syncUrl({ status: event.target.value }); }}>
+                  <option value="all">All statuses</option>
+                  <option value="confirmed">Confirmed</option>
+                  <option value="tentative">Tentative</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </label>
+            </div>
+          </details>
+        </div>
+        {extraFilterCount ? <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">{legId ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{legs.find((leg) => leg.id === legId)?.name ?? "Selected leg"}</span> : null}{status !== "all" ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">{status}</span> : null}</div> : null}
+      </div>
 
       {view === "calendar" ? <CalendarContent embedded legId={legId || undefined} season={season} status={status} /> : <RoutesContent embedded legId={legId || undefined} season={season} status={status} />}
     </div>
