@@ -41,6 +41,11 @@ function monthKey(date: Date) {
   return date.toISOString().slice(0, 7);
 }
 
+function initialSelectedDay(month: string) {
+  const today = businessDateKey(new Date());
+  return today.startsWith(`${month}-`) ? today : `${month}-01`;
+}
+
 function formatMonth(date: Date) {
   return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 }
@@ -127,7 +132,7 @@ function ActActivityCard({ event, compact = false, onClick }: { event: ActCalend
   return (
     <button className={`block w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-left transition hover:border-orange-300 hover:bg-white hover:shadow ${compact ? "text-xs" : "text-sm"}`} onClick={() => onClick(event)} type="button">
       <span className={`block truncate font-medium text-slate-800 ${compact ? "text-xs" : "text-sm"}`}>{event.displaySubject}</span>
-      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500"><span className={`rounded-full px-2 py-0.5 font-bold ${pillColor}`}>Act! {event.activityType}</span>{linkedName && !compact ? <span className="truncate">{linkedName}</span> : null}</span>
+      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500"><span className={`rounded-full px-2 py-0.5 font-bold ${pillColor}`}>ACT {event.activityType}</span>{linkedName && !compact ? <span className="truncate">{linkedName}</span> : null}</span>
     </button>
   );
 }
@@ -141,7 +146,7 @@ function ActActivityPopover({ event, onClose }: { event: ActCalendarActivity; on
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-start justify-between gap-3"><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${pillColor}`}>Act! {event.activityType}</span><button aria-label="Close" className="text-slate-400 hover:text-slate-700" onClick={onClose} type="button">×</button></div>
+        <div className="mb-3 flex items-start justify-between gap-3"><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${pillColor}`}>Imported {event.activityType}</span><button aria-label="Close" className="text-slate-400 hover:text-slate-700" onClick={onClose} type="button">×</button></div>
         <h2 className="text-base font-bold text-slate-900">{event.displaySubject}</h2>
         {event.startsAt ? <p className="mt-1 text-xs text-slate-500">{formatDay(event.startsAt)}{event.endsAt && event.endsAt.getTime() !== event.startsAt.getTime() ? ` – ${formatDay(event.endsAt)}` : ""}</p> : null}
         {linkedName ? <p className="mt-2 text-sm text-slate-700">{profileHref ? <Link className="font-medium text-orange-700 underline hover:text-orange-900" href={profileHref} onClick={onClose}>{linkedName}</Link> : <span className="font-medium">{linkedName}</span>}</p> : null}
@@ -185,15 +190,15 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   const [activeMonth, setActiveMonth] = useState(() => parseMonth(initialMonth));
   const [showActActivities, setShowActActivities] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<ActCalendarActivity | null>(null);
-  const [selectedDayKey, setSelectedDayKey] = useState(() => `${initialMonth}-01`);
+  const [selectedDayKey, setSelectedDayKey] = useState(() => initialSelectedDay(initialMonth));
   const [agendaLimit, setAgendaLimit] = useState(12);
 
   useEffect(() => {
     if (monthKey(activeMonth) === initialMonth) return;
     const next = parseMonth(initialMonth);
     setActiveMonth(next);
-    setSelectedDayKey(`${initialMonth}-01`);
-  }, [initialMonth, activeMonth]);
+    setSelectedDayKey(initialSelectedDay(initialMonth));
+  }, [initialMonth]);
 
   const { bookingEvents, actEvents } = useMemo(() => {
     const bookings: BookingEvent[] = [];
@@ -243,20 +248,19 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   function selectMonth(next: Date) {
     setActiveMonth(next);
     const key = monthKey(next);
-    setSelectedDayKey(`${key}-01`);
+    setSelectedDayKey(initialSelectedDay(key));
     onMonthChange?.(key);
   }
 
   function moveMonth(change: number) {
-    const next = new Date(Date.UTC(activeMonth.getUTCFullYear(), activeMonth.getUTCMonth() + change, 1));
-    selectMonth(next);
+    selectMonth(new Date(Date.UTC(activeMonth.getUTCFullYear(), activeMonth.getUTCMonth() + change, 1)));
   }
 
   function goToday() {
     const now = new Date();
     const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
     setActiveMonth(next);
-    setSelectedDayKey(utcDateKey(now));
+    setSelectedDayKey(businessDateKey(now));
     onMonthChange?.(monthKey(next));
   }
 
@@ -273,18 +277,28 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   return (
     <section className="grid gap-3" aria-label="Event calendar">
       <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-start justify-between gap-2">
           <div className="inline-flex rounded-lg bg-slate-100 p-1">
             <button aria-pressed={view === "month"} className={`rounded-md px-3 py-2 text-sm font-bold ${view === "month" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("month")} type="button">Month</button>
             <button aria-pressed={view === "agenda"} className={`rounded-md px-3 py-2 text-sm font-bold ${view === "agenda" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => { setView("agenda"); setAgendaLimit(12); }} type="button">Upcoming</button>
           </div>
-          {actEvents.length > 0 ? <button className={`rounded-lg border px-2.5 py-2 text-xs font-semibold ${showActActivities ? "border-teal-300 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setShowActActivities((value) => !value)} type="button">ACT {showActActivities ? "on" : "off"}</button> : null}
+          {actEvents.length > 0 ? (
+            <details className="relative">
+              <summary className="cursor-pointer list-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">More ▾</summary>
+              <div className="absolute right-0 z-30 mt-1 w-56 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input checked={showActActivities} className="mt-0.5" onChange={(event) => setShowActActivities(event.target.checked)} type="checkbox" />
+                  <span><strong className="block font-semibold">Show imported ACT activity</strong><span className="mt-0.5 block text-xs text-slate-500">Normally hidden to keep the calendar simple.</span></span>
+                </label>
+              </div>
+            </details>
+          ) : null}
         </div>
 
         {view === "month" ? (
           <div className="mt-3 flex items-center justify-between gap-2">
             <button aria-label="Previous month" className="button-secondary min-w-10 px-2.5" onClick={() => moveMonth(-1)} type="button">←</button>
-            <button className="min-w-0 flex-1 rounded-lg px-2 py-1 text-center hover:bg-slate-50" onClick={goToday} type="button"><span className="block text-base font-bold">{formatMonth(activeMonth)}</span><span className="text-[11px] font-semibold text-slate-500">Today</span></button>
+            <button className="min-w-0 flex-1 rounded-lg px-2 py-1 text-center hover:bg-slate-50" onClick={goToday} type="button"><span className="block text-base font-bold">{formatMonth(activeMonth)}</span><span className="text-[11px] font-semibold text-slate-500">Jump to today</span></button>
             <button aria-label="Next month" className="button-secondary min-w-10 px-2.5" onClick={() => moveMonth(1)} type="button">→</button>
           </div>
         ) : null}

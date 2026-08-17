@@ -1,10 +1,7 @@
 import { Link } from "wouter";
 
 import { profileTypeOptions } from "@/features/organizations/last-resort-input";
-import type {
-  OrganizationListQuery,
-  OrganizationListPage,
-} from "@/features/organizations/organization-repository";
+import type { OrganizationListQuery, OrganizationListPage } from "@/features/organizations/organization-repository";
 
 function listHref(query: OrganizationListQuery) {
   const params = new URLSearchParams();
@@ -30,21 +27,23 @@ function detailHref(organizationId: string, query: OrganizationListQuery) {
   return `/profiles/${organizationId}?${params.toString()}`;
 }
 
+type ActiveFilter = { label: string; href: string };
+
 export function OrganizationList({ organizations, query, travelLegs }: { organizations: OrganizationListPage; query: OrganizationListQuery; travelLegs: { id: string; name: string; color: string }[] }) {
   const profileTypeLabel = profileTypeOptions.find((option) => option.value === query.placeType)?.label;
   const legLabel = travelLegs.find((leg) => leg.id === query.travelLegId)?.name;
-  const activeFilters = [
-    query.placeType ? profileTypeLabel ?? query.placeType : null,
-    query.region ? `Region: ${query.region}` : null,
-    query.lastResort === "only" ? "Last Resort" : null,
-    query.travelLegId ? `Leg: ${legLabel ?? "selected"}` : null,
-    query.hasPhone ? "Has phone" : null,
-    query.hasEmail ? "Has email" : null,
-    query.hasFollowUp ? "Has follow-up" : null,
-    query.hasBooking ? "Has booking" : null,
-    query.hasLocations ? "Has locations" : null,
-    query.showMembers ? "Showing family members" : null,
-  ].filter((value): value is string => Boolean(value));
+  const activeFilters: ActiveFilter[] = [
+    query.placeType ? { label: profileTypeLabel ?? query.placeType, href: listHref({ ...query, placeType: null, page: 1 }) } : null,
+    query.region ? { label: `Region: ${query.region}`, href: listHref({ ...query, region: null, page: 1 }) } : null,
+    query.lastResort === "only" ? { label: "Last Resort", href: listHref({ ...query, lastResort: "all", page: 1 }) } : null,
+    query.travelLegId ? { label: `Leg: ${legLabel ?? "selected"}`, href: listHref({ ...query, travelLegId: null, page: 1 }) } : null,
+    query.hasPhone ? { label: "Has phone", href: listHref({ ...query, hasPhone: false, page: 1 }) } : null,
+    query.hasEmail ? { label: "Has email", href: listHref({ ...query, hasEmail: false, page: 1 }) } : null,
+    query.hasFollowUp ? { label: "Has follow-up", href: listHref({ ...query, hasFollowUp: false, page: 1 }) } : null,
+    query.hasBooking ? { label: "Has booking", href: listHref({ ...query, hasBooking: false, page: 1 }) } : null,
+    query.hasLocations ? { label: "Has locations", href: listHref({ ...query, hasLocations: false, page: 1 }) } : null,
+    query.showMembers ? { label: "Showing family members", href: listHref({ ...query, showMembers: false, page: 1 }) } : null,
+  ].filter((value): value is ActiveFilter => Boolean(value));
 
   return (
     <div className="grid gap-4">
@@ -92,7 +91,15 @@ export function OrganizationList({ organizations, query, travelLegs }: { organiz
           </div>
         </details>
 
-        {activeFilters.length ? <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3" aria-label="Active filters">{activeFilters.map((filter) => <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700" key={filter}>{filter}</span>)}</div> : null}
+        {activeFilters.length ? (
+          <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3" aria-label="Active filters">
+            {activeFilters.map((filter) => (
+              <Link aria-label={`Remove ${filter.label} filter`} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-200" href={filter.href} key={filter.label}>
+                {filter.label}<span aria-hidden className="text-slate-400">×</span>
+              </Link>
+            ))}
+          </div>
+        ) : null}
       </form>
 
       <p aria-live="polite" className="text-sm text-slate-600">Showing {organizations.records.length} of {organizations.total} profiles</p>

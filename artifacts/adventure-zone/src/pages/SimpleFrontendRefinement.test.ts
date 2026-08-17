@@ -5,6 +5,7 @@ const dropdown = readFileSync("src/components/ui/dropdown-menu.tsx", "utf8");
 const organizationList = readFileSync("src/components/organizations/organization-list.tsx", "utf8");
 const profilesPage = readFileSync("src/pages/OrganizationsPage.tsx", "utf8");
 const profileSheet = readFileSync("src/components/profiles/profile-detail-sheet.tsx", "utf8");
+const needsAttention = readFileSync("src/components/today/needs-attention.tsx", "utf8");
 
 describe("simple frontend refinement contracts", () => {
   it("forces popup menus to use an opaque surface", () => {
@@ -29,6 +30,14 @@ describe("simple frontend refinement contracts", () => {
   it("uses place identity and Notes instead of raw History as a main tab", () => {
     expect(profileSheet).toContain("data?.place?.name");
     expect(profileSheet).toContain('["overview", "notes", "events"]');
+    expect(profileSheet).toContain("Open follow-ups");
+    expect(profileSheet).toContain("followUpHistory");
     expect(profileSheet).toContain("History & imported changes");
+  });
+
+  it("keeps Today attention items in one compact action list instead of summary cards", () => {
+    expect(needsAttention).not.toContain("SummaryCards");
+    expect(needsAttention).toContain("Just the things that need a decision or follow-up.");
+    expect(needsAttention).toContain("items.map");
   });
 });

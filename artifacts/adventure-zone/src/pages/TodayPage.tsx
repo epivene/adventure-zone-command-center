@@ -75,11 +75,17 @@ export default function TodayPage() {
 
       <NeedsAttention contractCount={dashboard.contractCount ?? 0} followUpCount={dashboard.followUpCount ?? 0} newLeadCount={dashboard.newLeadCount ?? 0} newLeadHref={newLeadHref} visibleRouteWarningCount={dashboard.visibleRouteWarningCount ?? 0} />
 
-      {(dashboard.needsFollowUpPlan ?? []).length ? <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer font-bold">Follow-up planning ({dashboard.needsFollowUpPlan.length})</summary><ul className="mt-4 grid gap-3">{dashboard.needsFollowUpPlan.map((booking: any) => <li key={booking.id}><Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: booking.organizationId ?? null, contactId: booking.primaryContactId, bookingId: booking.id, mode: booking.status === "new_lead" ? "prospect" : undefined }) ?? `/bookings/${booking.id}`}>{booking.name}</Link><BookingOperations operations={booking.operations} /></li>)}</ul></details> : null}
+      {(dashboard.needsFollowUpPlan ?? []).length ? (
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="cursor-pointer font-bold">Needs a next step ({dashboard.needsFollowUpPlan.length})</summary>
+          <p className="mt-2 text-sm text-slate-600">These leads or past events do not have another reminder scheduled yet.</p>
+          <ul className="mt-4 grid gap-3">{dashboard.needsFollowUpPlan.map((booking: any) => <li key={booking.id}><Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: booking.organizationId ?? null, contactId: booking.primaryContactId, bookingId: booking.id, mode: booking.status === "new_lead" ? "prospect" : undefined }) ?? `/bookings/${booking.id}`}>{booking.name}</Link><BookingOperations operations={booking.operations} /></li>)}</ul>
+        </details>
+      ) : null}
 
       {(dashboard.todayTrips ?? []).length ? <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer font-bold">Today’s trips ({dashboard.todayTrips.length})</summary><ul className="mt-4 grid gap-2">{dashboard.todayTrips.map((trip: any) => <li key={trip.id}><Link className="font-semibold hover:text-orange-700" href={`/trips/${trip.id}`}>{trip.name}</Link><span className="ml-2 text-sm text-slate-600">{trip.legName ? `${trip.legName} · ` : ""}{trip.stopCount} stops</span></li>)}</ul></details> : null}
 
-      <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer font-bold">Renewals & secondary activity</summary><div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div></details>
+      <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer font-bold">More for later</summary><div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div></details>
 
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
     </div>
