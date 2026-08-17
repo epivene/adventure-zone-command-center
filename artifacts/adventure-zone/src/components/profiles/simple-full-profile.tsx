@@ -3,6 +3,7 @@ import { Link } from "wouter";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
+import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -97,7 +98,7 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
             </div>
           </section>
 
-          {recentNote ? <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent note</p><p className="mt-2 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{recentNote.body}</p></section> : null}
+          {recentNote ? <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent note</p><p className="mt-2 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(recentNote.body)}</p></section> : null}
 
           {profile.contacts.length > 1 ? (
             <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2">
@@ -122,7 +123,7 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
                 contactId: note.contactId,
                 bookingId: note.bookingId,
                 kind: note.kind as any,
-                body: note.body,
+                body: simplifyHistoryText(note.body),
                 occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
                 createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
                 updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
