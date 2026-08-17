@@ -1,134 +1,55 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import type { ReactNode } from "react";
-import { useAuth } from "@/lib/auth-context";
+import { CalendarDays, ContactRound, House } from "lucide-react";
+import { AddMenu, AppMenu } from "./app-menu";
+import { MobileBottomNav } from "./mobile-bottom-nav";
 
-const navigation = [
-  { href: "/today", label: "Today" },
-  { href: "/bookings", label: "Bookings" },
-  { href: "/profiles", label: "Profiles" },
-  { href: "/calendar", label: "Calendar" },
-  { href: "/routes", label: "Routes" },
-  { href: "/manager-communications", label: "Communications" },
+const primaryNavigation = [
+  { href: "/today", label: "Today", icon: House },
+  { href: "/profiles", label: "Profiles", icon: ContactRound },
+  { href: "/schedule", label: "Schedule", icon: CalendarDays },
 ];
 
-function CreateEventButton({ className }: { className: string }) {
-  return (
-    <Link
-      aria-label="New event profile"
-      className={`${className} w-full rounded-lg bg-orange-600 px-4 py-3 text-center font-semibold text-white shadow-sm transition hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600`}
-      href="/event-profiles/new"
-    >
-      New event
-    </Link>
-  );
-}
-
-function SignOutButton({ className }: { className: string }) {
-  const { signOut } = useAuth();
-  return (
-    <button
-      type="button"
-      className={`${className} rounded-lg px-3 py-2 text-left font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600`}
-      onClick={signOut}
-    >
-      Sign out
-    </button>
-  );
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
+  const [location] = useLocation();
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
-      <aside className="fixed inset-y-0 hidden w-64 flex-col border-r border-slate-200 bg-white p-5 md:flex">
-        <Link className="mb-8 text-lg font-bold tracking-tight" href="/today">
-          Adventure Zone
-          <span className="block text-sm font-medium text-slate-500">Command Center</span>
-        </Link>
-        <nav aria-label="Main navigation" className="grid gap-1">
-          {navigation.map((item) => (
-            <Link
-              className="rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-              href={item.href}
-              key={item.href}
-            >
-              {item.label}
-            </Link>
-          ))}
-          <Link
-            className="mt-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-            href="/contacts"
-          >
-            All contacts
+      <header className="sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 backdrop-blur md:block">
+        <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-3">
+          <Link className="mr-3 min-w-max font-bold tracking-tight" href="/today">
+            Adventure Zone
+            <span className="ml-2 text-sm font-medium text-slate-500">Command Center</span>
           </Link>
-          <details className="group mt-2">
-            <summary className="cursor-pointer rounded-lg px-3 py-2 font-medium text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
-              Settings
-            </summary>
-            <div className="mt-1 grid">
-              <Link
-                className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-                href="/settings/packages-resources"
-              >
-                Packages &amp; resources
-              </Link>
-              <Link
-                className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-                href="/settings/act-migration"
-              >
-                Act! import
-              </Link>
-            </div>
-          </details>
-        </nav>
-        <CreateEventButton className="mt-auto" />
-        <SignOutButton className="mt-2" />
-      </aside>
+          <nav aria-label="Main navigation" className="flex items-center gap-1">
+            {primaryNavigation.map((item) => {
+              const active = location === item.href || location.startsWith(`${item.href}/`);
+              const Icon = item.icon;
+              return (
+                <Link
+                  aria-current={active ? "page" : undefined}
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-orange-50 text-orange-700" : "text-slate-700 hover:bg-slate-100"}`}
+                  href={item.href}
+                  key={item.href}
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+          <div className="ml-auto flex items-center gap-2">
+            <AddMenu />
+            <AppMenu />
+          </div>
+        </div>
+      </header>
 
-      <main className="min-h-screen px-4 py-6 pb-28 md:ml-64 md:px-8 md:py-8 md:pb-8">
+      <main className="min-h-screen px-4 py-5 pb-28 md:px-8 md:py-7 md:pb-8">
         {children}
       </main>
 
-      <nav
-        aria-label="Mobile navigation"
-        className="fixed inset-x-0 bottom-0 z-10 grid grid-cols-8 border-t border-slate-200 bg-white p-2 shadow-[0_-4px_12px_rgba(15,23,42,0.08)] md:hidden"
-      >
-        {navigation.map((item) => (
-          <Link
-            className="flex min-h-12 items-center justify-center rounded-md px-1 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-            href={item.href}
-            key={item.href}
-          >
-            {item.label}
-          </Link>
-        ))}
-        <details className="relative flex items-center justify-center">
-          <summary className="flex min-h-12 cursor-pointer list-none items-center justify-center rounded-md px-1 text-center text-xs font-semibold text-slate-700 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
-            Settings
-          </summary>
-          <div className="absolute bottom-14 right-0 grid min-w-40 rounded-md border border-slate-200 bg-white p-1 text-sm font-semibold text-slate-700 shadow-lg">
-            <Link
-              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-              href="/contacts"
-            >
-              All contacts
-            </Link>
-            <Link
-              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-              href="/settings/packages-resources"
-            >
-              Packages &amp; resources
-            </Link>
-            <Link
-              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
-              href="/settings/act-migration"
-            >
-              Act! import
-            </Link>
-            <SignOutButton className="text-sm" />
-          </div>
-        </details>
-        <CreateEventButton className="flex items-center" />
-      </nav>
+      <MobileBottomNav />
     </div>
   );
 }
