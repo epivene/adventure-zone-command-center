@@ -28,8 +28,8 @@ import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } fr
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/navigation/app-shell";
 import { OfflineBanner } from "@/components/connectivity/offline-banner";
+import { AssistantContextProvider } from "@/features/assistant/assistant-context";
 
-// Pages
 import TodayPage from "@/pages/TodayPage";
 import BookingsPage from "@/pages/BookingsPage";
 import BookingDetailPage from "@/pages/BookingDetailPage";
@@ -117,11 +117,7 @@ function SignInPage() {
           type="password"
           value={password}
         />
-        {error ? (
-          <p className="mt-3 text-sm font-medium text-red-600" role="alert">
-            {error}
-          </p>
-        ) : null}
+        {error ? <p className="mt-3 text-sm font-medium text-red-600" role="alert">{error}</p> : null}
         <button
           className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-60"
           disabled={submitting || password.length === 0}
@@ -142,23 +138,15 @@ function Landing() {
         Bookings, contacts, routes, and calls for your adventure business — all in one place.
       </p>
       <div className="mt-8 grid w-full max-w-sm gap-3">
-        <Link className="button-primary px-6 py-3 text-center" href="/sign-in">
-          Admin / Command Center
-        </Link>
-        <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">
-          Manager Portal
-        </Link>
+        <Link className="button-primary px-6 py-3 text-center" href="/sign-in">Admin / Command Center</Link>
+        <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Manager Portal</Link>
       </div>
     </div>
   );
 }
 
 function LoadingScreen() {
-  return (
-    <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50">
-      <p className="text-sm font-medium text-slate-500">Loading…</p>
-    </div>
-  );
+  return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading…</p></div>;
 }
 
 function HomeRoute() {
@@ -207,6 +195,51 @@ function ManagerProtectedApp() {
   );
 }
 
+function AdminProtectedApp() {
+  return (
+    <AssistantContextProvider>
+      <AppShell>
+        <Switch>
+          <Route path="/today" component={TodayPage} />
+          <Route path="/bookings" component={BookingsPage} />
+          <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
+          <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>
+          <Route path="/contacts/new" component={ContactNewPage} />
+          <Route path="/contacts/:id/edit">{(params)=><ContactEditPage contactId={params.id}/>}</Route>
+          <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
+          <Route path="/contacts" component={ContactsPage} />
+          <Route path="/profiles/:profileId" component={EventProfilePage} />
+          <Route path="/profiles" component={OrganizationsPage} />
+          <Route path="/organizations" component={OrganizationsPage} />
+          <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
+          <Route path="/schedule" component={SchedulePage} />
+          <Route path="/calendar" component={CalendarPage} />
+          <Route path="/routes" component={RoutesPage} />
+          <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
+          <Route path="/calls/workspace" component={CallWorkspacePage} />
+          <Route path="/calls/mobile" component={MobileCallLogPage} />
+          <Route path="/event-profiles/new" component={EventProfileNewPage} />
+          <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
+          <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
+          <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
+          <Route path="/settings/act-migration" component={ActMigrationPage} />
+          <Route path="/settings/act-recovery" component={ActRecoveryPage} />
+          <Route path="/settings" component={SettingsStub} />
+          <Route path="/act-migration" component={ActMigrationPage} />
+          <Route path="/quick-add" component={QuickAddPage} />
+          <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
+          <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
+          <Route path="/manager-crew" component={ManagerCrewAdminPage} />
+          <Route path={ADMIN_WRAP_UP_PATH}>{(params)=><EventWrapUpAdminPage bookingId={params.bookingId}/>}</Route>
+          <Route path={ADMIN_AFTERMATH_PATH} component={ManagerAftermathAdminPage} />
+          <Route path="/manager-issues" component={ManagerIssuesAdminPage} />
+          <Route component={NotFound} />
+        </Switch>
+      </AppShell>
+    </AssistantContextProvider>
+  );
+}
+
 function AppRoutes() {
   return (
     <Switch>
@@ -222,46 +255,7 @@ function AppRoutes() {
         <ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider>
       </Route>
       <Route>
-        <Protected>
-          <AppShell>
-            <Switch>
-              <Route path="/today" component={TodayPage} />
-              <Route path="/bookings" component={BookingsPage} />
-              <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
-              <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>
-              <Route path="/contacts/new" component={ContactNewPage} />
-              <Route path="/contacts/:id/edit">{(params)=><ContactEditPage contactId={params.id}/>}</Route>
-              <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
-              <Route path="/contacts" component={ContactsPage} />
-              <Route path="/profiles/:profileId" component={EventProfilePage} />
-              <Route path="/profiles" component={OrganizationsPage} />
-              <Route path="/organizations" component={OrganizationsPage} />
-              <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
-              <Route path="/schedule" component={SchedulePage} />
-              <Route path="/calendar" component={CalendarPage} />
-              <Route path="/routes" component={RoutesPage} />
-              <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
-              <Route path="/calls/workspace" component={CallWorkspacePage} />
-              <Route path="/calls/mobile" component={MobileCallLogPage} />
-              <Route path="/event-profiles/new" component={EventProfileNewPage} />
-              <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
-              <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
-              <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
-              <Route path="/settings/act-migration" component={ActMigrationPage} />
-              <Route path="/settings/act-recovery" component={ActRecoveryPage} />
-              <Route path="/settings" component={SettingsStub} />
-              <Route path="/act-migration" component={ActMigrationPage} />
-              <Route path="/quick-add" component={QuickAddPage} />
-              <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
-              <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
-              <Route path="/manager-crew" component={ManagerCrewAdminPage} />
-              <Route path={ADMIN_WRAP_UP_PATH}>{(params)=><EventWrapUpAdminPage bookingId={params.bookingId}/>}</Route>
-              <Route path={ADMIN_AFTERMATH_PATH} component={ManagerAftermathAdminPage} />
-              <Route path="/manager-issues" component={ManagerIssuesAdminPage} />
-              <Route component={NotFound} />
-            </Switch>
-          </AppShell>
-        </Protected>
+        <Protected><AdminProtectedApp /></Protected>
       </Route>
     </Switch>
   );
