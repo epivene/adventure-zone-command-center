@@ -49,10 +49,31 @@ export type AssistantContextBundle = {
   [key: string]: unknown;
 };
 
+export type AssistantConversationMessage = {
+  id: string;
+  role: "user" | "assistant";
+  body: string;
+  answerMode: AssistantAnswer["mode"] | null;
+  confidence: AssistantAnswer["confidence"] | null;
+  createdAt: string;
+  sources: AssistantSourceReference[];
+};
+
+export type AssistantConversation = {
+  id: string;
+  contextKind: AssistantContextKind;
+  contextRecordId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: AssistantConversationMessage[];
+};
+
 export type AssistantAskResponse = {
   answer: AssistantAnswer;
   brief: BookingBrief;
   context: AssistantContextBundle;
+  conversationId?: string;
 };
 
 export type ActiveAssistantContext = {
