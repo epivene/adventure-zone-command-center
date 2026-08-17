@@ -47,11 +47,15 @@ function service(): ActRecoveryRouteService {
         sourceVersionId: VERSION_ID,
         streamType: "history",
         actRecordId: "history-1",
-        rawSnapshot: { regarding: "E-mail sent", details: "Proposal package sent" },
+        rawSnapshot: {
+          regarding: "<b>E-mail sent</b>",
+          details: "<div>Proposal package<br>sent</div>",
+        },
         relationshipEvidence: {},
         targetSummary: { reason: "timeline_parent_unresolved" },
       }],
     })),
+    cleanupAndRetry: vi.fn(async () => ({ reviewed: 283, droppedLinkedTo: 41, retried: 242 })),
     assign: vi.fn(async () => ({ ok: true as const })),
     drop: vi.fn(async () => ({ ok: true as const })),
     retry: vi.fn(async () => ({ ok: true as const })),
@@ -66,7 +70,7 @@ function app(service: ActRecoveryRouteService) {
 }
 
 describe("ACT recovery routes", () => {
-  it("starts a recovery idempotently and exposes reconciled status", async () => {
+  it("resumes recovery by cleaning the review queue before returning status", async () => {
     const recovery = service();
     const server = app(recovery);
 
@@ -80,13 +84,15 @@ describe("ACT recovery routes", () => {
       requestedBy: "owner",
       sourceDatabaseKey: "archive-db",
     });
+    expect(recovery.cleanupAndRetry).toHaveBeenCalledWith({ decidedBy: "owner" });
+    expect(recovery.status).toHaveBeenCalledWith({ runId: RUN_ID });
 
     const current = await request(server).get("/act-recovery/status");
     expect(current.status).toBe(200);
     expect(current.body).toMatchObject({ candidateCount: 7, checkedCount: 5, retryableFailed: 1 });
   });
 
-  it("returns original archive content in the paged review queue", async () => {
+  it("returns readable plain text instead of raw ACT HTML in the review queue", async () => {
     const recovery = service();
     const response = await request(app(recovery)).get("/act-recovery/review?page=1");
 
@@ -95,9 +101,21 @@ describe("ACT recovery routes", () => {
       sourceRecordId: SOURCE_ID,
       sourceVersionId: VERSION_ID,
       streamType: "history",
-      rawSnapshot: { regarding: "E-mail sent", details: "Proposal package sent" },
+      rawSnapshot: { regarding: "E-mail sent", details: "Proposal package\nsent" },
     });
     expect(recovery.reviewPage).toHaveBeenCalledWith({ page: 1, pageSize: 50 });
+  });
+
+  it("exposes an explicit bulk cleanup and retry action", async () => {
+    const recovery = service();
+    const response = await request(app(recovery)).post("/act-recovery/review/cleanup-retry").send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      ok: true,
+      summary: { reviewed: 283, droppedLinkedTo: 41, retried: 242 },
+    });
+    expect(recovery.cleanupAndRetry).toHaveBeenCalledWith({ decidedBy: "owner" });
   });
 
   it("validates assignment targets and forwards an explicit owner decision", async () => {
