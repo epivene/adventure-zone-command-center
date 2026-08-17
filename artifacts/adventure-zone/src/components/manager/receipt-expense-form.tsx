@@ -14,7 +14,7 @@ type Suggestions = { merchant: string | null; totalCents: number | null; taxCent
 const dollars = (cents: number | null | undefined) => cents == null ? "" : (cents / 100).toFixed(2);
 const toCents = (value: string) => Math.round((Number(value) || 0) * 100);
 
-export function ReceiptExpenseForm({ mode, onDone }: { mode: "receipt" | "manual"; onDone?: () => void }) {
+export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "receipt" | "manual"; bookingId?: string | null; onDone?: () => void }) {
   const { manager, managerApi } = useManagerAuth();
   const [file, setFile] = useState<File | null>(null);
   const [expenseId] = useState(() => crypto.randomUUID());
@@ -75,7 +75,7 @@ export function ReceiptExpenseForm({ mode, onDone }: { mode: "receipt" | "manual
       path: "/manager/expenses",
       body: {
         id: expenseId,
-        bookingId: null,
+        bookingId,
         tripId: null,
         tripSegmentId: null,
         category,
@@ -130,6 +130,7 @@ export function ReceiptExpenseForm({ mode, onDone }: { mode: "receipt" | "manual
 
   return <form onSubmit={save} className="grid gap-3 rounded-xl border bg-white p-4">
     <h2 className="font-bold">{mode === "receipt" ? "Add receipt" : "Add expense manually"}</h2>
+    {bookingId ? <p className="text-xs font-semibold text-orange-700">This expense will be attached to the event wrap-up.</p> : null}
     {mode === "receipt" ? <label className="grid gap-1 text-sm font-semibold">Receipt photo<input type="file" accept="image/*" capture="environment" onChange={chooseReceipt} /></label> : null}
     {extractionMessage ? <p role="status" className="text-sm text-slate-600">{extractionMessage}</p> : null}
     <label className="grid gap-1 text-sm font-semibold">Merchant<input value={merchant} onChange={event => setMerchant(event.target.value)} /></label>
