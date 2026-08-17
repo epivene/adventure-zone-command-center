@@ -77,6 +77,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 Act! import
               </Link>
+              <Link
+                className="block rounded-lg px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+                href="/archived"
+              >
+                Archived records
+              </Link>
             </div>
           </details>
         </nav>
@@ -123,6 +129,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               href="/settings/act-migration"
             >
               Act! import
+            </Link>
+            <Link
+              className="rounded px-3 py-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600"
+              href="/archived"
+            >
+              Archived records
             </Link>
             <SignOutButton className="text-sm" />
           </div>
