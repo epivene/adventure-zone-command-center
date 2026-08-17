@@ -120,6 +120,15 @@ export class ActTimelineRecovery {
     let created = false;
     let provenanceRepaired = false;
     let contentRepaired = false;
+    let deduplicatedByContent = false;
+    if (!activityId) {
+      activityId = await this.findExactImportedDuplicate(
+        normalized.value.body,
+        new Date(normalized.value.timelineSortAt),
+        parents,
+      );
+      deduplicatedByContent = Boolean(activityId);
+    }
     if (!activityId) {
       const occurredAt = normalized.value.sourceOccurredAt ? new Date(normalized.value.sourceOccurredAt) : null;
       const endsAt = normalized.value.endsAt ? new Date(normalized.value.endsAt) : null;
@@ -135,7 +144,7 @@ export class ActTimelineRecovery {
       `);
       activityId = text(inserted[0]?.id);
       created = true;
-    } else if (!text(existing[0]?.sourceRecordId)) {
+    } else if (!deduplicatedByContent && !text(existing[0]?.sourceRecordId)) {
       await this.database.execute(sql`
         update activities
         set source_record_id = ${candidate.sourceRecordId}, source_version_id = ${candidate.sourceVersionId},
@@ -168,11 +177,62 @@ export class ActTimelineRecovery {
         created,
         provenanceRepaired,
         contentRepaired,
+        deduplicatedByContent,
         associationsAdded,
         parentCount: parents.length,
         manuallyAssigned: Boolean(manualParent),
       },
     };
+  }
+
+  private async findExactImportedDuplicate(
+    body: string,
+    timelineSortAt: Date,
+    parents: Parent[],
+  ): Promise<string> {
+    if (!parents.length) return "";
+    const parentConditions = parents.map((parent) => {
+      if (parent.entityType === "organization") {
+        return sql`(
+          candidate.organization_id = ${parent.entityId}
+          or exists (
+            select 1 from activity_associations association
+            where association.activity_id = candidate.id
+              and association.organization_id = ${parent.entityId}
+          )
+        )`;
+      }
+      if (parent.entityType === "contact") {
+        return sql`(
+          candidate.contact_id = ${parent.entityId}
+          or exists (
+            select 1 from activity_associations association
+            where association.activity_id = candidate.id
+              and association.contact_id = ${parent.entityId}
+          )
+        )`;
+      }
+      return sql`(
+        candidate.booking_id = ${parent.entityId}
+        or exists (
+          select 1 from activity_associations association
+          where association.activity_id = candidate.id
+            and association.booking_id = ${parent.entityId}
+        )
+      )`;
+    });
+    const found = await this.query(sql`
+      select candidate.id
+      from activities candidate
+      where candidate.source_record_id is not null
+        and (to_jsonb(candidate)->>'deleted_at') is null
+        and candidate.body = ${body}
+        and candidate.timeline_sort_at = ${timelineSortAt}
+        and (${sql.join(parentConditions, sql` or `)})
+      order by candidate.id
+      limit 1
+    `);
+    return text(found[0]?.id);
   }
 
   private async resolveParents(
