@@ -35,6 +35,7 @@ import managerTravelAdminRouter from "./manager-travel-admin";
 import eventWrapUpAdminRouter from "./event-wrap-up-admin";
 import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
+import managerAssistantAdminRouter from "./manager-assistant-admin";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -56,6 +57,7 @@ router.use(managerTravelAdminRouter);
 router.use(eventWrapUpAdminRouter);
 router.use(managerCommunicationsAdminRouter);
 router.use(managerMeetupsAdminRouter);
+router.use(managerAssistantAdminRouter);
 router.use(todayRouter);
 router.use(assistantRouter);
 router.use(bookingPackageEditorRouter);
