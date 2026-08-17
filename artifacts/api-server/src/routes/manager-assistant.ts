@@ -25,6 +25,7 @@ const askAdminSchema = managerAskInputSchema.extend({
   urgency: z.enum(["normal", "urgent"]).default("normal"),
   escalationReason: z.string().trim().min(1).max(1000),
 });
+const responseSchema = z.object({ body: z.string().trim().min(1).max(12000) }).strict();
 
 router.get("/manager/assistant/context", requireManager, async (req, res): Promise<void> => {
   const parsed = managerContextInputSchema.safeParse({
@@ -88,6 +89,31 @@ router.post("/manager/assistant/admin-questions", requireManager, async (req, re
 
 router.get("/manager/assistant/admin-questions", requireManager, async (req, res) => {
   res.json({ questions: await questionRepo.listForLeg(req.legManager!.legId) });
+});
+
+router.post("/manager/assistant/admin-questions/:questionId/respond", requireManager, async (req, res): Promise<void> => {
+  const questionId = z.string().uuid().safeParse(Array.isArray(req.params.questionId) ? req.params.questionId[0] : req.params.questionId);
+  const parsed = responseSchema.safeParse(req.body);
+  if (!questionId.success || !parsed.success) {
+    res.status(400).json({ error: "Enter a response." });
+    return;
+  }
+  const question = await questionRepo.getById(questionId.data);
+  if (!question || question.travelLegId !== req.legManager!.legId) {
+    res.status(404).json({ error: "Admin question not found." });
+    return;
+  }
+  if (question.status === "resolved") {
+    res.status(409).json({ error: "This question is already resolved." });
+    return;
+  }
+  const response = await questionRepo.addResponse({
+    questionId: question.id,
+    actorType: "manager",
+    actorId: `manager:${req.legManager!.legId}`,
+    body: parsed.data.body,
+  });
+  res.status(201).json({ response });
 });
 
 export default router;
