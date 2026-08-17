@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Plus } from "lucide-react";
+import { useManagerAssistant } from "@/features/manager-assistant/manager-assistant-context";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-type NextEvent = { bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null };
+type NextEvent = { bookingId?: string | null; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null };
 type RouteSummary = { nextEvent?: NextEvent | null };
 type MoneySummary = {
   expenseTotalCents?: number;
@@ -31,6 +32,7 @@ function QuickAddMenu() {
 
 export default function ManagerHomePage() {
   const { manager, managerApi } = useManagerAuth();
+  const { setActiveContext, openAssistant } = useManagerAssistant();
   const [reviewsDue, setReviewsDue] = useState(0);
   const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
   const [money, setMoney] = useState<MoneySummary | null>(null);
@@ -41,9 +43,17 @@ export default function ManagerHomePage() {
     managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
   }, [managerApi]);
 
+  useEffect(() => () => setActiveContext(null), [setActiveContext]);
+
   const location = [nextEvent?.city, nextEvent?.region].filter(Boolean).join(", ");
   const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
   const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
+
+  function askAboutNextStop() {
+    if (!nextEvent?.bookingId) return;
+    setActiveContext({ kind: "booking", recordId: nextEvent.bookingId, label: nextEvent.bookingName ?? "Next event" });
+    openAssistant("What do I need to know for this event?");
+  }
 
   return (
     <div className="grid gap-4">
@@ -54,7 +64,7 @@ export default function ManagerHomePage() {
 
       <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Next Stop</p>
-        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{location || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><Link className="button-primary mt-3 inline-flex" href="/manager/route">Open Schedule</Link></div> : <p className="mt-2 text-sm text-slate-700">No upcoming event is currently assigned.</p>}
+        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{location || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><div className="mt-3 flex flex-wrap gap-2"><Link className="button-primary inline-flex" href="/manager/route">Open Schedule</Link>{nextEvent.bookingId ? <button className="button-secondary" type="button" onClick={askAboutNextStop}>Ask Assistant</button> : null}</div></div> : <p className="mt-2 text-sm text-slate-700">No upcoming event is currently assigned.</p>}
       </section>
 
       {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">

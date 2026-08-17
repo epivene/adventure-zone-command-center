@@ -1,0 +1,53 @@
+name: Manager Assistant CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/manager-assistant/**"
+      - "artifacts/api-server/src/features/assistant/assistant-types.ts"
+      - "artifacts/api-server/src/routes/manager-assistant*.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/adventure-zone/src/features/manager-assistant/**"
+      - "artifacts/adventure-zone/src/components/manager/manager-assistant*.tsx"
+      - "artifacts/adventure-zone/src/components/manager-admin/admin-question-review.tsx"
+      - "artifacts/adventure-zone/src/components/manager/manager-shell.tsx"
+      - "artifacts/adventure-zone/src/pages/ManagerHomePage.tsx"
+      - "artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx"
+      - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx"
+      - "artifacts/adventure-zone/src/lib/manager-auth-context.tsx"
+      - "lib/db/src/manager-assistant-schema*"
+      - "lib/db/migrations/046_manager_assistant_questions.sql"
+      - ".github/workflows/manager-assistant-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  manager-assistant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Manager assistant tests
+        run: >-
+          pnpm exec vitest run
+          lib/db/src/manager-assistant-schema.test.ts
+          artifacts/api-server/src/features/manager-assistant/manager-assistant-input.test.ts
+          artifacts/api-server/src/features/manager-assistant/manager-assistant-context.test.ts
+          artifacts/api-server/src/features/manager-assistant/manager-deterministic-answers.test.ts
+          artifacts/api-server/src/features/manager-assistant/manager-assistant-service.test.ts
+          artifacts/api-server/src/features/manager-assistant/admin-question-repository.test.ts
+          artifacts/api-server/src/features/manager-assistant/admin-question-service.test.ts
+          artifacts/adventure-zone/src/features/manager-assistant/manager-assistant-offline-cache.test.ts
+          artifacts/api-server/src/features/leg-manager/manager-map-data.test.ts
+          artifacts/api-server/src/features/manager-comms/acknowledgment-service.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build

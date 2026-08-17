@@ -4,10 +4,13 @@ import { ArrowLeft } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
+import { ManagerAssistantProvider } from "@/features/manager-assistant/manager-assistant-context";
+import { ManagerAssistantDrawer } from "./manager-assistant-drawer";
+import { ManagerAssistantLauncher } from "./manager-assistant-launcher";
 import { ManagerActionCenter } from "./manager-action-center";
 import { ManagerMobileNav } from "./manager-mobile-nav";
 
-export function ManagerShell({ children }: { children: React.ReactNode }) {
+function ManagerShellInner({ children }: { children: React.ReactNode }) {
   const { manager, signOut, managerApi } = useManagerAuth();
   const [location] = useLocation();
   const [unreadMessages, setUnreadMessages] = useState(0);
@@ -44,6 +47,20 @@ export function ManagerShell({ children }: { children: React.ReactNode }) {
     </header>
     <ManagerActionCenter />
     <main className="mx-auto max-w-3xl p-4">{children}</main>
+    <ManagerAssistantLauncher />
+    <ManagerAssistantDrawer />
     <ManagerMobileNav unreadMessages={unreadMessages} onSignOut={signOut} />
   </div>;
+}
+
+export function ManagerShell({ children }: { children: React.ReactNode }) {
+  const { manager } = useManagerAuth();
+  const defaultContext = manager
+    ? { kind: "leg" as const, recordId: manager.legId, label: manager.legName }
+    : null;
+  return (
+    <ManagerAssistantProvider defaultContext={defaultContext}>
+      <ManagerShellInner>{children}</ManagerShellInner>
+    </ManagerAssistantProvider>
+  );
 }

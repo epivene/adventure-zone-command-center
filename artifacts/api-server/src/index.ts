@@ -10,6 +10,7 @@ import { ensureActivityDeleteSchema } from "./features/activities/activity-delet
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
+import { ensureManagerAssistantSchema } from "./features/manager-assistant/manager-assistant-schema";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -26,8 +27,10 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 await ensureBookingProbabilitySchema();
 await ensurePackageIntelligenceSchema();
 const assistantSchemaApplied = await ensureBookingAssistantSchema();
+const managerAssistantSchemaApplied = await ensureManagerAssistantSchema();
 const appliedMigrations = await runActReviewMigrations();
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
+if (managerAssistantSchemaApplied) appliedMigrations.push("046_manager_assistant_questions.sql");
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
 await new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
