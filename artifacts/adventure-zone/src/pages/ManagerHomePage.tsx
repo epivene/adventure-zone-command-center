@@ -5,7 +5,7 @@ import { useManagerAuth } from "@/lib/manager-auth-context";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null };
+type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null };
 type ManagerMapSummary = { events?: NextEvent[] };
 type IncompleteWrapUp = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedOutAt?: string | null };
 type MoneySummary = {
@@ -40,7 +40,7 @@ export default function ManagerHomePage() {
 
   useEffect(() => {
     managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due").then((data) => setReviewsDue(data.reviewsDue?.length ?? 0)).catch(() => setReviewsDue(0));
-    managerApi<ManagerMapSummary>("/manager/map").then((data) => setNextEvent((data.events ?? [])[0] ?? null)).catch(() => setNextEvent(null));
+    managerApi<ManagerMapSummary>("/manager/map").then((data) => setNextEvent((data.events ?? []).find((event) => event.status === "confirmed") ?? null)).catch(() => setNextEvent(null));
     managerApi<{ lifecycles?: IncompleteWrapUp[] }>("/manager/events/lifecycle/incomplete").then((data) => setIncompleteWrapUps(data.lifecycles ?? [])).catch(() => setIncompleteWrapUps([]));
     managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
   }, [managerApi]);
@@ -63,7 +63,7 @@ export default function ManagerHomePage() {
 
       <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Next Stop</p>
-        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{location || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} /></div><Link className="button-secondary mt-3 inline-flex" href="/manager/route">Open Schedule</Link></div> : <p className="mt-2 text-sm text-slate-700">No upcoming event is currently assigned.</p>}
+        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{location || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} /></div><Link className="button-secondary mt-3 inline-flex" href="/manager/route">Open Schedule</Link></div> : <p className="mt-2 text-sm text-slate-700">No confirmed upcoming event is currently assigned.</p>}
       </section>
 
       {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">
