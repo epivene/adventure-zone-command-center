@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ASSISTANT_OWNER_ACTOR_ID,
   assistantCacheKey,
   pruneAssistantSnapshots,
   type AssistantCachedSnapshot,
 } from "./assistant-offline-cache";
 
-function snapshot(index: number, savedAt: string): AssistantCachedSnapshot {
+function snapshot(
+  index: number,
+  savedAt: string,
+  actorId = ASSISTANT_OWNER_ACTOR_ID,
+): AssistantCachedSnapshot {
   return {
-    key: `booking:${index}`,
+    key: `${actorId}:booking:${index}`,
+    actorId,
     kind: "booking",
     recordId: String(index),
     label: `Booking ${index}`,
@@ -23,8 +29,10 @@ function snapshot(index: number, savedAt: string): AssistantCachedSnapshot {
 }
 
 describe("assistant offline cache", () => {
-  it("uses context kind + record id as stable cache key", () => {
-    expect(assistantCacheKey({ kind: "booking", recordId: "ABC", label: "X" })).toBe("booking:ABC");
+  it("scopes stable cache keys to the authenticated owner", () => {
+    expect(assistantCacheKey({ kind: "booking", recordId: "ABC", label: "X" })).toBe(
+      "owner:booking:ABC",
+    );
   });
 
   it("keeps only the newest bounded snapshots", () => {
@@ -50,5 +58,19 @@ describe("assistant offline cache", () => {
       { now: new Date("2026-08-17T00:00:00.000Z"), maxEntries: 20, maxAgeDays: 30 },
     );
     expect(result.map((row) => row.recordId)).toEqual(["2"]);
+  });
+
+  it("does not return another actor's cached CRM context", () => {
+    const result = pruneAssistantSnapshots(
+      [
+        snapshot(1, "2026-08-16T00:00:00.000Z", "owner"),
+        snapshot(2, "2026-08-16T00:00:00.000Z", "other-user"),
+      ],
+      {
+        actorId: "owner",
+        now: new Date("2026-08-17T00:00:00.000Z"),
+      },
+    );
+    expect(result.map((row) => row.recordId)).toEqual(["1"]);
   });
 });
