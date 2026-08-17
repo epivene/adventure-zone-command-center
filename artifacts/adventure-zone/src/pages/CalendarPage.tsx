@@ -18,11 +18,16 @@ export type ScheduleFilterProps = {
   embedded?: boolean;
 };
 
+function isActActivity(event: CalendarEvent) {
+  return event.source === "act_activity";
+}
+
 export function CalendarContent({ season, legId, status, embedded = false }: ScheduleFilterProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [showPotential, setShowPotential] = useState(false);
 
   const now = new Date();
   const currentMonth = businessDateKey(now).slice(0, 7);
@@ -45,25 +50,47 @@ export function CalendarContent({ season, legId, status, embedded = false }: Sch
       .finally(() => setLoading(false));
   }, [activeMonth]);
 
-  const filteredEvents = useMemo(() => (events as any[]).filter((event) => {
+  const scopedEvents = useMemo(() => (events as any[]).filter((event) => {
     if (legId && event.travelLegId !== legId) return false;
     if (status && status !== "all" && String(event.status ?? "").toLowerCase() !== status.toLowerCase()) return false;
     if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
     return true;
   }) as CalendarEvent[], [events, legId, status, season]);
 
+  const hasExplicitStatusFilter = Boolean(status && status !== "all");
+  const potentialBookingCount = useMemo(() => scopedEvents.filter((event) => !isActActivity(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [scopedEvents]);
+  const filteredEvents = useMemo(() => {
+    if (hasExplicitStatusFilter || showPotential) return scopedEvents;
+    return scopedEvents.filter((event) => isActActivity(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
+  }, [scopedEvents, hasExplicitStatusFilter, showPotential]);
+
   const handleMonthChange = useCallback((month: string) => setActiveMonth(month), []);
+
+  const calendarTools = (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {!hasExplicitStatusFilter && potentialBookingCount > 0 ? (
+        <button
+          className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${showPotential ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+          onClick={() => setShowPotential((value) => !value)}
+          type="button"
+        >
+          {showPotential ? "Hide potential" : `Show potential (${potentialBookingCount})`}
+        </button>
+      ) : null}
+      <button onClick={() => setShowSuggestions((value) => !value)} className={embedded ? "text-sm font-semibold text-slate-500 hover:text-orange-700" : "button-secondary"} type="button">
+        {showSuggestions ? (embedded ? "Hide extra tools" : "Hide suggestions") : "More"}
+      </button>
+    </div>
+  );
 
   return (
     <div className="grid gap-4">
       {!embedded ? (
         <header className="flex flex-wrap items-end justify-between gap-4">
-          <div><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Schedule</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Calendar</h1><p className="mt-2 max-w-2xl text-slate-600">Confirmed, tentative, and imported activity dates.</p></div>
-          <button onClick={() => setShowSuggestions((value) => !value)} className="button-secondary">{showSuggestions ? "Hide suggestions" : "More"}</button>
+          <div><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Schedule</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Calendar</h1><p className="mt-2 max-w-2xl text-slate-600">Booked events are shown first. Potential bookings stay available when you need planning context.</p></div>
+          {calendarTools}
         </header>
-      ) : (
-        <div className="flex justify-end"><button onClick={() => setShowSuggestions((value) => !value)} className="text-sm font-semibold text-slate-500 hover:text-orange-700">{showSuggestions ? "Hide extra tools" : "More"}</button></div>
-      )}
+      ) : calendarTools}
 
       {showSuggestions ? <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm"><HistorySuggestions /></section> : null}
       {loading ? <p className="text-slate-500">Loading calendar…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : <EventCalendar events={filteredEvents} initialMonth={activeMonth} onMonthChange={handleMonthChange} />}
