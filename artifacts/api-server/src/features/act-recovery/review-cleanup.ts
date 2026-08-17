@@ -1,6 +1,11 @@
 import { actHtmlToPlainText } from "@/features/act-replacement/normalizers/act-html-text";
 import { normalizeTimeline } from "@/features/act-replacement/normalizers/timeline-normalizer";
 
+const displayTextKeys = [
+  "details", "Details", "noteText", "NoteText", "body", "Body",
+  "regarding", "Regarding", "subject", "Subject",
+] as const;
+
 function text(snapshot: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
     const value = snapshot[key];
@@ -15,6 +20,15 @@ function capturedAt(snapshot: Record<string, unknown>) {
     if (typeof value === "string" && !Number.isNaN(new Date(value).getTime())) return value;
   }
   return new Date(0).toISOString();
+}
+
+export function cleanReviewSnapshot(rawSnapshot: Record<string, unknown>) {
+  const cleaned = { ...rawSnapshot };
+  for (const key of displayTextKeys) {
+    const value = cleaned[key];
+    if (typeof value === "string" && value.trim()) cleaned[key] = actHtmlToPlainText(value);
+  }
+  return cleaned;
 }
 
 export function reviewDisplay(input: {
