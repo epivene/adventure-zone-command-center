@@ -3,6 +3,7 @@ import { apiGet } from "@/lib/auth-token";
 import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { HistorySuggestions } from "@/components/calendar/history-suggestions";
 import { businessDateKey } from "@/lib/business-date";
+import { calendarInitialMonth, normalizeCalendarBookingDates } from "@/features/calendar/calendar-display";
 
 function buildDateWindow(monthKey: string): { from: string; to: string } {
   const [year, month] = monthKey.split("-").map(Number);
@@ -29,21 +30,35 @@ export function CalendarContent({ season, legId, status, embedded = false }: Sch
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showPotential, setShowPotential] = useState(false);
 
-  const now = new Date();
-  const currentMonth = businessDateKey(now).slice(0, 7);
-  const initialMonth = season && /^\d{4}$/.test(season) ? `${season}-01` : currentMonth;
+  const todayKey = businessDateKey(new Date());
+  const currentYear = todayKey.slice(0, 4);
+  const initialMonth = calendarInitialMonth(season, todayKey);
   const [activeMonth, setActiveMonth] = useState(initialMonth);
 
   useEffect(() => {
-    if (season && /^\d{4}$/.test(season)) setActiveMonth((current) => current.startsWith(`${season}-`) ? current : `${season}-01`);
-  }, [season]);
+    if (!season || !/^\d{4}$/.test(season)) return;
+    setActiveMonth((current) => {
+      if (current.startsWith(`${season}-`)) return current;
+      return season === currentYear ? todayKey.slice(0, 7) : `${season}-01`;
+    });
+  }, [season, currentYear, todayKey]);
 
   useEffect(() => {
     const { from, to } = buildDateWindow(activeMonth);
     setLoading(true);
     apiGet<CalendarEvent[]>(`/calendar?from=${from}&to=${to}`)
       .then((data) => {
-        setEvents((data ?? []).map((event) => ({ ...event, startsAt: event.startsAt ? new Date(event.startsAt) : null, endsAt: event.endsAt ? new Date(event.endsAt) : null })) as CalendarEvent[]);
+        const parsed = (data ?? []).map((event) => {
+          const converted = {
+            ...event,
+            startsAt: event.startsAt ? new Date(event.startsAt) : null,
+            endsAt: event.endsAt ? new Date(event.endsAt) : null,
+          } as CalendarEvent;
+          return isActActivity(converted)
+            ? converted
+            : normalizeCalendarBookingDates(converted as CalendarEvent & { startsAt: Date | null; endsAt: Date | null });
+        });
+        setEvents(parsed as CalendarEvent[]);
         setError(null);
       })
       .catch((e) => setError(e.message))
