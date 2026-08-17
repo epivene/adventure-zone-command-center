@@ -21,6 +21,9 @@ export const assistantSourceKindValues = [
   "route",
   "business_knowledge",
   "derived_fact",
+  "handoff",
+  "acknowledgment",
+  "operations_knowledge",
 ] as const;
 
 export type AssistantSourceKind = (typeof assistantSourceKindValues)[number];
