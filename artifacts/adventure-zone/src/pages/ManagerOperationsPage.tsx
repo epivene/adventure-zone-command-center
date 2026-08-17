@@ -55,7 +55,7 @@ export default function ManagerOperationsPage() {
         </section>
       ) : null}
 
-      {!tripId ? <p className="rounded-xl border bg-orange-50 p-3 text-sm">No current trip. Leg-level travel updates can still be saved.</p> : null}
+      {!tripId ? <p className="rounded-xl border bg-orange-50 p-3 text-sm">No formal trip has been created yet. Booked events assigned to this leg still appear on the map; leg-level travel updates can still be saved.</p> : null}
 
       {map.data ? <ManagerTravelPlanningPanel managerApi={managerApi} tripId={tripId} mapData={map.data} compact={mode === "on-road"} /> : null}
 
