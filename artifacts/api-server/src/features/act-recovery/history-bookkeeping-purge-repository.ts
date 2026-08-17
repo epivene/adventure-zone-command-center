@@ -58,7 +58,7 @@ export class ActHistoryBookkeepingPurgeRepository {
         source.stream_type as "streamType",
         source.act_record_id as "actRecordId",
         version.raw_snapshot as "rawSnapshot",
-        coalesce(version.source_edited_at, version.source_created_at, version.fetched_at, version.created_at) as "capturedAt"
+        version.fetched_at as "capturedAt"
       from act_source_records source
       join act_source_record_versions version on version.id = source.latest_version_id
       where source.stream_type in ('history', 'note', 'activity')
@@ -131,15 +131,12 @@ export class ActHistoryBookkeepingPurgeRepository {
         await transaction.execute(sql`delete from activities where id in (${activityIdSql})`);
       }
 
-      // Remove durable recovery/review state before deleting its source/version FKs.
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_archive_recovery_decisions", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_archive_recovery_items", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_replacement_review_decisions", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_replacement_outcomes", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_source_assignments", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_imported_field_origins", sourceIdSql);
-
-      // Operations can own imported-field-origin rows, so origins are removed first above.
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_replacement_apply_operations", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_replacement_observations", sourceIdSql);
       await this.deleteBySourceIdsIfPresent(transaction as never, "act_archive_profile_import_sources", sourceIdSql);
@@ -158,7 +155,6 @@ export class ActHistoryBookkeepingPurgeRepository {
         `);
       }
 
-      // Break the source -> latest-version cycle, then remove all preserved versions.
       await transaction.execute(sql`
         update act_source_records
         set latest_version_id = null, latest_fingerprint = null
@@ -186,7 +182,6 @@ export class ActHistoryBookkeepingPurgeRepository {
     sourceIdSql: ReturnType<typeof sql.join>,
   ) {
     if (!await this.tableExists(executor, tableName)) return;
-    // tableName is selected only from the hard-coded calls above; identifiers are not user input.
     const table = sql.raw(tableName);
     await executor.execute(sql`delete from ${table} where source_record_id in (${sourceIdSql})`);
   }
