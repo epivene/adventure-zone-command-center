@@ -4,8 +4,11 @@ import type {
   BookingBrief,
 } from "./assistant-types";
 
+export const ASSISTANT_OWNER_ACTOR_ID = "owner";
+
 export type AssistantCachedSnapshot = {
   key: string;
+  actorId: string;
   kind: Exclude<ActiveAssistantContext, null>["kind"];
   recordId: string;
   label: string;
@@ -16,8 +19,9 @@ export type AssistantCachedSnapshot = {
 
 export function assistantCacheKey(
   context: Exclude<ActiveAssistantContext, null>,
+  actorId: string = ASSISTANT_OWNER_ACTOR_ID,
 ): string {
-  return `${context.kind}:${context.recordId}`;
+  return `${actorId}:${context.kind}:${context.recordId}`;
 }
 
 export function pruneAssistantSnapshots(
@@ -26,13 +30,16 @@ export function pruneAssistantSnapshots(
     now?: Date;
     maxEntries?: number;
     maxAgeDays?: number;
+    actorId?: string;
   } = {},
 ): AssistantCachedSnapshot[] {
   const now = options.now ?? new Date();
   const maxEntries = options.maxEntries ?? 20;
   const maxAgeDays = options.maxAgeDays ?? 30;
+  const actorId = options.actorId ?? ASSISTANT_OWNER_ACTOR_ID;
   const cutoff = now.getTime() - maxAgeDays * 24 * 60 * 60 * 1000;
   return [...snapshots]
+    .filter((snapshot) => snapshot.actorId === actorId)
     .filter((snapshot) => new Date(snapshot.savedAt).getTime() >= cutoff)
     .sort((a, b) => b.savedAt.localeCompare(a.savedAt))
     .slice(0, maxEntries);
@@ -43,12 +50,13 @@ const STORE = "context-snapshots";
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const request = indexedDB.open(DB_NAME, 2);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: "key" });
+      if (db.objectStoreNames.contains(STORE)) {
+        db.deleteObjectStore(STORE);
       }
+      db.createObjectStore(STORE, { keyPath: "key" });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -83,10 +91,13 @@ export async function saveAssistantSnapshot(input: {
   contextRef: Exclude<ActiveAssistantContext, null>;
   context: AssistantContextBundle;
   brief: BookingBrief;
+  actorId?: string;
 }): Promise<void> {
   if (typeof indexedDB === "undefined") return;
+  const actorId = input.actorId ?? ASSISTANT_OWNER_ACTOR_ID;
   const snapshot: AssistantCachedSnapshot = {
-    key: assistantCacheKey(input.contextRef),
+    key: assistantCacheKey(input.contextRef, actorId),
+    actorId,
     kind: input.contextRef.kind,
     recordId: input.contextRef.recordId,
     label: input.contextRef.label ?? input.context.context.label,
@@ -104,31 +115,43 @@ export async function saveAssistantSnapshot(input: {
   });
 
   const all = await getAll();
-  const keep = pruneAssistantSnapshots(all);
+  const keep = pruneAssistantSnapshots(all, { actorId });
   const keepKeys = new Set(keep.map((row) => row.key));
   await Promise.all(
-    all.filter((row) => !keepKeys.has(row.key)).map((row) => remove(row.key)),
+    all
+      .filter((row) => row.actorId === actorId && !keepKeys.has(row.key))
+      .map((row) => remove(row.key)),
   );
 }
 
 export async function getAssistantSnapshot(
   context: Exclude<ActiveAssistantContext, null>,
+  actorId: string = ASSISTANT_OWNER_ACTOR_ID,
 ): Promise<AssistantCachedSnapshot | null> {
   if (typeof indexedDB === "undefined") return null;
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, "readonly");
-    const request = tx.objectStore(STORE).get(assistantCacheKey(context));
+    const request = tx.objectStore(STORE).get(assistantCacheKey(context, actorId));
     request.onsuccess = () => {
       const row = request.result as AssistantCachedSnapshot | undefined;
-      if (!row) {
+      if (!row || row.actorId !== actorId) {
         resolve(null);
         return;
       }
-      const [fresh] = pruneAssistantSnapshots([row]);
+      const [fresh] = pruneAssistantSnapshots([row], { actorId });
       resolve(fresh ?? null);
     };
     request.onerror = () => reject(request.error);
     tx.oncomplete = () => db.close();
   });
+}
+
+export async function clearAssistantCacheForActor(
+  actorId: string = ASSISTANT_OWNER_ACTOR_ID,
+): Promise<void> {
+  const rows = await getAll();
+  await Promise.all(
+    rows.filter((row) => row.actorId === actorId).map((row) => remove(row.key)),
+  );
 }
