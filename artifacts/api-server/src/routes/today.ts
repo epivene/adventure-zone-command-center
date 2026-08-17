@@ -1,6 +1,11 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
-import { getTodayDashboard } from "@/features/follow-ups/today-query";
+import {
+  enrichTodayDashboardOperations,
+  getTodayDashboard,
+  TODAY_UPCOMING_EVENT_LIMIT,
+} from "@/features/follow-ups/today-query";
+import { listTodayUpcomingEvents } from "@/features/follow-ups/today-upcoming-events";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import { listTripsInWindow } from "@/features/trips/trip-repository";
 import { businessDayBounds } from "@/lib/business-date";
@@ -13,15 +18,21 @@ router.get("/today", async (req, res): Promise<void> => {
     const planPage = Number(req.query.planPage) || 1;
     const now = new Date();
     const { start, end } = businessDayBounds(now);
-    const [dashboard, todayTrips] = await Promise.all([
+    const operationsProvider = createBookingOperationsSummaryProvider(db);
+    const [baseDashboard, upcomingEvents, todayTrips] = await Promise.all([
       getTodayDashboard(
         now,
         null,
         { followUps: followUpsPage, needsFollowUpPlan: planPage },
-        createBookingOperationsSummaryProvider(db),
+        null,
       ),
+      listTodayUpcomingEvents(db, start, TODAY_UPCOMING_EVENT_LIMIT),
       listTripsInWindow(db, start, end),
     ]);
+    const dashboard = await enrichTodayDashboardOperations(
+      { ...baseDashboard, upcomingEvents },
+      operationsProvider,
+    );
     res.json({
       ...dashboard,
       todayTrips: todayTrips.map((trip) => ({
