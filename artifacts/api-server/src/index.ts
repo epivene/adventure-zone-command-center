@@ -7,6 +7,7 @@ import { autoConsolidateImportedLocationFamilies } from "./features/organization
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
+import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -30,9 +31,10 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-// Ensure probability migrations 034/035 are present even on Render services
-// whose configured start command bypasses the standalone custom migration runner.
+// Ensure compatibility guards are present even on Render services whose
+// configured start command bypasses a standalone migration runner.
 await ensureBookingProbabilitySchema();
+await ensurePackageIntelligenceSchema();
 const appliedMigrations = await runActReviewMigrations();
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
