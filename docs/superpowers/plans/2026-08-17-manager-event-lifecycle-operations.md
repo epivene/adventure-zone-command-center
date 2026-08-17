@@ -4,7 +4,7 @@
 
 **Goal:** Complete the Leg Manager operational flow with permanent worker deletion, receipt capture with AI-assisted field extraction, event check-in/check-out, and resumable post-event wrap-up.
 
-**Architecture:** Reuse the existing crew, finance, receipt, review, incident, and wrap-up systems rather than creating parallel feature stacks. Add one small booking+leg lifecycle record for check-in/out and wrap-up status; all domain data stays in its existing source-of-truth tables. Extend the existing provider-agnostic AI client with an image-capable receipt-extraction path, but require human confirmation before any expense is saved.
+**Architecture:** Reuse the existing crew, finance, receipt, review, incident, and wrap-up systems rather than creating parallel feature stacks. Add one small booking+leg lifecycle record for check-in/out and overall wrap-up status; all domain data stays in its existing source-of-truth tables. Extend the existing provider-agnostic AI client with an image-capable receipt-extraction path, but require human confirmation before any expense is saved.
 
 **Tech Stack:** React + TypeScript, Wouter, Express, Drizzle ORM/PostgreSQL, Vitest + Testing Library, IndexedDB/offline manager queues, Google Cloud receipt object storage, existing Anthropic/OpenAI provider infrastructure.
 
@@ -14,61 +14,17 @@
 - Worker deletion is permanent and requires a second explicit named confirmation action.
 - A Leg Manager may permanently delete only a worker associated with their own leg; Admin may permanently delete any worker.
 - Worker deletion removes worker-owned work history, ratings, manager notes, and worker-specific event links, but never unrelated bookings, trips, finance entries, events, or workers.
-- Receipt capture must work from camera or existing image and must preserve the original image.
+- Receipt capture must work from camera or existing image and preserve the original image.
 - AI receipt extraction only proposes merchant, total, tax, and transaction date; the manager must review/edit before saving.
-- Receipt extraction failure must fall back to manual entry without losing the captured image.
-- Offline expense sync must occur before receipt metadata/image upload; upload failure must not roll back the saved expense.
+- Receipt extraction failure falls back to manual entry without losing the captured image.
+- Offline expense sync occurs before receipt metadata/image upload; upload failure must not roll back the saved expense.
 - Check-in/out ownership is booking + leg and must not depend on a Trip record.
 - GPS is optional and may never block check-in or check-out.
-- Check-out must persist before wrap-up navigation occurs.
+- Check-out persists before wrap-up navigation occurs.
 - Existing due-review behavior remains authoritative and must not be duplicated.
-- Finish later preserves all already-saved wrap-up section data.
+- Finish later preserves every already-saved wrap-up section.
 - Cross-leg permissions are server-enforced.
 - Do not introduce payroll/timeclock functionality or geofence requirements.
-
----
-
-## File Structure
-
-**Worker deletion**
-- Modify: `artifacts/api-server/src/features/leg-manager/crew-repository.ts`
-- Modify: `artifacts/api-server/src/features/leg-manager/crew-repository.test.ts`
-- Modify: `artifacts/api-server/src/routes/leg-manager.ts`
-- Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts`
-- Create: `artifacts/api-server/src/routes/leg-manager-worker-delete.test.ts`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerWorkerPage.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerWorkerPage.test.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerAftermathAdminPage.tsx`
-
-**Receipt entry + extraction**
-- Modify: `artifacts/api-server/src/features/ai-suggestions/ai-client.ts`
-- Create: `artifacts/api-server/src/features/leg-manager/receipt-extraction.ts`
-- Create: `artifacts/api-server/src/features/leg-manager/receipt-extraction.test.ts`
-- Modify: `artifacts/api-server/src/routes/leg-manager.ts`
-- Create: `artifacts/adventure-zone/src/components/manager/receipt-expense-form.tsx`
-- Create: `artifacts/adventure-zone/src/components/manager/receipt-expense-form.test.tsx`
-- Modify: `artifacts/adventure-zone/src/components/manager/receipt-capture.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerReceiptsPage.tsx`
-- Create: `artifacts/adventure-zone/src/pages/ManagerReceiptsPage.test.tsx`
-
-**Event lifecycle persistence**
-- Modify: `lib/db/src/schema/index.ts`
-- Add migration using the repository's next numbered migration file under `lib/db/migrations/`
-- Create: `artifacts/api-server/src/features/leg-manager/event-lifecycle-repository.ts`
-- Create: `artifacts/api-server/src/features/leg-manager/event-lifecycle-repository.test.ts`
-- Modify: `artifacts/api-server/src/routes/leg-manager.ts`
-- Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts`
-
-**Check-in/out + wrap-up UI**
-- Create: `artifacts/adventure-zone/src/features/manager/event-location.ts`
-- Create: `artifacts/adventure-zone/src/features/manager/event-location.test.ts`
-- Create: `artifacts/adventure-zone/src/components/manager/event-lifecycle-action.tsx`
-- Create: `artifacts/adventure-zone/src/components/manager/event-lifecycle-action.test.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerHomePage.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerHomePage.test.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerEventWrapUpPage.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerEventReviewPage.tsx`
 
 ---
 
@@ -82,17 +38,17 @@
 - Create: `artifacts/api-server/src/routes/leg-manager-worker-delete.test.ts`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerWorkerPage.tsx`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerWorkerPage.test.tsx`
-- Modify: `artifacts/adventure-zone/src/pages/ManagerAftermathAdminPage.tsx`
+- Modify: `artifacts/adventure-zone/src/pages/ManagerCrewAdminPage.tsx`
 
 **Interfaces:**
-- Produce `crew.workerBelongsToLeg(workerId: string, legId: string): Promise<boolean>`.
-- Produce `crew.deleteWorker(workerId: string): Promise<boolean>` that transactionally removes worker-owned children then the worker.
+- Produce `workerBelongsToLeg(workerId: string, legId: string): Promise<boolean>`.
+- Produce `deleteWorker(workerId: string): Promise<boolean>` that transactionally removes worker-owned child rows then the worker.
 - Manager route: `DELETE /manager/crew/:workerId`.
 - Admin route: `DELETE /manager-admin/crew/:workerId`.
 
-- [ ] **Step 1: Add failing repository tests for scoped ownership and cascade delete**
+- [ ] **Step 1: Write failing repository tests**
 
-Add tests that create two workers and two legs, attach work-history and manager-note rows to one worker, then assert:
+Create two workers and two legs. Attach work history and manager notes to worker A for leg A. Assert:
 
 ```ts
 expect(await repo.workerBelongsToLeg(workerA.id, legA.id)).toBe(true);
@@ -104,66 +60,55 @@ expect(await repo.getManagerNote(noteA.id)).toBeNull();
 expect(await repo.getWorker(workerB.id)).not.toBeNull();
 ```
 
-- [ ] **Step 2: Run the focused repository test**
+- [ ] **Step 2: Run repository test and verify RED**
 
-Run:
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-repository.test.ts
 ```
-Expected: FAIL because worker-level delete/ownership methods do not yet exist.
+Expected: FAIL because worker-level ownership/delete methods do not exist.
 
-- [ ] **Step 3: Implement repository ownership + transactional delete**
+- [ ] **Step 3: Implement repository ownership and transaction**
 
-In `crew-repository.ts`, add `getWorker`, `workerBelongsToLeg`, and `deleteWorker`. Ownership is true when any worker work-history or manager-note row belongs to the supplied leg. Delete worker-owned child records first inside one database transaction, then delete the worker row. Return false when the worker does not exist.
+`workerBelongsToLeg` is true when a worker has any work-history or manager-note row owned by the supplied leg. `deleteWorker` deletes worker-owned work-history/ratings, manager notes, and worker-specific links in a database transaction, then deletes the worker. Do not delete bookings, trips, finance entries, or event rows.
 
-- [ ] **Step 4: Add failing route permission tests**
+- [ ] **Step 4: Write failing route permission tests**
 
-Create `leg-manager-worker-delete.test.ts` covering:
-- own-leg manager gets 204
-- unrelated-leg manager gets 403
-- missing worker gets 404
-- admin delete gets 204 regardless of leg
+`leg-manager-worker-delete.test.ts` covers own-leg manager → 204, unrelated-leg manager → 403, missing worker → 404, and admin → 204 regardless of leg.
 
-- [ ] **Step 5: Implement manager/admin delete routes**
+- [ ] **Step 5: Implement manager/admin DELETE routes**
 
-Manager route:
+Manager flow:
+
 ```ts
-router.delete("/manager/crew/:workerId", requireManager, async (req, res) => {
-  const workerId = routeParam(req.params.workerId);
-  if (!(await crew.workerBelongsToLeg(workerId, req.legManager!.legId))) {
-    res.status(403).json({ error: "This worker is not associated with your leg" });
-    return;
-  }
-  if (!(await crew.deleteWorker(workerId))) {
-    res.status(404).json({ error: "Worker not found" });
-    return;
-  }
-  res.status(204).end();
-});
+if (!(await crew.workerBelongsToLeg(workerId, req.legManager!.legId))) {
+  res.status(403).json({ error: "This worker is not associated with your leg" });
+  return;
+}
+if (!(await crew.deleteWorker(workerId))) {
+  res.status(404).json({ error: "Worker not found" });
+  return;
+}
+res.status(204).end();
 ```
 
-Admin route performs only existence/delete checks and has no leg restriction.
+Admin route skips the leg-scope check but still returns 404 for a missing worker.
 
-- [ ] **Step 6: Add UI test for two-step named confirmation**
+- [ ] **Step 6: Write destructive-confirmation UI tests**
 
-Test that the first **Delete worker** click does not call DELETE, then the confirmation renders `Delete <worker name>`, and only that second action calls the route and returns to `/manager/crew`.
+On both manager and admin crew UI, first click on **Delete worker** must not call DELETE. It reveals a warning naming the worker. Only the second action, exactly `Delete ${worker.name}`, may issue the request.
 
-- [ ] **Step 7: Implement manager/admin destructive confirmation UI**
+- [ ] **Step 7: Implement two-step named confirmation**
 
-On `ManagerWorkerPage`, add a danger section after ordinary worker tools. The first button reveals a warning containing the worker name and that history/notes will also be permanently deleted. The second button must be exactly `Delete ${worker.name}`. On success navigate to `/manager/crew`.
+Manager success navigates back to `/manager/crew`. Admin success removes the worker immediately from `ManagerCrewAdminPage` results. Disable the second button while deleting.
 
-In `ManagerAftermathAdminPage`, expose the same named confirmation next to workers in the existing admin crew area using `/manager-admin/crew/:workerId`.
-
-- [ ] **Step 8: Run focused tests and commit**
+- [ ] **Step 8: Verify and commit Task 1**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-repository.test.ts src/routes/leg-manager-worker-delete.test.ts
 pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerWorkerPage.test.tsx
 ```
 
-Commit:
 ```bash
-git add artifacts/api-server/src/features/leg-manager/crew-repository.ts artifacts/api-server/src/features/leg-manager/crew-repository.test.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/api-server/src/routes/leg-manager-admin.ts artifacts/api-server/src/routes/leg-manager-worker-delete.test.ts artifacts/adventure-zone/src/pages/ManagerWorkerPage.tsx artifacts/adventure-zone/src/pages/ManagerWorkerPage.test.tsx artifacts/adventure-zone/src/pages/ManagerAftermathAdminPage.tsx
 git commit -m "feat: add scoped permanent worker deletion"
 ```
 
@@ -183,14 +128,13 @@ git commit -m "feat: add scoped permanent worker deletion"
 - Create: `artifacts/adventure-zone/src/pages/ManagerReceiptsPage.test.tsx`
 
 **Interfaces:**
-- Extend AI client with optional `completeImage(input: { prompt: string; mimeType: string; base64: string }): Promise<string>` using the same provider-selection order as `complete()`.
-- Produce `extractReceiptFields(image): Promise<{ merchant: string | null; totalCents: number | null; taxCents: number | null; occurredAt: string | null }>`.
-- Manager route: `POST /manager/receipts/extract` with raw image bytes and image content type.
-- New form accepts optional `initialImage: File` and optional extraction suggestions, then creates an expense before queueing the receipt metadata/image.
+- Extend `AiCompletionClient` with optional `completeImage(input: { prompt: string; mimeType: string; base64: string }): Promise<string>` using the existing provider priority.
+- Produce `extractReceiptFields()` returning `{ merchant, totalCents, taxCents, occurredAt }` with nullable fields.
+- Manager route: `POST /manager/receipts/extract`, raw `image/*`, max 12 MB.
 
-- [ ] **Step 1: Add failing extraction parser tests**
+- [ ] **Step 1: Write failing extraction parser tests**
 
-Cover valid JSON, fenced JSON, missing fields, malformed provider response, and impossible negative values. Expected normalized result example:
+Cover valid JSON, fenced JSON, missing fields, malformed provider output, negative values, and a normal result:
 
 ```ts
 expect(result).toEqual({
@@ -201,113 +145,98 @@ expect(result).toEqual({
 });
 ```
 
-Malformed extraction returns all-null suggestions instead of throwing away the image flow.
+Malformed extraction returns all-null suggestions instead of aborting receipt capture.
 
-- [ ] **Step 2: Extend the existing AI provider client for images**
+- [ ] **Step 2: Run extraction tests and verify RED**
 
-For Anthropic, use one user message containing an image block plus text prompt. For OpenAI, use a user message containing text plus a `data:<mime>;base64,...` image URL. Keep provider priority unchanged and keep `complete()` behavior unchanged for existing callers.
+```bash
+pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/receipt-extraction.test.ts
+```
 
-- [ ] **Step 3: Implement `receipt-extraction.ts`**
+- [ ] **Step 3: Add image completion to existing AI provider abstraction**
 
-Prompt requires JSON only:
+Anthropic: send an image block plus text prompt. OpenAI: send text plus a `data:<mime>;base64,...` image input. Keep current `complete()` unchanged for every existing AI caller.
+
+- [ ] **Step 4: Implement receipt extraction**
+
+Require JSON matching:
+
 ```json
 {"merchant":null,"totalCents":null,"taxCents":null,"occurredAt":null}
 ```
-Validate and normalize with Zod. Never infer cents from ambiguous text client-side; provider output must already be integer cents.
 
-- [ ] **Step 4: Add and implement `/manager/receipts/extract`**
+Validate with Zod. Values are suggestions only. Do not save an expense in the extraction function.
 
-Use `express.raw({ type: "image/*", limit: "12mb" })`. If no AI provider is configured, return HTTP 200 with `{ suggestions: null, unavailable: true }` so capture continues manually. Other extraction failures likewise return a safe manual-fallback payload rather than deleting the photo.
+- [ ] **Step 5: Implement `/manager/receipts/extract` manual-fallback behavior**
 
-- [ ] **Step 5: Add failing Receipts empty-state/UI tests**
+If no provider is configured or provider extraction fails, return 200 with `{ suggestions: null, unavailable: true }`. The photo remains usable for manual entry.
 
-Assert the empty page exposes:
-- `+ Add receipt`
-- `Add expense manually`
+- [ ] **Step 6: Write Receipts-page tests**
 
-For Add receipt, provide a fake image, mock extraction, and assert merchant/total/tax/date populate editable inputs before Save.
+Empty state must show both **+ Add receipt** and **Add expense manually**. Camera/photo selection calls extraction when online and fills editable merchant/total/tax/date fields. Extraction failure still opens the form with the image retained.
 
-- [ ] **Step 6: Implement `ReceiptExpenseForm` and receipt-first sequencing**
+- [ ] **Step 7: Implement `ReceiptExpenseForm`**
 
-Form fields:
-- merchant
-- total
-- tax
-- date
-- category
-- payment source
-- optional booking/trip association
-- notes
-
-On receipt-first Save:
-1. create `/manager/expenses` using a stable client mutation ID
-2. receive the persisted expense ID
-3. queue receipt metadata referencing that expense ID
+Fields: merchant, total, tax, date, category, payment source, optional event/trip, notes. Receipt-first Save sequence is:
+1. create expense with stable mutation ID
+2. obtain expense ID
+3. queue receipt metadata tied to expense ID
 4. queue image blob
-5. flush expense mutation before receipt metadata/image when online
+5. flush expense before receipt image when online
 
-Manual expense uses the same form without an image/extraction step.
+Manual expense uses the same form without an image.
 
-- [ ] **Step 7: Preserve existing offline semantics**
+- [ ] **Step 8: Verify existing offline semantics**
 
-Reuse `manager-sync-queue` and `manager-blob-queue`. The image must remain locally queued when extraction is unavailable/offline; when online returns, expense sync occurs before receipt upload.
+Reuse `manager-sync-queue` and `manager-blob-queue`. Receipt upload failure never rolls back an expense. Offline capture stores the image/draft until sync resumes.
 
-- [ ] **Step 8: Run focused tests and commit**
+- [ ] **Step 9: Verify and commit Task 2**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/receipt-extraction.test.ts
 pnpm --filter @workspace/adventure-zone exec vitest run src/components/manager/receipt-expense-form.test.tsx src/pages/ManagerReceiptsPage.test.tsx
 ```
 
-Commit:
 ```bash
-git add artifacts/api-server/src/features/ai-suggestions/ai-client.ts artifacts/api-server/src/features/leg-manager/receipt-extraction.ts artifacts/api-server/src/features/leg-manager/receipt-extraction.test.ts artifacts/api-server/src/routes/leg-manager.ts artifacts/adventure-zone/src/components/manager/receipt-expense-form.tsx artifacts/adventure-zone/src/components/manager/receipt-expense-form.test.tsx artifacts/adventure-zone/src/components/manager/receipt-capture.tsx artifacts/adventure-zone/src/pages/ManagerReceiptsPage.tsx artifacts/adventure-zone/src/pages/ManagerReceiptsPage.test.tsx
 git commit -m "feat: add receipt-first expense capture"
 ```
 
 ---
 
-### Task 3: Persist Booking + Leg Check-In/Out State
+### Task 3: Persist Booking + Leg Event Lifecycle
 
 **Files:**
 - Modify: `lib/db/src/schema/index.ts`
-- Add migration under: `lib/db/migrations/`
+- Create: the next numbered SQL migration under `lib/db/migrations/`
 - Create: `artifacts/api-server/src/features/leg-manager/event-lifecycle-repository.ts`
 - Create: `artifacts/api-server/src/features/leg-manager/event-lifecycle-repository.test.ts`
 - Modify: `artifacts/api-server/src/routes/leg-manager.ts`
 - Modify: `artifacts/api-server/src/routes/leg-manager-admin.ts`
 
 **Interfaces:**
-- New table `event_leg_lifecycle` keyed uniquely by `(booking_id, leg_id)`.
-- Columns: `id`, `booking_id`, `leg_id`, `checked_in_at`, `check_in_latitude`, `check_in_longitude`, `check_in_location_status`, `checked_out_at`, `check_out_latitude`, `check_out_longitude`, `check_out_location_status`, `wrap_up_status`, `wrap_up_finished_at`, `created_at`, `updated_at`.
-- Location status enum values: `captured | unavailable | denied | error | not_requested`.
-- Wrap-up status values: `not_started | incomplete | finished`.
-- Manager routes:
-  - `GET /manager/events/:bookingId/lifecycle`
-  - `POST /manager/events/:bookingId/check-in`
-  - `POST /manager/events/:bookingId/check-out`
-  - `POST /manager/events/:bookingId/wrap-up/finish-later`
-  - `POST /manager/events/:bookingId/wrap-up/finish`
-- Admin route: `GET /manager-admin/events/lifecycle`.
+- New `event_leg_lifecycle` table, unique `(booking_id, leg_id)`.
+- Columns: ID, booking/leg IDs, check-in timestamp/coords/status, checkout timestamp/coords/status, wrap-up status, wrap-up finished timestamp, created/updated timestamps.
+- Location status: `captured | unavailable | denied | error | not_requested`.
+- Wrap-up status: `not_started | incomplete | finished`.
+- Manager routes: `GET /manager/events/:bookingId/lifecycle`, `POST /manager/events/:bookingId/check-in`, `POST /manager/events/:bookingId/check-out`, `POST /manager/events/:bookingId/wrap-up/finish-later`, `POST /manager/events/:bookingId/wrap-up/finish`.
+- Admin read route: `GET /manager-admin/events/lifecycle`.
 
-- [ ] **Step 1: Add failing repository tests**
+- [ ] **Step 1: Write failing repository tests**
 
-Test:
-- check-in inserts once
-- repeated check-in returns same timestamp and does not duplicate
-- check-out before check-in returns `NOT_CHECKED_IN`
-- repeated check-out is idempotent
-- GPS-null status persists
-- finish-later sets incomplete
-- finish sets finished with timestamp
+Test first check-in, duplicate check-in idempotency, checkout-before-checkin rejection, duplicate checkout idempotency, null GPS persistence, incomplete status, and finished status/timestamp.
 
-- [ ] **Step 2: Add schema + migration**
+- [ ] **Step 2: Run lifecycle repository tests and verify RED**
 
-Create the table with booking and leg foreign keys and a unique index on `(booking_id, leg_id)`. Use nullable coordinate columns and non-null location-status strings with defaults. Do not reference `trip_id`.
+```bash
+pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/event-lifecycle-repository.test.ts
+```
 
-- [ ] **Step 3: Implement repository methods**
+- [ ] **Step 3: Add schema + migration**
 
-Produce:
+Foreign keys point to bookings and travel legs. No `trip_id` column. Unique index on booking+leg. Coordinates nullable; status strings non-null with safe defaults.
+
+- [ ] **Step 4: Implement repository API**
+
 ```ts
 getForBookingLeg(bookingId, legId)
 checkIn(input)
@@ -318,31 +247,33 @@ listIncompleteForLeg(legId)
 listAll()
 ```
 
-Use transactions/upserts so duplicate mobile retries are idempotent.
+Use transactions/upserts so mobile retries do not create duplicate check-ins/checkouts.
 
-- [ ] **Step 4: Add manager route tests for cross-leg protection**
+- [ ] **Step 5: Write route permission tests**
 
-Before each manager lifecycle mutation, verify `finance.refsBelongToLeg(legId, { bookingId, tripId: null, tripSegmentId: null })`. A booking on another leg returns 403.
+Every manager lifecycle mutation verifies the booking belongs to the authenticated leg using the existing leg-reference ownership check. Cross-leg booking → 403. Checkout before check-in → 409.
 
-- [ ] **Step 5: Implement lifecycle routes**
+- [ ] **Step 6: Implement routes**
 
-`check-out` must call repository persistence and return the stored lifecycle record before any client navigation occurs. `finish` is an explicit status action, not an inference from page navigation.
+Checkout writes the lifecycle record and returns success before the client opens wrap-up. Finish/Finish later update only lifecycle workflow state; they do not copy review/crew/finance data.
 
-- [ ] **Step 6: Add admin lifecycle read endpoint**
+- [ ] **Step 7: Add admin lifecycle overview route**
 
-Return booking/leg identity, timestamps, optional coordinates, location statuses, and wrap-up status for operational oversight. Do not mutate history in this task.
+Expose timestamps, optional coords/statuses, booking/leg identity, and wrap-up status. Read-only in this release.
 
-- [ ] **Step 7: Run focused tests and commit**
+- [ ] **Step 8: Verify and commit Task 3**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/event-lifecycle-repository.test.ts
 ```
 
-Commit schema, migration, repository, and routes together.
+```bash
+git commit -m "feat: persist manager event lifecycle"
+```
 
 ---
 
-### Task 4: One-Tap Check-In / Check-Out With Optional Location
+### Task 4: One-Tap Check-In / Check-Out With Optional GPS
 
 **Files:**
 - Create: `artifacts/adventure-zone/src/features/manager/event-location.ts`
@@ -355,66 +286,53 @@ Commit schema, migration, repository, and routes together.
 
 **Interfaces:**
 - `captureOptionalEventLocation(): Promise<{ latitude: number | null; longitude: number | null; status: EventLocationStatus }>`.
-- `EventLifecycleAction` consumes booking ID + lifecycle state and emits one current action: Check in, Check out, or Finish event wrap-up.
+- `EventLifecycleAction` consumes booking ID + lifecycle and exposes exactly one urgent action.
 
-- [ ] **Step 1: Add location helper tests**
+- [ ] **Step 1: Write optional-location tests**
 
-Mock `navigator.geolocation` for:
-- success → `captured` + coords
-- permission denied → `denied`, null coords
-- unavailable → `unavailable`, null coords
-- error → `error`, null coords
-- missing API → `not_requested`, null coords
+Mock geolocation for success, permission denied, unavailable, error, and missing browser API. All outcomes resolve; none throw solely because GPS failed.
 
-No case throws to the calling check-in/out action.
+- [ ] **Step 2: Implement optional-location helper**
 
-- [ ] **Step 2: Implement optional location helper**
+Use a bounded geolocation timeout. Return `captured`, `denied`, `unavailable`, `error`, or `not_requested` with null coords when not captured.
 
-Use a bounded geolocation timeout. Resolve a status object in all cases; never reject because GPS is optional.
+- [ ] **Step 3: Write lifecycle-action tests**
 
-- [ ] **Step 3: Add lifecycle-action component tests**
+Expected actions: no check-in → **Check in**; checked in/no checkout → **Check out**; checked out/incomplete → **Finish event wrap-up**; finished → no urgent lifecycle action. Pending request disables the action.
 
-Given lifecycle state:
-- no check-in → only `Check in`
-- checked in/no checkout → only `Check out`
-- checked out/incomplete → only `Finish event wrap-up`
-- finished → no urgent lifecycle button
+- [ ] **Step 4: Implement lifecycle actions**
 
-Also assert duplicate click disables the button while the request is pending.
+Payload:
 
-- [ ] **Step 4: Implement lifecycle action calls**
-
-Check-in/out payload:
 ```ts
 {
   occurredAt: new Date().toISOString(),
   latitude,
   longitude,
   locationStatus: status,
-  clientMutationId: crypto.randomUUID()
+  clientMutationId: crypto.randomUUID(),
 }
 ```
-After successful checkout, navigate immediately to `/manager/events/${bookingId}/wrap-up`.
+
+Successful checkout immediately navigates to `/manager/events/${bookingId}/wrap-up` only after the POST returns successfully.
 
 - [ ] **Step 5: Wire Manager Home**
 
-Load lifecycle state for the relevant assigned event and show one action at a time near the top work queue. Incomplete wrap-up gets the label **Finish event wrap-up**.
+For the most relevant assigned event, show one lifecycle action near the top. Checked-out incomplete events surface **Finish event wrap-up** prominently.
 
 - [ ] **Step 6: Wire Manager Schedule/event detail**
 
-In the existing schedule detail sheet, show:
-- Checked in + formatted arrival time
-- Checked out + formatted departure time
-- current lifecycle action
-- `Wrap-up incomplete` indicator after checkout until Finish
+Display check-in/out timestamps and current state. Show **Wrap-up incomplete** after checkout until finish. Reuse the same lifecycle action component.
 
-- [ ] **Step 7: Run focused frontend tests and commit**
+- [ ] **Step 7: Verify and commit Task 4**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/features/manager/event-location.test.ts src/components/manager/event-lifecycle-action.test.tsx src/pages/ManagerHomePage.test.tsx
 ```
 
-Commit the helper, component, and page integrations.
+```bash
+git commit -m "feat: add event check in and check out"
+```
 
 ---
 
@@ -422,82 +340,75 @@ Commit the helper, component, and page integrations.
 
 **Files:**
 - Modify: `artifacts/adventure-zone/src/pages/ManagerEventWrapUpPage.tsx`
+- Create or modify: `artifacts/adventure-zone/src/pages/ManagerEventWrapUpPage.test.tsx`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerEventReviewPage.tsx`
+- Modify: `artifacts/adventure-zone/src/pages/ManagerEventReviewPage.test.tsx`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerHomePage.tsx`
 - Modify: `artifacts/adventure-zone/src/pages/ManagerRoutePage.tsx`
-- Modify existing wrap-up/review tests or create: `artifacts/adventure-zone/src/pages/ManagerEventWrapUpPage.test.tsx`
+- Modify: `artifacts/api-server/src/features/leg-manager/event-review-repository.test.ts`
 
 **Interfaces:**
-- Existing event review POST remains the only review record.
-- Existing crew, finance/receipt, incident, and calculator data remain persisted in their current stores.
-- Lifecycle `wrap_up_status` records only overall workflow status, not duplicate copies of section data.
+- Existing review POST remains the only review record.
+- Existing crew, finance/receipts, incidents, and calculators remain their own sources of truth.
+- Lifecycle `wrap_up_status` stores only overall workflow state.
 
-- [ ] **Step 1: Add failing wrap-up resume tests**
+- [ ] **Step 1: Write failing wrap-up/resume tests**
 
-Cover:
-- checkout route opens correct booking wrap-up
-- saved review remains present when returning
-- `Finish later` calls lifecycle incomplete endpoint and returns to manager Home
-- Home shows Finish event wrap-up for incomplete booking
-- Schedule shows Wrap-up incomplete
-- `Finish wrap-up` calls lifecycle finish endpoint
+Cover checkout opening the correct booking, already-saved section data remaining on return, Finish later marking incomplete and returning Home, Home/Schedule resume indicators, and Finish marking complete.
 
-- [ ] **Step 2: Convert wrap-up page into a checklist shell around existing sections**
+- [ ] **Step 2: Wrap existing sections in a checklist shell**
 
-Render the existing event review, crew/work-history, finance/receipt, incidents/issues, and calculator sections without copying their data into lifecycle state. Each section may save independently.
+Compose existing event review, crew/work-history, finance/receipt, incidents/issues, and calculator sections. Do not create duplicate copies of their data.
 
-- [ ] **Step 3: Add Finish later**
+- [ ] **Step 3: Implement Finish later**
 
-Call:
-```text
-POST /manager/events/:bookingId/wrap-up/finish-later
-```
-Then return to Manager Home. Do not clear any form/server state.
+POST `/manager/events/:bookingId/wrap-up/finish-later`, then return Home. Do not clear persisted section data.
 
-- [ ] **Step 4: Add Finish wrap-up**
+- [ ] **Step 4: Implement Finish wrap-up**
 
-Before marking finished, require only the explicitly required completion conditions already enforced by existing wrap-up logic. Optional receipt/incident/crew-note sections may remain empty. Call the lifecycle finish endpoint only after those checks pass.
+Honor the existing required completion checks. Optional receipts/incidents/crew notes may remain empty. Only after requirements pass, POST `/manager/events/:bookingId/wrap-up/finish`.
 
 - [ ] **Step 5: Reuse current event review**
 
-Submitting the review from the wrap-up must use the existing review route. Returning to wrap-up fetches existing review state. Because `listDueReviewsForManager()` already excludes reviewed booking IDs, completing the review here automatically removes it from due reviews.
+Submitting review from wrap-up uses the existing review endpoint. Returning to wrap-up reads the existing review. Because due-review logic already excludes reviewed booking IDs, the same record satisfies the later review request automatically.
 
-- [ ] **Step 6: Verify skipped review behavior**
+- [ ] **Step 6: Verify skipped review still becomes due**
 
-Add API/service coverage proving an incomplete wrap-up with no review does not suppress `listDueReviewsForManager()` once the event's effective end date is due.
+Add service/repository test proving `wrap_up_status = incomplete` without a review does not suppress `listDueReviewsForManager()` once the event end date is due.
 
-- [ ] **Step 7: Run focused tests and commit**
+- [ ] **Step 7: Verify and commit Task 5**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerEventWrapUpPage.test.tsx src/pages/ManagerHomePage.test.tsx src/pages/ManagerEventReviewPage.test.tsx
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/event-review-repository.test.ts
 ```
 
-Commit the wrap-up integration.
+```bash
+git commit -m "feat: make event wrap up resumable"
+```
 
 ---
 
-### Task 6: Release Verification and Regression Guard
+### Task 6: Release Verification
 
 **Files:**
-- Modify only if needed after verification: `.github/workflows/calendar-route-handoff-ci.yml`
+- Modify production files only if verification exposes a regression.
 
-**Interfaces:**
-- No new product interface; this task verifies all prior tasks together.
+**Interfaces:** No new interfaces; verify Tasks 1–5 together.
 
-- [ ] **Step 1: Run all focused server tests**
+- [ ] **Step 1: Run focused API tests**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/crew-repository.test.ts src/routes/leg-manager-worker-delete.test.ts src/features/leg-manager/receipt-extraction.test.ts src/features/leg-manager/event-lifecycle-repository.test.ts src/features/leg-manager/event-review-repository.test.ts
 ```
 
-- [ ] **Step 2: Run all focused frontend tests**
+- [ ] **Step 2: Run focused frontend tests**
 
 ```bash
 pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerWorkerPage.test.tsx src/components/manager/receipt-expense-form.test.tsx src/pages/ManagerReceiptsPage.test.tsx src/features/manager/event-location.test.ts src/components/manager/event-lifecycle-action.test.tsx src/pages/ManagerHomePage.test.tsx src/pages/ManagerEventWrapUpPage.test.tsx src/pages/ManagerEventReviewPage.test.tsx
 ```
 
-- [ ] **Step 3: Run package typechecks/builds**
+- [ ] **Step 3: Run typecheck/build**
 
 ```bash
 pnpm --filter @workspace/api-server typecheck
@@ -507,21 +418,20 @@ pnpm --filter @workspace/adventure-zone build
 
 - [ ] **Step 4: Manual mobile acceptance pass**
 
-Verify on a Leg Manager session:
-1. own-leg worker can be permanently deleted only after named confirmation
-2. unrelated worker has no usable delete path
-3. Receipts empty state allows camera/manual entry
-4. captured receipt fills suggestions but remains editable
-5. check-in works after denying GPS
-6. check-out immediately opens wrap-up
-7. Finish later returns Home and leaves a resume action
-8. Schedule shows Wrap-up incomplete
-9. returning to wrap-up preserves already-saved section data
-10. Finish removes urgent lifecycle action
+Verify:
+1. own-leg worker requires named second confirmation before permanent deletion
+2. unrelated worker cannot be deleted by manager; Admin can delete any worker
+3. Receipts empty state offers camera receipt and manual expense
+4. scan suggestions are editable and extraction failure still keeps photo/manual entry
+5. check-in succeeds after GPS denial
+6. check-out persists and opens wrap-up
+7. Finish later returns Home with a resume action
+8. Schedule shows **Wrap-up incomplete**
+9. returning preserves already-saved review/crew/money/incident data
+10. Finish removes the urgent lifecycle action
 
-- [ ] **Step 5: Commit any test-only regression fixes**
+- [ ] **Step 5: Commit any verification-only corrections**
 
-Use a focused commit message such as:
 ```bash
 git commit -m "test: verify manager event lifecycle release"
 ```
