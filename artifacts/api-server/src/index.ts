@@ -8,6 +8,8 @@ import { ensureEventFamilySchema } from "./features/event-families/event-family-
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
+import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
+import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -35,9 +37,13 @@ if (Number.isNaN(port) || port <= 0) {
 // configured start command bypasses a standalone migration runner.
 await ensureBookingProbabilitySchema();
 await ensurePackageIntelligenceSchema();
+await ensureBookingAssistantSchema();
 const appliedMigrations = await runActReviewMigrations();
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
+await new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
+  "system:booking-assistant-seed",
+);
 logger.info(
   {
     appliedMigrations,
