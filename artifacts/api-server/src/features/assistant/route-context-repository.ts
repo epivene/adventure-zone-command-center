@@ -6,6 +6,16 @@ import { BookingContextRepository } from "./booking-context-repository";
 import { PostgresBusinessKnowledgeRepository } from "./business-knowledge-repository";
 import type { BookingAssistantContextBundle } from "./assistant-types";
 
+function routeSummary(trip: any) {
+  const start = trip.start_date ? new Date(trip.start_date).toISOString().slice(0, 10) : "date not set";
+  const end = trip.end_date ? new Date(trip.end_date).toISOString().slice(0, 10) : start;
+  return {
+    id: trip.id as string,
+    label: `${trip.name} · ${trip.leg_name}`,
+    summary: `${trip.leg_name} route from ${start} through ${end}.`,
+  };
+}
+
 export class RouteContextRepository {
   private readonly bookingContext: BookingContextRepository;
   private readonly knowledge: PostgresBusinessKnowledgeRepository;
@@ -25,6 +35,7 @@ export class RouteContextRepository {
     );
     const trip = tripResult.rows[0];
     if (!trip) return null;
+    const summary = routeSummary(trip);
 
     const stopsResult = await this.pool.query(
       `SELECT ts.booking_id
@@ -45,11 +56,7 @@ export class RouteContextRepository {
         return {
           ...bundle,
           context: { kind: "route", recordId: tripId, label: trip.name },
-          routeContext: {
-            id: tripId,
-            label: `${trip.name} · ${trip.leg_name}`,
-            travelLegId: trip.travel_leg_id,
-          },
+          routeContext: summary,
         };
       }
     }
@@ -67,11 +74,7 @@ export class RouteContextRepository {
       recentActivities: [],
       openFollowUps: [],
       packageHistorySignals: [],
-      routeContext: {
-        id: tripId,
-        label: `${trip.name} · ${trip.leg_name}`,
-        travelLegId: trip.travel_leg_id,
-      },
+      routeContext: summary,
       derivedFacts: [],
       businessKnowledge: knowledge.map((entry) => ({
         id: entry.id,
