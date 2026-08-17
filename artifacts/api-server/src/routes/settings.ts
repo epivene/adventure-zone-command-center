@@ -5,9 +5,9 @@ import {
 } from "@/features/packages/package-intelligence-settings";
 import { PackageSettingsError } from "@/features/packages/package-repository";
 import {
-  DrizzleResourceSettingsRepository,
-  ResourceSettingsError,
-} from "@/features/resources/resource-repository";
+  DrizzleResourceIntelligenceSettingsRepository,
+} from "@/features/resources/resource-intelligence-settings";
+import { ResourceSettingsError } from "@/features/resources/resource-repository";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 
 const router: IRouter = Router();
@@ -16,10 +16,9 @@ router.get("/settings/packages-resources", async (req, res): Promise<void> => {
   try {
     const [packageTemplates, resources, allTravelLegs] = await Promise.all([
       new DrizzlePackageIntelligenceSettingsRepository(db).listPackageTemplates(),
-      new DrizzleResourceSettingsRepository(db).listResources(),
+      new DrizzleResourceIntelligenceSettingsRepository(db).listResources(),
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
     ]);
-    // ResourceInventoryEditor expects ResourceTravelLegOption shape
     const travelLegs = allTravelLegs.map((leg) => ({
       id: leg.id,
       name: leg.name,
@@ -51,10 +50,8 @@ router.post("/settings/package-templates", async (req, res): Promise<void> => {
 router.post("/settings/resources", async (req, res): Promise<void> => {
   const actorId = (req as any).userId as string;
   try {
-    const record = await new DrizzleResourceSettingsRepository(db).upsertResource(
-      req.body,
-      actorId,
-    );
+    const record = await new DrizzleResourceIntelligenceSettingsRepository(db)
+      .upsertResource(req.body, actorId);
     res.json({ ok: true, record });
   } catch (err) {
     if (err instanceof ResourceSettingsError) {
