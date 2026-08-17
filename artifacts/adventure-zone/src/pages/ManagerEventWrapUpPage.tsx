@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { EventWrapUpFinanceCheck } from "@/components/manager/event-wrap-up-finance-check";
 import { EventWrapUpProfitability } from "@/components/manager/event-wrap-up-profitability";
 import { EventWrapUpRating } from "@/components/manager/event-wrap-up-rating";
@@ -120,6 +120,16 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
     {payload.wrapUp?.status === "reviewed" ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-semibold text-emerald-800">Reviewed and closed</p> : null}
     {message ? <p role="status" className="text-sm font-semibold text-emerald-700">{message}</p> : null}
     {error ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
+
+    <section className="rounded-xl border bg-white p-4">
+      <h2 className="font-bold">Wrap-up checklist</h2>
+      <p className="mt-1 text-sm text-slate-600">Use these shortcuts for anything that happened at this event, then come back here to finish.</p>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <Link className="button-secondary text-center" href={`/manager/receipts?bookingId=${encodeURIComponent(bookingId)}`}>Receipt / expense</Link>
+        <Link className="button-secondary text-center" href="/manager/crew">Crew notes</Link>
+        <Link className="button-secondary text-center" href={`/manager/incidents/new?bookingId=${encodeURIComponent(bookingId)}`}>Report issue</Link>
+      </div>
+    </section>
 
     <EventWrapUpRating stars={stars} notes={notes} disabled={!editable} onStarsChange={setStars} onNotesChange={setNotes} />
     <EventWrapUpSettlement expectedCashCents={payload.calculation.settlement.expectedCashCents} nonCashCents={nonCashCents} actualCash={actualCash} differenceNote={differenceNote} disabled={!editable} onActualCashChange={setActualCash} onDifferenceNoteChange={setDifferenceNote} />
