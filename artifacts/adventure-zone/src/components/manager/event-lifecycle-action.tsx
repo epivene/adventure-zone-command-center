@@ -15,7 +15,7 @@ function time(value: string | null) {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export function EventLifecycleAction({ bookingId, compact = false, onChanged }: { bookingId: string; compact?: boolean; onChanged?: (lifecycle: Lifecycle) => void }) {
+export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn = true, onChanged }: { bookingId: string; compact?: boolean; allowCheckIn?: boolean; onChanged?: (lifecycle: Lifecycle) => void }) {
   const { managerApi } = useManagerAuth();
   const [, navigate] = useLocation();
   const [lifecycle, setLifecycle] = useState<Lifecycle | null>(null);
@@ -57,5 +57,6 @@ export function EventLifecycleAction({ bookingId, compact = false, onChanged }: 
   if (lifecycle?.wrapUpStatus === "finished") return <p className="text-sm font-semibold text-emerald-700">Event wrap-up finished</p>;
   if (lifecycle?.checkedOutAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-amber-700">Checked out {time(lifecycle.checkedOutAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/wrap-up`}>Finish event wrap-up</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
   if (lifecycle?.checkedInAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-emerald-700">Checked in {time(lifecycle.checkedInAt)}</p><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void action("check-out")}>{busy ? "Checking out…" : "Check out"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+  if (!allowCheckIn) return null;
   return <div className="grid gap-1"><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void action("check-in")}>{busy ? "Checking in…" : "Check in"}</button>{!compact ? <p className="text-xs text-slate-500">Location is optional. Check-in still works if location permission is off.</p> : null}{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
 }
