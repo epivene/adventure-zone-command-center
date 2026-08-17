@@ -16,29 +16,18 @@ import {
   type ActExtractionRuntime,
 } from "./features/act-replacement/runtime";
 
-// Fail fast if required owner config is absent — this is a single-owner CRM.
 validateOwnerConfig();
 
 const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
+if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
 const port = Number(rawPort);
+if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-// Ensure compatibility guards are present even on Render services whose
-// configured start command bypasses a standalone migration runner.
 await ensureBookingProbabilitySchema();
 await ensurePackageIntelligenceSchema();
-await ensureBookingAssistantSchema();
+const assistantSchemaApplied = await ensureBookingAssistantSchema();
 const appliedMigrations = await runActReviewMigrations();
+if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
 await new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
@@ -78,8 +67,6 @@ const server = app.listen(port, async () => {
     extractionRuntime = runtime;
     if (!shutdownRequested) runtime.start();
   } catch (err) {
-    // Keep the API alive, but include the safe error class in Render logs so a
-    // failed worker startup cannot masquerade as an empty Act import.
     logger.error(
       {
         errorCode:
