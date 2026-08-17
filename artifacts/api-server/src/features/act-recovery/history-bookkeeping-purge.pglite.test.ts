@@ -41,7 +41,10 @@ beforeEach(async () => {
       source_database_key text NOT NULL,
       fingerprint text NOT NULL,
       raw_snapshot jsonb NOT NULL,
-      fetched_at timestamptz NOT NULL DEFAULT now()
+      source_created_at timestamptz,
+      source_edited_at timestamptz,
+      fetched_at timestamptz NOT NULL DEFAULT now(),
+      created_at timestamptz NOT NULL DEFAULT now()
     );
     CREATE TABLE act_archive_recovery_items (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
