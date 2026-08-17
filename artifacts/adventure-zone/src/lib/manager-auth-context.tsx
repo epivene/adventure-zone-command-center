@@ -24,7 +24,7 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(!!token());
   useEffect(() => { managerRef.current = manager; }, [manager]);
 
-  const signOut = useCallback(() => {
+  const clearCurrentSession = useCallback(() => {
     const current = managerRef.current;
     save(null);
     setManager(null);
@@ -34,10 +34,14 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signOut = useCallback(() => clearCurrentSession(), [clearCurrentSession]);
+
   const managerApi = useCallback(async <T,>(path: string, options: RequestInit = {}) => {
-    const res = await raw(path, options);
+    const requestToken = token();
+    const res = await raw(path, options, requestToken);
     if (res.status === 401) {
-      signOut();
+      // Do not let a request that started with an old token wipe a newer successful sign-in.
+      if (token() === requestToken) clearCurrentSession();
       throw Object.assign(new Error("Manager session expired"), { status: 401 });
     }
     if (!res.ok) {
@@ -45,15 +49,25 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
       throw Object.assign(new Error(payload.error ?? `API ${res.status}`), { status: res.status });
     }
     return res.json() as Promise<T>;
-  }, [signOut]);
+  }, [clearCurrentSession]);
 
   useEffect(() => {
-    if (!token()) { setLoading(false); return; }
-    managerApi<{ manager: ManagerIdentity }>("/manager/auth/me")
-      .then((response) => setManager(response.manager))
-      .catch(() => signOut())
+    const bootstrapToken = token();
+    if (!bootstrapToken) { setLoading(false); return; }
+    raw("/manager/auth/me", {}, bootstrapToken)
+      .then(async (res) => {
+        if (!res.ok) throw Object.assign(new Error("Manager session expired"), { status: res.status });
+        return res.json() as Promise<{ manager: ManagerIdentity }>;
+      })
+      .then((response) => {
+        // Ignore stale bootstrap results if a newer login replaced the saved token.
+        if (token() === bootstrapToken) setManager(response.manager);
+      })
+      .catch(() => {
+        if (token() === bootstrapToken) clearCurrentSession();
+      })
       .finally(() => setLoading(false));
-  }, [managerApi, signOut]);
+  }, [clearCurrentSession]);
 
   const signIn = useCallback(async (legId: string, password: string) => {
     const res = await raw("/manager/auth/login", { method: "POST", body: JSON.stringify({ legId, password }) }, null);
@@ -64,6 +78,7 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json() as { token: string; manager: ManagerIdentity };
     save(data.token);
     setManager(data.manager);
+    setLoading(false);
   }, []);
 
   const value = useMemo(() => ({ manager, loading, signIn, signOut, managerApi }), [manager, loading, signIn, signOut, managerApi]);

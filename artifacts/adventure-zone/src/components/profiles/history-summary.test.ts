@@ -15,9 +15,12 @@ describe("profile history summaries", () => {
     expect(historyCategory({ kind: "history", body: '<div><p>Hi Breck Create,</p><p>We represent The Adventure Zone.</p></div>', importedFromAct: true, actSourceType: "history" })).toBe("notes");
   });
 
-  it("keeps recognizable ACT bookkeeping under System", () => {
+  it("keeps bookkeeping, linked records, and blank updates under System", () => {
     expect(historyCategory({ kind: "history", body: "Field Stage changed from A to B", importedFromAct: true, actSourceType: "history" })).toBe("system");
     expect(historyCategory({ kind: "history", body: "A new opportunity called New Opportunity was created", importedFromAct: true, actSourceType: "history" })).toBe("system");
+    expect(historyCategory({ kind: "history", body: "Linked contact Amy Smith", importedFromAct: true, actSourceType: "history" })).toBe("system");
+    expect(historyCategory({ kind: "history", body: "Updated", importedFromAct: true, actSourceType: "history" })).toBe("system");
+    expect(historyCategory({ kind: "history", body: "   ", importedFromAct: true, actSourceType: "history" })).toBe("system");
   });
 
   it("converts imported HTML note bodies to readable text", () => {
