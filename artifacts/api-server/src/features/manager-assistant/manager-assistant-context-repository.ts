@@ -56,15 +56,14 @@ export class PostgresManagerAssistantContextSource
     const extras = await this.pool.query(
       `SELECT b.id,
               COALESCE(array_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '{}') AS package_names,
-              COALESCE(array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS resource_names,
-              b.notes
+              COALESCE(array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS resource_names
        FROM bookings b
        LEFT JOIN booking_package_selections bps ON bps.booking_id = b.id
        LEFT JOIN package_templates pt ON pt.id = bps.package_template_id
        LEFT JOIN booking_resource_assignments bra ON bra.booking_id = b.id
        LEFT JOIN resources r ON r.id = bra.resource_id
        WHERE b.id = ANY($1::uuid[]) AND b.travel_leg_id = $2
-       GROUP BY b.id, b.notes`,
+       GROUP BY b.id`,
       [ids, legId],
     );
     const byId = new Map(extras.rows.map((row) => [row.id as string, row]));
@@ -80,9 +79,7 @@ export class PostgresManagerAssistantContextSource
         status: event.status,
         packageNames: (extra?.package_names ?? []) as string[],
         resourceNames: (extra?.resource_names ?? []) as string[],
-        setupSummary: typeof extra?.notes === "string" && extra.notes.trim()
-          ? extra.notes.trim().slice(0, 1000)
-          : null,
+        setupSummary: null,
       };
     });
   }
@@ -90,11 +87,12 @@ export class PostgresManagerAssistantContextSource
   async getRoute(legId: string): Promise<ManagerRouteAssistantSummary | null> {
     const map = await this.scopedMap(legId);
     if (!map.route) return null;
+    const trip = await new DrizzleTripRepository(db).getTrip(map.route.trip.id);
     return {
       tripId: map.route.trip.id,
       label: map.route.trip.name,
-      startDate: null,
-      endDate: null,
+      startDate: iso(trip?.startDate),
+      endDate: iso(trip?.endDate),
       stops: map.route.stops.map((stop) => ({
         bookingId: stop.bookingId,
         label: stop.bookingName,
@@ -115,18 +113,14 @@ export class PostgresManagerAssistantContextSource
     const rows = await this.acknowledgments.listActiveForLeg(legId);
     return rows.map((row) => ({
       id: row.id,
-      summary: `${row.title}${row.managerComment ? ` — ${row.managerComment}` : ""}`,
+      summary: row.title,
     }));
   }
 
-  async listOperationalInstructions(legId: string) {
-    const events = await this.listAssignedEvents(legId);
-    return events
-      .filter((event) => event.setupSummary)
-      .map((event) => ({
-        id: `booking:${event.id}`,
-        summary: `${event.name}: ${event.setupSummary}`,
-      }));
+  async listOperationalInstructions(_legId: string) {
+    // Only explicit manager-safe operational knowledge belongs here. Freeform
+    // CRM/booking notes are deliberately excluded from manager assistant scope.
+    return [];
   }
 
   async listKnowledge(input: {
