@@ -103,7 +103,7 @@ Confirmation copy:
 
 > Archive this profile? It will disappear from Profiles, search, caller matching, Today, and normal event selection. Its contacts, bookings, notes, history, and relationships will stay intact.
 
-On success, redirect away from the archived active-detail view to the normal Profiles area or the Archived records workspace.
+On success, redirect to the **Archived records** workspace so the user can immediately see where the profile went and restore it if needed.
 
 Add an **Archived records** screen reachable from Settings/navigation. At minimum it lists archived profiles with:
 
