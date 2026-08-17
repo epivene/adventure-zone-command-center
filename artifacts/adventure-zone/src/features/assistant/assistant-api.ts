@@ -10,6 +10,7 @@ import type {
   AssistantAnswer,
   AssistantAskResponse,
   AssistantContextBundle,
+  AssistantConversation,
   AssistantSourceReference,
   BookingBrief,
 } from "./assistant-types";
@@ -37,6 +38,15 @@ export async function getBookingBrief(
     `/assistant/brief?${params(context)}`,
   );
   return response.brief;
+}
+
+export async function getLatestAssistantConversation(
+  context: Exclude<ActiveAssistantContext, null>,
+): Promise<AssistantConversation | null> {
+  const response = await apiGet<{ conversation: AssistantConversation | null }>(
+    `/assistant/conversation?${params(context)}`,
+  );
+  return response.conversation;
 }
 
 export type AssistantLoadedSnapshot = {
@@ -126,9 +136,11 @@ function offlineAnswer(
 export async function askBookingAssistant(input: {
   context: Exclude<ActiveAssistantContext, null>;
   question: string;
+  conversationId?: string;
 }): Promise<AssistantAskResponse> {
   try {
     const result = await apiPost<AssistantAskResponse>("/assistant/ask", {
+      conversationId: input.conversationId,
       contextKind: input.context.kind,
       contextRecordId: input.context.recordId,
       question: input.question,
@@ -154,8 +166,14 @@ export async function askBookingAssistant(input: {
         },
         brief: cached.brief,
         context: cached.context,
+        conversationId: input.conversationId,
       };
     }
-    return { answer, brief: cached.brief, context: cached.context };
+    return {
+      answer,
+      brief: cached.brief,
+      context: cached.context,
+      conversationId: input.conversationId,
+    };
   }
 }
