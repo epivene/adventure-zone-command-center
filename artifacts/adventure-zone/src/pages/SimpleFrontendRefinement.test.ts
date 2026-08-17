@@ -22,7 +22,7 @@ describe("simple frontend refinement contracts", () => {
   it("collapses event families and groups family/duplicate utilities at the bottom", () => {
     expect(profilesPage).toContain("<details");
     expect(profilesPage).toContain("Event Families");
-    expect(profilesPage).toContain("Suggest families");
+    expect(profilesPage).toContain("<EventFamilySuggestions compact");
     expect(profilesPage).toContain("Find duplicates");
   });
 
