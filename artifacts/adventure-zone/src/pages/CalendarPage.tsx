@@ -59,14 +59,14 @@ export function CalendarContent({ season, legId, status, embedded = false }: Sch
       {!embedded ? (
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Schedule</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Calendar</h1><p className="mt-2 max-w-2xl text-slate-600">Confirmed, tentative, and imported activity dates.</p></div>
-          <button onClick={() => setShowSuggestions((value) => !value)} className="button-secondary">{showSuggestions ? "Hide AI suggestions" : "Suggest bookings from history"}</button>
+          <button onClick={() => setShowSuggestions((value) => !value)} className="button-secondary">{showSuggestions ? "Hide suggestions" : "More"}</button>
         </header>
       ) : (
-        <div className="flex justify-end"><button onClick={() => setShowSuggestions((value) => !value)} className="text-sm font-semibold text-orange-700">{showSuggestions ? "Hide suggestions" : "History suggestions"}</button></div>
+        <div className="flex justify-end"><button onClick={() => setShowSuggestions((value) => !value)} className="text-sm font-semibold text-slate-500 hover:text-orange-700">{showSuggestions ? "Hide extra tools" : "More"}</button></div>
       )}
 
       {showSuggestions ? <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm"><HistorySuggestions /></section> : null}
-      {loading ? <p className="text-slate-500">Loading calendar…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : <EventCalendar events={filteredEvents} initialMonth={initialMonth} onMonthChange={handleMonthChange} />}
+      {loading ? <p className="text-slate-500">Loading calendar…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : <EventCalendar events={filteredEvents} initialMonth={activeMonth} onMonthChange={handleMonthChange} />}
     </div>
   );
 }
