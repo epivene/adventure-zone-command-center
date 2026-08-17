@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ManagerScopedMap } from "@/components/manager/manager-scoped-map";
 import { ReportScheduleIssue } from "@/components/manager/report-schedule-issue";
 import { useManagerScopedMap } from "@/features/manager/use-manager-scoped-map";
+import { useManagerAssistant } from "@/features/manager-assistant/manager-assistant-context";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { ResponsiveDetailSheet } from "@/components/navigation/responsive-detail-sheet";
 
@@ -10,6 +11,7 @@ type Data = { route: null | { trip: { id: string; name: string; startLabel: stri
 
 export default function ManagerRoutePage() {
   const { managerApi } = useManagerAuth();
+  const { setActiveContext } = useManagerAssistant();
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState("");
   const [focusedBookingId, setFocusedBookingId] = useState<string | null>(null);
@@ -19,6 +21,20 @@ export default function ManagerRoutePage() {
   useEffect(() => {
     managerApi<Data>("/manager/route").then(setData).catch((e) => setError(e.message));
   }, [managerApi]);
+
+  useEffect(() => {
+    if (detailBookingId) {
+      const event = (map.data?.events ?? data?.events ?? []).find((row: any) => row.bookingId === detailBookingId);
+      setActiveContext({ kind: "booking", recordId: detailBookingId, label: event?.bookingName ?? "Event" });
+      return () => setActiveContext(null);
+    }
+    if (data?.route?.trip.id) {
+      setActiveContext({ kind: "route", recordId: data.route.trip.id, label: data.route.trip.name });
+      return () => setActiveContext(null);
+    }
+    setActiveContext(null);
+    return undefined;
+  }, [data?.route?.trip.id, data?.route?.trip.name, detailBookingId, map.data?.events, data?.events, setActiveContext]);
 
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading schedule…</p>;
