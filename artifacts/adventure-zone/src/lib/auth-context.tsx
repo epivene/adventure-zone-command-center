@@ -12,6 +12,7 @@ import {
   onAuthChange,
   setAuthToken,
 } from "./auth-token";
+import { clearAssistantCacheForActor } from "@/features/assistant/assistant-offline-cache";
 
 type AuthState = {
   /** null while the stored token is being validated on first load. */
@@ -27,17 +28,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getAuthToken() ? null : false,
   );
 
-  // Validate a stored token once on load.
   useEffect(() => {
     let cancelled = false;
     if (getAuthToken()) {
       apiFetch("/auth/me")
         .then((res) => {
           if (!cancelled) setIsSignedIn(res.ok);
-          if (!res.ok) setAuthToken(null);
+          if (!res.ok) {
+            setAuthToken(null);
+            void clearAssistantCacheForActor().catch(() => undefined);
+          }
         })
         .catch(() => {
-          // Network error — keep the token, but treat as signed out for now.
           if (!cancelled) setIsSignedIn(false);
         });
     }
@@ -75,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
+    void clearAssistantCacheForActor().catch(() => undefined);
     setAuthToken(null);
   }, []);
 
