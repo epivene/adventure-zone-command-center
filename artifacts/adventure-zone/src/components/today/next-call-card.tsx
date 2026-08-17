@@ -68,12 +68,15 @@ export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null })
     : null;
 
   return (
-    <section className="rounded-xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
-      <p className="text-sm font-bold uppercase tracking-[0.14em] text-orange-800">
-        Next call
-      </p>
+    <section className="rounded-2xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-xl font-bold text-slate-950">Up Next</h2>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-orange-800 shadow-sm">
+          Next action
+        </span>
+      </div>
       {followUp ? (
-        <div className="mt-3">
+        <div className="mt-4">
           <Link
             className="text-xl font-bold text-slate-950 hover:text-orange-800"
             href={profileHref ?? callWorkspaceHref(followUp)}
@@ -84,6 +87,10 @@ export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null })
             Call due {formatDate(followUp.dueAt)}
           </p>
           <BookingOperations operations={followUp.operations} />
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link className="button-primary" href={profileHref ?? callWorkspaceHref(followUp)}>Open</Link>
+            <Link className="button-secondary" href="/calls/workspace">Call workspace</Link>
+          </div>
         </div>
       ) : (
         <p className="mt-3 text-sm text-slate-700">
