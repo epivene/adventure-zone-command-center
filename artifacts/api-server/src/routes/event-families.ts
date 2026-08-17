@@ -10,6 +10,7 @@ import {
   EventFamilyNotFoundError,
   EventFamilyRepository,
 } from "@/features/event-families/event-family-repository";
+import { assertActiveProfile, ActiveProfileError } from "@/features/record-lifecycle/active-profile";
 
 const router: IRouter = Router();
 const idSchema = z.string().uuid();
@@ -31,6 +32,10 @@ function noteRepo() {
 function sendError(req: Request, res: Response, error: unknown): void {
   if (error instanceof z.ZodError) {
     res.status(400).json({ ok: false, error: error.issues[0]?.message ?? "Invalid input" });
+    return;
+  }
+  if (error instanceof ActiveProfileError) {
+    res.status(error.code === "PROFILE_ARCHIVED" ? 409 : 404).json({ ok: false, error: error.message });
     return;
   }
   if (error instanceof EventFamilyNotFoundError) {
@@ -70,11 +75,12 @@ router.post("/event-families", async (req, res): Promise<void> => {
          FROM organizations o
          LEFT JOIN event_family_members m ON m.organization_id = o.id
          WHERE o.id = ANY($1::uuid[])
+           AND o.archived_at IS NULL
          FOR UPDATE OF o`,
         [organizationIds],
       );
       if (candidates.rows.length !== organizationIds.length) {
-        throw new EventFamilyConflictError("One or more profiles no longer exist");
+        throw new EventFamilyConflictError("One or more profiles no longer exist or are archived");
       }
       if (candidates.rows.some((row) => row.consolidated_into_id)) {
         throw new EventFamilyConflictError("A retired profile cannot be grouped");
@@ -268,6 +274,7 @@ router.post("/event-families/:id/members", async (req, res): Promise<void> => {
   try {
     const familyId = idSchema.parse(req.params.id);
     const { organizationId } = memberSchema.parse(req.body);
+    await assertActiveProfile(db, organizationId);
     await repo().addMember(familyId, organizationId);
     res.json({ ok: true });
   } catch (error) {
