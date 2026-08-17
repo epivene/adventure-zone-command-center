@@ -2,9 +2,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.fn();
-const apiPatch = vi.fn();
-const apiPut = vi.fn();
+const { apiGet, apiPatch, apiPut } = vi.hoisted(() => ({
+  apiGet: vi.fn(),
+  apiPatch: vi.fn(),
+  apiPut: vi.fn(),
+}));
 
 vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch, apiPut }));
 
@@ -71,7 +73,7 @@ describe("ProfileInlineEditor", () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
-  it("cancels without saving", async () => {
+  it("cancels without saving", () => {
     const onCancel = vi.fn();
     render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} onCancel={onCancel} />);
     fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Changed" } });
@@ -85,6 +87,7 @@ describe("ProfileInlineEditor", () => {
     apiPatch.mockRejectedValueOnce(new Error("Could not save profile"));
     render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Keep this value" } });
+    await screen.findByDisplayValue("coloradoevents@gmail.com");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save profile");
     expect(screen.getByLabelText("Profile name")).toHaveValue("Keep this value");
