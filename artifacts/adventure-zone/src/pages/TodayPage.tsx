@@ -2,64 +2,37 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { FollowUpList } from "@/components/today/follow-up-list";
-import {
-  CallQueueWorkspace,
-} from "@/components/today/call-queue-workspace";
+import { CallQueueWorkspace } from "@/components/today/call-queue-workspace";
 import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
-import { SummaryCards } from "@/components/today/summary-cards";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { RenewalsSection } from "@/components/today/renewals-section";
+import { NeedsAttention } from "@/components/today/needs-attention";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 function formatDate(value: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeZone: BUSINESS_TIME_ZONE,
-  }).format(value);
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
 }
 
-function todayHref(followUpsPage: number, planPage: number) {
-  const query = new URLSearchParams();
-  if (followUpsPage > 1) query.set("followUpsPage", String(followUpsPage));
-  if (planPage > 1) query.set("planPage", String(planPage));
-  const s = query.toString();
-  return s ? `/today?${s}` : "/today";
-}
-
-type CallingConfig = {
-  assistedCallingEnabled: boolean;
-  voicemailLauncherUrl: string | null;
-};
-
-const disabledCallingConfig: CallingConfig = {
-  assistedCallingEnabled: false,
-  voicemailLauncherUrl: null,
-};
+type CallingConfig = { assistedCallingEnabled: boolean; voicemailLauncherUrl: string | null };
+const disabledCallingConfig: CallingConfig = { assistedCallingEnabled: false, voicemailLauncherUrl: null };
 
 function coerceFollowUps(items: any[]) {
   return (items ?? []).map((followUp) => ({
     ...followUp,
     dueAt: new Date(followUp.dueAt),
-    lastContactedAt: followUp.lastContactedAt
-      ? new Date(followUp.lastContactedAt)
-      : null,
+    lastContactedAt: followUp.lastContactedAt ? new Date(followUp.lastContactedAt) : null,
   }));
 }
 
 function coerceRenewals(items: any[]) {
-  return (items ?? []).map((renewal) => ({
-    ...renewal,
-    dueAt: renewal.dueAt ? new Date(renewal.dueAt) : null,
-  }));
+  return (items ?? []).map((renewal) => ({ ...renewal, dueAt: renewal.dueAt ? new Date(renewal.dueAt) : null }));
 }
 
 export default function TodayPage() {
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [callingConfig, setCallingConfig] = useState<CallingConfig>(
-    disabledCallingConfig,
-  );
+  const [callingConfig, setCallingConfig] = useState<CallingConfig>(disabledCallingConfig);
   const now = new Date();
 
   useEffect(() => {
@@ -67,217 +40,103 @@ export default function TodayPage() {
       apiGet<any>("/today"),
       apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig),
     ])
-      .then(([d, config]) => {
-        setDashboard(d);
-        setCallingConfig(config);
-        setLoading(false);
-      })
+      .then(([d, config]) => { setDashboard(d); setCallingConfig(config); setLoading(false); })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-7xl">
-        <div className="flex h-64 items-center justify-center">
-          <p className="text-slate-500">Loading dashboard…</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="mx-auto max-w-5xl py-20 text-center text-slate-500">Loading Today…</div>;
+  if (error || !dashboard) return <div className="mx-auto max-w-5xl"><div className="mt-8 rounded-xl border border-rose-200 bg-rose-50 p-6"><p className="font-semibold text-rose-800">Could not load Today</p><p className="mt-1 text-sm text-rose-700">{error}</p></div></div>;
 
-  if (error || !dashboard) {
-    return (
-      <div className="mx-auto max-w-7xl">
-        <div className="mt-8 rounded-xl border border-rose-200 bg-rose-50 p-6">
-          <p className="font-semibold text-rose-800">Could not load dashboard</p>
-          <p className="mt-1 text-sm text-rose-700">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Coerce date strings back to Date objects
   const followUps = coerceFollowUps(dashboard.followUps ?? []);
   const renewals = coerceRenewals(dashboard.renewals ?? []);
-
-  const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({
-    ...e,
-    startsAt: e.startsAt ? new Date(e.startsAt) : null,
-  }));
-
-  const firstNewLead = (dashboard.needsFollowUpPlan ?? []).find(
-    (b: any) => b.status === "new_lead",
-  );
-  const newLeadHref = firstNewLead
-    ? eventProfileHref({
-        organizationId: firstNewLead.organizationId ?? null,
-        contactId: firstNewLead.primaryContactId,
-        bookingId: firstNewLead.id,
-        mode: "prospect",
-      }) ?? undefined
-    : undefined;
+  const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({ ...e, startsAt: e.startsAt ? new Date(e.startsAt) : null }));
+  const firstNewLead = (dashboard.needsFollowUpPlan ?? []).find((b: any) => b.status === "new_lead");
+  const newLeadHref = firstNewLead ? eventProfileHref({ organizationId: firstNewLead.organizationId ?? null, contactId: firstNewLead.primaryContactId, bookingId: firstNewLead.id, mode: "prospect" }) ?? undefined : undefined;
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="mx-auto grid max-w-5xl gap-5">
+      <header className="flex items-end justify-between gap-3">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">
-            Command Center
-          </p>
+          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Command Center</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Today</h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Calls and decisions that need your attention first.
-          </p>
+          <p className="mt-1 text-sm text-slate-600">Work the next thing, then keep moving down the queue.</p>
         </div>
-        <Link className="button-primary text-center" href="/event-profiles/new">
-          New event
-        </Link>
       </header>
 
-      <SummaryCards
-        contractCount={dashboard.contractCount}
-        followUpCount={dashboard.followUpCount}
-        newLeadCount={dashboard.newLeadCount}
-        newLeadHref={newLeadHref}
-        visibleRouteWarningCount={dashboard.visibleRouteWarningCount}
-      />
-
       {callingConfig.assistedCallingEnabled ? (
-        <CallQueueWorkspace
-          callingConfig={callingConfig}
-          followUps={followUps}
-          initialFollowUpId={dashboard.nextCall?.id}
-          refreshToday={async () => {
-            const refreshed = await apiGet<any>("/today");
-            setDashboard(refreshed);
-            return {
-              followUps: coerceFollowUps(refreshed.followUps ?? []),
-              followUpTotal: refreshed.followUpTotal ?? 0,
-            };
-          }}
-          remainingCount={dashboard.followUpTotal ?? followUps.length}
-        />
+        <section className="grid gap-2" aria-labelledby="up-next-title">
+          <h2 className="text-xl font-bold" id="up-next-title">Up Next</h2>
+          <CallQueueWorkspace
+            callingConfig={callingConfig}
+            followUps={followUps}
+            initialFollowUpId={dashboard.nextCall?.id}
+            refreshToday={async () => {
+              const refreshed = await apiGet<any>("/today");
+              setDashboard(refreshed);
+              return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 };
+            }}
+            remainingCount={dashboard.followUpTotal ?? followUps.length}
+          />
+        </section>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(19rem,1fr)] lg:items-start">
-          <div className="grid gap-3">
-            <FollowUpList followUps={followUps} now={now} />
-          </div>
-          <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />
-        </div>
+        <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />
       )}
 
-      {(dashboard.todayTrips ?? []).length ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-bold">Today's trips</h2>
-          <p className="mt-1 text-sm text-slate-600">Routes on the road today.</p>
+      {!callingConfig.assistedCallingEnabled ? <FollowUpList followUps={followUps} now={now} /> : null}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-baseline justify-between gap-3">
+          <div><h2 className="text-xl font-bold">Upcoming Events</h2><p className="mt-1 text-sm text-slate-600">The next dated bookings.</p></div>
+          <Link className="text-sm font-semibold text-orange-700" href="/schedule">Open Schedule</Link>
+        </div>
+        {upcomingEvents.length ? (
           <ul className="mt-4 grid gap-2">
-            {dashboard.todayTrips.map((trip: any) => (
-              <li className="flex flex-wrap items-center gap-2" key={trip.id}>
-                {trip.legColor ? (
-                  <span aria-hidden className="size-3 rounded-full" style={{ backgroundColor: trip.legColor }} />
-                ) : null}
-                <Link className="font-semibold text-slate-950 hover:text-orange-700" href={`/trips/${trip.id}`}>
-                  {trip.name}
-                </Link>
-                <span className="text-sm text-slate-600">
-                  {trip.legName ? `${trip.legName} · ` : ""}
-                  {trip.stopCount} {trip.stopCount === 1 ? "stop" : "stops"}
-                  {trip.vehicleName ? ` · ${trip.vehicleName}` : ""}
-                </span>
+            {upcomingEvents.map((event: any) => (
+              <li className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 p-3" key={event.id}>
+                <div className="min-w-0">
+                  <Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: event.organizationId ?? null, contactId: event.primaryContactId, bookingId: event.id }) ?? `/bookings/${event.id}`}>{event.name}</Link>
+                  <BookingOperations operations={event.operations} />
+                </div>
+                {event.startsAt ? <span className="whitespace-nowrap text-sm text-slate-600">{formatDate(event.startsAt)}</span> : null}
               </li>
             ))}
           </ul>
-        </section>
+        ) : <p className="mt-4 text-sm text-slate-600">No upcoming event dates are set.</p>}
+      </section>
+
+      <NeedsAttention
+        contractCount={dashboard.contractCount ?? 0}
+        followUpCount={dashboard.followUpCount ?? 0}
+        newLeadCount={dashboard.newLeadCount ?? 0}
+        newLeadHref={newLeadHref}
+        visibleRouteWarningCount={dashboard.visibleRouteWarningCount ?? 0}
+      />
+
+      {(dashboard.needsFollowUpPlan ?? []).length ? (
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="cursor-pointer font-bold">Follow-up planning ({dashboard.needsFollowUpPlan.length})</summary>
+          <ul className="mt-4 grid gap-3">
+            {dashboard.needsFollowUpPlan.map((booking: any) => (
+              <li key={booking.id}>
+                <Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: booking.organizationId ?? null, contactId: booking.primaryContactId, bookingId: booking.id, mode: booking.status === "new_lead" ? "prospect" : undefined }) ?? `/bookings/${booking.id}`}>{booking.name}</Link>
+                <BookingOperations operations={booking.operations} />
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-bold">Needs Follow-up Plan</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Active leads and post-event wrap-ups without a future action.
-          </p>
-          {(dashboard.needsFollowUpPlan ?? []).length ? (
-            <ul className="mt-4 grid gap-2">
-              {dashboard.needsFollowUpPlan.map((booking: any) => (
-                <li key={booking.id}>
-                  <Link
-                    className="font-semibold text-slate-950 hover:text-orange-700"
-                    href={
-                      eventProfileHref({
-                        organizationId: booking.organizationId ?? null,
-                        contactId: booking.primaryContactId,
-                        bookingId: booking.id,
-                        mode: booking.status === "new_lead" ? "prospect" : undefined,
-                      }) ?? `/bookings/${booking.id}`
-                    }
-                  >
-                    {booking.name}
-                  </Link>
-                  {booking.planReason === "post_event" ? (
-                    <div className="mt-1 text-sm text-slate-600">
-                      <span className="font-semibold text-slate-700">
-                        Post-event follow-up
-                      </span>
-                      <span>
-                        {" · "}Add the aftermath summary and notes, record how it went, and decide whether/when to contact them for next year.
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="ml-2 text-sm capitalize text-slate-600">
-                      {booking.status.replaceAll("_", " ")}
-                    </span>
-                  )}
-                  <BookingOperations operations={booking.operations} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 text-sm text-slate-600">Every active lead has a future action.</p>
-          )}
-        </section>
+      {(dashboard.todayTrips ?? []).length ? (
+        <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <summary className="cursor-pointer font-bold">Today’s trips ({dashboard.todayTrips.length})</summary>
+          <ul className="mt-4 grid gap-2">{dashboard.todayTrips.map((trip: any) => <li key={trip.id}><Link className="font-semibold hover:text-orange-700" href={`/trips/${trip.id}`}>{trip.name}</Link><span className="ml-2 text-sm text-slate-600">{trip.legName ? `${trip.legName} · ` : ""}{trip.stopCount} stops</span></li>)}</ul>
+        </details>
+      ) : null}
 
-        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <h2 className="text-xl font-bold">Upcoming events</h2>
-          <p className="mt-1 text-sm text-slate-600">The next five dated bookings.</p>
-          {upcomingEvents.length ? (
-            <ul className="mt-4 grid gap-3">
-              {upcomingEvents.map((event: any) => (
-                <li className="flex items-start justify-between gap-3" key={event.id}>
-                  <div>
-                    <Link
-                      className="font-semibold text-slate-950 hover:text-orange-700"
-                      href={
-                        eventProfileHref({
-                          organizationId: event.organizationId ?? null,
-                          contactId: event.primaryContactId,
-                          bookingId: event.id,
-                        }) ?? `/bookings/${event.id}`
-                      }
-                    >
-                      {event.name}
-                    </Link>
-                    <BookingOperations operations={event.operations} />
-                  </div>
-                  {event.startsAt && (
-                    <span className="whitespace-nowrap text-sm text-slate-600">
-                      {formatDate(event.startsAt)}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 text-sm text-slate-600">No upcoming event dates are set.</p>
-          )}
-        </section>
-      </div>
-
-      <RenewalsSection
-        error={dashboard.renewalError ?? null}
-        prominentCount={dashboard.renewalProminentCount ?? 0}
-        renewals={renewals}
-        total={dashboard.renewalTotal ?? renewals.length}
-      />
+      <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <summary className="cursor-pointer font-bold">Renewals & secondary activity</summary>
+        <div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div>
+      </details>
     </div>
   );
 }
