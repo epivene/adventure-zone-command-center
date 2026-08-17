@@ -1,0 +1,32 @@
+name: Package Intelligence CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/packages/**"
+      - "artifacts/adventure-zone/src/features/packages/**"
+      - "artifacts/adventure-zone/src/components/packages/**"
+      - "artifacts/adventure-zone/src/components/bookings/**"
+      - "artifacts/adventure-zone/src/pages/BookingDetailPage.tsx"
+      - "lib/db/src/**"
+      - "lib/db/migrations/**"
+      - ".github/workflows/package-intelligence-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  package-intelligence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Package policy tests
+        run: pnpm exec vitest run artifacts/api-server/src/features/packages/package-policy.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
