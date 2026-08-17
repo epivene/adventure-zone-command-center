@@ -1,14 +1,31 @@
 import type { Pool } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 
+export async function bookingAssistantSchemaReady(
+  pool: Pool = defaultPool,
+): Promise<boolean> {
+  const result = await pool.query(`
+    SELECT
+      to_regclass(current_schema() || '.business_knowledge_entries') IS NOT NULL
+      AND to_regclass(current_schema() || '.derived_crm_facts') IS NOT NULL
+      AND to_regclass(current_schema() || '.assistant_conversations') IS NOT NULL
+      AND to_regclass(current_schema() || '.assistant_messages') IS NOT NULL
+      AND to_regclass(current_schema() || '.assistant_message_sources') IS NOT NULL
+      AS ready
+  `);
+  return result.rows[0]?.ready === true;
+}
+
 /**
- * Additive Render startup guard for the Booking Assistant schema. This mirrors
- * the package-intelligence guard because some deployed start commands do not
- * execute every standalone SQL migration before the API boots.
+ * Additive Render startup migration/compatibility guard for Booking Assistant.
+ * Returns true only when this boot had to apply the 045 schema, which lets the
+ * server include it in its normal migration logging even on hosts whose start
+ * command bypasses the legacy file registry.
  */
 export async function ensureBookingAssistantSchema(
   pool: Pool = defaultPool,
-): Promise<void> {
+): Promise<boolean> {
+  if (await bookingAssistantSchemaReady(pool)) return false;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS business_knowledge_entries (
       id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -98,4 +115,5 @@ export async function ensureBookingAssistantSchema(
     CREATE INDEX IF NOT EXISTS assistant_message_sources_message_idx
       ON assistant_message_sources(message_id);
   `);
+  return true;
 }
