@@ -6,6 +6,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 type NextEvent = { bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null };
 type RouteSummary = { nextEvent?: NextEvent | null };
+type MoneySummary = {
+  expenseTotalCents?: number;
+  cashPosition?: { cashOnHandCents?: number };
+};
 
 function formatEventDate(value?: string | null) {
   if (!value) return "Date not set";
@@ -29,17 +33,17 @@ export default function ManagerHomePage() {
   const { manager, managerApi } = useManagerAuth();
   const [reviewsDue, setReviewsDue] = useState(0);
   const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
-  const [money, setMoney] = useState<any>(null);
+  const [money, setMoney] = useState<MoneySummary | null>(null);
 
   useEffect(() => {
     managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due").then((data) => setReviewsDue(data.reviewsDue?.length ?? 0)).catch(() => setReviewsDue(0));
     managerApi<RouteSummary>("/manager/route").then((data) => setNextEvent(data.nextEvent ?? null)).catch(() => setNextEvent(null));
-    managerApi<any>("/manager/money").then(setMoney).catch(() => setMoney(null));
+    managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
   }, [managerApi]);
 
   const location = [nextEvent?.city, nextEvent?.region].filter(Boolean).join(", ");
-  const cashOnHand = money?.cashOnHand ?? money?.summary?.cashOnHand;
-  const expenseTotal = money?.expenseTotal ?? money?.summary?.expenseTotal;
+  const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
+  const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
 
   return (
     <div className="grid gap-4">
@@ -54,8 +58,8 @@ export default function ManagerHomePage() {
       </section>
 
       {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">
-        {cashOnHand != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Cash on hand</p><p className="mt-1 text-xl font-bold">${Number(cashOnHand).toFixed(2)}</p></Link> : null}
-        {expenseTotal != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Expenses</p><p className="mt-1 text-xl font-bold">${Number(expenseTotal).toFixed(2)}</p></Link> : null}
+        {cashOnHand != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Cash on hand</p><p className="mt-1 text-xl font-bold">${cashOnHand.toFixed(2)}</p></Link> : null}
+        {expenseTotal != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Expenses</p><p className="mt-1 text-xl font-bold">${expenseTotal.toFixed(2)}</p></Link> : null}
       </section> : null}
 
       {reviewsDue > 0 ? <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">Needs Attention</h2><p className="mt-1 text-sm text-amber-900">{reviewsDue} {reviewsDue === 1 ? "event still needs" : "events still need"} a review.</p><Link href="/manager/reviews" className="button-secondary mt-3 inline-flex">Complete reviews</Link></section> : null}
