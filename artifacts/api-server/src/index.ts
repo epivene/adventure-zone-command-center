@@ -9,6 +9,7 @@ import { ensureBookingProbabilitySchema } from "./features/bookings/booking-prob
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
+import { ensureCrewWorkerLegMembershipSchema } from "./features/leg-manager/crew-worker-membership-schema";
 import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
 import {
@@ -31,6 +32,7 @@ const appliedMigrations = await runActReviewMigrations();
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
+await ensureCrewWorkerLegMembershipSchema();
 await ensureEventLegLifecycleSchema();
 await new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
   "system:booking-assistant-seed",
