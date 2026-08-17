@@ -5,9 +5,11 @@ import {
   dropRecoveryItem,
   getRecoveryReview,
   getRecoveryStatus,
+  purgeRecoveryBookkeeping,
   retryRecoveryItem,
   searchRecoveryProfiles,
   startRecovery,
+  type ActHistoryPurgeBatchSummary,
   type ActRecoveryReviewItem,
   type ActRecoveryStatus,
   type RecoveryProfileSearchResult,
@@ -76,6 +78,7 @@ export default function ActRecoveryPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [purgeSummary, setPurgeSummary] = useState<ActHistoryPurgeBatchSummary | null>(null);
   const [searchText, setSearchText] = useState<Record<string, string>>({});
   const [searchResults, setSearchResults] = useState<Record<string, RecoveryProfileSearchResult[]>>({});
   const [selectedProfile, setSelectedProfile] = useState<Record<string, RecoveryProfileSearchResult | null>>({});
@@ -125,6 +128,24 @@ export default function ActRecoveryPage() {
     } finally {
       setBusy(null);
       setLoading(false);
+    }
+  }
+
+  async function purgeBookkeeping() {
+    const confirmed = window.confirm(
+      "Permanently delete ACT linking and system-update history that contains no meaningful note or message?",
+    );
+    if (!confirmed) return;
+    setBusy("purge");
+    setError(null);
+    try {
+      const result = await purgeRecoveryBookkeeping({ batchSize: 100 });
+      setPurgeSummary(result.summary);
+      await refresh();
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not purge ACT bookkeeping."));
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -278,6 +299,34 @@ export default function ActRecoveryPage() {
           <p className="mt-1 text-sm text-orange-900">Start Recovery to classify and salvage the ACT data already stored in Command Center.</p>
         </section>
       ) : null}
+
+      <section className="rounded-xl border border-rose-200 bg-white p-5 shadow-sm" aria-labelledby="act-purge-heading">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-950" id="act-purge-heading">Clean ACT bookkeeping</h2>
+            <p className="mt-1 max-w-3xl text-sm text-slate-600">
+              Permanently remove pure ACT linking, record-created/updated, and field-change history when it contains no meaningful human note or message. Each click deletes at most 100 matching records.
+            </p>
+          </div>
+          <button
+            className="button-secondary min-h-11 shrink-0 text-rose-700"
+            disabled={busy !== null}
+            onClick={() => void purgeBookkeeping()}
+            type="button"
+          >
+            {busy === "purge" ? "Purging…" : "Purge ACT bookkeeping"}
+          </button>
+        </div>
+        {purgeSummary ? (
+          <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-700" role="status">
+            <p className="font-semibold">Purged {formatNumber(purgeSummary.purged)} bookkeeping records · {formatNumber(purgeSummary.retained)} retained</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Scanned {formatNumber(purgeSummary.scanned)} · Linking {formatNumber(purgeSummary.byReason.relationship_bookkeeping)} · Record updates {formatNumber(purgeSummary.byReason.record_lifecycle_bookkeeping)} · Field changes {formatNumber(purgeSummary.byReason.field_change_bookkeeping)}
+            </p>
+            {purgeSummary.hasMore ? <p className="mt-2 text-xs font-semibold text-amber-700">More archived records remain to scan.</p> : <p className="mt-2 text-xs font-semibold text-green-700">No more archived timeline records remain in this scan.</p>}
+          </div>
+        ) : null}
+      </section>
 
       {status && (
         <section className="grid gap-4" aria-labelledby="recovery-review-heading">
