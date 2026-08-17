@@ -3,6 +3,8 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
+import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
+import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
@@ -33,49 +35,42 @@ export default function EventProfilePage() {
     if (contactId) qs.set("contactId", contactId);
     try {
       const d = await apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`);
-      {
-        const ratingSummary = await apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 }));
-        // JSON dates arrive as strings — the workspace formats Date objects.
-        const toDate = (v: any) => (v ? new Date(v) : null);
-        const normalized = {
-          ...d,
-          wrapUpRatingSummary: ratingSummary,
-          notes: (d.notes ?? []).map((n: any) => ({ ...n, occurredAt: toDate(n.occurredAt), createdAt: toDate(n.createdAt), updatedAt: toDate(n.updatedAt) })),
-          followUps: (d.followUps ?? []).map((f: any) => ({
-            ...f,
-            dueAt: toDate(f.dueAt),
-            completedAt: toDate(f.completedAt),
-          })),
-          bookings: (d.bookings ?? []).map((b: any) => ({ ...b, startsAt: toDate(b.startsAt) })),
-        };
-        const callablePhones = await Promise.all((normalized.contacts ?? []).map(async (contact: any) => {
-          const detail = await apiGet<any>(`/contacts/${contact.id}`).catch(() => null);
-          if (!detail) return [contact.id as string, null] as const;
-          const phones = Array.isArray(detail?.phones) ? detail.phones : [];
-          const callablePhone = phones
-            .filter((phone: any) => !phone.doNotCallAt && typeof phone.number === "string" && phone.number.trim())
-            .toSorted((left: any, right: any) => Number(Boolean(right.primary)) - Number(Boolean(left.primary)))[0];
-          return [contact.id as string, callablePhone?.number ?? null] as const;
-        }));
-        setCallablePhoneByContactId(Object.fromEntries(callablePhones));
-        setFamilyNotes([]);
-        setFamilyNotesError(null);
-        if (normalized.familyContext?.kind === "event_family") {
-          listFamilyNotes(normalized.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
-        }
-        setData(normalized);
-        setError(null);
-        setLoading(false);
+      const ratingSummary = await apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 }));
+      const toDate = (value: any) => (value ? new Date(value) : null);
+      const normalized = {
+        ...d,
+        wrapUpRatingSummary: ratingSummary,
+        notes: (d.notes ?? []).map((note: any) => ({ ...note, occurredAt: toDate(note.occurredAt), createdAt: toDate(note.createdAt), updatedAt: toDate(note.updatedAt) })),
+        followUps: (d.followUps ?? []).map((followUp: any) => ({ ...followUp, dueAt: toDate(followUp.dueAt), completedAt: toDate(followUp.completedAt) })),
+        bookings: (d.bookings ?? []).map((booking: any) => ({ ...booking, startsAt: toDate(booking.startsAt), endsAt: toDate(booking.endsAt) })),
+      };
+
+      const callablePhones = await Promise.all((normalized.contacts ?? []).map(async (contact: any) => {
+        const detail = await apiGet<any>(`/contacts/${contact.id}`).catch(() => null);
+        if (!detail) return [contact.id as string, null] as const;
+        const phones = Array.isArray(detail?.phones) ? detail.phones : [];
+        const callablePhone = phones
+          .filter((phone: any) => !phone.doNotCallAt && typeof phone.number === "string" && phone.number.trim())
+          .toSorted((left: any, right: any) => Number(Boolean(right.primary)) - Number(Boolean(left.primary)))[0];
+        return [contact.id as string, callablePhone?.number ?? null] as const;
+      }));
+
+      setCallablePhoneByContactId(Object.fromEntries(callablePhones));
+      setFamilyNotes([]);
+      setFamilyNotesError(null);
+      if (normalized.familyContext?.kind === "event_family") {
+        listFamilyNotes(normalized.familyContext.id).then(setFamilyNotes).catch(() => setFamilyNotesError("Could not load family notes."));
       }
-    } catch (e: any) {
-      setError(e.message);
+      setData(normalized);
+      setError(null);
+    } catch (reason: any) {
+      setError(reason.message);
+    } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void loadProfile();
-  }, [profileId, contactId]);
+  useEffect(() => { void loadProfile(); }, [profileId, contactId]);
 
   function retryFamilyNotes() {
     if (data?.familyContext?.kind !== "event_family") return;
@@ -111,36 +106,45 @@ export default function EventProfilePage() {
       >
         <span aria-hidden="true">←</span> Back
       </button>
-      <EventRatingSummary average={data.wrapUpRatingSummary?.average ?? null} count={data.wrapUpRatingSummary?.count ?? 0} />
+
+      <SimpleFullProfile profile={data} />
+
+      {(data.wrapUpRatingSummary?.count ?? 0) > 0 ? (
+        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <summary className="cursor-pointer font-semibold text-slate-800">Reviews & rating ({data.wrapUpRatingSummary.count})</summary>
+          <div className="mt-3"><EventRatingSummary average={data.wrapUpRatingSummary?.average ?? null} count={data.wrapUpRatingSummary?.count ?? 0} /></div>
+        </details>
+      ) : null}
+
       {recoveredActNotes.length ? (
-        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm" aria-labelledby="recovered-act-history-title">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-bold" id="recovered-act-history-title">Recovered ACT notes &amp; history</h2>
-              <p className="mt-1 text-sm text-amber-900">Preserved from merged ACT profiles. These records are read-only so the original imported history stays intact.</p>
-            </div>
-            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-900">{recoveredActNotes.length} recovered</span>
-          </div>
-          <ul className="mt-4 grid gap-3">
+        <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <summary className="cursor-pointer font-semibold text-slate-800">Imported ACT history ({recoveredActNotes.length})</summary>
+          <p className="mt-2 text-sm text-slate-600">Original imported records are preserved here for reference.</p>
+          <ul className="mt-3 grid gap-2">
             {recoveredActNotes.map((note: string) => (
-              <li className="whitespace-pre-wrap rounded-lg border border-amber-200 bg-white/70 p-3 text-sm text-slate-800" key={note}>
-                {note}
-              </li>
+              <li className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700" key={note}>{simplifyHistoryText(note)}</li>
             ))}
           </ul>
-        </section>
+        </details>
       ) : null}
-      <EventProfileWorkspace
-        profile={data}
-        assistedCallingEnabled={data.assistedCallingEnabled === true}
-        callablePhoneByContactId={callablePhoneByContactId}
-        context={{ bookingId, followUpId, action, mode }}
-        familyNotes={familyNotes}
-        familyNotesError={familyNotesError}
-        retryFamilyNotes={retryFamilyNotes}
-        organizationContext={data.organizationContext ?? { parent: null, children: [] }}
-        onOrganizationChanged={() => void loadProfile()}
-      />
+
+      <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer font-semibold text-slate-800">Advanced profile tools</summary>
+        <p className="mt-2 text-sm text-slate-600">Organization relationships, locations, calling tools, family notes, and the original detailed workspace.</p>
+        <div className="mt-4">
+          <EventProfileWorkspace
+            profile={data}
+            assistedCallingEnabled={data.assistedCallingEnabled === true}
+            callablePhoneByContactId={callablePhoneByContactId}
+            context={{ bookingId, followUpId, action, mode }}
+            familyNotes={familyNotes}
+            familyNotesError={familyNotesError}
+            retryFamilyNotes={retryFamilyNotes}
+            organizationContext={data.organizationContext ?? { parent: null, children: [] }}
+            onOrganizationChanged={() => void loadProfile()}
+          />
+        </div>
+      </details>
     </div>
   );
 }
