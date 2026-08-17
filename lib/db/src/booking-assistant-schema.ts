@@ -17,6 +17,7 @@ export const businessKnowledgeEntries = pgTable(
   "business_knowledge_entries",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    seedKey: text("seed_key"),
     scope: text("scope").notNull(),
     scopeRecordId: uuid("scope_record_id"),
     title: text("title").notNull(),
@@ -42,6 +43,7 @@ export const businessKnowledgeEntries = pgTable(
       "business_knowledge_entries_body_nonblank",
       sql`nullif(trim(${table.body}), '') is not null`,
     ),
+    uniqueIndex("business_knowledge_entries_seed_key_unique").on(table.seedKey),
     index("business_knowledge_entries_scope_active_idx").on(
       table.scope,
       table.scopeRecordId,
