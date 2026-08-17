@@ -15,8 +15,41 @@ function friendlyStage(value: string) {
   return lastPart.replaceAll("_", " ");
 }
 
+function decodeHtmlEntities(value: string) {
+  const named: Record<string, string> = { amp: "&", apos: "'", gt: ">", lt: "<", nbsp: " ", quot: '"' };
+  return value.replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (match, entity: string) => {
+    const normalized = entity.toLowerCase();
+    if (normalized.startsWith("#x")) {
+      const code = Number.parseInt(normalized.slice(2), 16);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    if (normalized.startsWith("#")) {
+      const code = Number.parseInt(normalized.slice(1), 10);
+      return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+    }
+    return named[normalized] ?? match;
+  });
+}
+
+export function htmlToPlainText(value: string) {
+  if (!value) return "";
+  const withoutHiddenBlocks = value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ");
+  const withBreaks = withoutHiddenBlocks
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/(?:div|p|li|tr|h[1-6])\s*>/gi, "\n")
+    .replace(/<li\b[^>]*>/gi, "• ");
+  return decodeHtmlEntities(withBreaks.replace(/<[^>]+>/g, " "))
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function simplifyHistoryText(body: string) {
-  const text = body.trim();
+  const text = htmlToPlainText(body).trim();
   if (!text) return "Profile updated";
 
   let match = text.match(/^Field\s+Stage\s+changed\s+from\s+(.+?)\s+to\s+(.+)$/i);
@@ -47,10 +80,17 @@ export type HistoryFilter = "all" | "calls" | "notes" | "follow-ups" | "act" | "
 
 export function historyCategory(item: ProfileHistoryItem): Exclude<HistoryFilter, "all"> {
   const kind = (item.kind ?? "").toLowerCase();
+  const actSourceType = (item.actSourceType ?? "").toLowerCase();
+
+  if (actSourceType === "note") return "notes";
+  if (actSourceType === "history") return "system";
+  if (actSourceType === "activity") return kind.includes("call") ? "calls" : "act";
+
   if (kind.includes("call")) return "calls";
   if (kind.includes("follow")) return "follow-ups";
   if (kind.includes("note")) return "notes";
-  if (kind.includes("history") || kind.includes("audit") || /^Field\s+/i.test(item.body ?? "") || /^A new opportunity called\s+/i.test(item.body ?? "")) return "system";
-  if (item.importedFromAct || item.actSourceType) return "act";
+  const plainBody = htmlToPlainText(item.body ?? "");
+  if (kind.includes("history") || kind.includes("audit") || /^Field\s+/i.test(plainBody) || /^A new opportunity called\s+/i.test(plainBody)) return "system";
+  if (item.importedFromAct) return "act";
   return "notes";
 }
