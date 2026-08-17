@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { EventWrapUpFinanceCheck } from "@/components/manager/event-wrap-up-finance-check";
 import { EventWrapUpProfitability } from "@/components/manager/event-wrap-up-profitability";
 import { EventWrapUpRating } from "@/components/manager/event-wrap-up-rating";
@@ -14,6 +15,7 @@ type Payload = any;
 
 export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: string }) {
   const { managerApi } = useManagerAuth();
+  const [, navigate] = useLocation();
   const [payload, setPayload] = useState<Payload | null>(null);
   const [stars, setStars] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
@@ -43,31 +45,57 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
     return Number.isFinite(value) && value >= 0 ? value : null;
   }, [actualCash]);
 
+  async function persistDraft() {
+    const next = await managerApi<Payload>(`/manager/wrap-ups/${bookingId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        ratingStars: stars,
+        ratingNotes: notes.trim() || null,
+        actualCashOnHandCents: actualCashCents,
+        cashDifferenceNote: differenceNote.trim() || null,
+      }),
+    });
+    apply(next);
+    return next;
+  }
+
   async function saveDraft() {
-    if (!payload) return;
+    if (!payload || !editable) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const next = await managerApi<Payload>(`/manager/wrap-ups/${bookingId}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          ratingStars: stars,
-          ratingNotes: notes.trim() || null,
-          actualCashOnHandCents: actualCashCents,
-          cashDifferenceNote: differenceNote.trim() || null,
-        }),
-      });
-      apply(next); setMessage("Draft saved.");
+      await persistDraft();
+      setMessage("Draft saved.");
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save draft"); }
     finally { setBusy(false); }
   }
 
-  async function submitWrapUp() {
+  async function finishLater() {
     if (!payload) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const next = await managerApi<Payload>(`/manager/wrap-ups/${bookingId}/submit`, { method: "POST", body: "{}" });
-      apply(next); setMessage("Wrap-up submitted.");
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not submit wrap-up"); }
+      if (editable) await persistDraft();
+      await managerApi(`/manager/events/${bookingId}/wrap-up/finish-later`, { method: "POST", body: "{}" });
+      navigate("/manager");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save this wrap-up for later"); }
+    finally { setBusy(false); }
+  }
+
+  async function finishWrapUp() {
+    if (!payload || stars === null || actualCashCents === null) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      if (editable) await persistDraft();
+      await managerApi(`/manager/events/${bookingId}/wrap-up/review`, {
+        method: "POST",
+        body: JSON.stringify({ rating: stars, feedback: notes.trim() || null, clientMutationId: crypto.randomUUID() }),
+      });
+      if (editable) {
+        const next = await managerApi<Payload>(`/manager/wrap-ups/${bookingId}/submit`, { method: "POST", body: "{}" });
+        apply(next);
+      }
+      await managerApi(`/manager/events/${bookingId}/wrap-up/finish`, { method: "POST", body: "{}" });
+      navigate("/manager");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not finish event wrap-up"); }
     finally { setBusy(false); }
   }
 
@@ -84,6 +112,7 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
       <h1 className="text-2xl font-bold">Event Wrap-Up</h1>
       <h2 className="text-xl font-semibold">{payload.event.name}</h2>
       <p className="text-sm text-slate-600">{payload.event.city}, {payload.event.region} · {payload.event.legName}{payload.event.tripName ? ` · ${payload.event.tripName}` : ""}</p>
+      <p className="text-sm text-slate-600">Finish it now or save it and come back from Home or Schedule.</p>
       <span className="w-fit rounded-full bg-slate-100 px-2 py-1 text-xs font-bold uppercase tracking-wide">{payload.wrapUp?.status ?? "draft"}</span>
     </header>
 
@@ -100,9 +129,9 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
     {closeoutWarnings.length ? <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">Before you finish</h2><ul className="mt-2 list-disc pl-5 text-sm">{closeoutWarnings.map((warning: string) => <li key={warning}>{warning}</li>)}</ul></section> : null}
 
     <section className="flex flex-wrap gap-2 rounded-xl border bg-white p-4">
-      <button type="button" className="button-secondary" disabled={!editable || busy} onClick={() => void saveDraft()}>{busy ? "Saving…" : "Save draft"}</button>
-      <button type="button" className="button-primary" disabled={!editable || busy || actualCashCents === null} onClick={() => void submitWrapUp()}>Submit wrap-up</button>
-      <a className="button-secondary" href="/manager/reviews">Back to wrap-ups</a>
+      {editable ? <button type="button" className="button-secondary" disabled={busy} onClick={() => void saveDraft()}>{busy ? "Saving…" : "Save draft"}</button> : null}
+      <button type="button" className="button-secondary" disabled={busy} onClick={() => void finishLater()}>Finish later</button>
+      <button type="button" className="button-primary" disabled={busy || stars === null || actualCashCents === null} onClick={() => void finishWrapUp()}>Finish wrap-up</button>
     </section>
   </div>;
 }
