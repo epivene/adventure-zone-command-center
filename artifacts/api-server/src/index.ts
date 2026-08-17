@@ -94,7 +94,7 @@ const shutdown = createActServerShutdown({
   },
   closeServer() {
     return new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve());
+      server.close((error) => (error ? reject(error) : resolve()));
     });
   },
   async closePool() {
