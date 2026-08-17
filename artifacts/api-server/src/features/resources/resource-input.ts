@@ -18,6 +18,13 @@ const trimmedLabel = z
   .min(1, "This field is required.")
   .max(100, "This field is too long.");
 
+export const packageCountCategoryValues = [
+  "main_attraction",
+  "game_extra",
+  "special_shared",
+] as const;
+export type PackageCountCategory = (typeof packageCountCategoryValues)[number];
+
 export const configureBookingResourcesInputSchema = z
   .object({
     bookingId: canonicalUuid,
@@ -50,6 +57,7 @@ export const resourceInputSchema = z
     name: trimmedLabel,
     category: trimmedLabel,
     countsAsAttraction: z.boolean(),
+    packageCountCategory: z.enum(packageCountCategoryValues),
     packageTemplateIds: z.array(canonicalUuid),
     normalTravelLegId: canonicalUuid.nullable(),
     movable: z.boolean(),
