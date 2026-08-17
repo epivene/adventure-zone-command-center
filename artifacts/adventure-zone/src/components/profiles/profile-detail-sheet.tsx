@@ -38,6 +38,19 @@ function noteLabel(note: any) {
   return "Note";
 }
 
+function followUpHistoryItem(followUp: any) {
+  const kind = String(followUp.kind ?? "follow-up").replaceAll("_", " ");
+  return {
+    id: `follow-up:${followUp.id}`,
+    kind: "follow_up",
+    body: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} ${followUp.completedAt ? "completed" : "due"}${followUp.dueAt ? ` ${formatDateTime(followUp.dueAt)}` : ""}`,
+    occurredAt: followUp.completedAt ?? followUp.dueAt ?? null,
+    createdAt: followUp.dueAt ?? null,
+    importedFromAct: false,
+    actSourceType: null,
+  };
+}
+
 const historyFilters: Array<{ value: HistoryFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "calls", label: "Calls" },
@@ -81,10 +94,17 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
   const selectedContact = contacts.find((contact: any) => contact.id === selectedContactId) ?? contacts[0] ?? null;
   const location = [place.city, place.region].filter(Boolean).join(", ");
   const meaningfulNotes = notes.filter((note: any) => historyCategory(note) !== "system");
-  const filteredHistory = historyFilter === "all" ? notes : notes.filter((note: any) => historyCategory(note) === historyFilter);
-  const nextFollowUp = [...followUps]
-    .filter((item: any) => !item.completedAt && item.dueAt)
-    .sort((a: any, b: any) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0] ?? null;
+  const followUpHistory = followUps.map(followUpHistoryItem);
+  const allHistory = [...notes, ...followUpHistory].sort((a: any, b: any) => {
+    const left = new Date(a.occurredAt ?? a.createdAt ?? 0).getTime();
+    const right = new Date(b.occurredAt ?? b.createdAt ?? 0).getTime();
+    return right - left;
+  });
+  const filteredHistory = historyFilter === "all" ? allHistory : allHistory.filter((item: any) => historyCategory(item) === historyFilter);
+  const openFollowUps = [...followUps]
+    .filter((item: any) => !item.completedAt)
+    .sort((a: any, b: any) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
+  const nextFollowUp = openFollowUps[0] ?? null;
   const nextEvent = [...bookings]
     .filter((item: any) => item.startsAt && new Date(item.startsAt).getTime() >= Date.now())
     .sort((a: any, b: any) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ?? null;
@@ -100,7 +120,7 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
                 <h2 className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-950">{place.name ?? title}</h2>
                 {location ? <p className="mt-1 text-sm font-medium text-slate-600">{location}</p> : null}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {place.placeType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{String(place.placeType).replaceAll("_", " ")}</span> : null}
+                  {place.placeType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">{String(place.placeType).replaceAll("_", " ")}</span> : null}
                   {place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
                 </div>
               </div>
@@ -139,8 +159,23 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
             <section className="grid gap-3">
               <div>
                 <h3 className="text-lg font-bold">Notes & communication</h3>
-                <p className="mt-1 text-sm text-slate-600">Useful notes, calls, and follow-up context first.</p>
+                <p className="mt-1 text-sm text-slate-600">Useful notes, calls, and follow-ups first.</p>
               </div>
+
+              {openFollowUps.length ? (
+                <details className="rounded-xl border border-orange-100 bg-orange-50/60 p-3">
+                  <summary className="cursor-pointer font-semibold text-slate-900">Open follow-ups ({openFollowUps.length})</summary>
+                  <div className="mt-3 grid gap-2">
+                    {openFollowUps.slice(0, 10).map((followUp: any) => (
+                      <div className="rounded-lg bg-white p-3 text-sm" key={followUp.id}>
+                        <p className="font-semibold capitalize">{String(followUp.kind ?? "follow-up").replaceAll("_", " ")}</p>
+                        <p className="mt-0.5 text-slate-600">Due {formatDateTime(followUp.dueAt) ?? "date not set"}</p>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+
               {meaningfulNotes.length ? meaningfulNotes.slice(0, 25).map((note: any) => (
                 <article className="rounded-xl border border-slate-200 bg-white p-3" key={note.id ?? `${note.kind}-${note.occurredAt}`}>
                   <div className="flex items-baseline justify-between gap-2">
@@ -152,17 +187,17 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
               )) : <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">No notes yet.</p>}
 
               <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <summary className="cursor-pointer font-semibold text-slate-800">History & imported changes ({notes.length})</summary>
+                <summary className="cursor-pointer font-semibold text-slate-800">History & imported changes ({allHistory.length})</summary>
                 <div className="mt-3 grid gap-3">
                   <div className="flex flex-wrap gap-2" aria-label="History filters">
                     {historyFilters.map((filter) => (
                       <button key={filter.value} type="button" onClick={() => setHistoryFilter(filter.value)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${historyFilter === filter.value ? "border-orange-300 bg-orange-50 text-orange-800" : "border-slate-200 bg-white text-slate-600"}`}>{filter.label}</button>
                     ))}
                   </div>
-                  {filteredHistory.length ? filteredHistory.slice(0, 60).map((note: any) => (
-                    <article className="rounded-lg border border-slate-200 bg-white p-3" key={`history-${note.id ?? `${note.kind}-${note.occurredAt}`}`}>
-                      <div className="flex items-baseline justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{historyCategory(note).replaceAll("-", " ")}</span>{formatDate(note.occurredAt ?? note.createdAt) ? <span className="shrink-0 text-xs text-slate-500">{formatDate(note.occurredAt ?? note.createdAt)}</span> : null}</div>
-                      <p className="mt-1 text-sm text-slate-700">{simplifyHistoryText(note.body ?? "")}</p>
+                  {filteredHistory.length ? filteredHistory.slice(0, 60).map((item: any) => (
+                    <article className="rounded-lg border border-slate-200 bg-white p-3" key={`history-${item.id ?? `${item.kind}-${item.occurredAt}`}`}>
+                      <div className="flex items-baseline justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{historyCategory(item).replaceAll("-", " ")}</span>{formatDate(item.occurredAt ?? item.createdAt) ? <span className="shrink-0 text-xs text-slate-500">{formatDate(item.occurredAt ?? item.createdAt)}</span> : null}</div>
+                      <p className="mt-1 text-sm text-slate-700">{simplifyHistoryText(item.body ?? "")}</p>
                     </article>
                   )) : <p className="text-sm text-slate-600">Nothing matches this history filter.</p>}
                 </div>
