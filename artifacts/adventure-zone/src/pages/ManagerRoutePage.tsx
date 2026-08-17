@@ -31,7 +31,7 @@ export default function ManagerRoutePage() {
 
   const scheduledEvents = map.data?.events ?? data.events;
   const detailEvent = scheduledEvents.find((event: any) => event.bookingId === detailBookingId) ?? null;
-  const detailHasLifecycleAction = detailEvent && (detailEvent.status === "confirmed" || incompleteIds.has(detailEvent.bookingId));
+  const canLoadLifecycle = detailEvent && !["declined", "cancelled"].includes(String(detailEvent.status));
 
   return (
     <div className="grid gap-4">
@@ -56,7 +56,7 @@ export default function ManagerRoutePage() {
 
       <ResponsiveDetailSheet open={Boolean(detailEvent)} onOpenChange={(open) => { if (!open) setDetailBookingId(null); }} title={detailEvent?.bookingName ?? "Event"}>
         {detailEvent ? <div className="grid gap-4">
-          <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Event details</h2><p className="mt-2 text-sm text-slate-700">{[detailEvent.city, detailEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="text-sm text-slate-700">{detailEvent.startsAt ? new Date(detailEvent.startsAt).toLocaleString() : "Date not set"}</p>{detailEvent.address ? <p className="mt-2 text-sm text-slate-700">{detailEvent.address}</p> : null}{detailHasLifecycleAction ? <div className="mt-4 border-t pt-3"><EventLifecycleAction bookingId={detailEvent.bookingId} onChanged={(next) => { if (next.wrapUpStatus === "incomplete") setIncompleteIds((current) => new Set(current).add(detailEvent.bookingId)); }} /></div> : null}</section>
+          <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Event details</h2><p className="mt-2 text-sm text-slate-700">{[detailEvent.city, detailEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="text-sm text-slate-700">{detailEvent.startsAt ? new Date(detailEvent.startsAt).toLocaleString() : "Date not set"}</p>{detailEvent.address ? <p className="mt-2 text-sm text-slate-700">{detailEvent.address}</p> : null}{canLoadLifecycle ? <div className="mt-4 border-t pt-3"><EventLifecycleAction bookingId={detailEvent.bookingId} allowCheckIn={detailEvent.status === "confirmed"} onChanged={(next) => { if (next.wrapUpStatus === "incomplete") setIncompleteIds((current) => new Set(current).add(detailEvent.bookingId)); }} /></div> : null}</section>
           <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Schedule changes</h2><p className="mt-1 text-sm text-slate-600">The official booking is read-only here. Report anything that needs corrected.</p><div className="mt-3"><ReportScheduleIssue tripId={data.route?.trip.id ?? null} /></div></section>
         </div> : null}
       </ResponsiveDetailSheet>
