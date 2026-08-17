@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 
 import type {
   ArchivedProfileSummary,
@@ -35,7 +35,7 @@ function serializeSummary(profile: ArchivedProfileSummary) {
   };
 }
 
-function sendLifecycleError(res: Parameters<Parameters<IRouter["post"]>[1]>[1], error: unknown) {
+function sendLifecycleError(res: Response, error: unknown) {
   const code = error && typeof error === "object" && "code" in error
     ? String((error as { code?: unknown }).code ?? "")
     : "";
@@ -58,7 +58,7 @@ export function createProfileLifecycleRouter(input: {
       const profiles = await withService((service) => service.listArchived());
       res.json({ ok: true, profiles: profiles.map(serializeSummary) });
     } catch (error) {
-      sendLifecycleError(res as never, error);
+      sendLifecycleError(res, error);
     }
   });
 
@@ -73,7 +73,7 @@ export function createProfileLifecycleRouter(input: {
         const profile = await withService((service) => service[action](profileId, "owner"));
         res.json({ ok: true, profile: serializeState(profile) });
       } catch (error) {
-        sendLifecycleError(res as never, error);
+        sendLifecycleError(res, error);
       }
     });
   }
