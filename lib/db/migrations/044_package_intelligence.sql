@@ -37,19 +37,22 @@ SET name = 'Pirate''s Rebellion',
     updated_at = now()
 WHERE code IN ('pirates_rebellion', 'pirate_rebellion');
 
-ALTER TABLE package_templates
-  ALTER COLUMN minimum_attraction_count SET NOT NULL,
-  ALTER COLUMN maximum_attraction_count SET NOT NULL;
-
+-- Keep the new columns nullable for backward compatibility with any older
+-- seed/create path that inserts only base_attraction_count. Readers fall back
+-- to the base count until the package is edited in Settings.
 ALTER TABLE package_templates
   DROP CONSTRAINT IF EXISTS package_templates_minimum_attraction_count_positive,
   DROP CONSTRAINT IF EXISTS package_templates_maximum_attraction_count_valid;
 
 ALTER TABLE package_templates
   ADD CONSTRAINT package_templates_minimum_attraction_count_positive
-    CHECK (minimum_attraction_count > 0),
+    CHECK (minimum_attraction_count IS NULL OR minimum_attraction_count > 0),
   ADD CONSTRAINT package_templates_maximum_attraction_count_valid
-    CHECK (maximum_attraction_count >= minimum_attraction_count);
+    CHECK (
+      maximum_attraction_count IS NULL
+      OR minimum_attraction_count IS NULL
+      OR maximum_attraction_count >= minimum_attraction_count
+    );
 
 ALTER TABLE resources
   ADD COLUMN IF NOT EXISTS package_count_category text;
