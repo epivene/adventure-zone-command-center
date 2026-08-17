@@ -13,6 +13,7 @@ describe("simplified calendar contracts", () => {
   it("uses a compact mobile month grid and selected-day details", () => {
     expect(calendarSource).toContain('className="grid grid-cols-7 gap-px bg-slate-200"');
     expect(calendarSource).toContain("selectedDayKey");
+    expect(calendarSource).toContain("initialSelectedDay");
     expect(calendarSource).toContain("Nothing scheduled for this day.");
   });
 
@@ -23,8 +24,10 @@ describe("simplified calendar contracts", () => {
     expect(calendarSource).toContain("onMonthChange?.(monthKey(next))");
   });
 
-  it("keeps ACT activity hidden by default and makes the alternate view Upcoming", () => {
+  it("keeps imported activity hidden by default under More and makes the alternate view Upcoming", () => {
     expect(calendarSource).toContain("useState(false)");
+    expect(calendarSource).toContain("More ▾");
+    expect(calendarSource).toContain("Show imported ACT activity");
     expect(calendarSource).toContain(">Upcoming<");
     expect(calendarSource).toContain(">Show more<");
   });
