@@ -41,6 +41,7 @@ export function ResponsiveDetailSheet({
             {fullPageHref ? (
               <Link
                 className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+                data-open-full-profile="true"
                 href={fullPageHref}
                 onClick={() => onOpenChange(false)}
               >
