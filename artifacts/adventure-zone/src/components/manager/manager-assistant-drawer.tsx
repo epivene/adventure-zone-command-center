@@ -7,6 +7,7 @@ import {
   askManagerAssistant,
   listManagerAdminQuestions,
   loadManagerAssistantContext,
+  replyToAdminQuestion,
 } from "@/features/manager-assistant/manager-assistant-api";
 import { useManagerAssistant } from "@/features/manager-assistant/manager-assistant-context";
 import type {
@@ -26,6 +27,7 @@ export function ManagerAssistantDrawer() {
   const [answer, setAnswer] = useState<ManagerAssistantAnswer | null>(null);
   const [question, setQuestion] = useState("");
   const [questions, setQuestions] = useState<ManagerAdminQuestion[]>([]);
+  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -36,6 +38,11 @@ export function ManagerAssistantDrawer() {
     if (!open) return;
     setQuestion(prefill);
   }, [open, prefill]);
+
+  async function refreshQuestions() {
+    const result = await listManagerAdminQuestions(managerApi);
+    setQuestions(result.questions);
+  }
 
   useEffect(() => {
     if (!open || !activeContext || !manager) return;
@@ -104,6 +111,23 @@ export function ManagerAssistantDrawer() {
     }
   }
 
+  async function reply(questionId: string) {
+    const body = replyDrafts[questionId]?.trim();
+    if (!body || asking || offline) return;
+    setAsking(true);
+    setError(null);
+    try {
+      await replyToAdminQuestion(managerApi, questionId, body);
+      setReplyDrafts((current) => ({ ...current, [questionId]: "" }));
+      setNotice("Reply sent to the admins.");
+      await refreshQuestions();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not send your reply.");
+    } finally {
+      setAsking(false);
+    }
+  }
+
   if (!open) return null;
 
   return (
@@ -156,7 +180,7 @@ export function ManagerAssistantDrawer() {
                     {questions.slice(0, 8).map((item) => (
                       <li className="rounded-lg bg-slate-50 p-3 text-sm" key={item.id}>
                         <div className="flex items-start justify-between gap-2"><span>{item.question}</span><span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold">{statusLabel(item.status)}</span></div>
-                        {item.latestAdminResponse ? <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Admin answer</p><p className="mt-1 whitespace-pre-wrap text-sm text-emerald-950">{item.latestAdminResponse}</p></div> : null}
+                        {item.latestAdminResponse ? <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Admin answer</p><p className="mt-1 whitespace-pre-wrap text-sm text-emerald-950">{item.latestAdminResponse}</p>{item.status!=="resolved"?<div className="mt-2"><input className="w-full rounded-lg border border-emerald-200 bg-white px-2 py-1.5 text-sm" disabled={offline} onChange={(event)=>setReplyDrafts((current)=>({...current,[item.id]:event.target.value}))} placeholder={offline?"Reconnect to reply":"Reply to admin…"} value={replyDrafts[item.id]??""}/><button className="button-secondary mt-2" disabled={offline||asking||!(replyDrafts[item.id]??"").trim()} onClick={()=>void reply(item.id)} type="button">Send reply</button></div>:null}</div> : null}
                       </li>
                     ))}
                   </ul>
