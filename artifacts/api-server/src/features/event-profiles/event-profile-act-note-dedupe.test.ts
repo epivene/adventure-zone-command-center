@@ -35,16 +35,18 @@ function activity(input: {
   body: string;
   importedFromAct: boolean;
   actSourceType: "note" | "history" | null;
+  occurredAt?: Date;
 }) {
+  const timestamp = input.occurredAt ?? occurredAt;
   return {
     id: input.id,
     contactId: null,
     bookingId: null,
     kind: "note",
     body: input.body,
-    occurredAt,
-    createdAt: occurredAt,
-    updatedAt: occurredAt,
+    occurredAt: timestamp,
+    createdAt: timestamp,
+    updatedAt: timestamp,
     importedFromAct: input.importedFromAct,
     actSourceType: input.actSourceType,
   };
@@ -69,6 +71,26 @@ describe("ACT notes on event profiles", () => {
 
     expect(profile.notes).toHaveLength(1);
     expect(profile.notes[0]?.body).toBe("Called organizer and sent the package.");
+  });
+
+  it("keeps the same imported ACT text when it happened at a different time", () => {
+    const profile = buildEventProfile(recordsWithActivities([
+      activity({
+        id: "21000000-0000-4000-8000-000000000001",
+        body: "Called organizer and sent the package.",
+        importedFromAct: true,
+        actSourceType: "note",
+      }),
+      activity({
+        id: "21000000-0000-4000-8000-000000000002",
+        body: "Called organizer and sent the package.",
+        importedFromAct: true,
+        actSourceType: "history",
+        occurredAt: new Date("2026-05-10T19:30:00.000Z"),
+      }),
+    ]));
+
+    expect(profile.notes).toHaveLength(2);
   });
 
   it("does not collapse two local notes just because their text and timestamp match", () => {
