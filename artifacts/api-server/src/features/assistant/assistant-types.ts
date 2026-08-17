@@ -1,3 +1,5 @@
+import type { PackageHistorySignal } from "@/features/packages/package-history";
+
 export const assistantContextKindValues = [
   "organization",
   "contact",
@@ -37,6 +39,77 @@ export type AssistantAnswer = {
   confidence: "high" | "medium" | "low";
   sources: AssistantSourceReference[];
   needsAdmin: false;
+};
+
+export type BookingAssistantBookingSummary = {
+  id: string;
+  label: string;
+  startsAt: string | null;
+  status: string;
+  physicalAttractionTotal: number | null;
+  packageNames: string[];
+  specialResourceNames: string[];
+};
+
+export type BookingAssistantActivitySummary = {
+  id: string;
+  kind: string;
+  summary: string;
+  occurredAt: string | null;
+  sourceIds: string[];
+};
+
+export type BookingAssistantFollowUpSummary = {
+  id: string;
+  kind: string;
+  dueAt: string;
+  label: string;
+};
+
+export type BookingAssistantRouteSummary = {
+  id: string;
+  label: string;
+  summary: string;
+};
+
+export type BookingAssistantDerivedFactSummary = {
+  id: string;
+  factKind: string;
+  summary: string;
+  confidence: "high" | "medium" | "low";
+  status: "proposed" | "confirmed" | "dismissed";
+  sourceIds: string[];
+};
+
+export type BookingAssistantKnowledgeSummary = {
+  id: string;
+  title: string;
+  body: string;
+  sourceIds: string[];
+};
+
+export type BookingAssistantContextBundle = {
+  context: {
+    kind: AssistantContextKind;
+    recordId: string;
+    label: string;
+  };
+  profile: {
+    organizationId: string | null;
+    contactIds: string[];
+    contacts: Array<{ id: string; label: string; isPrimary: boolean }>;
+    eventFamilyId: string | null;
+  };
+  currentBooking: BookingAssistantBookingSummary | null;
+  priorBookings: BookingAssistantBookingSummary[];
+  recentActivities: BookingAssistantActivitySummary[];
+  openFollowUps: BookingAssistantFollowUpSummary[];
+  packageHistorySignals: PackageHistorySignal[];
+  routeContext: BookingAssistantRouteSummary | null;
+  derivedFacts: BookingAssistantDerivedFactSummary[];
+  businessKnowledge: BookingAssistantKnowledgeSummary[];
+  sources: AssistantSourceReference[];
+  generatedAt: string;
 };
 
 export function serializeAssistantSource(input: Omit<AssistantSourceReference, "occurredAt"> & {
