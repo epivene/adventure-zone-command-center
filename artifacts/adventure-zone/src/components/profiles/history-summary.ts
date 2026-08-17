@@ -23,7 +23,7 @@ export function simplifyHistoryText(body: string) {
   if (match) return `Stage changed to ${friendlyStage(match[2] ?? "")}`;
 
   match = text.match(/^Field\s+Probability of Close\s+changed\s+from\s+(.+?)\s+to\s+(.+)$/i);
-  if (match) return `Booking likelihood changed from ${cleanQuoted(match[1] ?? "")}\% to ${cleanQuoted(match[2] ?? "")}\%`;
+  if (match) return `Booking likelihood changed from ${cleanQuoted(match[1] ?? "")}% to ${cleanQuoted(match[2] ?? "")}%`;
 
   match = text.match(/^Field\s+Opportunity Name\s+changed\s+from\s+(.+?)\s+to\s+(.+)$/i);
   if (match) return `Renamed opportunity to ${cleanQuoted(match[2] ?? "")}`;
@@ -46,11 +46,11 @@ export function simplifyHistoryText(body: string) {
 export type HistoryFilter = "all" | "calls" | "notes" | "follow-ups" | "act" | "system";
 
 export function historyCategory(item: ProfileHistoryItem): Exclude<HistoryFilter, "all"> {
-  if (item.importedFromAct || item.actSourceType) return "act";
   const kind = (item.kind ?? "").toLowerCase();
   if (kind.includes("call")) return "calls";
   if (kind.includes("follow")) return "follow-ups";
   if (kind.includes("note")) return "notes";
-  if (kind.includes("history") || kind.includes("audit") || /^Field\s+/i.test(item.body ?? "")) return "system";
+  if (kind.includes("history") || kind.includes("audit") || /^Field\s+/i.test(item.body ?? "") || /^A new opportunity called\s+/i.test(item.body ?? "")) return "system";
+  if (item.importedFromAct || item.actSourceType) return "act";
   return "notes";
 }
