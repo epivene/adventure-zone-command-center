@@ -191,6 +191,27 @@ function stableSourceProvenance(records: EventProfileRecordSet) {
   );
 }
 
+function visibleActivityText(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function dedupeImportedActActivities(records: EventProfileActivityRecord[]) {
+  const seen = new Set<string>();
+  return records
+    .toSorted((left, right) =>
+      Number(right.occurredAt) - Number(left.occurredAt) || left.id.localeCompare(right.id),
+    )
+    .filter((activity) => {
+      if (!activity.importedFromAct) return true;
+      const body = visibleActivityText(activity.body);
+      if (!body) return true;
+      const key = `${activity.occurredAt.getTime()}\u0000${body}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
 export function buildEventProfile(
   records: EventProfileRecordSet,
   requestedContactId?: string,
@@ -225,9 +246,7 @@ export function buildEventProfile(
       || left.name.localeCompare(right.name)
       || left.id.localeCompare(right.id),
     ),
-    notes: records.activities.toSorted((left, right) =>
-      Number(right.occurredAt) - Number(left.occurredAt) || left.id.localeCompare(right.id),
-    ),
+    notes: dedupeImportedActActivities(records.activities),
     followUps: records.followUps.toSorted((left, right) =>
       Number(left.completedAt !== null) - Number(right.completedAt !== null)
       || Number(left.dueAt) - Number(right.dueAt)
