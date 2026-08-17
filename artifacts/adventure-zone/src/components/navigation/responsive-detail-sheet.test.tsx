@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { ResponsiveDetailSheet } from "./responsive-detail-sheet";
@@ -19,5 +20,21 @@ describe("ResponsiveDetailSheet", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open full/i })).toHaveAttribute("href", "/profiles/1");
     expect(screen.getByText("details")).toBeInTheDocument();
+  });
+
+  it("closes the sheet when Open full is chosen so the full page is visible", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const { hook } = memoryLocation({ path: "/today" });
+    render(
+      <Router hook={hook}>
+        <ResponsiveDetailSheet open onOpenChange={onOpenChange} title="Jane Doe" fullPageHref="/profiles/1">
+          details
+        </ResponsiveDetailSheet>
+      </Router>,
+    );
+
+    await user.click(screen.getByRole("link", { name: /open full/i }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });
