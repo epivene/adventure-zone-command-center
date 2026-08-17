@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from "node:fs";
 import { render, screen } from "@testing-library/react";
 import { Router, Route, Switch } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
@@ -6,6 +7,8 @@ import { describe, expect, it } from "vitest";
 
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
+
+const appSource = readFileSync("src/App.tsx", "utf8");
 
 describe("manager protected routing", () => {
   it("keeps manager sub-routes inside the manager router", () => {
@@ -39,5 +42,20 @@ describe("manager protected routing", () => {
 
     expect(screen.getByText("Wrap-up detail")).toBeInTheDocument();
     expect(screen.queryByText("Not found")).not.toBeInTheDocument();
+  });
+
+  it("keeps all manager destinations routed after simplifying primary navigation", () => {
+    for (const path of [
+      "/manager/route",
+      "/manager/money",
+      "/manager/crew",
+      "/manager/receipts",
+      "/manager/operations",
+      "/manager/reviews",
+      "/manager/incidents",
+      "/manager/messages",
+    ]) {
+      expect(appSource).toContain(`path=\"${path}`);
+    }
   });
 });

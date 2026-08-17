@@ -1,108 +1,69 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { Plus } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-type NextEvent = {
-  bookingName?: string | null;
-  city?: string | null;
-  region?: string | null;
-  startsAt?: string | null;
-};
-
+type NextEvent = { bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null };
 type RouteSummary = { nextEvent?: NextEvent | null };
 
 function formatEventDate(value?: string | null) {
   if (!value) return "Date not set";
-  return new Date(value).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-const destinations = [
-  { href: "/manager/route", title: "Events & Route", detail: "Official schedule, stops, and route issues" },
-  { href: "/manager/money", title: "Money", detail: "Income, expenses, cash, and settlement" },
-  { href: "/manager/receipts", title: "Receipts", detail: "Receipt photos and missing-receipt follow-up" },
-  { href: "/manager/crew", title: "Crew", detail: "Seasonal workers, history, and rehire notes" },
-  { href: "/manager/reviews", title: "Reviews & Incidents", detail: "Post-event reviews and incident follow-up" },
-  { href: "/manager/operations", title: "Operations", detail: "Mileage, RV parks, food, and maintenance" },
-];
+function QuickAddMenu() {
+  return <DropdownMenu>
+    <DropdownMenuTrigger asChild><button className="button-primary inline-flex items-center gap-2" type="button"><Plus className="h-4 w-4" />Add</button></DropdownMenuTrigger>
+    <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuItem asChild><Link href="/manager/receipts">Receipt</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild><Link href="/manager/money">Expense / income</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild><Link href="/manager/operations">Mileage</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild><Link href="/manager/route">Schedule issue</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild><Link href="/manager/incidents/new">Incident</Link></DropdownMenuItem>
+    </DropdownMenuContent>
+  </DropdownMenu>;
+}
 
 export default function ManagerHomePage() {
   const { manager, managerApi } = useManagerAuth();
   const [reviewsDue, setReviewsDue] = useState(0);
   const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
+  const [money, setMoney] = useState<any>(null);
 
   useEffect(() => {
-    managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due")
-      .then((data) => setReviewsDue(data.reviewsDue?.length ?? 0))
-      .catch(() => setReviewsDue(0));
-  }, [managerApi]);
-
-  useEffect(() => {
-    managerApi<RouteSummary>("/manager/route")
-      .then((data) => setNextEvent(data.nextEvent ?? null))
-      .catch(() => setNextEvent(null));
+    managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due").then((data) => setReviewsDue(data.reviewsDue?.length ?? 0)).catch(() => setReviewsDue(0));
+    managerApi<RouteSummary>("/manager/route").then((data) => setNextEvent(data.nextEvent ?? null)).catch(() => setNextEvent(null));
+    managerApi<any>("/manager/money").then(setMoney).catch(() => setMoney(null));
   }, [managerApi]);
 
   const location = [nextEvent?.city, nextEvent?.region].filter(Boolean).join(", ");
+  const cashOnHand = money?.cashOnHand ?? money?.summary?.cashOnHand;
+  const expenseTotal = money?.expenseTotal ?? money?.summary?.expenseTotal;
 
   return (
-    <div className="grid gap-5">
-      <header>
-        <p className="text-xs font-bold uppercase tracking-wider text-orange-700">Manager dashboard</p>
-        <h1 className="text-2xl font-bold">{manager?.legName}</h1>
-        <p className="mt-1 text-sm text-slate-600">What needs attention right now for this leg.</p>
+    <div className="grid gap-4">
+      <header className="flex items-end justify-between gap-3">
+        <div><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Home</p><h1 className="text-2xl font-bold">{manager?.legName}</h1><p className="mt-1 text-sm text-slate-600">What you need right now for this leg.</p></div>
+        <QuickAddMenu />
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Next event</p>
-            {nextEvent ? (
-              <>
-                <h2 className="mt-1 text-lg font-bold">{nextEvent.bookingName || "Upcoming event"}</h2>
-                <p className="mt-1 text-sm text-slate-600">{location || "Location not set"}</p>
-                <p className="text-sm text-slate-600">{formatEventDate(nextEvent.startsAt)}</p>
-              </>
-            ) : (
-              <p className="mt-2 text-sm text-slate-600">No upcoming event is currently assigned.</p>
-            )}
-          </div>
-          <Link className="button-primary shrink-0" href="/manager/route">Events & Route</Link>
-        </div>
+      <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+        <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Next Stop</p>
+        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{location || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><Link className="button-primary mt-3 inline-flex" href="/manager/route">Open Schedule</Link></div> : <p className="mt-2 text-sm text-slate-700">No upcoming event is currently assigned.</p>}
       </section>
 
-      {reviewsDue > 0 ? (
-        <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-          <h2 className="font-bold">{reviewsDue} {reviewsDue === 1 ? "event still needs" : "events still need"} a review</h2>
-          <p className="mt-1 text-sm text-amber-900">Finish post-event notes while the details are still fresh.</p>
-          <Link href="/manager/reviews" className="button-primary mt-3 inline-flex">Complete reviews</Link>
-        </section>
-      ) : null}
+      {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">
+        {cashOnHand != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Cash on hand</p><p className="mt-1 text-xl font-bold">${Number(cashOnHand).toFixed(2)}</p></Link> : null}
+        {expenseTotal != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Expenses</p><p className="mt-1 text-xl font-bold">${Number(expenseTotal).toFixed(2)}</p></Link> : null}
+      </section> : null}
 
-      <section>
-        <h2 className="text-lg font-bold">Your leg</h2>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          {destinations.map((item) => (
-            <Link key={item.href} href={item.href} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-orange-300 hover:bg-orange-50">
-              <span className="font-bold text-slate-950">{item.title}</span>
-              <span className="mt-1 block text-sm text-slate-600">{item.detail}</span>
-            </Link>
-          ))}
-        </div>
-      </section>
+      {reviewsDue > 0 ? <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">Needs Attention</h2><p className="mt-1 text-sm text-amber-900">{reviewsDue} {reviewsDue === 1 ? "event still needs" : "events still need"} a review.</p><Link href="/manager/reviews" className="button-secondary mt-3 inline-flex">Complete reviews</Link></section> : null}
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="font-bold">Quick actions</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Link className="button-secondary text-center" href="/manager/receipts">Add receipt</Link>
-          <Link className="button-secondary text-center" href="/manager/money">Add expense</Link>
-          <Link className="button-secondary text-center" href="/manager/operations">Log mileage</Link>
-          <Link className="button-secondary text-center" href="/manager/incidents/new">Report incident</Link>
-        </div>
+      <section className="grid grid-cols-3 gap-2">
+        <Link className="rounded-xl border border-slate-200 bg-white p-3 text-center text-sm font-semibold shadow-sm" href="/manager/receipts">Receipts</Link>
+        <Link className="rounded-xl border border-slate-200 bg-white p-3 text-center text-sm font-semibold shadow-sm" href="/manager/operations">Mileage</Link>
+        <Link className="rounded-xl border border-slate-200 bg-white p-3 text-center text-sm font-semibold shadow-sm" href="/manager/crew">Crew</Link>
       </section>
     </div>
   );

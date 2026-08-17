@@ -40,6 +40,7 @@ import ContactEditPage from "@/pages/ContactEditPage";
 import ContactNewPage from "@/pages/ContactNewPage";
 import OrganizationsPage from "@/pages/OrganizationsPage";
 import EventFamilyPage from "@/pages/EventFamilyPage";
+import SchedulePage from "@/pages/SchedulePage";
 import CalendarPage from "@/pages/CalendarPage";
 import RoutesPage from "@/pages/RoutesPage";
 import TripDetailPage from "@/pages/TripDetailPage";
@@ -236,6 +237,7 @@ function AppRoutes() {
               <Route path="/profiles" component={OrganizationsPage} />
               <Route path="/organizations" component={OrganizationsPage} />
               <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
+              <Route path="/schedule" component={SchedulePage} />
               <Route path="/calendar" component={CalendarPage} />
               <Route path="/routes" component={RoutesPage} />
               <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
