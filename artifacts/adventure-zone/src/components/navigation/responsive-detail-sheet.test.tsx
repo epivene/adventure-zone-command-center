@@ -1,19 +1,13 @@
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { Router } from "wouter";
-import { memoryLocation } from "wouter/memory-location";
 import { ResponsiveDetailSheet } from "./responsive-detail-sheet";
 
 describe("ResponsiveDetailSheet", () => {
   it("renders a back/close control and full profile link when open", () => {
-    const { hook } = memoryLocation({ path: "/today" });
     render(
-      <Router hook={hook}>
-        <ResponsiveDetailSheet open onOpenChange={() => {}} title="Jane Doe" fullPageHref="/profiles/1">
-          details
-        </ResponsiveDetailSheet>
-      </Router>,
+      <ResponsiveDetailSheet open onOpenChange={() => {}} title="Jane Doe" fullPageHref="/profiles/1">
+        details
+      </ResponsiveDetailSheet>,
     );
 
     expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
@@ -22,19 +16,17 @@ describe("ResponsiveDetailSheet", () => {
     expect(screen.getByText("details")).toBeInTheDocument();
   });
 
-  it("closes the sheet when Open full is chosen so the full page is visible", async () => {
-    const user = userEvent.setup();
+  it("navigates on pointer down before parent click interceptors can reopen the sheet", () => {
+    window.history.replaceState({}, "", "/today");
     const onOpenChange = vi.fn();
-    const { hook } = memoryLocation({ path: "/today" });
     render(
-      <Router hook={hook}>
-        <ResponsiveDetailSheet open onOpenChange={onOpenChange} title="Jane Doe" fullPageHref="/profiles/1">
-          details
-        </ResponsiveDetailSheet>
-      </Router>,
+      <ResponsiveDetailSheet open onOpenChange={onOpenChange} title="Jane Doe" fullPageHref="/profiles/1">
+        details
+      </ResponsiveDetailSheet>,
     );
 
-    await user.click(screen.getByRole("link", { name: /open full/i }));
+    fireEvent.pointerDown(screen.getByRole("link", { name: /open full/i }), { button: 0 });
     expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(window.location.pathname).toBe("/profiles/1");
   });
 });
