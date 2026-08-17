@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clearManagerPrivateData } from "./manager-sync-queue";
 import { clearManagerBlobData } from "./manager-blob-queue";
+import { clearManagerAssistantCache } from "@/features/manager-assistant/manager-assistant-offline-cache";
 
 const KEY = "az_manager_token";
 const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -31,6 +32,7 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
     if (current) {
       void clearManagerPrivateData(current.legId);
       void clearManagerBlobData(current.legId);
+      void clearManagerAssistantCache(current.legId);
     }
   }, []);
 
@@ -40,7 +42,6 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
     const requestToken = token();
     const res = await raw(path, options, requestToken);
     if (res.status === 401) {
-      // Do not let a request that started with an old token wipe a newer successful sign-in.
       if (token() === requestToken) clearCurrentSession();
       throw Object.assign(new Error("Manager session expired"), { status: 401 });
     }
@@ -60,7 +61,6 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
         return res.json() as Promise<{ manager: ManagerIdentity }>;
       })
       .then((response) => {
-        // Ignore stale bootstrap results if a newer login replaced the saved token.
         if (token() === bootstrapToken) setManager(response.manager);
       })
       .catch(() => {
@@ -76,6 +76,12 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
       throw Object.assign(new Error(payload.error ?? "Could not sign in"), { status: res.status });
     }
     const data = await res.json() as { token: string; manager: ManagerIdentity };
+    const previous = managerRef.current;
+    if (previous && previous.legId !== data.manager.legId) {
+      void clearManagerPrivateData(previous.legId);
+      void clearManagerBlobData(previous.legId);
+      void clearManagerAssistantCache(previous.legId);
+    }
     save(data.token);
     setManager(data.manager);
     setLoading(false);
