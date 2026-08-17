@@ -4,44 +4,26 @@ on:
   pull_request:
     paths:
       - "artifacts/api-server/src/features/packages/**"
+      - "artifacts/api-server/src/features/resources/**"
+      - "artifacts/api-server/src/routes/booking-package-editor.ts"
+      - "artifacts/api-server/src/routes/bookings.ts"
+      - "artifacts/api-server/src/routes/settings.ts"
       - "artifacts/adventure-zone/src/features/packages/**"
+      - "artifacts/adventure-zone/src/features/resources/**"
       - "artifacts/adventure-zone/src/components/packages/**"
       - "artifacts/adventure-zone/src/components/resources/**"
       - "artifacts/adventure-zone/src/components/bookings/**"
       - "artifacts/adventure-zone/src/pages/BookingDetailPage.tsx"
-      - "lib/db/src/**"
-      - "lib/db/migrations/**"
-      - "scripts/apply-package-intelligence-schema.py"
+      - "artifacts/adventure-zone/src/pages/BookingEditPage.tsx"
+      - "lib/db/migrations/044_package_intelligence.sql"
       - ".github/workflows/package-intelligence-ci.yml"
   workflow_dispatch:
-
-permissions:
-  contents: write
 
 jobs:
   package-intelligence:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Apply shared schema patch
-        run: python scripts/apply-package-intelligence-schema.py
-      - name: Persist shared schema patch
-        if: github.event_name == 'pull_request'
-        run: |
-          if git diff --quiet; then
-            echo "Shared schema already current."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add lib/db/src/schema/index.ts lib/db/src/migrations.ts
-            git commit -m "feat: wire package intelligence schema"
-            git push origin HEAD:${{ github.event.pull_request.head.ref }}
-          fi
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -50,7 +32,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Package policy tests
-        run: pnpm exec vitest run artifacts/api-server/src/features/packages/package-policy.test.ts
+      - name: Package intelligence tests
+        run: pnpm exec vitest run artifacts/api-server/src/features/packages/package-policy.test.ts artifacts/api-server/src/features/packages/package-history.test.ts artifacts/adventure-zone/src/components/bookings/package-history-signals.test.tsx
       - name: Workspace typecheck
         run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
