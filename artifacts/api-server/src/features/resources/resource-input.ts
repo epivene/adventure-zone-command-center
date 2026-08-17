@@ -34,10 +34,7 @@ export const configureBookingResourcesInputSchema = z
   .strict()
   .superRefine((input, context) => {
     if (new Set(input.resourceIds).size !== input.resourceIds.length) {
-      context.addIssue({
-        code: "custom",
-        message: "Choose each resource only once.",
-      });
+      context.addIssue({ code: "custom", message: "Choose each resource only once." });
     }
   });
 
@@ -57,26 +54,18 @@ export const resourceInputSchema = z
     name: trimmedLabel,
     category: trimmedLabel,
     countsAsAttraction: z.boolean(),
-    packageCountCategory: z.enum(packageCountCategoryValues),
+    packageCountCategory: z.enum(packageCountCategoryValues).default("main_attraction"),
     packageTemplateIds: z.array(canonicalUuid),
     normalTravelLegId: canonicalUuid.nullable(),
     movable: z.boolean(),
     setupMinutes: z.number().int().nonnegative(),
     teardownMinutes: z.number().int().nonnegative(),
     minimumTransferMinutes: z.number().int().nonnegative(),
-    status: z.enum([
-      "available",
-      "unavailable",
-      "maintenance",
-      "archived",
-    ]),
+    status: z.enum(["available", "unavailable", "maintenance", "archived"]),
   })
   .strict()
   .superRefine((input, context) => {
-    if (
-      new Set(input.packageTemplateIds).size !==
-      input.packageTemplateIds.length
-    ) {
+    if (new Set(input.packageTemplateIds).size !== input.packageTemplateIds.length) {
       context.addIssue({
         code: "custom",
         message: "Choose each package tag only once.",
@@ -88,9 +77,9 @@ export const resourceInputSchema = z
 export type ConfigureBookingResourcesInput = z.output<
   typeof configureBookingResourcesInputSchema
 >;
-
 export type AcknowledgeResourceConflictInput = z.output<
   typeof acknowledgeResourceConflictInputSchema
 >;
-
-export type ResourceInput = z.output<typeof resourceInputSchema>;
+/** Input keeps the new category optional so legacy callers remain source-compatible; parsing supplies main_attraction. */
+export type ResourceInput = z.input<typeof resourceInputSchema>;
+export type ParsedResourceInput = z.output<typeof resourceInputSchema>;
