@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ManagerScopedMap } from "@/components/manager/manager-scoped-map";
 import { ReportScheduleIssue } from "@/components/manager/report-schedule-issue";
@@ -24,7 +24,7 @@ export default function ManagerRoutePage() {
   if (!data) return <p>Loading schedule…</p>;
 
   const scheduledEvents = map.data?.events ?? data.events;
-  const detailEvent = useMemo(() => scheduledEvents.find((event: any) => event.bookingId === detailBookingId) ?? null, [scheduledEvents, detailBookingId]);
+  const detailEvent = scheduledEvents.find((event: any) => event.bookingId === detailBookingId) ?? null;
 
   return (
     <div className="grid gap-4">
