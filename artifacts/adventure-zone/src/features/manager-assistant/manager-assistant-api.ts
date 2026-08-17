@@ -17,8 +17,9 @@ function offlineAnswer(question:string,context:ManagerAssistantContextBundle):Ma
   const q=normalize(question);
   if(/forklift|loader|setup|tear ?down|power|electric|water|stake|ballast/.test(q)){
     const terms=q.split(" ").filter(term=>term.length>4);
-    const matches=context.operationalInstructions.filter(item=>terms.some(term=>normalize(item.summary).includes(term)));
-    if(matches.length)return{text:matches.slice(0,3).map(item=>item.summary).join(" "),mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};
+    const knowledge=context.knowledge.map(item=>`${item.title}: ${item.body}`);
+    const matches=[...context.operationalInstructions.map(item=>item.summary),...knowledge].filter(text=>terms.some(term=>normalize(text).includes(term)));
+    if(matches.length)return{text:matches.slice(0,3).join(" "),mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};
   }
   if(/meetup|handoff|swap|paintball/.test(q)&&context.handoffs.length)return{text:context.handoffs.slice(0,3).map(item=>item.summary).join(" "),mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};
   if(/what.*next|next event|where.*next|schedule/.test(q)&&context.assignedEvents[0]){const event=context.assignedEvents[0];return{text:`${event.name}${event.city||event.region?` in ${[event.city,event.region].filter(Boolean).join(", ")}`:""}${event.startsAt?` starts ${event.startsAt}`:""}.`,mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};}
@@ -60,6 +61,13 @@ export async function askManagerAssistant(managerApi: ManagerApi, legId:string, 
 
 export async function listManagerAdminQuestions(managerApi: ManagerApi) {
   return managerApi<{ questions: ManagerAdminQuestion[] }>("/manager/assistant/admin-questions");
+}
+
+export async function replyToAdminQuestion(managerApi: ManagerApi, questionId: string, body: string) {
+  return managerApi<{ response: unknown }>(`/manager/assistant/admin-questions/${questionId}/respond`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
 }
 
 export async function askAdminFromManager(input: {
