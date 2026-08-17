@@ -118,8 +118,6 @@ export class PostgresManagerAssistantContextSource
   }
 
   async listOperationalInstructions(_legId: string) {
-    // Only explicit manager-safe operational knowledge belongs here. Freeform
-    // CRM/booking notes are deliberately excluded from manager assistant scope.
     return [];
   }
 
@@ -129,18 +127,45 @@ export class PostgresManagerAssistantContextSource
     tripId: string | null;
   }) {
     const result = await this.pool.query(
-      `SELECT id, title, body
-       FROM operations_knowledge_entries
-       WHERE active = true
-         AND effective_at <= now()
-         AND (review_after IS NULL OR review_after >= now())
+      `SELECT ok.id, ok.title, ok.body
+       FROM operations_knowledge_entries ok
+       WHERE ok.active = true
+         AND ok.effective_at <= now()
+         AND (ok.review_after IS NULL OR ok.review_after >= now())
          AND (
-           scope = 'global'
-           OR (scope = 'leg' AND scope_record_id = $1)
+           ok.scope = 'global'
+           OR (ok.scope = 'leg' AND ok.scope_record_id = $1)
+           OR (
+             $2::uuid IS NOT NULL
+             AND ok.scope = 'package'
+             AND ok.scope_record_id IN (
+               SELECT bps.package_template_id::text
+               FROM booking_package_selections bps
+               WHERE bps.booking_id = $2::uuid
+             )
+           )
+           OR (
+             $2::uuid IS NOT NULL
+             AND ok.scope = 'resource'
+             AND ok.scope_record_id IN (
+               SELECT bra.resource_id::text
+               FROM booking_resource_assignments bra
+               WHERE bra.booking_id = $2::uuid
+             )
+           )
+           OR (
+             $2::uuid IS NOT NULL
+             AND ok.scope = 'site'
+             AND ok.scope_record_id = (
+               SELECT b.organization_location_id::text
+               FROM bookings b
+               WHERE b.id = $2::uuid AND b.travel_leg_id = $1::uuid
+             )
+           )
          )
-       ORDER BY effective_at DESC, created_at DESC
+       ORDER BY ok.effective_at DESC, ok.created_at DESC
        LIMIT 40`,
-      [input.legId],
+      [input.legId, input.bookingId],
     );
     return result.rows.map((row) => ({
       id: row.id as string,
