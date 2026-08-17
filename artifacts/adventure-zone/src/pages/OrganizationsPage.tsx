@@ -1,12 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
+import { getArchivedProfiles } from "@/actions/profile-lifecycle";
 import { OrganizationList } from "@/components/organizations/organization-list";
 import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/duplicates-view";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 import { Toaster } from "@/components/ui/toaster";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
+
+function withoutArchivedProfiles(data: any, archivedIds: Set<string>) {
+  const organizations = Array.isArray(data?.organizations)
+    ? data.organizations.filter((profile: any) => !archivedIds.has(String(profile.id)))
+    : data?.organizations;
+  const families = Array.isArray(data?.families)
+    ? data.families
+        .map((family: any) => ({
+          ...family,
+          members: Array.isArray(family.members)
+            ? family.members.filter((member: any) => !archivedIds.has(String(member.organizationId ?? member.id)))
+            : family.members,
+        }))
+        .filter((family: any) => !Array.isArray(family.members) || family.members.length > 0)
+    : data?.families;
+  return { ...data, organizations, families };
+}
 
 export default function OrganizationsPage() {
   const search = useSearch();
@@ -32,6 +50,7 @@ export default function OrganizationsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [archivedIds, setArchivedIds] = useState<Set<string>>(new Set());
 
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dupLoading, setDupLoading] = useState(false);
@@ -57,7 +76,13 @@ export default function OrganizationsPage() {
     setLoading(true);
     setError(null);
     try {
-      setData(await apiGet<any>(`/organizations?${qs.toString()}`));
+      const [profiles, archived] = await Promise.all([
+        apiGet<any>(`/organizations?${qs.toString()}`),
+        getArchivedProfiles(),
+      ]);
+      const ids = new Set(archived.map((profile) => profile.id));
+      setArchivedIds(ids);
+      setData(withoutArchivedProfiles(profiles, ids));
     } catch (e: any) {
       setError(e?.message ?? "Failed to load profiles");
     } finally {
@@ -74,15 +99,22 @@ export default function OrganizationsPage() {
     setDupError(null);
     try {
       const result = await apiGet<{ groups: DuplicateGroup[] }>("/organizations/duplicates");
-      setDupGroups(result.groups);
-      return result.groups;
+      const groups = result.groups
+        .map((group: any) => ({
+          ...group,
+          candidateIds: (group.candidateIds ?? []).filter((id: string) => !archivedIds.has(id)),
+          organizations: (group.organizations ?? []).filter((organization: any) => !archivedIds.has(String(organization.id))),
+        }))
+        .filter((group: any) => group.organizations.length >= 2);
+      setDupGroups(groups);
+      return groups;
     } catch (e: any) {
       setDupError(e.message ?? "Failed to load duplicates");
       return null;
     } finally {
       setDupLoading(false);
     }
-  }, []);
+  }, [archivedIds]);
 
   function handleFindDuplicates() {
     setShowDuplicates(true);
