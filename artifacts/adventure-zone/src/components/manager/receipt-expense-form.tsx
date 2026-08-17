@@ -105,18 +105,23 @@ export function ReceiptExpenseForm({ mode, onDone }: { mode: "receipt" | "manual
       setState("syncing");
       const rows = await flushManagerMutationQueue(managerApi);
       const expenseRow = rows.find((row) => row.id === expenseId);
-      if (expenseRow?.state === "needs_attention") {
+      const receiptRow = rows.find((row) => row.id === receiptId);
+      if (expenseRow?.state === "needs_attention" || (file && receiptRow?.state === "needs_attention")) {
         setState("needs_attention");
         return;
       }
-      if (file) {
-        await flushManagerBlobQueue(async row => {
-          await managerApi(`/manager/receipts/${row.receiptId}/image`, {
-            method: "PUT",
-            headers: { "Content-Type": row.blob.type || "image/jpeg" },
-            body: row.blob,
-          });
-        });
+      if (file && receiptRow?.state === "synced") {
+        await flushManagerBlobQueue(
+          async row => {
+            await managerApi(`/manager/receipts/${row.receiptId}/image`, {
+              method: "PUT",
+              headers: { "Content-Type": row.blob.type || "image/jpeg" },
+              body: row.blob,
+            });
+          },
+          undefined,
+          async row => row.receiptId !== receiptId || receiptRow.state === "synced",
+        );
       }
       setState("synced");
     }
