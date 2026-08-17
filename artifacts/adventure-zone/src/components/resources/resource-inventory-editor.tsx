@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import type { PackageTemplateSettingsRecord } from "@/features/packages/package-repository";
 import {
   resourceInputSchema,
+  type PackageCountCategory,
   type ResourceInput,
 } from "@/features/resources/resource-input";
 import type { ResourceInventoryRecord } from "@/features/resources/resource-repository";
@@ -23,6 +24,7 @@ const emptyResource: ResourceInput = {
   name: "",
   category: "",
   countsAsAttraction: false,
+  packageCountCategory: "main_attraction",
   packageTemplateIds: [],
   normalTravelLegId: null,
   movable: false,
@@ -45,7 +47,10 @@ function ResourceForm({
 }) {
   const existing = initialValue.id !== null;
   const initialName = initialValue.name;
-  const [value, setValue] = useState<ResourceInput>({ ...initialValue });
+  const [value, setValue] = useState<ResourceInput>({
+    ...initialValue,
+    packageCountCategory: initialValue.packageCountCategory ?? "main_attraction",
+  });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,7 +100,6 @@ function ResourceForm({
       }
       setValue(existing ? parsed.data : emptyResource);
       setSaved(true);
-      // Data re-fetches on navigation; no client-side refresh needed.
     } catch {
       setError("The resource could not be saved. Try again.");
     } finally {
@@ -141,6 +145,29 @@ function ResourceForm({
             type="text"
             value={value.category}
           />
+        </label>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <label className="grid gap-1 text-sm font-semibold">
+          Package counting
+          <select
+            aria-label="Package counting"
+            onChange={(event) =>
+              update(
+                "packageCountCategory",
+                event.currentTarget.value as PackageCountCategory,
+              )
+            }
+            value={value.packageCountCategory ?? "main_attraction"}
+          >
+            <option value="main_attraction">Main attraction</option>
+            <option value="game_extra">Carnival game / extra</option>
+            <option value="special_shared">Special / shared equipment</option>
+          </select>
+          <span className="text-xs font-normal text-slate-500">
+            Only main attractions count toward a package's normal attraction range.
+          </span>
         </label>
       </div>
 
@@ -225,7 +252,7 @@ function ResourceForm({
             }
             type="checkbox"
           />
-          Counts as an attraction
+          Counts as a physical attraction/resource
         </label>
         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
           <input
@@ -311,9 +338,7 @@ export function ResourceInventoryEditor({
           Resource inventory
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Add operational equipment or update its package tags, travel needs,
-          timing, and availability. Archive retired resources to preserve
-          booking history.
+          Add operational equipment or update its package tags, package-count meaning, travel needs, timing, and availability. Archive retired resources to preserve booking history.
         </p>
       </div>
 
