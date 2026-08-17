@@ -7,7 +7,6 @@ import {
 } from "./package-input";
 import {
   DrizzlePackageSettingsRepository,
-  PackageSettingsError,
 } from "./package-repository";
 
 export type PackageIntelligenceSettingsRecord = {
@@ -24,12 +23,19 @@ export type PackageIntelligenceSettingsRecord = {
   active: boolean;
 };
 
+export class PackageIntelligenceSettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PackageIntelligenceSettingsValidationError";
+  }
+}
+
 type DrizzleDatabase = typeof database;
 
 type IntelligenceRow = {
   id: string;
-  minimum_attraction_count: number;
-  maximum_attraction_count: number;
+  minimum_attraction_count: number | null;
+  maximum_attraction_count: number | null;
   customer_description: string | null;
   booking_talking_points: string | null;
   operational_requirements: string | null;
@@ -91,7 +97,9 @@ export class DrizzlePackageIntelligenceSettingsRepository {
   ): Promise<PackageIntelligenceSettingsRecord> {
     const parsed = packageTemplateInputSchema.safeParse(input);
     if (!parsed.success) {
-      throw new PackageSettingsError("PACKAGE_TEMPLATE_NOT_FOUND");
+      throw new PackageIntelligenceSettingsValidationError(
+        parsed.error.issues[0]?.message ?? "Review this package.",
+      );
     }
 
     const data = parsed.data;
