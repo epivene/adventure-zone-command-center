@@ -1,7 +1,6 @@
-import type { ReactNode } from "react";
+import type { KeyboardEvent, PointerEvent, ReactNode } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowLeft, ExternalLink, X } from "lucide-react";
-import { Link } from "wouter";
 
 export type ResponsiveDetailSheetProps = {
   open: boolean;
@@ -18,6 +17,26 @@ export function ResponsiveDetailSheet({
   children,
   fullPageHref,
 }: ResponsiveDetailSheetProps) {
+  function navigateFullProfile(href: string) {
+    onOpenChange(false);
+    window.history.pushState({}, "", href);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }
+
+  function handleFullPointerDown(event: PointerEvent<HTMLAnchorElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (fullPageHref) navigateFullProfile(fullPageHref);
+  }
+
+  function handleFullKeyDown(event: KeyboardEvent<HTMLAnchorElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (fullPageHref) navigateFullProfile(fullPageHref);
+  }
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
@@ -39,15 +58,17 @@ export function ResponsiveDetailSheet({
               {title}
             </Dialog.Title>
             {fullPageHref ? (
-              <Link
+              <a
                 className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
                 data-open-full-profile="true"
                 href={fullPageHref}
-                onClick={() => onOpenChange(false)}
+                onClick={(event) => event.preventDefault()}
+                onKeyDown={handleFullKeyDown}
+                onPointerDown={handleFullPointerDown}
               >
                 <ExternalLink className="h-4 w-4" />
                 <span>Open full</span>
-              </Link>
+              </a>
             ) : null}
             <Dialog.Close asChild>
               <button
