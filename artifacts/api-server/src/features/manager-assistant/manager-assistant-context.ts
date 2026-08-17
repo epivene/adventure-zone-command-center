@@ -1,3 +1,4 @@
+import type { AssistantSourceReference } from "@/features/assistant/assistant-types";
 import type { ManagerContextInput } from "./manager-assistant-input";
 import type {
   ManagerAssignedEventSummary,
@@ -17,6 +18,16 @@ export interface ManagerAssistantContextSource {
     bookingId: string | null;
     tripId: string | null;
   }): Promise<Array<{ id: string; title: string; body: string }>>;
+}
+
+function source(
+  id: string,
+  kind: AssistantSourceReference["kind"],
+  recordId: string,
+  label: string,
+  occurredAt: string | null = null,
+): AssistantSourceReference {
+  return { id, kind, recordId, label, occurredAt };
 }
 
 export async function buildManagerAssistantContext(input: {
@@ -61,6 +72,40 @@ export async function buildManagerAssistantContext(input: {
     tripId,
   });
 
+  const sources: AssistantSourceReference[] = [
+    ...events.map((event) =>
+      source(
+        `manager_booking_${event.id}`,
+        "booking",
+        event.id,
+        event.name,
+        event.startsAt,
+      ),
+    ),
+    ...(route
+      ? [source(`manager_route_${route.tripId}`, "route", route.tripId, route.label, route.startDate)]
+      : []),
+    ...handoffs.map((handoff) =>
+      source(`manager_handoff_${handoff.id}`, "handoff", handoff.id, handoff.summary),
+    ),
+    ...acknowledgments.map((acknowledgment) =>
+      source(
+        `manager_ack_${acknowledgment.id}`,
+        "acknowledgment",
+        acknowledgment.id,
+        acknowledgment.summary,
+      ),
+    ),
+    ...knowledge.map((entry) =>
+      source(
+        `manager_knowledge_${entry.id}`,
+        "operations_knowledge",
+        entry.id,
+        entry.title,
+      ),
+    ),
+  ];
+
   return {
     leg,
     activeContext: {
@@ -75,7 +120,7 @@ export async function buildManagerAssistantContext(input: {
     acknowledgments,
     operationalInstructions,
     knowledge,
-    sources: [],
+    sources,
     generatedAt: (input.now ?? new Date()).toISOString(),
   };
 }
