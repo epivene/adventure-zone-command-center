@@ -40,6 +40,7 @@ const adminMenuGroups: MenuGroup[] = [
     items: [
       { href: "/settings/act-migration", label: "Act! import" },
       { href: "/settings/act-recovery", label: "ACT recovery" },
+      { href: "/archived", label: "Archived records" },
     ],
   },
   {

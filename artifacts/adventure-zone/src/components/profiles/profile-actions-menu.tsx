@@ -1,4 +1,5 @@
-import { Link } from "wouter";
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
 import { MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
@@ -11,6 +12,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { archiveProfile } from "@/actions/profile-lifecycle";
 
 export function ProfileActionsMenu({
   profileId,
@@ -19,8 +21,27 @@ export function ProfileActionsMenu({
   profileId: string;
   contactId?: string | null;
 }) {
+  const [, setLocation] = useLocation();
+  const [archiving, setArchiving] = useState(false);
   const fullProfile = `/profiles/${profileId}`;
   const withContact = contactId ? `${fullProfile}?contactId=${encodeURIComponent(contactId)}` : fullProfile;
+
+  async function archive() {
+    if (archiving) return;
+    const confirmed = window.confirm(
+      "Archive this profile? Contacts, bookings, notes, history, and relationships will stay intact. You can restore it later from Archived records.",
+    );
+    if (!confirmed) return;
+    setArchiving(true);
+    try {
+      await archiveProfile(profileId);
+      setLocation("/archived");
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not archive this profile.");
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   return (
     <DropdownMenu>
@@ -59,7 +80,15 @@ export function ProfileActionsMenu({
           <DropdownMenuSubTrigger>More</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
             <DropdownMenuItem asChild><Link href={fullProfile}>Open Full Profile</Link></DropdownMenuItem>
-            <DropdownMenuItem asChild><Link href={fullProfile}>Archive / Delete</Link></DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={archiving}
+              onSelect={(event) => {
+                event.preventDefault();
+                void archive();
+              }}
+            >
+              {archiving ? "Archiving…" : "Archive profile"}
+            </DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       </DropdownMenuContent>

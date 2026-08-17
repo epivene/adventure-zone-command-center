@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
 import { useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
+import { getArchivedProfiles } from "@/actions/profile-lifecycle";
 import { OrganizationList } from "@/components/organizations/organization-list";
 import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/duplicates-view";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
@@ -68,9 +69,20 @@ export default function OrganizationsPage() {
     setDupLoading(true);
     setDupError(null);
     try {
-      const result = await apiGet<{ groups: DuplicateGroup[] }>("/organizations/duplicates");
-      setDupGroups(result.groups);
-      return result.groups;
+      const [result, archived] = await Promise.all([
+        apiGet<{ groups: DuplicateGroup[] }>("/organizations/duplicates"),
+        getArchivedProfiles(),
+      ]);
+      const archivedIds = new Set(archived.map((profile) => profile.id));
+      const groups = result.groups
+        .map((group) => ({
+          ...group,
+          candidateIds: group.candidateIds?.filter((id) => !archivedIds.has(id)),
+          organizations: group.organizations.filter((organization) => !archivedIds.has(organization.id)),
+        }))
+        .filter((group) => group.organizations.length >= 2);
+      setDupGroups(groups);
+      return groups;
     } catch (e: any) {
       setDupError(e.message ?? "Failed to load duplicates");
       return null;

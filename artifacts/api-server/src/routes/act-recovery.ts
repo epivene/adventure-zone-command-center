@@ -4,6 +4,7 @@ import type {
   ActRecoveryReviewPage,
   ActRecoveryStatus,
 } from "@/features/act-recovery/review-service";
+import type { ActHistoryPurgeBatchSummary } from "@/features/act-recovery/history-bookkeeping-purge-service";
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const targetEntityTypes = new Set(["organization", "contact", "booking"] as const);
@@ -34,6 +35,7 @@ export interface ActRecoveryRouteService {
     sourceVersionId: string;
     decidedBy: string;
   }): Promise<{ ok: true }>;
+  purgeBookkeeping(input: { batchSize: number }): Promise<ActHistoryPurgeBatchSummary>;
 }
 
 function errorCode(error: unknown) {
@@ -77,15 +79,31 @@ async function productionService(): Promise<ActRecoveryRouteService> {
     { db },
     { DrizzleActArchiveRecoveryRepository },
     { ActRecoveryReviewService },
+    { ActHistoryBookkeepingPurgeRepository },
+    { ActHistoryBookkeepingPurgeService },
   ] = await Promise.all([
     import("@/db/client"),
     import("@/features/act-recovery/recovery-repository"),
     import("@/features/act-recovery/review-service"),
+    import("@/features/act-recovery/history-bookkeeping-purge-repository"),
+    import("@/features/act-recovery/history-bookkeeping-purge-service"),
   ]);
-  return new ActRecoveryReviewService(
+  const review = new ActRecoveryReviewService(
     db,
     new DrizzleActArchiveRecoveryRepository(db),
   );
+  const purge = new ActHistoryBookkeepingPurgeService(
+    new ActHistoryBookkeepingPurgeRepository(db),
+  );
+  return {
+    startRun: (input) => review.startRun(input),
+    status: (input) => review.status(input),
+    reviewPage: (input) => review.reviewPage(input),
+    assign: (input) => review.assign(input),
+    drop: (input) => review.drop(input),
+    retry: (input) => review.retry(input),
+    purgeBookkeeping: (input) => purge.purgeNextBatch(input),
+  };
 }
 
 export function createActRecoveryRouter(input: {
@@ -136,6 +154,30 @@ export function createActRecoveryRouter(input: {
     const pageSize = Math.max(1, Math.min(100, Number.parseInt(String(req.query.pageSize ?? "50"), 10) || 50));
     try {
       res.json(await withService((service) => service.reviewPage({ page, pageSize })));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  router.post("/act-recovery/purge-bookkeeping", async (req, res) => {
+    const batchSize = bodyRecord(req).batchSize;
+    if (!Number.isInteger(batchSize) || Number(batchSize) < 1 || Number(batchSize) > 250) {
+      res.status(400).json({ error: "act_recovery_purge_batch_size_invalid" });
+      return;
+    }
+    const startedAt = Date.now();
+    try {
+      const summary = await withService((service) => service.purgeBookkeeping({ batchSize: Number(batchSize) }));
+      req.log?.info?.({
+        policyVersion: "2026-08-16-v1",
+        durationMs: Date.now() - startedAt,
+        scanned: summary.scanned,
+        purged: summary.purged,
+        retained: summary.retained,
+        byReason: summary.byReason,
+        hasMore: summary.hasMore,
+      }, "ACT bookkeeping purge batch completed");
+      res.json({ ok: true, summary });
     } catch (error) {
       sendError(res, error);
     }
