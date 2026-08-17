@@ -3,6 +3,7 @@ import { useSearch } from "wouter";
 
 import { createActivityAction, editActivityAction, listActivityRevisionsAction } from "@/actions/activities";
 import { completeCallAction } from "@/actions/calls";
+import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { CallWorkspace } from "@/components/calls/call-workspace";
 import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-unavailable";
 import { apiGet } from "@/lib/auth-token";
@@ -92,9 +93,19 @@ export default function CallWorkspacePage() {
   const followUp = context.followUp
     ? { ...context.followUp, dueAt: new Date(context.followUp.dueAt) }
     : null;
+  const organization = context.organization ?? null;
+
+  const assistantContext = booking?.id
+    ? { kind: "booking" as const, recordId: booking.id, label: booking.name ?? "Booking" }
+    : organization?.id
+      ? { kind: "organization" as const, recordId: organization.id, label: organization.name ?? "Profile" }
+      : contact?.id
+        ? { kind: "contact" as const, recordId: contact.id, label: contact.name ?? "Contact" }
+        : null;
 
   return (
     <div className="mx-auto max-w-7xl">
+      {assistantContext ? <AssistantContextRegistration {...assistantContext} /> : null}
       <CallWorkspace
         activityParent={data.activityParent}
         assistedCallingEnabled={config.assistedCallingEnabled}
@@ -109,7 +120,7 @@ export default function CallWorkspacePage() {
         mode="full"
         onComplete={completeCallAction}
         operations={data.operations ?? null}
-        organization={context.organization ?? null}
+        organization={organization}
         phones={data.phones ?? []}
         scriptPrompts={data.scriptPrompts ?? []}
         timeline={coerceTimeline(data.timeline)}
