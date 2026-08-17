@@ -45,7 +45,7 @@ router.post("/manager/events/:bookingId/check-in", requireManager, async (req, r
   const legId = req.legManager!.legId;
   const parsed = locationInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: "Invalid check-in location" }); return; }
-  if (!(await lifecycle.bookingBelongsToLeg(id, legId))) { res.status(403).json({ error: "Booking is outside your leg" }); return; }
+  if (!(await lifecycle.bookingCanCheckIn(id, legId))) { res.status(403).json({ error: "Only confirmed events assigned to your leg can be checked in" }); return; }
   const row = await lifecycle.checkIn({ bookingId: id, legId, at: new Date(), latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
   res.json({ lifecycle: row });
 });
