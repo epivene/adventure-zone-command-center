@@ -146,12 +146,13 @@ export function ManagerAssistantDrawer() {
               {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{error}</p> : null}
 
               {questions.length ? (
-                <details className="rounded-xl border border-slate-200 bg-white p-4">
+                <details className="rounded-xl border border-slate-200 bg-white p-4" open={questions.some((item) => item.status === "answered")}>
                   <summary className="cursor-pointer font-semibold">Questions sent to admins ({questions.length})</summary>
                   <ul className="mt-3 grid gap-2">
                     {questions.slice(0, 8).map((item) => (
                       <li className="rounded-lg bg-slate-50 p-3 text-sm" key={item.id}>
                         <div className="flex items-start justify-between gap-2"><span>{item.question}</span><span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold">{statusLabel(item.status)}</span></div>
+                        {item.latestAdminResponse ? <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-2"><p className="text-xs font-bold uppercase tracking-wide text-emerald-700">Admin answer</p><p className="mt-1 whitespace-pre-wrap text-sm text-emerald-950">{item.latestAdminResponse}</p></div> : null}
                       </li>
                     ))}
                   </ul>
