@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
 import type { FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
@@ -9,14 +9,10 @@ import { TripsSection } from "@/components/routes/trips-section";
 import { AdminMapViewToggle, type AdminMapView } from "@/components/routes/admin-map-view-toggle";
 import { ManagerPreviewMap } from "@/components/routes/manager-preview-map";
 import { ManagerRouteReviewQueue } from "@/components/routes/manager-route-review-queue";
-import {
-  updateTravelLegAction,
-  reorderTravelLegsAction,
-  addTravelLegAction,
-  archiveTravelLegAction,
-  restoreTravelLegAction,
-} from "@/actions/routes";
+import { updateTravelLegAction, reorderTravelLegsAction, addTravelLegAction, archiveTravelLegAction, restoreTravelLegAction } from "@/actions/routes";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
+
+export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean };
 
 type TripFocusDetail = {
   trip: { id: string; name: string; startLabel: string; startLatitude: number | null; startLongitude: number | null; endLabel: string; endLatitude: number | null; endLongitude: number | null };
@@ -34,7 +30,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
   return { id: detail.trip.id, name: detail.trip.name, points };
 }
 
-export default function RoutesPage() {
+export function RoutesContent({ season, legId, status, embedded = false }: RouteScheduleFilters) {
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
   const [focusedTrip, setFocusedTrip] = useState<FocusedTripMapData | null>(null);
@@ -65,8 +61,8 @@ export default function RoutesPage() {
     return result;
   }
   async function handleSaveOrder(input: TravelLegOrder) { const result = await reorderTravelLegsAction(input); if (result.ok) setData((current: any) => ({ ...current, travelLegs: result.legs })); return result; }
-  async function handleSetManagerPassword(legId: string, password: string) { await apiPut(`/manager-admin/legs/${legId}/access`, { password }); await loadData(); }
-  async function handleSignOutManagerDevices(legId: string) { const response = await apiFetch(`/manager-admin/legs/${legId}/sign-out-all`, { method: "POST", body: "{}" }); if (!response.ok) throw new Error("Could not sign out manager devices"); await loadData(); }
+  async function handleSetManagerPassword(leg: string, password: string) { await apiPut(`/manager-admin/legs/${leg}/access`, { password }); await loadData(); }
+  async function handleSignOutManagerDevices(leg: string) { const response = await apiFetch(`/manager-admin/legs/${leg}/sign-out-all`, { method: "POST", body: "{}" }); if (!response.ok) throw new Error("Could not sign out manager devices"); await loadData(); }
   async function handleAdd() { const result = await addTravelLegAction(); if (!result.ok) throw new Error(result.error); await loadData(); }
   async function handleArchive(id: string) { const result = await archiveTravelLegAction(id); if (!result.ok) throw new Error(result.error); await loadData(); }
   async function handleRestore(id: string) { const result = await restoreTravelLegAction(id); if (!result.ok) throw new Error(result.error); await loadData(); }
@@ -74,20 +70,47 @@ export default function RoutesPage() {
 
   const focusedTripCoordinates = focusedTrip?.points.map((point) => [point.longitude, point.latitude] as [number, number]) ?? null;
   const activeLegs = data?.travelLegs?.filter((leg: any) => !leg.archivedAt) ?? [];
+  const filteredEvents = useMemo(() => (data?.events ?? []).filter((event: any) => {
+    if (legId && event.travelLegId !== legId) return false;
+    if (status && status !== "all" && String(event.status ?? "").toLowerCase() !== status.toLowerCase()) return false;
+    if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
+    return true;
+  }), [data?.events, legId, status, season]);
 
-  return <div className="mx-auto grid max-w-7xl gap-6">
-    <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header>
-    {loading ? <p className="text-slate-500">Loading routes…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <>
-      <TravelLegManagerCards key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
-      <ManagerRouteReviewQueue onApproved={loadData} />
-      <a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">View all leg finances →</a>
-      <div className="grid gap-2 sm:grid-cols-2"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
-      <TripsSection travelLegs={data.travelLegs} onFocusTrip={(tripId) => { void handleFocusTrip(tripId); }} />
-      <EquipmentHandoffs travelLegs={data.travelLegs} resources={data.legResources} onChange={setHandoffs} />
-      <section aria-labelledby="event-map-title" className="grid gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-bold" id="event-map-title">Event map</h2><p className="mt-1 text-sm text-slate-600">Use Admin view for organization-wide planning, or preview exactly what one manager sees.</p></div><AdminMapViewToggle view={mapView} onChange={setMapView} /></div>
-        {mapView === "manager-preview" ? <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div> : <EventMap events={data.events} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} />}
-      </section>
-    </> : null}
+  if (loading) return <p className="text-slate-500">Loading routes…</p>;
+  if (error) return <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div>;
+  if (!data) return null;
+
+  const mapSection = (
+    <section aria-labelledby="event-map-title" className="grid gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div><h2 className={embedded ? "text-xl font-bold" : "text-2xl font-bold"} id="event-map-title">Route Map</h2><p className="mt-1 text-sm text-slate-600">Confirmed and potential route context across the selected season and leg.</p></div>
+        <AdminMapViewToggle view={mapView} onChange={setMapView} />
+      </div>
+      {mapView === "manager-preview" ? (
+        <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div>
+      ) : <EventMap events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} />}
+    </section>
+  );
+
+  return <div className="grid gap-5">
+    {!embedded ? <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header> : null}
+    {mapSection}
+    <details className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" open={!embedded}>
+      <summary className="cursor-pointer font-bold">Trips & route planning</summary>
+      <div className="mt-4 grid gap-5"><TripsSection travelLegs={data.travelLegs} onFocusTrip={(tripId) => { void handleFocusTrip(tripId); }} /><EquipmentHandoffs travelLegs={data.travelLegs} resources={data.legResources} onChange={setHandoffs} /></div>
+    </details>
+    <details className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <summary className="cursor-pointer font-bold">Leg management & manager access</summary>
+      <div className="mt-4 grid gap-5">
+        <TravelLegManagerCards key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
+        <ManagerRouteReviewQueue onApproved={loadData} />
+        <div className="grid gap-2 sm:grid-cols-3"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">Leg finances →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
+      </div>
+    </details>
   </div>;
+}
+
+export default function RoutesPage() {
+  return <div className="mx-auto max-w-7xl"><RoutesContent /></div>;
 }
