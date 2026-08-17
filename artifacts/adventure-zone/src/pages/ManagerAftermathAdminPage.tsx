@@ -8,11 +8,13 @@ function Detail({ label, value }: { label: string; value: any }) {
   if (value === null || value === undefined || value === "") return null;
   return <p className="text-sm"><span className="font-semibold">{label}:</span> {String(value)}</p>;
 }
+function dateTime(value: any) { return value ? new Date(value).toLocaleString() : null; }
 
 export default function ManagerAftermathAdminPage() {
   const search = useSearch();
   const selectedWrapUp = new URLSearchParams(search).get("wrapUp");
   const [wrapUps, setWrapUps] = useState<any[]>([]);
+  const [lifecycles, setLifecycles] = useState<any[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [incidents, setIncidents] = useState<any[]>([]);
   const [followOnly, setFollowOnly] = useState(false);
@@ -23,10 +25,12 @@ export default function ManagerAftermathAdminPage() {
     if (selectedWrapUp) return;
     Promise.all([
       apiGet<any>("/event-wrap-up-admin"),
+      apiGet<any>("/manager-admin/events/lifecycle"),
       apiGet<any>("/manager-admin/reviews"),
       apiGet<any>("/manager-admin/incidents"),
-    ]).then(([wrap, reviewData, incidentData]) => {
+    ]).then(([wrap, lifecycleData, reviewData, incidentData]) => {
       setWrapUps(wrap.wrapUps ?? []);
+      setLifecycles(lifecycleData.lifecycles ?? []);
       setReviews(reviewData.reviews ?? []);
       setIncidents(incidentData.incidents ?? []);
     });
@@ -39,8 +43,13 @@ export default function ManagerAftermathAdminPage() {
   return <div className="mx-auto grid max-w-5xl gap-6">
     <header>
       <h1 className="text-3xl font-bold">Event aftermath</h1>
-      <p className="text-slate-600">Review submitted event wrap-ups, profitability, cash settlement, ratings, and incidents across all travel legs.</p>
+      <p className="text-slate-600">Review check-ins, closeouts, ratings, cash settlement, and incidents across all travel legs.</p>
     </header>
+
+    <section className="grid gap-3">
+      <div><h2 className="text-xl font-bold">Event activity</h2><p className="text-sm text-slate-600">Manager arrival, departure, and wrap-up status.</p></div>
+      {lifecycles.length ? lifecycles.map((item) => <article key={item.id} className="rounded-xl border bg-white p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{item.bookingName}</h3><p className="text-sm text-slate-600">{item.legName} · {[item.city,item.region].filter(Boolean).join(", ")}</p></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${item.wrapUpStatus === "finished" ? "bg-emerald-100 text-emerald-800" : item.wrapUpStatus === "incomplete" ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"}`}>{String(item.wrapUpStatus).replaceAll("_"," ")}</span></div><div className="mt-3 grid gap-1"><Detail label="Checked in" value={dateTime(item.checkedInAt)} /><Detail label="Check-in location" value={item.checkInLatitude != null && item.checkInLongitude != null ? `${item.checkInLatitude}, ${item.checkInLongitude}` : item.checkInLocationStatus} /><Detail label="Checked out" value={dateTime(item.checkedOutAt)} /><Detail label="Check-out location" value={item.checkOutLatitude != null && item.checkOutLongitude != null ? `${item.checkOutLatitude}, ${item.checkOutLongitude}` : item.checkOutLocationStatus} /></div></article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No event check-ins yet.</p>}
+    </section>
 
     <section className="grid gap-3">
       <div>
