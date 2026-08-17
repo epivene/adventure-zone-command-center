@@ -48,6 +48,14 @@ export function htmlToPlainText(value: string) {
     .trim();
 }
 
+function isSystemHistoryText(value: string) {
+  const text = htmlToPlainText(value).trim();
+  return /^Field\s+.+?\s+changed\s+from\s+.+?\s+to\s+.+$/i.test(text)
+    || /^A new opportunity called\s+.+?\s+was created/i.test(text)
+    || /^Opportunity\s+.+?\s+(?:created|deleted|updated)/i.test(text)
+    || /^Record\s+.+?\s+(?:created|deleted|updated)/i.test(text);
+}
+
 export function simplifyHistoryText(body: string) {
   const text = htmlToPlainText(body).trim();
   if (!text) return "Profile updated";
@@ -81,16 +89,19 @@ export type HistoryFilter = "all" | "calls" | "notes" | "follow-ups" | "act" | "
 export function historyCategory(item: ProfileHistoryItem): Exclude<HistoryFilter, "all"> {
   const kind = (item.kind ?? "").toLowerCase();
   const actSourceType = (item.actSourceType ?? "").toLowerCase();
+  const plainBody = htmlToPlainText(item.body ?? "");
+  const systemLike = isSystemHistoryText(plainBody);
 
   if (actSourceType === "note") return "notes";
-  if (actSourceType === "history") return "system";
+  if (actSourceType === "history") return systemLike ? "system" : "notes";
   if (actSourceType === "activity") return kind.includes("call") ? "calls" : "act";
 
   if (kind.includes("call")) return "calls";
   if (kind.includes("follow")) return "follow-ups";
   if (kind.includes("note")) return "notes";
-  const plainBody = htmlToPlainText(item.body ?? "");
-  if (kind.includes("history") || kind.includes("audit") || /^Field\s+/i.test(plainBody) || /^A new opportunity called\s+/i.test(plainBody)) return "system";
+  if (systemLike || kind.includes("audit")) return "system";
+  if (kind.includes("history") && item.importedFromAct) return "notes";
+  if (kind.includes("history")) return "system";
   if (item.importedFromAct) return "act";
   return "notes";
 }
