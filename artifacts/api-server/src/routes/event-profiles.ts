@@ -17,7 +17,6 @@ import {
 import { DrizzleEventProfileRepository } from "@/features/event-profiles/event-profile-repository";
 import { getOrganizationMembershipContext } from "@/features/organizations/organization-membership-query";
 import { ensurePlacePersonRelationship } from "@/features/relationships/relationship-writer";
-import { assertActiveProfile, ActiveProfileError } from "@/features/record-lifecycle/active-profile";
 import { parseBusinessDateInput } from "@/lib/business-date";
 
 const router: IRouter = Router();
@@ -67,20 +66,10 @@ function splitName(name: string) {
   return { firstName: firstName ?? "", lastName: rest.join(" ") };
 }
 
-function archivedProfileResponse(res: any, error: unknown) {
-  if (!(error instanceof ActiveProfileError)) return false;
-  res.status(error.code === "PROFILE_ARCHIVED" ? 409 : 404).json({
-    ok: false,
-    error: error.message,
-  });
-  return true;
-}
-
 router.get("/event-profiles/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const contactId = req.query.contactId as string | undefined;
   try {
-    await assertActiveProfile(db, id);
     const repo = new DrizzleEventProfileRepository(db);
     const profile = await repo.getEventProfile(id, contactId);
     if (!profile) { res.status(404).json({ error: "Not found" }); return; }
@@ -109,7 +98,6 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
     const managerReviewAverage=managerReviews.length?managerReviews.reduce((sum,review)=>sum+review.rating,0)/managerReviews.length:null;
     res.json({ ...profile, familyContext, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
-    if (archivedProfileResponse(res, err)) return;
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });
   }
@@ -127,7 +115,6 @@ router.patch("/event-profiles/:id", async (req, res): Promise<void> => {
     return;
   }
   try {
-    await assertActiveProfile(db, id);
     const [updated] = await db
       .update(organizations)
       .set({
@@ -143,7 +130,6 @@ router.patch("/event-profiles/:id", async (req, res): Promise<void> => {
     }
     res.json({ ok: true, profileId: updated.id });
   } catch (error) {
-    if (archivedProfileResponse(res, error)) return;
     req.log.error({ err: error }, "Failed to update event profile");
     res.status(500).json({ ok: false, error: "The profile could not be saved. Try again." });
   }
@@ -153,7 +139,6 @@ router.get("/event-profiles/:id/seed", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!uuid.safeParse(id).success) { res.json(null); return; }
   try {
-    await assertActiveProfile(db, id);
     const repo = new DrizzleEventProfileRepository(db);
     const profile = await repo.getEventProfile(id);
     if (!profile) { res.json(null); return; }
@@ -169,7 +154,6 @@ router.get("/event-profiles/:id/seed", async (req, res): Promise<void> => {
       groups: profile.groups.map((g) => ({ id: g.id, name: g.name })),
     });
   } catch (err) {
-    if (err instanceof ActiveProfileError) { res.json(null); return; }
     req.log.error({ err }, "Failed to get event profile seed");
     res.status(500).json(null);
   }
@@ -191,14 +175,12 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
         throw new Error("ORGANIZATION_CREATE_REQUIRES_NEW_PROFILE");
       }
       if (organizationId) {
-        await assertActiveProfile(transaction, organizationId);
         const [found] = await transaction.select({ id: organizations.id, city: organizations.city, region: organizations.region, consolidatedIntoId: organizations.consolidatedIntoId }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
         if (!found) throw new Error("EVENT_NOT_FOUND");
         eventCity = found.city?.trim() ?? "";
         eventRegion = found.region?.trim().toUpperCase() ?? "";
       } else {
         if (parsed.data.parentOrganizationId) {
-          await assertActiveProfile(transaction, parsed.data.parentOrganizationId);
           const [parent] = await transaction.select({ id: organizations.id, consolidatedIntoId: organizations.consolidatedIntoId, parentOrganizationId: organizations.parentOrganizationId }).from(organizations).where(eq(organizations.id, parsed.data.parentOrganizationId)).limit(1);
           if (!parent) throw new Error("PARENT_ORGANIZATION_NOT_FOUND");
           if (parent.consolidatedIntoId || parent.parentOrganizationId) throw new Error("PARENT_ORGANIZATION_INVALID");
@@ -209,7 +191,6 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
       }
 
       if (parsed.data.familyId) {
-        await assertActiveProfile(transaction, organizationId);
         const [family] = await transaction.select({ id: eventFamilies.id }).from(eventFamilies).where(eq(eventFamilies.id, parsed.data.familyId)).limit(1);
         if (!family) throw new Error("EVENT_FAMILY_NOT_FOUND");
         const [organizationState] = await transaction.select({ consolidatedIntoId: organizations.consolidatedIntoId }).from(organizations).where(eq(organizations.id, organizationId)).limit(1);
@@ -263,10 +244,6 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
     res.status(201).json({ ok: true, profileId });
   } catch (error) {
     req.log.error({ err: error }, "Failed to create event profile");
-    if (error instanceof ActiveProfileError) {
-      res.status(error.code === "PROFILE_ARCHIVED" ? 409 : 400).json({ ok: false, error: error.message });
-      return;
-    }
     if (error instanceof Error && ["PARENT_ORGANIZATION_NOT_FOUND", "PARENT_ORGANIZATION_INVALID", "ORGANIZATION_CREATE_REQUIRES_NEW_PROFILE"].includes(error.message)) {
       res.status(error.message === "PARENT_ORGANIZATION_NOT_FOUND" ? 400 : 409).json({ ok: false, error: "That organization can no longer accept this event. Refresh and try again." });
       return;

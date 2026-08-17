@@ -5,7 +5,6 @@ import { EventProfileWorkspace } from "@/components/event-profiles/event-profile
 import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
-import { ArchiveProfileButton } from "@/components/record-lifecycle/archive-profile-button";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
@@ -99,20 +98,14 @@ export default function EventProfilePage() {
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <button
-          aria-label="Back"
-          className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-          onClick={goBack}
-          type="button"
-        >
-          <span aria-hidden="true">←</span> Back
-        </button>
-        <ArchiveProfileButton
-          profileId={profileId}
-          onArchived={() => setLocation("/archived")}
-        />
-      </div>
+      <button
+        aria-label="Back"
+        className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+        onClick={goBack}
+        type="button"
+      >
+        <span aria-hidden="true">←</span> Back
+      </button>
 
       <SimpleFullProfile profile={data} />
 

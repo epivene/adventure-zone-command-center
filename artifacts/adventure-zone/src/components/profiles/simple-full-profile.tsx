@@ -3,6 +3,7 @@ import { Link } from "wouter";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
+import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -34,6 +35,7 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
   const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
+  const meaningfulNotes = useMemo(() => profile.notes.filter((note) => historyCategory(note) !== "system"), [profile.notes]);
 
   const nextFollowUp = useMemo(() => [...profile.followUps]
     .filter((item) => !item.completedAt && item.dueAt)
@@ -43,7 +45,18 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
     .filter((item) => item.startsAt && item.startsAt.getTime() >= Date.now())
     .sort((left, right) => (left.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER) - (right.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER))[0] ?? null, [profile.bookings]);
 
-  const recentNote = profile.notes[0] ?? null;
+  const recentNote = meaningfulNotes[0] ?? null;
+
+  async function loadSimpleNotesPage(page: number) {
+    const result = await loadTimelinePageAction({ organizationId: profile.id }, page);
+    if (!result.ok) return result;
+    return {
+      ...result,
+      items: result.items
+        .filter((item) => historyCategory(item) !== "system")
+        .map((item) => ({ ...item, body: simplifyHistoryText(item.body) })),
+    };
+  }
 
   return (
     <div className="grid gap-4">
@@ -97,7 +110,7 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
             </div>
           </section>
 
-          {recentNote ? <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent note</p><p className="mt-2 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{recentNote.body}</p></section> : null}
+          {recentNote ? <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent note</p><p className="mt-2 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(recentNote.body)}</p></section> : null}
 
           {profile.contacts.length > 1 ? (
             <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2">
@@ -116,13 +129,13 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
           <div className="mt-4">
             <ActivityTimeline
               noteComposer
-              activities={profile.notes.map((note) => ({
+              activities={meaningfulNotes.map((note) => ({
                 id: note.id,
                 organizationId: profile.id,
                 contactId: note.contactId,
                 bookingId: note.bookingId,
                 kind: note.kind as any,
-                body: note.body,
+                body: simplifyHistoryText(note.body),
                 occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
                 createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
                 updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
@@ -137,7 +150,7 @@ export function SimpleFullProfile({ profile }: { profile: EventProfile }) {
               editActivity={editActivityAction}
               deleteActivity={deleteActivityAction}
               loadRevisions={listActivityRevisionsAction}
-              loadPage={(page) => loadTimelinePageAction({ organizationId: profile.id }, page)}
+              loadPage={loadSimpleNotesPage}
             />
           </div>
           {profile.followUps.length ? <details className="mt-4 border-t border-slate-100 pt-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Follow-ups ({profile.followUps.length})</summary><ul className="mt-2 grid gap-2">{profile.followUps.map((item) => <li className="rounded-lg bg-slate-50 p-3 text-sm" key={item.id}><span className="font-semibold capitalize">{item.kind.replaceAll("_", " ")}</span><span className="ml-2 text-slate-600">{formatDate(item.dueAt)}</span></li>)}</ul></details> : null}

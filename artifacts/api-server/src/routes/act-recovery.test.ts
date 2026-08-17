@@ -55,17 +55,6 @@ function service(): ActRecoveryRouteService {
     assign: vi.fn(async () => ({ ok: true as const })),
     drop: vi.fn(async () => ({ ok: true as const })),
     retry: vi.fn(async () => ({ ok: true as const })),
-    purgeBookkeeping: vi.fn(async () => ({
-      scanned: 12,
-      purged: 4,
-      retained: 8,
-      byReason: {
-        relationship_bookkeeping: 2,
-        record_lifecycle_bookkeeping: 1,
-        field_change_bookkeeping: 1,
-      },
-      hasMore: true,
-    })),
   };
 }
 
@@ -159,39 +148,5 @@ describe("ACT recovery routes", () => {
     expect((await request(server).post(`/act-recovery/review/${SOURCE_ID}/retry`).send({ sourceVersionId: VERSION_ID })).status).toBe(200);
     expect(recovery.drop).toHaveBeenCalledWith({ sourceRecordId: SOURCE_ID, sourceVersionId: VERSION_ID, decidedBy: "owner" });
     expect(recovery.retry).toHaveBeenCalledWith({ sourceRecordId: SOURCE_ID, sourceVersionId: VERSION_ID, decidedBy: "owner" });
-  });
-
-  it("validates and runs one bounded permanent bookkeeping purge batch", async () => {
-    const recovery = service();
-    const server = app(recovery);
-
-    for (const batchSize of [0, -1, 251, "100"]) {
-      const invalid = await request(server)
-        .post("/act-recovery/purge-bookkeeping")
-        .send({ batchSize });
-      expect(invalid.status).toBe(400);
-    }
-    expect(recovery.purgeBookkeeping).not.toHaveBeenCalled();
-
-    const response = await request(server)
-      .post("/act-recovery/purge-bookkeeping")
-      .send({ batchSize: 100 });
-
-    expect(response.status).toBe(200);
-    expect(response.body).toEqual({
-      ok: true,
-      summary: {
-        scanned: 12,
-        purged: 4,
-        retained: 8,
-        byReason: {
-          relationship_bookkeeping: 2,
-          record_lifecycle_bookkeeping: 1,
-          field_change_bookkeeping: 1,
-        },
-        hasMore: true,
-      },
-    });
-    expect(recovery.purgeBookkeeping).toHaveBeenCalledWith({ batchSize: 100 });
   });
 });

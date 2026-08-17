@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, sql } from "drizzle-orm";
+import { count, eq, inArray } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   eventFamilies,
@@ -10,7 +10,6 @@ import {
   type OrganizationListPage,
   type OrganizationListQuery,
 } from "@/features/organizations/organization-repository";
-import { activeProfileIdSet } from "@/features/record-lifecycle/active-profile";
 
 export type EventFamilyListRecord = {
   id: string;
@@ -32,9 +31,6 @@ export async function attachEventFamiliesToOrganizationPage(
   families: EventFamilyListRecord[];
 }> {
   const condition = buildOrganizationListCondition(query, { includeEventFamilyMembers: true });
-  const liveCondition = and(condition, sql`${organizations}.archived_at is null`);
-  const activeIds = await activeProfileIdSet(db, page.records.map((record) => record.id));
-  const activeRecords = page.records.filter((record) => activeIds.has(record.id));
 
   const matchedFamilies = await db
     .select({
@@ -47,7 +43,7 @@ export async function attachEventFamiliesToOrganizationPage(
     .from(eventFamilyMembers)
     .innerJoin(eventFamilies, eq(eventFamilies.id, eventFamilyMembers.familyId))
     .innerJoin(organizations, eq(organizations.id, eventFamilyMembers.organizationId))
-    .where(liveCondition)
+    .where(condition)
     .groupBy(
       eventFamilies.id,
       eventFamilies.name,
@@ -61,16 +57,12 @@ export async function attachEventFamiliesToOrganizationPage(
     ? await db
         .select({ familyId: eventFamilyMembers.familyId, value: count() })
         .from(eventFamilyMembers)
-        .innerJoin(organizations, eq(organizations.id, eventFamilyMembers.organizationId))
-        .where(and(
-          inArray(eventFamilyMembers.familyId, familyIds),
-          sql`${organizations}.archived_at is null`,
-        ))
+        .where(inArray(eventFamilyMembers.familyId, familyIds))
         .groupBy(eventFamilyMembers.familyId)
     : [];
   const totalByFamily = new Map(totalCounts.map((row) => [row.familyId, row.value]));
 
-  const pageOrganizationIds = activeRecords.map((record) => record.id);
+  const pageOrganizationIds = page.records.map((record) => record.id);
   const pageMemberships = pageOrganizationIds.length
     ? await db
         .select({
@@ -89,7 +81,7 @@ export async function attachEventFamiliesToOrganizationPage(
   return {
     organizations: {
       ...page,
-      records: activeRecords.map((record) => {
+      records: page.records.map((record) => {
         const membership = familyByOrganization.get(record.id);
         return {
           ...record,

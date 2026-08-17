@@ -9,7 +9,6 @@ const client = vi.hoisted(() => ({
   assignRecoveryParent: vi.fn(),
   dropRecoveryItem: vi.fn(),
   retryRecoveryItem: vi.fn(),
-  purgeRecoveryBookkeeping: vi.fn(),
 }));
 
 vi.mock("@/features/act-recovery/act-recovery-client", () => client);
@@ -71,26 +70,10 @@ describe("ActRecoveryPage", () => {
     client.assignRecoveryParent.mockResolvedValue({ ok: true });
     client.dropRecoveryItem.mockResolvedValue({ ok: true });
     client.retryRecoveryItem.mockResolvedValue({ ok: true });
-    client.purgeRecoveryBookkeeping.mockResolvedValue({
-      ok: true,
-      summary: {
-        scanned: 15,
-        purged: 6,
-        retained: 9,
-        byReason: {
-          relationship_bookkeeping: 3,
-          record_lifecycle_bookkeeping: 2,
-          field_change_bookkeeping: 1,
-        },
-        hasMore: true,
-      },
-    });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   afterEach(() => {
     cleanup();
-    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -140,19 +123,5 @@ describe("ActRecoveryPage", () => {
       sourceRecordId: SOURCE_ID,
       sourceVersionId: VERSION_ID,
     }));
-  });
-
-  it("requires confirmation and shows the result of one permanent bookkeeping purge batch", async () => {
-    render(<ActRecoveryPage />);
-    await screen.findByRole("heading", { name: "ACT Recovery" });
-
-    fireEvent.click(screen.getByRole("button", { name: "Purge ACT bookkeeping" }));
-
-    expect(window.confirm).toHaveBeenCalledWith(
-      "Permanently delete ACT linking and system-update history that contains no meaningful note or message?",
-    );
-    await waitFor(() => expect(client.purgeRecoveryBookkeeping).toHaveBeenCalledWith({ batchSize: 100 }));
-    expect(await screen.findByText("Purged 6 bookkeeping records · 9 retained")).toBeInTheDocument();
-    expect(screen.getByText("More archived records remain to scan.")).toBeInTheDocument();
   });
 });

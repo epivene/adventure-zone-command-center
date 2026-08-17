@@ -45,18 +45,6 @@ export type RecoveryProfileSearchResult = {
   region: string | null;
 };
 
-export type ActHistoryPurgeBatchSummary = {
-  scanned: number;
-  purged: number;
-  retained: number;
-  byReason: {
-    relationship_bookkeeping: number;
-    record_lifecycle_bookkeeping: number;
-    field_change_bookkeeping: number;
-  };
-  hasMore: boolean;
-};
-
 async function responseError(response: Response) {
   const body = await response.json().catch(() => ({})) as { error?: unknown };
   const code = typeof body.error === "string" ? body.error : `API ${response.status}`;
@@ -78,13 +66,6 @@ export function startRecovery(): Promise<ActRecoveryStatus> {
 
 export function getRecoveryReview(page = 1): Promise<ActRecoveryReviewPage> {
   return apiGet<ActRecoveryReviewPage>(`/act-recovery/review?page=${page}&pageSize=50`);
-}
-
-export function purgeRecoveryBookkeeping(input: { batchSize: number } = { batchSize: 100 }) {
-  return apiPost<{ ok: true; summary: ActHistoryPurgeBatchSummary }>(
-    "/act-recovery/purge-bookkeeping",
-    input,
-  );
 }
 
 export async function searchRecoveryProfiles(query: string): Promise<RecoveryProfileSearchResult[]> {
