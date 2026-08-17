@@ -9,9 +9,15 @@ describe("profile history summaries", () => {
     expect(simplifyHistoryText('A new opportunity called New Opportunity was created')).toBe("New opportunity created");
   });
 
-  it("keeps ACT notes with Notes even when their generic imported kind says history", () => {
+  it("keeps human ACT prose under Notes even when ACT labels it history", () => {
     expect(historyCategory({ kind: "history", body: "Called organizer", importedFromAct: true, actSourceType: "note" })).toBe("notes");
+    expect(historyCategory({ kind: "history", body: "Hi Breck Create, We'd love to come to your festival.", importedFromAct: true, actSourceType: "history" })).toBe("notes");
+    expect(historyCategory({ kind: "history", body: '<div><p>Hi Breck Create,</p><p>We represent The Adventure Zone.</p></div>', importedFromAct: true, actSourceType: "history" })).toBe("notes");
+  });
+
+  it("keeps recognizable ACT bookkeeping under System", () => {
     expect(historyCategory({ kind: "history", body: "Field Stage changed from A to B", importedFromAct: true, actSourceType: "history" })).toBe("system");
+    expect(historyCategory({ kind: "history", body: "A new opportunity called New Opportunity was created", importedFromAct: true, actSourceType: "history" })).toBe("system");
   });
 
   it("converts imported HTML note bodies to readable text", () => {

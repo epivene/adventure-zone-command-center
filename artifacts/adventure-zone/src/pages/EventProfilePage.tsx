@@ -40,7 +40,13 @@ export default function EventProfilePage() {
       const normalized = {
         ...d,
         wrapUpRatingSummary: ratingSummary,
-        notes: (d.notes ?? []).map((note: any) => ({ ...note, occurredAt: toDate(note.occurredAt), createdAt: toDate(note.createdAt), updatedAt: toDate(note.updatedAt) })),
+        notes: (d.notes ?? []).map((note: any) => ({
+          ...note,
+          body: note.importedFromAct ? simplifyHistoryText(String(note.body ?? "")) : note.body,
+          occurredAt: toDate(note.occurredAt),
+          createdAt: toDate(note.createdAt),
+          updatedAt: toDate(note.updatedAt),
+        })),
         followUps: (d.followUps ?? []).map((followUp: any) => ({ ...followUp, dueAt: toDate(followUp.dueAt), completedAt: toDate(followUp.completedAt) })),
         bookings: (d.bookings ?? []).map((booking: any) => ({ ...booking, startsAt: toDate(booking.startsAt), endsAt: toDate(booking.endsAt) })),
       };
