@@ -13,13 +13,13 @@ import { startRecovery } from "./act-recovery-client";
 describe("ACT recovery client", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("starts the v2 recovery rules instead of replaying the completed v1 run", async () => {
+  it("starts the v3 HTML cleanup rules instead of replaying the completed v2 run", async () => {
     auth.apiPost.mockResolvedValue({ complete: false });
 
     await startRecovery();
 
     expect(auth.apiPost).toHaveBeenCalledWith("/act-recovery/runs", {
-      requestKey: "archive-full-recovery-v2-inline-history",
+      requestKey: "archive-full-recovery-v3-history-html-text",
     });
   });
 });

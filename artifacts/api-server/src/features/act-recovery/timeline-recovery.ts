@@ -98,7 +98,7 @@ export class ActTimelineRecovery {
     const legacyKey = actTimelineKey(sourceType, candidate.actRecordId);
     const existing = legacyKey
       ? await this.query(sql`
-          select id, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
+          select id, body, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
           from activities
           where source_record_id = ${candidate.sourceRecordId}
             or act_record_id = ${legacyKey}
@@ -106,7 +106,7 @@ export class ActTimelineRecovery {
           limit 2
         `)
       : await this.query(sql`
-          select id, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
+          select id, body, source_record_id as "sourceRecordId", source_version_id as "sourceVersionId", source_type as "sourceType"
           from activities
           where source_record_id = ${candidate.sourceRecordId}
           order by id
@@ -119,6 +119,7 @@ export class ActTimelineRecovery {
     let activityId = text(existing[0]?.id);
     let created = false;
     let provenanceRepaired = false;
+    let contentRepaired = false;
     if (!activityId) {
       const occurredAt = normalized.value.sourceOccurredAt ? new Date(normalized.value.sourceOccurredAt) : null;
       const endsAt = normalized.value.endsAt ? new Date(normalized.value.endsAt) : null;
@@ -144,11 +145,20 @@ export class ActTimelineRecovery {
       provenanceRepaired = true;
     }
 
+    if (activityId && existing[0] && text(existing[0].body) !== normalized.value.body) {
+      await this.database.execute(sql`
+        update activities
+        set body = ${normalized.value.body}, updated_at = now()
+        where id = ${activityId}
+      `);
+      contentRepaired = true;
+    }
+
     let associationsAdded = 0;
     for (const parent of parents) {
       associationsAdded += await this.ensureAssociation(activityId, parent);
     }
-    const changed = created || provenanceRepaired || associationsAdded > 0;
+    const changed = created || provenanceRepaired || contentRepaired || associationsAdded > 0;
     return {
       state: changed ? "recovered" : "already_present",
       targetSummary: {
@@ -157,6 +167,7 @@ export class ActTimelineRecovery {
         sourceType,
         created,
         provenanceRepaired,
+        contentRepaired,
         associationsAdded,
         parentCount: parents.length,
         manuallyAssigned: Boolean(manualParent),
