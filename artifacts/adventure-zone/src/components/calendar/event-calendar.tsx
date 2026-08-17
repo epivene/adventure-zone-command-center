@@ -1,7 +1,7 @@
 "use client";
 
 import { Link } from "wouter";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { MapEvent } from "@/features/routes/map-data";
 import { buildMonthSpanSegments, type MonthSpanSegment } from "@/features/calendar/month-spans";
@@ -26,7 +26,6 @@ export type ActCalendarActivity = {
 export type BookingEvent = MapEvent & { source?: "booking" | undefined };
 export type CalendarEvent = BookingEvent | ActCalendarActivity;
 type CalendarView = "month" | "agenda";
-
 type PositionedSegment = MonthSpanSegment & { lane: number };
 
 function parseMonth(value: string) {
@@ -38,27 +37,24 @@ function parseMonth(value: string) {
   return new Date(Date.UTC(year, month - 1, 1));
 }
 
+function monthKey(date: Date) {
+  return date.toISOString().slice(0, 7);
+}
+
 function formatMonth(date: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date);
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
 }
 
 function formatDay(date: Date) {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: BUSINESS_TIME_ZONE,
-  }).format(date);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: BUSINESS_TIME_ZONE }).format(date);
+}
+
+function formatSelectedDay(date: Date) {
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(date);
 }
 
 function formatStatus(status: string) {
-  return status
-    .split("_")
-    .map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`)
-    .join(" ");
+  return status.split("_").map((word) => `${word[0]?.toUpperCase() ?? ""}${word.slice(1)}`).join(" ");
 }
 
 function utcDateKey(date: Date) {
@@ -84,7 +80,6 @@ function bookingOccursOn(event: BookingEvent, dateKey: string) {
 function positionWeekSegments(segments: MonthSpanSegment[]): PositionedSegment[] {
   const positioned: PositionedSegment[] = [];
   const occupiedByLane: Array<Array<[number, number]>> = [];
-
   for (const segment of [...segments].sort((a, b) => {
     const widthA = a.endColumn - a.startColumn;
     const widthB = b.endColumn - b.startColumn;
@@ -93,9 +88,7 @@ function positionWeekSegments(segments: MonthSpanSegment[]): PositionedSegment[]
     let lane = 0;
     while (true) {
       const occupied = occupiedByLane[lane] ?? [];
-      const conflicts = occupied.some(
-        ([start, end]) => !(segment.endColumn < start || segment.startColumn > end),
-      );
+      const conflicts = occupied.some(([start, end]) => !(segment.endColumn < start || segment.startColumn > end));
       if (!conflicts) {
         occupied.push([segment.startColumn, segment.endColumn]);
         occupiedByLane[lane] = occupied;
@@ -105,7 +98,6 @@ function positionWeekSegments(segments: MonthSpanSegment[]): PositionedSegment[]
       lane += 1;
     }
   }
-
   return positioned;
 }
 
@@ -113,26 +105,10 @@ function BookingEventLink({ event, compact = false }: { event: BookingEvent; com
   const confirmed = event.status === "confirmed";
   const color = event.travelLegColor ?? "#64748b";
   return (
-    <Link
-      className={`block rounded-lg border bg-white px-3 py-2 shadow-sm transition hover:border-orange-300 hover:shadow ${
-        confirmed ? "border-slate-200" : "border-dashed border-slate-300"
-      }`}
-      href={`/bookings/${event.id}`}
-      style={{ borderLeftColor: color, borderLeftWidth: "4px" }}
-    >
-      <span className={`block font-bold text-slate-950 ${compact ? "text-xs" : "text-sm"}`}>
-        {event.name}
-      </span>
+    <Link className={`block rounded-lg border bg-white px-3 py-2 shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"}`} href={`/bookings/${event.id}`} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>
+      <span className={`block font-bold text-slate-950 ${compact ? "text-xs" : "text-sm"}`}>{event.name}</span>
       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-        <span
-          className={
-            confirmed
-              ? "rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800"
-              : "rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800"
-          }
-        >
-          {confirmed ? "Confirmed" : "Tentative"}
-        </span>
+        <span className={confirmed ? "rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800" : "rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800"}>{confirmed ? "Confirmed" : "Tentative"}</span>
         {!compact ? <span>{formatStatus(event.status)}</span> : null}
       </span>
     </Link>
@@ -145,34 +121,13 @@ const actTypeColors: Record<ActCalendarActivity["activityType"], string> = {
   Activity: "bg-teal-100 text-teal-800",
 };
 
-function ActActivityCard({
-  event,
-  compact = false,
-  onClick,
-}: {
-  event: ActCalendarActivity;
-  compact?: boolean;
-  onClick: (event: ActCalendarActivity) => void;
-}) {
+function ActActivityCard({ event, compact = false, onClick }: { event: ActCalendarActivity; compact?: boolean; onClick: (event: ActCalendarActivity) => void }) {
   const pillColor = actTypeColors[event.activityType];
   const linkedName = event.organizationName ?? event.contactName;
   return (
-    <button
-      className={`block w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-left transition hover:border-orange-300 hover:bg-white hover:shadow ${
-        compact ? "text-xs" : "text-sm"
-      }`}
-      onClick={() => onClick(event)}
-      type="button"
-    >
-      <span className={`block truncate font-medium text-slate-800 ${compact ? "text-xs" : "text-sm"}`}>
-        {event.displaySubject}
-      </span>
-      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-        <span className={`rounded-full px-2 py-0.5 font-bold ${pillColor}`}>
-          Act! {event.activityType}
-        </span>
-        {linkedName && !compact ? <span className="truncate">{linkedName}</span> : null}
-      </span>
+    <button className={`block w-full rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-left transition hover:border-orange-300 hover:bg-white hover:shadow ${compact ? "text-xs" : "text-sm"}`} onClick={() => onClick(event)} type="button">
+      <span className={`block truncate font-medium text-slate-800 ${compact ? "text-xs" : "text-sm"}`}>{event.displaySubject}</span>
+      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500"><span className={`rounded-full px-2 py-0.5 font-bold ${pillColor}`}>Act! {event.activityType}</span>{linkedName && !compact ? <span className="truncate">{linkedName}</span> : null}</span>
     </button>
   );
 }
@@ -180,86 +135,28 @@ function ActActivityCard({
 function ActActivityPopover({ event, onClose }: { event: ActCalendarActivity; onClose: () => void }) {
   const pillColor = actTypeColors[event.activityType];
   const linkedName = event.organizationName ?? event.contactName;
-  const profileHref = event.organizationId
-    ? `/profiles/${event.organizationId}`
-    : event.contactId
-      ? `/contacts/${event.contactId}`
-      : null;
+  const profileHref = event.organizationId ? `/profiles/${event.organizationId}` : event.contactId ? `/contacts/${event.contactId}` : null;
   const bodyLines = event.body.split(/\n\n|\n/).filter(Boolean);
-  const bodyRest = bodyLines
-    .filter((line) => line.trim() !== event.displaySubject.trim())
-    .join("\n")
-    .trim();
-
+  const bodyRest = bodyLines.filter((line) => line.trim() !== event.displaySubject.trim()).join("\n").trim();
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${pillColor}`}>
-            Act! {event.activityType}
-          </span>
-          <button aria-label="Close" className="text-slate-400 hover:text-slate-700" onClick={onClose} type="button">×</button>
-        </div>
+      <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-3 flex items-start justify-between gap-3"><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${pillColor}`}>Act! {event.activityType}</span><button aria-label="Close" className="text-slate-400 hover:text-slate-700" onClick={onClose} type="button">×</button></div>
         <h2 className="text-base font-bold text-slate-900">{event.displaySubject}</h2>
-        {event.startsAt ? (
-          <p className="mt-1 text-xs text-slate-500">
-            {formatDay(event.startsAt)}
-            {event.endsAt && event.endsAt.getTime() !== event.startsAt.getTime()
-              ? ` – ${formatDay(event.endsAt)}`
-              : ""}
-          </p>
-        ) : null}
-        {linkedName ? (
-          <p className="mt-2 text-sm text-slate-700">
-            {profileHref ? (
-              <Link className="font-medium text-orange-700 underline hover:text-orange-900" href={profileHref} onClick={onClose}>
-                {linkedName}
-              </Link>
-            ) : <span className="font-medium">{linkedName}</span>}
-          </p>
-        ) : null}
-        {bodyRest ? (
-          <p className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-slate-700">
-            {bodyRest.length > 600 ? `${bodyRest.slice(0, 600)}…` : bodyRest}
-          </p>
-        ) : null}
-        {event.bookingId ? (
-          <div className="mt-4">
-            <Link className="text-sm font-medium text-orange-700 underline hover:text-orange-900" href={`/bookings/${event.bookingId}`} onClick={onClose}>
-              View linked booking →
-            </Link>
-          </div>
-        ) : null}
+        {event.startsAt ? <p className="mt-1 text-xs text-slate-500">{formatDay(event.startsAt)}{event.endsAt && event.endsAt.getTime() !== event.startsAt.getTime() ? ` – ${formatDay(event.endsAt)}` : ""}</p> : null}
+        {linkedName ? <p className="mt-2 text-sm text-slate-700">{profileHref ? <Link className="font-medium text-orange-700 underline hover:text-orange-900" href={profileHref} onClick={onClose}>{linkedName}</Link> : <span className="font-medium">{linkedName}</span>}</p> : null}
+        {bodyRest ? <p className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap text-sm text-slate-700">{bodyRest.length > 600 ? `${bodyRest.slice(0, 600)}…` : bodyRest}</p> : null}
+        {event.bookingId ? <div className="mt-4"><Link className="text-sm font-medium text-orange-700 underline hover:text-orange-900" href={`/bookings/${event.bookingId}`} onClick={onClose}>View linked booking →</Link></div> : null}
       </div>
     </div>
   );
 }
 
-function DesktopMonthWeek({
-  weekIndex,
-  days,
-  bookingEvents,
-  actEvents,
-  segments,
-  activeMonth,
-  onSelectActivity,
-}: {
-  weekIndex: number;
-  days: Date[];
-  bookingEvents: BookingEvent[];
-  actEvents: ActCalendarActivity[];
-  segments: MonthSpanSegment[];
-  activeMonth: Date;
-  onSelectActivity: (event: ActCalendarActivity) => void;
-}) {
+function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments, activeMonth, onSelectActivity }: { weekIndex: number; days: Date[]; bookingEvents: BookingEvent[]; actEvents: ActCalendarActivity[]; segments: MonthSpanSegment[]; activeMonth: Date; onSelectActivity: (event: ActCalendarActivity) => void }) {
   const positioned = useMemo(() => positionWeekSegments(segments), [segments]);
   const laneCount = positioned.length ? Math.max(...positioned.map((segment) => segment.lane)) + 1 : 0;
   const eventById = useMemo(() => new Map(bookingEvents.map((event) => [event.id, event])), [bookingEvents]);
   const bookingAreaHeight = laneCount * 30;
-
   return (
     <div className="relative hidden border-b border-slate-200 last:border-b-0 sm:block">
       <div className="grid grid-cols-7 gap-px bg-slate-200">
@@ -267,73 +164,36 @@ function DesktopMonthWeek({
           const key = utcDateKey(date);
           const inMonth = date.getUTCMonth() === activeMonth.getUTCMonth();
           const activities = actEvents.filter((event) => event.startsAt && utcDateKey(event.startsAt) === key);
-          return (
-            <div
-              className={`min-h-32 bg-white p-2 ${inMonth ? "" : "text-slate-400"}`}
-              key={key}
-              style={{ paddingTop: `${42 + bookingAreaHeight}px` }}
-            >
-              <time className="absolute mt-[-34px] text-xs font-bold" dateTime={key}>{date.getUTCDate()}</time>
-              <div className="grid gap-1.5">
-                {activities.map((event) => (
-                  <ActActivityCard compact event={event} key={event.id} onClick={onSelectActivity} />
-                ))}
-              </div>
-            </div>
-          );
+          return <div className={`min-h-32 bg-white p-2 ${inMonth ? "" : "text-slate-400"}`} key={key} style={{ paddingTop: `${42 + bookingAreaHeight}px` }}><time className="absolute mt-[-34px] text-xs font-bold" dateTime={key}>{date.getUTCDate()}</time><div className="grid gap-1.5">{activities.map((event) => <ActActivityCard compact event={event} key={event.id} onClick={onSelectActivity} />)}</div></div>;
         })}
       </div>
-
-      <div
-        className="pointer-events-none absolute inset-x-0 top-9 z-10 grid grid-cols-7 gap-x-px px-px"
-        style={{ gridAutoRows: "28px" }}
-      >
+      <div className="pointer-events-none absolute inset-x-0 top-9 z-10 grid grid-cols-7 gap-x-px px-px" style={{ gridAutoRows: "28px" }}>
         {positioned.map((segment) => {
           const event = eventById.get(segment.eventId);
           if (!event) return null;
           const color = event.travelLegColor ?? "#64748b";
           const confirmed = event.status === "confirmed";
-          return (
-            <Link
-              className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border bg-white px-2 py-1 text-xs font-bold shadow-sm transition hover:border-orange-300 hover:shadow ${
-                confirmed ? "border-slate-200" : "border-dashed border-slate-300"
-              } ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`}
-              data-end-column={segment.endColumn}
-              data-start-column={segment.startColumn}
-              data-testid={`booking-span-${event.id}-${weekIndex}`}
-              href={`/bookings/${event.id}`}
-              key={`${event.id}-${weekIndex}`}
-              style={{
-                borderLeftColor: color,
-                borderLeftWidth: segment.startsHere ? "4px" : "1px",
-                gridColumnStart: segment.startColumn + 1,
-                gridColumnEnd: segment.endColumn + 2,
-                gridRowStart: segment.lane + 1,
-              }}
-              title={`${event.name}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}
-            >
-              {segment.startsHere ? event.name : `↳ ${event.name}`}
-            </Link>
-          );
+          return <Link className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border bg-white px-2 py-1 text-xs font-bold shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={`/bookings/${event.id}`} key={`${event.id}-${weekIndex}`} style={{ borderLeftColor: color, borderLeftWidth: segment.startsHere ? "4px" : "1px", gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1 }} title={`${event.name}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}>{segment.startsHere ? event.name : `↳ ${event.name}`}</Link>;
         })}
       </div>
     </div>
   );
 }
 
-export function EventCalendar({
-  events,
-  initialMonth = businessDateKey(new Date()).slice(0, 7),
-  onMonthChange,
-}: {
-  events: CalendarEvent[];
-  initialMonth?: string;
-  onMonthChange?: (month: string) => void;
-}) {
+export function EventCalendar({ events, initialMonth = businessDateKey(new Date()).slice(0, 7), onMonthChange }: { events: CalendarEvent[]; initialMonth?: string; onMonthChange?: (month: string) => void }) {
   const [view, setView] = useState<CalendarView>("month");
   const [activeMonth, setActiveMonth] = useState(() => parseMonth(initialMonth));
-  const [showActActivities, setShowActActivities] = useState(true);
+  const [showActActivities, setShowActActivities] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<ActCalendarActivity | null>(null);
+  const [selectedDayKey, setSelectedDayKey] = useState(() => `${initialMonth}-01`);
+  const [agendaLimit, setAgendaLimit] = useState(12);
+
+  useEffect(() => {
+    if (monthKey(activeMonth) === initialMonth) return;
+    const next = parseMonth(initialMonth);
+    setActiveMonth(next);
+    setSelectedDayKey(`${initialMonth}-01`);
+  }, [initialMonth, activeMonth]);
 
   const { bookingEvents, actEvents } = useMemo(() => {
     const bookings: BookingEvent[] = [];
@@ -345,26 +205,12 @@ export function EventCalendar({
     return { bookingEvents: bookings, actEvents: activities };
   }, [events]);
 
-  const datedBookings = useMemo(
-    () => bookingEvents
-      .filter((event): event is BookingEvent & { startsAt: Date } => event.startsAt !== null)
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id)),
-    [bookingEvents],
-  );
-
-  const datedActEvents = useMemo(
-    () => actEvents
-      .filter((event): event is ActCalendarActivity & { startsAt: Date } => event.startsAt !== null)
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id)),
-    [actEvents],
-  );
-
+  const datedBookings = useMemo(() => bookingEvents.filter((event): event is BookingEvent & { startsAt: Date } => event.startsAt !== null).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id)), [bookingEvents]);
+  const datedActEvents = useMemo(() => actEvents.filter((event): event is ActCalendarActivity & { startsAt: Date } => event.startsAt !== null).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id)), [actEvents]);
   const allDatedEvents = useMemo(() => {
     const combined: CalendarEvent[] = [...datedBookings];
     if (showActActivities) combined.push(...datedActEvents);
-    return combined
-      .filter((event): event is CalendarEvent & { startsAt: Date } => eventStartsAt(event) !== null)
-      .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id));
+    return combined.filter((event): event is CalendarEvent & { startsAt: Date } => eventStartsAt(event) !== null).sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime() || a.id.localeCompare(b.id));
   }, [datedBookings, datedActEvents, showActActivities]);
 
   const monthDays = useMemo(() => {
@@ -377,124 +223,127 @@ export function EventCalendar({
     });
   }, [activeMonth]);
 
-  const bookingSpanSegments = useMemo(
-    () => buildMonthSpanSegments(datedBookings, monthDays),
-    [datedBookings, monthDays],
-  );
-
-  const agendaGroups = useMemo(() => {
-    const groups = new Map<string, typeof allDatedEvents>();
-    for (const event of allDatedEvents) {
-      const key = businessDateKey(event.startsAt).slice(0, 7);
+  const bookingSpanSegments = useMemo(() => buildMonthSpanSegments(datedBookings, monthDays), [datedBookings, monthDays]);
+  const selectedDay = monthDays.find((date) => utcDateKey(date) === selectedDayKey) ?? new Date(`${selectedDayKey}T00:00:00Z`);
+  const selectedBookings = datedBookings.filter((event) => bookingOccursOn(event, selectedDayKey));
+  const selectedActivities = showActActivities ? datedActEvents.filter((event) => utcDateKey(event.startsAt) === selectedDayKey) : [];
+  const todayKey = utcDateKey(new Date());
+  const startOfToday = new Date(`${businessDateKey(new Date())}T00:00:00`);
+  const futureEvents = allDatedEvents.filter((event) => event.startsAt.getTime() >= startOfToday.getTime());
+  const upcomingEvents = (futureEvents.length ? futureEvents : allDatedEvents).slice(0, agendaLimit);
+  const upcomingGroups = useMemo(() => {
+    const groups = new Map<string, typeof upcomingEvents>();
+    for (const event of upcomingEvents) {
+      const key = businessDateKey(event.startsAt);
       groups.set(key, [...(groups.get(key) ?? []), event]);
     }
     return [...groups.entries()];
-  }, [allDatedEvents]);
+  }, [upcomingEvents]);
+
+  function selectMonth(next: Date) {
+    setActiveMonth(next);
+    const key = monthKey(next);
+    setSelectedDayKey(`${key}-01`);
+    onMonthChange?.(key);
+  }
 
   function moveMonth(change: number) {
-    setActiveMonth((current) => {
-      const next = new Date(Date.UTC(current.getUTCFullYear(), current.getUTCMonth() + change, 1));
-      onMonthChange?.(next.toISOString().slice(0, 7));
-      return next;
-    });
+    const next = new Date(Date.UTC(activeMonth.getUTCFullYear(), activeMonth.getUTCMonth() + change, 1));
+    selectMonth(next);
+  }
+
+  function goToday() {
+    const now = new Date();
+    const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    setActiveMonth(next);
+    setSelectedDayKey(utcDateKey(now));
+    onMonthChange?.(monthKey(next));
+  }
+
+  function chooseMobileDay(date: Date) {
+    const key = utcDateKey(date);
+    setSelectedDayKey(key);
+    if (date.getUTCMonth() !== activeMonth.getUTCMonth() || date.getUTCFullYear() !== activeMonth.getUTCFullYear()) {
+      const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+      setActiveMonth(next);
+      onMonthChange?.(monthKey(next));
+    }
   }
 
   return (
-    <section className="grid gap-4" aria-label="Event calendar">
-      <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex rounded-lg border border-slate-300 bg-slate-50 p-1">
-            <button aria-pressed={view === "month"} className={`min-h-10 rounded-md px-4 text-sm font-bold ${view === "month" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("month")} type="button">Month view</button>
-            <button aria-pressed={view === "agenda"} className={`min-h-10 rounded-md px-4 text-sm font-bold ${view === "agenda" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("agenda")} type="button">Agenda view</button>
+    <section className="grid gap-3" aria-label="Event calendar">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="inline-flex rounded-lg bg-slate-100 p-1">
+            <button aria-pressed={view === "month"} className={`rounded-md px-3 py-2 text-sm font-bold ${view === "month" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => setView("month")} type="button">Month</button>
+            <button aria-pressed={view === "agenda"} className={`rounded-md px-3 py-2 text-sm font-bold ${view === "agenda" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600"}`} onClick={() => { setView("agenda"); setAgendaLimit(12); }} type="button">Upcoming</button>
           </div>
-          {actEvents.length > 0 ? (
-            <button
-              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition ${showActActivities ? "border-teal-300 bg-teal-50 text-teal-800 hover:bg-teal-100" : "border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100"}`}
-              onClick={() => setShowActActivities((value) => !value)}
-              type="button"
-            >
-              <span className={`inline-block h-2 w-2 rounded-full ${showActActivities ? "bg-teal-500" : "bg-slate-400"}`} />
-              Act! Activities ({actEvents.length})
-            </button>
-          ) : null}
+          {actEvents.length > 0 ? <button className={`rounded-lg border px-2.5 py-2 text-xs font-semibold ${showActActivities ? "border-teal-300 bg-teal-50 text-teal-800" : "border-slate-200 bg-white text-slate-500"}`} onClick={() => setShowActActivities((value) => !value)} type="button">ACT {showActActivities ? "on" : "off"}</button> : null}
         </div>
+
         {view === "month" ? (
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
-            <button aria-label="Previous month" className="button-secondary min-w-11 px-3" onClick={() => moveMonth(-1)} type="button">←</button>
-            <h2 className="min-w-36 text-center text-lg font-bold">{formatMonth(activeMonth)}</h2>
-            <button aria-label="Next month" className="button-secondary min-w-11 px-3" onClick={() => moveMonth(1)} type="button">→</button>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button aria-label="Previous month" className="button-secondary min-w-10 px-2.5" onClick={() => moveMonth(-1)} type="button">←</button>
+            <button className="min-w-0 flex-1 rounded-lg px-2 py-1 text-center hover:bg-slate-50" onClick={goToday} type="button"><span className="block text-base font-bold">{formatMonth(activeMonth)}</span><span className="text-[11px] font-semibold text-slate-500">Today</span></button>
+            <button aria-label="Next month" className="button-secondary min-w-10 px-2.5" onClick={() => moveMonth(1)} type="button">→</button>
           </div>
         ) : null}
       </div>
 
       {view === "month" ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="hidden grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-xs font-bold uppercase tracking-wide text-slate-500 sm:grid">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div className="p-2" key={day}>{day}</div>)}
+          <div className="grid grid-cols-7 border-b border-slate-200 bg-slate-50 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">
+            {["S", "M", "T", "W", "T", "F", "S"].map((day, index) => <div className="p-2 sm:hidden" key={`${day}-${index}`}>{day}</div>)}
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => <div className="hidden p-2 sm:block" key={day}>{day}</div>)}
           </div>
 
-          {Array.from({ length: 6 }, (_, weekIndex) => {
-            const days = monthDays.slice(weekIndex * 7, weekIndex * 7 + 7);
-            return (
-              <DesktopMonthWeek
-                activeMonth={activeMonth}
-                actEvents={showActActivities ? datedActEvents : []}
-                bookingEvents={datedBookings}
-                days={days}
-                key={weekIndex}
-                onSelectActivity={setSelectedActivity}
-                segments={bookingSpanSegments.filter((segment) => segment.weekIndex === weekIndex)}
-                weekIndex={weekIndex}
-              />
-            );
-          })}
+          <div className="sm:hidden">
+            <div className="grid grid-cols-7 gap-px bg-slate-200">
+              {monthDays.map((date) => {
+                const key = utcDateKey(date);
+                const inMonth = date.getUTCMonth() === activeMonth.getUTCMonth();
+                const bookingCount = datedBookings.filter((event) => bookingOccursOn(event, key)).length;
+                const actCount = showActActivities ? datedActEvents.filter((event) => utcDateKey(event.startsAt) === key).length : 0;
+                const count = bookingCount + actCount;
+                const selected = key === selectedDayKey;
+                const today = key === todayKey;
+                return (
+                  <button aria-label={`${formatSelectedDay(date)}${count ? `, ${count} item${count === 1 ? "" : "s"}` : ""}`} className={`relative min-h-14 bg-white p-1.5 text-center ${inMonth ? "text-slate-800" : "text-slate-400"} ${selected ? "ring-2 ring-inset ring-orange-400" : ""}`} key={key} onClick={() => chooseMobileDay(date)} type="button">
+                    <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${today ? "bg-orange-600 text-white" : ""}`}>{date.getUTCDate()}</span>
+                    {count ? <span className="mx-auto mt-0.5 block w-fit rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-600">{count}</span> : <span className="block h-3" />}
+                  </button>
+                );
+              })}
+            </div>
+            <section className="border-t border-slate-200 p-3">
+              <h3 className="font-bold">{formatSelectedDay(selectedDay)}</h3>
+              <div className="mt-2 grid gap-2">
+                {selectedBookings.map((event) => <BookingEventLink event={event} key={event.id} />)}
+                {selectedActivities.map((event) => <ActActivityCard event={event} key={event.id} onClick={setSelectedActivity} />)}
+                {!selectedBookings.length && !selectedActivities.length ? <p className="text-sm text-slate-500">Nothing scheduled for this day.</p> : null}
+              </div>
+            </section>
+          </div>
 
-          <div className="divide-y divide-slate-200 sm:hidden">
-            {monthDays.map((date) => {
-              const key = utcDateKey(date);
-              const inMonth = date.getUTCMonth() === activeMonth.getUTCMonth();
-              const bookings = datedBookings.filter((event) => bookingOccursOn(event, key));
-              const activities = showActActivities
-                ? datedActEvents.filter((event) => utcDateKey(event.startsAt) === key)
-                : [];
-              return (
-                <div className={`min-h-24 bg-white p-3 ${inMonth ? "" : "text-slate-400"}`} key={key}>
-                  <div className="mb-2 flex items-center justify-between text-xs font-bold">
-                    <span>{new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(date)}</span>
-                    <time dateTime={key}>{date.getUTCDate()}</time>
-                  </div>
-                  <div className="grid gap-1.5">
-                    {bookings.map((event) => <BookingEventLink compact event={event} key={event.id} />)}
-                    {activities.map((event) => <ActActivityCard compact event={event} key={event.id} onClick={setSelectedActivity} />)}
-                  </div>
-                </div>
-              );
+          <div className="hidden sm:block">
+            {Array.from({ length: 6 }, (_, weekIndex) => {
+              const days = monthDays.slice(weekIndex * 7, weekIndex * 7 + 7);
+              return <DesktopMonthWeek activeMonth={activeMonth} actEvents={showActActivities ? datedActEvents : []} bookingEvents={datedBookings} days={days} key={weekIndex} onSelectActivity={setSelectedActivity} segments={bookingSpanSegments.filter((segment) => segment.weekIndex === weekIndex)} weekIndex={weekIndex} />;
             })}
           </div>
         </div>
-      ) : allDatedEvents.length ? (
-        <div className="grid gap-5">
-          {agendaGroups.map(([key, groupEvents]) => (
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={key}>
-              <h2 className="text-xl font-bold">{formatMonth(parseMonth(key))}</h2>
-              <ol className="mt-4 grid gap-3">
-                {groupEvents.map((event) => (
-                  <li className="grid gap-2 sm:grid-cols-[7rem_minmax(0,1fr)] sm:items-start" key={event.id}>
-                    <time className="pt-2 text-sm font-bold text-slate-600">{formatDay(event.startsAt)}</time>
-                    {isActActivity(event)
-                      ? <ActActivityCard event={event} onClick={setSelectedActivity} />
-                      : <BookingEventLink event={event} />}
-                  </li>
-                ))}
-              </ol>
+      ) : upcomingEvents.length ? (
+        <div className="grid gap-3">
+          {upcomingGroups.map(([key, groupEvents]) => (
+            <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm" key={key}>
+              <h2 className="text-sm font-bold text-slate-700">{new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: BUSINESS_TIME_ZONE }).format(new Date(`${key}T12:00:00`))}</h2>
+              <ol className="mt-2 grid gap-2">{groupEvents.map((event) => <li key={event.id}>{isActActivity(event) ? <ActActivityCard event={event} onClick={setSelectedActivity} /> : <BookingEventLink event={event} />}</li>)}</ol>
             </section>
           ))}
+          {(futureEvents.length ? futureEvents : allDatedEvents).length > agendaLimit ? <button className="button-secondary justify-self-center" onClick={() => setAgendaLimit((value) => value + 12)} type="button">Show more</button> : null}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="font-semibold">No dated events yet.</p>
-          <p className="mt-1 text-sm text-slate-600">Add dates to a booking to place it on the calendar.</p>
-        </div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="font-semibold">No dated events yet.</p><p className="mt-1 text-sm text-slate-600">Add dates to a booking to place it on the calendar.</p></div>
       )}
 
       {selectedActivity ? <ActActivityPopover event={selectedActivity} onClose={() => setSelectedActivity(null)} /> : null}
