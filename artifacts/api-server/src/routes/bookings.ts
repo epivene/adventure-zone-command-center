@@ -12,8 +12,8 @@ import {
   configureBookingPackagesInputSchema,
   decideSpecialRequestInputSchema,
 } from "@/features/packages/package-input";
-import { PackageHistoryRepository } from "@/features/packages/package-history";
 import { DrizzlePackageRepository } from "@/features/packages/package-repository";
+import { PackageHistoryRepository } from "@/features/packages/package-history";
 import { PackageService } from "@/features/packages/package-service";
 import { DrizzleResourceRepository } from "@/features/resources/resource-repository";
 import { ResourceService } from "@/features/resources/resource-service";
@@ -83,6 +83,7 @@ router.post("/bookings", async (req, res): Promise<void> => {
   }
 });
 
+// Must be before /:id so Express matches complete-follow-up literally
 router.post("/bookings/complete-follow-up", async (req, res): Promise<void> => {
   try {
     const service = new BookingService(bookingRepo() as any);
@@ -203,10 +204,16 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
     const detail = await bookingRepo().getBookingDetail(id);
     if (!detail) { res.status(404).json({ error: "Not found" }); return; }
     const activitySvc = new ActivityService(new DrizzleActivityRepository(db));
+    const packageHistoryPromise = new PackageHistoryRepository()
+      .compareBooking(id)
+      .catch((err) => {
+        req.log.warn({ err, bookingId: id }, "Package history comparison unavailable");
+        return null;
+      });
     const [allTravelLegs, timelinePage, packageHistoryComparison] = await Promise.all([
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
       activitySvc.listTimeline({ bookingId: id }),
-      new PackageHistoryRepository().compareBooking(id),
+      packageHistoryPromise,
     ]);
     res.json({
       ...detail,
