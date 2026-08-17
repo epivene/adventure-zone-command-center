@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Bot, Send, X } from "lucide-react";
+import { Bot, Send, WifiOff, X } from "lucide-react";
 
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import {
@@ -28,6 +28,7 @@ export function ManagerAssistantDrawer() {
   const [questions, setQuestions] = useState<ManagerAdminQuestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
+  const [offline, setOffline] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,17 +38,18 @@ export function ManagerAssistantDrawer() {
   }, [open, prefill]);
 
   useEffect(() => {
-    if (!open || !activeContext) return;
+    if (!open || !activeContext || !manager) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
     Promise.all([
-      loadManagerAssistantContext(managerApi, activeContext),
+      loadManagerAssistantContext(managerApi, manager.legId, activeContext),
       listManagerAdminQuestions(managerApi).catch(() => ({ questions: [] })),
     ])
       .then(([ctx, questionList]) => {
         if (cancelled) return;
         setContext(ctx.context);
+        setOffline(ctx.offline);
         setQuestions(questionList.questions);
       })
       .catch((reason) => {
@@ -55,19 +57,20 @@ export function ManagerAssistantDrawer() {
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [activeContext, managerApi, open]);
+  }, [activeContext, manager, managerApi, open]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!activeContext || !question.trim() || asking) return;
+    if (!activeContext || !manager || !question.trim() || asking) return;
     setAsking(true);
     setError(null);
     setNotice(null);
     setAnswer(null);
     try {
-      const result = await askManagerAssistant(managerApi, activeContext, question.trim());
+      const result = await askManagerAssistant(managerApi, manager.legId, activeContext, question.trim());
       setContext(result.context);
       setAnswer(result.answer);
+      setOffline(result.offline);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The assistant could not answer that.");
     } finally {
@@ -114,6 +117,7 @@ export function ManagerAssistantDrawer() {
           </div>
           <button aria-label="Close Operations Assistant" className="rounded-lg p-2 hover:bg-slate-100" onClick={closeAssistant} type="button"><X className="h-5 w-5"/></button>
         </header>
+        {offline ? <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800"><WifiOff className="h-4 w-4"/>Offline — using saved leg data</div> : null}
 
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? <p className="text-sm text-slate-500">Loading your leg information…</p> : null}
