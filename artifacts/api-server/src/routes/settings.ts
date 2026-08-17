@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import {
-  DrizzlePackageSettingsRepository,
-  PackageSettingsError,
-} from "@/features/packages/package-repository";
+  DrizzlePackageIntelligenceSettingsRepository,
+} from "@/features/packages/package-intelligence-settings";
+import { PackageSettingsError } from "@/features/packages/package-repository";
 import {
   DrizzleResourceSettingsRepository,
   ResourceSettingsError,
@@ -15,7 +15,7 @@ const router: IRouter = Router();
 router.get("/settings/packages-resources", async (req, res): Promise<void> => {
   try {
     const [packageTemplates, resources, allTravelLegs] = await Promise.all([
-      new DrizzlePackageSettingsRepository(db).listPackageTemplates(),
+      new DrizzlePackageIntelligenceSettingsRepository(db).listPackageTemplates(),
       new DrizzleResourceSettingsRepository(db).listResources(),
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
     ]);
@@ -35,10 +35,8 @@ router.get("/settings/packages-resources", async (req, res): Promise<void> => {
 router.post("/settings/package-templates", async (req, res): Promise<void> => {
   const actorId = (req as any).userId as string;
   try {
-    const record = await new DrizzlePackageSettingsRepository(db).updatePackageTemplate(
-      req.body,
-      actorId,
-    );
+    const record = await new DrizzlePackageIntelligenceSettingsRepository(db)
+      .updatePackageTemplate(req.body, actorId);
     res.json({ ok: true, record });
   } catch (err) {
     if (err instanceof PackageSettingsError) {
