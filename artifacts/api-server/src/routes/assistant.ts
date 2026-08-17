@@ -8,6 +8,7 @@ import {
 import { AssistantConversationRepository } from "@/features/assistant/assistant-conversation-repository";
 import { AssistantService } from "@/features/assistant/assistant-service";
 import { BookingContextRepository } from "@/features/assistant/booking-context-repository";
+import { ContactContextRepository } from "@/features/assistant/contact-context-repository";
 import { extractDerivedFactsForProfile } from "@/features/assistant/derived-fact-job";
 import { DerivedFactRepository } from "@/features/assistant/derived-fact-repository";
 import { ProfileContextRepository } from "@/features/assistant/profile-context-repository";
@@ -43,6 +44,8 @@ async function loadContext(input: {
       return new ProfileContextRepository().getEventFamilyContext(
         input.contextRecordId,
       );
+    case "contact":
+      return new ContactContextRepository().getContactContext(input.contextRecordId);
     default:
       return null;
   }
