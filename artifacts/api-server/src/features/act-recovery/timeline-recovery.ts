@@ -3,6 +3,10 @@ import { sql } from "drizzle-orm";
 import type { db as applicationDatabase } from "@/db/client";
 import { normalizeTimeline } from "@/features/act-replacement/normalizers/timeline-normalizer";
 import { parseInlineRelationshipRecords } from "@/features/act-replacement/source-record-parser";
+import {
+  ACT_HISTORY_PURGE_POLICY_VERSION,
+  classifyActHistoryForPurge,
+} from "./history-bookkeeping-classifier";
 import type { RecoveryCandidate } from "./recovery-types";
 import type { RecoveryApplyResult } from "./entity-recovery";
 import { ActRecoverySourceLinkResolver } from "./source-link-resolver";
@@ -65,6 +69,21 @@ export class ActTimelineRecovery {
       return {
         state: normalized.issueCode === "missing_required_timeline_body" ? "dropped_unusable" : "needs_review",
         targetSummary: { reason: normalized.issueCode },
+      };
+    }
+
+    const purgeDecision = classifyActHistoryForPurge({
+      subject: normalized.value.subject,
+      body: normalized.value.body,
+    });
+    if (purgeDecision.purge) {
+      return {
+        state: "dropped_unusable",
+        targetSummary: {
+          reason: "act_bookkeeping_purged",
+          purgeReason: purgeDecision.reason,
+          policyVersion: ACT_HISTORY_PURGE_POLICY_VERSION,
+        },
       };
     }
 
@@ -257,8 +276,6 @@ export class ActTimelineRecovery {
       }
       return { entityType, entityId };
     } catch (error) {
-      // Focused unit fixtures created before the recovery-review table exists should
-      // still exercise exact relationship recovery. Production always has migration 043.
       const directCode = error && typeof error === "object" && "code" in error
         ? String((error as { code?: unknown }).code ?? "")
         : "";

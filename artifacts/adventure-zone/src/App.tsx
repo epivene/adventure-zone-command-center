@@ -52,6 +52,7 @@ import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
+import ArchivedRecordsPage from "@/pages/ArchivedRecordsPage";
 import QuickAddPage from "@/pages/QuickAddPage";
 import NotFound from "@/pages/not-found";
 
@@ -249,6 +250,7 @@ function AppRoutes() {
               <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
               <Route path="/settings/act-migration" component={ActMigrationPage} />
               <Route path="/settings/act-recovery" component={ActRecoveryPage} />
+              <Route path="/archived" component={ArchivedRecordsPage} />
               <Route path="/settings" component={SettingsStub} />
               <Route path="/act-migration" component={ActMigrationPage} />
               <Route path="/quick-add" component={QuickAddPage} />

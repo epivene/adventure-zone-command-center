@@ -7,6 +7,7 @@ import { autoConsolidateImportedLocationFamilies } from "./features/organization
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
+import { ensureProfileArchiveSchema } from "./features/record-lifecycle/profile-archive-schema";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -36,6 +37,7 @@ await ensureBookingProbabilitySchema();
 const appliedMigrations = await runActReviewMigrations();
 await ensureEventFamilySchema();
 await ensureActivityDeleteSchema();
+await ensureProfileArchiveSchema();
 logger.info(
   {
     appliedMigrations,
@@ -97,7 +99,7 @@ const shutdown = createActServerShutdown({
   },
   closeServer() {
     return new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+      server.close((error) => (error ? reject(error) : resolve());
     });
   },
   async closePool() {
