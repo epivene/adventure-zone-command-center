@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { queueManagerMutation, flushManagerMutationQueue } from "@/lib/manager-sync-queue";
 import { RehireStatus } from "@/components/manager/rehire-status";
@@ -8,6 +9,7 @@ const deleteButton = "rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 tex
 
 export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
   const { manager, managerApi } = useManagerAuth();
+  const [, navigate] = useLocation();
   const [worker, setWorker] = useState<any>(null);
   const [role, setRole] = useState("");
   const [note, setNote] = useState("");
@@ -16,6 +18,8 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
   const [editRole, setEditRole] = useState("");
   const [editingNote, setEditingNote] = useState<any>(null);
   const [editNote, setEditNote] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletingWorker, setDeletingWorker] = useState(false);
 
   async function load() {
     const data = await managerApi<any>("/manager/crew");
@@ -47,7 +51,7 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
       const result = await managerApi<any>(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "PATCH", body: JSON.stringify({ role: nextRole }) });
       if (result.entry) setWorker((current: any) => current ? { ...current, workHistory: (current.workHistory ?? []).map((entry: any) => entry.id === historyId ? { ...entry, ...result.entry } : entry) } : current);
       setStatus("History updated");
-    } catch (error) {
+    } catch {
       setStatus("Could not update history");
       await load();
     }
@@ -59,7 +63,7 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
     try {
       await managerApi(`/manager/crew/${workerId}/work-history/${historyId}`, { method: "DELETE" });
       setStatus("History deleted");
-    } catch (error) {
+    } catch {
       setStatus("Could not delete history");
       await load();
     }
@@ -76,7 +80,7 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
       const result = await managerApi<any>(`/manager/crew/${workerId}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ note: nextNote }) });
       if (result.note) setWorker((current: any) => current ? { ...current, managerNotes: (current.managerNotes ?? []).map((entry: any) => entry.id === noteId ? { ...entry, ...result.note } : entry) } : current);
       setStatus("Note updated");
-    } catch (error) {
+    } catch {
       setStatus("Could not update note");
       await load();
     }
@@ -88,9 +92,22 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
     try {
       await managerApi(`/manager/crew/${workerId}/notes/${noteId}`, { method: "DELETE" });
       setStatus("Note deleted");
-    } catch (error) {
+    } catch {
       setStatus("Could not delete note");
       await load();
+    }
+  }
+
+  async function deleteWorker() {
+    if (!worker || deletingWorker) return;
+    setDeletingWorker(true);
+    setStatus("Deleting worker…");
+    try {
+      await managerApi(`/manager/crew/${workerId}`, { method: "DELETE" });
+      navigate("/manager/crew");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not delete worker");
+      setDeletingWorker(false);
     }
   }
 
@@ -118,6 +135,11 @@ export default function ManagerWorkerPage({ workerId }: { workerId: string }) {
     <form className="grid gap-2 rounded-xl border bg-white p-4" onSubmit={event => { event.preventDefault(); void queue(`/manager/crew/${workerId}/notes`, "POST", { bookingId: null, note }).then(() => setNote("")); }}><h2 className="font-bold">Add manager note</h2><textarea value={note} onChange={event => setNote(event.target.value)} required /><button className="button-primary">Save note</button></form>
 
     <section className="rounded-xl border bg-white p-4"><h2 className="font-bold">Rehire guidance</h2><div className="mt-2 flex flex-wrap gap-2">{["rehirable", "undecided", "do_not_rehire"].map(value => <button className={actionButton} key={value} onClick={() => void queue(`/manager/crew/${workerId}/rehire-status`, "PATCH", { rehireStatus: value })}>{value.replaceAll("_", " ")}</button>)}</div></section>
+
+    <section className="rounded-xl border border-red-200 bg-red-50 p-4">
+      <h2 className="font-bold text-red-900">Delete worker</h2>
+      {!confirmDelete ? <button className={`${deleteButton} mt-3`} type="button" onClick={() => setConfirmDelete(true)}>Delete worker</button> : <div className="mt-3 grid gap-3"><p className="text-sm text-red-900">Permanently delete <b>{worker.name}</b>? Their work history, ratings, and manager notes will also be deleted. This cannot be undone.</p><div className="flex flex-wrap gap-2"><button className={deleteButton} disabled={deletingWorker} type="button" onClick={() => void deleteWorker()}>{deletingWorker ? "Deleting…" : `Delete ${worker.name}`}</button><button className={actionButton} disabled={deletingWorker} type="button" onClick={() => setConfirmDelete(false)}>Cancel</button></div></div>}
+    </section>
     {status ? <p role="status">{status}</p> : null}
   </div>;
 }
