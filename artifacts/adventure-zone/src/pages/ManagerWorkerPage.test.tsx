@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   noteText: "Bring back next year",
   historyDeleted: false,
   noteDeleted: false,
+  workerDeleted: false,
   api: vi.fn(async (path: string, init?: RequestInit) => {
     if (path === "/manager/crew") {
       return {
@@ -22,6 +23,7 @@ const mocks = vi.hoisted(() => ({
         }],
       };
     }
+    if (path === "/manager/crew/worker-1" && init?.method === "DELETE") { mocks.workerDeleted = true; return { ok: true }; }
     if (path.includes("/work-history/") && init?.method === "PATCH") {
       const body = JSON.parse(String(init.body)); mocks.historyRole = body.role; return { entry: { id: "history-1", role: body.role } };
     }
@@ -47,7 +49,7 @@ vi.mock("@/lib/manager-sync-queue", () => ({
 }));
 
 afterEach(() => {
-  cleanup(); vi.clearAllMocks(); mocks.historyRole = "Setup crew"; mocks.noteText = "Bring back next year"; mocks.historyDeleted = false; mocks.noteDeleted = false;
+  cleanup(); vi.clearAllMocks(); mocks.historyRole = "Setup crew"; mocks.noteText = "Bring back next year"; mocks.historyDeleted = false; mocks.noteDeleted = false; mocks.workerDeleted = false;
 });
 
 describe("ManagerWorkerPage", () => {
@@ -78,5 +80,15 @@ describe("ManagerWorkerPage", () => {
     const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
     fireEvent.click(deleteButtons[deleteButtons.length - 1]);
     await waitFor(() => expect(screen.queryByText("Call first next year")).not.toBeInTheDocument());
+  });
+
+  it("requires a named second confirmation before permanently deleting the worker", async () => {
+    render(<ManagerWorkerPage workerId="worker-1" />);
+    await screen.findByText("Jamie Worker");
+    fireEvent.click(screen.getByRole("button", { name: "Delete worker" }));
+    expect(mocks.workerDeleted).toBe(false);
+    expect(screen.getByText(/work history, ratings, and manager notes will also be deleted/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete Jamie Worker" }));
+    await waitFor(() => expect(mocks.workerDeleted).toBe(true));
   });
 });
