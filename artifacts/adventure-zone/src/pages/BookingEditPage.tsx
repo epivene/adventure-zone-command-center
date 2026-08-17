@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { BookingForm } from "@/components/bookings/booking-form";
 import { PackageResourceEditor } from "@/components/bookings/package-resource-editor";
@@ -11,8 +10,7 @@ import {
 import { businessDateKey } from "@/lib/business-date";
 import type { BookingPackageResourceEditorModel } from "@/features/bookings/booking-repository";
 
-export default function BookingEditPage() {
-  const { bookingId } = useParams<{ bookingId: string }>();
+export default function BookingEditPage({ bookingId }: { bookingId: string }) {
   const [data, setData] = useState<any>(null);
   const [packageModel, setPackageModel] =
     useState<BookingPackageResourceEditorModel | null>(null);
@@ -20,7 +18,6 @@ export default function BookingEditPage() {
   const [error, setError] = useState<string | null>(null);
 
   const reloadPackageModel = useCallback(async () => {
-    if (!bookingId) return;
     const model = await apiGet<BookingPackageResourceEditorModel>(
       `/bookings/${bookingId}/package-editor`,
     );
@@ -28,7 +25,6 @@ export default function BookingEditPage() {
   }, [bookingId]);
 
   useEffect(() => {
-    if (!bookingId) return;
     Promise.all([
       apiGet<any>(`/bookings/${bookingId}`),
       apiGet<BookingPackageResourceEditorModel>(
@@ -87,7 +83,7 @@ export default function BookingEditPage() {
             travelLegId: data.booking.travelLegId ?? "",
             notes: data.booking.notes ?? "",
           }}
-          onSubmit={(input) => updateBookingAction(bookingId!, input)}
+          onSubmit={(input) => updateBookingAction(bookingId, input)}
           successPath={`/bookings/${bookingId}`}
           travelLegs={data.allTravelLegs ?? []}
           variant="edit"
