@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import { bookings } from "@/db/schema";
@@ -69,7 +69,21 @@ export class EventLifecycleRepository {
   }
 
   async listIncompleteForLeg(legId: string) {
-    return this.database.select().from(eventLegLifecycle).where(and(eq(eventLegLifecycle.legId, legId), ne(eventLegLifecycle.wrapUpStatus, "finished")));
+    return this.database
+      .select({
+        id: eventLegLifecycle.id,
+        bookingId: eventLegLifecycle.bookingId,
+        legId: eventLegLifecycle.legId,
+        checkedInAt: eventLegLifecycle.checkedInAt,
+        checkedOutAt: eventLegLifecycle.checkedOutAt,
+        wrapUpStatus: eventLegLifecycle.wrapUpStatus,
+        bookingName: bookings.name,
+        city: bookings.city,
+        region: bookings.region,
+      })
+      .from(eventLegLifecycle)
+      .innerJoin(bookings, eq(bookings.id, eventLegLifecycle.bookingId))
+      .where(and(eq(eventLegLifecycle.legId, legId), eq(eventLegLifecycle.wrapUpStatus, "incomplete")));
   }
 
   async listAll() {
