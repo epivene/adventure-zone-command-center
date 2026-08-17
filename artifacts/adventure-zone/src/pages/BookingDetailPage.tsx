@@ -3,6 +3,7 @@ import { Link, useParams } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
+import { PackageHistorySignals } from "@/components/bookings/package-history-signals";
 import { StatusBadge } from "@/components/bookings/status-badge";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
@@ -79,7 +80,7 @@ export default function BookingDetailPage() {
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading booking…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
-  const { booking, organization, contact, travelLeg, timeline } = data;
+  const { booking, organization, contact, travelLeg, timeline, packageHistoryComparison } = data;
   const nextFollowUp = followUpItems.find((f: any) => !f.completedAt) ?? null;
   const difference = cashDifference(wrapUp?.calculation?.settlement?.differenceCents);
 
@@ -143,6 +144,8 @@ export default function BookingDetailPage() {
           )}
         </DetailSection>
       </div>
+
+      <PackageHistorySignals comparison={packageHistoryComparison} />
 
       {followUpItems.length > 0 && (
         <DetailSection title="Follow-up plan">
