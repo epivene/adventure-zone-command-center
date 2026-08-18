@@ -65,6 +65,7 @@ router.get("/manager-admin/messages/conversations/:conversationId", async (req, 
   const conversationId = param(req.params.conversationId);
   const messages = await communication.getMessages(conversationId, adminActor);
   const attachments = await participants.listAttachmentsForMessages(messages.map((message) => message.id));
+  await acknowledgmentRepository.ensureSchema();
   const withFiles = await attachFilesToMessages(messages, attachments, storage);
   const enriched = await Promise.all(withFiles.map(async (message) => ({
     ...message,
