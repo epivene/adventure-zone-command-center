@@ -15,6 +15,10 @@ describe("buildBookingContextBundle", () => {
         id: "booking-1",
         label: "County Fair",
         startsAt: new Date("2026-07-10T12:00:00Z"),
+        endsAt: new Date("2026-07-10T20:00:00Z"),
+        venueName: "Eastern Montana Fairgrounds",
+        city: "Miles City",
+        region: "MT",
         status: "possible",
         physicalAttractionTotal: 10,
         packageNames: ["Adventure Zone"],
@@ -51,6 +55,13 @@ describe("buildBookingContextBundle", () => {
     });
 
     expect(result.profile.contactIds).toEqual(["contact-1"]);
+    expect(result.currentBooking).toMatchObject({
+      startsAt: "2026-07-10T12:00:00.000Z",
+      endsAt: "2026-07-10T20:00:00.000Z",
+      venueName: "Eastern Montana Fairgrounds",
+      city: "Miles City",
+      region: "MT",
+    });
     expect(result.recentActivities[0]?.sourceIds).toEqual([
       "src_activity_activity-1",
     ]);
@@ -75,6 +86,10 @@ describe("buildBookingContextBundle", () => {
         id: "booking-1",
         label: "County Fair",
         startsAt: null,
+        endsAt: null,
+        venueName: null,
+        city: "Miles City",
+        region: "MT",
         status: "possible",
         physicalAttractionTotal: null,
         packageNames: [],
@@ -85,6 +100,10 @@ describe("buildBookingContextBundle", () => {
           id: "booking-1",
           label: "County Fair",
           startsAt: null,
+          endsAt: null,
+          venueName: null,
+          city: "Miles City",
+          region: "MT",
           status: "possible",
           physicalAttractionTotal: null,
           packageNames: [],
