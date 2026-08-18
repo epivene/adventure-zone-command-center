@@ -25,7 +25,7 @@ const genericEventPhrase = /^(.+?)\s+(events?|fairs?|festivals?|parades?|celebra
 
 function cleanSearchSubject(value: string) {
   return value
-    .replace(/^(find|search for|search|show me|show)\s+/i, "")
+    .replace(/^(find|search for|search|show me|show)\s+(?:me\s+)?(?:all\s+)?/i, "")
     .replace(/^(the\s+)?(profile|profiles|contact|contacts|customer|customers|event|events)\s+(for\s+)?/i, "")
     .replace(/[?.!]+$/g, "")
     .trim();
@@ -45,17 +45,17 @@ function searchRequest(question: string): ProfileSearchRequest | null {
     if (packageName) return { query: packageName, packageName, limit: 8 };
   }
 
-  const punctuationTrimmed = raw.replace(/[?.!]+$/g, "").trim();
-  const plainEventMatch = punctuationTrimmed.match(genericEventPhrase);
-  const plainEventSubject = namedEventCategories.test(punctuationTrimmed)
-    ? punctuationTrimmed
+  const cleanedSubject = cleanSearchSubject(raw);
+  const plainEventMatch = cleanedSubject.match(genericEventPhrase);
+  const plainEventSubject = namedEventCategories.test(cleanedSubject)
+    ? cleanedSubject
     : plainEventMatch?.[1]?.trim();
 
   const explicitSearch = /^(find|search|show)/i.test(raw) || /\b(profile|contact|customer|event family)\b/i.test(raw);
   const looksLikeSearch = explicitSearch || Boolean(plainEventSubject);
   if (!looksLikeSearch) return null;
 
-  let subject = plainEventSubject ?? cleanSearchSubject(raw);
+  let subject = plainEventSubject ?? cleanedSubject;
   let city: string | undefined;
   let region: string | undefined;
 
