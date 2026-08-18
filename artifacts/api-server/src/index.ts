@@ -1,9 +1,9 @@
 import app from "./app";
-import { runActReviewMigrations } from "@workspace/db/migrations";
 import { logger } from "./lib/logger";
 import { runStartupStep } from "./lib/startup-step";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
+import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
@@ -39,7 +39,14 @@ const managerAssistantSchemaApplied = await runStartupStep(
 );
 const appliedMigrations = await runStartupStep(
   "act review migrations",
-  runActReviewMigrations,
+  () => runActReviewMigrationsAtStartup({
+    onLockUnavailable: () => {
+      logger.warn(
+        { startupStep: "act review migrations" },
+        "Act review migrations are already running elsewhere; startup will continue",
+      );
+    },
+  }),
 );
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
 if (managerAssistantSchemaApplied) appliedMigrations.push("046_manager_assistant_questions.sql");
