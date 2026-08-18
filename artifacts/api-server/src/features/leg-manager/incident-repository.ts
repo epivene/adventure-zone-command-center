@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import { bookings, legIncidentAttachments, legIncidents, trips } from "@/db/schema";
@@ -109,7 +109,7 @@ export class DrizzleIncidentRepository implements IncidentStore {
   async updateIncident(id: string, input: IncidentAdminUpdate) {
     return (await this.database
       .update(legIncidents)
-      .set({ ...input, updatedAt: new Date() })
+      .set({ ...input, revision: sql`${legIncidents.revision} + 1`, updatedAt: new Date() })
       .where(eq(legIncidents.id, id))
       .returning())[0] ?? null;
   }
