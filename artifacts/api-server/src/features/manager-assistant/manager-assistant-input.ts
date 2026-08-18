@@ -7,6 +7,15 @@ export const managerAssistantContextKindValues = [
   "operations",
 ] as const;
 
+const ianaTimeZone = z.string().trim().min(1).max(120).refine((value) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date(0));
+    return true;
+  } catch {
+    return false;
+  }
+}, "Invalid time zone");
+
 export const managerContextInputSchema = z
   .object({
     contextKind: z.enum(managerAssistantContextKindValues),
@@ -17,6 +26,7 @@ export const managerContextInputSchema = z
 export const managerAskInputSchema = managerContextInputSchema
   .extend({
     question: z.string().trim().min(1).max(4000),
+    timeZone: ianaTimeZone.optional(),
   })
   .strict();
 
