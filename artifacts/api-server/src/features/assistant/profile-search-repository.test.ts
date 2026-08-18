@@ -1,0 +1,37 @@
+import { describe, expect, it } from "vitest";
+import { rankProfileSearchResults } from "./profile-search-repository";
+import type { AssistantProfileSearchResult } from "./profile-search-types";
+
+function row(overrides: Partial<AssistantProfileSearchResult>): AssistantProfileSearchResult {
+  return {
+    id: overrides.id ?? crypto.randomUUID(),
+    kind: overrides.kind ?? "organization",
+    label: overrides.label ?? "Example Fair",
+    secondaryLabel: overrides.secondaryLabel ?? null,
+    city: overrides.city ?? null,
+    region: overrides.region ?? null,
+    status: overrides.status ?? null,
+    lastContactAt: overrides.lastContactAt ?? null,
+    bookingCount: overrides.bookingCount ?? null,
+    matchedOn: overrides.matchedOn ?? ["name"],
+  };
+}
+
+describe("rankProfileSearchResults", () => {
+  it("ranks exact names before partial/contact/location matches", () => {
+    const results = rankProfileSearchResults([
+      row({ id: "3", label: "Morton County Fairgrounds", matchedOn: ["name"] }),
+      row({ id: "2", label: "Lisa Doe", kind: "contact", matchedOn: ["contact"] }),
+      row({ id: "1", label: "Morton County Fair", matchedOn: ["name"] }),
+    ], "Morton County Fair", 8);
+    expect(results.map((item) => item.id)).toEqual(["1", "3", "2"]);
+  });
+
+  it("deduplicates canonical result ids and respects the bound", () => {
+    const repeated = row({ id: "same", label: "Water Lantern Festival" });
+    const rows = [repeated, repeated, ...Array.from({ length: 12 }, (_, index) => row({ id: String(index), label: `Profile ${index}` }))];
+    const results = rankProfileSearchResults(rows, "profile", 8);
+    expect(results).toHaveLength(8);
+    expect(new Set(results.map((item) => `${item.kind}:${item.id}`)).size).toBe(8);
+  });
+});
