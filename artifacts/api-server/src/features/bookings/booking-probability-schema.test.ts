@@ -9,7 +9,10 @@ describe("ensureBookingProbabilitySchema", () => {
       async query(sql: string) {
         queries.push(sql);
         if (sql.includes("to_regtype('probability')")) {
-          return { rows: [{ ready: true, hasDefinite: false }] };
+          return { rows: [{ ready: true, hasDefinite: false, hasTrigger: false }] };
+        }
+        if (sql.includes("pg_try_advisory_lock")) {
+          return { rows: [{ locked: true }] };
         }
         return { rows: [] };
       },
@@ -41,7 +44,7 @@ describe("ensureBookingProbabilitySchema", () => {
       async query(sql: string) {
         queries.push(sql);
         if (sql.includes("to_regtype('probability')")) {
-          return { rows: [{ ready: false, hasDefinite: false }] };
+          return { rows: [{ ready: false, hasDefinite: false, hasTrigger: false }] };
         }
         return { rows: [] };
       },
@@ -57,5 +60,6 @@ describe("ensureBookingProbabilitySchema", () => {
 
     expect(queries.some((sql) => sql.includes("ALTER TYPE probability"))).toBe(false);
     expect(queries.some((sql) => sql.includes("UPDATE bookings"))).toBe(false);
+    expect(queries.some((sql) => sql.includes("pg_advisory"))).toBe(false);
   });
 });
