@@ -23,8 +23,8 @@ function fakeClient(options?: { locked?: boolean }) {
 describe("runActReviewMigrationsAtStartup", () => {
   it("pre-acquires the migration lock without waiting and reuses that client", async () => {
     const { client, queries, wasReleased } = fakeClient();
-    const runMigrations = vi.fn(async ({ pool }) => {
-      const migrationClient = await pool.connect();
+    const runMigrations = vi.fn(async (options: any) => {
+      const migrationClient = await options.pool.connect();
       await migrationClient.query(
         "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
       );
@@ -59,7 +59,7 @@ describe("runActReviewMigrationsAtStartup", () => {
 
     expect(applied).toEqual([]);
     expect(runMigrations).not.toHaveBeenCalled();
-    expect(onLockUnavailable).toHaveBeenCalledOnce();
+    expect(onLockUnavailable).toHaveBeenCalledTimes(1);
     expect(queries).toHaveLength(1);
     expect(queries[0]).toContain("pg_try_advisory_lock");
     expect(wasReleased()).toBe(true);
