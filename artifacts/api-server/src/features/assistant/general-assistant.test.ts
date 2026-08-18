@@ -43,6 +43,24 @@ describe("answerGeneralAssistant", () => {
     expect(calls[0]).toMatchObject({ packageName: "Pirate's Rebellion" });
   });
 
+  it("treats a bare holiday event phrase as profile discovery", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "Christmas events", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "Christmas", limit: 8 });
+  });
+
+  it("treats a bare festival/theme name as profile discovery", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "Oktoberfest", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "Oktoberfest", limit: 8 });
+  });
+
+  it("keeps numbered holiday names intact for discovery", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "4th of July", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "4th of July", limit: 8 });
+  });
+
   it("does not invent an unrestricted general query", async () => {
     const calls: ProfileSearchRequest[] = [];
     const result = await answerGeneralAssistant({ question: "Change all my bookings to confirmed", profileSearch: fakeRepo(calls) });
