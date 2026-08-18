@@ -22,6 +22,29 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+CREATE OR REPLACE FUNCTION leg_expenses_set_initial_assignment_source()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.assignment_source IS NULL OR NEW.assignment_source = 'unassigned' THEN
+    IF NEW.booking_id IS NOT NULL OR NEW.trip_id IS NOT NULL OR NEW.trip_segment_id IS NOT NULL THEN
+      NEW.assignment_source := 'explicit';
+    ELSE
+      NEW.assignment_source := 'unassigned';
+    END IF;
+  END IF;
+  NEW.assignment_updated_at := COALESCE(NEW.assignment_updated_at, now());
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS leg_expenses_initial_assignment_source ON leg_expenses;
+CREATE TRIGGER leg_expenses_initial_assignment_source
+BEFORE INSERT ON leg_expenses
+FOR EACH ROW
+EXECUTE FUNCTION leg_expenses_set_initial_assignment_source();
+
 CREATE TABLE IF NOT EXISTS leg_finance_audit (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   record_type text NOT NULL,
