@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rankProfileSearchResults } from "./profile-search-repository";
+import { PostgresProfileSearchRepository, rankProfileSearchResults } from "./profile-search-repository";
 import type { AssistantProfileSearchResult } from "./profile-search-types";
 
 function row(overrides: Partial<AssistantProfileSearchResult>): AssistantProfileSearchResult {
@@ -33,5 +33,22 @@ describe("rankProfileSearchResults", () => {
     const results = rankProfileSearchResults(rows, "profile", 8);
     expect(results).toHaveLength(8);
     expect(new Set(results.map((item) => `${item.kind}:${item.id}`)).size).toBe(8);
+  });
+});
+
+describe("PostgresProfileSearchRepository", () => {
+  it("casts booking status to text so UNION rows share one status type", async () => {
+    let sql = "";
+    const pool = {
+      async query(text: string) {
+        sql = text;
+        return { rows: [] };
+      },
+    };
+
+    const repository = new PostgresProfileSearchRepository(pool as never);
+    await repository.search({ query: "Pirate's Rebellion", limit: 8 });
+
+    expect(sql).toContain("SELECT b.status::text FROM bookings b");
   });
 });
