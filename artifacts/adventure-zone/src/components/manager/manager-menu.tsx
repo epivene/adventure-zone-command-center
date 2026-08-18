@@ -17,7 +17,7 @@ const groups = [
   { label: "Events", items: [
     { href: "/manager/reviews", label: "Event Reviews" },
     { href: "/manager/incidents", label: "Incidents" },
-    { href: "/manager/incidents/new", label: "Report Incident" },
+    { href: "/manager/incidents/new", label: "Report General Incident" },
   ] },
   { label: "Communication", items: [
     { href: "/manager/messages", label: "Messages" },

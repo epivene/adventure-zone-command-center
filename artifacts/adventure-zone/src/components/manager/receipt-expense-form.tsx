@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue, queueManagerMutation } from "@/lib/manager-sync-queue";
 import { flushManagerBlobQueue, queueManagerBlob } from "@/lib/manager-blob-queue";
@@ -17,6 +17,8 @@ const toCents = (value: string) => Math.round((Number(value) || 0) * 100);
 export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "receipt" | "manual"; bookingId?: string | null; onDone?: () => void }) {
   const { manager, managerApi } = useManagerAuth();
   const [file, setFile] = useState<File | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  const galleryRef = useRef<HTMLInputElement | null>(null);
   const [expenseId] = useState(() => crypto.randomUUID());
   const [receiptId] = useState(() => crypto.randomUUID());
   const [merchant, setMerchant] = useState("");
@@ -131,7 +133,16 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
   return <form onSubmit={save} className="grid gap-3 rounded-xl border bg-white p-4">
     <h2 className="font-bold">{mode === "receipt" ? "Add receipt" : "Add expense manually"}</h2>
     {bookingId ? <p className="text-xs font-semibold text-orange-700">This expense will be attached to the event wrap-up.</p> : null}
-    {mode === "receipt" ? <label className="grid gap-1 text-sm font-semibold">Receipt photo<input type="file" accept="image/*" capture="environment" onChange={chooseReceipt} /></label> : null}
+    {mode === "receipt" ? <div className="grid gap-2">
+      <span className="text-sm font-semibold">Receipt photo</span>
+      <div className="grid grid-cols-2 gap-2">
+        <button className="button-secondary" type="button" onClick={() => cameraRef.current?.click()}>Take photo</button>
+        <button className="button-secondary" type="button" onClick={() => galleryRef.current?.click()}>Choose from gallery</button>
+      </div>
+      <input ref={cameraRef} className="sr-only" aria-label="Take receipt photo" type="file" accept="image/*" capture="environment" onChange={chooseReceipt} />
+      <input ref={galleryRef} className="sr-only" aria-label="Choose receipt from gallery" type="file" accept="image/*" onChange={chooseReceipt} />
+      {file ? <p className="text-sm text-slate-600">Selected: {file.name}</p> : null}
+    </div> : null}
     {extractionMessage ? <p role="status" className="text-sm text-slate-600">{extractionMessage}</p> : null}
     <label className="grid gap-1 text-sm font-semibold">Merchant<input value={merchant} onChange={event => setMerchant(event.target.value)} /></label>
     <div className="grid grid-cols-2 gap-3"><label className="grid gap-1 text-sm font-semibold">Total<input inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value)} required /></label><label className="grid gap-1 text-sm font-semibold">Tax<input inputMode="decimal" value={tax} onChange={event => setTax(event.target.value)} /></label></div>
