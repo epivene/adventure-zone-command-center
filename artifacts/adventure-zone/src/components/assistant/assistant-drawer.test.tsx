@@ -36,7 +36,7 @@ describe("AssistantDrawer general mode", () => {
     Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
   });
 
-  it("keeps the assistant usable with no profile open", () => {
+  it("keeps the assistant usable with no profile open and suggests supported searches", () => {
     render(
       <AssistantContextProvider>
         <OpenAssistant />
@@ -46,6 +46,8 @@ describe("AssistantDrawer general mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     expect(screen.getByText("General Command Center")).toBeTruthy();
     expect(screen.getByLabelText("Ask Booking Assistant")).not.toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Find Christmas events" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Who usually books Pirate's Rebellion?" })).toBeNull();
   });
 
   it("renders structured profile results from general search", async () => {
