@@ -79,15 +79,23 @@ export default function EventFamilyPage() {
     }
   }
 
-  async function addMember(organizationId: string) {
-    if (!family) return;
+  async function addMembers(organizationIds: string[]) {
+    if (!family || !organizationIds.length) return;
     setSaving(true);
     setError(null);
     try {
-      await apiPost(`/event-families/${family.id}/members`, { organizationId });
+      const results = await Promise.allSettled(
+        organizationIds.map((organizationId) =>
+          apiPost(`/event-families/${family.id}/members`, { organizationId }),
+        ),
+      );
       await load();
+      const failed = results.filter((result) => result.status === "rejected").length;
+      if (failed > 0) {
+        setError(`${failed} selected profile${failed === 1 ? "" : "s"} could not be added. The successful additions were kept.`);
+      }
     } catch (err: any) {
-      setError(err?.message ?? "Could not add profile to family");
+      setError(err?.message ?? "Could not add profiles to family");
     } finally {
       setSaving(false);
     }
@@ -99,24 +107,14 @@ export default function EventFamilyPage() {
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6">
-      <AssistantContextRegistration
-        kind="event_family"
-        label={family.name}
-        recordId={family.id}
-      />
+      <AssistantContextRegistration kind="event_family" label={family.name} recordId={family.id} />
       <header>
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Event family</p>
         <div className="mt-2 flex flex-wrap items-end gap-2">
-          <input
-            className="min-w-64 rounded-lg border border-slate-300 px-3 py-2 text-2xl font-bold"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
+          <input className="min-w-64 rounded-lg border border-slate-300 px-3 py-2 text-2xl font-bold" value={name} onChange={(event) => setName(event.target.value)} />
           <button className="button-secondary" disabled={saving || !name.trim() || name.trim() === family.name} onClick={rename} type="button">Save name</button>
         </div>
-        <p className="mt-2 text-sm text-slate-600">
-          Related events live together here while each underlying profile keeps its own contacts, calls, notes, bookings, follow-ups, and history.
-        </p>
+        <p className="mt-2 text-sm text-slate-600">Related events live together here while each underlying profile keeps its own contacts, calls, notes, bookings, follow-ups, and history.</p>
       </header>
 
       {error ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
@@ -130,26 +128,20 @@ export default function EventFamilyPage() {
             <button className="button-secondary w-fit" type="button" onClick={() => void loadNotes()}>Retry family notes</button>
           </div>
         ) : (
-          <ScopedNotes
-            title="Family notes"
-            notes={familyNotes}
-            onCreate={(body) => createFamilyNote(family.id, body)}
-            onUpdate={(noteId, body) => updateFamilyNote(family.id, noteId, body)}
-            onDelete={(noteId) => deleteFamilyNote(family.id, noteId)}
-          />
+          <ScopedNotes title="Family notes" notes={familyNotes} onCreate={(body) => createFamilyNote(family.id, body)} onUpdate={(noteId, body) => updateFamilyNote(family.id, noteId, body)} onDelete={(noteId) => deleteFamilyNote(family.id, noteId)} />
         )}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold">Add events to this family</h2>
-            <p className="mt-1 text-sm text-slate-500">Search every profile, or create a brand-new event already assigned to this family.</p>
+            <h2 className="text-lg font-bold">Add events</h2>
+            <p className="text-sm text-slate-500">Search existing profiles or create a new event in this family.</p>
           </div>
-          <Link className="button-secondary" href={`/event-profiles/new?familyId=${family.id}`}>Create new event in this family</Link>
+          <Link className="button-secondary" href={`/event-profiles/new?familyId=${family.id}`}>Create new event</Link>
         </div>
-        <div className="mt-4">
-          <ProfileMemberPicker familyId={family.id} disabled={saving} onSelect={addMember} />
+        <div className="mt-3">
+          <ProfileMemberPicker familyId={family.id} disabled={saving} onSelectMany={addMembers} />
         </div>
       </section>
 
