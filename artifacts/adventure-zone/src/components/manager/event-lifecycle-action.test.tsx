@@ -31,11 +31,16 @@ beforeEach(() => { mocks.lifecycle = null; mocks.api.mockClear(); });
 
 describe("EventLifecycleAction", () => {
   it("checks in even when optional location is unavailable", async () => {
+    vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
+      locale: "en-US", calendar: "gregory", numberingSystem: "latn", timeZone: "America/Denver", hourCycle: "h12", hour12: true,
+    });
     const { hook } = memoryLocation({ path: "/manager", static: false });
     render(<Router hook={hook}><EventLifecycleAction bookingId="booking-1" /></Router>);
     fireEvent.click(await screen.findByRole("button", { name: "Check in" }));
     expect(await screen.findByRole("button", { name: "Check out" })).toBeInTheDocument();
-    expect(mocks.api).toHaveBeenCalledWith("/manager/events/booking-1/check-in", expect.objectContaining({ method: "POST" }));
+    const call = mocks.api.mock.calls.find(([path]) => path === "/manager/events/booking-1/check-in");
+    expect(call?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ locationStatus: "denied", timeZone: "America/Denver" });
   });
 
   it("checks out and immediately opens the event wrap-up", async () => {
