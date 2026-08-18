@@ -95,16 +95,17 @@ export async function recoverStaleDatabaseLockConvoys(options?: {
   const sleep = options?.sleep ?? systemSleep;
   const minimumAgeMs = options?.minimumAgeMs ?? 15 * 60_000;
   const minimumBlockedSessions = options?.minimumBlockedSessions ?? 10;
-  const maximumPasses = options?.maximumPasses ?? 4;
+  const maximumPasses = options?.maximumPasses ?? 8;
   const settleDelayMs = options?.settleDelayMs ?? 750;
   const terminated: StaleLockRecoveryResult["terminated"] = [];
   let passes = 0;
+  let recoveryTriggered = false;
 
   for (let pass = 0; pass < maximumPasses; pass += 1) {
     passes += 1;
     const candidates = await pool.query(findStaleRootBlockersSql, [
       minimumAgeMs,
-      minimumBlockedSessions,
+      recoveryTriggered ? 1 : minimumBlockedSessions,
     ]);
     if (candidates.rows.length === 0) break;
 
@@ -118,6 +119,7 @@ export async function recoverStaleDatabaseLockConvoys(options?: {
       );
       if (result.rows[0]?.["terminated"] !== true) continue;
 
+      recoveryTriggered = true;
       terminatedThisPass += 1;
       terminated.push({
         pid,
