@@ -26,6 +26,7 @@ export async function runActReviewMigrationsAtStartup(options?: {
   const runMigrations = options?.runMigrations ?? (runActReviewMigrations as MigrationRunner);
   const client = await pool.connect();
   let prelocked = false;
+  let timeoutsApplied = false;
 
   try {
     const lock = await client.query(advisoryTryLockSql);
@@ -34,6 +35,10 @@ export async function runActReviewMigrationsAtStartup(options?: {
       return [];
     }
     prelocked = true;
+
+    await client.query("SET lock_timeout = '5s'");
+    await client.query("SET statement_timeout = '20s'");
+    timeoutsApplied = true;
 
     // The migration runner acquires the same session-level advisory lock.
     // Reusing this already-locked client makes that acquisition immediate,
@@ -49,6 +54,10 @@ export async function runActReviewMigrationsAtStartup(options?: {
       },
     });
   } finally {
+    if (timeoutsApplied) {
+      await client.query("RESET statement_timeout").catch(() => undefined);
+      await client.query("RESET lock_timeout").catch(() => undefined);
+    }
     if (prelocked) {
       await client.query(advisoryUnlockSql).catch(() => undefined);
     }
