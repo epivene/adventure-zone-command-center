@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ManagerOperationsPage from "./ManagerOperationsPage";
 
@@ -18,10 +18,10 @@ vi.mock("@/lib/manager-sync-queue", () => ({
 }));
 vi.mock("@/features/manager/use-manager-scoped-map", () => ({ useManagerScopedMap: () => ({ loading: false, error: null, reload: vi.fn(), data: { leg: { id: "leg-a", name: "Kristy", color: "#f97316" }, route: null, events: [], meetups: [] } }) }));
 vi.mock("@/components/manager/manager-scoped-map", () => ({
-  ManagerScopedMap: ({ variant, mode, onModeChange }: any) => <div aria-label="Manager operations map"><p>Travel mode</p><button aria-pressed={mode === "planning"} onClick={() => onModeChange("planning")}>Planning</button><button aria-pressed={mode === "on-road"} onClick={() => onModeChange("on-road")}>On the Road</button><span>{variant}</span></div>,
+  ManagerScopedMap: ({ variant, mode }: any) => <div aria-label="Manager operations map" data-mode={mode}><span>{variant}</span></div>,
 }));
 vi.mock("@/components/manager/manager-travel-planning-panel", () => ({
-  ManagerTravelPlanningPanel: ({ compact }: { compact?: boolean }) => <div aria-label="Travel planning panel">{compact ? "quick road updates" : "Update local fuel price · Suggest change"}</div>,
+  ManagerTravelPlanningPanel: ({ compact }: { compact?: boolean }) => <div aria-label="Travel planning panel">{compact ? "quick road updates" : "Update local fuel price · Suggest change · Road tools"}</div>,
 }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); localStorage.clear(); });
@@ -32,23 +32,21 @@ describe("ManagerOperationsPage", () => {
     expect(await screen.findByLabelText("Manager operations map")).toHaveTextContent("operations");
   });
 
-  it("shows collaborative Planning tools without a manager or leg selector", async () => {
+  it("shows one combined travel view with planning and road tools", async () => {
     render(<ManagerOperationsPage />);
-    expect(await screen.findByText("Travel mode")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Planning" })).toHaveAttribute("aria-pressed", "true");
+    const map = await screen.findByLabelText("Manager operations map");
+    expect(map).toHaveAttribute("data-mode", "on-road");
+    expect(screen.queryByText("Travel mode")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Planning" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "On the Road" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Travel planning panel")).toHaveTextContent("Update local fuel price");
     expect(screen.getByLabelText("Travel planning panel")).toHaveTextContent("Suggest change");
-    expect(screen.queryByLabelText(/choose manager|choose leg|preview manager/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Travel planning panel")).toHaveTextContent("Road tools");
   });
 
-  it("switches to a calmer On the Road update panel while keeping field logging", async () => {
+  it("keeps mileage and maintenance logging in the combined view", async () => {
     render(<ManagerOperationsPage />);
-    const road = await screen.findByRole("button", { name: "On the Road" });
-    fireEvent.click(road);
-    expect(road).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByLabelText("Travel planning panel")).toHaveTextContent("quick road updates");
-    expect(screen.getByLabelText("Travel planning panel")).not.toHaveTextContent("Suggest change");
-    expect(screen.getByRole("heading", { name: "Mileage" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Mileage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maintenance" })).toBeInTheDocument();
   });
 
