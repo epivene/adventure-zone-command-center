@@ -1,18 +1,12 @@
-import { useMemo, useState } from "react";
-import { ManagerMapModeToggle } from "@/components/routes/manager-map-mode";
+import { useMemo } from "react";
 import { ManagerRouteMapShell } from "@/components/routes/manager-route-map-shell";
 import { ManagerTripNavigationActions, type FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
 import type { MapViewportTarget } from "@/features/routes/map-focus";
-import { MANAGER_MAP_MODE_KEY, type ManagerMapMode } from "@/features/routes/manager-map-navigation";
+import type { ManagerMapMode } from "@/features/routes/manager-map-navigation";
 import type { ManagerMapVariant, ManagerScopedMapData } from "@/features/manager/manager-map-types";
 import { ManagerScopedMapLayers } from "./manager-scoped-map-layers";
 
 const UTAH: MapViewportTarget = { kind: "center", center: [-111.9, 40.2], zoom: 6 };
-
-export function initialManagerTravelMode(): ManagerMapMode {
-  if (typeof window === "undefined") return "planning";
-  return window.localStorage.getItem(MANAGER_MAP_MODE_KEY) === "on-road" ? "on-road" : "planning";
-}
 
 function viewportFor(data: ManagerScopedMapData, variant: ManagerMapVariant): MapViewportTarget {
   const coordinates: [number, number][] = [];
@@ -42,7 +36,7 @@ function tripData(data: ManagerScopedMapData): FocusedTripMapData | null {
   return { id: trip.id, name: trip.name, points };
 }
 
-export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFocusBooking, mode: controlledMode, onModeChange, readOnlyPreview = false }: {
+export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFocusBooking, mode = "on-road", readOnlyPreview = false }: {
   data: ManagerScopedMapData;
   variant: ManagerMapVariant;
   focusedBookingId?: string | null;
@@ -51,21 +45,12 @@ export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFoc
   onModeChange?: (mode: ManagerMapMode) => void;
   readOnlyPreview?: boolean;
 }) {
-  const [localMode, setLocalMode] = useState<ManagerMapMode>(initialManagerTravelMode);
-  const mode = controlledMode ?? localMode;
   const viewport = useMemo(() => viewportFor(data, variant), [data, variant]);
   const focusedTrip = useMemo(() => tripData(data), [data]);
   const label = readOnlyPreview ? "Manager preview map" : variant === "events" ? "Manager events map" : "Manager operations map";
 
-  function changeMode(next: ManagerMapMode) {
-    if (controlledMode === undefined) setLocalMode(next);
-    onModeChange?.(next);
-    if (typeof window !== "undefined") window.localStorage.setItem(MANAGER_MAP_MODE_KEY, next);
-  }
-
   return (
     <section className="grid gap-3" aria-label={label}>
-      {variant === "operations" ? <ManagerMapModeToggle mode={mode} onChange={changeMode} /> : null}
       {variant === "operations" ? <ManagerTripNavigationActions trip={focusedTrip} mode={mode} /> : null}
       <div className={variant === "events" ? "max-h-[24rem] overflow-hidden rounded-xl border border-slate-200" : "overflow-hidden rounded-xl border border-slate-200"}>
         <ManagerRouteMapShell viewport={viewport}>
