@@ -73,6 +73,7 @@ router.get("/manager-admin/messages/conversations/:conversationId", async (req, 
       ? await listAdminMessageAcknowledgments(db, message.id)
       : [],
   })));
+  await communication.markConversationReadForAdmin(conversationId);
   res.json({ messages: enriched });
 });
 router.post("/manager-admin/messages/conversations/:conversationId", async (req, res): Promise<void> => {
