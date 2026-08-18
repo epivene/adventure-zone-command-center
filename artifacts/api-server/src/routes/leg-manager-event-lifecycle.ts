@@ -10,10 +10,19 @@ const router: IRouter = Router();
 const requireManager = createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));
 const lifecycle = new EventLifecycleRepository(db);
 const reviews = new DrizzleEventReviewRepository(db);
+const ianaTimeZone = z.string().trim().min(1).max(120).refine((value) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date(0));
+    return true;
+  } catch {
+    return false;
+  }
+}, "Invalid time zone");
 const locationInput = z.object({
   latitude: z.number().min(-90).max(90).nullable().optional(),
   longitude: z.number().min(-180).max(180).nullable().optional(),
   locationStatus: z.enum(eventLocationStatuses).default("not_requested"),
+  timeZone: ianaTimeZone.nullable().optional(),
 });
 const wrapUpReviewInput = z.object({
   rating: z.number().int().min(0).max(5),
@@ -48,9 +57,9 @@ router.post("/manager/events/:bookingId/check-in", requireManager, async (req, r
   const id = bookingId(req);
   const legId = req.legManager!.legId;
   const parsed = locationInput.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Invalid check-in location" }); return; }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid check-in data" }); return; }
   if (!(await lifecycle.bookingCanCheckIn(id, legId))) { res.status(403).json({ error: "Only confirmed events assigned to your leg can be checked in" }); return; }
-  const row = await lifecycle.checkIn({ bookingId: id, legId, at: new Date(), latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
+  const row = await lifecycle.checkIn({ bookingId: id, legId, at: new Date(), timeZone: parsed.data.timeZone ?? null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
   res.json({ lifecycle: row });
 });
 
@@ -58,9 +67,9 @@ router.post("/manager/events/:bookingId/check-out", requireManager, async (req, 
   const id = bookingId(req);
   const legId = req.legManager!.legId;
   const parsed = locationInput.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: "Invalid check-out location" }); return; }
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid check-out data" }); return; }
   if (!(await lifecycle.bookingBelongsToLeg(id, legId))) { res.status(403).json({ error: "Booking is outside your leg" }); return; }
-  const result = await lifecycle.checkOut({ bookingId: id, legId, at: new Date(), latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
+  const result = await lifecycle.checkOut({ bookingId: id, legId, at: new Date(), timeZone: parsed.data.timeZone ?? null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
   if (!result.ok) { res.status(409).json({ error: "Check in before checking out" }); return; }
   res.json({ lifecycle: result.lifecycle });
 });
