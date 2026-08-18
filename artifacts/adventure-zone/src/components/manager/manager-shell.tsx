@@ -8,8 +8,6 @@ import { flushManagerBlobQueue, type ManagerBlobKind } from "@/lib/manager-blob-
 import { managerBackTarget } from "@/lib/manager-back-target";
 import { ManagerAssistantProvider } from "@/features/manager-assistant/manager-assistant-context";
 import { MessageBubbleLink } from "@/components/navigation/message-bubble-link";
-import { ManagerAssistantDrawer } from "./manager-assistant-drawer";
-import { ManagerAssistantLauncher } from "./manager-assistant-launcher";
 import { ManagerActionCenter } from "./manager-action-center";
 import { ManagerMobileNav } from "./manager-mobile-nav";
 
@@ -28,14 +26,8 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
           const mutation = mutations.find((candidate) => candidate.id === row.receiptId);
           const inferredKind: ManagerBlobKind | undefined = row.kind ?? (mutation?.path === "/manager/incident-attachments" ? "incident" : mutation?.path === "/manager/receipts" ? "receipt" : undefined);
           if (!inferredKind) throw new Error("Image type is unknown");
-          const path = inferredKind === "incident"
-            ? `/manager/incident-attachments/${row.receiptId}/image`
-            : `/manager/receipts/${row.receiptId}/image`;
-          await managerApi(path, {
-            method: "PUT",
-            headers: { "Content-Type": row.blob.type || "image/jpeg" },
-            body: row.blob,
-          });
+          const path = inferredKind === "incident" ? `/manager/incident-attachments/${row.receiptId}/image` : `/manager/receipts/${row.receiptId}/image`;
+          await managerApi(path, { method: "PUT", headers: { "Content-Type": row.blob.type || "image/jpeg" }, body: row.blob });
         },
         undefined,
         async row => {
@@ -59,9 +51,7 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
       try {
         const data = await managerApi<{ conversations: Array<{ unreadCount?: number }> }>("/manager/messages/conversations");
         if (active) setUnreadMessages((data.conversations ?? []).reduce((sum, row) => sum + (row.unreadCount ?? 0), 0));
-      } catch {
-        if (active) setUnreadMessages(0);
-      }
+      } catch { if (active) setUnreadMessages(0); }
     };
     void refresh();
     const id = window.setInterval(refresh, 15000);
@@ -78,20 +68,12 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
     </header>
     <ManagerActionCenter />
     <main className="mx-auto max-w-3xl p-4">{children}</main>
-    <ManagerAssistantLauncher />
-    <ManagerAssistantDrawer />
     <ManagerMobileNav unreadMessages={unreadMessages} onSignOut={signOut} />
   </div>;
 }
 
 export function ManagerShell({ children }: { children: React.ReactNode }) {
   const { manager } = useManagerAuth();
-  const defaultContext = manager
-    ? { kind: "leg" as const, recordId: manager.legId, label: manager.legName }
-    : null;
-  return (
-    <ManagerAssistantProvider defaultContext={defaultContext}>
-      <ManagerShellInner>{children}</ManagerShellInner>
-    </ManagerAssistantProvider>
-  );
+  const defaultContext = manager ? { kind: "leg" as const, recordId: manager.legId, label: manager.legName } : null;
+  return <ManagerAssistantProvider defaultContext={defaultContext}><ManagerShellInner>{children}</ManagerShellInner></ManagerAssistantProvider>;
 }
