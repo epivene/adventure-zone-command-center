@@ -20,6 +20,7 @@ function rankResult(result: AssistantProfileSearchResult, query: string): number
   if (label.startsWith(q)) return 850;
   if (label.includes(q)) return 700;
   let score = 0;
+  if (result.matchedOn.includes("booking")) score += 600;
   if (result.matchedOn.includes("contact")) score += 500;
   if (result.matchedOn.includes("family")) score += 450;
   if (result.matchedOn.includes("city") || result.matchedOn.includes("region")) score += 300;
@@ -69,6 +70,7 @@ export class PostgresProfileSearchRepository implements ProfileSearchRepository 
                 ARRAY_REMOVE(ARRAY[
                   CASE WHEN lower(o.name)=lower($1) OR o.name ILIKE $2 THEN 'name' END,
                   CASE WHEN EXISTS (SELECT 1 FROM organization_contacts oc JOIN contacts c ON c.id=oc.contact_id WHERE oc.organization_id=o.id AND concat_ws(' ',c.first_name,c.last_name) ILIKE $2) THEN 'contact' END,
+                  CASE WHEN EXISTS (SELECT 1 FROM bookings b WHERE b.organization_id=o.id AND b.name ILIKE $2) THEN 'booking' END,
                   CASE WHEN o.city ILIKE COALESCE($3::text,o.city) AND $3::text IS NOT NULL THEN 'city' END,
                   CASE WHEN o.region ILIKE COALESCE($4::text,o.region) AND $4::text IS NOT NULL THEN 'region' END,
                   CASE WHEN EXISTS (SELECT 1 FROM event_family_members efm JOIN event_families ef ON ef.id=efm.family_id WHERE efm.organization_id=o.id AND ef.name ILIKE $2) THEN 'family' END,
@@ -84,6 +86,7 @@ export class PostgresProfileSearchRepository implements ProfileSearchRepository 
            AND (
              o.name ILIKE $2 OR o.city ILIKE $2 OR o.region ILIKE $2
              OR EXISTS (SELECT 1 FROM organization_contacts oc JOIN contacts c ON c.id=oc.contact_id WHERE oc.organization_id=o.id AND (concat_ws(' ',c.first_name,c.last_name) ILIKE $2 OR c.email ILIKE $2 OR c.phone ILIKE $2))
+             OR EXISTS (SELECT 1 FROM bookings b WHERE b.organization_id=o.id AND b.name ILIKE $2)
              OR EXISTS (SELECT 1 FROM event_family_members efm JOIN event_families ef ON ef.id=efm.family_id WHERE efm.organization_id=o.id AND ef.name ILIKE $2)
              OR $5::text IS NOT NULL OR $6::boolean
            )
@@ -118,6 +121,11 @@ export class PostgresProfileSearchRepository implements ProfileSearchRepository 
          FROM event_families ef
          WHERE ef.name ILIKE $2
             OR EXISTS (SELECT 1 FROM event_family_members efm JOIN organizations o ON o.id=efm.organization_id WHERE efm.family_id=ef.id AND o.name ILIKE $2)
+            OR EXISTS (
+              SELECT 1 FROM event_family_members efm
+              JOIN bookings b ON b.organization_id=efm.organization_id
+              WHERE efm.family_id=ef.id AND b.name ILIKE $2
+            )
        )
        SELECT * FROM organization_rows
        UNION ALL SELECT * FROM contact_rows
