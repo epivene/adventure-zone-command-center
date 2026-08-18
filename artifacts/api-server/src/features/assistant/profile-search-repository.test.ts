@@ -80,4 +80,24 @@ describe("PostgresProfileSearchRepository", () => {
     expect(sql).toContain("b.name ILIKE $2");
     expect(sql).toContain("THEN 'booking' END");
   });
+
+  it("searches names visible after profile consolidation and event-family grouping", async () => {
+    let sql = "";
+    const pool = {
+      async query(text: string) {
+        sql = text;
+        return { rows: [] };
+      },
+    };
+
+    const repository = new PostgresProfileSearchRepository(pool as never);
+    await repository.search({ query: "Christmas", limit: 8 });
+
+    expect(sql).toContain("FROM organization_locations ol");
+    expect(sql).toContain("ol.label ILIKE $2");
+    expect(sql).toContain("ol.venue_name ILIKE $2");
+    expect(sql).toContain("ol.act_source_label ILIKE $2");
+    expect(sql).toContain("ef.normalized_name ILIKE $2");
+    expect(sql).toContain("ef.description ILIKE $2");
+  });
 });
