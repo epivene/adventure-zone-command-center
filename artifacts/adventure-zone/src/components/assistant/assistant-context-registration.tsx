@@ -12,21 +12,14 @@ export function AssistantContextRegistration({
   recordId: string;
   label: string;
 }) {
-  const { pageContext, setPageContext } = useAssistantContext();
+  const { clearPageContext, setPageContext } = useAssistantContext();
 
   useEffect(() => {
     if (!recordId) return;
     const registered = { kind, recordId, label };
     setPageContext(registered);
-    return () => {
-      if (
-        pageContext?.kind === registered.kind &&
-        pageContext.recordId === registered.recordId
-      ) {
-        setPageContext(null);
-      }
-    };
-  }, [kind, label, pageContext, recordId, setPageContext]);
+    return () => clearPageContext(registered);
+  }, [clearPageContext, kind, label, recordId, setPageContext]);
 
   return null;
 }
