@@ -2,9 +2,9 @@ import { Storage } from "@google-cloud/storage";
 
 export interface LegManagerObjectStorage {
   put(key:string,bytes:Uint8Array,contentType:string):Promise<void>;
-  getSignedReadUrl(key:string,expiresInSeconds?:number):Promise<string>;
+  getSignedReadUrl?(key:string,expiresInSeconds?:number):Promise<string>;
   getSignedUrl?(key:string):Promise<string>;
-  delete(key:string):Promise<void>;
+  delete?(key:string):Promise<void>;
 }
 
 export class GoogleCloudLegManagerObjectStorage implements LegManagerObjectStorage {
