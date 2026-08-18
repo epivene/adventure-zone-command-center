@@ -22,10 +22,10 @@ export type ManagerAssignedEventSummary = {
   region: string | null;
   startsAt: string | null;
   endsAt: string | null;
-  checkedInAt: string | null;
-  checkedOutAt: string | null;
-  checkInTimeZone: string | null;
-  checkOutTimeZone: string | null;
+  checkedInAt?: string | null;
+  checkedOutAt?: string | null;
+  checkInTimeZone?: string | null;
+  checkOutTimeZone?: string | null;
   status: string;
   packageNames: string[];
   resourceNames: string[];
