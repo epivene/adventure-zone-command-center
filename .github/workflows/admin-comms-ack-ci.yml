@@ -7,6 +7,8 @@ on:
       - "artifacts/api-server/src/routes/manager-communications-admin.ts"
       - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx"
       - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.test.tsx"
+      - "artifacts/adventure-zone/src/components/manager/manager-action-center.tsx"
+      - "artifacts/adventure-zone/src/components/manager/manager-action-center.test.tsx"
       - ".github/workflows/admin-comms-ack-ci.yml"
 
 jobs:
@@ -25,8 +27,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Backend acknowledgment tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms/admin-message-acknowledgment.test.ts src/features/manager-comms/acknowledgment-service.test.ts
-      - name: Admin communications UI tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx
+      - name: Communications UI tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx src/components/manager/manager-action-center.test.tsx
       - name: Build API
         run: pnpm --filter @workspace/api-server run build
       - name: Build web
