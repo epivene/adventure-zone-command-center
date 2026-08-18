@@ -8,6 +8,8 @@ import {
 import { DrizzleLegManagerRepository } from "@/features/leg-manager/leg-manager-repository";
 import { DrizzleScheduleIssueRepository } from "@/features/leg-manager/schedule-issue-repository";
 import { DrizzleFinanceRepository } from "@/features/leg-manager/finance-repository";
+import { financeAssignmentSources } from "@/features/leg-manager/admin-finance-types";
+import { enrichAdminExpenseRecord, enrichAdminExpenseRecords } from "@/features/leg-manager/admin-finance-record-service";
 import { DrizzleCrewRepository, listWorkersForManager } from "@/features/leg-manager/crew-repository";
 import { crewRehireStatuses } from "@/features/leg-manager/crew-types";
 import { DrizzleIncidentRepository } from "@/features/leg-manager/incident-repository";
@@ -17,10 +19,12 @@ import { attachIncidentPhotoUrls } from "@/features/leg-manager/incident-photo-s
 
 const router: IRouter = Router();
 const repo = new DrizzleLegManagerRepository(db);
+const finance = new DrizzleFinanceRepository(db);
 const crew = new DrizzleCrewRepository(db);
 const incidents = new DrizzleIncidentRepository(db);
 const reviews = new DrizzleEventReviewRepository(db);
 const incidentStorage = new GoogleCloudLegManagerObjectStorage();
+const financeStorage = new GoogleCloudLegManagerObjectStorage();
 const access = z.object({ password: z.string().min(1) });
 const duplicatePasswordMessage =
   "That password is already assigned to another manager. Choose a different password.";
@@ -34,6 +38,30 @@ const incidentUpdateSchema = z.object({
   actionTaken: z.string().trim().max(8000).nullable().optional(),
   followUpNeeded: z.boolean().optional(),
 }).refine((value) => Object.keys(value).length > 0, { message: "At least one incident field is required" });
+const expenseIdSchema = z.string().uuid();
+const expenseFiltersSchema = z.object({
+  legId: z.string().uuid().optional(),
+  bookingId: z.string().uuid().optional(),
+  category: z.string().trim().min(1).optional(),
+  paymentSource: z.string().trim().min(1).optional(),
+  assignmentSource: z.enum(financeAssignmentSources).optional(),
+  receiptStatus: z.enum(["attached", "missing", "incomplete"]).optional(),
+  dateFrom: z.coerce.date().optional(),
+  dateTo: z.coerce.date().optional(),
+});
+const expenseUpdateSchema = z.object({
+  merchant: z.string().trim().max(240).nullable().optional(),
+  category: z.enum(["fuel", "food", "rv_park", "vehicle_maintenance", "trailer_maintenance", "supplies", "employee_related", "other"]).optional(),
+  amountCents: z.number().int().min(0).optional(),
+  taxCents: z.number().int().min(0).optional(),
+  paymentSource: z.enum(["adventure_zone_cash", "adventure_zone_debit", "personal"]).optional(),
+  occurredAt: z.coerce.date().optional(),
+  notes: z.string().trim().max(4000).nullable().optional(),
+  bookingId: z.string().uuid().nullable().optional(),
+  tripId: z.string().uuid().nullable().optional(),
+  tripSegmentId: z.string().uuid().nullable().optional(),
+  changeReason: z.string().trim().max(1000).nullable().optional(),
+}).refine((value) => Object.keys(value).some((key) => key !== "changeReason"), { message: "At least one expense field is required" });
 
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -111,17 +139,71 @@ router.post("/manager-admin/issues/:id/resolve", async (req, res): Promise<void>
 });
 
 router.get("/manager-admin/legs/:legId/money/summary", async (req, res) => {
-  res.json(await new DrizzleFinanceRepository(db).summary(
+  res.json(await finance.summary(
     req.params.legId,
     typeof req.query.tripId === "string" ? req.query.tripId : null,
   ));
 });
 
 router.get("/manager-admin/money/summary", async (req, res) => {
-  res.json(await new DrizzleFinanceRepository(db).summary(
+  res.json(await finance.summary(
     null,
     typeof req.query.tripId === "string" ? req.query.tripId : null,
   ));
+});
+
+router.get("/manager-admin/finance/expenses", async (req, res): Promise<void> => {
+  const parsed = expenseFiltersSchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid finance filters" });
+    return;
+  }
+  const expenseRows = await finance.listAdminExpenses(parsed.data);
+  const auditPairs = await Promise.all(expenseRows.map(async (row) => [row.id, await finance.listExpenseAudit(row.id)] as const));
+  const records = await enrichAdminExpenseRecords(expenseRows, new Map(auditPairs), financeStorage);
+  res.json({ records });
+});
+
+router.get("/manager-admin/finance/expenses/:expenseId", async (req, res): Promise<void> => {
+  const parsedId = expenseIdSchema.safeParse(param(req.params.expenseId));
+  if (!parsedId.success) {
+    res.status(400).json({ error: "Invalid expense id" });
+    return;
+  }
+  const row = await finance.getAdminExpense(parsedId.data);
+  if (!row) {
+    res.status(404).json({ error: "Expense not found" });
+    return;
+  }
+  const record = await enrichAdminExpenseRecord(row, await finance.listExpenseAudit(row.id), financeStorage);
+  res.json({ record });
+});
+
+router.patch("/manager-admin/finance/expenses/:expenseId", async (req, res): Promise<void> => {
+  const parsedId = expenseIdSchema.safeParse(param(req.params.expenseId));
+  const parsed = expenseUpdateSchema.safeParse(req.body ?? {});
+  if (!parsedId.success || !parsed.success) {
+    res.status(400).json({ error: "Invalid expense update" });
+    return;
+  }
+  try {
+    const row = await finance.updateAdminExpense(parsedId.data, parsed.data, {
+      actorId: null,
+      actorLabel: "Authenticated admin",
+    });
+    if (!row) {
+      res.status(404).json({ error: "Expense not found" });
+      return;
+    }
+    const record = await enrichAdminExpenseRecord(row, await finance.listExpenseAudit(row.id), financeStorage);
+    res.json({ record });
+  } catch (error) {
+    if (error instanceof Error && error.message === "OUTSIDE_LEG") {
+      res.status(409).json({ error: "That event or travel assignment does not belong to this leg" });
+      return;
+    }
+    throw error;
+  }
 });
 
 router.get("/manager-admin/crew", async (_req, res) => {
@@ -162,18 +244,18 @@ router.patch("/manager-admin/crew/work-history/:historyId", async (req, res): Pr
   }).safeParse(req.body);
   if (!historyId || !parsed.success) { res.status(400).json({ error: "Invalid history update" }); return; }
   const entry = await crew.updateWorkHistory(historyId, parsed.data);
-  if (!entry) { res.status(404).json({ error: "History entry not found" }); return; }
+  if (!entry) { res.status(404).json({ error: "Worker not found" }); return; }
   res.json({ entry });
 });
 
 router.get("/manager-admin/incidents", async (req, res) => {
-  const rows = await incidents.listAll();
+  const incidentRows = await incidents.listAll();
   try {
-    const attachments = await incidents.listAttachmentsForIncidents(rows.map((row) => row.id));
-    res.json({ incidents: await attachIncidentPhotoUrls(rows, attachments, incidentStorage) });
+    const attachments = await incidents.listAttachmentsForIncidents(incidentRows.map((row) => row.id));
+    res.json({ incidents: await attachIncidentPhotoUrls(incidentRows, attachments, incidentStorage) });
   } catch (error) {
     req.log.warn({ err: error }, "Incident attachment enrichment failed");
-    const fallbackIncidents = rows.map((row) => ({ ...row, attachments: [] }));
+    const fallbackIncidents = incidentRows.map((row) => ({ ...row, attachments: [] }));
     res.json({ incidents: fallbackIncidents, warning: "incident_attachments_unavailable" });
   }
 });
@@ -214,7 +296,7 @@ router.delete("/manager-admin/incidents/:incidentId", async (req, res): Promise<
   const objectKeys = attachments
     .map((attachment) => attachment.objectKey)
     .filter((key): key is string => typeof key === "string" && key.trim().length > 0);
-  const cleanup = await Promise.allSettled(objectKeys.map((key) => incidentStorage.delete(key)));
+  const cleanup = await Promise.allSettled(objectKeys.map((key) => incidentStorage.delete?.(key)));
   const failures = cleanup.filter((result) => result.status === "rejected").length;
   if (failures > 0) {
     req.log.warn({ incidentId: parsedId.data, failures }, "Incident deleted but some attachment objects could not be removed");
