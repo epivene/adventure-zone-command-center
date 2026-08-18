@@ -20,6 +20,9 @@ const stateNames: Record<string, string> = {
   vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY",
 };
 
+const namedEventCategories = /^(christmas|halloween|oktoberfest|octoberfest|fourth of july|4th of july|independence day|holiday|winter carnival|summer festival)$/i;
+const genericEventPhrase = /^(.+?)\s+(events?|fairs?|festivals?|parades?|celebrations?)$/i;
+
 function cleanSearchSubject(value: string) {
   return value
     .replace(/^(find|search for|search|show me|show)\s+/i, "")
@@ -42,10 +45,17 @@ function searchRequest(question: string): ProfileSearchRequest | null {
     if (packageName) return { query: packageName, packageName, limit: 8 };
   }
 
-  const looksLikeSearch = /^(find|search|show)/i.test(raw) || /\b(profile|contact|customer|event family)\b/i.test(raw);
+  const punctuationTrimmed = raw.replace(/[?.!]+$/g, "").trim();
+  const plainEventMatch = punctuationTrimmed.match(genericEventPhrase);
+  const plainEventSubject = namedEventCategories.test(punctuationTrimmed)
+    ? punctuationTrimmed
+    : plainEventMatch?.[1]?.trim();
+
+  const explicitSearch = /^(find|search|show)/i.test(raw) || /\b(profile|contact|customer|event family)\b/i.test(raw);
+  const looksLikeSearch = explicitSearch || Boolean(plainEventSubject);
   if (!looksLikeSearch) return null;
 
-  let subject = cleanSearchSubject(raw);
+  let subject = plainEventSubject ?? cleanSearchSubject(raw);
   let city: string | undefined;
   let region: string | undefined;
 
@@ -81,7 +91,7 @@ export async function answerGeneralAssistant(input: {
   if (!request) {
     return {
       kind: "needs_context",
-      text: "I can help you find profiles, contacts, event families, overdue follow-ups, or customers by package history. For customer-specific history or call help, choose a profile first.",
+      text: "I can help you find profiles, contacts, event families, seasonal events, overdue follow-ups, or customers by package history. For customer-specific history or call help, choose a profile first.",
     };
   }
 
@@ -90,7 +100,7 @@ export async function answerGeneralAssistant(input: {
     kind: "profile_results",
     text: results.length
       ? `I found ${results.length} matching ${results.length === 1 ? "profile" : "profiles"}.`
-      : "I couldn't find a matching profile. Try a broader name, city, state, contact, or package search.",
+      : "I couldn't find a matching profile or event. Try a broader name, city, state, contact, event type, or package search.",
     results,
   };
 }

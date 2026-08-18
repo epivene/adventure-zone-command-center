@@ -19,6 +19,24 @@ describe("answerGeneralAssistant", () => {
     expect(calls[0]).toMatchObject({ query: "Morton County Fair", limit: 8 });
   });
 
+  it("treats plain seasonal event phrases as structured event discovery", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "Christmas events", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "Christmas", limit: 8 });
+  });
+
+  it("supports common named event categories without requiring find/search wording", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "Oktoberfest", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "Oktoberfest", limit: 8 });
+  });
+
+  it("keeps numbered holiday names intact for discovery", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "4th of July", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "4th of July", limit: 8 });
+  });
+
   it("extracts a contact name and city", async () => {
     const calls: ProfileSearchRequest[] = [];
     await answerGeneralAssistant({ question: "Find the profile for Lisa in Dickinson", profileSearch: fakeRepo(calls) });

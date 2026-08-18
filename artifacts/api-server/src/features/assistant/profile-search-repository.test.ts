@@ -27,6 +27,14 @@ describe("rankProfileSearchResults", () => {
     expect(results.map((item) => item.id)).toEqual(["1", "3", "2"]);
   });
 
+  it("gives booking-name matches useful rank for event discovery", () => {
+    const results = rankProfileSearchResults([
+      row({ id: "1", label: "City of Dickinson", matchedOn: ["booking"] }),
+      row({ id: "2", label: "Unrelated Profile", matchedOn: ["region"] }),
+    ], "Christmas", 8);
+    expect(results[0]?.id).toBe("1");
+  });
+
   it("deduplicates canonical result ids and respects the bound", () => {
     const repeated = row({ id: "same", label: "Water Lantern Festival" });
     const rows = [repeated, repeated, ...Array.from({ length: 12 }, (_, index) => row({ id: String(index), label: `Profile ${index}` }))];
@@ -55,5 +63,21 @@ describe("PostgresProfileSearchRepository", () => {
     expect(sql).toContain("$5::text");
     expect(sql).toContain("$6::boolean");
     expect(sql).toContain("'%' || $5::text || '%'");
+  });
+
+  it("searches booking names so seasonal events can find their owning profile", async () => {
+    let sql = "";
+    const pool = {
+      async query(text: string) {
+        sql = text;
+        return { rows: [] };
+      },
+    };
+
+    const repository = new PostgresProfileSearchRepository(pool as never);
+    await repository.search({ query: "Christmas", limit: 8 });
+
+    expect(sql).toContain("b.name ILIKE $2");
+    expect(sql).toContain("THEN 'booking' END");
   });
 });
