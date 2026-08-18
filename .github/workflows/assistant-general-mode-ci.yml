@@ -28,6 +28,7 @@ jobs:
       - name: Focused assistant tests
         run: >-
           pnpm exec vitest run
+          artifacts/api-server/src/features/assistant/profile-search-input.test.ts
           artifacts/api-server/src/features/assistant/profile-search-repository.test.ts
           artifacts/api-server/src/features/assistant/general-assistant.test.ts
           artifacts/adventure-zone/src/features/assistant/assistant-context.test.tsx
