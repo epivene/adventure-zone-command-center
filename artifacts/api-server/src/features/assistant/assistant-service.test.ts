@@ -64,6 +64,26 @@ describe("AssistantService", () => {
     expect(calls).toBe(0);
   });
 
+  it("uses the staff device time zone for deterministic booking schedule answers", async () => {
+    let calls = 0;
+    const service = new AssistantService({
+      loadContext: async () => context(),
+      createAiClient: async () => ({ providerName: "fake", complete: async () => { calls += 1; return "{}"; } }),
+    });
+
+    const result = await service.ask({
+      contextKind: "booking",
+      contextRecordId: "booking-1",
+      question: "What time does this event start?",
+      timeZone: "America/Denver",
+    });
+
+    expect(result.answer.mode).toBe("deterministic");
+    expect(result.answer.text).toMatch(/6:00 AM/i);
+    expect(result.answer.text).toMatch(/MDT/i);
+    expect(calls).toBe(0);
+  });
+
   it("returns a source-validated cloud answer for harder questions", async () => {
     const service = new AssistantService({
       loadContext: async () => context(),
