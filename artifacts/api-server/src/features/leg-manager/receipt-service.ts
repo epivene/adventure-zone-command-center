@@ -47,6 +47,7 @@ export async function uploadReceiptImage(
   store: ReceiptMetadataStore,
   storage: ReceiptObjectStorage,
   input: { legId: string; receiptId: string; mimeType: string; bytes: Uint8Array },
+  options?: { onStorageError?: (error: unknown) => void },
 ) {
   if (!(await store.getForLeg(input.legId, input.receiptId))) {
     return { ok: false as const, error: "OUTSIDE_LEG" as const };
@@ -62,7 +63,8 @@ export async function uploadReceiptImage(
         mimeType: input.mimeType,
       }),
     };
-  } catch {
+  } catch (error) {
+    options?.onStorageError?.(error);
     await store.setImageState(input.legId, input.receiptId, {
       imageStatus: "image_failed",
       objectKey: null,
