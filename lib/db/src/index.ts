@@ -25,6 +25,7 @@ export const pool = new Pool({
   connectionString: finalConnectionString,
   application_name: "adventure-zone-command-center-api",
   connectionTimeoutMillis: 5_000,
+  statement_timeout: 15 * 60_000,
 });
 const schema = { ...coreSchema, ...eventFamilySchema };
 export const db = drizzle(pool, { schema });
