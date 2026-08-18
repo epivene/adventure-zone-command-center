@@ -4,6 +4,7 @@ import { runStartupStep } from "./lib/startup-step";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
+import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
@@ -26,6 +27,20 @@ const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
+
+const staleLockRecovery = await runStartupStep(
+  "stale database lock recovery",
+  recoverStaleDatabaseLockConvoys,
+);
+if (staleLockRecovery.terminated.length > 0) {
+  logger.warn(
+    {
+      terminatedBlockers: staleLockRecovery.terminated,
+      recoveryPasses: staleLockRecovery.passes,
+    },
+    "Terminated stale database sessions that were blocking the CRM",
+  );
+}
 
 await runStartupStep("booking probability schema", ensureBookingProbabilitySchema);
 await runStartupStep("package intelligence schema", ensurePackageIntelligenceSchema);
