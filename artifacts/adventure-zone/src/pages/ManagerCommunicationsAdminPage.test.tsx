@@ -51,7 +51,7 @@ describe("ManagerCommunicationsAdminPage",()=>{
   it("lets admin create a message and require acknowledgments",async()=>{
     render(<ManagerCommunicationsAdminPage/>);
     fireEvent.click(await screen.findByRole("button",{name:/New message/i}));
-    fireEvent.click(screen.getByLabelText("Kristy"));
+    fireEvent.click(await screen.findByLabelText("Kristy"));
     fireEvent.click(screen.getByLabelText("Hulk"));
     fireEvent.change(screen.getByLabelText("Subject"),{target:{value:"Load-in update"}});
     fireEvent.change(screen.getByLabelText("Message"),{target:{value:"Please arrive at 8 AM."}});
