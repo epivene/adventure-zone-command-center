@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -37,20 +38,23 @@ function sameRecord(left: ActiveAssistantContext, right: ActiveAssistantContext)
 
 export function AssistantContextProvider({ children }: { children: ReactNode }) {
   const [pageContext, setPageContextState] = useState<ActiveAssistantContext>(null);
+  const pageContextRef = useRef<ActiveAssistantContext>(null);
   const [transientContext, setTransientContextState] = useState<ActiveAssistantContext>(null);
   const [explicitContext, setExplicitContext] = useState<ActiveAssistantContext>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [prefill, setPrefill] = useState("");
 
   const setPageContext = useCallback((next: ActiveAssistantContext) => {
-    setPageContextState((previous) => {
-      if (next && !sameRecord(previous, next)) setExplicitContext(null);
-      return next;
-    });
+    const previous = pageContextRef.current;
+    if (next && !sameRecord(previous, next)) setExplicitContext(null);
+    pageContextRef.current = next;
+    setPageContextState(next);
   }, []);
 
   const clearPageContext = useCallback((expected: ConcreteAssistantContext) => {
-    setPageContextState((current) => sameRecord(current, expected) ? null : current);
+    if (!sameRecord(pageContextRef.current, expected)) return;
+    pageContextRef.current = null;
+    setPageContextState(null);
   }, []);
 
   const setTransientContext = useCallback((next: ActiveAssistantContext) => {
