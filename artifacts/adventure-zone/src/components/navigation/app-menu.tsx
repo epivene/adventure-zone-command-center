@@ -43,12 +43,6 @@ const adminMenuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: "Reports & History",
-    items: [
-      { href: "/profiles", label: "Profiles & history" },
-    ],
-  },
-  {
     label: "Settings",
     items: [
       { href: "/settings/packages-resources", label: "Packages & resources" },
