@@ -39,9 +39,13 @@ describe("runActReviewMigrationsAtStartup", () => {
 
     expect(applied).toEqual(["043_act_archive_full_recovery.sql"]);
     expect(queries[0]).toContain("pg_try_advisory_lock");
+    expect(queries).toContain("SET lock_timeout = '5s'");
+    expect(queries).toContain("SET statement_timeout = '20s'");
     expect(queries).toContain(
       "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
     );
+    expect(queries).toContain("RESET statement_timeout");
+    expect(queries).toContain("RESET lock_timeout");
     expect(queries.at(-1)).toContain("pg_advisory_unlock");
     expect(wasReleased()).toBe(true);
   });
@@ -77,6 +81,8 @@ describe("runActReviewMigrationsAtStartup", () => {
       }),
     ).rejects.toThrow("migration failed");
 
+    expect(queries).toContain("RESET statement_timeout");
+    expect(queries).toContain("RESET lock_timeout");
     expect(queries.at(-1)).toContain("pg_advisory_unlock");
     expect(wasReleased()).toBe(true);
   });
