@@ -38,6 +38,12 @@ export type ActRecoveryReviewPage = {
   items: ActRecoveryReviewItem[];
 };
 
+export type ActRecoveryCleanupRetrySummary = {
+  reviewed: number;
+  droppedLinkedTo: number;
+  retried: number;
+};
+
 export type RecoveryProfileSearchResult = {
   id: string;
   name: string;
@@ -66,6 +72,13 @@ export function startRecovery(): Promise<ActRecoveryStatus> {
 
 export function getRecoveryReview(page = 1): Promise<ActRecoveryReviewPage> {
   return apiGet<ActRecoveryReviewPage>(`/act-recovery/review?page=${page}&pageSize=50`);
+}
+
+export function cleanupAndRetryRecoveryReview() {
+  return apiPost<{ ok: true; summary: ActRecoveryCleanupRetrySummary }>(
+    "/act-recovery/review/cleanup-retry",
+    {},
+  );
 }
 
 export async function searchRecoveryProfiles(query: string): Promise<RecoveryProfileSearchResult[]> {
