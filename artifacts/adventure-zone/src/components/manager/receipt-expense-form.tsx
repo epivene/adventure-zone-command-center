@@ -11,10 +11,11 @@ const categories = [
 ] as const;
 
 type Suggestions = { merchant: string | null; totalCents: number | null; taxCents: number | null; occurredAt: string | null };
+type SaveState = "saved_offline" | "synced" | "needs_attention";
 const dollars = (cents: number | null | undefined) => cents == null ? "" : (cents / 100).toFixed(2);
 const toCents = (value: string) => Math.round((Number(value) || 0) * 100);
 
-export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "receipt" | "manual"; bookingId?: string | null; onDone?: () => void }) {
+export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "receipt" | "manual"; bookingId?: string | null; onDone?: (state: SaveState) => void }) {
   const { manager, managerApi } = useManagerAuth();
   const [file, setFile] = useState<File | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
@@ -37,14 +38,14 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
     if (suggestions.merchant) setMerchant(suggestions.merchant);
     if (suggestions.totalCents != null) setAmount(dollars(suggestions.totalCents));
     if (suggestions.taxCents != null) setTax(dollars(suggestions.taxCents));
-    if (suggestions.occurredAt) setDate(suggestions.occurredAt);
+    if (suggestions.occurredAt) setDate(suggestions.occurredAt.slice(0, 10));
   }
 
   async function chooseReceipt(event: React.ChangeEvent<HTMLInputElement>) {
     const selected = event.target.files?.[0] ?? null;
     if (!selected || !manager) return;
     setFile(selected);
-    await queueManagerBlob({ id: receiptId, legId: manager.legId, receiptId, blob: selected, createdAt: new Date().toISOString() });
+    await queueManagerBlob({ id: receiptId, legId: manager.legId, receiptId, kind: "receipt", blob: selected, createdAt: new Date().toISOString() });
     if (!navigator.onLine) {
       setExtractionMessage("Photo saved offline. Enter the expense details now; the image will sync later.");
       return;
@@ -103,6 +104,7 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
       });
     }
     setState("saved_offline");
+    let finalState: SaveState = "saved_offline";
     if (navigator.onLine) {
       setState("syncing");
       const rows = await flushManagerMutationQueue(managerApi);
@@ -110,10 +112,11 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
       const receiptRow = rows.find((row) => row.id === receiptId);
       if (expenseRow?.state === "needs_attention" || (file && receiptRow?.state === "needs_attention")) {
         setState("needs_attention");
+        onDone?.("needs_attention");
         return;
       }
       if (file && receiptRow?.state === "synced") {
-        await flushManagerBlobQueue(
+        const blobs = await flushManagerBlobQueue(
           async row => {
             await managerApi(`/manager/receipts/${row.receiptId}/image`, {
               method: "PUT",
@@ -122,12 +125,18 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
             });
           },
           undefined,
-          async row => row.receiptId !== receiptId || receiptRow.state === "synced",
+          async row => row.kind === "receipt" && row.receiptId === receiptId,
         );
+        if (blobs.find((row) => row.id === receiptId)?.state === "image_failed") {
+          setState("needs_attention");
+          onDone?.("needs_attention");
+          return;
+        }
       }
       setState("synced");
+      finalState = "synced";
     }
-    onDone?.();
+    onDone?.(finalState);
   }
 
   return <form onSubmit={save} className="grid gap-3 rounded-xl border bg-white p-4">
@@ -150,7 +159,7 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
     <label className="grid gap-1 text-sm font-semibold">Category<select value={category} onChange={event => setCategory(event.target.value)}>{categories.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
     <label className="grid gap-1 text-sm font-semibold">Payment source<select value={source} onChange={event => setSource(event.target.value)}><option value="adventure_zone_cash">Adventure Zone cash</option><option value="adventure_zone_debit">Adventure Zone company debit</option><option value="personal">Personal money/card</option></select></label>
     <label className="grid gap-1 text-sm font-semibold">Notes<textarea rows={3} value={notes} onChange={event => setNotes(event.target.value)} /></label>
-    <button className="button-primary" disabled={extracting}>{extracting ? "Reading receipt…" : "Save expense"}</button>
+    <button className="button-primary" disabled={extracting || state === "syncing"}>{extracting ? "Reading receipt…" : state === "syncing" ? "Saving…" : "Save expense"}</button>
     {state ? <ManagerSyncStatus state={state} /> : null}
   </form>;
 }
