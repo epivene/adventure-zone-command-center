@@ -22,12 +22,23 @@ function store(): ReceiptMetadataStore & { rows: any[] } {
 }
 
 describe("receipt service", () => {
-  it("keeps metadata when image upload fails", async () => {
+  it("keeps metadata and reports the underlying storage error when image upload fails", async () => {
     const metadata = store();
     const input = { id: "receipt-a", legId: "leg-a", expenseId: "expense-a", clientMutationId: "00000000-0000-4000-8000-000000000001", mimeType: "image/jpeg" };
     expect((await createReceiptMetadata(metadata, input)).ok).toBe(true);
-    const storage: ReceiptObjectStorage = { async put() { throw new Error("offline"); }, async getSignedReadUrl() { return ""; } };
-    expect((await uploadReceiptImage(metadata, storage, { legId: "leg-a", receiptId: "receipt-a", mimeType: "image/jpeg", bytes: new Uint8Array([1]) })).ok).toBe(false);
+    const storageError = new Error("bucket permission denied");
+    const storage: ReceiptObjectStorage = { async put() { throw storageError; }, async getSignedReadUrl() { return ""; } };
+    let captured: unknown = null;
+
+    const result = await uploadReceiptImage(
+      metadata,
+      storage,
+      { legId: "leg-a", receiptId: "receipt-a", mimeType: "image/jpeg", bytes: new Uint8Array([1]) },
+      { onStorageError(error) { captured = error; } },
+    );
+
+    expect(result).toEqual({ ok: false, error: "UPLOAD_FAILED" });
+    expect(captured).toBe(storageError);
     expect(metadata.rows).toHaveLength(1);
     expect(metadata.rows[0].imageStatus).toBe("image_failed");
   });

@@ -31,6 +31,16 @@ export interface ReceiptMetadataStore {
   deleteForLeg(legId: string, receiptId: string): Promise<any | null>;
 }
 
+function logReceiptStorageError(error: unknown) {
+  const details = error && typeof error === "object"
+    ? {
+        message: "message" in error ? String((error as { message?: unknown }).message ?? "Unknown storage error") : "Unknown storage error",
+        code: "code" in error ? String((error as { code?: unknown }).code ?? "") : "",
+      }
+    : { message: String(error), code: "" };
+  console.error("[receipt-storage] image upload failed", details);
+}
+
 export async function createReceiptMetadata(
   store: ReceiptMetadataStore,
   input: ReceiptCreateInput,
@@ -47,6 +57,7 @@ export async function uploadReceiptImage(
   store: ReceiptMetadataStore,
   storage: ReceiptObjectStorage,
   input: { legId: string; receiptId: string; mimeType: string; bytes: Uint8Array },
+  options?: { onStorageError?: (error: unknown) => void },
 ) {
   if (!(await store.getForLeg(input.legId, input.receiptId))) {
     return { ok: false as const, error: "OUTSIDE_LEG" as const };
@@ -62,7 +73,9 @@ export async function uploadReceiptImage(
         mimeType: input.mimeType,
       }),
     };
-  } catch {
+  } catch (error) {
+    if (options?.onStorageError) options.onStorageError(error);
+    else logReceiptStorageError(error);
     await store.setImageState(input.legId, input.receiptId, {
       imageStatus: "image_failed",
       objectKey: null,

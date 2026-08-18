@@ -23,6 +23,12 @@ services:
       # The owner password used to sign in to the app.
       - key: OWNER_PASSWORD
         sync: false
+      # Private Google Cloud Storage bucket used for manager receipt images.
+      - key: LEG_MANAGER_RECEIPT_BUCKET
+        sync: false
+      # Full service-account JSON for receipt uploads/signing. Keep this server-only.
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false
       # Act! settings are server-only. Never expose these through Vite.
       - key: ACT_API_BASE_URL
         value: https://apius.act.com/act.web.api
