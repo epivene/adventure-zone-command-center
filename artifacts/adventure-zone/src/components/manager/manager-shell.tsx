@@ -3,6 +3,8 @@ import { Link, useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
+import { indexedDbManagerMutationStore } from "@/lib/manager-offline-db";
+import { flushManagerBlobQueue } from "@/lib/manager-blob-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
 import { ManagerAssistantProvider } from "@/features/manager-assistant/manager-assistant-context";
 import { ManagerAssistantDrawer } from "./manager-assistant-drawer";
@@ -17,7 +19,23 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
   const backTarget = managerBackTarget(location);
 
   useEffect(() => {
-    const flush = () => void flushManagerMutationQueue(managerApi).catch(() => undefined);
+    const flush = () => void (async () => {
+      await flushManagerMutationQueue(managerApi);
+      await flushManagerBlobQueue(
+        async row => {
+          await managerApi(`/manager/receipts/${row.receiptId}/image`, {
+            method: "PUT",
+            headers: { "Content-Type": row.blob.type || "image/jpeg" },
+            body: row.blob,
+          });
+        },
+        undefined,
+        async row => {
+          const mutations = await indexedDbManagerMutationStore.list();
+          return mutations.some((mutation) => mutation.id === row.receiptId && mutation.path === "/manager/receipts" && mutation.state === "synced");
+        },
+      );
+    })().catch(() => undefined);
     flush();
     window.addEventListener("online", flush);
     return () => window.removeEventListener("online", flush);
