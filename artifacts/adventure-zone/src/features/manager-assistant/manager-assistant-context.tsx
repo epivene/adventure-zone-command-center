@@ -1,6 +1,8 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import type { ManagerAssistantContextRef } from "./manager-assistant-types";
 
+export const MANAGER_ASSISTANT_PENDING_KEY = "az_manager_assistant_pending";
+
 type ManagerAssistantContextValue = {
   activeContext: ManagerAssistantContextRef | null;
   setActiveContext: (context: ManagerAssistantContextRef | null) => void;
@@ -22,7 +24,14 @@ export function ManagerAssistantProvider({ children, defaultContext }: { childre
     setActiveContext: setOverride,
     open,
     prefill,
-    openAssistant(next = "") { setPrefill(next); setOpen(true); },
+    openAssistant(next = "") {
+      setPrefill(next);
+      setOpen(false);
+      try {
+        sessionStorage.setItem(MANAGER_ASSISTANT_PENDING_KEY, JSON.stringify({ context: activeContext, prefill: next }));
+      } catch {}
+      window.location.assign("/manager/messages?assistant=1");
+    },
     closeAssistant() { setOpen(false); setPrefill(""); },
   }), [activeContext, open, prefill]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
