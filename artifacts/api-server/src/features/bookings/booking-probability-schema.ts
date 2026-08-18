@@ -1,8 +1,8 @@
 import type { Pool } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 
-const advisoryLockSql =
-  "SELECT pg_advisory_lock(hashtext('adventure-zone:booking-probability-schema'))";
+const advisoryTryLockSql =
+  "SELECT pg_try_advisory_lock(hashtext('adventure-zone:booking-probability-schema')) AS locked";
 const advisoryUnlockSql =
   "SELECT pg_advisory_unlock(hashtext('adventure-zone:booking-probability-schema'))";
 
@@ -19,14 +19,13 @@ export async function ensureBookingProbabilitySchema(
 ): Promise<void> {
   const client = await pool.connect();
   let locked = false;
+  let repairTimeoutsApplied = false;
 
   try {
-    await client.query(advisoryLockSql);
-    locked = true;
-
     const readiness = await client.query<{
       ready: boolean;
       hasDefinite: boolean;
+      hasTrigger: boolean;
     }>(`
       SELECT
         to_regtype('probability') IS NOT NULL
@@ -37,11 +36,28 @@ export async function ensureBookingProbabilitySchema(
           JOIN pg_enum e ON e.enumtypid = t.oid
           WHERE t.typname = 'probability'
             AND e.enumlabel = 'definite'
-        ) AS "hasDefinite"
+        ) AS "hasDefinite",
+        EXISTS (
+          SELECT 1
+          FROM pg_trigger
+          WHERE tgname = 'bookings_confirmed_probability_trigger'
+            AND NOT tgisinternal
+        ) AS "hasTrigger"
     `);
 
     const state = readiness.rows[0];
     if (!state?.ready) return;
+    if (state.hasDefinite && state.hasTrigger) return;
+
+    const lock = await client.query<{ locked: boolean }>(advisoryTryLockSql);
+    if (lock.rows[0]?.locked !== true) {
+      throw new Error("Booking probability schema repair lock unavailable");
+    }
+    locked = true;
+
+    await client.query("SET lock_timeout = '5s'");
+    await client.query("SET statement_timeout = '20s'");
+    repairTimeoutsApplied = true;
 
     // Enum values added by ALTER TYPE cannot safely be consumed until that
     // statement has committed. With no explicit transaction, each query below
@@ -79,6 +95,10 @@ export async function ensureBookingProbabilitySchema(
       EXECUTE FUNCTION set_confirmed_booking_probability();
     `);
   } finally {
+    if (repairTimeoutsApplied) {
+      await client.query("RESET statement_timeout").catch(() => undefined);
+      await client.query("RESET lock_timeout").catch(() => undefined);
+    }
     if (locked) {
       await client.query(advisoryUnlockSql).catch(() => undefined);
     }
