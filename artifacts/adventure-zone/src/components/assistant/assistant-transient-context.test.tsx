@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AssistantContextProvider, useAssistantContext } from "@/features/assistant/assistant-context";
@@ -15,23 +15,38 @@ function Probe() {
   );
 }
 
+function tree(open: boolean) {
+  return (
+    <AssistantContextProvider>
+      <Probe />
+      <AssistantTransientContext open={open} kind="organization" recordId="side" label="Side" />
+    </AssistantContextProvider>
+  );
+}
+
 describe("AssistantTransientContext", () => {
   it("temporarily overrides page context and restores it on close", () => {
-    const { rerender } = render(
-      <AssistantContextProvider>
-        <Probe />
-        <AssistantTransientContext open={false} kind="organization" recordId="side" label="Side" />
-      </AssistantContextProvider>,
-    );
-    screen.getByRole("button", { name: "page" }).click();
+    const { rerender } = render(tree(false));
+    fireEvent.click(screen.getByRole("button", { name: "page" }));
     expect(screen.getByTestId("active").textContent).toBe("page");
 
-    rerender(
-      <AssistantContextProvider>
-        <Probe />
-        <AssistantTransientContext open kind="organization" recordId="side" label="Side" />
-      </AssistantContextProvider>,
-    );
+    rerender(tree(true));
     expect(screen.getByTestId("active").textContent).toBe("side");
+
+    rerender(tree(false));
+    expect(screen.getByTestId("active").textContent).toBe("page");
+  });
+
+  it("restores an explicit search-selected context after the side profile closes", () => {
+    const { rerender } = render(tree(false));
+    fireEvent.click(screen.getByRole("button", { name: "page" }));
+    fireEvent.click(screen.getByRole("button", { name: "explicit" }));
+    expect(screen.getByTestId("active").textContent).toBe("explicit");
+
+    rerender(tree(true));
+    expect(screen.getByTestId("active").textContent).toBe("side");
+
+    rerender(tree(false));
+    expect(screen.getByTestId("active").textContent).toBe("explicit");
   });
 });
