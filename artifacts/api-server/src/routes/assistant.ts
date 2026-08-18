@@ -11,6 +11,9 @@ import { BookingContextRepository } from "@/features/assistant/booking-context-r
 import { ContactContextRepository } from "@/features/assistant/contact-context-repository";
 import { extractDerivedFactsForProfile } from "@/features/assistant/derived-fact-job";
 import { DerivedFactRepository } from "@/features/assistant/derived-fact-repository";
+import { answerGeneralAssistant } from "@/features/assistant/general-assistant";
+import { profileSearchInputSchema } from "@/features/assistant/profile-search-input";
+import { PostgresProfileSearchRepository } from "@/features/assistant/profile-search-repository";
 import { ProfileContextRepository } from "@/features/assistant/profile-context-repository";
 import { RouteContextRepository } from "@/features/assistant/route-context-repository";
 import type {
@@ -20,6 +23,9 @@ import type {
 
 const router: IRouter = Router();
 const canonicalUuid = z.uuid().transform((value) => value.toLowerCase());
+const profileSearch = new PostgresProfileSearchRepository();
+const allowedProfileSearchKeys = new Set(["q", "city", "region", "packageName", "overdueFollowUp", "limit"]);
+const generalAskSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const factProfileInputSchema = z
   .object({
     organizationId: canonicalUuid.optional(),
@@ -38,13 +44,9 @@ async function loadContext(input: {
     case "booking":
       return new BookingContextRepository().getBookingContext(input.contextRecordId);
     case "organization":
-      return new ProfileContextRepository().getOrganizationContext(
-        input.contextRecordId,
-      );
+      return new ProfileContextRepository().getOrganizationContext(input.contextRecordId);
     case "event_family":
-      return new ProfileContextRepository().getEventFamilyContext(
-        input.contextRecordId,
-      );
+      return new ProfileContextRepository().getEventFamilyContext(input.contextRecordId);
     case "contact":
       return new ContactContextRepository().getContactContext(input.contextRecordId);
     case "route":
@@ -58,15 +60,61 @@ function service(): AssistantService {
   return new AssistantService({ loadContext });
 }
 
+router.get("/assistant/profile-search", async (req, res): Promise<void> => {
+  const unknownKey = Object.keys(req.query).find((key) => !allowedProfileSearchKeys.has(key));
+  if (unknownKey) {
+    res.status(400).json({ error: `Unsupported profile search field: ${unknownKey}` });
+    return;
+  }
+  const parsed = profileSearchInputSchema.safeParse({
+    q: req.query.q,
+    city: req.query.city,
+    region: req.query.region,
+    packageName: req.query.packageName,
+    overdueFollowUp: req.query.overdueFollowUp,
+    limit: req.query.limit,
+  });
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the profile search." });
+    return;
+  }
+  try {
+    const results = await profileSearch.search({
+      query: parsed.data.q,
+      city: parsed.data.city,
+      region: parsed.data.region,
+      packageName: parsed.data.packageName,
+      overdueFollowUp: parsed.data.overdueFollowUp,
+      limit: parsed.data.limit,
+    });
+    res.json({ results });
+  } catch (err) {
+    req.log.error({ err }, "Assistant profile search failed");
+    res.status(500).json({ error: "Could not search profiles right now." });
+  }
+});
+
+router.post("/assistant/general/ask", async (req, res): Promise<void> => {
+  const parsed = generalAskSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review your assistant question." });
+    return;
+  }
+  try {
+    res.json(await answerGeneralAssistant({ question: parsed.data.question, profileSearch }));
+  } catch (err) {
+    req.log.error({ err }, "General Booking Assistant ask failed");
+    res.status(500).json({ error: "The Booking Assistant could not search Command Center right now." });
+  }
+});
+
 router.get("/assistant/context", async (req, res): Promise<void> => {
   const parsed = getAssistantContextInputSchema.safeParse({
     contextKind: req.query.kind,
     contextRecordId: req.query.id,
   });
   if (!parsed.success) {
-    res.status(400).json({
-      error: parsed.error.issues[0]?.message ?? "Review the assistant context.",
-    });
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the assistant context." });
     return;
   }
   try {
@@ -88,9 +136,7 @@ router.get("/assistant/brief", async (req, res): Promise<void> => {
     contextRecordId: req.query.id,
   });
   if (!parsed.success) {
-    res.status(400).json({
-      error: parsed.error.issues[0]?.message ?? "Review the assistant context.",
-    });
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the assistant context." });
     return;
   }
   try {
@@ -117,8 +163,7 @@ router.get("/assistant/conversation", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const conversation = await new AssistantConversationRepository()
-      .getLatestConversation({ actorId, ...parsed.data });
+    const conversation = await new AssistantConversationRepository().getLatestConversation({ actorId, ...parsed.data });
     res.json({ conversation });
   } catch (err) {
     req.log.error({ err }, "Failed to resume assistant conversation");
@@ -137,10 +182,7 @@ router.post("/assistant/derived-facts/extract", async (req, res): Promise<void> 
     res.json({ ok: true, ...result });
   } catch (err) {
     req.log.error({ err }, "Derived fact extraction failed");
-    res.status(500).json({
-      ok: false,
-      error: "Could not analyze imported history right now.",
-    });
+    res.status(500).json({ ok: false, error: "Could not analyze imported history right now." });
   }
 });
 
@@ -149,21 +191,13 @@ router.get("/assistant/derived-facts", async (req, res): Promise<void> => {
     organizationId: req.query.organizationId || undefined,
     contactId: req.query.contactId || undefined,
   });
-  const status =
-    req.query.status === "proposed" ||
-    req.query.status === "confirmed" ||
-    req.query.status === "dismissed"
-      ? req.query.status
-      : undefined;
+  const status = req.query.status === "proposed" || req.query.status === "confirmed" || req.query.status === "dismissed" ? req.query.status : undefined;
   if (!parsed.success) {
     res.status(400).json({ error: "Choose a profile or contact." });
     return;
   }
   try {
-    const facts = await new DerivedFactRepository().listForProfile({
-      ...parsed.data,
-      status,
-    });
+    const facts = await new DerivedFactRepository().listForProfile({ ...parsed.data, status });
     res.json({ facts });
   } catch (err) {
     req.log.error({ err }, "Failed to list derived facts");
@@ -179,10 +213,7 @@ router.post("/assistant/derived-facts/:factId/decision", async (req, res): Promi
     return;
   }
   try {
-    const updated = await new DerivedFactRepository().setStatus({
-      factId: factId.data,
-      status: status.data,
-    });
+    const updated = await new DerivedFactRepository().setStatus({ factId: factId.data, status: status.data });
     if (!updated) {
       res.status(409).json({ error: "This fact was already reviewed." });
       return;
@@ -198,9 +229,7 @@ router.post("/assistant/ask", async (req, res): Promise<void> => {
   const actorId = (req as any).userId as string;
   const parsed = askBookingAssistantInputSchema.safeParse(req.body);
   if (!parsed.success) {
-    res.status(400).json({
-      error: parsed.error.issues[0]?.message ?? "Review your assistant question.",
-    });
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review your assistant question." });
     return;
   }
   try {
@@ -225,17 +254,12 @@ router.post("/assistant/ask", async (req, res): Promise<void> => {
       res.status(404).json({ error: "Assistant context not found." });
       return;
     }
-    if (
-      err instanceof Error &&
-      err.message === "ASSISTANT_CONVERSATION_NOT_FOUND"
-    ) {
+    if (err instanceof Error && err.message === "ASSISTANT_CONVERSATION_NOT_FOUND") {
       res.status(404).json({ error: "Assistant conversation not found." });
       return;
     }
     req.log.error({ err }, "Booking Assistant ask failed");
-    res.status(500).json({
-      error: "The Booking Assistant could not answer that right now.",
-    });
+    res.status(500).json({ error: "The Booking Assistant could not answer that right now." });
   }
 });
 

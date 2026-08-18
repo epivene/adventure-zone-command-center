@@ -31,6 +31,24 @@ export type AssistantAnswer = {
   needsAdmin: false;
 };
 
+export type AssistantProfileSearchResult = {
+  id: string;
+  kind: "organization" | "contact" | "event_family";
+  label: string;
+  secondaryLabel: string | null;
+  city: string | null;
+  region: string | null;
+  status: string | null;
+  lastContactAt: string | null;
+  bookingCount: number | null;
+  matchedOn: string[];
+};
+
+export type GeneralAssistantResponse =
+  | { kind: "profile_results"; text: string; results: AssistantProfileSearchResult[] }
+  | { kind: "answer"; answer: AssistantAnswer }
+  | { kind: "needs_context"; text: string };
+
 export type BookingBrief = {
   headline: string;
   items: Array<{

@@ -8,6 +8,9 @@ import { Toaster } from "@/components/ui/toaster";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
+import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
+
+type LabeledProfileSheetTarget = ProfileSheetTarget & { label?: string };
 
 export default function OrganizationsPage() {
   const search = useSearch();
@@ -33,7 +36,7 @@ export default function OrganizationsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [profileTarget, setProfileTarget] = useState<ProfileSheetTarget | null>(null);
+  const [profileTarget, setProfileTarget] = useState<LabeledProfileSheetTarget | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dupLoading, setDupLoading] = useState(false);
   const [dupError, setDupError] = useState<string | null>(null);
@@ -86,7 +89,11 @@ export default function OrganizationsPage() {
     event.preventDefault();
     const queryString = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
     const linkParams = new URLSearchParams(queryString);
-    setProfileTarget({ profileId: decodeURIComponent(match[1]), contactId: linkParams.get("contactId") ?? undefined });
+    setProfileTarget({
+      profileId: decodeURIComponent(match[1]),
+      contactId: linkParams.get("contactId") ?? undefined,
+      label: element?.textContent?.trim() || "Side profile",
+    });
   }
 
   function openDuplicates() {
@@ -138,6 +145,7 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label={profileTarget.label ?? "Side profile"} /> : null}
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
       <Toaster />
     </div>
