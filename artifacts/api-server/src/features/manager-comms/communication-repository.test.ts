@@ -11,7 +11,7 @@ const repo = new CommunicationRepository(db);
 
 beforeAll(async () => {
   await repo.ensureSchema();
-  await db.execute(sql.raw("truncate manager_message_reads, manager_message_attachments, manager_messages, manager_conversation_members, manager_conversations cascade"));
+  await db.execute(sql.raw("truncate manager_admin_message_reads, manager_message_reads, manager_message_attachments, manager_messages, manager_conversation_members, manager_conversations cascade"));
 });
 
 afterAll(async () => {
@@ -65,5 +65,27 @@ describe("CommunicationRepository", () => {
     expect((await repo.listForManager(LEG_B)).find((row) => row.id === conversation.id)?.unreadCount).toBe(1);
     await repo.markConversationRead(conversation.id, LEG_B);
     expect((await repo.listForManager(LEG_B)).find((row) => row.id === conversation.id)?.unreadCount).toBe(0);
+  });
+
+  it("tracks manager replies as unread for Admin until Admin opens the conversation", async () => {
+    const conversation = await repo.createConversation({ kind: "leg_admin", title: "Leg A + Admin", memberLegIds: [LEG_A] });
+    await repo.sendMessage({
+      conversationId: conversation.id,
+      actor: { kind: "admin", name: "Admin" },
+      body: "How did setup go?",
+      clientMutationId: "00000000-0000-4000-8000-00000000d003",
+    });
+    await repo.markConversationReadForAdmin(conversation.id);
+
+    await repo.sendMessage({
+      conversationId: conversation.id,
+      actor: { kind: "manager", legId: LEG_A, name: "Kristy" },
+      body: "Setup went well.",
+      clientMutationId: "00000000-0000-4000-8000-00000000d004",
+    });
+
+    expect((await repo.listAllForAdmin()).find((row) => row.id === conversation.id)?.unreadCount).toBe(1);
+    await repo.markConversationReadForAdmin(conversation.id);
+    expect((await repo.listAllForAdmin()).find((row) => row.id === conversation.id)?.unreadCount).toBe(0);
   });
 });
