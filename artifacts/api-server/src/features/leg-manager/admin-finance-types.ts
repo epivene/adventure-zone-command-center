@@ -52,6 +52,7 @@ export type AdminExpenseRow = {
   id: string;
   legId: string;
   legName: string;
+  submitterName: string | null;
   bookingId: string | null;
   bookingName: string | null;
   tripId: string | null;
