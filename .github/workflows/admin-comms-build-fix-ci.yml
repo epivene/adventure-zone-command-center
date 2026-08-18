@@ -1,0 +1,23 @@
+name: Admin Comms Build Fix CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx"
+      - ".github/workflows/admin-comms-build-fix-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx
+      - run: pnpm --filter @workspace/adventure-zone run build
