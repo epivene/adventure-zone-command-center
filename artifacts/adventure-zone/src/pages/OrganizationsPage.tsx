@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
+import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 
 export default function OrganizationsPage() {
   const search = useSearch();
@@ -138,6 +139,7 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label="Side profile" /> : null}
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
       <Toaster />
     </div>
