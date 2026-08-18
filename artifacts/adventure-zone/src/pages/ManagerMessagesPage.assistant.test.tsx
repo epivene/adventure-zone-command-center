@@ -8,8 +8,8 @@ const context = readFileSync("src/features/manager-assistant/manager-assistant-c
 describe("manager Operations Assistant in Messages", () => {
   it("pins the Assistant in Messages instead of floating it from the shell", () => {
     expect(messages).toContain("Operations Assistant");
-    expect(messages).toContain("ManagerAssistantDrawer");
-    expect(messages).toContain("embedded");
+    expect(messages).toContain("ManagerAssistantConversation");
+    expect(messages).toContain("Pinned");
     expect(shell).not.toContain("ManagerAssistantLauncher");
     expect(shell).not.toContain("<ManagerAssistantDrawer />");
   });
@@ -17,7 +17,8 @@ describe("manager Operations Assistant in Messages", () => {
   it("routes contextual Ask Assistant shortcuts into the Messages assistant thread", () => {
     expect(context).toContain("az_manager_assistant_pending");
     expect(context).toContain("/manager/messages?assistant=1");
-    expect(messages).toContain("assistant=1");
+    expect(messages).toContain("assistant");
     expect(messages).toContain("setActiveContext");
+    expect(messages).toContain("MANAGER_ASSISTANT_PENDING_KEY");
   });
 });
