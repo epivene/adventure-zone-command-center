@@ -11,8 +11,10 @@ import type {
   AssistantAskResponse,
   AssistantContextBundle,
   AssistantConversation,
+  AssistantProfileSearchResult,
   AssistantSourceReference,
   BookingBrief,
+  GeneralAssistantResponse,
 } from "./assistant-types";
 
 export type DerivedFactReviewItem = {
@@ -33,6 +35,17 @@ function params(context: Exclude<ActiveAssistantContext, null>): string {
     kind: context.kind,
     id: context.recordId,
   }).toString();
+}
+
+export async function askGeneralAssistant(question: string): Promise<GeneralAssistantResponse> {
+  return apiPost<GeneralAssistantResponse>("/assistant/general/ask", { question });
+}
+
+export async function searchAssistantProfiles(query: string): Promise<AssistantProfileSearchResult[]> {
+  const response = await apiGet<{ results: AssistantProfileSearchResult[] }>(
+    `/assistant/profile-search?${new URLSearchParams({ q: query }).toString()}`,
+  );
+  return response.results;
 }
 
 export async function getAssistantContext(
