@@ -79,15 +79,23 @@ export default function EventFamilyPage() {
     }
   }
 
-  async function addMember(organizationId: string) {
-    if (!family) return;
+  async function addMembers(organizationIds: string[]) {
+    if (!family || !organizationIds.length) return;
     setSaving(true);
     setError(null);
     try {
-      await apiPost(`/event-families/${family.id}/members`, { organizationId });
+      const results = await Promise.allSettled(
+        organizationIds.map((organizationId) =>
+          apiPost(`/event-families/${family.id}/members`, { organizationId }),
+        ),
+      );
       await load();
+      const failed = results.filter((result) => result.status === "rejected").length;
+      if (failed > 0) {
+        setError(`${failed} selected profile${failed === 1 ? "" : "s"} could not be added. The successful additions were kept.`);
+      }
     } catch (err: any) {
-      setError(err?.message ?? "Could not add profile to family");
+      setError(err?.message ?? "Could not add profiles to family");
     } finally {
       setSaving(false);
     }
@@ -141,15 +149,15 @@ export default function EventFamilyPage() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold">Add events to this family</h2>
-            <p className="mt-1 text-sm text-slate-500">Search every profile, or create a brand-new event already assigned to this family.</p>
+            <h2 className="text-lg font-bold">Add events</h2>
+            <p className="text-sm text-slate-500">Search existing profiles or create a new event in this family.</p>
           </div>
-          <Link className="button-secondary" href={`/event-profiles/new?familyId=${family.id}`}>Create new event in this family</Link>
+          <Link className="button-secondary" href={`/event-profiles/new?familyId=${family.id}`}>Create new event</Link>
         </div>
-        <div className="mt-4">
-          <ProfileMemberPicker familyId={family.id} disabled={saving} onSelect={addMember} />
+        <div className="mt-3">
+          <ProfileMemberPicker familyId={family.id} disabled={saving} onSelectMany={addMembers} />
         </div>
       </section>
 
