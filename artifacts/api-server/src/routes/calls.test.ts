@@ -251,14 +251,14 @@ describe("assisted calling configuration route", () => {
     });
   });
 
-  it("defaults to enabled when the deployment flag is omitted", async () => {
+  it("uses safe disabled defaults when the deployment flag is omitted", async () => {
     delete process.env.ASSISTED_CALLING_ENABLED;
     delete process.env.VOICEMAIL_LAUNCH_URL;
 
     const response = await request(app).get("/calls/config").expect(200);
 
     expect(response.body).toEqual({
-      assistedCallingEnabled: true,
+      assistedCallingEnabled: false,
       voicemailLauncherUrl: null,
     });
   });
