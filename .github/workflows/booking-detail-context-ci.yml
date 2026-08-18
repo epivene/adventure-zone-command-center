@@ -1,0 +1,27 @@
+name: Booking Detail Context CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/pages/BookingDetailPage.tsx"
+      - "artifacts/adventure-zone/src/pages/BookingDetailPage.assistant-context.test.tsx"
+      - ".github/workflows/booking-detail-context-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Booking detail regression test
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/BookingDetailPage.assistant-context.test.tsx
+      - name: Build web
+        run: pnpm --filter @workspace/adventure-zone run build
