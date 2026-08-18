@@ -1,5 +1,6 @@
 import type { AssistantSourceReference } from "@/features/assistant/assistant-types";
 import type {
+  ManagerAssignedEventSummary,
   ManagerAssistantAnswer,
   ManagerAssistantContextBundle,
 } from "./manager-assistant-types";
@@ -41,11 +42,87 @@ function escalate(reason: string): ManagerAssistantAnswer {
   };
 }
 
+function validTimeZone(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date(0));
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function formatLifecycleTime(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(value));
+}
+
+function lifecycleEvent(context: ManagerAssistantContextBundle): ManagerAssignedEventSummary | null {
+  if (context.activeEvent) return context.activeEvent;
+  if (context.activeContext.kind === "booking") {
+    const active = context.assignedEvents.find((event) => event.id === context.activeContext.recordId);
+    if (active) return active;
+  }
+  const checkedIn = context.assignedEvents
+    .filter((event) => event.checkedInAt && !event.checkedOutAt)
+    .sort((left, right) => String(right.checkedInAt).localeCompare(String(left.checkedInAt)))[0];
+  if (checkedIn) return checkedIn;
+  const recentlyCheckedOut = context.assignedEvents
+    .filter((event) => event.checkedOutAt)
+    .sort((left, right) => String(right.checkedOutAt).localeCompare(String(left.checkedOutAt)))[0];
+  return recentlyCheckedOut ?? context.assignedEvents[0] ?? null;
+}
+
+function lifecycleAnswer(input: {
+  question: string;
+  context: ManagerAssistantContextBundle;
+  timeZone?: string;
+}): ManagerAssistantAnswer | null {
+  const asksCheckIn = /\b(check ?in|checked in|arriv(?:e|ed|al))\b/.test(input.question);
+  const asksCheckOut = /\b(check ?out|checked out|depart(?:ed|ure)?|left)\b/.test(input.question);
+  if (!asksCheckIn && !asksCheckOut) return null;
+
+  const event = lifecycleEvent(input.context);
+  if (!event) return escalate("No assigned event is available for the lifecycle-time question.");
+
+  const value = asksCheckOut ? event.checkedOutAt : event.checkedInAt;
+  if (!value) {
+    return answer(
+      `${event.name} does not have an actual ${asksCheckOut ? "check-out" : "check-in"} time saved yet.`,
+      sourcesBy(input.context, (source) => source.kind === "booking" && source.recordId === event.id),
+      "medium",
+    );
+  }
+
+  const zone = validTimeZone(
+    asksCheckOut ? event.checkOutTimeZone : event.checkInTimeZone,
+  ) ?? validTimeZone(input.timeZone) ?? "UTC";
+  return answer(
+    `${event.name} ${asksCheckOut ? "checked out" : "checked in"} ${formatLifecycleTime(value, zone)}.`,
+    sourcesBy(input.context, (source) => source.kind === "booking" && source.recordId === event.id),
+  );
+}
+
 export function answerManagerDeterministically(input: {
   question: string;
   context: ManagerAssistantContextBundle;
+  timeZone?: string;
 }): ManagerAssistantAnswer | null {
   const question = normalize(input.question);
+
+  const actualLifecycle = lifecycleAnswer({
+    question,
+    context: input.context,
+    timeZone: input.timeZone,
+  });
+  if (actualLifecycle) return actualLifecycle;
 
   if (/forklift|loader|setup|tear ?down|power|electric|water|stake|ballast/.test(question)) {
     const candidates = [
