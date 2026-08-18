@@ -7,6 +7,7 @@ import { indexedDbManagerMutationStore } from "@/lib/manager-offline-db";
 import { flushManagerBlobQueue, type ManagerBlobKind } from "@/lib/manager-blob-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
 import { ManagerAssistantProvider } from "@/features/manager-assistant/manager-assistant-context";
+import { MessageBubbleLink } from "@/components/navigation/message-bubble-link";
 import { ManagerAssistantDrawer } from "./manager-assistant-drawer";
 import { ManagerAssistantLauncher } from "./manager-assistant-launcher";
 import { ManagerActionCenter } from "./manager-action-center";
@@ -72,6 +73,7 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
       <div className="mx-auto flex max-w-3xl items-center gap-3">
         {backTarget ? <Link href={backTarget} className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-sm font-semibold" aria-label="Back"><ArrowLeft className="h-4 w-4"/><span className="hidden sm:inline">Back</span></Link> : null}
         <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Leg Manager</p><p className="truncate font-semibold">{manager?.legName}</p></div>
+        <MessageBubbleLink className="ml-auto" href="/manager/messages" label="Messages" unreadCount={unreadMessages} />
       </div>
     </header>
     <ManagerActionCenter />

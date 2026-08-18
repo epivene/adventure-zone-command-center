@@ -94,6 +94,11 @@ create table if not exists manager_message_reads (
   primary key (conversation_id, leg_id)
 );
 
+create table if not exists manager_admin_message_reads (
+  conversation_id uuid primary key references manager_conversations(id) on delete cascade,
+  read_at timestamptz not null default now()
+);
+
 create table if not exists manager_message_attachments (
   id uuid primary key default gen_random_uuid(),
   conversation_id uuid not null references manager_conversations(id) on delete cascade,
@@ -195,8 +200,14 @@ export class CommunicationRepository {
     const result = await this.database.execute(sql`
       select c.id, c.kind, c.title,
         c.created_at as "createdAt", c.updated_at as "updatedAt",
-        0::int as "unreadCount"
+        count(msg.id) filter (
+          where msg.created_at > coalesce(r.read_at, 'epoch'::timestamptz)
+            and msg.actor_kind = 'manager'
+        )::int as "unreadCount"
       from manager_conversations c
+      left join manager_admin_message_reads r on r.conversation_id = c.id
+      left join manager_messages msg on msg.conversation_id = c.id
+      group by c.id, r.read_at
       order by c.updated_at desc, c.created_at desc
     `);
     return resultRows<ConversationSummary>(result);
@@ -276,6 +287,17 @@ export class CommunicationRepository {
       insert into manager_message_reads (conversation_id, leg_id, read_at)
       values (${conversationId}::uuid, ${legId}::uuid, now())
       on conflict (conversation_id, leg_id) do update set read_at = excluded.read_at
+    `);
+  }
+
+  async markConversationReadForAdmin(conversationId: string) {
+    if (!(await this.conversationExists(conversationId))) {
+      throw Object.assign(new Error("Conversation not found"), { code: "NOT_FOUND" });
+    }
+    await this.database.execute(sql`
+      insert into manager_admin_message_reads (conversation_id, read_at)
+      values (${conversationId}::uuid, now())
+      on conflict (conversation_id) do update set read_at = excluded.read_at
     `);
   }
 

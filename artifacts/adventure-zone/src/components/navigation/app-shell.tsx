@@ -1,11 +1,13 @@
 import { Link, useLocation } from "wouter";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CalendarDays, ContactRound, House } from "lucide-react";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
+import { MessageBubbleLink } from "./message-bubble-link";
 import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
+import { apiGet } from "@/lib/auth-token";
 
 const primaryNavigation = [
   { href: "/today", label: "Today", icon: House },
@@ -15,6 +17,22 @@ const primaryNavigation = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const data = await apiGet<{ conversations: Array<{ unreadCount?: number }> }>("/manager-admin/messages/conversations");
+        if (active) setUnreadMessages((data.conversations ?? []).reduce((sum, row) => sum + (row.unreadCount ?? 0), 0));
+      } catch {
+        if (active) setUnreadMessages(0);
+      }
+    };
+    void refresh();
+    const id = window.setInterval(refresh, 15000);
+    return () => { active = false; window.clearInterval(id); };
+  }, [location]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
@@ -43,11 +61,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             })}
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            <MessageBubbleLink href="/manager-communications" label="Messages" unreadCount={unreadMessages} />
             <AddMenu />
             <AppMenu />
           </div>
         </div>
       </header>
+
+      <div className="fixed right-4 top-4 z-30 md:hidden">
+        <MessageBubbleLink href="/manager-communications" label="Messages" unreadCount={unreadMessages} />
+      </div>
 
       <main className="min-h-screen px-4 py-5 pb-28 md:px-8 md:py-7 md:pb-8">
         {children}
