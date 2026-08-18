@@ -16,6 +16,6 @@ describe("admin incident mutations", () => {
     expect(route).toContain('router.delete("/manager-admin/incidents/:incidentId"');
     expect(route).toContain("incidents.deleteIncident");
     expect(repository).toContain("deleteIncident(");
-    expect(storage).toContain("delete(key:string)");
+    expect(storage).toMatch(/delete\(key:\s*string\)/);
   });
 });
