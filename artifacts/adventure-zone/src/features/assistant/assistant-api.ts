@@ -37,6 +37,14 @@ function params(context: Exclude<ActiveAssistantContext, null>): string {
   }).toString();
 }
 
+function browserTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function askGeneralAssistant(question: string): Promise<GeneralAssistantResponse> {
   return apiPost<GeneralAssistantResponse>("/assistant/general/ask", { question });
 }
@@ -199,6 +207,7 @@ export async function askBookingAssistant(input: {
       contextKind: input.context.kind,
       contextRecordId: input.context.recordId,
       question: input.question,
+      timeZone: browserTimeZone(),
     });
     await saveAssistantSnapshot({
       contextRef: input.context,
