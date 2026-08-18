@@ -24,6 +24,20 @@ const incidentStorage = new GoogleCloudLegManagerObjectStorage();
 const access = z.object({ password: z.string().min(1) });
 const duplicatePasswordMessage =
   "That password is already assigned to another manager. Choose a different password.";
+const incidentIdSchema = z.string().uuid();
+const incidentUpdateSchema = z.object({
+  type: z.string().trim().min(1).max(160).optional(),
+  occurredAt: z.coerce.date().optional(),
+  locationText: z.string().trim().max(500).nullable().optional(),
+  peopleInvolved: z.string().trim().max(2000).nullable().optional(),
+  description: z.string().trim().min(1).max(8000).optional(),
+  actionTaken: z.string().trim().max(8000).nullable().optional(),
+  followUpNeeded: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, { message: "At least one incident field is required" });
+
+function param(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 router.get("/manager-admin/legs/access", async (_req, res) => {
   res.json({ legs: await repo.listAdminStatuses() });
@@ -38,13 +52,7 @@ router.put("/manager-admin/legs/:legId/access", async (req, res): Promise<void> 
   const existing = await repo.listConfiguredPasswordRecords();
   for (const record of existing) {
     if (record.legId === req.params.legId) continue;
-    if (
-      await verifyLegManagerPassword(
-        parsed.data.password,
-        record.passwordHash,
-        record.passwordSalt,
-      )
-    ) {
+    if (await verifyLegManagerPassword(parsed.data.password, record.passwordHash, record.passwordSalt)) {
       res.status(409).json({ error: duplicatePasswordMessage });
       return;
     }
@@ -89,17 +97,12 @@ router.get("/manager-admin/issues", async (req, res) => {
 });
 
 router.post("/manager-admin/issues/:id/resolve", async (req, res): Promise<void> => {
-  const parsed = z
-    .object({ resolutionNote: z.string().trim().min(1).max(4000) })
-    .safeParse(req.body);
+  const parsed = z.object({ resolutionNote: z.string().trim().min(1).max(4000) }).safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Resolution note is required" });
     return;
   }
-  const issue = await new DrizzleScheduleIssueRepository(db).resolve(
-    req.params.id,
-    parsed.data.resolutionNote,
-  );
+  const issue = await new DrizzleScheduleIssueRepository(db).resolve(req.params.id, parsed.data.resolutionNote);
   if (!issue) {
     res.status(404).json({ error: "Issue not found" });
     return;
@@ -108,21 +111,17 @@ router.post("/manager-admin/issues/:id/resolve", async (req, res): Promise<void>
 });
 
 router.get("/manager-admin/legs/:legId/money/summary", async (req, res) => {
-  res.json(
-    await new DrizzleFinanceRepository(db).summary(
-      req.params.legId,
-      typeof req.query.tripId === "string" ? req.query.tripId : null,
-    ),
-  );
+  res.json(await new DrizzleFinanceRepository(db).summary(
+    req.params.legId,
+    typeof req.query.tripId === "string" ? req.query.tripId : null,
+  ));
 });
 
 router.get("/manager-admin/money/summary", async (req, res) => {
-  res.json(
-    await new DrizzleFinanceRepository(db).summary(
-      null,
-      typeof req.query.tripId === "string" ? req.query.tripId : null,
-    ),
-  );
+  res.json(await new DrizzleFinanceRepository(db).summary(
+    null,
+    typeof req.query.tripId === "string" ? req.query.tripId : null,
+  ));
 });
 
 router.get("/manager-admin/crew", async (_req, res) => {
@@ -144,8 +143,7 @@ router.post("/manager-admin/crew", async (req, res): Promise<void> => {
 });
 
 router.patch("/manager-admin/crew/:workerId/rehire-status", async (req, res): Promise<void> => {
-  const raw = req.params.workerId;
-  const workerId = Array.isArray(raw) ? raw[0] ?? "" : raw;
+  const workerId = param(req.params.workerId);
   const parsed = z.object({ rehireStatus: z.enum(crewRehireStatuses) }).safeParse(req.body);
   if (!workerId || !parsed.success) { res.status(400).json({ error: "Invalid rehire status" }); return; }
   const worker = await crew.updateRehireStatus(workerId, parsed.data.rehireStatus);
@@ -154,8 +152,7 @@ router.patch("/manager-admin/crew/:workerId/rehire-status", async (req, res): Pr
 });
 
 router.patch("/manager-admin/crew/work-history/:historyId", async (req, res): Promise<void> => {
-  const raw = req.params.historyId;
-  const historyId = Array.isArray(raw) ? raw[0] ?? "" : raw;
+  const historyId = param(req.params.historyId);
   const parsed = z.object({
     role: z.string().trim().min(1).max(160).optional(),
     startedAt: z.coerce.date().optional(),
@@ -173,6 +170,50 @@ router.get("/manager-admin/incidents", async (_req, res) => {
   const rows = await incidents.listAll();
   const attachments = await incidents.listAttachmentsForIncidents(rows.map((row) => row.id));
   res.json({ incidents: await attachIncidentPhotoUrls(rows, attachments, incidentStorage) });
+});
+
+router.patch("/manager-admin/incidents/:incidentId", async (req, res): Promise<void> => {
+  const incidentId = param(req.params.incidentId);
+  const parsedId = incidentIdSchema.safeParse(incidentId);
+  const parsed = incidentUpdateSchema.safeParse(req.body ?? {});
+  if (!parsedId.success || !parsed.success) {
+    res.status(400).json({ error: "Invalid incident update" });
+    return;
+  }
+  const incident = await incidents.updateIncident(parsedId.data, parsed.data);
+  if (!incident) {
+    res.status(404).json({ error: "Incident not found" });
+    return;
+  }
+  const attachments = await incidents.listAttachmentsForIncidents([incident.id]);
+  const [withPhotos] = await attachIncidentPhotoUrls([incident], attachments, incidentStorage);
+  res.json({ incident: withPhotos ?? incident });
+});
+
+router.delete("/manager-admin/incidents/:incidentId", async (req, res): Promise<void> => {
+  const incidentId = param(req.params.incidentId);
+  const parsedId = incidentIdSchema.safeParse(incidentId);
+  if (!parsedId.success) {
+    res.status(400).json({ error: "Invalid incident id" });
+    return;
+  }
+
+  const attachments = await incidents.listAttachmentsForIncidents([parsedId.data]);
+  const deleted = await incidents.deleteIncident(parsedId.data);
+  if (!deleted) {
+    res.status(404).json({ error: "Incident not found" });
+    return;
+  }
+
+  const objectKeys = attachments
+    .map((attachment) => attachment.objectKey)
+    .filter((key): key is string => typeof key === "string" && key.trim().length > 0);
+  const cleanup = await Promise.allSettled(objectKeys.map((key) => incidentStorage.delete(key)));
+  const failures = cleanup.filter((result) => result.status === "rejected").length;
+  if (failures > 0) {
+    req.log.warn({ incidentId: parsedId.data, failures }, "Incident deleted but some attachment objects could not be removed");
+  }
+  res.json({ ok: true });
 });
 
 router.get("/manager-admin/reviews", async (_req, res) => {
