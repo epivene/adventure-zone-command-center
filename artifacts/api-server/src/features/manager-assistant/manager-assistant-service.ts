@@ -64,6 +64,7 @@ export class ManagerAssistantService {
     const deterministic = answerManagerDeterministically({
       question: input.request.question,
       context,
+      timeZone: input.request.timeZone,
     });
     if (deterministic && !deterministic.needsAdmin) {
       return { context, answer: deterministic };

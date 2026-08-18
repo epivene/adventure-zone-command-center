@@ -43,4 +43,24 @@ describe("manager assistant input", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts a valid IANA time zone and rejects made-up zones", () => {
+    const valid = managerAskInputSchema.safeParse({
+      contextKind: "booking",
+      contextRecordId: "11111111-1111-4111-8111-111111111111",
+      question: "What time did we check in?",
+      timeZone: "America/Denver",
+    });
+    expect(valid.success).toBe(true);
+    if (valid.success) expect(valid.data.timeZone).toBe("America/Denver");
+
+    expect(
+      managerAskInputSchema.safeParse({
+        contextKind: "booking",
+        contextRecordId: "11111111-1111-4111-8111-111111111111",
+        question: "What time did we check in?",
+        timeZone: "Mountain-ish",
+      }).success,
+    ).toBe(false);
+  });
 });

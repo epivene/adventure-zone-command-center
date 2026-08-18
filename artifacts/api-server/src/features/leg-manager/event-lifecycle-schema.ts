@@ -8,10 +8,12 @@ export const eventLegLifecycle = pgTable("event_leg_lifecycle", {
   bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "cascade" }),
   legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
   checkedInAt: timestamp("checked_in_at", { withTimezone: true }),
+  checkInTimeZone: text("check_in_time_zone"),
   checkInLatitude: doublePrecision("check_in_latitude"),
   checkInLongitude: doublePrecision("check_in_longitude"),
   checkInLocationStatus: text("check_in_location_status").default("not_requested").notNull(),
   checkedOutAt: timestamp("checked_out_at", { withTimezone: true }),
+  checkOutTimeZone: text("check_out_time_zone"),
   checkOutLatitude: doublePrecision("check_out_latitude"),
   checkOutLongitude: doublePrecision("check_out_longitude"),
   checkOutLocationStatus: text("check_out_location_status").default("not_requested").notNull(),
@@ -31,10 +33,12 @@ export async function ensureEventLegLifecycleSchema() {
       booking_id uuid NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
       leg_id uuid NOT NULL REFERENCES travel_legs(id) ON DELETE RESTRICT,
       checked_in_at timestamptz,
+      check_in_time_zone text,
       check_in_latitude double precision,
       check_in_longitude double precision,
       check_in_location_status text NOT NULL DEFAULT 'not_requested',
       checked_out_at timestamptz,
+      check_out_time_zone text,
       check_out_latitude double precision,
       check_out_longitude double precision,
       check_out_location_status text NOT NULL DEFAULT 'not_requested',
@@ -47,6 +51,8 @@ export async function ensureEventLegLifecycleSchema() {
       CONSTRAINT event_leg_lifecycle_wrap_up_status_valid CHECK (wrap_up_status IN ('not_started','incomplete','finished')),
       CONSTRAINT event_leg_lifecycle_checkout_after_checkin CHECK (checked_out_at IS NULL OR checked_in_at IS NOT NULL)
     );
+    ALTER TABLE event_leg_lifecycle ADD COLUMN IF NOT EXISTS check_in_time_zone text;
+    ALTER TABLE event_leg_lifecycle ADD COLUMN IF NOT EXISTS check_out_time_zone text;
     CREATE UNIQUE INDEX IF NOT EXISTS event_leg_lifecycle_booking_leg_unique ON event_leg_lifecycle(booking_id, leg_id);
     CREATE INDEX IF NOT EXISTS event_leg_lifecycle_leg_status_idx ON event_leg_lifecycle(leg_id, wrap_up_status);
   `));

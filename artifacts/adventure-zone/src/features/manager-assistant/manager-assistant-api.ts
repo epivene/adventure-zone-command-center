@@ -13,8 +13,21 @@ import type {
 type ManagerApi = <T>(path: string, options?: RequestInit) => Promise<T>;
 
 function normalize(value:string){return value.toLowerCase().replace(/[?!.,'’]/g," ").replace(/\s+/g," ").trim();}
+function deviceTimeZone(){try{return Intl.DateTimeFormat().resolvedOptions().timeZone||undefined}catch{return undefined}}
+function formatLifecycle(value:string,timeZone:string|undefined){return new Intl.DateTimeFormat("en-US",{timeZone,month:"long",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",timeZoneName:"short"}).format(new Date(value));}
 function offlineAnswer(question:string,context:ManagerAssistantContextBundle):ManagerAssistantAnswer{
   const q=normalize(question);
+  const asksCheckIn=/\b(check ?in|checked in|arriv(?:e|ed|al))\b/.test(q);
+  const asksCheckOut=/\b(check ?out|checked out|depart(?:ed|ure)?|left)\b/.test(q);
+  if(asksCheckIn||asksCheckOut){
+    const event=context.activeEvent??context.assignedEvents.find(item=>item.checkedInAt&&!item.checkedOutAt)??context.assignedEvents.find(item=>item.checkedOutAt)??context.assignedEvents[0];
+    if(event){
+      const value=asksCheckOut?event.checkedOutAt:event.checkedInAt;
+      if(!value)return{text:`${event.name} does not have an actual ${asksCheckOut?"check-out":"check-in"} time saved yet.`,mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};
+      const zone=(asksCheckOut?event.checkOutTimeZone:event.checkInTimeZone)??deviceTimeZone();
+      return{text:`${event.name} ${asksCheckOut?"checked out":"checked in"} ${formatLifecycle(value,zone)}.`,mode:"offline_cached",confidence:"high",sources:[],needsAdmin:false,escalationReason:null};
+    }
+  }
   if(/forklift|loader|setup|tear ?down|power|electric|water|stake|ballast/.test(q)){
     const terms=q.split(" ").filter(term=>term.length>4);
     const knowledge=context.knowledge.map(item=>`${item.title}: ${item.body}`);
@@ -23,7 +36,7 @@ function offlineAnswer(question:string,context:ManagerAssistantContextBundle):Ma
   }
   if(/meetup|handoff|swap|paintball/.test(q)&&context.handoffs.length)return{text:context.handoffs.slice(0,3).map(item=>item.summary).join(" "),mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};
   if(/what.*next|next event|where.*next|schedule/.test(q)&&context.assignedEvents[0]){const event=context.assignedEvents[0];return{text:`${event.name}${event.city||event.region?` in ${[event.city,event.region].filter(Boolean).join(", ")}`:""}${event.startsAt?` starts ${event.startsAt}`:""}.`,mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};}
-  if(/package|equipment|what.*bringing|what.*taking/.test(q)){const event=(context.activeEvent as any)??context.assignedEvents[0];if(event){const parts=[event.packageNames?.length?`Packages: ${event.packageNames.join(", ")}.`:null,event.resourceNames?.length?`Equipment: ${event.resourceNames.join(", ")}.`:null].filter(Boolean);if(parts.length)return{text:parts.join(" "),mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};}}
+  if(/package|equipment|what.*bringing|what.*taking/.test(q)){const event=context.activeEvent??context.assignedEvents[0];if(event){const parts=[event.packageNames?.length?`Packages: ${event.packageNames.join(", ")}.`:null,event.resourceNames?.length?`Equipment: ${event.resourceNames.join(", ")}.`:null].filter(Boolean);if(parts.length)return{text:parts.join(" "),mode:"offline_cached",confidence:"medium",sources:[],needsAdmin:false,escalationReason:null};}}
   return{text:"I'm offline and the saved manager data doesn't answer that confidently. You can queue this for an admin and it will send when the connection returns.",mode:"offline_cached",confidence:"low",sources:[],needsAdmin:true,escalationReason:"Offline saved operational data is insufficient for this question."};
 }
 
@@ -46,7 +59,7 @@ export async function askManagerAssistant(managerApi: ManagerApi, legId:string, 
   try{
     const result=await managerApi<{ context: ManagerAssistantContextBundle; answer: ManagerAssistantAnswer }>("/manager/assistant/ask", {
       method: "POST",
-      body: JSON.stringify({ contextKind: context.kind, contextRecordId: context.recordId, question }),
+      body: JSON.stringify({ contextKind: context.kind, contextRecordId: context.recordId, question, timeZone: deviceTimeZone() }),
     });
     await saveManagerAssistantContext({legId,contextRef:context,context:result.context}).catch(()=>undefined);
     return{...result,offline:false};

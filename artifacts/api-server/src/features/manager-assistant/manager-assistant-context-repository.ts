@@ -12,8 +12,9 @@ import type {
   ManagerRouteAssistantSummary,
 } from "./manager-assistant-types";
 
-function iso(value: Date | null | undefined): string | null {
-  return value ? value.toISOString() : null;
+function iso(value: Date | string | null | undefined): string | null {
+  if (!value) return null;
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
 export class PostgresManagerAssistantContextSource
@@ -55,15 +56,20 @@ export class PostgresManagerAssistantContextSource
     const ids = map.events.map((event) => event.bookingId);
     const extras = await this.pool.query(
       `SELECT b.id,
+              ell.checked_in_at,
+              ell.checked_out_at,
+              ell.check_in_time_zone,
+              ell.check_out_time_zone,
               COALESCE(array_agg(DISTINCT pt.name) FILTER (WHERE pt.name IS NOT NULL), '{}') AS package_names,
               COALESCE(array_agg(DISTINCT r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS resource_names
        FROM bookings b
+       LEFT JOIN event_leg_lifecycle ell ON ell.booking_id = b.id AND ell.leg_id = b.travel_leg_id
        LEFT JOIN booking_package_selections bps ON bps.booking_id = b.id
        LEFT JOIN package_templates pt ON pt.id = bps.package_template_id
        LEFT JOIN booking_resource_assignments bra ON bra.booking_id = b.id
        LEFT JOIN resources r ON r.id = bra.resource_id
        WHERE b.id = ANY($1::uuid[]) AND b.travel_leg_id = $2
-       GROUP BY b.id`,
+       GROUP BY b.id, ell.checked_in_at, ell.checked_out_at, ell.check_in_time_zone, ell.check_out_time_zone`,
       [ids, legId],
     );
     const byId = new Map(extras.rows.map((row) => [row.id as string, row]));
@@ -76,6 +82,10 @@ export class PostgresManagerAssistantContextSource
         region: event.region,
         startsAt: iso(event.startsAt),
         endsAt: iso(event.endsAt),
+        checkedInAt: iso(extra?.checked_in_at),
+        checkedOutAt: iso(extra?.checked_out_at),
+        checkInTimeZone: (extra?.check_in_time_zone as string | null | undefined) ?? null,
+        checkOutTimeZone: (extra?.check_out_time_zone as string | null | undefined) ?? null,
         status: event.status,
         packageNames: (extra?.package_names ?? []) as string[],
         resourceNames: (extra?.resource_names ?? []) as string[],

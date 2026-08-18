@@ -15,22 +15,28 @@ export type ManagerAssistantAnswer = {
   escalationReason: string | null;
 };
 
+export type ManagerAssignedEventSummary = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  checkedInAt?: string | null;
+  checkedOutAt?: string | null;
+  checkInTimeZone?: string | null;
+  checkOutTimeZone?: string | null;
+  status: string;
+  packageNames: string[];
+  resourceNames: string[];
+  setupSummary: string | null;
+};
+
 export type ManagerAssistantContextBundle = {
   leg: { id: string; name: string };
   activeContext: { kind: ManagerAssistantContextKind; recordId: string; label: string };
-  assignedEvents: Array<{
-    id: string;
-    name: string;
-    city: string | null;
-    region: string | null;
-    startsAt: string | null;
-    endsAt: string | null;
-    status: string;
-    packageNames: string[];
-    resourceNames: string[];
-    setupSummary: string | null;
-  }>;
-  activeEvent: unknown;
+  assignedEvents: ManagerAssignedEventSummary[];
+  activeEvent: ManagerAssignedEventSummary | null;
   route: null | { tripId: string; label: string; stops: Array<{ bookingId: string; label: string; sortOrder: number }> };
   handoffs: Array<{ id: string; summary: string }>;
   acknowledgments: Array<{ id: string; summary: string }>;
