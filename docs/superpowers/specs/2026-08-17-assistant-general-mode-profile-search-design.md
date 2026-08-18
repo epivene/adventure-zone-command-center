@@ -23,14 +23,14 @@ The input remains enabled.
 
 Assistant context follows this priority while the user navigates:
 
-1. An explicitly selected assistant context, such as choosing `Use as context` from an assistant search result.
-2. An open transient side profile/detail sheet/preview.
+1. An open transient side profile/detail sheet/preview.
+2. An explicitly selected assistant context, such as choosing `Use as context` from an assistant search result.
 3. The canonical context of the current page, such as a full profile, booking, event family, call workspace, or route.
 4. General Command Center mode.
 
-Transient context must be reversible. Opening a side profile temporarily changes assistant context to that profile. Closing that side profile restores the context that was active immediately before the side profile opened rather than clearing context blindly.
+Transient context must be reversible. Opening a side profile temporarily changes assistant context to that profile. Closing that side profile restores the context that was active underneath it—an explicit search-selected context if one exists, otherwise the current page context, otherwise General mode.
 
-An explicitly chosen profile from assistant search should remain selected until the user navigates into a new canonical context or explicitly clears/switches it.
+An explicitly chosen profile from assistant search should remain selected until the user navigates into a new canonical context or explicitly clears/switches it. Opening a side profile temporarily overrides it, but closing the side profile restores it.
 
 ### Side profiles count as profiles
 
@@ -43,7 +43,7 @@ When the side profile is open, the assistant should behave as though the user op
 - What should I say when I call?
 - What follow-up is due?
 
-Closing the side profile restores the prior/page/general context.
+Closing the side profile restores the underlying explicit/page/general context.
 
 ### General-mode profile search
 
@@ -134,7 +134,7 @@ explicitContext: ActiveAssistantContext | null
 Effective context is resolved by priority:
 
 ```ts
-explicitContext ?? transientContext ?? pageContext ?? null
+transientContext ?? explicitContext ?? pageContext ?? null
 ```
 
 `null` effective context is valid General mode.
@@ -288,10 +288,10 @@ Tests must prove:
 
 - no context -> General mode and input enabled,
 - page profile -> page context,
-- side profile opens -> transient profile wins,
-- side profile closes -> previous page/explicit context restored,
-- explicit search selection -> explicit context wins,
-- explicit context clear -> underlying transient/page/general context returns,
+- side profile opens -> transient profile wins over explicit/page context,
+- side profile closes -> previous explicit/page/general context restored,
+- explicit search selection -> explicit context wins over page context,
+- explicit context clear -> underlying page/general context returns,
 - navigation to a new canonical page clears stale explicit selection according to implementation rule.
 
 ### Search
