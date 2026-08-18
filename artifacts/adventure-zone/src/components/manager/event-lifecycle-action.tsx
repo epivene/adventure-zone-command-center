@@ -15,6 +15,14 @@ function time(value: string | null) {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function deviceTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
+
 export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn = true, onChanged }: { bookingId: string; compact?: boolean; allowCheckIn?: boolean; onChanged?: (lifecycle: Lifecycle) => void }) {
   const { managerApi } = useManagerAuth();
   const [, navigate] = useLocation();
@@ -41,7 +49,7 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
       const location = await captureOptionalEventLocation();
       const result = await managerApi<{ lifecycle: Lifecycle }>(`/manager/events/${bookingId}/${kind}`, {
         method: "POST",
-        body: JSON.stringify(location),
+        body: JSON.stringify({ ...location, timeZone: deviceTimeZone() }),
       });
       setLifecycle(result.lifecycle);
       onChanged?.(result.lifecycle);
