@@ -57,20 +57,30 @@ export default function ManagerAftermathAdminPage() {
   const [incidentDraft, setIncidentDraft] = useState<IncidentDraft | null>(null);
   const [incidentBusy, setIncidentBusy] = useState<string | null>(null);
   const [incidentError, setIncidentError] = useState<string | null>(null);
+  const [incidentLoadError, setIncidentLoadError] = useState<string | null>(null);
+
+  async function loadIncidents() {
+    setIncidentLoadError(null);
+    try {
+      const incidentData = await apiGet<any>("/manager-admin/incidents");
+      setIncidents(incidentData.incidents ?? []);
+    } catch (error) {
+      setIncidentLoadError(error instanceof Error ? error.message : "Could not load incidents.");
+    }
+  }
 
   useEffect(() => {
     if (selectedWrapUp) return;
-    Promise.all([
-      apiGet<any>("/event-wrap-up-admin"),
-      apiGet<any>("/manager-admin/events/lifecycle"),
-      apiGet<any>("/manager-admin/reviews"),
-      apiGet<any>("/manager-admin/incidents"),
-    ]).then(([wrap, lifecycleData, reviewData, incidentData]) => {
-      setWrapUps(wrap.wrapUps ?? []);
-      setLifecycles(lifecycleData.lifecycles ?? []);
-      setReviews(reviewData.reviews ?? []);
-      setIncidents(incidentData.incidents ?? []);
-    });
+    void apiGet<any>("/event-wrap-up-admin")
+      .then((data) => setWrapUps(data.wrapUps ?? []))
+      .catch(() => setWrapUps([]));
+    void apiGet<any>("/manager-admin/events/lifecycle")
+      .then((data) => setLifecycles(data.lifecycles ?? []))
+      .catch(() => setLifecycles([]));
+    void apiGet<any>("/manager-admin/reviews")
+      .then((data) => setReviews(data.reviews ?? []))
+      .catch(() => setReviews([]));
+    void loadIncidents();
   }, [selectedWrapUp]);
 
   function beginEdit(incident: any) {
@@ -180,7 +190,9 @@ export default function ManagerAftermathAdminPage() {
         <h2 className="text-xl font-bold">Incidents</h2>
         <label className="flex items-center gap-2"><input type="checkbox" aria-label="Follow-up only" checked={followOnly} onChange={(event) => setFollowOnly(event.target.checked)} />Follow-up only</label>
       </div>
+      {incidentLoadError ? <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert"><p>{incidentLoadError}</p><button className="button-secondary mt-2" onClick={() => void loadIncidents()} type="button">Retry incidents</button></div> : null}
       {incidentError ? <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">{incidentError}</p> : null}
+      {!incidentLoadError && visibleIncidents.length === 0 ? <p className="mt-2 rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No incidents recorded.</p> : null}
       {visibleIncidents.map((incident) => {
         const open = openIncident === incident.id;
         const editing = editingIncident === incident.id && incidentDraft !== null;

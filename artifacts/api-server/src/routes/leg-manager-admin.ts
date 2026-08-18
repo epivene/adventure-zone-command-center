@@ -166,10 +166,16 @@ router.patch("/manager-admin/crew/work-history/:historyId", async (req, res): Pr
   res.json({ entry });
 });
 
-router.get("/manager-admin/incidents", async (_req, res) => {
+router.get("/manager-admin/incidents", async (req, res) => {
   const rows = await incidents.listAll();
-  const attachments = await incidents.listAttachmentsForIncidents(rows.map((row) => row.id));
-  res.json({ incidents: await attachIncidentPhotoUrls(rows, attachments, incidentStorage) });
+  try {
+    const attachments = await incidents.listAttachmentsForIncidents(rows.map((row) => row.id));
+    res.json({ incidents: await attachIncidentPhotoUrls(rows, attachments, incidentStorage) });
+  } catch (error) {
+    req.log.warn({ err: error }, "Incident attachment enrichment failed");
+    const fallbackIncidents = rows.map((row) => ({ ...row, attachments: [] }));
+    res.json({ incidents: fallbackIncidents, warning: "incident_attachments_unavailable" });
+  }
 });
 
 router.patch("/manager-admin/incidents/:incidentId", async (req, res): Promise<void> => {
