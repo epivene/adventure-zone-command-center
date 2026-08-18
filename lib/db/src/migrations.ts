@@ -428,6 +428,18 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.act_archive_recovery_decisions') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "044_finance_admin_evidence.sql",
+    markerSql: `SELECT
+      EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'leg_expenses'
+          AND column_name = 'assignment_source'
+      )
+      AND to_regclass(current_schema() || '.leg_finance_audit') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
