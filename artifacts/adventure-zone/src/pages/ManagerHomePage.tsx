@@ -8,6 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 
 type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null };
 type ManagerMapSummary = { events?: NextEvent[] };
+type CurrentLifecycle = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedInAt?: string | null; checkedOutAt?: string | null };
 type IncompleteWrapUp = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedOutAt?: string | null };
 type MoneySummary = {
   expenseTotalCents?: number;
@@ -17,6 +18,11 @@ type MoneySummary = {
 function formatEventDate(value?: string | null) {
   if (!value) return "Date not set";
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatCheckedIn(value?: string | null) {
+  if (!value) return "Checked in";
+  return `Checked in ${formatEventDate(value)}`;
 }
 
 function QuickAddMenu() {
@@ -36,26 +42,30 @@ export default function ManagerHomePage() {
   const { manager, managerApi } = useManagerAuth();
   const { setActiveContext, openAssistant } = useManagerAssistant();
   const [reviewsDue, setReviewsDue] = useState(0);
-  const [nextEvent, setNextEvent] = useState<NextEvent | null>(null);
+  const [confirmedEvents, setConfirmedEvents] = useState<NextEvent[]>([]);
+  const [currentLifecycle, setCurrentLifecycle] = useState<CurrentLifecycle | null>(null);
   const [incompleteWrapUps, setIncompleteWrapUps] = useState<IncompleteWrapUp[]>([]);
   const [money, setMoney] = useState<MoneySummary | null>(null);
 
   useEffect(() => {
     managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due").then((data) => setReviewsDue(data.reviewsDue?.length ?? 0)).catch(() => setReviewsDue(0));
-    managerApi<ManagerMapSummary>("/manager/map").then((data) => setNextEvent((data.events ?? []).find((event) => event.status === "confirmed") ?? null)).catch(() => setNextEvent(null));
+    managerApi<ManagerMapSummary>("/manager/map").then((data) => setConfirmedEvents((data.events ?? []).filter((event) => event.status === "confirmed"))).catch(() => setConfirmedEvents([]));
+    managerApi<{ lifecycle?: CurrentLifecycle | null }>("/manager/events/lifecycle/current").then((data) => setCurrentLifecycle(data.lifecycle ?? null)).catch(() => setCurrentLifecycle(null));
     managerApi<{ lifecycles?: IncompleteWrapUp[] }>("/manager/events/lifecycle/incomplete").then((data) => setIncompleteWrapUps(data.lifecycles ?? [])).catch(() => setIncompleteWrapUps([]));
     managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
   }, [managerApi]);
 
   useEffect(() => () => setActiveContext(null), [setActiveContext]);
 
-  const location = [nextEvent?.city, nextEvent?.region].filter(Boolean).join(", ");
+  const currentMapEvent = currentLifecycle ? confirmedEvents.find((event) => event.bookingId === currentLifecycle.bookingId) ?? null : null;
+  const currentEvent = currentLifecycle ? { ...currentMapEvent, ...currentLifecycle } : null;
+  const nextEvent = confirmedEvents.find((event) => event.bookingId !== currentLifecycle?.bookingId) ?? null;
   const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
   const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
 
-  function askAboutNextStop() {
-    if (!nextEvent?.bookingId) return;
-    setActiveContext({ kind: "booking", recordId: nextEvent.bookingId, label: nextEvent.bookingName ?? "Next event" });
+  function askAboutEvent(event: NextEvent | CurrentLifecycle, label: string) {
+    if (!event.bookingId) return;
+    setActiveContext({ kind: "booking", recordId: event.bookingId, label: event.bookingName ?? label });
     openAssistant("What do I need to know for this event?");
   }
 
@@ -71,10 +81,29 @@ export default function ManagerHomePage() {
         <div className="mt-2 grid gap-2">{incompleteWrapUps.map((item) => <Link key={item.bookingId} href={`/manager/events/${item.bookingId}/wrap-up`} className="rounded-xl border border-amber-200 bg-white p-3"><p className="font-bold">{item.bookingName || "Event wrap-up"}</p><p className="text-sm text-slate-600">{[item.city, item.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="mt-1 text-sm font-semibold text-amber-800">Wrap-up incomplete</p></Link>)}</div>
       </section> : null}
 
-      <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+      {currentEvent ? <>
+        <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Current Event</p>
+          <div className="mt-2">
+            <h2 className="text-xl font-bold">{currentEvent.bookingName || "Current event"}</h2>
+            <p className="mt-1 text-sm text-slate-700">{[currentEvent.city, currentEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
+            <p className="mt-2 text-sm font-semibold text-emerald-700">{formatCheckedIn(currentEvent.checkedInAt)}</p>
+            <div className="mt-3"><EventLifecycleAction bookingId={currentEvent.bookingId} /></div>
+            <div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(currentEvent, "Current event")}>Ask Assistant</button></div>
+          </div>
+        </section>
+
+        {nextEvent ? <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Up Next</p>
+          <h2 className="mt-2 text-lg font-bold">{nextEvent.bookingName || "Upcoming event"}</h2>
+          <p className="mt-1 text-sm text-slate-600">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
+          <p className="text-sm text-slate-600">{formatEventDate(nextEvent.startsAt)}</p>
+          <div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div>
+        </section> : null}
+      </> : <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Next Stop</p>
-        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{location || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} /></div><div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={askAboutNextStop}>Ask Assistant</button></div></div> : <p className="mt-2 text-sm text-slate-700">No confirmed upcoming event is currently assigned.</p>}
-      </section>
+        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="text-sm text-slate-700">{formatEventDate(nextEvent.startsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} /></div><div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div></div> : <p className="mt-2 text-sm text-slate-700">No confirmed upcoming event is currently assigned.</p>}
+      </section>}
 
       {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">
         {cashOnHand != null ? <Link href="/manager/money" className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Cash on hand</p><p className="mt-1 text-xl font-bold">${cashOnHand.toFixed(2)}</p></Link> : null}

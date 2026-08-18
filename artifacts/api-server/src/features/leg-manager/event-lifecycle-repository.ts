@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import { bookings, travelLegs } from "@/db/schema";
@@ -23,6 +23,27 @@ export class EventLifecycleRepository {
 
   async get(bookingId: string, legId: string): Promise<EventLifecycleRecord | null> {
     return (await this.database.select().from(eventLegLifecycle).where(and(eq(eventLegLifecycle.bookingId, bookingId), eq(eventLegLifecycle.legId, legId))).limit(1))[0] ?? null;
+  }
+
+  async getCurrentForLeg(legId: string) {
+    return (await this.database
+      .select({
+        id: eventLegLifecycle.id,
+        bookingId: eventLegLifecycle.bookingId,
+        legId: eventLegLifecycle.legId,
+        checkedInAt: eventLegLifecycle.checkedInAt,
+        checkedOutAt: eventLegLifecycle.checkedOutAt,
+        bookingName: bookings.name,
+        city: bookings.city,
+        region: bookings.region,
+      })
+      .from(eventLegLifecycle)
+      .innerJoin(bookings, eq(bookings.id, eventLegLifecycle.bookingId))
+      .where(and(
+        eq(eventLegLifecycle.legId, legId),
+        isNull(eventLegLifecycle.checkedOutAt),
+      ))
+      .limit(1))[0] ?? null;
   }
 
   async checkIn(input: { bookingId: string; legId: string; at: Date; latitude: number | null; longitude: number | null; locationStatus: EventLocationStatus }) {

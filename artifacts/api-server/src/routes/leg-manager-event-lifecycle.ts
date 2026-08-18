@@ -26,6 +26,10 @@ function bookingId(req: any) {
   return Array.isArray(raw) ? raw[0] ?? "" : raw ?? "";
 }
 
+router.get("/manager/events/lifecycle/current", requireManager, async (req, res) => {
+  res.json({ lifecycle: await lifecycle.getCurrentForLeg(req.legManager!.legId) });
+});
+
 router.get("/manager/events/lifecycle/incomplete", requireManager, async (req, res) => {
   res.json({ lifecycles: await lifecycle.listIncompleteForLeg(req.legManager!.legId) });
 });
