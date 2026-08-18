@@ -28,7 +28,8 @@ export class BookingContextRepository {
     bookingId: string,
   ): Promise<BookingAssistantContextBundle | null> {
     const bookingResult = await this.pool.query(
-      `SELECT b.id, b.name, b.starts_at, b.status, b.physical_attraction_total,
+      `SELECT b.id, b.name, b.starts_at, b.ends_at, b.venue_name, b.city, b.region,
+              b.status, b.physical_attraction_total,
               b.organization_id, b.travel_leg_id,
               o.name AS organization_name
        FROM bookings b
@@ -67,7 +68,8 @@ export class BookingContextRepository {
 
     const relatedBookingResult = eventFamilyId
       ? await this.pool.query(
-          `SELECT b.id, b.name, b.starts_at, b.status, b.physical_attraction_total
+          `SELECT b.id, b.name, b.starts_at, b.ends_at, b.venue_name, b.city, b.region,
+                  b.status, b.physical_attraction_total
            FROM bookings b
            JOIN event_family_members efm ON efm.organization_id = b.organization_id
            WHERE efm.family_id = $1
@@ -79,7 +81,8 @@ export class BookingContextRepository {
         )
       : booking.organization_id
         ? await this.pool.query(
-            `SELECT id, name, starts_at, status, physical_attraction_total
+            `SELECT id, name, starts_at, ends_at, venue_name, city, region,
+                    status, physical_attraction_total
              FROM bookings
              WHERE organization_id = $1
                AND id <> $2
@@ -117,6 +120,10 @@ export class BookingContextRepository {
       id: row.id as string,
       label: row.name as string,
       startsAt: dateOrNull(row.starts_at),
+      endsAt: dateOrNull(row.ends_at),
+      venueName: row.venue_name ? String(row.venue_name) : null,
+      city: row.city ? String(row.city) : null,
+      region: row.region ? String(row.region) : null,
       status: row.status as string,
       physicalAttractionTotal:
         row.physical_attraction_total === null

@@ -101,6 +101,7 @@ export class AssistantService {
     contextKind: AssistantContextKind;
     contextRecordId: string;
     question: string;
+    timeZone?: string;
   }): Promise<AssistantAskResult> {
     const context = await this.getContext(input);
     if (!context) {
@@ -111,6 +112,7 @@ export class AssistantService {
       question: input.question,
       context,
       brief,
+      timeZone: input.timeZone,
     });
     if (deterministic) {
       return { answer: deterministic, brief, context };

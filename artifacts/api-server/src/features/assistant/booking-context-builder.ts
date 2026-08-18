@@ -24,6 +24,10 @@ export type LoadedAssistantContext = {
     id: string;
     label: string;
     startsAt: Date | null;
+    endsAt?: Date | null;
+    venueName?: string | null;
+    city?: string | null;
+    region?: string | null;
     status: string;
     physicalAttractionTotal: number | null;
     packageNames: string[];
@@ -33,6 +37,10 @@ export type LoadedAssistantContext = {
     id: string;
     label: string;
     startsAt: Date | null;
+    endsAt?: Date | null;
+    venueName?: string | null;
+    city?: string | null;
+    region?: string | null;
     status: string;
     physicalAttractionTotal: number | null;
     packageNames: string[];
@@ -172,11 +180,19 @@ export function buildBookingContextBundle(
       ? {
           ...input.currentBooking,
           startsAt: input.currentBooking.startsAt?.toISOString() ?? null,
+          endsAt: input.currentBooking.endsAt?.toISOString() ?? null,
+          venueName: input.currentBooking.venueName ?? null,
+          city: input.currentBooking.city ?? null,
+          region: input.currentBooking.region ?? null,
         }
       : null,
     priorBookings: input.priorBookings.map((booking) => ({
       ...booking,
       startsAt: booking.startsAt?.toISOString() ?? null,
+      endsAt: booking.endsAt?.toISOString() ?? null,
+      venueName: booking.venueName ?? null,
+      city: booking.city ?? null,
+      region: booking.region ?? null,
     })),
     recentActivities: input.recentActivities.map((activity) => ({
       id: activity.id,

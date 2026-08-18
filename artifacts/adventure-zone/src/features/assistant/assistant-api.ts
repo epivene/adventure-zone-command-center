@@ -30,11 +30,196 @@ export type DerivedFactReviewItem = {
   createdAt: string;
 };
 
+type CachedBookingSchedule = {
+  id: string;
+  label: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  venueName: string | null;
+  city: string | null;
+  region: string | null;
+};
+
 function params(context: Exclude<ActiveAssistantContext, null>): string {
   return new URLSearchParams({
     kind: context.kind,
     id: context.recordId,
   }).toString();
+}
+
+function browserTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizedText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[?!.,'’]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function optionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function cachedBooking(value: unknown): CachedBookingSchedule | null {
+  const row = recordValue(value);
+  if (!row || typeof row["id"] !== "string" || typeof row["label"] !== "string") {
+    return null;
+  }
+  return {
+    id: row["id"],
+    label: row["label"],
+    startsAt: row["startsAt"] === null ? null : optionalString(row["startsAt"]),
+    endsAt: row["endsAt"] === null ? null : optionalString(row["endsAt"]),
+    venueName: optionalString(row["venueName"]),
+    city: optionalString(row["city"]),
+    region: optionalString(row["region"]),
+  };
+}
+
+function asksCachedSchedule(question: string): boolean {
+  if (/follow ?up|next action|call due/.test(question)) return false;
+  return (
+    /\bwhat time\b/.test(question) ||
+    /\bwhat (date|day)\b/.test(question) ||
+    /\bwhen (is|was|does|did|will)\b/.test(question) ||
+    /\b(start|starting|end|ending) time\b/.test(question) ||
+    /\b(event|booking) schedule\b/.test(question)
+  );
+}
+
+function phraseIncluded(question: string, value: string | null): boolean {
+  const phrase = normalizedText(value ?? "");
+  return Boolean(phrase) && ` ${question} `.includes(` ${phrase} `);
+}
+
+function cachedBookingScore(booking: CachedBookingSchedule, question: string): number {
+  let score = 0;
+  if (phraseIncluded(question, booking.label)) score += 1_000;
+  if (phraseIncluded(question, booking.city)) score += 900;
+  if (phraseIncluded(question, booking.venueName)) score += 800;
+  const location = [booking.city, booking.region].filter(Boolean).join(" ");
+  if (phraseIncluded(question, location)) score += 950;
+  if (booking.startsAt) {
+    const year = String(new Date(booking.startsAt).getUTCFullYear());
+    if (phraseIncluded(question, year)) score += 150;
+  }
+  return score;
+}
+
+function selectCachedScheduleBooking(
+  snapshot: AssistantCachedSnapshot,
+  question: string,
+): CachedBookingSchedule | null {
+  const current = cachedBooking(snapshot.context["currentBooking"]);
+  const priorValue = snapshot.context["priorBookings"];
+  const prior = Array.isArray(priorValue)
+    ? priorValue.flatMap((value) => {
+        const booking = cachedBooking(value);
+        return booking ? [booking] : [];
+      })
+    : [];
+  const bookings = [
+    ...(current ? [current] : []),
+    ...prior.filter((booking) => booking.id !== current?.id),
+  ];
+  if (bookings.length === 0) return null;
+  const ranked = bookings
+    .map((booking, index) => ({ booking, index, score: cachedBookingScore(booking, question) }))
+    .sort((left, right) => right.score - left.score || left.index - right.index);
+  if ((ranked[0]?.score ?? 0) > 0) return ranked[0]?.booking ?? null;
+  return current ?? (bookings.length === 1 ? bookings[0] ?? null : null);
+}
+
+function safeDate(value: string | null): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function cachedBookingDescriptor(booking: CachedBookingSchedule): string {
+  const location = [booking.city, booking.region].filter(Boolean).join(", ");
+  if (booking.venueName && location) {
+    return `${booking.label} at ${booking.venueName} in ${location}`;
+  }
+  if (location) return `${booking.label} in ${location}`;
+  if (booking.venueName) return `${booking.label} at ${booking.venueName}`;
+  return booking.label;
+}
+
+function localDayKey(date: Date, timeZone?: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    ...(timeZone ? { timeZone } : {}),
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function cachedScheduleAnswer(
+  question: string,
+  snapshot: AssistantCachedSnapshot,
+): AssistantAnswer | null {
+  if (!asksCachedSchedule(question)) return null;
+  const booking = selectCachedScheduleBooking(snapshot, question);
+  if (!booking) return null;
+
+  const descriptor = cachedBookingDescriptor(booking);
+  const startsAt = safeDate(booking.startsAt);
+  const sources = snapshot.context.sources.filter(
+    (source) => source.kind === "booking" && source.recordId === booking.id,
+  );
+  if (!startsAt) {
+    return {
+      text: `${descriptor} doesn't have a start time saved in the cached booking.`,
+      mode: "offline_cached",
+      confidence: "low",
+      sources,
+      needsAdmin: false,
+    };
+  }
+
+  const endsAt = safeDate(booking.endsAt);
+  const timeZone = browserTimeZone();
+  const dateFormatter = new Intl.DateTimeFormat("en-US", {
+    ...(timeZone ? { timeZone } : {}),
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-US", {
+    ...(timeZone ? { timeZone } : {}),
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+  const dateText = dateFormatter.format(startsAt);
+  let text = `${descriptor} is saved for ${dateText} at ${timeFormatter.format(startsAt)}.`;
+  if (endsAt) {
+    text = localDayKey(startsAt, timeZone) === localDayKey(endsAt, timeZone)
+      ? `${descriptor} is saved for ${dateText}, from ${timeFormatter.format(startsAt)} to ${timeFormatter.format(endsAt)}.`
+      : `${descriptor} is saved from ${dateText} at ${timeFormatter.format(startsAt)} through ${dateFormatter.format(endsAt)} at ${timeFormatter.format(endsAt)}.`;
+  }
+
+  return {
+    text,
+    mode: "offline_cached",
+    confidence: "high",
+    sources,
+    needsAdmin: false,
+  };
 }
 
 export async function askGeneralAssistant(question: string): Promise<GeneralAssistantResponse> {
@@ -154,7 +339,10 @@ function offlineAnswer(
   question: string,
   snapshot: AssistantCachedSnapshot,
 ): AssistantAnswer | null {
-  const normalized = question.toLowerCase().replace(/[?!.,'’]/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = normalizedText(question);
+  const schedule = cachedScheduleAnswer(normalized, snapshot);
+  if (schedule) return schedule;
+
   let keys: string[] = [];
   if (/normally|usually.*book|usual package/.test(normalized)) {
     keys = ["package_history"];
@@ -199,6 +387,7 @@ export async function askBookingAssistant(input: {
       contextKind: input.context.kind,
       contextRecordId: input.context.recordId,
       question: input.question,
+      timeZone: browserTimeZone(),
     });
     await saveAssistantSnapshot({
       contextRef: input.context,

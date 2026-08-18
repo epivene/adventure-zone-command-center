@@ -48,6 +48,11 @@ export type BookingAssistantBookingSummary = {
   id: string;
   label: string;
   startsAt: string | null;
+  /** Optional for compatibility with Assistant snapshots saved before schedule enrichment. */
+  endsAt?: string | null;
+  venueName?: string | null;
+  city?: string | null;
+  region?: string | null;
   status: string;
   physicalAttractionTotal: number | null;
   packageNames: string[];
