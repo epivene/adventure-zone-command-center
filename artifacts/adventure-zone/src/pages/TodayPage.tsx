@@ -8,6 +8,7 @@ import { BookingOperations } from "@/components/today/booking-operations";
 import { RenewalsSection } from "@/components/today/renewals-section";
 import { NeedsAttention } from "@/components/today/needs-attention";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
+import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 function formatDate(value: Date) {
@@ -87,6 +88,7 @@ export default function TodayPage() {
 
       <details className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><summary className="cursor-pointer font-bold">More for later</summary><div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div></details>
 
+      {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label="Side profile" /> : null}
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
     </div>
   );
