@@ -69,23 +69,23 @@ export class PostgresProfileSearchRepository implements ProfileSearchRepository 
                 ARRAY_REMOVE(ARRAY[
                   CASE WHEN lower(o.name)=lower($1) OR o.name ILIKE $2 THEN 'name' END,
                   CASE WHEN EXISTS (SELECT 1 FROM organization_contacts oc JOIN contacts c ON c.id=oc.contact_id WHERE oc.organization_id=o.id AND concat_ws(' ',c.first_name,c.last_name) ILIKE $2) THEN 'contact' END,
-                  CASE WHEN o.city ILIKE COALESCE($3,o.city) AND $3 IS NOT NULL THEN 'city' END,
-                  CASE WHEN o.region ILIKE COALESCE($4,o.region) AND $4 IS NOT NULL THEN 'region' END,
+                  CASE WHEN o.city ILIKE COALESCE($3::text,o.city) AND $3::text IS NOT NULL THEN 'city' END,
+                  CASE WHEN o.region ILIKE COALESCE($4::text,o.region) AND $4::text IS NOT NULL THEN 'region' END,
                   CASE WHEN EXISTS (SELECT 1 FROM event_family_members efm JOIN event_families ef ON ef.id=efm.family_id WHERE efm.organization_id=o.id AND ef.name ILIKE $2) THEN 'family' END,
-                  CASE WHEN $5 IS NOT NULL AND EXISTS (SELECT 1 FROM bookings b JOIN booking_package_selections bps ON bps.booking_id=b.id JOIN package_templates pt ON pt.id=bps.package_template_id WHERE b.organization_id=o.id AND pt.name ILIKE '%' || $5 || '%') THEN 'package' END,
-                  CASE WHEN $6 AND EXISTS (SELECT 1 FROM follow_ups f WHERE f.organization_id=o.id AND f.completed_at IS NULL AND f.due_at < now()) THEN 'overdue_follow_up' END
+                  CASE WHEN $5::text IS NOT NULL AND EXISTS (SELECT 1 FROM bookings b JOIN booking_package_selections bps ON bps.booking_id=b.id JOIN package_templates pt ON pt.id=bps.package_template_id WHERE b.organization_id=o.id AND pt.name ILIKE '%' || $5::text || '%') THEN 'package' END,
+                  CASE WHEN $6::boolean AND EXISTS (SELECT 1 FROM follow_ups f WHERE f.organization_id=o.id AND f.completed_at IS NULL AND f.due_at < now()) THEN 'overdue_follow_up' END
                 ],NULL) AS matched_on
          FROM organizations o
          WHERE o.consolidated_into_id IS NULL
-           AND ($3 IS NULL OR o.city ILIKE $3)
-           AND ($4 IS NULL OR o.region ILIKE $4)
-           AND ($5 IS NULL OR EXISTS (SELECT 1 FROM bookings b JOIN booking_package_selections bps ON bps.booking_id=b.id JOIN package_templates pt ON pt.id=bps.package_template_id WHERE b.organization_id=o.id AND pt.name ILIKE '%' || $5 || '%'))
-           AND (NOT $6 OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.organization_id=o.id AND f.completed_at IS NULL AND f.due_at < now()))
+           AND ($3::text IS NULL OR o.city ILIKE $3::text)
+           AND ($4::text IS NULL OR o.region ILIKE $4::text)
+           AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM bookings b JOIN booking_package_selections bps ON bps.booking_id=b.id JOIN package_templates pt ON pt.id=bps.package_template_id WHERE b.organization_id=o.id AND pt.name ILIKE '%' || $5::text || '%'))
+           AND (NOT $6::boolean OR EXISTS (SELECT 1 FROM follow_ups f WHERE f.organization_id=o.id AND f.completed_at IS NULL AND f.due_at < now()))
            AND (
              o.name ILIKE $2 OR o.city ILIKE $2 OR o.region ILIKE $2
              OR EXISTS (SELECT 1 FROM organization_contacts oc JOIN contacts c ON c.id=oc.contact_id WHERE oc.organization_id=o.id AND (concat_ws(' ',c.first_name,c.last_name) ILIKE $2 OR c.email ILIKE $2 OR c.phone ILIKE $2))
              OR EXISTS (SELECT 1 FROM event_family_members efm JOIN event_families ef ON ef.id=efm.family_id WHERE efm.organization_id=o.id AND ef.name ILIKE $2)
-             OR $5 IS NOT NULL OR $6
+             OR $5::text IS NOT NULL OR $6::boolean
            )
        ), contact_rows AS (
          SELECT c.id,
@@ -101,8 +101,8 @@ export class PostgresProfileSearchRepository implements ProfileSearchRepository 
          FROM contacts c
          LEFT JOIN organization_contacts oc ON oc.contact_id=c.id
          LEFT JOIN organizations o ON o.id=oc.organization_id AND o.consolidated_into_id IS NULL
-         WHERE ($3 IS NULL OR COALESCE(o.city,c.city) ILIKE $3)
-           AND ($4 IS NULL OR COALESCE(o.region,c.region) ILIKE $4)
+         WHERE ($3::text IS NULL OR COALESCE(o.city,c.city) ILIKE $3::text)
+           AND ($4::text IS NULL OR COALESCE(o.region,c.region) ILIKE $4::text)
            AND (concat_ws(' ',c.first_name,c.last_name) ILIKE $2 OR c.email ILIKE $2 OR c.phone ILIKE $2)
        ), family_rows AS (
          SELECT ef.id,
