@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost, apiPut } from "@/lib/auth-token";
+import {
+  AdminExpenseRecordCard,
+  type AdminExpenseRecord,
+  type FinanceEventOption,
+} from "@/components/manager-finance/admin-expense-record";
 
 function money(cents: number | null | undefined) {
   if (cents == null) return "Unavailable";
@@ -17,6 +22,10 @@ function centsFromDollars(value: string) {
 
 export default function EventWrapUpAdminPage({ bookingId }: { bookingId: string }) {
   const [data, setData] = useState<any>(null);
+  const [expenseRecords, setExpenseRecords] = useState<AdminExpenseRecord[]>([]);
+  const [financeEvents, setFinanceEvents] = useState<FinanceEventOption[]>([]);
+  const [financeError, setFinanceError] = useState("");
+  const [financeLoading, setFinanceLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [stars, setStars] = useState<number | null>(null);
@@ -46,7 +55,31 @@ export default function EventWrapUpAdminPage({ bookingId }: { bookingId: string 
     setOverheadLabel(next.overhead?.label ?? "Event overhead");
   }
 
-  useEffect(() => { void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load wrap-up")); }, [bookingId]);
+  async function loadFinanceEvidence() {
+    setFinanceLoading(true);
+    setFinanceError("");
+    try {
+      const [expenseData, routeData] = await Promise.all([
+        apiGet<{ records: AdminExpenseRecord[] }>(`/manager-admin/finance/expenses?bookingId=${encodeURIComponent(bookingId)}`),
+        apiGet<any>("/routes").catch(() => ({ events: [] })),
+      ]);
+      setExpenseRecords(expenseData.records ?? []);
+      setFinanceEvents((routeData.events ?? []).map((event: any) => ({
+        id: String(event.id),
+        name: String(event.name ?? "Unnamed event"),
+        travelLegId: event.travelLegId ?? null,
+      })));
+    } catch (cause) {
+      setFinanceError(cause instanceof Error ? cause.message : "Could not load event receipts.");
+    } finally {
+      setFinanceLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load wrap-up"));
+    void loadFinanceEvidence();
+  }, [bookingId]);
 
   async function act(work: () => Promise<unknown>, success: string) {
     setError(""); setMessage("");
@@ -54,9 +87,18 @@ export default function EventWrapUpAdminPage({ bookingId }: { bookingId: string 
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save change"); }
   }
 
+  function replaceExpense(next: AdminExpenseRecord) {
+    setExpenseRecords((current) => {
+      if (next.bookingId !== bookingId) return current.filter((row) => row.id !== next.id);
+      return current.map((row) => row.id === next.id ? next : row);
+    });
+    void load();
+  }
+
   if (!data) return <p>{error || "Loading event wrap-up…"}</p>;
   const trueProfit = data.calculation?.trueProfit;
   const reviewed = data.wrapUp?.status === "reviewed";
+  const receiptComplete = expenseRecords.length > 0 && expenseRecords.every((record) => record.receipt?.imageStatus === "image_uploaded");
 
   return <div className="mx-auto grid max-w-5xl gap-5">
     <header>
@@ -89,9 +131,17 @@ export default function EventWrapUpAdminPage({ bookingId }: { bookingId: string 
       <div className="grid gap-2 sm:grid-cols-3">
         <p><b>Direct profit:</b> {money(data.calculation?.directProfit?.profitCents)}</p>
         <p><b>Estimated true profit:</b> {trueProfit?.profitCents == null ? "Unavailable" : money(trueProfit.profitCents)}</p>
-        <p><b>Receipts:</b> {data.finance?.missingReceiptCount ? `${data.finance.missingReceiptCount} missing/incomplete` : "Complete"}</p>
+        <p><b>Receipts:</b> {financeLoading ? "Loading…" : expenseRecords.length === 0 ? "No event expenses" : receiptComplete ? "Complete" : `${expenseRecords.filter((record) => record.receipt?.imageStatus !== "image_uploaded").length} missing/incomplete`}</p>
       </div>
       {trueProfit?.profitCents == null ? <p className="font-semibold text-amber-700">Estimated true profit unavailable — {(trueProfit?.incompleteReasons ?? []).join("; ")}</p> : null}
+    </section>
+
+    <section className="grid gap-3 rounded-xl border bg-white p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div><h2 className="text-xl font-bold">Expenses & receipts</h2><p className="text-sm text-slate-600">Manager submissions tied to this event, with the entered details and receipt evidence kept together.</p></div>
+        <button className="button-secondary" type="button" onClick={() => void loadFinanceEvidence()}>Refresh receipts</button>
+      </div>
+      {financeError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3"><p role="alert" className="text-sm font-semibold text-rose-700">{financeError}</p><button className="button-secondary mt-2" type="button" onClick={() => void loadFinanceEvidence()}>Retry receipts</button></div> : financeLoading ? <p className="text-sm text-slate-500">Loading receipts…</p> : expenseRecords.length ? <div className="grid gap-3">{expenseRecords.map((record) => <AdminExpenseRecordCard key={record.id} record={record} events={financeEvents} onUpdated={replaceExpense} />)}</div> : <p className="rounded-lg border border-dashed bg-slate-50 p-4 text-sm text-slate-500">No expenses have been assigned to this event yet.</p>}
     </section>
 
     <section className="grid gap-4 rounded-xl border bg-white p-4">
