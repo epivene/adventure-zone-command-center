@@ -37,7 +37,7 @@ describe("rankProfileSearchResults", () => {
 });
 
 describe("PostgresProfileSearchRepository", () => {
-  it("casts booking status to text so UNION rows share one status type", async () => {
+  it("normalizes union status and optional search parameter types", async () => {
     let sql = "";
     const pool = {
       async query(text: string) {
@@ -50,5 +50,10 @@ describe("PostgresProfileSearchRepository", () => {
     await repository.search({ query: "Pirate's Rebellion", limit: 8 });
 
     expect(sql).toContain("SELECT b.status::text FROM bookings b");
+    expect(sql).toContain("$3::text");
+    expect(sql).toContain("$4::text");
+    expect(sql).toContain("$5::text");
+    expect(sql).toContain("$6::boolean");
+    expect(sql).toContain("'%' || $5::text || '%'");
   });
 });
