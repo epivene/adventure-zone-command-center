@@ -35,6 +35,7 @@ import managerCommunicationsRouter from "./manager-communications";
 import managerMeetupsRouter from "./manager-meetups";
 import managerAssistantRouter from "./manager-assistant";
 import managerAdminRouter from "./leg-manager-admin";
+import managerFinanceAdminRouter from "./manager-finance-admin";
 import managerWorkerDeleteAdminRouter from "./leg-manager-worker-delete-admin";
 import managerEventLifecycleAdminRouter from "./leg-manager-event-lifecycle-admin";
 import managerTravelAdminRouter from "./manager-travel-admin";
@@ -63,6 +64,7 @@ router.use(managerAssistantRouter);
 
 router.use(requireOwnerMiddleware);
 router.use(managerAdminRouter);
+router.use(managerFinanceAdminRouter);
 router.use(managerWorkerDeleteAdminRouter);
 router.use(managerEventLifecycleAdminRouter);
 router.use(managerTravelAdminRouter);
