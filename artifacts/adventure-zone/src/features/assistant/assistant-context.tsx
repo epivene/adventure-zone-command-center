@@ -17,6 +17,7 @@ type AssistantContextValue = {
   explicitContext: ActiveAssistantContext;
   activeContext: ActiveAssistantContext;
   setPageContext(context: ActiveAssistantContext): void;
+  clearPageContext(context: ConcreteAssistantContext): void;
   setTransientContext(context: ActiveAssistantContext): void;
   clearTransientContext(): void;
   selectExplicitContext(context: ConcreteAssistantContext): void;
@@ -50,6 +51,12 @@ export function AssistantContextProvider({ children }: { children: ReactNode }) 
     });
   }, []);
 
+  const clearPageContext = useCallback((expected: ConcreteAssistantContext) => {
+    setPageContextState((current) =>
+      sameRecord(current, expected) ? null : current,
+    );
+  }, []);
+
   const setTransientContext = useCallback((next: ActiveAssistantContext) => {
     setTransientContextState(next);
   }, []);
@@ -68,6 +75,7 @@ export function AssistantContextProvider({ children }: { children: ReactNode }) 
       explicitContext,
       activeContext,
       setPageContext,
+      clearPageContext,
       setTransientContext,
       clearTransientContext,
       selectExplicitContext,
@@ -86,6 +94,7 @@ export function AssistantContextProvider({ children }: { children: ReactNode }) 
     [
       activeContext,
       clearExplicitContext,
+      clearPageContext,
       clearTransientContext,
       explicitContext,
       isOpen,
