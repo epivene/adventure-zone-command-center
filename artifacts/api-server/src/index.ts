@@ -1,6 +1,7 @@
 import app from "./app";
 import { runActReviewMigrations } from "@workspace/db/migrations";
 import { logger } from "./lib/logger";
+import { runStartupStep } from "./lib/startup-step";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
@@ -26,19 +27,30 @@ if (!rawPort) throw new Error("PORT environment variable is required but was not
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
-await ensureBookingProbabilitySchema();
-await ensurePackageIntelligenceSchema();
-const assistantSchemaApplied = await ensureBookingAssistantSchema();
-const managerAssistantSchemaApplied = await ensureManagerAssistantSchema();
-const appliedMigrations = await runActReviewMigrations();
+await runStartupStep("booking probability schema", ensureBookingProbabilitySchema);
+await runStartupStep("package intelligence schema", ensurePackageIntelligenceSchema);
+const assistantSchemaApplied = await runStartupStep(
+  "booking assistant schema",
+  ensureBookingAssistantSchema,
+);
+const managerAssistantSchemaApplied = await runStartupStep(
+  "manager assistant schema",
+  ensureManagerAssistantSchema,
+);
+const appliedMigrations = await runStartupStep(
+  "act review migrations",
+  runActReviewMigrations,
+);
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
 if (managerAssistantSchemaApplied) appliedMigrations.push("046_manager_assistant_questions.sql");
-await ensureEventFamilySchema();
-await ensureActivityDeleteSchema();
-await ensureCrewWorkerLegMembershipSchema();
-await ensureEventLegLifecycleSchema();
-await new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
-  "system:booking-assistant-seed",
+await runStartupStep("event family schema", ensureEventFamilySchema);
+await runStartupStep("activity delete schema", ensureActivityDeleteSchema);
+await runStartupStep("crew worker leg membership schema", ensureCrewWorkerLegMembershipSchema);
+await runStartupStep("event leg lifecycle schema", ensureEventLegLifecycleSchema);
+await runStartupStep("booking assistant business knowledge seed", () =>
+  new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
+    "system:booking-assistant-seed",
+  ),
 );
 logger.info(
   {
@@ -50,9 +62,9 @@ logger.info(
     : "Database schema is current",
 );
 
-const importedLocationFamilies = await autoConsolidateImportedLocationFamilies(
-  db,
-  new Date(),
+const importedLocationFamilies = await runStartupStep(
+  "imported location family consolidation",
+  () => autoConsolidateImportedLocationFamilies(db, new Date()),
 );
 logger.info(
   importedLocationFamilies,
