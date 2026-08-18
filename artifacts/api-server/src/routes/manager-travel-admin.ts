@@ -3,16 +3,19 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleManagerMapBookingRepository } from "@/features/leg-manager/manager-map-booking-repository";
 import { loadManagerScopedMapData } from "@/features/leg-manager/manager-map-data";
+import { resolveManagerMapEventLocations } from "@/features/leg-manager/manager-map-location";
 import { DrizzleManagerRouteSuggestionRepository } from "@/features/leg-manager/route-suggestion-repository";
 import { ManagerRouteSuggestionService } from "@/features/leg-manager/route-suggestion-service";
 import { DrizzleRouteSuggestionDomain } from "@/features/leg-manager/route-suggestion-domain";
 import { HandoffRepository } from "@/features/routes/handoff-repository";
 import { DrizzleTripRepository } from "@/features/trips/trip-repository";
+import { NominatimGeocodingProvider } from "@/features/trips/geocoding";
 
 const router: IRouter = Router();
 const repository = new DrizzleManagerRouteSuggestionRepository(db);
 const domain = new DrizzleRouteSuggestionDomain(db);
 const service = new ManagerRouteSuggestionService(repository, domain, domain);
+const managerMapGeocoder = new NominatimGeocodingProvider();
 const rejectSchema = z.object({ adminResponse: z.string().trim().max(2000).nullable().optional() });
 const legIdSchema = z.string().uuid();
 
@@ -29,7 +32,8 @@ router.get("/manager-travel-admin/preview/:legId", async (req, res): Promise<voi
     },
     parsed.data,
   );
-  res.json(payload);
+  const events = await resolveManagerMapEventLocations(payload.events, managerMapGeocoder);
+  res.json({ ...payload, events });
 });
 
 router.get("/manager-travel-admin/suggestions", async (_req, res) => {
