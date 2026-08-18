@@ -24,7 +24,7 @@ const generalPrompts = [
   "Find a profile",
   "Who needs follow-up?",
   "Find profiles in Minnesota",
-  "Who usually books Pirate's Rebellion?",
+  "Find Christmas events",
 ];
 
 function resultHref(result: AssistantProfileSearchResult) {
@@ -199,7 +199,7 @@ export function AssistantDrawer() {
             <div className="grid gap-4">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <h3 className="font-bold text-slate-950">General Command Center</h3>
-                <p className="mt-1 text-sm text-slate-600">Find a customer, contact, event family, overdue follow-up, or package-history match. Pick a result and I’ll use it for your next questions.</p>
+                <p className="mt-1 text-sm text-slate-600">Find customers, contacts, event families, or themed events like Christmas, Halloween, Oktoberfest, and 4th of July. You can also search by city/state or overdue follow-up.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {generalPrompts.map((prompt) => (
                     <button className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100" key={prompt} onClick={() => setQuestion(prompt)} type="button">{prompt}</button>
@@ -230,7 +230,7 @@ export function AssistantDrawer() {
             id="booking-assistant-question"
             maxLength={4000}
             onChange={(event) => setQuestion(event.currentTarget.value)}
-            placeholder={generalMode ? "Find a profile, ask who needs follow-up, or search by city…" : "Ask what happened last year, what they normally book, what you may be forgetting…"}
+            placeholder={generalMode ? "Find Christmas events, a profile, or events by city…" : "Ask what happened last year, what they normally book, what you may be forgetting…"}
             value={question}
           />
           <div className="mt-2 flex items-center justify-between gap-3">
