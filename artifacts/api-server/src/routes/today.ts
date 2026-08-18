@@ -7,6 +7,13 @@ import {
 } from "@/features/follow-ups/today-query";
 import { listTodayUpcomingEvents } from "@/features/follow-ups/today-upcoming-events";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
+import {
+  clearTodayNextSteps,
+  filterClearedTodayNextSteps,
+  parseTodayNextStepBookingIds,
+  reopenTodayNextSteps,
+  snoozeTodayNextSteps,
+} from "@/features/follow-ups/today-next-step";
 import { listTripsInWindow } from "@/features/trips/trip-repository";
 import { businessDayBounds } from "@/lib/business-date";
 
@@ -33,8 +40,11 @@ router.get("/today", async (req, res): Promise<void> => {
       { ...baseDashboard, upcomingEvents },
       operationsProvider,
     );
+    const needsFollowUpPlan = await filterClearedTodayNextSteps(db, dashboard.needsFollowUpPlan);
     res.json({
       ...dashboard,
+      needsFollowUpPlan,
+      needsFollowUpPlanTotal: needsFollowUpPlan.length,
       todayTrips: todayTrips.map((trip) => ({
         id: trip.id,
         name: trip.name,
@@ -49,6 +59,53 @@ router.get("/today", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to load today dashboard");
     res.status(500).json({ error: "Failed to load dashboard" });
+  }
+});
+
+router.post("/today/next-step/clear", async (req, res): Promise<void> => {
+  try {
+    const bookingIds = parseTodayNextStepBookingIds(req.body?.bookingIds);
+    if (!bookingIds.length) {
+      res.status(400).json({ ok: false, error: "Select at least one booking." });
+      return;
+    }
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : "no_follow_up_needed";
+    await clearTodayNextSteps(db, bookingIds, reason);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to clear Today next-step items");
+    res.status(500).json({ ok: false, error: "Could not clear the selected items." });
+  }
+});
+
+router.post("/today/next-step/reopen", async (req, res): Promise<void> => {
+  try {
+    const bookingIds = parseTodayNextStepBookingIds(req.body?.bookingIds);
+    if (!bookingIds.length) {
+      res.status(400).json({ ok: false, error: "Select at least one booking." });
+      return;
+    }
+    await reopenTodayNextSteps(db, bookingIds);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reopen Today next-step items");
+    res.status(500).json({ ok: false, error: "Could not restore the selected items." });
+  }
+});
+
+router.post("/today/next-step/snooze", async (req, res): Promise<void> => {
+  try {
+    const bookingIds = parseTodayNextStepBookingIds(req.body?.bookingIds);
+    const dueAt = new Date(typeof req.body?.dueAt === "string" ? req.body.dueAt : Number.NaN);
+    if (!bookingIds.length || !Number.isFinite(dueAt.getTime())) {
+      res.status(400).json({ ok: false, error: "Select bookings and a valid snooze date." });
+      return;
+    }
+    await snoozeTodayNextSteps(db, bookingIds, dueAt);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to snooze Today next-step items");
+    res.status(500).json({ ok: false, error: "Could not snooze the selected items." });
   }
 });
 

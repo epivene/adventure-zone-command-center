@@ -3,8 +3,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiGet = vi.hoisted(() => vi.fn());
+const apiPost = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/auth-token", () => ({ apiGet }));
+vi.mock("@/lib/auth-token", () => ({ apiGet, apiPost }));
 vi.mock("wouter", () => ({
   Link: ({ href, children, ...props }: any) => (
     <a href={href} {...props}>{children}</a>
@@ -88,6 +89,7 @@ function mockDashboard(value: ReturnType<typeof dashboard>) {
 afterEach(() => {
   cleanup();
   apiGet.mockReset();
+  apiPost.mockReset();
 });
 
 describe("TodayPage renewals", () => {
@@ -147,7 +149,7 @@ describe("TodayPage renewals", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
-    expect(screen.getByText("Needs Follow-up Plan")).toBeInTheDocument();
+    expect(screen.getByText("Needs a next step (1)")).toBeInTheDocument();
     expect(screen.getByText("Current Fair Lead")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load next-season renewals.",
@@ -167,8 +169,7 @@ describe("TodayPage renewals", () => {
       expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Post-event follow-up")).toBeInTheDocument();
-    expect(screen.getByText(/aftermath summary/i)).toBeInTheDocument();
-    expect(screen.getByText("new lead")).toBeInTheDocument();
+    expect(screen.getByText("Past event · Needs follow-up decision")).toBeInTheDocument();
+    expect(screen.getByText("New Lead · Needs follow-up decision")).toBeInTheDocument();
   });
 });
