@@ -1,0 +1,41 @@
+name: Assistant General Mode CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/assistant/**"
+      - "artifacts/api-server/src/routes/assistant.ts"
+      - "artifacts/adventure-zone/src/features/assistant/**"
+      - "artifacts/adventure-zone/src/components/assistant/**"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "artifacts/adventure-zone/src/pages/OrganizationsPage.tsx"
+      - ".github/workflows/assistant-general-mode-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  assistant-general-mode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused assistant tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/features/assistant/profile-search-repository.test.ts
+          artifacts/api-server/src/features/assistant/general-assistant.test.ts
+          artifacts/adventure-zone/src/features/assistant/assistant-context.test.tsx
+          artifacts/adventure-zone/src/components/assistant/profile-search-results.test.tsx
+          artifacts/adventure-zone/src/components/assistant/assistant-drawer.test.tsx
+          artifacts/adventure-zone/src/components/assistant/assistant-transient-context.test.tsx
+          artifacts/adventure-zone/src/features/assistant/assistant-offline-cache.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
