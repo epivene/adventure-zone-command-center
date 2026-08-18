@@ -1,5 +1,179 @@
-import { and, desc, eq, inArray } from "drizzle-orm";import type { NodePgDatabase } from "drizzle-orm/node-postgres";import * as schema from "@/db/schema";import { bookings,legIncidentAttachments,legIncidents,trips } from "@/db/schema";
-export type IncidentInput={id:string;type:string;occurredAt:Date;bookingId:string|null;tripId:string|null;locationText:string|null;peopleInvolved:string|null;description:string;actionTaken:string|null;followUpNeeded:boolean;clientMutationId:string};
-export interface IncidentStore{findByMutation(legId:string,clientMutationId:string):Promise<any|null>;bookingBelongsToLeg(bookingId:string,legId:string):Promise<boolean>;tripBelongsToLeg(tripId:string,legId:string):Promise<boolean>;insertIncident(input:IncidentInput&{legId:string}):Promise<any>;listAll():Promise<any[]>}
-export async function createIncidentForManager(store:IncidentStore,legId:string,input:IncidentInput){const existing=await store.findByMutation(legId,input.clientMutationId);if(existing)return{ok:true as const,idempotent:true,incident:existing};if(input.bookingId&&!(await store.bookingBelongsToLeg(input.bookingId,legId)))return{ok:false as const,code:"FORBIDDEN" as const};if(input.tripId&&!(await store.tripBelongsToLeg(input.tripId,legId)))return{ok:false as const,code:"FORBIDDEN" as const};return{ok:true as const,idempotent:false,incident:await store.insertIncident({...input,legId})};}
-export class DrizzleIncidentRepository implements IncidentStore{constructor(private readonly database:NodePgDatabase<typeof schema>){}async findByMutation(legId:string,id:string){return(await this.database.select().from(legIncidents).where(and(eq(legIncidents.legId,legId),eq(legIncidents.clientMutationId,id))).limit(1))[0]??null}async bookingBelongsToLeg(id:string,legId:string){return!!(await this.database.select({id:bookings.id}).from(bookings).where(and(eq(bookings.id,id),eq(bookings.travelLegId,legId))).limit(1))[0]}async tripBelongsToLeg(id:string,legId:string){return!!(await this.database.select({id:trips.id}).from(trips).where(and(eq(trips.id,id),eq(trips.travelLegId,legId))).limit(1))[0]}async insertIncident(input:IncidentInput&{legId:string}){const rows=await this.database.insert(legIncidents).values(input).onConflictDoNothing({target:[legIncidents.legId,legIncidents.clientMutationId]}).returning();if(rows[0])return rows[0];const existing=await this.findByMutation(input.legId,input.clientMutationId);if(!existing)throw new Error("Incident insert conflict");return existing}async listAll(){return this.database.select().from(legIncidents).orderBy(desc(legIncidents.occurredAt))}async listForLeg(legId:string){return this.database.select().from(legIncidents).where(eq(legIncidents.legId,legId)).orderBy(desc(legIncidents.occurredAt))}async listAttachmentsForIncidents(incidentIds:string[],legId:string|null=null){if(!incidentIds.length)return[];const condition=legId?and(inArray(legIncidentAttachments.incidentId,incidentIds),eq(legIncidentAttachments.legId,legId)):inArray(legIncidentAttachments.incidentId,incidentIds);return this.database.select().from(legIncidentAttachments).where(condition)}async createAttachment(input:{id:string;legId:string;incidentId:string;clientMutationId:string;mimeType:string|null}){const rows=await this.database.insert(legIncidentAttachments).values(input).onConflictDoNothing({target:[legIncidentAttachments.legId,legIncidentAttachments.clientMutationId]}).returning();return rows[0]??(await this.database.select().from(legIncidentAttachments).where(and(eq(legIncidentAttachments.legId,input.legId),eq(legIncidentAttachments.clientMutationId,input.clientMutationId))).limit(1))[0]}async getAttachment(legId:string,id:string){return(await this.database.select().from(legIncidentAttachments).where(and(eq(legIncidentAttachments.legId,legId),eq(legIncidentAttachments.id,id))).limit(1))[0]??null}async setAttachmentUploaded(legId:string,id:string,key:string,mime:string){return(await this.database.update(legIncidentAttachments).set({objectKey:key,imageStatus:"image_uploaded",mimeType:mime,updatedAt:new Date()}).where(and(eq(legIncidentAttachments.id,id),eq(legIncidentAttachments.legId,legId))).returning())[0]??null}}
+import { and, desc, eq, inArray } from "drizzle-orm";
+import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import * as schema from "@/db/schema";
+import { bookings, legIncidentAttachments, legIncidents, trips } from "@/db/schema";
+
+export type IncidentInput = {
+  id: string;
+  type: string;
+  occurredAt: Date;
+  bookingId: string | null;
+  tripId: string | null;
+  locationText: string | null;
+  peopleInvolved: string | null;
+  description: string;
+  actionTaken: string | null;
+  followUpNeeded: boolean;
+  clientMutationId: string;
+};
+
+export type IncidentAdminUpdate = {
+  type?: string;
+  occurredAt?: Date;
+  locationText?: string | null;
+  peopleInvolved?: string | null;
+  description?: string;
+  actionTaken?: string | null;
+  followUpNeeded?: boolean;
+};
+
+export interface IncidentStore {
+  findByMutation(legId: string, clientMutationId: string): Promise<any | null>;
+  bookingBelongsToLeg(bookingId: string, legId: string): Promise<boolean>;
+  tripBelongsToLeg(tripId: string, legId: string): Promise<boolean>;
+  insertIncident(input: IncidentInput & { legId: string }): Promise<any>;
+  listAll(): Promise<any[]>;
+}
+
+export async function createIncidentForManager(
+  store: IncidentStore,
+  legId: string,
+  input: IncidentInput,
+) {
+  const existing = await store.findByMutation(legId, input.clientMutationId);
+  if (existing) return { ok: true as const, idempotent: true, incident: existing };
+  if (input.bookingId && !(await store.bookingBelongsToLeg(input.bookingId, legId))) {
+    return { ok: false as const, code: "FORBIDDEN" as const };
+  }
+  if (input.tripId && !(await store.tripBelongsToLeg(input.tripId, legId))) {
+    return { ok: false as const, code: "FORBIDDEN" as const };
+  }
+  return {
+    ok: true as const,
+    idempotent: false,
+    incident: await store.insertIncident({ ...input, legId }),
+  };
+}
+
+export class DrizzleIncidentRepository implements IncidentStore {
+  constructor(private readonly database: NodePgDatabase<typeof schema>) {}
+
+  async findByMutation(legId: string, id: string) {
+    return (await this.database
+      .select()
+      .from(legIncidents)
+      .where(and(eq(legIncidents.legId, legId), eq(legIncidents.clientMutationId, id)))
+      .limit(1))[0] ?? null;
+  }
+
+  async bookingBelongsToLeg(id: string, legId: string) {
+    return Boolean((await this.database
+      .select({ id: bookings.id })
+      .from(bookings)
+      .where(and(eq(bookings.id, id), eq(bookings.travelLegId, legId)))
+      .limit(1))[0]);
+  }
+
+  async tripBelongsToLeg(id: string, legId: string) {
+    return Boolean((await this.database
+      .select({ id: trips.id })
+      .from(trips)
+      .where(and(eq(trips.id, id), eq(trips.travelLegId, legId)))
+      .limit(1))[0]);
+  }
+
+  async insertIncident(input: IncidentInput & { legId: string }) {
+    const rows = await this.database
+      .insert(legIncidents)
+      .values(input)
+      .onConflictDoNothing({ target: [legIncidents.legId, legIncidents.clientMutationId] })
+      .returning();
+    if (rows[0]) return rows[0];
+    const existing = await this.findByMutation(input.legId, input.clientMutationId);
+    if (!existing) throw new Error("Incident insert conflict");
+    return existing;
+  }
+
+  async listAll() {
+    return this.database.select().from(legIncidents).orderBy(desc(legIncidents.occurredAt));
+  }
+
+  async listForLeg(legId: string) {
+    return this.database
+      .select()
+      .from(legIncidents)
+      .where(eq(legIncidents.legId, legId))
+      .orderBy(desc(legIncidents.occurredAt));
+  }
+
+  async updateIncident(id: string, input: IncidentAdminUpdate) {
+    return (await this.database
+      .update(legIncidents)
+      .set({ ...input, updatedAt: new Date() })
+      .where(eq(legIncidents.id, id))
+      .returning())[0] ?? null;
+  }
+
+  async deleteIncident(id: string) {
+    return this.database.transaction(async (transaction) => {
+      const attachments = await transaction
+        .select()
+        .from(legIncidentAttachments)
+        .where(eq(legIncidentAttachments.incidentId, id));
+      await transaction
+        .delete(legIncidentAttachments)
+        .where(eq(legIncidentAttachments.incidentId, id));
+      const incident = (await transaction
+        .delete(legIncidents)
+        .where(eq(legIncidents.id, id))
+        .returning())[0] ?? null;
+      return { incident, attachments };
+    });
+  }
+
+  async listAttachmentsForIncidents(incidentIds: string[], legId: string | null = null) {
+    if (!incidentIds.length) return [];
+    const condition = legId
+      ? and(inArray(legIncidentAttachments.incidentId, incidentIds), eq(legIncidentAttachments.legId, legId))
+      : inArray(legIncidentAttachments.incidentId, incidentIds);
+    return this.database.select().from(legIncidentAttachments).where(condition);
+  }
+
+  async createAttachment(input: {
+    id: string;
+    legId: string;
+    incidentId: string;
+    clientMutationId: string;
+    mimeType: string | null;
+  }) {
+    const rows = await this.database
+      .insert(legIncidentAttachments)
+      .values(input)
+      .onConflictDoNothing({ target: [legIncidentAttachments.legId, legIncidentAttachments.clientMutationId] })
+      .returning();
+    return rows[0] ?? (await this.database
+      .select()
+      .from(legIncidentAttachments)
+      .where(and(
+        eq(legIncidentAttachments.legId, input.legId),
+        eq(legIncidentAttachments.clientMutationId, input.clientMutationId),
+      ))
+      .limit(1))[0];
+  }
+
+  async getAttachment(legId: string, id: string) {
+    return (await this.database
+      .select()
+      .from(legIncidentAttachments)
+      .where(and(eq(legIncidentAttachments.legId, legId), eq(legIncidentAttachments.id, id)))
+      .limit(1))[0] ?? null;
+  }
+
+  async setAttachmentUploaded(legId: string, id: string, key: string, mime: string) {
+    return (await this.database
+      .update(legIncidentAttachments)
+      .set({ objectKey: key, imageStatus: "image_uploaded", mimeType: mime, updatedAt: new Date() })
+      .where(and(eq(legIncidentAttachments.id, id), eq(legIncidentAttachments.legId, legId)))
+      .returning())[0] ?? null;
+  }
+}
