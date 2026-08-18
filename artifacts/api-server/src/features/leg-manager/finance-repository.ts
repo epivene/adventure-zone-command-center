@@ -66,6 +66,7 @@ function normalizeAdminExpenseRow(row: any): AdminExpenseRow {
     id: String(row.id),
     legId: String(row.legId),
     legName: String(row.legName),
+    submitterName: row.submitterName ?? null,
     bookingId: row.bookingId ?? null,
     bookingName: row.bookingName ?? null,
     tripId: row.tripId ?? null,
@@ -265,6 +266,7 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
         e.id,
         e.leg_id AS "legId",
         tl.name AS "legName",
+        lma.manager_name AS "submitterName",
         e.booking_id AS "bookingId",
         b.name AS "bookingName",
         e.trip_id AS "tripId",
@@ -289,6 +291,7 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
         r.created_at AS "receiptCreatedAt"
       FROM leg_expenses e
       INNER JOIN travel_legs tl ON tl.id = e.leg_id
+      LEFT JOIN leg_manager_access lma ON lma.leg_id = e.leg_id
       LEFT JOIN bookings b ON b.id = e.booking_id
       LEFT JOIN LATERAL (
         SELECT lr.* FROM leg_receipts lr
