@@ -25,6 +25,16 @@ const access = z.object({ password: z.string().min(1) });
 const duplicatePasswordMessage =
   "That password is already assigned to another manager. Choose a different password.";
 
+const incidentAdminUpdate = z.object({
+  type: z.string().trim().min(1).max(160).optional(),
+  occurredAt: z.coerce.date().optional(),
+  locationText: z.string().trim().max(500).nullable().optional(),
+  peopleInvolved: z.string().trim().max(2000).nullable().optional(),
+  description: z.string().trim().min(1).max(8000).optional(),
+  actionTaken: z.string().trim().max(8000).nullable().optional(),
+  followUpNeeded: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, { message: "No incident changes supplied" });
+
 router.get("/manager-admin/legs/access", async (_req, res) => {
   res.json({ legs: await repo.listAdminStatuses() });
 });
@@ -173,6 +183,39 @@ router.get("/manager-admin/incidents", async (_req, res) => {
   const rows = await incidents.listAll();
   const attachments = await incidents.listAttachmentsForIncidents(rows.map((row) => row.id));
   res.json({ incidents: await attachIncidentPhotoUrls(rows, attachments, incidentStorage) });
+});
+
+router.patch("/manager-admin/incidents/:incidentId", async (req, res): Promise<void> => {
+  const incidentId = Array.isArray(req.params.incidentId) ? req.params.incidentId[0] ?? "" : req.params.incidentId;
+  const parsed = incidentAdminUpdate.safeParse(req.body);
+  if (!incidentId || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Incident id is required" : parsed.error.issues[0]?.message ?? "Invalid incident update" });
+    return;
+  }
+  const incident = await incidents.updateIncident(incidentId, parsed.data);
+  if (!incident) {
+    res.status(404).json({ error: "Incident not found" });
+    return;
+  }
+  res.json({ incident });
+});
+
+router.delete("/manager-admin/incidents/:incidentId", async (req, res): Promise<void> => {
+  const incidentId = Array.isArray(req.params.incidentId) ? req.params.incidentId[0] ?? "" : req.params.incidentId;
+  if (!incidentId) {
+    res.status(400).json({ error: "Incident id is required" });
+    return;
+  }
+  const deleted = await incidents.deleteIncident(incidentId);
+  if (!deleted.incident) {
+    res.status(404).json({ error: "Incident not found" });
+    return;
+  }
+  const objectKeys = deleted.attachments
+    .map((attachment) => typeof attachment.objectKey === "string" ? attachment.objectKey.trim() : "")
+    .filter(Boolean);
+  await Promise.allSettled(objectKeys.map((key) => incidentStorage.delete(key)));
+  res.json({ ok: true, id: incidentId });
 });
 
 router.get("/manager-admin/reviews", async (_req, res) => {
