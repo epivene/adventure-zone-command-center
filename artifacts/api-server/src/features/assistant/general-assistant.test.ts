@@ -31,6 +31,12 @@ describe("answerGeneralAssistant", () => {
     expect(calls[0]).toMatchObject({ query: "Oktoberfest", limit: 8 });
   });
 
+  it("keeps numbered holiday names intact for discovery", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "4th of July", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "4th of July", limit: 8 });
+  });
+
   it("extracts a contact name and city", async () => {
     const calls: ProfileSearchRequest[] = [];
     await answerGeneralAssistant({ question: "Find the profile for Lisa in Dickinson", profileSearch: fakeRepo(calls) });
