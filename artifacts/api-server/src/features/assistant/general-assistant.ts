@@ -20,6 +20,8 @@ const stateNames: Record<string, string> = {
   vermont: "VT", virginia: "VA", washington: "WA", "west virginia": "WV", wisconsin: "WI", wyoming: "WY",
 };
 
+const recurringEventTheme = /\b(christmas|xmas|halloween|oktoberfest|octoberfest|4th of july|fourth of july|independence day|easter|thanksgiving|memorial day|labor day|new year(?:'s)?|st\.? patrick(?:'s)? day|valentine(?:'s)? day)\b/i;
+
 function cleanSearchSubject(value: string) {
   return value
     .replace(/^(find|search for|search|show me|show)\s+/i, "")
@@ -40,6 +42,14 @@ function searchRequest(question: string): ProfileSearchRequest | null {
   if (packageMatch && /who|profile|customer|event/i.test(raw)) {
     const packageName = packageMatch[1]?.replace(/[?.!]+$/g, "").trim();
     if (packageName) return { query: packageName, packageName, limit: 8 };
+  }
+
+  // Holiday/theme discovery should work even when the user does not say
+  // "find" or "profile". Retrieval still goes through the same bounded,
+  // server-side profile search repository.
+  const themeMatch = raw.match(recurringEventTheme);
+  if (themeMatch?.[1]) {
+    return { query: themeMatch[1], limit: 8 };
   }
 
   const looksLikeSearch = /^(find|search|show)/i.test(raw) || /\b(profile|contact|customer|event family)\b/i.test(raw);
@@ -81,7 +91,7 @@ export async function answerGeneralAssistant(input: {
   if (!request) {
     return {
       kind: "needs_context",
-      text: "I can help you find profiles, contacts, event families, overdue follow-ups, or customers by package history. For customer-specific history or call help, choose a profile first.",
+      text: "I can search Command Center profiles and event families by name, holiday/theme, contact, city, state, overdue follow-up, or package history. Try something like ‘Christmas events,’ ‘Oktoberfest,’ or ‘events in North Dakota.’",
     };
   }
 
@@ -90,7 +100,7 @@ export async function answerGeneralAssistant(input: {
     kind: "profile_results",
     text: results.length
       ? `I found ${results.length} matching ${results.length === 1 ? "profile" : "profiles"}.`
-      : "I couldn't find a matching profile. Try a broader name, city, state, contact, or package search.",
+      : "I couldn't find a matching profile or event. Try a broader event/theme name, city, state, contact, or package search.",
     results,
   };
 }
