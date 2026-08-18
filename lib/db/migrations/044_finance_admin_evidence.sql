@@ -1,14 +1,26 @@
 ALTER TABLE leg_expenses
   ADD COLUMN IF NOT EXISTS assignment_source text,
   ADD COLUMN IF NOT EXISTS assignment_reason text,
-  ADD COLUMN IF NOT EXISTS assignment_updated_at timestamptz;
+  ADD COLUMN IF NOT EXISTS assignment_updated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS submitted_by_label text;
+
+UPDATE leg_expenses e
+SET assignment_source = CASE
+  WHEN e.booking_id IS NOT NULL OR e.trip_id IS NOT NULL OR e.trip_segment_id IS NOT NULL THEN 'legacy'
+  ELSE 'unassigned'
+END,
+assignment_updated_at = COALESCE(e.updated_at, e.created_at, now()),
+submitted_by_label = COALESCE(e.submitted_by_label, lma.manager_name)
+FROM leg_manager_access lma
+WHERE e.leg_id = lma.leg_id
+  AND (e.assignment_source IS NULL OR e.submitted_by_label IS NULL);
 
 UPDATE leg_expenses
 SET assignment_source = CASE
   WHEN booking_id IS NOT NULL OR trip_id IS NOT NULL OR trip_segment_id IS NOT NULL THEN 'legacy'
   ELSE 'unassigned'
 END,
-assignment_updated_at = COALESCE(updated_at, created_at, now())
+assignment_updated_at = COALESCE(assignment_updated_at, updated_at, created_at, now())
 WHERE assignment_source IS NULL;
 
 ALTER TABLE leg_expenses
@@ -35,6 +47,11 @@ BEGIN
     END IF;
   END IF;
   NEW.assignment_updated_at := COALESCE(NEW.assignment_updated_at, now());
+  IF NEW.submitted_by_label IS NULL THEN
+    SELECT manager_name INTO NEW.submitted_by_label
+    FROM leg_manager_access
+    WHERE leg_id = NEW.leg_id;
+  END IF;
   RETURN NEW;
 END;
 $$;
