@@ -25,6 +25,9 @@ export type FinanceMutationInput = FinanceRefs & {
   clientMutationId: string;
   payload: Record<string, unknown>;
 };
+export type ExpenseUpdate = Partial<Pick<typeof legExpenses.$inferInsert,
+  "category" | "merchant" | "amountCents" | "taxCents" | "paymentSource" | "occurredAt" | "notes" | "employeeNote" | "detailJson"
+>>;
 
 export interface FinanceMutationStore {
   findByMutation(
@@ -209,6 +212,54 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
       .onConflictDoNothing({ target: [legCashEntries.legId, legCashEntries.clientMutationId] });
   }
 
+  async getExpenseForLeg(legId: string, expenseId: string) {
+    return (await this.database.select().from(legExpenses).where(and(eq(legExpenses.id, expenseId), eq(legExpenses.legId, legId))).limit(1))[0] ?? null;
+  }
+
+  private async reconcileExpenseCash(expense: typeof legExpenses.$inferSelect) {
+    await this.database.delete(legCashEntries).where(and(
+      eq(legCashEntries.legId, expense.legId),
+      eq(legCashEntries.clientMutationId, expense.clientMutationId),
+      eq(legCashEntries.kind, "expense_paid_cash"),
+    ));
+    const derived = derivedCashEntryForMutation("expense", expense);
+    if (!derived) return;
+    await this.database.insert(legCashEntries).values({
+      legId: expense.legId,
+      bookingId: expense.bookingId,
+      tripId: expense.tripId,
+      tripSegmentId: expense.tripSegmentId,
+      kind: derived.kind,
+      amountCents: derived.amountCents,
+      occurredAt: expense.occurredAt,
+      notes: "Automatically recorded from cash-paid expense",
+      clientMutationId: expense.clientMutationId,
+    }).onConflictDoNothing({ target: [legCashEntries.legId, legCashEntries.clientMutationId] });
+  }
+
+  async updateExpenseForLeg(legId: string, expenseId: string, patch: ExpenseUpdate) {
+    const current = await this.getExpenseForLeg(legId, expenseId);
+    if (!current) return null;
+    const updated = (await this.database.update(legExpenses).set({
+      ...patch,
+      revision: current.revision + 1,
+      updatedAt: new Date(),
+    }).where(and(eq(legExpenses.id, expenseId), eq(legExpenses.legId, legId))).returning())[0] ?? null;
+    if (updated) await this.reconcileExpenseCash(updated);
+    return updated;
+  }
+
+  async deleteExpenseForLeg(legId: string, expenseId: string) {
+    const current = await this.getExpenseForLeg(legId, expenseId);
+    if (!current) return null;
+    await this.database.delete(legCashEntries).where(and(
+      eq(legCashEntries.legId, legId),
+      eq(legCashEntries.clientMutationId, current.clientMutationId),
+      eq(legCashEntries.kind, "expense_paid_cash"),
+    ));
+    return (await this.database.delete(legExpenses).where(and(eq(legExpenses.id, expenseId), eq(legExpenses.legId, legId))).returning())[0] ?? null;
+  }
+
   async summary(legId: string | null, tripId?: string | null) {
     const incomeWhere = and(legId ? eq(legEventIncome.legId, legId) : undefined, tripId ? eq(legEventIncome.tripId, tripId) : undefined);
     const expenseWhere = and(legId ? eq(legExpenses.legId, legId) : undefined, tripId ? eq(legExpenses.tripId, tripId) : undefined);
@@ -234,11 +285,29 @@ export class DrizzleFinanceRepository implements FinanceMutationStore {
     }
     for (const entry of cash) settlementEffects.push({ kind: entry.kind as LegCashEntryKind, amountCents: entry.amountCents });
     const cashPositionEntries = cash.map((entry) => ({ kind: entry.kind as LegCashEntryKind, amountCents: entry.amountCents }));
-    const receiptByExpense = new Map(receipts.map((receipt) => [receipt.expenseId, receipt.imageStatus]));
-    const expensesWithReceipts = expenses.map((expense) => ({
-      ...expense,
-      receiptStatus: receiptByExpense.get(expense.id) ?? "missing",
-    }));
+    const receiptsByExpense = new Map<string, typeof receipts>();
+    for (const receipt of receipts) {
+      const rows = receiptsByExpense.get(receipt.expenseId) ?? [];
+      rows.push(receipt);
+      receiptsByExpense.set(receipt.expenseId, rows);
+    }
+    const expensesWithReceipts = expenses.map((expense) => {
+      const expenseReceipts = receiptsByExpense.get(expense.id) ?? [];
+      return {
+        ...expense,
+        receiptStatus: expenseReceipts.some((receipt) => receipt.imageStatus === "image_uploaded")
+          ? "image_uploaded"
+          : expenseReceipts[0]?.imageStatus ?? "missing",
+        receipts: expenseReceipts.map((receipt) => ({
+          id: receipt.id,
+          imageStatus: receipt.imageStatus,
+          objectKey: receipt.objectKey,
+          mimeType: receipt.mimeType,
+          createdAt: receipt.createdAt,
+          updatedAt: receipt.updatedAt,
+        })),
+      };
+    });
 
     return {
       incomeTotalCents,

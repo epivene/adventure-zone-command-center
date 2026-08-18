@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
 import { indexedDbManagerMutationStore } from "@/lib/manager-offline-db";
-import { flushManagerBlobQueue } from "@/lib/manager-blob-queue";
+import { flushManagerBlobQueue, type ManagerBlobKind } from "@/lib/manager-blob-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
 import { ManagerAssistantProvider } from "@/features/manager-assistant/manager-assistant-context";
 import { ManagerAssistantDrawer } from "./manager-assistant-drawer";
@@ -23,7 +23,14 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
       await flushManagerMutationQueue(managerApi);
       await flushManagerBlobQueue(
         async row => {
-          await managerApi(`/manager/receipts/${row.receiptId}/image`, {
+          const mutations = await indexedDbManagerMutationStore.list();
+          const mutation = mutations.find((candidate) => candidate.id === row.receiptId);
+          const inferredKind: ManagerBlobKind | undefined = row.kind ?? (mutation?.path === "/manager/incident-attachments" ? "incident" : mutation?.path === "/manager/receipts" ? "receipt" : undefined);
+          if (!inferredKind) throw new Error("Image type is unknown");
+          const path = inferredKind === "incident"
+            ? `/manager/incident-attachments/${row.receiptId}/image`
+            : `/manager/receipts/${row.receiptId}/image`;
+          await managerApi(path, {
             method: "PUT",
             headers: { "Content-Type": row.blob.type || "image/jpeg" },
             body: row.blob,
@@ -32,7 +39,11 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
         undefined,
         async row => {
           const mutations = await indexedDbManagerMutationStore.list();
-          return mutations.some((mutation) => mutation.id === row.receiptId && mutation.path === "/manager/receipts" && mutation.state === "synced");
+          const mutation = mutations.find((candidate) => candidate.id === row.receiptId);
+          if (!mutation || mutation.state !== "synced") return false;
+          if (row.kind === "receipt") return mutation.path === "/manager/receipts";
+          if (row.kind === "incident") return mutation.path === "/manager/incident-attachments";
+          return mutation.path === "/manager/receipts" || mutation.path === "/manager/incident-attachments";
         },
       );
     })().catch(() => undefined);

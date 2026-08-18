@@ -47,13 +47,13 @@ export class DrizzleIncidentRepository implements IncidentStore {
   }
 
   async bookingBelongsToLeg(id: string, legId: string) {
-    return !!(await this.database.select({ id: bookings.id }).from(bookings)
-      .where(and(eq(bookings.id, id), eq(bookings.travelLegId, legId))).limit(1))[0];
+    return Boolean((await this.database.select({ id: bookings.id }).from(bookings)
+      .where(and(eq(bookings.id, id), eq(bookings.travelLegId, legId))).limit(1))[0]);
   }
 
   async tripBelongsToLeg(id: string, legId: string) {
-    return !!(await this.database.select({ id: trips.id }).from(trips)
-      .where(and(eq(trips.id, id), eq(trips.travelLegId, legId))).limit(1))[0];
+    return Boolean((await this.database.select({ id: trips.id }).from(trips)
+      .where(and(eq(trips.id, id), eq(trips.travelLegId, legId))).limit(1))[0]);
   }
 
   async insertIncident(input: IncidentInput & { legId: string }) {
@@ -73,6 +73,10 @@ export class DrizzleIncidentRepository implements IncidentStore {
     return this.database.select().from(legIncidents).where(eq(legIncidents.legId, legId)).orderBy(desc(legIncidents.occurredAt));
   }
 
+  async getForLeg(legId: string, incidentId: string) {
+    return (await this.database.select().from(legIncidents).where(and(eq(legIncidents.id, incidentId), eq(legIncidents.legId, legId))).limit(1))[0] ?? null;
+  }
+
   async updateIncident(incidentId: string, input: IncidentUpdate) {
     return (await this.database.update(legIncidents).set({
       ...input,
@@ -81,8 +85,20 @@ export class DrizzleIncidentRepository implements IncidentStore {
     }).where(eq(legIncidents.id, incidentId)).returning())[0] ?? null;
   }
 
+  async updateIncidentForLeg(legId: string, incidentId: string, input: IncidentUpdate) {
+    return (await this.database.update(legIncidents).set({
+      ...input,
+      revision: sql`${legIncidents.revision} + 1`,
+      updatedAt: new Date(),
+    }).where(and(eq(legIncidents.id, incidentId), eq(legIncidents.legId, legId))).returning())[0] ?? null;
+  }
+
   async deleteIncident(incidentId: string) {
     return (await this.database.delete(legIncidents).where(eq(legIncidents.id, incidentId)).returning())[0] ?? null;
+  }
+
+  async deleteIncidentForLeg(legId: string, incidentId: string) {
+    return (await this.database.delete(legIncidents).where(and(eq(legIncidents.id, incidentId), eq(legIncidents.legId, legId))).returning())[0] ?? null;
   }
 
   async listAttachmentsForIncidents(incidentIds: string[], legId: string | null = null) {
