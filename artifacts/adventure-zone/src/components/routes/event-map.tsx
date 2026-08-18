@@ -4,7 +4,6 @@ import { Link } from "wouter";
 import { useMemo, useState } from "react";
 
 import { apiPost } from "@/lib/auth-token";
-import { MapFiltersPanel } from "@/components/routes/map-filters";
 import type { EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
 import {
   filterMapEvents,
@@ -21,8 +20,6 @@ import {
 } from "@/features/routes/route-view";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 import { primaryViewportEvents, routeScopeSummary, viewportTarget } from "@/features/routes/map-focus";
-import { readManagerMapMode, writeManagerMapMode, type ManagerMapMode } from "@/features/routes/manager-map-navigation";
-import { ManagerMapModeToggle } from "./manager-map-mode";
 import { ManagerRouteMapShell } from "./manager-route-map-shell";
 import {
   ManagerRouteMapLayers,
@@ -109,9 +106,7 @@ function EventList({
         <ul className="mt-3 grid gap-2">
           {events.map((event) => (
             <li
-              className={`rounded-lg border border-slate-200 p-3 transition ${
-                event.planningEmphasis === "dimmed" ? "opacity-40" : ""
-              }`}
+              className={`rounded-lg border border-slate-200 p-3 transition ${event.planningEmphasis === "dimmed" ? "opacity-40" : ""}`}
               data-emphasis={event.planningEmphasis}
               key={event.id}
             >
@@ -185,10 +180,6 @@ export function EventMap({
   onClearTripFocus?: () => void;
 }) {
   const currentYear = new Date().getFullYear();
-  const [managerMode, setManagerMode] = useState<ManagerMapMode>(() => {
-    if (typeof window === "undefined") return "planning";
-    return readManagerMapMode(window.localStorage);
-  });
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
   const [mode, setMode] = useState<RouteViewMode>("full");
   const [seasonYear, setSeasonYear] = useState(currentYear);
@@ -236,9 +227,7 @@ export function EventMap({
       const year = eventSeasonYear(event);
       if (year !== null) years.add(year);
     }
-    for (const handoff of handoffs) {
-      years.add(new Date(handoff.windowStartsAt).getFullYear());
-    }
+    for (const handoff of handoffs) years.add(new Date(handoff.windowStartsAt).getFullYear());
     return [...years].sort((a, b) => b - a);
   }, [currentYear, effectiveEvents, handoffs]);
 
@@ -253,26 +242,15 @@ export function EventMap({
       if (!event.travelLegId) continue;
       if (eventSeasonYear(event) !== seasonYear) continue;
       const bucket = event.routeBucket ?? classifyRouteBucket(event.status);
-      const emphasis = routeEmphasis({
-        bucket,
-        mode,
-        eventLegId: event.travelLegId,
-        focusedLegId,
-      });
+      const emphasis = routeEmphasis({ bucket, mode, eventLegId: event.travelLegId, focusedLegId });
       if (emphasis === "hidden") continue;
       result.push({
         ...event,
         routeBucket: bucket,
-        locationLabel:
-          event.locationLabel ??
-          ([event.city, event.region].filter(Boolean).join(", ") || null),
+        locationLabel: event.locationLabel ?? ([event.city, event.region].filter(Boolean).join(", ") || null),
         locationQuality:
           event.locationQuality ??
-          (event.latitude !== null && event.longitude !== null
-            ? "coordinates"
-            : event.city
-              ? "city"
-              : "missing"),
+          (event.latitude !== null && event.longitude !== null ? "coordinates" : event.city ? "city" : "missing"),
         mappingState:
           event.mappingState ??
           (event.latitude !== null && event.longitude !== null
@@ -318,6 +296,15 @@ export function EventMap({
     onClearTripFocus?.();
   }
 
+  const activeFilterCount = [
+    mode !== "full",
+    seasonYear !== currentYear,
+    focusedLegId !== null,
+    Boolean(filters.regions.length),
+    Boolean(filters.dateFrom),
+    Boolean(filters.dateTo),
+  ].filter(Boolean).length;
+
   const dataset = useMemo(() => {
     const base = toMapDataset(planningEvents);
     const emphasis = new Map(planningEvents.map((event) => [event.id, event.planningEmphasis]));
@@ -360,18 +347,12 @@ export function EventMap({
           type: "Feature",
           geometry: {
             type: "LineString",
-            coordinates: [
-              [from.longitude, from.latitude],
-              [to.longitude, to.latitude],
-            ],
+            coordinates: [[from.longitude, from.latitude], [to.longitude, to.latitude]],
           },
           properties: {
             legId,
             color: from.travelLegColor ?? to.travelLegColor ?? "#64748b",
-            emphasis:
-              from.planningEmphasis === "dimmed" && to.planningEmphasis === "dimmed"
-                ? "dimmed"
-                : "primary",
+            emphasis: from.planningEmphasis === "dimmed" && to.planningEmphasis === "dimmed" ? "dimmed" : "primary",
           },
         });
       }
@@ -411,66 +392,6 @@ export function EventMap({
 
   return (
     <div className="grid gap-5">
-      <ManagerMapModeToggle
-        mode={managerMode}
-        onChange={(next) => {
-          setManagerMode(next);
-          if (typeof window !== "undefined") writeManagerMapMode(window.localStorage, next);
-        }}
-      />
-      <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Route view</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {(["full", "confirmed", "potential", "history"] as RouteViewMode[]).map((value) => (
-              <button
-                aria-pressed={mode === value}
-                className={mode === value ? "button-primary px-4" : "button-secondary px-4"}
-                key={value}
-                onClick={() => setMode(value)}
-                type="button"
-              >
-                {value === "full" ? "Full" : formatLabel(value)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm font-semibold">
-            Season/year
-            <select onChange={(event) => setSeasonYear(Number(event.target.value))} value={seasonYear}>
-              {seasonYears.map((year) => <option key={year} value={year}>{year}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1 text-sm font-semibold">
-            Leg focus
-            <select onChange={(event) => setFocusedLegId(event.target.value || null)} value={focusedLegId ?? ""}>
-              <option value="">All legs</option>
-              {travelLegs.filter((leg) => !leg.archivedAt).map((leg) => (
-                <option key={leg.id} value={leg.id}>{leg.name}</option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <p className="text-xs text-slate-500">
-          Confirmed, Potential, and leg focus emphasize what you asked for without hiding nearby active legs. History is separated by season.
-        </p>
-      </section>
-
-      <MapFiltersPanel filters={filters} onChange={(next) => { setFilters(next); setFocusedEventId(null); }} onReset={() => { setFilters(initialFilters); setFocusedEventId(null); }} regions={regions} />
-
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3">
-        <p className="text-sm font-semibold text-slate-700">{scopeSummary}</p>
-        <div className="flex gap-2">
-          {focusedEventId ? <button className="button-secondary" onClick={() => setFocusedEventId(null)} type="button">Clear event focus</button> : null}
-          {focusedTripCoordinates ? <button className="button-secondary" onClick={onClearTripFocus} type="button">Clear trip focus</button> : null}
-          <button className="button-secondary" onClick={resetScope} type="button">Reset map scope</button>
-        </div>
-      </div>
-
-      <ManagerTripNavigationActions trip={focusedTrip} mode={managerMode} />
-
       {retryError ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{retryError}</p> : null}
       {mapError ? <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{mapError}</p> : null}
 
@@ -480,6 +401,81 @@ export function EventMap({
       {planningEvents.length === 0 ? (
         <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">No matching route events</p>
       ) : null}
+
+      <details className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-bold text-slate-900">
+          <span>Filters{activeFilterCount ? ` (${activeFilterCount})` : ""}</span>
+          <span className="text-xs font-normal text-slate-500">{scopeSummary}</span>
+        </summary>
+        <div className="grid gap-4 border-t border-slate-200 p-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">Route view</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(["full", "confirmed", "potential", "history"] as RouteViewMode[]).map((value) => (
+                <button
+                  aria-pressed={mode === value}
+                  className={mode === value ? "button-primary px-4" : "button-secondary px-4"}
+                  key={value}
+                  onClick={() => { setMode(value); setFocusedEventId(null); }}
+                  type="button"
+                >
+                  {value === "full" ? "Full" : formatLabel(value)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="grid gap-1 text-sm font-semibold">
+              Season/year
+              <select onChange={(event) => { setSeasonYear(Number(event.target.value)); setFocusedEventId(null); }} value={seasonYear}>
+                {seasonYears.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              Leg focus
+              <select onChange={(event) => { setFocusedLegId(event.target.value || null); setFocusedEventId(null); }} value={focusedLegId ?? ""}>
+                <option value="">All legs</option>
+                {travelLegs.filter((leg) => !leg.archivedAt).map((leg) => (
+                  <option key={leg.id} value={leg.id}>{leg.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              State
+              <select
+                onChange={(event) => { setFilters({ ...filters, regions: event.target.value ? [event.target.value] : [] }); setFocusedEventId(null); }}
+                value={filters.regions[0] ?? ""}
+              >
+                <option value="">All states</option>
+                {regions.map((region) => <option key={region} value={region}>{region}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              After
+              <input
+                onChange={(event) => { setFilters({ ...filters, dateFrom: event.target.value || null }); setFocusedEventId(null); }}
+                type="date"
+                value={filters.dateFrom ?? ""}
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              Before
+              <input
+                onChange={(event) => { setFilters({ ...filters, dateTo: event.target.value || null }); setFocusedEventId(null); }}
+                type="date"
+                value={filters.dateTo ?? ""}
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+            {focusedEventId ? <button className="button-secondary" onClick={() => setFocusedEventId(null)} type="button">Clear event focus</button> : null}
+            {focusedTripCoordinates ? <button className="button-secondary" onClick={onClearTripFocus} type="button">Clear trip focus</button> : null}
+            <button className="button-secondary" onClick={resetScope} type="button">Reset filters</button>
+          </div>
+        </div>
+      </details>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
@@ -497,12 +493,14 @@ export function EventMap({
             handoffs={handoffs.filter((handoff) => new Date(handoff.windowStartsAt).getFullYear() === seasonYear)}
             routeLines={planningRouteLines}
             focusedEventId={focusedEventId}
-            managerMode={managerMode}
+            managerMode="on-road"
             focusedTrip={focusedTrip}
             onFocusEvent={setFocusedEventId}
           />
         </ManagerRouteMapShell>
       </div>
+
+      <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">
         <EventList events={mappedEvents} title="Route events" focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} />
