@@ -17,6 +17,10 @@ function makeContext(): BookingAssistantContextBundle {
       id: "current",
       label: "County Fair 2026",
       startsAt: "2026-07-10T12:00:00.000Z",
+      endsAt: "2026-07-10T20:00:00.000Z",
+      venueName: "Stark County Fairgrounds",
+      city: "Dickinson",
+      region: "ND",
       status: "possible",
       physicalAttractionTotal: 9,
       packageNames: ["Adventure Zone"],
@@ -27,6 +31,10 @@ function makeContext(): BookingAssistantContextBundle {
         id: "prior",
         label: "County Fair 2025",
         startsAt: "2025-07-10T12:00:00.000Z",
+        endsAt: "2025-07-10T20:00:00.000Z",
+        venueName: "Eastern Montana Fairgrounds",
+        city: "Miles City",
+        region: "MT",
         status: "completed",
         physicalAttractionTotal: 12,
         packageNames: ["Adventure Zone", "Pirate's Rebellion"],
@@ -69,10 +77,64 @@ describe("answerDeterministically", () => {
       question,
       context,
       brief: buildBookingBrief(context),
+      timeZone: "America/Denver",
     });
     expect(answer?.mode).toBe("deterministic");
     expect(answer?.text).toMatch(expected);
     expect(answer?.sources.length).toBeGreaterThan(0);
+  });
+
+  it("answers the current booking start and end time without calling cloud AI", () => {
+    const context = makeContext();
+    const answer = answerDeterministically({
+      question: "What time does this event start?",
+      context,
+      brief: buildBookingBrief(context),
+      timeZone: "America/Denver",
+    });
+
+    expect(answer?.mode).toBe("deterministic");
+    expect(answer?.text).toMatch(/County Fair 2026/i);
+    expect(answer?.text).toMatch(/6:00 AM/i);
+    expect(answer?.text).toMatch(/2:00 PM/i);
+    expect(answer?.text).toMatch(/MDT/i);
+    expect(answer?.sources.map((source) => source.id)).toEqual(["src-current"]);
+  });
+
+  it("finds a named event by its saved booking city and answers its time", () => {
+    const context = makeContext();
+    const answer = answerDeterministically({
+      question: "What time was the Miles City event?",
+      context,
+      brief: buildBookingBrief(context),
+      timeZone: "America/Denver",
+    });
+
+    expect(answer?.mode).toBe("deterministic");
+    expect(answer?.text).toMatch(/Miles City, MT/i);
+    expect(answer?.text).toMatch(/July 10, 2025/i);
+    expect(answer?.text).toMatch(/6:00 AM/i);
+    expect(answer?.text).toMatch(/2:00 PM/i);
+    expect(answer?.sources.map((source) => source.id)).toEqual(["src-prior"]);
+  });
+
+  it("states when the matched booking has no saved start time instead of guessing", () => {
+    const context = makeContext();
+    context.currentBooking = {
+      ...context.currentBooking!,
+      startsAt: null,
+      endsAt: null,
+    };
+    const answer = answerDeterministically({
+      question: "What time is this event?",
+      context,
+      brief: buildBookingBrief(context),
+      timeZone: "America/Denver",
+    });
+
+    expect(answer?.text).toMatch(/doesn't have a start time saved/i);
+    expect(answer?.confidence).toBe("low");
+    expect(answer?.sources.map((source) => source.id)).toEqual(["src-current"]);
   });
 
   it("combines known omissions and follow-up for what am I forgetting", () => {
@@ -81,6 +143,7 @@ describe("answerDeterministically", () => {
       question: "What am I forgetting?",
       context,
       brief: buildBookingBrief(context),
+      timeZone: "America/Denver",
     });
     expect(answer?.text).toMatch(/Paintball trailer/i);
     expect(answer?.text).toMatch(/Call Lisa/i);
@@ -94,6 +157,7 @@ describe("answerDeterministically", () => {
       question: "What did they book last year?",
       context,
       brief: buildBookingBrief(context),
+      timeZone: "America/Denver",
     });
     expect(answer?.text).toMatch(/don't have enough saved history/i);
     expect(answer?.confidence).toBe("low");
@@ -106,6 +170,7 @@ describe("answerDeterministically", () => {
         question: "Write a persuasive renewal email with three subject lines",
         context,
         brief: buildBookingBrief(context),
+        timeZone: "America/Denver",
       }),
     ).toBeNull();
   });
