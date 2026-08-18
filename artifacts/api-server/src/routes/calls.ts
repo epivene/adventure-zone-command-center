@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { DrizzleCallRepository } from "@/features/calls/call-repository";
 import { CallService } from "@/features/calls/call-service";
 import { completeCallInputSchema } from "@/features/calls/call-input";
+import { isAssistedCallingEnabled } from "@/features/calls/assisted-calling-enabled";
 import {
   DrizzleCallWorkspaceContextRepository,
   activityTimelineParent,
@@ -20,7 +21,7 @@ import { submitQuickCaller } from "@/features/contacts/quick-caller-service";
 const router: IRouter = Router();
 
 function requireAssistedCalling(_req: Request, res: Response, next: NextFunction): void {
-  if (process.env.ASSISTED_CALLING_ENABLED !== "true") {
+  if (!isAssistedCallingEnabled()) {
     res.status(404).json({ error: "Not found" });
     return;
   }
@@ -29,7 +30,7 @@ function requireAssistedCalling(_req: Request, res: Response, next: NextFunction
 
 router.get("/calls/config", (_req, res): void => {
   res.json({
-    assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true",
+    assistedCallingEnabled: isAssistedCallingEnabled(),
     voicemailLauncherUrl: process.env.VOICEMAIL_LAUNCH_URL || null,
   });
 });

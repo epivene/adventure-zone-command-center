@@ -45,7 +45,6 @@ const adminMenuGroups: MenuGroup[] = [
   {
     label: "Reports & History",
     items: [
-      { href: "/routes", label: "Trips & route history" },
       { href: "/profiles", label: "Profiles & history" },
     ],
   },

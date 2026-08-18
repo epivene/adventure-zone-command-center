@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { useSearch } from "wouter";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation, useSearch } from "wouter";
 
 import { createActivityAction, editActivityAction, listActivityRevisionsAction } from "@/actions/activities";
 import { completeCallAction } from "@/actions/calls";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
+import { CallerFinder } from "@/components/calls/caller-finder";
 import { CallWorkspace } from "@/components/calls/call-workspace";
 import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-unavailable";
 import { apiGet } from "@/lib/auth-token";
@@ -28,11 +29,13 @@ type CallingConfig = {
 
 export default function CallWorkspacePage() {
   const search = useSearch();
+  const [, setLocation] = useLocation();
   const params = new URLSearchParams(search);
   const followUpId = params.get("followUpId") ?? undefined;
   const bookingId = params.get("bookingId") ?? undefined;
   const contactId = params.get("contactId") ?? undefined;
   const organizationId = params.get("organizationId") ?? undefined;
+  const hasContext = Boolean(followUpId || bookingId || contactId || organizationId);
 
   const [data, setData] = useState<any>(null);
   const [config, setConfig] = useState<CallingConfig>({
@@ -41,6 +44,11 @@ export default function CallWorkspacePage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const selectCaller = useCallback((selectedContactId: string) => {
+    const query = new URLSearchParams({ contactId: selectedContactId });
+    setLocation(`/calls/workspace?${query.toString()}`);
+  }, [setLocation]);
 
   useEffect(() => {
     const query = new URLSearchParams();
@@ -57,7 +65,7 @@ export default function CallWorkspacePage() {
       }))
       .then(async (callingConfig) => {
         setConfig(callingConfig);
-        if (!callingConfig.assistedCallingEnabled) {
+        if (!callingConfig.assistedCallingEnabled || !hasContext) {
           setData(null);
           setLoading(false);
           return;
@@ -70,10 +78,11 @@ export default function CallWorkspacePage() {
         setError(reason.message);
         setLoading(false);
       });
-  }, [search]);
+  }, [search, hasContext]);
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading call workspace…</p></div>;
   if (!config.assistedCallingEnabled) return <AssistedCallingUnavailable />;
+  if (!hasContext) return <div className="mx-auto max-w-7xl py-8"><CallerFinder onSelect={selectCaller} /></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
   const context = data.context ?? {};

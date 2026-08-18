@@ -220,7 +220,7 @@ describe("caller finder route", () => {
     expect(find).not.toHaveBeenCalled();
   });
 
-  it("does not expose assisted endpoints while the server flag is off", async () => {
+  it("does not expose assisted endpoints while the server flag is explicitly off", async () => {
     process.env.ASSISTED_CALLING_ENABLED = "false";
     await request(app).get("/calls/caller-finder").expect(404);
     expect(find).not.toHaveBeenCalled();
@@ -251,14 +251,14 @@ describe("assisted calling configuration route", () => {
     });
   });
 
-  it("uses safe disabled defaults without implying voicemail delivery", async () => {
+  it("defaults to enabled when the deployment flag is omitted", async () => {
     delete process.env.ASSISTED_CALLING_ENABLED;
     delete process.env.VOICEMAIL_LAUNCH_URL;
 
     const response = await request(app).get("/calls/config").expect(200);
 
     expect(response.body).toEqual({
-      assistedCallingEnabled: false,
+      assistedCallingEnabled: true,
       voicemailLauncherUrl: null,
     });
   });

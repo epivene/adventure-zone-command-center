@@ -10,6 +10,10 @@ import {
   probabilityValues,
 } from "@/features/bookings/booking-types";
 import {
+  isBookingCurrentOrFuture,
+  normalizedBookingEnd,
+} from "@/features/bookings/booking-list-visibility";
+import {
   BUSINESS_TIME_ZONE,
   businessDateKey,
   classifyBusinessDueDate,
@@ -46,6 +50,7 @@ export function BookingList({
   const [travelLegId, setTravelLegId] = useState("");
   const [startsAfter, setStartsAfter] = useState("");
   const [startsBefore, setStartsBefore] = useState("");
+  const [showPast, setShowPast] = useState(false);
 
   const regions = [...new Set(bookings.map((booking) => booking.region))].sort();
   const travelLegs = [
@@ -56,7 +61,10 @@ export function BookingList({
     ).values(),
   ];
 
-  const filteredBookings = bookings.filter((booking) => {
+  const currentBookings = bookings.filter((booking) => isBookingCurrentOrFuture(booking, now));
+  const visibleBase = showPast ? bookings : currentBookings;
+
+  const filteredBookings = visibleBase.filter((booking) => {
     if (status && booking.status !== status) return false;
     if (probability && booking.probability !== probability) return false;
     if (region && booking.region !== region) return false;
@@ -85,6 +93,7 @@ export function BookingList({
     setTravelLegId("");
     setStartsAfter("");
     setStartsBefore("");
+    setShowPast(false);
   }
 
   return (
@@ -159,15 +168,23 @@ export function BookingList({
             value={startsBefore}
           />
         </label>
-        <div className="flex items-end sm:col-span-2 xl:col-span-6">
+        <div className="flex flex-wrap items-end gap-3 sm:col-span-2 xl:col-span-6">
           <button className="button-secondary" onClick={resetFilters} type="button">
             Reset filters
           </button>
+          <label className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700">
+            <input
+              checked={showPast}
+              onChange={(event) => setShowPast(event.target.checked)}
+              type="checkbox"
+            />
+            Show past bookings
+          </label>
         </div>
       </section>
 
       <p aria-live="polite" className="text-sm text-slate-600">
-        Showing {filteredBookings.length} of {bookings.length} bookings
+        Showing {filteredBookings.length} of {visibleBase.length} {showPast ? "bookings" : "current/upcoming bookings"}
       </p>
 
       {filteredBookings.length ? (
@@ -177,6 +194,7 @@ export function BookingList({
               booking.nextAction !== null &&
               classifyBusinessDueDate(booking.nextAction.dueAt, now) ===
                 "overdue";
+            const displayEnd = normalizedBookingEnd(booking.endsAt);
             return (
               <li
                 className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
@@ -220,7 +238,7 @@ export function BookingList({
                       <dt className="font-semibold text-slate-500">Dates</dt>
                       <dd>
                         {booking.startsAt ? formatShortDate(booking.startsAt) : "Not set"}
-                        {booking.endsAt ? `–${formatShortDate(booking.endsAt)}` : ""}
+                        {displayEnd ? `–${formatShortDate(displayEnd)}` : ""}
                       </dd>
                     </div>
                     <div>
