@@ -48,6 +48,18 @@ describe("AssistantDrawer general mode", () => {
     expect(screen.getByLabelText("Ask Booking Assistant")).not.toHaveProperty("disabled", true);
   });
 
+  it("shows a useful thematic event search prompt", () => {
+    render(
+      <AssistantContextProvider>
+        <OpenAssistant />
+        <AssistantDrawer />
+      </AssistantContextProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    expect(screen.getByRole("button", { name: "Find Christmas events" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Who usually books Pirate's Rebellion?" })).toBeNull();
+  });
+
   it("renders structured profile results from general search", async () => {
     render(
       <AssistantContextProvider>
