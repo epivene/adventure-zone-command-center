@@ -2,6 +2,7 @@ import type { BookingBrief } from "./booking-brief";
 import type {
   AssistantAnswer,
   AssistantSourceReference,
+  BookingAssistantBookingSummary,
   BookingAssistantContextBundle,
 } from "./assistant-types";
 
@@ -85,6 +86,17 @@ function asksFollowUp(question: string): boolean {
   );
 }
 
+function asksSchedule(question: string): boolean {
+  if (/follow ?up|next action|call due/.test(question)) return false;
+  return (
+    /\bwhat time\b/.test(question) ||
+    /\bwhat (date|day)\b/.test(question) ||
+    /\bwhen (is|was|does|did|will)\b/.test(question) ||
+    /\b(start|starting|end|ending) time\b/.test(question) ||
+    /\b(event|booking) schedule\b/.test(question)
+  );
+}
+
 function asksMainContact(question: string): boolean {
   return (
     /who (is|s) the main contact/.test(question) ||
@@ -105,10 +117,144 @@ function asksForgetting(question: string): boolean {
   );
 }
 
+function phraseIncluded(question: string, value: string | null | undefined): boolean {
+  const phrase = normalize(value ?? "");
+  if (!phrase) return false;
+  return ` ${question} `.includes(` ${phrase} `);
+}
+
+function bookingScheduleScore(
+  booking: BookingAssistantBookingSummary,
+  question: string,
+): number {
+  let score = 0;
+  if (phraseIncluded(question, booking.label)) score += 1_000;
+  if (phraseIncluded(question, booking.city)) score += 900;
+  if (phraseIncluded(question, booking.venueName)) score += 800;
+  const location = [booking.city, booking.region].filter(Boolean).join(" ");
+  if (phraseIncluded(question, location)) score += 950;
+  if (booking.startsAt) {
+    const year = String(new Date(booking.startsAt).getUTCFullYear());
+    if (phraseIncluded(question, year)) score += 150;
+  }
+  return score;
+}
+
+function selectScheduleBooking(
+  context: BookingAssistantContextBundle,
+  question: string,
+): BookingAssistantBookingSummary | null {
+  const bookings = [
+    ...(context.currentBooking ? [context.currentBooking] : []),
+    ...context.priorBookings.filter(
+      (booking) => booking.id !== context.currentBooking?.id,
+    ),
+  ];
+  if (bookings.length === 0) return null;
+
+  const ranked = bookings
+    .map((booking, index) => ({
+      booking,
+      index,
+      score: bookingScheduleScore(booking, question),
+    }))
+    .sort((left, right) =>
+      right.score - left.score || left.index - right.index,
+    );
+  if ((ranked[0]?.score ?? 0) > 0) return ranked[0]?.booking ?? null;
+
+  if (
+    context.currentBooking &&
+    (/\b(this|current|the) (event|booking)\b/.test(question) ||
+      context.context.kind === "booking")
+  ) {
+    return context.currentBooking;
+  }
+
+  return bookings.length === 1 ? bookings[0] ?? null : context.currentBooking;
+}
+
+function safeDate(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function safeTimeZone(value: string | undefined): string {
+  if (!value) return "UTC";
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date(0));
+    return value;
+  } catch {
+    return "UTC";
+  }
+}
+
+function bookingDescriptor(booking: BookingAssistantBookingSummary): string {
+  const location = [booking.city, booking.region].filter(Boolean).join(", ");
+  const venue = booking.venueName?.trim();
+  if (venue && location) return `${booking.label} at ${venue} in ${location}`;
+  if (location) return `${booking.label} in ${location}`;
+  if (venue) return `${booking.label} at ${venue}`;
+  return booking.label;
+}
+
+function dayKey(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function scheduleText(input: {
+  booking: BookingAssistantBookingSummary;
+  context: BookingAssistantContextBundle;
+  timeZone?: string;
+}): string {
+  const descriptor = bookingDescriptor(input.booking);
+  const startsAt = safeDate(input.booking.startsAt);
+  if (!startsAt) {
+    return `${descriptor} doesn't have a start time saved in the booking.`;
+  }
+
+  const endsAt = safeDate(input.booking.endsAt);
+  const timeZone = safeTimeZone(input.timeZone);
+  const dateFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+  const timeFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+  const generatedAt = safeDate(input.context.generatedAt);
+  const comparison = endsAt ?? startsAt;
+  const tense = generatedAt && comparison.getTime() < generatedAt.getTime()
+    ? "was scheduled"
+    : "is scheduled";
+
+  if (!endsAt) {
+    return `${descriptor} ${tense} for ${dateFormatter.format(startsAt)} at ${timeFormatter.format(startsAt)}.`;
+  }
+
+  if (dayKey(startsAt, timeZone) === dayKey(endsAt, timeZone)) {
+    return `${descriptor} ${tense} for ${dateFormatter.format(startsAt)}, from ${timeFormatter.format(startsAt)} to ${timeFormatter.format(endsAt)}.`;
+  }
+
+  return `${descriptor} ${tense} from ${dateFormatter.format(startsAt)} at ${timeFormatter.format(startsAt)} through ${dateFormatter.format(endsAt)} at ${timeFormatter.format(endsAt)}.`;
+}
+
 export function answerDeterministically(input: {
   question: string;
   context: BookingAssistantContextBundle;
   brief: BookingBrief;
+  timeZone?: string;
 }): AssistantAnswer | null {
   const question = normalize(input.question);
   const context = input.context;
@@ -195,6 +341,22 @@ export function answerDeterministically(input: {
       ).toLocaleString("en-US")}.`,
       "high",
       followUpSource(context, followUp.id),
+    );
+  }
+
+  if (asksSchedule(question)) {
+    const booking = selectScheduleBooking(context, question);
+    if (!booking) {
+      return deterministic(
+        "I don't see a saved booking in this context to check for an event time.",
+        "low",
+        [],
+      );
+    }
+    return deterministic(
+      scheduleText({ booking, context, timeZone: input.timeZone }),
+      booking.startsAt ? "high" : "low",
+      bookingSource(context, booking.id),
     );
   }
 
