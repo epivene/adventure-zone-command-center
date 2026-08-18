@@ -102,7 +102,7 @@ router.delete("/manager/expenses/:expenseId", requireManager, async (req, res): 
     return;
   }
   await finance.deleteExpenseForLeg(legId, expenseId);
-  res.status(204).end();
+  res.json({ ok: true });
 });
 
 router.delete("/manager/receipts/:receiptId", requireManager, async (req, res): Promise<void> => {
@@ -121,7 +121,7 @@ router.delete("/manager/receipts/:receiptId", requireManager, async (req, res): 
     res.status(503).json({ error: "Could not remove receipt image" });
     return;
   }
-  res.status(204).end();
+  res.json({ ok: true });
 });
 
 router.patch("/manager/incidents/:incidentId", requireManager, async (req, res): Promise<void> => {
@@ -161,7 +161,7 @@ router.delete("/manager/incidents/:incidentId", requireManager, async (req, res)
     return;
   }
   await incidents.deleteIncidentForLeg(legId, incidentId);
-  res.status(204).end();
+  res.json({ ok: true });
 });
 
 export default router;
