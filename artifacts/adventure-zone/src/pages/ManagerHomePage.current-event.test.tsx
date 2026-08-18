@@ -11,7 +11,7 @@ vi.mock("@/features/manager-assistant/manager-assistant-context", () => ({
   useManagerAssistant: () => ({ setActiveContext: vi.fn(), openAssistant: vi.fn() }),
 }));
 vi.mock("@/components/manager/event-lifecycle-action", () => ({
-  EventLifecycleAction: ({ bookingId }: { bookingId: string }) => <div>Lifecycle {bookingId}</div>,
+  EventLifecycleAction: ({ bookingId }: { bookingId: string }) => <div>Checked in Aug 17, 8:58 PM · Lifecycle {bookingId}</div>,
 }));
 vi.mock("wouter", () => ({ Link: ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a> }));
 
@@ -40,6 +40,7 @@ describe("ManagerHomePage current event state", () => {
     expect(screen.getByText("Up Next")).toBeInTheDocument();
     expect(screen.getByText("Next County Fair")).toBeInTheDocument();
     expect(screen.queryByText("Next Stop")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Checked in Aug 17, 8:58 PM/)).toHaveLength(1);
   });
 
   it("keeps Next Stop when there is no checked-in event", async () => {
