@@ -1,9 +1,13 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.hoisted(() => vi.fn());
+const mocks = vi.hoisted(() => ({
+  apiGet: vi.fn(),
+  search: "?contactId=20000000-0000-4000-8000-000000000001",
+  setLocation: vi.fn(),
+}));
 
-vi.mock("@/lib/auth-token", () => ({ apiGet }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet }));
 vi.mock("@/actions/activities", () => ({
   createActivityAction: vi.fn(),
   editActivityAction: vi.fn(),
@@ -20,18 +24,30 @@ vi.mock("@/components/calls/call-workspace", () => ({
     </p>
   ),
 }));
-vi.mock("wouter", () => ({ useSearch: () => "?contactId=20000000-0000-4000-8000-000000000001" }));
+vi.mock("@/components/calls/caller-finder", () => ({
+  CallerFinder: ({ onSelect }: { onSelect: (contactId: string) => void }) => (
+    <button onClick={() => onSelect("30000000-0000-4000-8000-000000000001")} type="button">
+      Choose caller
+    </button>
+  ),
+}));
+vi.mock("wouter", () => ({
+  useSearch: () => mocks.search,
+  useLocation: () => ["/calls/workspace", mocks.setLocation],
+}));
 
 import CallWorkspacePage from "./CallWorkspacePage";
 
 afterEach(() => {
   cleanup();
-  apiGet.mockReset();
+  mocks.apiGet.mockReset();
+  mocks.setLocation.mockReset();
+  mocks.search = "?contactId=20000000-0000-4000-8000-000000000001";
 });
 
 describe("CallWorkspacePage configuration fallback", () => {
   it("fails closed without rendering assisted workspace when config loading fails", async () => {
-    apiGet.mockImplementation((path: string) => {
+    mocks.apiGet.mockImplementation((path: string) => {
       if (path === "/calls/config") return Promise.reject(new Error("config unavailable"));
       return Promise.resolve({
         context: {
@@ -60,10 +76,26 @@ describe("CallWorkspacePage configuration fallback", () => {
   });
 
   it("renders the workspace only when the shared server flag is enabled", async () => {
-    apiGet.mockImplementation((path: string) => path === "/calls/config"
+    mocks.apiGet.mockImplementation((path: string) => path === "/calls/config"
       ? Promise.resolve({ assistedCallingEnabled: true, voicemailLauncherUrl: null })
       : Promise.resolve({ context: {}, timeline: [], phones: [] }));
     render(<CallWorkspacePage />);
     expect(await screen.findByText("workspace:true:none")).toBeInTheDocument();
+  });
+
+  it("opens a caller finder when Calls is opened without a selected record", async () => {
+    mocks.search = "";
+    mocks.apiGet.mockResolvedValue({ assistedCallingEnabled: true, voicemailLauncherUrl: null });
+
+    render(<CallWorkspacePage />);
+
+    const choose = await screen.findByRole("button", { name: "Choose caller" });
+    expect(mocks.apiGet).toHaveBeenCalledWith("/calls/config");
+    expect(mocks.apiGet).not.toHaveBeenCalledWith("/calls/workspace?");
+
+    fireEvent.click(choose);
+    expect(mocks.setLocation).toHaveBeenCalledWith(
+      "/calls/workspace?contactId=30000000-0000-4000-8000-000000000001",
+    );
   });
 });
