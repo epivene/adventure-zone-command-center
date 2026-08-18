@@ -2,11 +2,15 @@ import { describe, expect, it } from "vitest";
 import { isAssistedCallingEnabled } from "./assisted-calling-enabled";
 
 describe("isAssistedCallingEnabled", () => {
-  it("keeps assisted calling available when the deployment flag is missing", () => {
-    expect(isAssistedCallingEnabled(undefined)).toBe(true);
+  it("stays disabled when the deployment flag is missing", () => {
+    expect(isAssistedCallingEnabled(undefined)).toBe(false);
   });
 
-  it("still allows an explicit false flag to disable assisted calling", () => {
+  it("stays disabled for an explicit false flag", () => {
     expect(isAssistedCallingEnabled("false")).toBe(false);
+  });
+
+  it("enables assisted calling only for an explicit true flag", () => {
+    expect(isAssistedCallingEnabled("true")).toBe(true);
   });
 });
