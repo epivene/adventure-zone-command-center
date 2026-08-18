@@ -5,6 +5,7 @@ import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
 import { PackageHistorySignals } from "@/components/bookings/package-history-signals";
 import { BookingBriefCard } from "@/components/assistant/booking-brief-card";
+import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { StatusBadge } from "@/components/bookings/status-badge";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
@@ -79,7 +80,7 @@ function DetailList({ items }: { items: { label: string; value: ReactNode }[] })
 }
 
 export default function BookingDetailPage({ bookingId }: { bookingId: string }) {
-  const { setActiveContext, openAssistant } = useAssistantContext();
+  const { openAssistant } = useAssistantContext();
   const [data, setData] = useState<any>(null);
   const [wrapUp, setWrapUp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -109,7 +110,6 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
       recordId: bookingId,
       label: data?.booking?.name ?? "Booking",
     };
-    setActiveContext(context);
     let cancelled = false;
     Promise.all([
       getAssistantContext(context),
@@ -127,9 +127,8 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
       });
     return () => {
       cancelled = true;
-      setActiveContext(null);
     };
-  }, [bookingId, data?.booking?.name, setActiveContext]);
+  }, [bookingId, data?.booking?.name]);
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading booking…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
@@ -140,6 +139,7 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
+      <AssistantContextRegistration kind="booking" label={booking.name ?? "Booking"} recordId={bookingId} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
