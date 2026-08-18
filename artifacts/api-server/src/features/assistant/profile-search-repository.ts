@@ -63,7 +63,7 @@ export class PostgresProfileSearchRepository implements ProfileSearchRepository 
                 NULL::text AS secondary_label,
                 o.city,
                 o.region,
-                (SELECT b.status FROM bookings b WHERE b.organization_id=o.id ORDER BY b.starts_at DESC NULLS LAST, b.created_at DESC LIMIT 1) AS status,
+                (SELECT b.status::text FROM bookings b WHERE b.organization_id=o.id ORDER BY b.starts_at DESC NULLS LAST, b.created_at DESC LIMIT 1) AS status,
                 NULL::timestamptz AS last_contact_at,
                 (SELECT count(*)::int FROM bookings b WHERE b.organization_id=o.id) AS booking_count,
                 ARRAY_REMOVE(ARRAY[
