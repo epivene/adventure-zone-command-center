@@ -1,0 +1,35 @@
+name: Admin Comms Acknowledgment CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/manager-comms/**"
+      - "artifacts/api-server/src/routes/manager-communications-admin.ts"
+      - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx"
+      - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.test.tsx"
+      - "artifacts/adventure-zone/src/components/manager/manager-action-center.tsx"
+      - "artifacts/adventure-zone/src/components/manager/manager-action-center.test.tsx"
+      - ".github/workflows/admin-comms-ack-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Backend acknowledgment tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms/admin-message-acknowledgment.test.ts src/features/manager-comms/acknowledgment-service.test.ts
+      - name: Communications UI tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx src/components/manager/manager-action-center.test.tsx
+      - name: Build API
+        run: pnpm --filter @workspace/api-server run build
+      - name: Build web
+        run: pnpm --filter @workspace/adventure-zone run build

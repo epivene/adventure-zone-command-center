@@ -10,6 +10,8 @@ import { AcknowledgmentService } from "@/features/manager-comms/acknowledgment-s
 import { AttachmentFilingDestinationRepository, AttachmentFilingRepository, fileMessageAttachment } from "@/features/manager-comms/attachment-filing-service";
 import { createConversationForActor, sendMessageForActor } from "@/features/manager-comms/communication-service";
 import { attachFilesToMessages } from "@/features/manager-comms/message-view";
+import { sendAdminMessageWithOptionalAcknowledgment } from "@/features/manager-comms/admin-message-acknowledgment";
+import { listAdminMessageAcknowledgments } from "@/features/manager-comms/admin-message-acknowledgment-status";
 
 const router: IRouter = Router();
 const communication = new CommunicationRepository(db);
@@ -38,7 +40,13 @@ const conversationInput = z.object({
   title: z.string().trim().max(160).nullable().optional(),
   memberLegIds: z.array(z.string().uuid()).max(20),
 });
-const messageInput = z.object({ body: z.string().trim().min(1).max(12000), clientMutationId: z.string().uuid(), attachmentIds: z.array(z.string().uuid()).max(10).optional().default([]) });
+const messageInput = z.object({
+  body: z.string().trim().min(1).max(12000),
+  clientMutationId: z.string().uuid(),
+  attachmentIds: z.array(z.string().uuid()).max(10).optional().default([]),
+  requireAcknowledgment: z.boolean().optional().default(false),
+  acknowledgmentTitle: z.string().trim().max(160).nullable().optional(),
+});
 const attachmentInput = z.object({ id: z.string().uuid(), fileName: z.string().trim().max(240).nullable().optional(), mimeType: z.string().trim().max(160).nullable().optional(), sizeBytes: z.number().int().nonnegative().max(12 * 1024 * 1024).nullable().optional(), clientMutationId: z.string().uuid() });
 const filingInput = z.object({
   destination: z.enum(["expense_receipt","incident_photo","equipment_handoff_photo","general_leg_document"]),
@@ -57,19 +65,45 @@ router.get("/manager-admin/messages/conversations/:conversationId", async (req, 
   const conversationId = param(req.params.conversationId);
   const messages = await communication.getMessages(conversationId, adminActor);
   const attachments = await participants.listAttachmentsForMessages(messages.map((message) => message.id));
-  res.json({ messages: await attachFilesToMessages(messages, attachments, storage) });
+  await acknowledgmentRepository.ensureSchema();
+  const withFiles = await attachFilesToMessages(messages, attachments, storage);
+  const enriched = await Promise.all(withFiles.map(async (message) => ({
+    ...message,
+    acknowledgments: message.actorKind === "admin"
+      ? await listAdminMessageAcknowledgments(db, message.id)
+      : [],
+  })));
+  res.json({ messages: enriched });
 });
 router.post("/manager-admin/messages/conversations/:conversationId", async (req, res): Promise<void> => {
   const conversationId = param(req.params.conversationId);
   const parsed = messageInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Invalid message" }); return; }
-  const message = await sendMessageForActor(serviceStore, notifications, adminActor, { conversationId, body: parsed.data.body, clientMutationId: parsed.data.clientMutationId });
+  const result = await sendAdminMessageWithOptionalAcknowledgment({
+    communication: {
+      sendMessage: (input) => sendMessageForActor(serviceStore, notifications, input.actor, {
+        conversationId: input.conversationId,
+        body: input.body,
+        clientMutationId: input.clientMutationId,
+      }),
+      listMemberLegIds: (id) => participants.listMemberLegIds(id),
+    },
+    acknowledgments,
+    actor: adminActor as Extract<MessageActor, { kind: "admin" }>,
+    input: {
+      conversationId,
+      body: parsed.data.body,
+      clientMutationId: parsed.data.clientMutationId,
+      requireAcknowledgment: parsed.data.requireAcknowledgment,
+      acknowledgmentTitle: parsed.data.acknowledgmentTitle ?? null,
+    },
+  });
   for (const attachmentId of parsed.data.attachmentIds) {
     const attachment = await communication.getAttachment(attachmentId);
     if (!attachment || attachment.conversationId !== conversationId || attachment.uploaderKind !== "admin") continue;
-    await communication.attachFileToMessage(attachmentId, message.id);
+    await communication.attachFileToMessage(attachmentId, result.message.id);
   }
-  res.status(201).json({ message });
+  res.status(201).json(result);
 });
 router.post("/manager-admin/messages/conversations/:conversationId/attachments", async (req, res): Promise<void> => {
   const conversationId = param(req.params.conversationId);
