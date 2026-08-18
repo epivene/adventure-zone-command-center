@@ -42,6 +42,18 @@ function cashDifference(cents: number | null | undefined) {
   return `${money(Math.abs(cents))} ${cents < 0 ? "short" : "over"}`;
 }
 
+export function coerceBookingDetailPayload(d: any) {
+  return {
+    ...d,
+    timeline: (d.timeline ?? []).map((item: any) => ({
+      ...item,
+      occurredAt: item.occurredAt ? new Date(item.occurredAt) : item.occurredAt,
+      createdAt: item.createdAt ? new Date(item.createdAt) : item.createdAt,
+      updatedAt: item.updatedAt ? new Date(item.updatedAt) : item.updatedAt,
+    })),
+  };
+}
+
 function DetailSection({ children, title }: { children: ReactNode; title: string }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -81,7 +93,13 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
       apiGet<any>(`/bookings/${bookingId}`),
       apiGet<any>(`/event-wrap-up-admin/${bookingId}`).catch(() => null),
     ])
-      .then(([d, wrap]) => { setData(d); setWrapUp(wrap?.wrapUp ? wrap : null); setFollowUpItems(d.followUps ?? []); setLoading(false); })
+      .then(([raw, wrap]) => {
+        const d = coerceBookingDetailPayload(raw);
+        setData(d);
+        setWrapUp(wrap?.wrapUp ? wrap : null);
+        setFollowUpItems(d.followUps ?? []);
+        setLoading(false);
+      })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, [bookingId]);
 
