@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import { apiGet } from "@/lib/auth-token";
 import type { OrganizationListPage } from "@/features/organizations/organization-repository";
@@ -8,24 +8,44 @@ type Candidate = OrganizationListPage["records"][number];
 export function ProfileMemberPicker({
   familyId,
   disabled = false,
-  onSelect,
+  onSelectMany,
 }: {
   familyId: string;
   disabled?: boolean;
-  onSelect: (profileId: string) => Promise<void> | void;
+  onSelectMany: (profileIds: string[]) => Promise<void> | void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Candidate[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
-  async function search(term = query) {
+  function membershipLabel(candidate: Candidate) {
+    if (candidate.eventFamilyId === familyId) return "Already in this family";
+    if (candidate.eventFamilyId) return "Already in another event family";
+    if (candidate.parentContext?.kind === "organization_group") {
+      return `Location of ${candidate.parentContext.name}`;
+    }
+    return null;
+  }
+
+  async function search() {
+    const term = query.trim();
+    if (!term) {
+      setResults([]);
+      setSelectedIds(new Set());
+      setHasSearched(false);
+      setError(null);
+      return;
+    }
     setLoading(true);
     setError(null);
+    setHasSearched(true);
+    setSelectedIds(new Set());
     try {
       const qs = new URLSearchParams({
-        q: term.trim(),
+        q: term,
         showMembers: "yes",
         page: "1",
         pageSize: "20",
@@ -43,25 +63,28 @@ export function ProfileMemberPicker({
     }
   }
 
-  useEffect(() => {
-    void search("");
-  }, []);
-
-  function membershipLabel(candidate: Candidate) {
-    if (candidate.eventFamilyId === familyId) return "Already in this family";
-    if (candidate.eventFamilyId) return "Already in another event family";
-    if (candidate.parentContext?.kind === "organization_group") {
-      return `Location of ${candidate.parentContext.name}`;
-    }
-    return null;
+  function toggleCandidate(candidate: Candidate) {
+    if (membershipLabel(candidate)) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(candidate.id)) next.delete(candidate.id);
+      else next.add(candidate.id);
+      return next;
+    });
   }
 
-  const selected = results.find((candidate) => candidate.id === selectedId) ?? null;
-  const selectedBlocked = Boolean(selected && membershipLabel(selected));
+  async function addSelected() {
+    const ids = [...selectedIds];
+    if (!ids.length || disabled) return;
+    await onSelectMany(ids);
+    setSelectedIds(new Set());
+    setResults([]);
+    setQuery("");
+    setHasSearched(false);
+  }
 
   return (
     <div className="grid gap-3">
-      <p className="text-sm text-slate-600">Add any active existing profile or duplicate without creating another record.</p>
       <form
         className="flex flex-col gap-2 sm:flex-row"
         onSubmit={(event) => {
@@ -70,16 +93,16 @@ export function ProfileMemberPicker({
         }}
       >
         <label className="grid min-w-0 flex-1 gap-1 text-sm font-semibold">
-          Search all profiles
+          Search profiles
           <input
-            aria-label="Search all profiles"
+            aria-label="Search profiles"
             disabled={disabled}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder="Name, city, contact, phone, or email"
             value={query}
           />
         </label>
-        <button className="button-secondary self-end" disabled={disabled || loading} type="submit">
+        <button className="button-secondary self-end" disabled={disabled || loading || !query.trim()} type="submit">
           {loading ? "Searching…" : "Search"}
         </button>
       </form>
@@ -91,28 +114,36 @@ export function ProfileMemberPicker({
         </div>
       ) : null}
 
-      {!error ? (
-        <div className="max-h-72 overflow-y-auto rounded-lg border border-slate-200">
+      {!error && hasSearched ? (
+        <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200">
           {results.length ? (
             <ul className="divide-y divide-slate-100">
               {results.map((candidate) => {
                 const label = membershipLabel(candidate);
+                const selected = selectedIds.has(candidate.id);
                 return (
                   <li key={candidate.id}>
-                    <button
-                      className={selectedId === candidate.id
-                        ? "grid w-full gap-0.5 bg-orange-50 px-3 py-2 text-left"
-                        : "grid w-full gap-0.5 px-3 py-2 text-left hover:bg-slate-50"}
-                      disabled={disabled}
-                      onClick={() => setSelectedId(candidate.id)}
-                      type="button"
+                    <label className={label
+                      ? "flex cursor-not-allowed items-start gap-3 bg-slate-50 px-3 py-2 opacity-60"
+                      : selected
+                        ? "flex cursor-pointer items-start gap-3 bg-orange-50 px-3 py-2"
+                        : "flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-slate-50"}
                     >
-                      <span className="font-semibold">{candidate.name}</span>
-                      <span className="text-sm text-slate-600">
-                        {[candidate.city, candidate.region].filter(Boolean).join(", ") || "Location not set"}
+                      <input
+                        checked={selected}
+                        className="mt-1"
+                        disabled={disabled || Boolean(label)}
+                        onChange={() => toggleCandidate(candidate)}
+                        type="checkbox"
+                      />
+                      <span className="grid min-w-0 flex-1 gap-0.5">
+                        <span className="font-semibold">{candidate.name}</span>
+                        <span className="text-sm text-slate-600">
+                          {[candidate.city, candidate.region].filter(Boolean).join(", ") || "Location not set"}
+                        </span>
+                        {label ? <span className="text-xs font-semibold text-amber-700">{label}</span> : null}
                       </span>
-                      {label ? <span className="text-xs font-semibold text-amber-700">{label}</span> : null}
-                    </button>
+                    </label>
                   </li>
                 );
               })}
@@ -123,21 +154,16 @@ export function ProfileMemberPicker({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
+      {selectedIds.size > 0 ? (
         <button
-          className="button-primary"
-          disabled={disabled || !selected || selectedBlocked}
-          onClick={() => selected && void onSelect(selected.id)}
+          className="button-primary w-fit"
+          disabled={disabled || loading}
+          onClick={() => void addSelected()}
           type="button"
         >
-          Add existing profile / duplicate
+          Add selected ({selectedIds.size})
         </button>
-        {selectedBlocked ? (
-          <span className="text-sm font-medium text-amber-700">
-            This profile is already grouped. Remove it from its current family/group before moving it.
-          </span>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
