@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSearch } from "wouter";
-import { apiGet } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPatch } from "@/lib/auth-token";
 import { EventWrapUpReviewQueue } from "@/components/routes/event-wrap-up-review-queue";
 import EventWrapUpAdminPage from "@/pages/EventWrapUpAdminPage";
 
@@ -9,6 +9,14 @@ function Detail({ label, value }: { label: string; value: any }) {
   return <p className="text-sm"><span className="font-semibold">{label}:</span> {String(value)}</p>;
 }
 function dateTime(value: any) { return value ? new Date(value).toLocaleString() : null; }
+function dateTimeInput(value: any) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+function nullable(value: string) { return value.trim() ? value.trim() : null; }
 
 export default function ManagerAftermathAdminPage() {
   const search = useSearch();
@@ -20,6 +28,10 @@ export default function ManagerAftermathAdminPage() {
   const [followOnly, setFollowOnly] = useState(false);
   const [openReview, setOpenReview] = useState<string | null>(null);
   const [openIncident, setOpenIncident] = useState<string | null>(null);
+  const [editingIncident, setEditingIncident] = useState<string | null>(null);
+  const [incidentDraft, setIncidentDraft] = useState<any>(null);
+  const [incidentBusy, setIncidentBusy] = useState<string | null>(null);
+  const [incidentError, setIncidentError] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedWrapUp) return;
@@ -35,6 +47,63 @@ export default function ManagerAftermathAdminPage() {
       setIncidents(incidentData.incidents ?? []);
     });
   }, [selectedWrapUp]);
+
+  function beginEdit(incident: any) {
+    setIncidentError(null);
+    setEditingIncident(incident.id);
+    setIncidentDraft({
+      type: incident.type ?? "",
+      occurredAt: dateTimeInput(incident.occurredAt),
+      locationText: incident.locationText ?? "",
+      peopleInvolved: incident.peopleInvolved ?? "",
+      description: incident.description ?? "",
+      actionTaken: incident.actionTaken ?? "",
+      followUpNeeded: Boolean(incident.followUpNeeded),
+    });
+  }
+
+  async function saveIncident(incident: any) {
+    if (!incidentDraft) return;
+    setIncidentBusy(`save:${incident.id}`);
+    setIncidentError(null);
+    try {
+      const response = await apiPatch<{ incident: any }>(`/manager-admin/incidents/${incident.id}`, {
+        type: incidentDraft.type.trim(),
+        occurredAt: incidentDraft.occurredAt ? new Date(incidentDraft.occurredAt).toISOString() : undefined,
+        locationText: nullable(incidentDraft.locationText),
+        peopleInvolved: nullable(incidentDraft.peopleInvolved),
+        description: incidentDraft.description.trim(),
+        actionTaken: nullable(incidentDraft.actionTaken),
+        followUpNeeded: Boolean(incidentDraft.followUpNeeded),
+      });
+      setIncidents((current) => current.map((item) => item.id === incident.id ? { ...item, ...response.incident } : item));
+      setEditingIncident(null);
+      setIncidentDraft(null);
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : "Could not update incident");
+    } finally {
+      setIncidentBusy(null);
+    }
+  }
+
+  async function deleteIncident(incident: any) {
+    if (!window.confirm("Delete this incident? This permanently removes the incident and its attached photos.")) return;
+    setIncidentBusy(`delete:${incident.id}`);
+    setIncidentError(null);
+    try {
+      await apiDelete<{ ok: true; id: string }>(`/manager-admin/incidents/${incident.id}`);
+      setIncidents((current) => current.filter((item) => item.id !== incident.id));
+      if (openIncident === incident.id) setOpenIncident(null);
+      if (editingIncident === incident.id) {
+        setEditingIncident(null);
+        setIncidentDraft(null);
+      }
+    } catch (error) {
+      setIncidentError(error instanceof Error ? error.message : "Could not delete incident");
+    } finally {
+      setIncidentBusy(null);
+    }
+  }
 
   if (selectedWrapUp) return <EventWrapUpAdminPage bookingId={selectedWrapUp} />;
 
@@ -76,14 +145,36 @@ export default function ManagerAftermathAdminPage() {
 
     <section>
       <div className="flex items-center justify-between"><h2 className="text-xl font-bold">Incidents</h2><label className="flex gap-2"><input type="checkbox" aria-label="Follow-up only" checked={followOnly} onChange={(event) => setFollowOnly(event.target.checked)} />Follow-up only</label></div>
+      {incidentError ? <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">{incidentError}</p> : null}
       {visibleIncidents.map((incident) => {
         const open = openIncident === incident.id;
+        const editing = editingIncident === incident.id;
         return <article key={incident.id} className="mt-2 rounded-xl border bg-white">
           <button type="button" aria-expanded={open} className="w-full p-3 text-left" onClick={() => setOpenIncident(open ? null : incident.id)}>
             <div className="flex items-center justify-between gap-3"><b>{incident.type}</b><span className="text-sm font-semibold text-orange-700">{open ? "Hide details" : "View details"}</span></div>
             <p>{incident.description}</p>{incident.followUpNeeded ? <p className="font-semibold text-amber-700">Follow-up needed</p> : null}
           </button>
-          {open ? <div className="grid gap-1 border-t p-3"><Detail label="Occurred" value={incident.occurredAt ? new Date(incident.occurredAt).toLocaleString() : null} /><Detail label="Location" value={incident.locationText} /><Detail label="People involved" value={incident.peopleInvolved} /><Detail label="Action taken" value={incident.actionTaken} /></div> : null}
+          {open ? <div className="grid gap-3 border-t p-3">
+            {editing && incidentDraft ? <div className="grid gap-3">
+              <label className="grid gap-1 text-sm font-semibold">Type<input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" value={incidentDraft.type} onChange={(event) => setIncidentDraft({ ...incidentDraft, type: event.target.value })} /></label>
+              <label className="grid gap-1 text-sm font-semibold">Occurred<input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" type="datetime-local" value={incidentDraft.occurredAt} onChange={(event) => setIncidentDraft({ ...incidentDraft, occurredAt: event.target.value })} /></label>
+              <label className="grid gap-1 text-sm font-semibold">Description<textarea className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={incidentDraft.description} onChange={(event) => setIncidentDraft({ ...incidentDraft, description: event.target.value })} /></label>
+              <label className="grid gap-1 text-sm font-semibold">Location<input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" value={incidentDraft.locationText} onChange={(event) => setIncidentDraft({ ...incidentDraft, locationText: event.target.value })} /></label>
+              <label className="grid gap-1 text-sm font-semibold">People involved<textarea className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={incidentDraft.peopleInvolved} onChange={(event) => setIncidentDraft({ ...incidentDraft, peopleInvolved: event.target.value })} /></label>
+              <label className="grid gap-1 text-sm font-semibold">Action taken<textarea className="min-h-20 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={incidentDraft.actionTaken} onChange={(event) => setIncidentDraft({ ...incidentDraft, actionTaken: event.target.value })} /></label>
+              <label className="flex items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={incidentDraft.followUpNeeded} onChange={(event) => setIncidentDraft({ ...incidentDraft, followUpNeeded: event.target.checked })} />Follow-up needed</label>
+              <div className="flex flex-wrap gap-2">
+                <button className="button-primary" disabled={incidentBusy !== null || !incidentDraft.type.trim() || !incidentDraft.description.trim()} onClick={() => void saveIncident(incident)} type="button">{incidentBusy === `save:${incident.id}` ? "Saving…" : "Save changes"}</button>
+                <button className="button-secondary" disabled={incidentBusy !== null} onClick={() => { setEditingIncident(null); setIncidentDraft(null); }} type="button">Cancel</button>
+              </div>
+            </div> : <>
+              <div className="grid gap-1"><Detail label="Occurred" value={incident.occurredAt ? new Date(incident.occurredAt).toLocaleString() : null} /><Detail label="Location" value={incident.locationText} /><Detail label="People involved" value={incident.peopleInvolved} /><Detail label="Action taken" value={incident.actionTaken} /></div>
+              <div className="flex flex-wrap gap-2 border-t pt-3">
+                <button className="button-secondary" disabled={incidentBusy !== null} onClick={() => beginEdit(incident)} type="button">Edit incident</button>
+                <button className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50" disabled={incidentBusy !== null} onClick={() => void deleteIncident(incident)} type="button">{incidentBusy === `delete:${incident.id}` ? "Deleting…" : "Delete incident"}</button>
+              </div>
+            </>}
+          </div> : null}
         </article>;
       })}
     </section>
