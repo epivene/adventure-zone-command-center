@@ -20,11 +20,6 @@ function formatEventDate(value?: string | null) {
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function formatCheckedIn(value?: string | null) {
-  if (!value) return "Checked in";
-  return `Checked in ${formatEventDate(value)}`;
-}
-
 function QuickAddMenu() {
   return <DropdownMenu>
     <DropdownMenuTrigger asChild><button className="button-primary inline-flex items-center gap-2" type="button"><Plus className="h-4 w-4" />Add</button></DropdownMenuTrigger>
@@ -87,7 +82,6 @@ export default function ManagerHomePage() {
           <div className="mt-2">
             <h2 className="text-xl font-bold">{currentEvent.bookingName || "Current event"}</h2>
             <p className="mt-1 text-sm text-slate-700">{[currentEvent.city, currentEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
-            <p className="mt-2 text-sm font-semibold text-emerald-700">{formatCheckedIn(currentEvent.checkedInAt)}</p>
             <div className="mt-3"><EventLifecycleAction bookingId={currentEvent.bookingId} /></div>
             <div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(currentEvent, "Current event")}>Ask Assistant</button></div>
           </div>
