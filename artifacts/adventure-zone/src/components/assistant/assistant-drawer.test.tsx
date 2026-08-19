@@ -32,12 +32,14 @@ vi.mock("@/features/assistant/lead-scout-api", () => ({
   stopLeadScout: vi.fn(),
   continueLeadScout: vi.fn(),
   deepenLeadScoutCandidate: vi.fn(),
+  dismissLeadScoutCandidate: vi.fn(),
 }));
 
 import { askGeneralAssistant } from "@/features/assistant/assistant-api";
 import {
   continueLeadScout,
   deepenLeadScoutCandidate,
+  dismissLeadScoutCandidate,
   getLatestLeadScoutRun,
   getLeadScoutRun,
   startLeadScout,
@@ -142,6 +144,14 @@ const stoppedRun = {
   progress: { ...runningRun.progress, label: "Search stopped — partial results" },
 };
 
+const completedRun = {
+  ...runningRun,
+  status: "complete" as const,
+  stage: "complete" as const,
+  completedAt: "2026-08-19T18:30:00.000Z",
+  progress: { ...runningRun.progress, label: "Search complete", candidatesEnriched: 1 },
+};
+
 const deepeningRun = {
   ...runningRun,
   candidates: runningRun.candidates.map((candidate) => ({
@@ -149,6 +159,11 @@ const deepeningRun = {
     enrichmentStatus: "enriching" as const,
     deepenRequestedAt: "2026-08-19T18:20:00.000Z",
   })),
+};
+
+const dismissedRun = {
+  ...completedRun,
+  candidates: completedRun.candidates.map((candidate) => ({ ...candidate, reviewStatus: "dismissed" as const })),
 };
 
 describe("AssistantDrawer general mode", () => {
@@ -163,6 +178,7 @@ describe("AssistantDrawer general mode", () => {
     vi.mocked(stopLeadScout).mockReset();
     vi.mocked(continueLeadScout).mockReset();
     vi.mocked(deepenLeadScoutCandidate).mockReset();
+    vi.mocked(dismissLeadScoutCandidate).mockReset();
   });
 
   it("keeps the assistant usable with no profile open and suggests supported searches", () => {
@@ -210,10 +226,11 @@ describe("AssistantDrawer general mode", () => {
     await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
     expect(startLeadScout).toHaveBeenCalledWith(leadRun.id);
     expect(screen.getByText("Unsaved prospect")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not a fit" })).toHaveProperty("disabled", true);
   });
 
   it("queues Research deeper for one prospect and resumes run polling state", async () => {
-    vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce({ ...runningRun, status: "complete", stage: "complete" } as any);
+    vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(completedRun as any);
     vi.mocked(deepenLeadScoutCandidate).mockResolvedValueOnce(deepeningRun as any);
     render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
@@ -221,6 +238,18 @@ describe("AssistantDrawer general mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Research deeper" }));
     await waitFor(() => expect(deepenLeadScoutCandidate).toHaveBeenCalledWith(leadRun.id, runningRun.candidates[0].id));
     await waitFor(() => expect(screen.getByRole("button", { name: "Researching deeper…" })).toHaveProperty("disabled", true));
+  });
+
+  it("marks a completed Scout prospect Not a fit and removes it from the review list", async () => {
+    vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(completedRun as any);
+    vi.mocked(dismissLeadScoutCandidate).mockResolvedValueOnce(dismissedRun as any);
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Not a fit" }));
+    await waitFor(() => expect(dismissLeadScoutCandidate).toHaveBeenCalledWith(leadRun.id, runningRun.candidates[0].id));
+    await waitFor(() => expect(screen.queryByText("Silver Valley Days")).toBeNull());
+    expect(screen.getByText(/No Scout prospects remain/i)).toBeTruthy();
   });
 
   it("stops and continues a Scout run without losing partial prospects", async () => {
