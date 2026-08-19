@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { BookingList } from "@/components/bookings/booking-list";
 import type { BookingListItem } from "@/components/bookings/booking-list";
+import { bookingStatusValues, type BookingStatus } from "@/features/bookings/booking-types";
 
 export default function BookingsPage() {
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  const requestedStatus = params.get("status");
+  const initialStatus: BookingStatus | "" = bookingStatusValues.includes(requestedStatus as BookingStatus)
+    ? requestedStatus as BookingStatus
+    : "";
   const [bookings, setBookings] = useState<BookingListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +59,7 @@ export default function BookingsPage() {
           <p className="text-rose-700">{error}</p>
         </div>
       ) : (
-        <BookingList bookings={bookings} now={now} />
+        <BookingList bookings={bookings} now={now} initialStatus={initialStatus} />
       )}
     </div>
   );
