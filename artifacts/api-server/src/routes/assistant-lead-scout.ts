@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 
 import { LeadScoutService } from "@/features/assistant/lead-scout-service";
+import { isResearchProspectValidationError } from "@/features/profile-research/research-prospect-intake";
 
 const createSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const uuidSchema = z.uuid().transform((value) => value.toLowerCase());
@@ -51,7 +52,7 @@ function sendError(req: any, res: any, error: unknown) {
     res.status(409).json({ error: "This prospect cannot be saved as a new lead in its current state." });
     return;
   }
-  if (error instanceof Error && error.message.startsWith("RESEARCH_PROSPECT_")) {
+  if (isResearchProspectValidationError(error)) {
     res.status(400).json({ error: "Review the accepted prospect details and first follow-up." });
     return;
   }
