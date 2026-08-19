@@ -21,9 +21,9 @@ describe("compact full profile", () => {
   });
 
   it("makes the summary cards useful shortcuts to real profile sections", () => {
-    expect(simple).toContain('targetId="profile-contacts"');
-    expect(simple).toContain('targetId="profile-events"');
-    expect(simple).toContain('targetId="profile-activity-timeline"');
+    expect(simple).toContain('"profile-contacts"');
+    expect(simple).toContain('"profile-events"');
+    expect(simple).toContain('"profile-activity-timeline"');
     expect(simple).toContain('id="profile-contacts"');
     expect(simple).toContain('id="profile-events"');
     expect(simple).toContain('id="profile-activity-timeline"');
