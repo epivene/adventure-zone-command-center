@@ -38,6 +38,20 @@ export type ResearchProspectSaveInput = {
   nextActionDueAt: string;
 };
 
+const researchProspectValidationCodes = new Set([
+  "RESEARCH_PROSPECT_ACTION_REQUIRED",
+  "RESEARCH_PROSPECT_FOLLOW_UP_REQUIRED",
+  "RESEARCH_PROSPECT_NAME_REQUIRED",
+  "RESEARCH_PROSPECT_LOCATION_REQUIRED",
+  "RESEARCH_PROSPECT_PUBLIC_URL_REQUIRED",
+  "RESEARCH_PROSPECT_DATE_INVALID",
+  "RESEARCH_PROSPECT_DATE_RANGE_INVALID",
+]);
+
+export function isResearchProspectValidationError(error: unknown): error is Error {
+  return error instanceof Error && researchProspectValidationCodes.has(error.message);
+}
+
 type CrmMatch = RelatedEventCrmMatch;
 
 type ResearchProspectStore = {
