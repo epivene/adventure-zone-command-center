@@ -5,10 +5,17 @@ import {
   type RelatedEventCrmMatch,
 } from "@/features/profile-research/profile-research-related-event-matcher";
 import type { RelatedEventOpportunity } from "@/features/profile-research/profile-research-discovery";
+import { selectBestFact } from "./lead-scout-evidence";
+import { scoreAdventureZoneFit } from "./lead-scout-fit";
 import { LeadScoutRepository } from "./lead-scout-repository";
 import { OpenAiLeadScoutProvider } from "./openai-lead-scout-provider";
 import type { LeadScoutProvider } from "./lead-scout-provider";
-import type { LeadScoutCandidateView, LeadScoutSourceInput } from "./lead-scout-types";
+import type {
+  LeadScoutCandidateInput,
+  LeadScoutCandidateView,
+  LeadScoutEvidenceFact,
+  LeadScoutSourceInput,
+} from "./lead-scout-types";
 
 type Matcher = (
   events: RelatedEventOpportunity[],
@@ -24,6 +31,10 @@ type WorkerRepository = Pick<
   | "upsertCandidates"
   | "updateProgress"
   | "setCandidateCrmMatch"
+  | "replaceCandidateFacts"
+  | "startCandidateEnrichment"
+  | "completeCandidateEnrichment"
+  | "failCandidateEnrichment"
   | "setCandidateFit"
   | "stopRun"
   | "completeRun"
@@ -44,22 +55,80 @@ function candidateEvent(candidate: LeadScoutCandidateView): RelatedEventOpportun
   };
 }
 
-function baselineFit(candidate: LeadScoutCandidateView, regions: string[]) {
-  let score = 0;
-  const reasons: string[] = [];
-  if (candidate.startsAt) { score += 25; reasons.push("date fits the requested window"); }
-  if (candidate.region && regions.includes(candidate.region)) { score += 20; reasons.push("location fits the requested area"); }
-  if (candidate.website) { score += 15; reasons.push("public event source is available"); }
-  if (/fair|festival|family|community|carnival|celebration/i.test(candidate.eventType ?? candidate.name)) {
-    score += 25;
-    reasons.push("event format is a good Adventure Zone prospect");
-  }
-  if (candidate.city || candidate.venue) { score += 10; reasons.push("location details are available"); }
-  if (candidate.crmMatchStatus === "new_prospect") { score += 5; reasons.push("not currently matched in Command Center"); }
+function candidateInput(candidate: LeadScoutCandidateView): LeadScoutCandidateInput {
   return {
-    score: Math.min(100, score),
-    rationale: reasons.length ? reasons.join("; ") : "Needs more research before ranking.",
+    name: candidate.name,
+    city: candidate.city,
+    region: candidate.region,
+    venue: candidate.venue,
+    startsAt: candidate.startsAt,
+    endsAt: candidate.endsAt,
+    website: candidate.website,
+    eventType: candidate.eventType,
+    rationale: candidate.fitRationale,
   };
+}
+
+function contains(facts: LeadScoutEvidenceFact[], pattern: RegExp) {
+  return facts.some((fact) => pattern.test(`${fact.key} ${fact.value} ${fact.rationale}`));
+}
+
+function selectedByCategory(
+  facts: LeadScoutEvidenceFact[],
+  sources: LeadScoutSourceInput[],
+  category: LeadScoutEvidenceFact["category"],
+  keyPattern?: RegExp,
+) {
+  return selectBestFact(
+    facts.filter((fact) => fact.category === category && (!keyPattern || keyPattern.test(fact.key))),
+    sources,
+  );
+}
+
+function evidenceSummary(facts: LeadScoutEvidenceFact[], sources: LeadScoutSourceInput[]) {
+  const organizerName = selectedByCategory(facts, sources, "contact", /organizer.*name|contact.*name/i)?.value ?? null;
+  const organizerEmail = selectedByCategory(facts, sources, "contact", /email/i)?.value ?? null;
+  const organizerPhone = selectedByCategory(facts, sources, "contact", /phone|telephone/i)?.value ?? null;
+  const attendanceSummary = selectedByCategory(facts, sources, "attendance")?.value ?? null;
+  const vendorSummary = selectedByCategory(facts, sources, "vendor", /path|application|vendor|exhibitor|booth/i)?.value
+    ?? selectedByCategory(facts, sources, "vendor")?.value
+    ?? null;
+  const recurrenceSummary = selectedByCategory(facts, sources, "recurrence")?.value ?? null;
+  const deadline = selectedByCategory(facts, sources, "vendor", /deadline/i)?.value ?? null;
+  const applicationDeadline = deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : null;
+  return { organizerName, organizerEmail, organizerPhone, attendanceSummary, vendorSummary, recurrenceSummary, applicationDeadline };
+}
+
+function evidenceFit(
+  candidate: LeadScoutCandidateView,
+  facts: LeadScoutEvidenceFact[],
+  sources: LeadScoutSourceInput[],
+  now: Date,
+) {
+  const schedule = selectedByCategory(facts, sources, "schedule");
+  const identity = selectedByCategory(facts, sources, "identity");
+  const existenceConfidence = schedule?.confidence ?? identity?.confidence ?? (candidate.startsAt ? "medium" : "low");
+  const deadline = selectedByCategory(facts, sources, "vendor", /deadline/i)?.value ?? candidate.applicationDeadline;
+  const applicationDeadline = deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : null;
+  const text = `${candidate.name} ${candidate.eventType ?? ""} ${candidate.venue ?? ""}`;
+  return scoreAdventureZoneFit({
+    eventName: candidate.name,
+    eventType: candidate.eventType,
+    startsAt: candidate.startsAt,
+    endsAt: candidate.endsAt,
+    applicationDeadline,
+    now,
+    hasPublicSource: Boolean(candidate.website || sources.length),
+    hasFamilySignal: /family|kids?|children|community|fair|festival/i.test(text) || contains(facts, /family|kids?|children/i),
+    hasOutdoorSignal: /outdoor|park|fairground|downtown|street|festival|fair/i.test(text) || contains(facts, /outdoor|space|fairground|park/i),
+    hasVendorPath: contains(facts.filter((fact) => fact.category === "vendor"), /vendor|exhibitor|application|booth|participat/i),
+    hasEntertainmentPath: contains(facts, /entertainment|attraction|amusement|carnival|inflatable|ride/i),
+    hasOrganizerContact: facts.some((fact) => fact.category === "contact"),
+    hasAttendanceEvidence: facts.some((fact) => fact.category === "attendance"),
+    hasLogisticsEvidence: facts.some((fact) => fact.category === "logistics"),
+    hasExclusiveCarnivalProvider: contains(facts.filter((fact) => fact.category === "competition"), /exclusive|incumbent|contracted|midway|carnival provider/i),
+    existenceConfidence,
+  });
 }
 
 export class LeadScoutWorker {
@@ -90,37 +159,22 @@ export class LeadScoutWorker {
     return this.repository.isCancellationRequested(runId);
   }
 
-  private async providerCall<T>(
-    runId: string,
-    workerId: string,
-    operation: (signal: AbortSignal) => Promise<T>,
-  ): Promise<T> {
+  private async providerCall<T>(runId: string, workerId: string, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
     const controller = new AbortController();
     if (await this.cancelled(runId)) controller.abort();
     const cancelTimer = setInterval(() => {
-      void this.cancelled(runId)
-        .then((cancelled) => { if (cancelled) controller.abort(); })
-        .catch(() => undefined);
+      void this.cancelled(runId).then((cancelled) => { if (cancelled) controller.abort(); }).catch(() => undefined);
     }, this.cancellationPollMs);
     const leaseTimer = setInterval(() => {
       void this.repository.renewLease(runId, workerId, new Date(), this.leaseMs).catch(() => undefined);
     }, this.leaseHeartbeatMs);
-    try {
-      return await operation(controller.signal);
-    } finally {
-      clearInterval(cancelTimer);
-      clearInterval(leaseTimer);
-    }
+    try { return await operation(controller.signal); }
+    finally { clearInterval(cancelTimer); clearInterval(leaseTimer); }
   }
 
   async runOne(input: { workerId: string; now: Date }): Promise<{ kind: "idle" | "progress" }> {
-    const claim = await this.repository.claimRunnable({
-      workerId: input.workerId,
-      now: input.now,
-      leaseMs: this.leaseMs,
-    });
+    const claim = await this.repository.claimRunnable({ workerId: input.workerId, now: input.now, leaseMs: this.leaseMs });
     if (!claim) return { kind: "idle" };
-
     if (claim.status === "stopping" || await this.cancelled(claim.runId)) {
       await this.repository.stopRun(claim.runId);
       return { kind: "progress" };
@@ -128,18 +182,10 @@ export class LeadScoutWorker {
 
     try {
       if (claim.stage === "source_discovery") {
-        const sources = await this.providerCall(claim.runId, claim.workerId, (signal) =>
-          this.provider.discoverSources(claim.criteria, signal));
+        const sources = await this.providerCall(claim.runId, claim.workerId, (signal) => this.provider.discoverSources(claim.criteria, signal));
         await this.repository.upsertSources(claim.runId, sources);
-        if (await this.cancelled(claim.runId)) {
-          await this.repository.stopRun(claim.runId);
-          return { kind: "progress" };
-        }
-        await this.repository.updateProgress(claim.runId, {
-          stage: "candidate_discovery",
-          label: "Checking candidate events",
-          sourcesChecked: sources.length,
-        });
+        if (await this.cancelled(claim.runId)) { await this.repository.stopRun(claim.runId); return { kind: "progress" }; }
+        await this.repository.updateProgress(claim.runId, { stage: "candidate_discovery", label: "Checking candidate events", sourcesChecked: sources.length });
         return { kind: "progress" };
       }
 
@@ -150,16 +196,8 @@ export class LeadScoutWorker {
         const candidates = await this.providerCall(claim.runId, claim.workerId, (signal) =>
           this.provider.discoverCandidates({ criteria: claim.criteria, sources, signal }));
         await this.repository.upsertCandidates(claim.runId, candidates);
-        if (await this.cancelled(claim.runId)) {
-          await this.repository.stopRun(claim.runId);
-          return { kind: "progress" };
-        }
-        await this.repository.updateProgress(claim.runId, {
-          stage: "crm_compare",
-          label: "Comparing with Command Center",
-          candidatesFound: candidates.length,
-          candidatesCompared: 0,
-        });
+        if (await this.cancelled(claim.runId)) { await this.repository.stopRun(claim.runId); return { kind: "progress" }; }
+        await this.repository.updateProgress(claim.runId, { stage: "crm_compare", label: "Comparing with Command Center", candidatesFound: candidates.length, candidatesCompared: 0 });
         return { kind: "progress" };
       }
 
@@ -169,37 +207,63 @@ export class LeadScoutWorker {
         const index = run.progress.candidatesCompared;
         const candidate = run.candidates[index];
         if (!candidate) {
-          await this.repository.updateProgress(claim.runId, { stage: "fit_rank", label: "Ranking Adventure Zone fit" });
+          await this.repository.updateProgress(claim.runId, { stage: "candidate_enrichment", label: "Researching candidate details" });
           return { kind: "progress" };
         }
-        if (await this.cancelled(claim.runId)) {
-          await this.repository.stopRun(claim.runId);
-          return { kind: "progress" };
-        }
+        if (await this.cancelled(claim.runId)) { await this.repository.stopRun(claim.runId); return { kind: "progress" }; }
         const event = candidateEvent(candidate);
-        const match = event
-          ? (await this.matcher([event]))[0]?.crmMatch ?? { status: "new_prospect" as const }
-          : { status: "new_prospect" as const };
+        const match = event ? (await this.matcher([event]))[0]?.crmMatch ?? { status: "new_prospect" as const } : { status: "new_prospect" as const };
         await this.repository.setCandidateCrmMatch(claim.runId, candidate.id, match);
         const compared = index + 1;
         await this.repository.updateProgress(claim.runId, {
           candidatesCompared: compared,
-          stage: compared >= run.candidates.length ? "fit_rank" : "crm_compare",
-          label: compared >= run.candidates.length ? "Ranking Adventure Zone fit" : "Comparing with Command Center",
+          stage: compared >= run.candidates.length ? "candidate_enrichment" : "crm_compare",
+          label: compared >= run.candidates.length ? "Researching candidate details" : "Comparing with Command Center",
         });
         return { kind: "progress" };
       }
 
-      if (claim.stage === "fit_rank") {
+      if (claim.stage === "candidate_enrichment") {
         const run = await this.repository.getRun({ actorId: claim.actorId, runId: claim.runId });
-        if (!run) throw new Error("Lead Scout run disappeared during fit ranking.");
-        const candidate = run.candidates.find((item) => item.fitScore == null);
+        if (!run) throw new Error("Lead Scout run disappeared during candidate enrichment.");
+        const candidate = run.candidates.find((item) => item.enrichmentStatus === "needs_enrichment");
         if (!candidate) {
-          await this.repository.completeRun(claim.runId);
+          await this.repository.updateProgress(claim.runId, { stage: "fit_rank", label: "Finishing prospect ranking" });
           return { kind: "progress" };
         }
-        const fit = baselineFit(candidate, claim.criteria.regions);
-        await this.repository.setCandidateFit(claim.runId, candidate.id, fit);
+        if (await this.cancelled(claim.runId)) { await this.repository.stopRun(claim.runId); return { kind: "progress" }; }
+        if (!await this.repository.startCandidateEnrichment(claim.runId, candidate.id)) return { kind: "progress" };
+        const knownSources: LeadScoutSourceInput[] = run.sources.map((source) => ({ ...source, excerpt: "" }));
+        try {
+          const enrichment = await this.providerCall(claim.runId, claim.workerId, (signal) =>
+            this.provider.enrichCandidate({ criteria: claim.criteria, candidate: candidateInput(candidate), knownSources, signal }));
+          await this.repository.upsertSources(claim.runId, enrichment.sources);
+          await this.repository.replaceCandidateFacts(claim.runId, candidate.id, enrichment.facts);
+          const allSources = [...knownSources, ...enrichment.sources];
+          const summary = evidenceSummary(enrichment.facts, allSources);
+          await this.repository.completeCandidateEnrichment(claim.runId, candidate.id, { coverageGaps: enrichment.coverageGaps, ...summary });
+          const fit = evidenceFit(candidate, enrichment.facts, allSources, input.now);
+          await this.repository.setCandidateFit(claim.runId, candidate.id, {
+            ...fit,
+            rationale: [...fit.reasons, ...fit.cautions].join("; ") || "Needs more research before ranking.",
+          });
+          await this.repository.updateProgress(claim.runId, {
+            candidatesEnriched: run.progress.candidatesEnriched + 1,
+            label: "Researching candidate details",
+          });
+        } catch (error) {
+          if (await this.cancelled(claim.runId) || (error instanceof Error && error.name === "AbortError")) throw error;
+          await this.repository.failCandidateEnrichment(
+            claim.runId,
+            candidate.id,
+            error instanceof Error ? error.message : "Candidate enrichment failed.",
+          );
+        }
+        return { kind: "progress" };
+      }
+
+      if (claim.stage === "fit_rank") {
+        await this.repository.completeRun(claim.runId);
         return { kind: "progress" };
       }
 
@@ -214,8 +278,7 @@ export class LeadScoutWorker {
         await this.repository.stopRun(claim.runId);
         return { kind: "progress" };
       }
-      const message = error instanceof Error ? error.message : "Lead Scout worker failed.";
-      await this.repository.failRun(claim.runId, message);
+      await this.repository.failRun(claim.runId, error instanceof Error ? error.message : "Lead Scout worker failed.");
       return { kind: "progress" };
     }
   }
