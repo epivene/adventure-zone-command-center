@@ -58,7 +58,49 @@ export class DrizzlePackageIntelligenceSettingsRepository {
     this.baseRepository = new DrizzlePackageSettingsRepository(database);
   }
 
+  private async ensureBasePriceSchema(): Promise<void> {
+    await this.database.execute(sql.raw(`
+      DO $$
+      DECLARE
+        had_column boolean;
+      BEGIN
+        SELECT EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = current_schema()
+            AND table_name = 'package_templates'
+            AND column_name = 'base_price_cents'
+        ) INTO had_column;
+
+        IF NOT had_column THEN
+          ALTER TABLE package_templates ADD COLUMN base_price_cents integer;
+
+          UPDATE package_templates
+          SET base_price_cents = 800000
+          WHERE code = 'adventure_zone';
+
+          UPDATE package_templates
+          SET base_price_cents = 700000
+          WHERE code IN ('pirates_rebellion', 'pirate_rebellion');
+        END IF;
+      END $$;
+
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'package_templates_base_price_cents_nonnegative'
+        ) THEN
+          ALTER TABLE package_templates
+            ADD CONSTRAINT package_templates_base_price_cents_nonnegative
+              CHECK (base_price_cents IS NULL OR base_price_cents >= 0);
+        END IF;
+      END $$;
+    `));
+  }
+
   async listPackageTemplates(): Promise<PackageIntelligenceSettingsRecord[]> {
+    await this.ensureBasePriceSchema();
     const [base, intelligenceResult] = await Promise.all([
       this.baseRepository.listPackageTemplates(),
       this.database.execute(sql`
@@ -106,6 +148,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       );
     }
 
+    await this.ensureBasePriceSchema();
     const data = parsed.data;
     const base = await this.baseRepository.updatePackageTemplate(data, actorId);
     await this.database.execute(sql`
