@@ -276,6 +276,15 @@ export class LeadScoutRepository {
     return true;
   }
 
+  async dismissCandidate(runId: string, actorId: string, candidateId: string): Promise<boolean> {
+    const result = await this.db.query(`update lead_scout_candidates candidate
+      set review_status='dismissed', updated_at=now()
+      where candidate.id=$3 and candidate.run_id=$1 and candidate.review_status in ('unreviewed','shortlisted')
+        and exists (select 1 from lead_scout_runs run where run.id=$1 and run.actor_id=$2)
+      returning candidate.id`, [runId, actorId, candidateId]);
+    return result.rows.length > 0;
+  }
+
   async startCandidateEnrichment(runId: string, candidateId: string): Promise<boolean> {
     const result = await this.db.query(`update lead_scout_candidates set enrichment_status='enriching', enrichment_error=null, updated_at=now()
       where run_id=$1 and id=$2 and enrichment_status='needs_enrichment' and review_status in ('unreviewed','shortlisted') returning id`,
