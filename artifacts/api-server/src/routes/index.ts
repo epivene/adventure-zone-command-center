@@ -40,7 +40,7 @@ import managerAdminRouter from "./leg-manager-admin";
 import managerFinanceAdminRouter from "./manager-finance-admin";
 import managerWorkerDeleteAdminRouter from "./leg-manager-worker-delete-admin";
 import managerEventLifecycleAdminRouter from "./leg-manager-event-lifecycle-admin";
-import managerTravelAdminRouter from "./leg-manager-travel-admin";
+import managerTravelAdminRouter from "./manager-travel-admin";
 import eventWrapUpAdminRouter from "./event-wrap-up-admin";
 import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
