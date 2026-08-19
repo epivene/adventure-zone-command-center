@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { runActReviewMigrationsAtStartup } from "./act-review-startup";
 
-function fakeClient(options?: { locked?: boolean }) {
+function fakeClient(options?: { locked?: boolean; researchReady?: boolean }) {
   const queries: string[] = [];
   let released = false;
   const client = {
@@ -10,6 +10,9 @@ function fakeClient(options?: { locked?: boolean }) {
       queries.push(sql);
       if (sql.includes("pg_try_advisory_lock")) {
         return { rows: [{ locked: options?.locked ?? true }] };
+      }
+      if (sql.includes("profile_research_runs") && sql.includes("AS ready")) {
+        return { rows: [{ ready: options?.researchReady ?? true }] };
       }
       return { rows: [] };
     },
@@ -41,6 +44,7 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(queries[0]).toContain("pg_try_advisory_lock");
     expect(queries).toContain("SET lock_timeout = '5s'");
     expect(queries).toContain("SET statement_timeout = '20s'");
+    expect(queries.some((sql) => sql.includes("profile_research_runs") && sql.includes("AS ready"))).toBe(true);
     expect(queries).toContain(
       "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
     );
@@ -48,6 +52,20 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(queries).toContain("RESET lock_timeout");
     expect(queries.at(-1)).toContain("pg_advisory_unlock");
     expect(wasReleased()).toBe(true);
+  });
+
+  it("creates the profile research schema before running the legacy registry", async () => {
+    const { client, queries } = fakeClient({ researchReady: false });
+    const runMigrations = vi.fn(async () => []);
+
+    const applied = await runActReviewMigrationsAtStartup({
+      pool: { connect: async () => client },
+      runMigrations,
+    });
+
+    expect(applied).toEqual(["061_profile_research_runs.sql"]);
+    expect(queries.some((sql) => sql.includes("create table if not exists profile_research_runs"))).toBe(true);
+    expect(runMigrations).toHaveBeenCalledTimes(1);
   });
 
   it("does not block startup when another process owns the migration lock", async () => {
