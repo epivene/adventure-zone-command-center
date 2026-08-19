@@ -230,16 +230,6 @@ export function CallQueueWorkspace({
     };
   }, [selected?.id, retryKey, loadWorkspace]);
 
-  function startGuidedCall(followUp: CallQueueItem) {
-    setSelectedId(followUp.id);
-    if (followUp.callPhone?.number) {
-      window.location.assign(buildTelHref({
-        number: followUp.callPhone.number,
-        extension: followUp.callPhone.extension,
-      }));
-    }
-  }
-
   async function handleComplete(input: any): Promise<CompleteCallResult> {
     if (!selected) return { ok: false, error: "No caller is selected." };
     const completedId = selected.id;
@@ -300,6 +290,12 @@ export function CallQueueWorkspace({
             {queue.map((followUp) => {
               const active = followUp.id === selectedId;
               const label = followUp.contactName ?? followUp.bookingName;
+              const telHref = followUp.callPhone?.number
+                ? buildTelHref({
+                    number: followUp.callPhone.number,
+                    extension: followUp.callPhone.extension,
+                  })
+                : null;
               return (
                 <li
                   className={`rounded-lg border p-3 transition ${
@@ -321,16 +317,27 @@ export function CallQueueWorkspace({
                         <span className="mt-0.5 block text-sm text-slate-600">{followUp.organizationName}</span>
                       ) : null}
                     </button>
-                    <button
-                      aria-label="Start guided call"
-                      className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-white text-lg shadow-sm transition hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={!followUp.callPhone?.number}
-                      onClick={() => startGuidedCall(followUp)}
-                      title={followUp.callPhone?.number ? `Call ${label}` : `No callable number for ${label}`}
-                      type="button"
-                    >
-                      <span aria-hidden>📞</span>
-                    </button>
+                    {telHref ? (
+                      <a
+                        aria-label="Start guided call"
+                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-white text-lg shadow-sm transition hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                        href={telHref}
+                        onClick={() => setSelectedId(followUp.id)}
+                        title={`Call ${label}`}
+                      >
+                        <span aria-hidden>📞</span>
+                      </a>
+                    ) : (
+                      <button
+                        aria-label="No callable number"
+                        className="inline-flex size-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-lg opacity-50"
+                        disabled
+                        title={`No callable number for ${label}`}
+                        type="button"
+                      >
+                        <span aria-hidden>📞</span>
+                      </button>
+                    )}
                   </div>
                   <button
                     className="mt-2 block w-full text-left"
