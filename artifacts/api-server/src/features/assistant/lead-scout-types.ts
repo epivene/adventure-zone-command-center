@@ -59,13 +59,13 @@ export type LeadScoutFitInput = {
   now: Date;
   hasPublicSource: boolean;
   hasFamilySignal: boolean;
-  hasAdultSpecialInterestSignal: boolean;
+  hasAdultSpecialInterestSignal?: boolean;
   hasOutdoorSignal: boolean;
   hasVendorPath: boolean;
   hasEntertainmentPath: boolean;
   hasOrganizerContact: boolean;
   hasAttendanceEvidence: boolean;
-  attendanceScale: "large" | "medium" | "small" | "unknown";
+  attendanceScale?: "large" | "medium" | "small" | "unknown";
   hasLogisticsEvidence: boolean;
   hasExclusiveCarnivalProvider: boolean;
   existenceConfidence: "high" | "medium" | "low";
