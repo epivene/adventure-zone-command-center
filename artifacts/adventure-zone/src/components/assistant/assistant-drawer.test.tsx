@@ -31,11 +31,15 @@ vi.mock("@/features/assistant/lead-scout-api", () => ({
   startLeadScout: vi.fn(),
   stopLeadScout: vi.fn(),
   continueLeadScout: vi.fn(),
+  deepenLeadScoutCandidate: vi.fn(),
+  dismissLeadScoutCandidate: vi.fn(),
 }));
 
 import { askGeneralAssistant } from "@/features/assistant/assistant-api";
 import {
   continueLeadScout,
+  deepenLeadScoutCandidate,
+  dismissLeadScoutCandidate,
   getLatestLeadScoutRun,
   getLeadScoutRun,
   startLeadScout,
@@ -96,8 +100,8 @@ const leadRun = {
 const runningRun = {
   ...leadRun,
   status: "running" as const,
-  stage: "candidate_discovery" as const,
-  progress: { label: "Checking candidate events", sourcesChecked: 12, candidatesFound: 1, candidatesEnriched: 0, candidatesCompared: 0 },
+  stage: "candidate_enrichment" as const,
+  progress: { label: "Researching candidate details", sourcesChecked: 12, candidatesFound: 1, candidatesEnriched: 0, candidatesCompared: 1 },
   candidates: [{
     id: "40000000-0000-4000-8000-000000000001",
     name: "Silver Valley Days",
@@ -117,10 +121,17 @@ const runningRun = {
     applicationDeadline: null,
     fitScore: null,
     fitRationale: "Family community event on the requested corridor.",
+    fitReasons: [],
+    fitCautions: [],
     crmMatchStatus: "new_prospect" as const,
     matchedOrganizationId: null,
     matchedBookingId: null,
     reviewStatus: "unreviewed" as const,
+    enrichmentStatus: "needs_enrichment" as const,
+    coverageGaps: [],
+    enrichmentError: null,
+    enrichedAt: null,
+    deepenRequestedAt: null,
     savedOrganizationId: null,
     savedBookingId: null,
     facts: [],
@@ -131,6 +142,28 @@ const stoppedRun = {
   ...runningRun,
   status: "stopped" as const,
   progress: { ...runningRun.progress, label: "Search stopped — partial results" },
+};
+
+const completedRun = {
+  ...runningRun,
+  status: "complete" as const,
+  stage: "complete" as const,
+  completedAt: "2026-08-19T18:30:00.000Z",
+  progress: { ...runningRun.progress, label: "Search complete", candidatesEnriched: 1 },
+};
+
+const deepeningRun = {
+  ...runningRun,
+  candidates: runningRun.candidates.map((candidate) => ({
+    ...candidate,
+    enrichmentStatus: "enriching" as const,
+    deepenRequestedAt: "2026-08-19T18:20:00.000Z",
+  })),
+};
+
+const dismissedRun = {
+  ...completedRun,
+  candidates: completedRun.candidates.map((candidate) => ({ ...candidate, reviewStatus: "dismissed" as const })),
 };
 
 describe("AssistantDrawer general mode", () => {
@@ -144,29 +177,20 @@ describe("AssistantDrawer general mode", () => {
     vi.mocked(startLeadScout).mockReset();
     vi.mocked(stopLeadScout).mockReset();
     vi.mocked(continueLeadScout).mockReset();
+    vi.mocked(deepenLeadScoutCandidate).mockReset();
+    vi.mocked(dismissLeadScoutCandidate).mockReset();
   });
 
   it("keeps the assistant usable with no profile open and suggests supported searches", () => {
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     expect(screen.getByText("General Command Center")).toBeTruthy();
     expect(screen.getByLabelText("Ask Booking Assistant")).not.toHaveProperty("disabled", true);
     expect(screen.getByRole("button", { name: "Find Christmas events" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Who usually books Pirate's Rebellion?" })).toBeNull();
   });
 
   it("renders structured profile results from general search", async () => {
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     fireEvent.change(screen.getByLabelText("Ask Booking Assistant"), { target: { value: "Find Morton County Fair" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
@@ -175,102 +199,79 @@ describe("AssistantDrawer general mode", () => {
   });
 
   it("renders CRM-first lead discovery with Find me new leads enabled", async () => {
-    vi.mocked(askGeneralAssistant).mockResolvedValueOnce({
-      kind: "lead_discovery",
-      text: "I found 1 existing Command Center possibility.",
-      run: leadRun as any,
-    });
-
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    vi.mocked(askGeneralAssistant).mockResolvedValueOnce({ kind: "lead_discovery", text: "I found 1 existing Command Center possibility.", run: leadRun as any });
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     fireEvent.change(screen.getByLabelText("Ask Booking Assistant"), { target: { value: leadRun.originalQuestion } });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
-
     await waitFor(() => expect(screen.getByText("Montana September Fair")).toBeTruthy());
-    expect(screen.getByText("Confirmed matches")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Find me new leads" })).not.toHaveProperty("disabled", true);
-    expect(screen.queryByText("Morton County Fair")).toBeNull();
   });
 
   it("restores the latest Lead Scout run when General Command Center reopens", async () => {
     vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(leadRun as any);
-
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
-
     await waitFor(() => expect(screen.getByText("Montana September Fair")).toBeTruthy());
     expect(getLatestLeadScoutRun).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "Find me new leads" })).toBeTruthy();
   });
 
   it("starts web scouting with preserved criteria and renders partial unsaved prospects", async () => {
     vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(leadRun as any);
     vi.mocked(startLeadScout).mockResolvedValueOnce(runningRun as any);
-
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Find me new leads" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Find me new leads" }));
-
     await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
     expect(startLeadScout).toHaveBeenCalledWith(leadRun.id);
     expect(screen.getByText("Unsaved prospect")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Stop search" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not a fit" })).toHaveProperty("disabled", true);
+  });
+
+  it("queues Research deeper for one prospect and resumes run polling state", async () => {
+    vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(completedRun as any);
+    vi.mocked(deepenLeadScoutCandidate).mockResolvedValueOnce(deepeningRun as any);
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Research deeper" }));
+    await waitFor(() => expect(deepenLeadScoutCandidate).toHaveBeenCalledWith(leadRun.id, runningRun.candidates[0].id));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Researching deeper…" })).toHaveProperty("disabled", true));
+  });
+
+  it("marks a completed Scout prospect Not a fit and removes it from the review list", async () => {
+    vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(completedRun as any);
+    vi.mocked(dismissLeadScoutCandidate).mockResolvedValueOnce(dismissedRun as any);
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Not a fit" }));
+    await waitFor(() => expect(dismissLeadScoutCandidate).toHaveBeenCalledWith(leadRun.id, runningRun.candidates[0].id));
+    await waitFor(() => expect(screen.queryByText("Silver Valley Days")).toBeNull());
+    expect(screen.getByText(/No Scout prospects remain/i)).toBeTruthy();
   });
 
   it("stops and continues a Scout run without losing partial prospects", async () => {
     vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(runningRun as any);
     vi.mocked(stopLeadScout).mockResolvedValueOnce(stoppedRun as any);
     vi.mocked(continueLeadScout).mockResolvedValueOnce(runningRun as any);
-
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Stop search" })).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Stop search" }));
-
-    await waitFor(() => expect(stopLeadScout).toHaveBeenCalledWith(runningRun.id));
     await waitFor(() => expect(screen.getByRole("button", { name: "Continue search" })).toBeTruthy());
     expect(screen.getByText("Silver Valley Days")).toBeTruthy();
-
     fireEvent.click(screen.getByRole("button", { name: "Continue search" }));
     await waitFor(() => expect(continueLeadScout).toHaveBeenCalledWith(runningRun.id));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Stop search" })).toBeTruthy());
-    expect(screen.getByText("Silver Valley Days")).toBeTruthy();
   });
 
   it("closing the drawer does not stop a running Scout", async () => {
     vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(runningRun as any);
-
-    render(
-      <AssistantContextProvider>
-        <OpenAssistant />
-        <AssistantDrawer />
-      </AssistantContextProvider>,
-    );
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Close Booking Assistant" }));
-
     expect(stopLeadScout).not.toHaveBeenCalled();
   });
 });

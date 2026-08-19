@@ -1,6 +1,7 @@
 import type {
   LeadDiscoveryCriteria,
   LeadScoutCandidateInput,
+  LeadScoutEvidenceFact,
   LeadScoutSourceInput,
 } from "./lead-scout-types";
 
@@ -15,4 +16,15 @@ export interface LeadScoutProvider {
     sources: LeadScoutSourceInput[];
     signal?: AbortSignal;
   }): Promise<LeadScoutCandidateInput[]>;
+
+  enrichCandidate(input: {
+    criteria: LeadDiscoveryCriteria;
+    candidate: LeadScoutCandidateInput;
+    knownSources: LeadScoutSourceInput[];
+    signal?: AbortSignal;
+  }): Promise<{
+    facts: LeadScoutEvidenceFact[];
+    sources: LeadScoutSourceInput[];
+    coverageGaps: string[];
+  }>;
 }

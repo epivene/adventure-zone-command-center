@@ -8,6 +8,7 @@ import type {
   LeadScoutCandidateFactView,
   LeadScoutCandidateInput,
   LeadScoutCandidateView,
+  LeadScoutEvidenceFact,
   LeadScoutProgress,
   LeadScoutProgressPatch,
   LeadScoutRunView,
@@ -68,8 +69,12 @@ function candidateFromRow(row: any, facts: LeadScoutCandidateFactView[]): LeadSc
     recurrenceSummary: row.recurrence_summary ?? null, attendanceSummary: row.attendance_summary ?? null,
     vendorSummary: row.vendor_summary ?? null, applicationDeadline: dateOnly(row.application_deadline),
     fitScore: row.fit_score == null ? null : Number(row.fit_score), fitRationale: row.fit_rationale ?? null,
+    fitReasons: jsonArray<string>(row.fit_reasons), fitCautions: jsonArray<string>(row.fit_cautions),
     crmMatchStatus: row.crm_match_status, matchedOrganizationId: row.matched_organization_id ?? null,
     matchedBookingId: row.matched_booking_id ?? null, reviewStatus: row.review_status,
+    enrichmentStatus: row.enrichment_status ?? "needs_enrichment",
+    coverageGaps: jsonArray<string>(row.coverage_gaps), enrichmentError: row.enrichment_error ?? null,
+    enrichedAt: iso(row.enriched_at), deepenRequestedAt: iso(row.deepen_requested_at),
     savedOrganizationId: row.saved_organization_id ?? null, savedBookingId: row.saved_booking_id ?? null, facts,
   };
 }
@@ -240,9 +245,88 @@ export class LeadScoutRepository {
         match.status === "new_prospect" ? null : (match.bookingId ?? null)]);
   }
 
-  async setCandidateFit(runId: string, candidateId: string, input: { score: number; rationale: string }): Promise<void> {
-    await this.db.query(`update lead_scout_candidates set fit_score=$3, fit_rationale=$4, updated_at=now() where run_id=$1 and id=$2`,
-      [runId, candidateId, Math.max(0, Math.min(100, Math.round(input.score))), input.rationale.slice(0, 1200)]);
+  async replaceCandidateFacts(runId: string, candidateId: string, facts: LeadScoutEvidenceFact[]): Promise<void> {
+    const sourceRows = (await this.db.query(`select id, url from lead_scout_sources where run_id=$1`, [runId])).rows;
+    const sourceIds = new Map(sourceRows.map((row) => [String(row.url), String(row.id)] as const));
+    await this.db.query(`delete from lead_scout_candidate_facts fact
+      where fact.candidate_id=$2 and exists (select 1 from lead_scout_candidates candidate where candidate.id=$2 and candidate.run_id=$1)`,
+      [runId, candidateId]);
+    for (const fact of facts) {
+      const ids = [...new Set(fact.sourceUrls.map((url) => sourceIds.get(url)).filter((id): id is string => Boolean(id)))];
+      if (!ids.length) continue;
+      await this.db.query(`insert into lead_scout_candidate_facts
+        (candidate_id,fact_key,fact_value,category,confidence,rationale,source_ids)
+        values ($1,$2,$3::jsonb,$4,$5,$6,$7::jsonb)`,
+        [candidateId, fact.key.slice(0, 120), JSON.stringify(fact.value), fact.category, fact.confidence,
+          fact.rationale.slice(0, 1000), JSON.stringify(ids)]);
+    }
+  }
+
+  async queueCandidateDeepen(runId: string, actorId: string, candidateId: string): Promise<boolean> {
+    const candidate = await this.db.query(`update lead_scout_candidates candidate
+      set enrichment_status='needs_enrichment', enrichment_error=null, deepen_requested_at=now(), updated_at=now()
+      where candidate.id=$3 and candidate.run_id=$1 and candidate.review_status in ('unreviewed','shortlisted')
+        and exists (select 1 from lead_scout_runs run where run.id=$1 and run.actor_id=$2)
+      returning candidate.id`, [runId, actorId, candidateId]);
+    if (!candidate.rows.length) return false;
+    await this.db.query(`update lead_scout_runs set status='running', stage='candidate_enrichment', completed_at=null,
+      failure_message=null, cancel_requested_at=null, worker_id=null, lease_expires_at=null,
+      progress=progress || '{"label":"Researching one prospect deeper"}'::jsonb, updated_at=now()
+      where id=$1 and actor_id=$2`, [runId, actorId]);
+    return true;
+  }
+
+  async dismissCandidate(runId: string, actorId: string, candidateId: string): Promise<boolean> {
+    const result = await this.db.query(`update lead_scout_candidates candidate
+      set review_status='dismissed', updated_at=now()
+      where candidate.id=$3 and candidate.run_id=$1 and candidate.review_status in ('unreviewed','shortlisted')
+        and exists (select 1 from lead_scout_runs run where run.id=$1 and run.actor_id=$2)
+      returning candidate.id`, [runId, actorId, candidateId]);
+    return result.rows.length > 0;
+  }
+
+  async startCandidateEnrichment(runId: string, candidateId: string): Promise<boolean> {
+    const result = await this.db.query(`update lead_scout_candidates set enrichment_status='enriching', enrichment_error=null, updated_at=now()
+      where run_id=$1 and id=$2 and enrichment_status='needs_enrichment' and review_status in ('unreviewed','shortlisted') returning id`,
+      [runId, candidateId]);
+    return result.rows.length > 0;
+  }
+
+  async completeCandidateEnrichment(runId: string, candidateId: string, input: {
+    coverageGaps: string[];
+    organizerName?: string | null;
+    organizerEmail?: string | null;
+    organizerPhone?: string | null;
+    attendanceSummary?: string | null;
+    vendorSummary?: string | null;
+    recurrenceSummary?: string | null;
+    applicationDeadline?: string | null;
+  }): Promise<void> {
+    await this.db.query(`update lead_scout_candidates set enrichment_status='enriched', coverage_gaps=$3::jsonb,
+      enrichment_error=null, enriched_at=now(), organizer_name=coalesce($4,organizer_name), organizer_email=coalesce($5,organizer_email),
+      organizer_phone=coalesce($6,organizer_phone), attendance_summary=coalesce($7,attendance_summary),
+      vendor_summary=coalesce($8,vendor_summary), recurrence_summary=coalesce($9,recurrence_summary),
+      application_deadline=coalesce($10::date,application_deadline), updated_at=now() where run_id=$1 and id=$2`,
+      [runId, candidateId, JSON.stringify(input.coverageGaps.slice(0, 12)), input.organizerName ?? null,
+        input.organizerEmail ?? null, input.organizerPhone ?? null, input.attendanceSummary ?? null,
+        input.vendorSummary ?? null, input.recurrenceSummary ?? null, input.applicationDeadline ?? null]);
+  }
+
+  async failCandidateEnrichment(runId: string, candidateId: string, message: string): Promise<void> {
+    await this.db.query(`update lead_scout_candidates set enrichment_status='enrichment_failed', enrichment_error=$3, updated_at=now()
+      where run_id=$1 and id=$2`, [runId, candidateId, message.slice(0, 1000)]);
+  }
+
+  async setCandidateFit(runId: string, candidateId: string, input: {
+    score: number;
+    rationale: string;
+    reasons?: string[];
+    cautions?: string[];
+  }): Promise<void> {
+    await this.db.query(`update lead_scout_candidates set fit_score=$3, fit_rationale=$4, fit_reasons=$5::jsonb,
+      fit_cautions=$6::jsonb, updated_at=now() where run_id=$1 and id=$2`,
+      [runId, candidateId, Math.max(0, Math.min(100, Math.round(input.score))), input.rationale.slice(0, 1200),
+        JSON.stringify((input.reasons ?? []).slice(0, 12)), JSON.stringify((input.cautions ?? []).slice(0, 12))]);
   }
 
   async completeRun(runId: string): Promise<void> {

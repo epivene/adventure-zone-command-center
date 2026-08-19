@@ -25,3 +25,19 @@ export async function continueLeadScout(runId: string): Promise<LeadScoutRunView
   const response = await apiPost<{ run: LeadScoutRunView }>(`/assistant/lead-scout/runs/${runId}/continue`, {});
   return response.run;
 }
+
+export async function deepenLeadScoutCandidate(runId: string, candidateId: string): Promise<LeadScoutRunView> {
+  const response = await apiPost<{ run: LeadScoutRunView }>(
+    `/assistant/lead-scout/runs/${runId}/candidates/${candidateId}/deepen`,
+    {},
+  );
+  return response.run;
+}
+
+export async function dismissLeadScoutCandidate(runId: string, candidateId: string): Promise<LeadScoutRunView> {
+  const response = await apiPost<{ run: LeadScoutRunView }>(
+    `/assistant/lead-scout/runs/${runId}/candidates/${candidateId}/dismiss`,
+    {},
+  );
+  return response.run;
+}

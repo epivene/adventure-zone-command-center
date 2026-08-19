@@ -30,6 +30,51 @@ export type LeadScoutSourceCategory =
   | "review_forum"
   | "other";
 
+export type LeadScoutEvidenceCategory =
+  | "identity"
+  | "schedule"
+  | "vendor"
+  | "attendance"
+  | "logistics"
+  | "recurrence"
+  | "social_review"
+  | "competition"
+  | "contact";
+
+export type LeadScoutEvidenceFact = {
+  key: string;
+  value: string;
+  category: LeadScoutEvidenceCategory;
+  confidence: "high" | "medium" | "low";
+  sourceUrls: string[];
+  rationale: string;
+};
+
+export type LeadScoutFitInput = {
+  eventName: string;
+  eventType: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  applicationDeadline: string | null;
+  now: Date;
+  hasPublicSource: boolean;
+  hasFamilySignal: boolean;
+  hasOutdoorSignal: boolean;
+  hasVendorPath: boolean;
+  hasEntertainmentPath: boolean;
+  hasOrganizerContact: boolean;
+  hasAttendanceEvidence: boolean;
+  hasLogisticsEvidence: boolean;
+  hasExclusiveCarnivalProvider: boolean;
+  existenceConfidence: "high" | "medium" | "low";
+};
+
+export type LeadScoutEnrichmentStatus =
+  | "needs_enrichment"
+  | "enriching"
+  | "enriched"
+  | "enrichment_failed";
+
 export type LeadDiscoveryCriteria = {
   originalQuestion: string;
   dateFrom: string | null;
@@ -133,10 +178,17 @@ export type LeadScoutCandidateView = {
   applicationDeadline: string | null;
   fitScore: number | null;
   fitRationale: string | null;
+  fitReasons: string[];
+  fitCautions: string[];
   crmMatchStatus: LeadScoutCrmMatchStatus;
   matchedOrganizationId: string | null;
   matchedBookingId: string | null;
   reviewStatus: "unreviewed" | "shortlisted" | "dismissed" | "saved";
+  enrichmentStatus: LeadScoutEnrichmentStatus;
+  coverageGaps: string[];
+  enrichmentError: string | null;
+  enrichedAt: string | null;
+  deepenRequestedAt: string | null;
   savedOrganizationId: string | null;
   savedBookingId: string | null;
   facts: LeadScoutCandidateFactView[];
