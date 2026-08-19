@@ -80,31 +80,42 @@ export async function extractDerivedFactsForProfile(input: {
   }
   const pool = input.pool ?? defaultPool;
   const params: unknown[] = [];
-  const clauses: string[] = [];
+  const directClauses: string[] = [];
+  const associationClauses: string[] = [];
   if (input.organizationId) {
     params.push(input.organizationId);
-    clauses.push(`organization_id = $${params.length}`);
+    directClauses.push(`activities.organization_id = $${params.length}`);
+    associationClauses.push(`associated.organization_id = $${params.length}`);
   }
   if (input.contactId) {
     params.push(input.contactId);
-    clauses.push(`contact_id = $${params.length}`);
+    directClauses.push(`activities.contact_id = $${params.length}`);
+    associationClauses.push(`associated.contact_id = $${params.length}`);
   }
 
   const result = await pool.query(
-    `SELECT id, body,
-            COALESCE(occurred_at, timeline_sort_at, created_at) AS occurred_at,
-            source_record_id, source_version_id
+    `SELECT activities.id, activities.body,
+            COALESCE(activities.occurred_at, activities.timeline_sort_at, activities.created_at) AS occurred_at,
+            activities.source_record_id, activities.source_version_id
      FROM activities
-     WHERE (${clauses.join(" OR ")})
-       AND deleted_at IS NULL
-       AND length(trim(body)) > 0
-       AND (
-         source_record_id IS NOT NULL
-         OR kind = 'act_history'
-         OR source_type IN ('note','history','activity')
+     WHERE (
+       (${directClauses.join(" OR ")})
+       OR EXISTS (
+         SELECT 1
+         FROM activity_associations associated
+         WHERE associated.activity_id = activities.id
+           AND (${associationClauses.join(" OR ")})
        )
-     ORDER BY COALESCE(occurred_at, timeline_sort_at, created_at) DESC,
-              created_at DESC
+     )
+       AND activities.deleted_at IS NULL
+       AND length(trim(activities.body)) > 0
+       AND (
+         activities.source_record_id IS NOT NULL
+         OR activities.kind = 'act_history'
+         OR activities.source_type IN ('note','history','activity')
+       )
+     ORDER BY COALESCE(activities.occurred_at, activities.timeline_sort_at, activities.created_at) DESC,
+              activities.created_at DESC
      LIMIT 250`,
     params,
   );

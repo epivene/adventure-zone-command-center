@@ -47,6 +47,7 @@ jobs:
           artifacts/api-server/src/features/assistant/assistant-service.test.ts
           artifacts/api-server/src/features/assistant/derived-fact-extractor.test.ts
           artifacts/api-server/src/features/assistant/derived-fact-job.test.ts
+          artifacts/api-server/src/features/assistant/derived-fact-job-associations.test.ts
           artifacts/adventure-zone/src/features/assistant/assistant-offline-cache.test.ts
           lib/db/src/booking-assistant-schema.test.ts
       - name: Workspace typecheck
