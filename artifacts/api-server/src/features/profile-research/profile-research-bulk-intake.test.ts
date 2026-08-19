@@ -15,14 +15,13 @@ const prospect = (name: string, overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("ProfileResearchBulkIntakeService", () => {
-  it("creates only prospects that still classify as new and applies one shared first follow-up", async () => {
-    const store = {
-      classify: vi.fn(async (event: any) => event.name === "Already Saved"
-        ? { status: "existing", organizationId: "org-existing", matchedName: "Already Saved" }
-        : { status: "new_prospect" }),
-      createLead: vi.fn(async (input: any) => ({ profileId: `profile-${input.event.name}`, bookingId: `booking-${input.event.name}` })),
+  it("uses the shared single-prospect service sequentially and keeps duplicate skips", async () => {
+    const intake = {
+      create: vi.fn(async (input: any) => input.accepted.name === "Already Saved"
+        ? { kind: "duplicate", match: { status: "existing", organizationId: "org-existing", matchedName: "Already Saved" } }
+        : { kind: "created", profileId: `profile-${input.accepted.name}`, bookingId: `booking-${input.accepted.name}` }),
     };
-    const service = new ProfileResearchBulkIntakeService(store as any);
+    const service = new ProfileResearchBulkIntakeService(intake as any);
 
     const result = await service.create({
       events: [prospect("Bluegrass Festival"), prospect("Already Saved")],
@@ -30,22 +29,41 @@ describe("ProfileResearchBulkIntakeService", () => {
       nextActionDueAt: "2026-08-24",
     });
 
-    expect(store.createLead).toHaveBeenCalledTimes(1);
-    expect(store.createLead).toHaveBeenCalledWith(expect.objectContaining({
-      event: expect.objectContaining({ name: "Bluegrass Festival", website: "https://example.com/bluegrass-festival" }),
-      booking: expect.objectContaining({ status: "new_lead", nextActionKind: "call", nextActionDueAt: "2026-08-24" }),
+    expect(intake.create).toHaveBeenCalledTimes(2);
+    expect(intake.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      accepted: expect.objectContaining({
+        name: "Bluegrass Festival",
+        city: "Breckenridge",
+        region: "CO",
+        website: "https://example.com/bluegrass-festival",
+      }),
+      nextActionKind: "call",
+      nextActionDueAt: "2026-08-24",
     }));
-    expect(result.created).toHaveLength(1);
+    expect(result.created).toEqual([expect.objectContaining({ name: "Bluegrass Festival", profileId: "profile-Bluegrass Festival" })]);
     expect(result.skipped).toEqual([expect.objectContaining({ name: "Already Saved", reason: "existing" })]);
   });
 
-  it("rejects an oversized batch before creating anything", async () => {
-    const store = { classify: vi.fn(), createLead: vi.fn() };
-    const service = new ProfileResearchBulkIntakeService(store as any);
+  it("rejects an oversized batch before calling the single service", async () => {
+    const intake = { create: vi.fn() };
+    const service = new ProfileResearchBulkIntakeService(intake as any);
     const events = Array.from({ length: 21 }, (_, index) => prospect(`Event ${index + 1}`));
 
     await expect(service.create({ events, nextActionKind: "email", nextActionDueAt: "2026-08-25" }))
       .rejects.toThrow("BULK_PROSPECT_LIMIT");
-    expect(store.createLead).not.toHaveBeenCalled();
+    expect(intake.create).not.toHaveBeenCalled();
+  });
+
+  it("propagates database creation failures instead of mislabeling them as missing info", async () => {
+    const intake = {
+      create: vi.fn(async () => { throw new Error("RESEARCH_PROSPECT_PROFILE_CREATE_FAILED"); }),
+    };
+    const service = new ProfileResearchBulkIntakeService(intake as any);
+
+    await expect(service.create({
+      events: [prospect("Bluegrass Festival")],
+      nextActionKind: "call",
+      nextActionDueAt: "2026-08-24",
+    })).rejects.toThrow("RESEARCH_PROSPECT_PROFILE_CREATE_FAILED");
   });
 });

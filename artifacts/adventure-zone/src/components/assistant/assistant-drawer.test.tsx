@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const profileResponse = {
@@ -33,6 +33,7 @@ vi.mock("@/features/assistant/lead-scout-api", () => ({
   continueLeadScout: vi.fn(),
   deepenLeadScoutCandidate: vi.fn(),
   dismissLeadScoutCandidate: vi.fn(),
+  saveLeadScoutCandidate: vi.fn(),
 }));
 
 import { askGeneralAssistant } from "@/features/assistant/assistant-api";
@@ -42,6 +43,7 @@ import {
   dismissLeadScoutCandidate,
   getLatestLeadScoutRun,
   getLeadScoutRun,
+  saveLeadScoutCandidate,
   startLeadScout,
   stopLeadScout,
 } from "@/features/assistant/lead-scout-api";
@@ -152,6 +154,19 @@ const completedRun = {
   progress: { ...runningRun.progress, label: "Search complete", candidatesEnriched: 1 },
 };
 
+const savedRun = {
+  ...completedRun,
+  candidates: completedRun.candidates.map((candidate) => ({
+    ...candidate,
+    crmMatchStatus: "existing" as const,
+    matchedOrganizationId: "profile-1",
+    matchedBookingId: "booking-1",
+    reviewStatus: "saved" as const,
+    savedOrganizationId: "profile-1",
+    savedBookingId: "booking-1",
+  })),
+};
+
 const deepeningRun = {
   ...runningRun,
   candidates: runningRun.candidates.map((candidate) => ({
@@ -179,6 +194,7 @@ describe("AssistantDrawer general mode", () => {
     vi.mocked(continueLeadScout).mockReset();
     vi.mocked(deepenLeadScoutCandidate).mockReset();
     vi.mocked(dismissLeadScoutCandidate).mockReset();
+    vi.mocked(saveLeadScoutCandidate).mockReset();
   });
 
   it("keeps the assistant usable with no profile open and suggests supported searches", () => {
@@ -227,6 +243,7 @@ describe("AssistantDrawer general mode", () => {
     expect(startLeadScout).toHaveBeenCalledWith(leadRun.id);
     expect(screen.getByText("Unsaved prospect")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Not a fit" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Save as lead" })).toHaveProperty("disabled", true);
   });
 
   it("queues Research deeper for one prospect and resumes run polling state", async () => {
@@ -238,6 +255,43 @@ describe("AssistantDrawer general mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Research deeper" }));
     await waitFor(() => expect(deepenLeadScoutCandidate).toHaveBeenCalledWith(leadRun.id, runningRun.candidates[0].id));
     await waitFor(() => expect(screen.getByRole("button", { name: "Researching deeper…" })).toHaveProperty("disabled", true));
+  });
+
+  it("saves a completed unsaved prospect and flips the card to In Command Center", async () => {
+    vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(completedRun as any);
+    vi.mocked(saveLeadScoutCandidate).mockResolvedValueOnce({
+      kind: "created",
+      profileId: "profile-1",
+      bookingId: "booking-1",
+      run: savedRun as any,
+    });
+    render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save as lead" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Save as lead" }));
+
+    const dialog = await screen.findByRole("form", { name: "Save Lead Scout prospect" });
+    fireEvent.change(within(dialog).getByLabelText("First action"), { target: { value: "call" } });
+    fireEvent.change(within(dialog).getByLabelText("First follow-up date"), { target: { value: "2026-08-24" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save as lead" }));
+
+    await waitFor(() => expect(saveLeadScoutCandidate).toHaveBeenCalledWith(
+      leadRun.id,
+      runningRun.candidates[0].id,
+      expect.objectContaining({
+        accepted: expect.objectContaining({
+          name: "Silver Valley Days",
+          city: "Kellogg",
+          region: "ID",
+          website: "https://example.org/silver-valley",
+        }),
+        nextActionKind: "call",
+        nextActionDueAt: "2026-08-24",
+      }),
+    ));
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Save Lead Scout prospect" })).toBeNull());
+    expect(screen.getByText("In Command Center")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open profile" })).toHaveAttribute("href", "/profiles/profile-1");
   });
 
   it("marks a completed Scout prospect Not a fit and removes it from the review list", async () => {

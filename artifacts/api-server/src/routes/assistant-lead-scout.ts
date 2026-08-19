@@ -2,13 +2,29 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 
 import { LeadScoutService } from "@/features/assistant/lead-scout-service";
+import { isResearchProspectValidationError } from "@/features/profile-research/research-prospect-intake";
 
 const createSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const uuidSchema = z.uuid().transform((value) => value.toLowerCase());
+const saveCandidateSchema = z.object({
+  accepted: z.object({
+    name: z.string().trim().min(1).max(300),
+    city: z.string().trim().min(1).max(160),
+    region: z.string().trim().regex(/^[A-Za-z]{2}$/),
+    startsAt: z.string().trim().nullable(),
+    endsAt: z.string().trim().nullable(),
+    website: z.string().trim().min(1).max(2000),
+    contactName: z.string().trim().max(240).nullable().optional(),
+    contactEmail: z.string().trim().email().max(320).nullable().optional(),
+    contactPhone: z.string().trim().max(80).nullable().optional(),
+  }).strict(),
+  nextActionKind: z.enum(["call", "email", "prepare_quote"]),
+  nextActionDueAt: z.string().trim().min(1).max(40),
+}).strict();
 
 type LeadScoutRouteService = Pick<
   LeadScoutService,
-  "createCrmDiscovery" | "getRun" | "getLatestRun" | "startWeb" | "stopWeb" | "continueWeb" | "deepenCandidate" | "dismissCandidate"
+  "createCrmDiscovery" | "getRun" | "getLatestRun" | "startWeb" | "stopWeb" | "continueWeb" | "deepenCandidate" | "dismissCandidate" | "saveCandidate"
 >;
 
 function actorId(req: any) {
@@ -30,6 +46,19 @@ function sendError(req: any, res: any, error: unknown) {
   }
   if (error instanceof Error && error.message === "LEAD_SCOUT_CANDIDATE_NOT_DISMISSIBLE") {
     res.status(409).json({ error: "Stop the active Scout before marking this prospect Not a fit." });
+    return;
+  }
+  if (error instanceof Error && error.message === "LEAD_SCOUT_CANDIDATE_NOT_SAVEABLE") {
+    res.status(409).json({ error: "This prospect cannot be saved as a new lead in its current state." });
+    return;
+  }
+  if (isResearchProspectValidationError(error)) {
+    res.status(400).json({ error: "Review the accepted prospect details and first follow-up." });
+    return;
+  }
+  if (error instanceof Error && error.message === "LEAD_SCOUT_SAVE_LINK_FAILED") {
+    req.log?.error?.({ err: error }, "Lead Scout lead was created but candidate linkage failed");
+    res.status(500).json({ error: "The lead was created, but the Scout result could not be linked. Reopen the search before retrying." });
     return;
   }
   req.log?.error?.({ err: error }, "Lead Scout route failed");
@@ -116,6 +145,22 @@ export function createAssistantLeadScoutRouter(
     const candidateId = parseCandidate(req, res); if (!candidateId) return;
     try {
       res.json({ run: await service.dismissCandidate({ ...input, candidateId }) });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  });
+
+  router.post("/assistant/lead-scout/runs/:runId/candidates/:candidateId/save", async (req, res): Promise<void> => {
+    const input = parseRun(req, res); if (!input) return;
+    const candidateId = parseCandidate(req, res); if (!candidateId) return;
+    const parsed = saveCandidateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the accepted prospect details." });
+      return;
+    }
+    try {
+      const result = await service.saveCandidate({ ...input, candidateId, ...parsed.data });
+      res.status(result.kind === "created" ? 201 : 200).json(result);
     } catch (error) {
       sendError(req, res, error);
     }

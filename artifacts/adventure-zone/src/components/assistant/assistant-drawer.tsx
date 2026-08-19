@@ -14,8 +14,11 @@ import {
   dismissLeadScoutCandidate,
   getLatestLeadScoutRun,
   getLeadScoutRun,
+  saveLeadScoutCandidate,
   startLeadScout,
   stopLeadScout,
+  type LeadScoutSaveResult,
+  type LeadScoutSaveSubmission,
 } from "@/features/assistant/lead-scout-api";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import type {
@@ -182,6 +185,27 @@ export function AssistantDrawer() {
     );
   }
 
+  async function saveScoutCandidate(
+    candidateId: string,
+    submission: LeadScoutSaveSubmission,
+  ): Promise<LeadScoutSaveResult> {
+    if (!leadScoutRun) throw new Error("No Lead Scout run is selected.");
+    if (scoutActionBusy) throw new Error("Another Scout action is still finishing.");
+    setScoutActionBusy(true);
+    setError(null);
+    try {
+      const result = await saveLeadScoutCandidate(leadScoutRun.id, candidateId, submission);
+      setLeadScoutRun(result.run);
+      return result;
+    } catch (cause) {
+      const failure = cause instanceof Error ? cause : new Error("Could not save this prospect as a lead.");
+      setError(failure.message);
+      throw failure;
+    } finally {
+      setScoutActionBusy(false);
+    }
+  }
+
   function useResultAsContext(result: AssistantProfileSearchResult) {
     selectExplicitContext({ kind: result.kind, recordId: result.id, label: result.label });
     setGeneralResponse(null); setLeadScoutRun(null); setQuestion("");
@@ -227,6 +251,7 @@ export function AssistantDrawer() {
                   onContinueSearch={continueSearch}
                   onResearchDeeper={researchDeeper}
                   onNotFit={markNotFit}
+                  onSaveCandidate={saveScoutCandidate}
                 />
               ) : null}
               <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} />
