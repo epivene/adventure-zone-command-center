@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
-import { DerivedFactsReview } from "@/components/assistant/derived-facts-review";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
+
+const ACT_PREVIEW_LENGTH = 280;
 
 export default function EventProfilePage() {
   const { profileId } = useParams<{ profileId: string }>();
@@ -19,6 +20,9 @@ export default function EventProfilePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [actHistorySearch, setActHistorySearch] = useState("");
+  const [expandedActNotes, setExpandedActNotes] = useState<Set<string>>(() => new Set());
   const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
   const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
   const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
@@ -99,6 +103,10 @@ export default function EventProfilePage() {
   }
 
   function goBack() {
+    if (profileEditing) {
+      setProfileEditing(false);
+      return;
+    }
     if (window.history.length > 1) {
       window.history.back();
       return;
@@ -112,10 +120,23 @@ export default function EventProfilePage() {
   const recoveredActNotes = [...new Set(
     (Array.isArray(data.migrationHistory?.notes) ? data.migrationHistory.notes : [])
       .filter((note: unknown): note is string => typeof note === "string")
-      .map((note: string) => note.trim())
+      .map((note: string) => simplifyHistoryText(note.trim()))
       .filter(Boolean),
   )];
+  const normalizedActSearch = actHistorySearch.trim().toLowerCase();
+  const filteredActNotes = normalizedActSearch
+    ? recoveredActNotes.filter((note) => note.toLowerCase().includes(normalizedActSearch))
+    : recoveredActNotes;
   const profileLabel = String(data.name ?? data.organization?.name ?? data.place?.name ?? "Profile");
+
+  function toggleActNote(note: string) {
+    setExpandedActNotes((current) => {
+      const next = new Set(current);
+      if (next.has(note)) next.delete(note);
+      else next.add(note);
+      return next;
+    });
+  }
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
@@ -126,7 +147,7 @@ export default function EventProfilePage() {
         onClick={goBack}
         type="button"
       >
-        <span aria-hidden="true">←</span> Back
+        <span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : "Back"}
       </button>
 
       <SimpleFullProfile
@@ -136,19 +157,38 @@ export default function EventProfilePage() {
         onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
         profileImageDataUrl={profileImageDataUrl}
         onProfileImageChange={saveProfileImage}
+        editing={profileEditing}
+        onEditingChange={setProfileEditing}
       />
-
-      {profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
       {recoveredActNotes.length ? (
         <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <summary className="cursor-pointer font-semibold text-slate-800">Imported ACT history ({recoveredActNotes.length})</summary>
           <p className="mt-2 text-sm text-slate-600">Original imported records are preserved here for reference.</p>
-          <ul className="mt-3 grid gap-2">
-            {recoveredActNotes.map((note: string) => (
-              <li className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700" key={note}>{simplifyHistoryText(note)}</li>
-            ))}
-          </ul>
+          <input
+            aria-label="Search imported ACT history"
+            className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            placeholder="Search imported ACT history"
+            value={actHistorySearch}
+            onChange={(event) => setActHistorySearch(event.target.value)}
+          />
+          <div className="mt-3 max-h-96 overflow-y-auto pr-1">
+            {filteredActNotes.length ? (
+              <ul className="grid gap-2">
+                {filteredActNotes.map((note: string) => {
+                  const expanded = expandedActNotes.has(note);
+                  const long = note.length > ACT_PREVIEW_LENGTH;
+                  const visible = expanded || !long ? note : `${note.slice(0, ACT_PREVIEW_LENGTH).trimEnd()}…`;
+                  return (
+                    <li className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700" key={note}>
+                      <p className="whitespace-pre-wrap">{visible}</p>
+                      {long ? <button className="mt-2 text-sm font-semibold text-orange-700 hover:underline" type="button" onClick={() => toggleActNote(note)}>{expanded ? "Less" : "More"}</button> : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : <p className="rounded-lg bg-white p-3 text-sm text-slate-600">No ACT history matches “{actHistorySearch.trim()}”.</p>}
+          </div>
         </details>
       ) : null}
 

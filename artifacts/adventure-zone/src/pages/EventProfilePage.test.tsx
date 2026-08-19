@@ -2,12 +2,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiGet = vi.hoisted(() => vi.fn());
+const apiPatch = vi.hoisted(() => vi.fn());
 const setLocation = vi.hoisted(() => vi.fn());
 const organizationId = "10000000-0000-4000-8000-000000000001";
 const contactId = "20000000-0000-4000-8000-000000000001";
 const bookingId = "30000000-0000-4000-8000-000000000001";
 
-vi.mock("@/lib/auth-token", () => ({ apiGet }));
+vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch }));
 vi.mock("wouter", () => ({
   useParams: () => ({ profileId: organizationId }),
   useSearch: () => `?contactId=${contactId}&bookingId=${bookingId}`,
@@ -71,29 +72,42 @@ function contactDetail(doNotCallAt: string | null) {
   };
 }
 
+function profileApi(path: string, value: any = profile) {
+  if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+  if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(value);
+  if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
+  return Promise.resolve(contactDetail(null));
+}
+
 afterEach(() => {
   cleanup();
   apiGet.mockReset();
+  apiPatch.mockReset();
   setLocation.mockReset();
 });
 
 describe("EventProfilePage navigation", () => {
   it("shows a Back button on a loaded profile", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve(profile)
-      : Promise.resolve(contactDetail(null)));
-
+    apiGet.mockImplementation((path: string) => profileApi(path));
     render(<EventProfilePage />);
-
     expect(await screen.findByRole("button", { name: "Back" })).toBeVisible();
+  });
+
+  it("turns Back into Back to profile while inline edit is open", async () => {
+    apiGet.mockImplementation((path: string) => profileApi(path));
+    render(<EventProfilePage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    const back = screen.getByRole("button", { name: "Back" });
+    expect(back).toHaveTextContent("Back to profile");
+    fireEvent.click(back);
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeVisible();
+    expect(setLocation).not.toHaveBeenCalled();
   });
 });
 
 describe("EventProfilePage call actions", () => {
   it("hides assisted profile entry points when the shared flag is off", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve({ ...profile, assistedCallingEnabled: false })
-      : Promise.resolve(contactDetail(null)));
+    apiGet.mockImplementation((path: string) => profileApi(path, { ...profile, assistedCallingEnabled: false }));
     render(<EventProfilePage />);
     expect(await screen.findByText("Assisted calling is not enabled.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Log call" })).not.toBeInTheDocument();
@@ -101,22 +115,21 @@ describe("EventProfilePage call actions", () => {
   });
 
   it("preserves the contact, organization, and booking IDs in Call and Log call URLs", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve(profile)
-      : Promise.resolve(contactDetail(null)));
+    apiGet.mockImplementation((path: string) => profileApi(path));
     render(<EventProfilePage />);
-
     const query = `organizationId=${organizationId}&contactId=${contactId}&bookingId=${bookingId}`;
     expect(await screen.findByRole("link", { name: "Call" })).toHaveAttribute("href", `/calls/new?${query}`);
     expect(screen.getByRole("link", { name: "Log call" })).toHaveAttribute("href", `/calls/log?${query}`);
   });
 
   it("suppresses call entry points for a Do Not Call contact but leaves Log call available", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve(profile)
-      : Promise.resolve(contactDetail("2026-08-12T12:00:00.000Z")));
+    apiGet.mockImplementation((path: string) => {
+      if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+      if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(profile);
+      if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
+      return Promise.resolve(contactDetail("2026-08-12T12:00:00.000Z"));
+    });
     render(<EventProfilePage />);
-
     expect(await screen.findByRole("button", { name: "Call" })).toBeDisabled();
     expect(screen.queryByRole("link", { name: /^Call$/ })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
@@ -133,11 +146,12 @@ describe("EventProfilePage call actions", () => {
       ],
     };
     apiGet.mockImplementation((path: string) => {
-      if (path.startsWith("/event-profiles/")) return Promise.resolve(multipleContacts);
+      if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+      if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(multipleContacts);
+      if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
       return Promise.resolve(contactDetail(path.endsWith(secondContactId) ? "2026-08-12T12:00:00.000Z" : null));
     });
     render(<EventProfilePage />);
-
     expect(await screen.findByRole("link", { name: "Call" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Blake North" }));
     expect(screen.getByRole("button", { name: "Call" })).toBeDisabled();
@@ -146,7 +160,9 @@ describe("EventProfilePage call actions", () => {
 
   it("calls the exact unsuppressed number when a contact has mixed phone suppression", async () => {
     apiGet.mockImplementation((path: string) => {
-      if (path.startsWith("/event-profiles/")) return Promise.resolve(profile);
+      if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+      if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(profile);
+      if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
       return Promise.resolve({
         phones: [
           { id: "phone-1", number: "303-555-0100", primary: true, doNotCallAt: "2026-08-12T12:00:00.000Z" },
@@ -155,18 +171,19 @@ describe("EventProfilePage call actions", () => {
       });
     });
     render(<EventProfilePage />);
-
     expect(await screen.findByRole("link", { name: "Call" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Call Sarah Miller" })).toHaveAttribute("href", "tel:7205550199");
     expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
   });
 
   it("fails closed for direct calling when authoritative phone details cannot load", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve(profile)
-      : Promise.reject(new Error("contact unavailable")));
+    apiGet.mockImplementation((path: string) => {
+      if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+      if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(profile);
+      if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
+      return Promise.reject(new Error("contact unavailable"));
+    });
     render(<EventProfilePage />);
-
     expect(await screen.findByRole("button", { name: "Call" })).toBeDisabled();
     expect(screen.queryByRole("link", { name: "Call Sarah Miller" })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Log call" })).toBeVisible();
@@ -174,51 +191,42 @@ describe("EventProfilePage call actions", () => {
 });
 
 describe("EventProfilePage recovered ACT history", () => {
-  it("shows migration notes that were preserved during profile merges", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve({
-          ...profile,
-          migrationHistory: {
-            contactSourceIds: [],
-            phones: [],
-            notes: ["Called in 2023 — interested in the full package.", "Old ACT history: sent pricing."],
-            bookingSourceIds: [],
-            groupSourceIds: [],
-          },
-        })
-      : Promise.resolve(contactDetail(null)));
-
+  it("keeps recovered ACT notes in a collapsed searchable section", async () => {
+    const recoveredProfile = {
+      ...profile,
+      migrationHistory: {
+        contactSourceIds: [],
+        phones: [],
+        notes: ["Called in 2023 — interested in the full package.", "Old ACT history: sent pricing."],
+        bookingSourceIds: [],
+        groupSourceIds: [],
+      },
+    };
+    apiGet.mockImplementation((path: string) => profileApi(path, recoveredProfile));
     render(<EventProfilePage />);
 
-    expect(await screen.findByRole("heading", { name: "Recovered ACT notes & history" })).toBeVisible();
+    const summary = await screen.findByText("Imported ACT history (2)");
+    expect(summary).toBeVisible();
+    fireEvent.click(summary);
+    expect(screen.getByLabelText("Search imported ACT history")).toBeVisible();
     expect(screen.getByText("Called in 2023 — interested in the full package.")).toBeVisible();
     expect(screen.getByText("Old ACT history: sent pricing.")).toBeVisible();
   });
 
-  it("does not show a recovered section when no preserved ACT notes exist", async () => {
-    apiGet.mockImplementation((path: string) => path.startsWith("/event-profiles/")
-      ? Promise.resolve(profile)
-      : Promise.resolve(contactDetail(null)));
-
+  it("does not show imported ACT history when none exists", async () => {
+    apiGet.mockImplementation((path: string) => profileApi(path));
     render(<EventProfilePage />);
-
     expect(await screen.findByText("Prairie Days")).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "Recovered ACT notes & history" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Imported ACT history/)).not.toBeInTheDocument();
   });
 });
 
 describe("EventProfilePage ratings", () => {
   it("shows a zero-star rating summary even before the first rating exists", async () => {
-    apiGet.mockImplementation((path: string) => {
-      if (path.startsWith("/event-profiles/")) return Promise.resolve(profile);
-      if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
-      return Promise.resolve(contactDetail(null));
-    });
-
+    apiGet.mockImplementation((path: string) => profileApi(path));
     render(<EventProfilePage />);
-
     expect(await screen.findByText("☆☆☆☆☆")).toBeVisible();
-    expect(screen.getByText("0.0 / 5")).toBeVisible();
+    expect(screen.getByText("0.0")).toBeVisible();
     expect(screen.getByText("0 rated occurrences")).toBeVisible();
   });
 });

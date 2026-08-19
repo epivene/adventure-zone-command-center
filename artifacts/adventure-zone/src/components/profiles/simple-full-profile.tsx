@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { Camera, MapPin, MessageCircle, UserRound } from "lucide-react";
+import { Camera, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import {
+  createActivityAction,
   deleteActivityAction,
   editActivityAction,
   listActivityRevisionsAction,
@@ -70,6 +71,8 @@ export function SimpleFullProfile({
   onAskAssistant,
   profileImageDataUrl,
   onProfileImageChange,
+  editing,
+  onEditingChange,
 }: {
   profile: EventProfile;
   onProfileSaved?: () => Promise<void> | void;
@@ -77,10 +80,19 @@ export function SimpleFullProfile({
   onAskAssistant?: () => void;
   profileImageDataUrl?: string | null;
   onProfileImageChange?: (dataUrl: string | null) => Promise<void>;
+  editing?: boolean;
+  onEditingChange?: (editing: boolean) => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [internalEditing, setInternalEditing] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [noteSearch, setNoteSearch] = useState("");
+  const [noteComposerOpen, setNoteComposerOpen] = useState(false);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState("");
+
+  const isEditing = editing ?? internalEditing;
   const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
@@ -97,6 +109,11 @@ export function SimpleFullProfile({
   const ratingCount = ratingSummary?.count ?? 0;
   const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
   const stars = `${"★".repeat(filledStars)}${"☆".repeat(5 - filledStars)}`;
+
+  function setEditing(next: boolean) {
+    if (editing === undefined) setInternalEditing(next);
+    onEditingChange?.(next);
+  }
 
   async function loadSimpleNotesPage(page: number) {
     const result = await loadTimelinePageAction({ organizationId: profile.id }, page);
@@ -137,7 +154,40 @@ export function SimpleFullProfile({
     finally { setPhotoBusy(false); }
   }
 
-  if (editing) {
+  function openNoteComposer() {
+    setNoteError("");
+    setNoteComposerOpen(true);
+    window.setTimeout(() => document.getElementById("profile-activity-timeline")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  }
+
+  async function saveNote() {
+    const body = noteBody.trim();
+    if (!body || noteSaving) return;
+    setNoteSaving(true);
+    setNoteError("");
+    try {
+      const result = await createActivityAction({
+        organizationId: profile.id,
+        contactId: primaryContact?.id ?? undefined,
+        kind: "note",
+        body,
+        occurredAt: new Date(),
+      });
+      if (!result.ok) {
+        setNoteError(result.error);
+        return;
+      }
+      setNoteBody("");
+      setNoteComposerOpen(false);
+      await onProfileSaved?.();
+    } catch (error) {
+      setNoteError(error instanceof Error ? error.message : "Could not save note.");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
+  if (isEditing) {
     return <ProfileInlineEditor profile={profile as any} contactId={primaryContact?.id ?? null} onSaved={handleSaved} onCancel={() => setEditing(false)} />;
   }
 
@@ -157,6 +207,10 @@ export function SimpleFullProfile({
     importedFromAct: Boolean(note.importedFromAct),
     actSourceType: note.actSourceType === "note" || note.actSourceType === "history" || note.actSourceType === "activity" ? note.actSourceType : null,
   }));
+  const normalizedSearch = noteSearch.trim().toLowerCase();
+  const filteredActivities = normalizedSearch
+    ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
+    : activities;
 
   return (
     <div className="grid gap-4">
@@ -165,7 +219,7 @@ export function SimpleFullProfile({
           <MessageCircle className="h-4 w-4" /> Ask Assistant
         </button>
         <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit</button>
-        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} />
+        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} onAddNote={openNoteComposer} />
       </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -241,16 +295,48 @@ export function SimpleFullProfile({
           </dl>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
-          <div className="mt-4">
-            <ActivityTimeline
-              activities={activities}
-              editActivity={editActivityAction}
-              deleteActivity={deleteActivityAction}
-              loadRevisions={listActivityRevisionsAction}
-              loadPage={loadSimpleNotesPage}
+        <section id="profile-activity-timeline" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
+            <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
+          </div>
+
+          <label className="relative mt-4 block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              aria-label="Search notes & history"
+              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
+              placeholder="Search notes & history"
+              value={noteSearch}
+              onChange={(event) => setNoteSearch(event.target.value)}
             />
+          </label>
+
+          {noteComposerOpen ? (
+            <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                New note
+                <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
+              </label>
+              {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <button className="button-primary" type="button" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()}>{noteSaving ? "Saving…" : "Save note"}</button>
+                <button className="button-secondary" type="button" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}>Cancel</button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            {normalizedSearch && filteredActivities.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No notes or history match “{noteSearch.trim()}”.</p> : (
+              <ActivityTimeline
+                activities={filteredActivities}
+                editActivity={editActivityAction}
+                deleteActivity={deleteActivityAction}
+                loadRevisions={listActivityRevisionsAction}
+                loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
+                collapseLongBodies
+              />
+            )}
           </div>
         </section>
       </div>

@@ -15,12 +15,15 @@ import {
 export function ProfileActionsMenu({
   profileId,
   contactId,
+  onAddNote,
 }: {
   profileId: string;
   contactId?: string | null;
+  onAddNote?: () => void;
 }) {
   const fullProfile = `/profiles/${profileId}`;
   const withContact = contactId ? `${fullProfile}?contactId=${encodeURIComponent(contactId)}` : fullProfile;
+  const followUpHref = `${withContact}${withContact.includes("?") ? "&" : "?"}action=follow-up`;
 
   return (
     <DropdownMenu>
@@ -35,7 +38,8 @@ export function ProfileActionsMenu({
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Add</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
-            <DropdownMenuItem asChild><Link href={`${withContact}${withContact.includes("?") ? "&" : "?"}action=follow-up`}>Note / Follow-up</Link></DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => onAddNote?.()}>Note</DropdownMenuItem>
+            <DropdownMenuItem asChild><Link href={followUpHref}>Follow-up</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href="/event-profiles/new">Event</Link></DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
@@ -58,7 +62,6 @@ export function ProfileActionsMenu({
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>More</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="w-52">
-            <DropdownMenuItem asChild><Link href={fullProfile}>Open Full Profile</Link></DropdownMenuItem>
             <DropdownMenuItem asChild><Link href={fullProfile}>Archive / Delete</Link></DropdownMenuItem>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
