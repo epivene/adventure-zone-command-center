@@ -62,13 +62,15 @@ function run(overrides: Partial<LeadScoutRunView> = {}): LeadScoutRunView {
 function dependencies(view = run()) {
   const repository = {
     getRun: vi.fn(async () => view),
-    markCandidateSaved: vi.fn(async () => true),
     setCandidateCrmMatch: vi.fn(async () => undefined),
   };
   const intake = {
     create: vi.fn(async () => ({ kind: "created" as const, profileId: "profile-1", bookingId: "booking-1" })),
   };
-  return { repository, intake };
+  const saveLinker = {
+    markSaved: vi.fn(async () => true),
+  };
+  return { repository, intake, saveLinker };
 }
 
 const accepted = {
@@ -86,7 +88,7 @@ const accepted = {
 describe("LeadScoutService.saveCandidate", () => {
   it("uses the latest persisted candidate plus accepted edits and required first action", async () => {
     const deps = dependencies();
-    const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never });
+    const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never, saveLinker: deps.saveLinker });
 
     const result = await service.saveCandidate({
       actorId: "owner-1",
@@ -108,7 +110,13 @@ describe("LeadScoutService.saveCandidate", () => {
       nextActionKind: "call",
       nextActionDueAt: "2026-08-24",
     });
-    expect(deps.repository.markCandidateSaved).toHaveBeenCalledWith(run().id, "owner-1", candidate.id, "profile-1", "booking-1");
+    expect(deps.saveLinker.markSaved).toHaveBeenCalledWith({
+      runId: run().id,
+      actorId: "owner-1",
+      candidateId: candidate.id,
+      profileId: "profile-1",
+      bookingId: "booking-1",
+    });
     expect(result).toMatchObject({ kind: "created", profileId: "profile-1", bookingId: "booking-1" });
   });
 
@@ -118,7 +126,7 @@ describe("LeadScoutService.saveCandidate", () => {
       kind: "duplicate" as const,
       match: { status: "possible_match", organizationId: "existing-org", bookingId: "existing-booking", matchedName: "Silver Valley Days" },
     } as any);
-    const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never });
+    const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never, saveLinker: deps.saveLinker });
 
     const result = await service.saveCandidate({
       actorId: "owner-1", runId: run().id, candidateId: candidate.id, accepted,
@@ -126,7 +134,7 @@ describe("LeadScoutService.saveCandidate", () => {
     });
 
     expect(result.kind).toBe("duplicate");
-    expect(deps.repository.markCandidateSaved).not.toHaveBeenCalled();
+    expect(deps.saveLinker.markSaved).not.toHaveBeenCalled();
     expect(deps.repository.setCandidateCrmMatch).toHaveBeenCalledWith(run().id, candidate.id, expect.objectContaining({ status: "possible_match" }));
   });
 
@@ -138,7 +146,7 @@ describe("LeadScoutService.saveCandidate", () => {
       run({ candidates: [{ ...candidate, reviewStatus: "saved", savedOrganizationId: "org-1" }] as any }),
     ]) {
       const deps = dependencies(view);
-      const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never });
+      const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never, saveLinker: deps.saveLinker });
       await expect(service.saveCandidate({
         actorId: "owner-1", runId: view.id, candidateId: candidate.id, accepted,
         nextActionKind: "call", nextActionDueAt: "2026-08-24",
