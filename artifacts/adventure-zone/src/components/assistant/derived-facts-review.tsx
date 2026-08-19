@@ -69,30 +69,30 @@ export function DerivedFactsReview({ organizationId }: { organizationId: string 
   }
 
   return (
-    <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <summary className="cursor-pointer font-semibold text-slate-800">
-        Assistant history analysis{facts.length ? ` (${facts.length} to review)` : ""}
-      </summary>
-      <div className="mt-4 grid gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-sm text-slate-600">
-              Analyze imported ACT! notes/history for useful booking facts. Pricing, package, setup, water, power, and load-out details are prioritized even when they are in older notes. Original ACT! records are never changed.
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              Findings stay proposed until you confirm them. Historical prices are never treated as current quotes automatically.
-            </p>
-          </div>
-          <button
-            className="button-secondary"
-            disabled={analyzing}
-            onClick={() => void analyze()}
-            type="button"
-          >
-            {analyzing ? "Analyzing…" : "Analyze ACT history"}
-          </button>
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" aria-labelledby="assistant-history-analysis-title">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-semibold text-slate-800" id="assistant-history-analysis-title">
+            Assistant history analysis{facts.length ? ` (${facts.length} to review)` : ""}
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            Analyze imported ACT! notes/history for useful booking facts. Pricing, package, setup, water, power, and load-out details are prioritized even when they are in older notes. Original ACT! records are never changed.
+          </p>
+          <p className="mt-1 text-xs text-slate-500">
+            Findings stay proposed until you confirm them. Historical prices are never treated as current quotes automatically.
+          </p>
         </div>
+        <button
+          className="button-secondary"
+          disabled={analyzing}
+          onClick={() => void analyze()}
+          type="button"
+        >
+          {analyzing ? "Analyzing…" : "Analyze ACT history"}
+        </button>
+      </div>
 
+      <div className="mt-4 grid gap-4">
         {message ? (
           <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800" role="status">
             {message}
@@ -147,6 +147,6 @@ export function DerivedFactsReview({ organizationId }: { organizationId: string 
           </ul>
         )}
       </div>
-    </details>
+    </section>
   );
 }
