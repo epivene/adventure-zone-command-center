@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearch } from "wouter";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { ReceiptCapture } from "@/components/manager/receipt-capture";
-import { ReceiptExpenseForm } from "@/components/manager/receipt-expense-form";
+import { ReceiptExpenseForm, type ReceiptEventOption } from "@/components/manager/receipt-expense-form";
 import { ManagerSyncStatus } from "@/components/manager/manager-sync-status";
 
 const categories = [
@@ -26,6 +26,7 @@ type Receipt = {
 
 type Expense = {
   id: string;
+  bookingId?: string | null;
   category: string;
   merchant: string | null;
   amountCents: number;
@@ -38,6 +39,9 @@ type Expense = {
 };
 
 type Notice = { state: "saved_offline" | "synced" | "needs_attention"; text?: string } | null;
+
+type CurrentLifecycleResponse = { lifecycle: null | { bookingId: string } };
+type ManagerRouteResponse = { events?: Array<{ bookingId: string; bookingName: string; startsAt?: string | null }> };
 
 function dollars(cents: number) { return (cents / 100).toFixed(2); }
 function dateInput(value: string) { return new Date(value).toISOString().slice(0, 10); }
@@ -183,6 +187,8 @@ export default function ManagerReceiptsPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [mode, setMode] = useState<"receipt" | "manual" | null>(bookingId ? "receipt" : null);
   const [notice, setNotice] = useState<Notice>(null);
+  const [currentBookingId, setCurrentBookingId] = useState<string | null>(null);
+  const [eventOptions, setEventOptions] = useState<ReceiptEventOption[]>([]);
 
   async function load() {
     try {
@@ -195,17 +201,29 @@ export default function ManagerReceiptsPage() {
 
   useEffect(() => { void load(); }, [managerApi]);
 
+  useEffect(() => {
+    Promise.all([
+      managerApi<CurrentLifecycleResponse>("/manager/events/lifecycle/current").catch(() => ({ lifecycle: null })),
+      managerApi<ManagerRouteResponse>("/manager/route").catch(() => ({ events: [] })),
+    ]).then(([lifecycleData, routeData]) => {
+      setCurrentBookingId(lifecycleData.lifecycle?.bookingId ?? null);
+      setEventOptions((routeData.events ?? []).map((event) => ({ id: event.bookingId, name: event.bookingName, startsAt: event.startsAt ?? null })));
+    });
+  }, [managerApi]);
+
   function saved(state: "saved_offline" | "synced" | "needs_attention") {
     setNotice({ state, text: state === "synced" ? "Expense and receipt saved." : state === "saved_offline" ? "Expense saved on this device." : "The expense was saved, but something needs attention." });
     setMode(null);
     void load();
   }
 
+  const defaultBookingId = bookingId ?? currentBookingId;
+
   return <div className="grid gap-4">
-    <header><h1 className="text-2xl font-bold">Receipts</h1><p className="text-sm text-slate-600">Take a photo and let the app fill in the receipt details, or add an expense manually.</p>{bookingId ? <p className="mt-1 text-sm font-semibold text-orange-700">Adding this from an event wrap-up.</p> : null}</header>
+    <header><h1 className="text-2xl font-bold">Receipts</h1><p className="text-sm text-slate-600">Take a photo and let the app fill in the receipt details, or add an expense manually.</p>{bookingId ? <p className="mt-1 text-sm font-semibold text-orange-700">Adding this from an event wrap-up.</p> : currentBookingId ? <p className="mt-1 text-sm font-semibold text-orange-700">New expenses default to your currently checked-in event.</p> : null}</header>
     {notice ? <div className="grid gap-1"><ManagerSyncStatus state={notice.state} />{notice.text ? <p className="text-sm text-slate-600">{notice.text}</p> : null}</div> : null}
     <div className="flex flex-wrap gap-2"><button className="button-primary" onClick={() => { setNotice(null); setMode("receipt"); }}>+ Add receipt</button><button className="button-secondary" onClick={() => { setNotice(null); setMode("manual"); }}>Add expense manually</button></div>
-    {mode ? <ReceiptExpenseForm key={mode} mode={mode} bookingId={bookingId} onDone={saved} /> : null}
+    {mode ? <ReceiptExpenseForm key={`${mode}:${defaultBookingId ?? ""}`} mode={mode} bookingId={defaultBookingId} events={eventOptions} onDone={saved} /> : null}
     {expenses.length ? expenses.map((expense) => <ExpenseCard key={expense.id} expense={expense} reload={load} showNotice={setNotice} />) : <section className="rounded-xl border border-dashed bg-white p-5 text-center"><p className="font-semibold">No expenses yet.</p><p className="mt-1 text-sm text-slate-600">Use Add receipt to scan your first one.</p></section>}
   </div>;
 }
