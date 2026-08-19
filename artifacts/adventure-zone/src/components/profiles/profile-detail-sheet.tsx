@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ExternalLink, Mail, MapPin, Phone, UserRound } from "lucide-react";
+
+import { createActivityAction } from "@/actions/activities";
 import { apiGet } from "@/lib/auth-token";
 import { ResponsiveDetailSheet } from "@/components/navigation/responsive-detail-sheet";
 import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInlineEditor } from "./profile-inline-editor";
-import { historyCategory, simplifyHistoryText, type HistoryFilter } from "./history-summary";
+import { historyCategory, simplifyHistoryText } from "./history-summary";
 import { formatPhoneDisplay, phoneHref } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
@@ -13,7 +16,7 @@ export type ProfileSheetTarget = {
   bookingId?: string;
 };
 
-type Tab = "overview" | "notes" | "events";
+type DetailSection = "notes" | "events" | "details" | null;
 
 function formatDate(value: unknown) {
   if (!value) return null;
@@ -33,59 +36,55 @@ function contactName(contact: any) {
   return contact?.name ?? ([contact?.firstName, contact?.lastName].filter(Boolean).join(" ") || "Contact");
 }
 
-function noteLabel(note: any) {
-  const category = historyCategory(note);
-  if (category === "calls") return "Call";
-  if (category === "follow-ups") return "Follow-up";
-  if (category === "act") return "ACT note";
-  return "Note";
+function detailRow(label: string, count: number | null, section: Exclude<DetailSection, null>, active: boolean, onToggle: (section: Exclude<DetailSection, null>) => void) {
+  return (
+    <button
+      aria-expanded={active}
+      className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left font-semibold text-slate-800 shadow-sm transition hover:border-orange-300 hover:bg-orange-50"
+      onClick={() => onToggle(section)}
+      type="button"
+    >
+      <span>{active ? "▾" : "▸"} {label}</span>
+      {count != null ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{count}</span> : null}
+    </button>
+  );
 }
-
-function followUpHistoryItem(followUp: any) {
-  const kind = String(followUp.kind ?? "follow-up").replaceAll("_", " ");
-  return {
-    id: `follow-up:${followUp.id}`,
-    kind: "follow_up",
-    body: `${kind.charAt(0).toUpperCase()}${kind.slice(1)} ${followUp.completedAt ? "completed" : "due"}${followUp.dueAt ? ` ${formatDateTime(followUp.dueAt)}` : ""}`,
-    occurredAt: followUp.completedAt ?? followUp.dueAt ?? null,
-    createdAt: followUp.dueAt ?? null,
-    importedFromAct: false,
-    actSourceType: null,
-  };
-}
-
-const historyFilters: Array<{ value: HistoryFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "calls", label: "Calls" },
-  { value: "notes", label: "Notes" },
-  { value: "follow-ups", label: "Follow-ups" },
-  { value: "act", label: "ACT" },
-  { value: "system", label: "System" },
-];
 
 export function ProfileDetailSheet({ target, open, onOpenChange }: { target: ProfileSheetTarget | null; open: boolean; onOpenChange(open: boolean): void }) {
   const [data, setData] = useState<any>(null);
+  const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
-  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [editing, setEditing] = useState(false);
+  const [detailSection, setDetailSection] = useState<DetailSection>(null);
+  const [recentNoteExpanded, setRecentNoteExpanded] = useState(false);
+  const [noteComposerOpen, setNoteComposerOpen] = useState(false);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteError, setNoteError] = useState("");
   const profileId = target?.profileId;
 
-  const loadProfile = useCallback(async (resetTab = false) => {
+  const loadProfile = useCallback(async (reset = false) => {
     if (!open || !profileId) return;
     setLoading(true);
     setError(null);
-    if (resetTab) {
-      setTab("overview");
-      setHistoryFilter("all");
+    if (reset) {
       setEditing(false);
+      setDetailSection(null);
+      setRecentNoteExpanded(false);
+      setNoteComposerOpen(false);
+      setNoteBody("");
+      setNoteError("");
     }
     const qs = new URLSearchParams();
     if (target?.contactId) qs.set("contactId", target.contactId);
     try {
-      const next = await apiGet<any>(`/event-profiles/${profileId}${qs.toString() ? `?${qs.toString()}` : ""}`);
+      const [next, photo] = await Promise.all([
+        apiGet<any>(`/event-profiles/${profileId}${qs.toString() ? `?${qs.toString()}` : ""}`),
+        apiGet<{ dataUrl: string | null }>(`/event-profiles/${profileId}/photo`).catch(() => ({ dataUrl: null })),
+      ]);
       setData(next);
+      setProfileImageDataUrl(photo.dataUrl ?? null);
     } catch (cause: any) {
       setError(cause?.message ?? "Could not load profile");
     } finally {
@@ -112,108 +111,158 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
   const selectedContact = contacts.find((contact: any) => contact.id === selectedContactId) ?? contacts[0] ?? null;
   const location = [place.city, place.region].filter(Boolean).join(", ");
   const meaningfulNotes = notes.filter((note: any) => historyCategory(note) !== "system");
-  const followUpHistory = followUps.map(followUpHistoryItem);
-  const allHistory = [...notes, ...followUpHistory].sort((a: any, b: any) => {
-    const left = new Date(a.occurredAt ?? a.createdAt ?? 0).getTime();
-    const right = new Date(b.occurredAt ?? b.createdAt ?? 0).getTime();
-    return right - left;
-  });
-  const filteredHistory = historyFilter === "all" ? allHistory : allHistory.filter((item: any) => historyCategory(item) === historyFilter);
+  const recentNote = meaningfulNotes[0] ?? null;
   const openFollowUps = [...followUps]
     .filter((item: any) => !item.completedAt)
     .sort((a: any, b: any) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
   const nextFollowUp = openFollowUps[0] ?? null;
-  const nextEvent = [...bookings]
-    .filter((item: any) => item.startsAt && new Date(item.startsAt).getTime() >= Date.now())
-    .sort((a: any, b: any) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime())[0] ?? null;
+  const followUpOverdue = Boolean(nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now());
   const visiblePhone = selectedContact?.phone ?? place.phone ?? null;
   const phoneText = formatPhoneDisplay(visiblePhone);
   const phoneLink = phoneHref(visiblePhone);
+  const email = selectedContact?.email ?? null;
   const websiteHref = normalizeExternalWebsite(place.website);
+
+  function toggleDetail(section: Exclude<DetailSection, null>) {
+    setDetailSection((current) => current === section ? null : section);
+  }
+
+  function openNoteComposer() {
+    setDetailSection("notes");
+    setNoteComposerOpen(true);
+    setNoteError("");
+  }
+
+  async function saveNote() {
+    const body = noteBody.trim();
+    if (!body || noteSaving) return;
+    setNoteSaving(true);
+    setNoteError("");
+    try {
+      const result = await createActivityAction({
+        organizationId: profileId,
+        contactId: selectedContactId ?? undefined,
+        kind: "note",
+        body,
+        occurredAt: new Date(),
+      });
+      if (!result.ok) {
+        setNoteError(result.error);
+        return;
+      }
+      setNoteBody("");
+      setNoteComposerOpen(false);
+      await loadProfile(false);
+      setDetailSection("notes");
+    } catch (cause) {
+      setNoteError(cause instanceof Error ? cause.message : "Could not save note.");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
 
   return (
     <ResponsiveDetailSheet fullPageHref={`/profiles/${profileId}${selectedContactId ? `?contactId=${encodeURIComponent(selectedContactId)}` : ""}`} onOpenChange={onOpenChange} open={open} title={title}>
       {loading && !data ? <p className="text-sm text-slate-500">Loading profile…</p> : error && !data ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : data ? (
-        <div className="grid gap-4">
+        <div className="grid gap-3 pb-2">
           {editing ? (
             <ProfileInlineEditor profile={data} contactId={selectedContactId} onSaved={handleInlineSaved} onCancel={() => setEditing(false)} />
           ) : (
             <>
-              <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    {location ? <p className="text-sm font-semibold text-slate-700">{location}</p> : <p className="text-sm text-slate-500">Location not set</p>}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {place.placeType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold capitalize text-slate-700">{String(place.placeType).replaceAll("_", " ")}</span> : null}
-                      {place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
+              {!nextFollowUp ? (
+                <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="font-bold text-emerald-900">✓ No open follow-ups</p>
+                  <p className="mt-1 text-sm text-emerald-800">You’re all caught up!</p>
+                </section>
+              ) : followUpOverdue ? (
+                <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+                  <p className="font-bold text-rose-900">Follow-up overdue</p>
+                  <p className="mt-1 text-sm capitalize text-rose-800">{String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
+                </section>
+              ) : (
+                <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="font-bold text-amber-900">Follow-up needed</p>
+                  <p className="mt-1 text-sm capitalize text-amber-800">{String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
+                </section>
+              )}
+
+              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  {profileImageDataUrl ? (
+                    <img alt={`${title} profile`} className="h-16 w-16 shrink-0 rounded-full object-cover shadow-sm" src={profileImageDataUrl} />
+                  ) : (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-700"><UserRound className="h-7 w-7" /></div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="inline-flex items-center gap-1 font-bold text-slate-950"><MapPin className="h-4 w-4" />{location || "Location not set"}</p>
+                        {place.placeType ? <p className="mt-1"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold capitalize text-slate-700">{String(place.placeType).replaceAll("_", " ")}</span></p> : null}
+                      </div>
+                      <button className="button-secondary shrink-0" onClick={() => setEditing(true)} type="button">Edit</button>
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit</button>
-                    <ProfileActionsMenu profileId={profileId} contactId={selectedContactId} />
-                  </div>
                 </div>
-                <div className="mt-3 grid gap-1 border-t border-slate-100 pt-3 text-sm">
-                  {selectedContact ? <p className="font-semibold text-slate-900">{contactName(selectedContact)}{selectedContact.role ? <span className="font-normal text-slate-500"> · {selectedContact.role}</span> : null}</p> : null}
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    {phoneText && phoneLink ? <a className="font-medium text-orange-700" href={phoneLink}>{phoneText}</a> : null}
-                    {selectedContact?.email ? <a className="font-medium text-orange-700" href={`mailto:${selectedContact.email}`}>{selectedContact.email}</a> : null}
-                    {websiteHref ? <a className="font-medium text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">{place.website}</a> : null}
-                  </div>
+
+                <div className="mt-4 flex items-center gap-2">
+                  {phoneLink ? <a aria-label={phoneText ? `Call ${phoneText}` : "Call"} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700" href={phoneLink}><Phone className="h-5 w-5" /></a> : null}
+                  {email ? <a aria-label={`Email ${email}`} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700" href={`mailto:${email}`}><Mail className="h-5 w-5" /></a> : null}
+                  {websiteHref ? <a aria-label="Open website" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank"><ExternalLink className="h-5 w-5" /></a> : null}
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
+                  <div><p className="text-sm font-bold text-slate-900">{contacts.length} contact{contacts.length === 1 ? "" : "s"}</p></div>
+                  <div><p className="text-sm font-bold text-slate-900">{bookings.length} booking{bookings.length === 1 ? "" : "s"}</p></div>
                 </div>
               </section>
 
-              <div role="tablist" aria-label="Profile sections" className="grid grid-cols-3 rounded-xl bg-slate-100 p-1">
-                {(["overview", "notes", "events"] as Tab[]).map((value) => (
-                  <button aria-selected={tab === value} className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize ${tab === value ? "bg-white text-orange-700 shadow-sm" : "text-slate-600"}`} key={value} onClick={() => setTab(value)} role="tab" type="button">{value}</button>
-                ))}
+              {recentNote ? (
+                <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Recent note</h3>{formatDate(recentNote.occurredAt ?? recentNote.createdAt) ? <span className="text-xs text-slate-500">{formatDate(recentNote.occurredAt ?? recentNote.createdAt)}</span> : null}</div>
+                  <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 ${recentNoteExpanded ? "" : "line-clamp-4"}`}>{simplifyHistoryText(recentNote.body ?? "")}</p>
+                  {simplifyHistoryText(recentNote.body ?? "").length > 220 ? <button className="mt-2 text-sm font-semibold text-orange-700" onClick={() => setRecentNoteExpanded((current) => !current)} type="button">{recentNoteExpanded ? "Show less" : "More"}</button> : null}
+                </section>
+              ) : null}
+
+              <div className="grid gap-2">
+                {detailRow("Notes", meaningfulNotes.length, "notes", detailSection === "notes", toggleDetail)}
+                {detailSection === "notes" ? (
+                  <section className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {noteComposerOpen ? (
+                      <div className="grid gap-2 rounded-lg bg-white p-3">
+                        <label className="grid gap-1 text-sm font-semibold text-slate-700">New note<textarea autoFocus className="min-h-24 rounded-md border border-slate-300 px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} /></label>
+                        {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
+                        <div className="flex gap-2"><button className="button-primary" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">{noteSaving ? "Saving…" : "Save note"}</button><button className="button-secondary" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }} type="button">Cancel</button></div>
+                      </div>
+                    ) : null}
+                    {meaningfulNotes.length ? meaningfulNotes.slice(0, 12).map((note: any) => <article className="rounded-lg bg-white p-3" key={note.id ?? `${note.kind}-${note.occurredAt}`}><div className="flex items-baseline justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{String(note.kind ?? "note").replaceAll("_", " ")}</span>{formatDate(note.occurredAt ?? note.createdAt) ? <span className="text-xs text-slate-500">{formatDate(note.occurredAt ?? note.createdAt)}</span> : null}</div><p className="mt-1 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(note.body ?? "")}</p></article>) : <p className="text-sm text-slate-600">No notes yet.</p>}
+                  </section>
+                ) : null}
+
+                {detailRow("Events", bookings.length, "events", detailSection === "events", toggleDetail)}
+                {detailSection === "events" ? (
+                  <section className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    {bookings.length ? bookings.map((booking: any) => <article className="rounded-lg bg-white p-3" key={booking.id}><h3 className="font-semibold">{booking.name ?? "Event"}</h3><p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p></article>) : <p className="text-sm text-slate-600">No events yet.</p>}
+                  </section>
+                ) : null}
+
+                {detailRow("More details", null, "details", detailSection === "details", toggleDetail)}
+                {detailSection === "details" ? (
+                  <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    <dl className="grid gap-3">
+                      <div><dt className="font-semibold text-slate-500">Address</dt><dd>{[place.address1, place.address2, place.city, place.region, place.postalCode].filter(Boolean).join(", ") || "Not set"}</dd></div>
+                      <div><dt className="font-semibold text-slate-500">Primary contact</dt><dd>{selectedContact ? contactName(selectedContact) : "Not set"}</dd></div>
+                      {selectedContact?.role ? <div><dt className="font-semibold text-slate-500">Role</dt><dd>{selectedContact.role}</dd></div> : null}
+                      {place.placeType ? <div><dt className="font-semibold text-slate-500">Category</dt><dd className="capitalize">{String(place.placeType).replaceAll("_", " ")}</dd></div> : null}
+                    </dl>
+                  </section>
+                ) : null}
               </div>
 
-              {tab === "overview" ? (
-                <div className="grid gap-3">
-                  <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4">
-                    <h3 className="font-bold">What matters next</h3>
-                    {nextFollowUp ? <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Next follow-up</p><p className="mt-1 font-semibold capitalize">{String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p></div> : <p className="text-sm text-slate-600">No open follow-up.</p>}
-                    {nextEvent ? <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Next event</p><p className="mt-1 font-semibold">{nextEvent.name}</p><p className="text-sm text-slate-600">{formatDateTime(nextEvent.startsAt)}</p></div> : null}
-                  </section>
-                  {meaningfulNotes[0] ? <section className="rounded-xl border border-slate-200 bg-white p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent note</p><p className="mt-2 line-clamp-4 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(meaningfulNotes[0].body ?? "")}</p></section> : null}
-                  <details className="rounded-xl border border-slate-200 bg-white p-3">
-                    <summary className="cursor-pointer text-sm font-semibold text-slate-700">More profile details</summary>
-                    <p className="mt-3 text-sm text-slate-600">{contacts.length} contact{contacts.length === 1 ? "" : "s"} · {bookings.length} event{bookings.length === 1 ? "" : "s"} · {meaningfulNotes.length} note{meaningfulNotes.length === 1 ? "" : "s"}</p>
-                  </details>
-                </div>
-              ) : null}
-
-              {tab === "notes" ? (
-                <section className="grid gap-3">
-                  <div><h3 className="text-lg font-bold">Notes & communication</h3><p className="mt-1 text-sm text-slate-600">Useful notes, calls, and follow-ups first.</p></div>
-                  {openFollowUps.length ? (
-                    <details className="rounded-xl border border-orange-100 bg-orange-50/60 p-3">
-                      <summary className="cursor-pointer font-semibold text-slate-900">Open follow-ups ({openFollowUps.length})</summary>
-                      <div className="mt-3 grid gap-2">{openFollowUps.slice(0, 10).map((followUp: any) => <div className="rounded-lg bg-white p-3 text-sm" key={followUp.id}><p className="font-semibold capitalize">{String(followUp.kind ?? "follow-up").replaceAll("_", " ")}</p><p className="mt-0.5 text-slate-600">Due {formatDateTime(followUp.dueAt) ?? "date not set"}</p></div>)}</div>
-                    </details>
-                  ) : null}
-                  {meaningfulNotes.length ? meaningfulNotes.slice(0, 25).map((note: any) => (
-                    <article className="rounded-xl border border-slate-200 bg-white p-3" key={note.id ?? `${note.kind}-${note.occurredAt}`}>
-                      <div className="flex items-baseline justify-between gap-2"><h4 className="font-semibold">{noteLabel(note)}</h4>{formatDate(note.occurredAt ?? note.createdAt) ? <span className="shrink-0 text-xs text-slate-500">{formatDate(note.occurredAt ?? note.createdAt)}</span> : null}</div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(note.body ?? "")}</p>
-                    </article>
-                  )) : <p className="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600">No notes yet.</p>}
-                  <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <summary className="cursor-pointer font-semibold text-slate-800">History & imported changes ({allHistory.length})</summary>
-                    <div className="mt-3 grid gap-3">
-                      <div className="flex flex-wrap gap-2" aria-label="History filters">{historyFilters.map((filter) => <button key={filter.value} type="button" onClick={() => setHistoryFilter(filter.value)} className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${historyFilter === filter.value ? "border-orange-300 bg-orange-50 text-orange-800" : "border-slate-200 bg-white text-slate-600"}`}>{filter.label}</button>)}</div>
-                      {filteredHistory.length ? filteredHistory.slice(0, 60).map((item: any) => <article className="rounded-lg border border-slate-200 bg-white p-3" key={`history-${item.id ?? `${item.kind}-${item.occurredAt}`} `}><div className="flex items-baseline justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{historyCategory(item).replaceAll("-", " ")}</span>{formatDate(item.occurredAt ?? item.createdAt) ? <span className="shrink-0 text-xs text-slate-500">{formatDate(item.occurredAt ?? item.createdAt)}</span> : null}</div><p className="mt-1 text-sm text-slate-700">{simplifyHistoryText(item.body ?? "")}</p></article>) : <p className="text-sm text-slate-600">Nothing matches this history filter.</p>}
-                    </div>
-                  </details>
-                </section>
-              ) : null}
-
-              {tab === "events" ? (
-                <section className="grid gap-2">
-                  {bookings.length ? bookings.map((booking: any) => <article className="rounded-xl border border-slate-200 bg-white p-3" key={booking.id}><h3 className="font-semibold">{booking.name ?? "Event"}</h3><p className="mt-1 text-sm text-slate-600">{formatDate(booking.startsAt) ?? "Date not set"}</p><p className="mt-1 text-xs font-semibold capitalize text-slate-500">{String(booking.status ?? "").replaceAll("_", " ")}</p></article>) : <p className="text-sm text-slate-600">No events yet.</p>}
-                </section>
-              ) : null}
+              <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 pt-3 backdrop-blur">
+                <button className="button-primary" onClick={openNoteComposer} type="button">Add note</button>
+                <ProfileActionsMenu profileId={profileId} contactId={selectedContactId} showAddNote={false} />
+              </div>
             </>
           )}
         </div>

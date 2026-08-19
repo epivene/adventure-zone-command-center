@@ -4,25 +4,43 @@ import { describe, expect, it } from "vitest";
 
 const source = readFileSync("src/components/profiles/profile-detail-sheet.tsx", "utf8");
 
-describe("ProfileDetailSheet", () => {
-  it("keeps the simple profile workspace and full-profile escape hatch", () => {
-    expect(source).toContain('type Tab = "overview" | "notes" | "events"');
-    expect(source).toContain("ProfileActionsMenu");
+describe("ProfileDetailSheet Option C", () => {
+  it("keeps the side profile minimal with one full-profile escape hatch", () => {
     expect(source).toContain("fullPageHref");
-    expect(source).toContain("More profile details");
+    expect(source).not.toContain('type Tab = "overview" | "notes" | "events"');
+    expect(source).not.toContain('role="tablist"');
+    expect(source).toContain("No open follow-ups");
+    expect(source).toContain("Follow-up overdue");
+    expect(source).toContain("Follow-up needed");
   });
 
-  it("supports inline editing without leaving the drawer", () => {
-    expect(source).toContain("ProfileInlineEditor");
-    expect(source).toContain("setEditing(true)");
-    expect(source).toContain("onSaved={handleInlineSaved}");
-    expect(source).toContain('type="button">Edit</button>');
+  it("shows each primary action only once", () => {
+    expect(source.match(/>Edit<\/button>/g)?.length ?? 0).toBe(1);
+    expect(source.match(/>Add note<\/button>/g)?.length ?? 0).toBe(1);
+    expect(source.match(/ProfileActionsMenu/g)?.length ?? 0).toBe(2); // import + one render
+    expect(source).not.toContain("Open full profile");
   });
 
-  it("shows formatted phone, email, and website together", () => {
-    expect(source).toContain("formatPhoneDisplay");
+  it("uses quick contact actions and compact counts", () => {
     expect(source).toContain("phoneHref");
-    expect(source).toContain("normalizeExternalWebsite");
-    expect(source).toContain("place.website");
+    expect(source).toContain("mailto:");
+    expect(source).toContain("websiteHref");
+    expect(source).toContain("Contacts");
+    expect(source).toContain("Bookings");
+  });
+
+  it("keeps details collapsed until requested", () => {
+    expect(source).toContain('detailSection === "notes"');
+    expect(source).toContain('detailSection === "events"');
+    expect(source).toContain('detailSection === "details"');
+    expect(source).toContain("Recent note");
+    expect(source).toContain("More details");
+  });
+
+  it("supports inline editing and a working note composer", () => {
+    expect(source).toContain("ProfileInlineEditor");
+    expect(source).toContain("createActivityAction");
+    expect(source).toContain("Save note");
+    expect(source).toContain("onSaved={handleInlineSaved}");
   });
 });
