@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ExternalLink, Search, X } from "lucide-react";
 
 import { apiGet, apiPost } from "@/lib/auth-token";
+import { SourceScoutBulkIntake } from "@/components/profiles/source-scout-bulk-intake";
 
 type Source = {
   id: string;
@@ -399,11 +400,11 @@ export function ProfileResearchPanel({
 
               {sourceScouts.length ? (
                 <section className="grid gap-3">
-                  <div><h3 className="text-lg font-bold">Source Scout results</h3><p className="text-sm text-slate-600">Saved scouting runs stay with this research record. New prospects can now be handed into the normal Add Event / Lead workflow for review.</p></div>
+                  <div><h3 className="text-lg font-bold">Source Scout results</h3><p className="text-sm text-slate-600">Saved scouting runs stay with this research record. New prospects can be added individually or selected in bulk.</p></div>
                   {sourceScouts.map((scout) => (
                     <details className="rounded-xl border border-slate-200 bg-white p-4" key={`${scout.sourceUrl}-${scout.startDate}-${scout.endDate}`} open>
                       <summary className="cursor-pointer font-bold">{scout.sourceTitle || scout.sourceUrl} <span className="ml-1 text-sm font-normal text-slate-500">{scout.startDate}–{scout.endDate} · {scout.events.length} event{scout.events.length === 1 ? "" : "s"}</span></summary>
-                      <div className="mt-3 grid gap-2">{scout.events.length ? scout.events.map((event, index) => { const match = crmMatchLabel(event.crmMatch); return <article className="rounded-lg bg-slate-50 p-3" key={`${event.name}-${event.startsAt ?? index}`}><div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold text-slate-950">{event.name}</p><p className="mt-1 text-xs text-slate-600">{eventDateLabel(event)} · {[event.venue, [event.city, event.region].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "Location not confirmed"}</p></div><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${match.className}`}>{match.label}</span></div><p className="mt-2 text-sm text-slate-600">{event.rationale}</p><div className="mt-2 flex gap-3"><a className="text-xs font-semibold text-orange-700 hover:underline" href={event.url} target="_blank" rel="noreferrer noopener">Open event source</a><Link className="text-xs font-semibold text-slate-700 hover:underline" href={crmHref(event)}>{crmActionLabel(event)}</Link></div></article>; }) : <p className="text-sm text-slate-600">No prospect-worthy events were found in this window.</p>}</div>
+                      <SourceScoutBulkIntake scout={scout} />
                     </details>
                   ))}
                 </section>
