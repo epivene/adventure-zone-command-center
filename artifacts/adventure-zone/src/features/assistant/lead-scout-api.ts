@@ -35,8 +35,26 @@ export type LeadScoutSaveResult =
       run: LeadScoutRunView;
     };
 
+function isTransientFetchFailure(error: unknown) {
+  return error instanceof TypeError && /failed to fetch|network|load failed|networkerror/i.test(error.message);
+}
+
+async function transientFetchRetry<T>(operation: () => Promise<T>): Promise<T> {
+  const delays = [500, 1000];
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientFetchFailure(error) || attempt >= delays.length) throw error;
+      await new Promise<void>((resolve) => window.setTimeout(resolve, delays[attempt]));
+    }
+  }
+}
+
 export async function getLeadScoutRun(runId: string): Promise<LeadScoutRunView> {
-  const response = await apiGet<{ run: LeadScoutRunView }>(`/assistant/lead-scout/runs/${runId}`);
+  const response = await transientFetchRetry(() =>
+    apiGet<{ run: LeadScoutRunView }>(`/assistant/lead-scout/runs/${runId}`),
+  );
   return response.run;
 }
 
