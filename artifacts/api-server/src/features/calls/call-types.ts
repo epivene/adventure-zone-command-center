@@ -6,6 +6,28 @@ import type { callDispositionValues } from "@/db/schema";
 export type CallDirection = "incoming" | "outgoing";
 export type CallMethod = "standard_call" | "office_call" | "individual_voicemail" | "mobile_log";
 export type CallScriptKind = "first_outreach" | "follow_up" | "contract_follow_up" | "incoming_inquiry";
+export type GuidedCallScriptKind =
+  | "first_outreach"
+  | "rebooking"
+  | "follow_up"
+  | "proposal_contract"
+  | "callback"
+  | "incoming_inquiry";
+
+export type CallBriefing = {
+  reason: GuidedCallScriptKind;
+  headline: string;
+  status: string | null;
+  eventName: string | null;
+  eventDate: string | null;
+  location: string | null;
+  routeLeg: string | null;
+  packageInterest: string | null;
+  lastContactedAt: string | null;
+  lastOutcome: string | null;
+  keyFacts: string[];
+  historySummary: string | null;
+};
 
 export type CallDisposition =
   | "no_answer"
