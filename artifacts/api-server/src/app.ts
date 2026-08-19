@@ -36,7 +36,10 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
-app.use(express.json());
+// Profile photos are compressed client-side and the photo route has its own
+// stricter 750 KB data-URL validation. Keep the general JSON ceiling just
+// above that so a valid shared profile image reaches the route for validation.
+app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/follow-ups", requireOwnerMiddleware, followUpsRouter);
