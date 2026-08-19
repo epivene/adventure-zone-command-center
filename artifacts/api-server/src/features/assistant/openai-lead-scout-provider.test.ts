@@ -1,13 +1,29 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { OpenAiLeadScoutProvider } from "./openai-lead-scout-provider";
-import type { LeadDiscoveryCriteria, LeadScoutSourceInput } from "./lead-scout-types";
+import type {
+  LeadDiscoveryCriteria,
+  LeadScoutCandidateInput,
+  LeadScoutSourceInput,
+} from "./lead-scout-types";
 
 const criteria: LeadDiscoveryCriteria = {
   originalQuestion: "Find events between Montana and Utah in September 2026",
   dateFrom: "2026-09-01", dateThrough: "2026-09-30", month: 9, year: 2026,
   regions: ["MT", "ID", "WY", "UT"], cities: [], geoMode: "corridor",
   routeId: null, legId: null, eventKeywords: ["festival"], fitIntent: "either",
+};
+
+const candidate: LeadScoutCandidateInput = {
+  name: "Silver Valley Days",
+  city: "Kellogg",
+  region: "ID",
+  venue: "Downtown",
+  startsAt: "2026-09-11",
+  endsAt: "2026-09-13",
+  website: "https://silver.example.org",
+  eventType: "community festival",
+  rationale: "Family community event",
 };
 
 function response(output: unknown, citations: string[]) {
@@ -99,5 +115,45 @@ describe("OpenAiLeadScoutProvider", () => {
     const controller = new AbortController();
     await provider.discoverSources(criteria, controller.signal);
     expect(fetchFn.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+  });
+
+  it("enriches a candidate with cited vendor, attendance, logistics, news, and public social evidence", async () => {
+    const official = "https://silver.example.org/vendors";
+    const news = "https://localnews.example.org/silver-valley-days";
+    const social = "https://facebook.com/events/silver-valley-days";
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => response({
+      sources: [
+        { url: official, title: "Vendor application", publisher: "Silver Valley Days", category: "vendor_application", excerpt: "x".repeat(1800) },
+        { url: news, title: "Festival recap", publisher: "Local News", category: "news_recap", excerpt: "Attendance recap" },
+        { url: social, title: "Public event page", publisher: "Facebook", category: "social", excerpt: "Family photos and comments" },
+      ],
+      facts: [
+        { key: "vendor_deadline", value: "2026-06-01", category: "vendor", confidence: "high", sourceUrls: [official], rationale: "Official application deadline." },
+        { key: "attendance", value: "About 8,000 attendees last year", category: "attendance", confidence: "medium", sourceUrls: [news], rationale: "Local news recap." },
+        { key: "family_feedback", value: "Public comments and photos show strong family participation", category: "social_review", confidence: "medium", sourceUrls: [social], rationale: "Qualitative public social evidence." },
+        { key: "organizer_phone", value: "555-9999", category: "contact", confidence: "high", sourceUrls: [social], rationale: "Only found in a social post." },
+        { key: "uncited_claim", value: "Should be dropped", category: "logistics", confidence: "high", sourceUrls: ["https://uncited.example.org"], rationale: "No citation." },
+      ],
+      coverageGaps: ["Facebook group discussions require login and could not be reviewed."],
+    }, [official, news, social]));
+    const provider = new OpenAiLeadScoutProvider(fetchFn as typeof fetch, "test-key");
+
+    const result = await provider.enrichCandidate({ criteria, candidate, knownSources: [], signal: undefined });
+
+    expect(result.sources).toHaveLength(3);
+    expect((result.sources[0]?.excerpt ?? "").length).toBeLessThanOrEqual(1200);
+    expect(result.facts.find((item) => item.key === "vendor_deadline")?.confidence).toBe("high");
+    expect(result.facts.find((item) => item.key === "organizer_phone")?.confidence).toBe("low");
+    expect(result.facts.some((item) => item.key === "uncited_claim")).toBe(false);
+    expect(result.coverageGaps).toEqual(["Facebook group discussions require login and could not be reviewed."]);
+
+    const body = JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body));
+    expect(body.input).toMatch(/vendor|exhibitor|application/i);
+    expect(body.input).toMatch(/attendance/i);
+    expect(body.input).toMatch(/logistics|power|space/i);
+    expect(body.input).toMatch(/social|review/i);
+    expect(body.input).toMatch(/competing|carnival|amusement/i);
+    expect(body.input).toMatch(/coverage gaps/i);
+    expect(body.input).toMatch(/untrusted data/i);
   });
 });
