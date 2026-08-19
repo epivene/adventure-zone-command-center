@@ -13,6 +13,7 @@ describe("manager receipt event assignment and map containment", () => {
     expect(receiptsPage).toContain("currentBookingId");
     expect(receiptForm).toContain("Event assignment");
     expect(receiptForm).toContain("setBookingId");
+    expect(receiptsPage).toContain("bookingId: selectedBookingId || null");
   });
 
   it("limits admin event suggestions to events assigned to the expense leg and sorts most recent first", () => {
