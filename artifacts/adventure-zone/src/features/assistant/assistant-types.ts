@@ -44,6 +44,140 @@ export type AssistantProfileSearchResult = {
   matchedOn: string[];
 };
 
+export type LeadScoutStatus =
+  | "interpreting"
+  | "crm_search"
+  | "crm_ready"
+  | "running"
+  | "stopping"
+  | "stopped"
+  | "complete"
+  | "failed";
+
+export type LeadScoutStage =
+  | "interpreting"
+  | "crm_search"
+  | "source_discovery"
+  | "candidate_discovery"
+  | "candidate_enrichment"
+  | "crm_compare"
+  | "fit_rank"
+  | "complete";
+
+export type LeadScoutCrmMatchStatus = "existing" | "possible_match" | "new_prospect";
+
+export type LeadDiscoveryCriteria = {
+  originalQuestion: string;
+  dateFrom: string | null;
+  dateThrough: string | null;
+  month: number | null;
+  year: number | null;
+  regions: string[];
+  cities: string[];
+  geoMode: "regions" | "corridor" | "route" | "radius" | "unspecified";
+  routeId: string | null;
+  legId: string | null;
+  eventKeywords: string[];
+  fitIntent: "bookable_event" | "vendor_opportunity" | "either";
+};
+
+export type AssistantLeadMatch = {
+  organizationId: string;
+  bookingId: string | null;
+  label: string;
+  city: string | null;
+  region: string | null;
+  dateFrom: string | null;
+  dateThrough: string | null;
+  dateConfidence: "confirmed" | "likely_recurring" | "unknown";
+  status: string | null;
+  relationshipSummary: string | null;
+  reasons: string[];
+  fitScore: number;
+};
+
+export type LeadScoutProgress = {
+  label: string | null;
+  sourcesChecked: number;
+  candidatesFound: number;
+  candidatesEnriched: number;
+  candidatesCompared: number;
+};
+
+export type LeadScoutSource = {
+  id: string;
+  url: string;
+  title: string;
+  publisher: string | null;
+  category:
+    | "official_event"
+    | "government"
+    | "tourism_chamber"
+    | "vendor_application"
+    | "venue_partner"
+    | "news_recap"
+    | "social"
+    | "review_forum"
+    | "other";
+  retrievedAt: string;
+};
+
+export type LeadScoutCandidateFact = {
+  id: string;
+  key: string;
+  value: unknown;
+  category: string;
+  confidence: "high" | "medium" | "low";
+  rationale: string;
+  sourceIds: string[];
+};
+
+export type LeadScoutCandidate = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  venue: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  organizerName: string | null;
+  organizerEmail: string | null;
+  organizerPhone: string | null;
+  website: string | null;
+  eventType: string | null;
+  recurrenceSummary: string | null;
+  attendanceSummary: string | null;
+  vendorSummary: string | null;
+  applicationDeadline: string | null;
+  fitScore: number | null;
+  fitRationale: string | null;
+  crmMatchStatus: LeadScoutCrmMatchStatus;
+  matchedOrganizationId: string | null;
+  matchedBookingId: string | null;
+  reviewStatus: "unreviewed" | "shortlisted" | "dismissed" | "saved";
+  savedOrganizationId: string | null;
+  savedBookingId: string | null;
+  facts: LeadScoutCandidateFact[];
+};
+
+export type LeadScoutRunView = {
+  id: string;
+  originalQuestion: string;
+  criteria: LeadDiscoveryCriteria | null;
+  criteriaSummary: string | null;
+  status: LeadScoutStatus;
+  stage: LeadScoutStage;
+  progress: LeadScoutProgress;
+  crmMatches: AssistantLeadMatch[];
+  candidates: LeadScoutCandidate[];
+  sources: LeadScoutSource[];
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  failureMessage: string | null;
+};
+
 export type GeneralAssistantResponse =
   | { kind: "profile_results"; text: string; results: AssistantProfileSearchResult[] }
   | { kind: "answer"; answer: AssistantAnswer }
