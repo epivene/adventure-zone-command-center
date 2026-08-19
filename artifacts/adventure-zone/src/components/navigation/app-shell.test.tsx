@@ -34,4 +34,11 @@ describe("simple Admin shell", () => {
       expect(menuSource).toContain(`href: "${href}"`);
     }
   });
+
+  it("hides the floating assistant launcher while a full profile is open", () => {
+    expect(shellSource).toContain("hideAssistantLauncher");
+    expect(shellSource).toContain('location.startsWith("/profiles/")');
+    expect(shellSource).toContain('location.startsWith("/event-profiles/")');
+    expect(shellSource).toContain("!hideAssistantLauncher ? <AssistantLauncher /> : null");
+  });
 });
