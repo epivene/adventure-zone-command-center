@@ -84,6 +84,11 @@ export const packageTemplateInputSchema = z
       .trim()
       .min(1, "Package name is required.")
       .max(100, "Package name is too long."),
+    basePriceCents: z
+      .number()
+      .int("Base price must be in whole cents.")
+      .nonnegative("Base price cannot be negative.")
+      .nullable(),
     baseAttractionCount: z
       .number()
       .int("Suggested attraction count must be a whole number.")
