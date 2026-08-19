@@ -5,9 +5,11 @@ import { bookings, followUps } from "@/db/schema";
 import type { TodayDashboard } from "./today-query";
 import { businessDayBounds } from "@/lib/business-date";
 
-// Adventure Zone's 2026-27 booking work starts fresh on September 1, 2026.
-// This is intentionally a work-queue boundary only: it never deletes or rewrites history.
+// Booking work gets a fresh plate on September 1, 2026, while the remaining
+// 2026 operating events can keep running through the fall. This only filters
+// the booking workload; it never deletes or rewrites history or calendar ops.
 export const TODAY_SEASON_RESET_AT = new Date("2026-09-01T05:00:00.000Z");
+export const NEXT_BOOKING_YEAR_AT = new Date("2027-01-01T06:00:00.000Z");
 
 export type TodaySeasonBookingSignal = {
   id: string;
@@ -36,8 +38,8 @@ export function bookingBelongsToFreshSeason(
   if (!booking) return false;
   return (
     carriedForwardBookingIds.has(booking.id) ||
-    atOrAfter(booking.startsAt, boundary) ||
-    atOrAfter(booking.endsAt, boundary) ||
+    atOrAfter(booking.startsAt, NEXT_BOOKING_YEAR_AT) ||
+    atOrAfter(booking.endsAt, NEXT_BOOKING_YEAR_AT) ||
     atOrAfter(booking.createdAt, boundary) ||
     atOrAfter(booking.updatedAt, boundary)
   );
@@ -127,8 +129,8 @@ export async function applyTodaySeasonResetFromDb(
   const signals = new Map(bookingRows.map((row) => [row.id, row as TodaySeasonBookingSignal]));
 
   const currentBookingSql = sql`(
-    ${bookings.startsAt} >= ${TODAY_SEASON_RESET_AT.toISOString()}
-    or ${bookings.endsAt} >= ${TODAY_SEASON_RESET_AT.toISOString()}
+    ${bookings.startsAt} >= ${NEXT_BOOKING_YEAR_AT.toISOString()}
+    or ${bookings.endsAt} >= ${NEXT_BOOKING_YEAR_AT.toISOString()}
     or ${bookings.createdAt} >= ${TODAY_SEASON_RESET_AT.toISOString()}
     or ${bookings.updatedAt} >= ${TODAY_SEASON_RESET_AT.toISOString()}
     or exists (
