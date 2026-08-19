@@ -164,6 +164,7 @@ export type LeadScoutWorkClaim = {
   runId: string;
   actorId: string;
   criteria: LeadDiscoveryCriteria;
+  status: "running" | "stopping";
   stage: LeadScoutStage;
   workerId: string;
   leaseExpiresAt: string;
