@@ -46,8 +46,9 @@ export function selectGuidedCallScriptKind(
     input.bookingStatus === "pending_contract"
   ) return "proposal_contract";
   if (input.priorBookedEvent || input.bookingStatus === "completed") return "rebooking";
-  if (input.bookingStatus === "new_lead" || (input.priorCompletedCallCount ?? 0) === 0) {
-    return "first_outreach";
-  }
+
+  const priorCompletedCallCount = input.priorCompletedCallCount ?? 0;
+  if (priorCompletedCallCount === 0) return "first_outreach";
+
   return "follow_up";
 }
