@@ -121,6 +121,7 @@ export function ProfileResearchPanel({
 
   async function startResearch(nextMode = mode) {
     if (busy) return;
+    setMode(nextMode);
     setBusy(true);
     setError("");
     setApplyMessage("");
@@ -226,11 +227,21 @@ export function ProfileResearchPanel({
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="font-semibold">Research depth</p>
-                <p className="mt-1 text-sm text-slate-600">Quick checks the current profile. Deep investigates the event more fully and scouts useful event calendars/directories it finds.</p>
+                <p className="mt-1 text-sm text-slate-600">Choose a research action. Quick focuses on this profile; Deep investigates it more fully and scouts useful event calendars/directories it finds.</p>
               </div>
-              <div className="flex gap-2">
-                {(["quick", "deep"] as const).map((value) => <button key={value} type="button" onClick={() => setMode(value)} className={`rounded-lg border px-3 py-2 text-sm font-semibold capitalize ${mode === value ? "border-orange-300 bg-orange-50 text-orange-800" : "border-slate-200 bg-white text-slate-700"}`}>{value}</button>)}
-                <button className="button-primary" type="button" disabled={busy} onClick={() => void startResearch()}>{busy && !run ? "Researching…" : run ? "Research again" : "Start research"}</button>
+              <div className="flex flex-wrap gap-2">
+                {(["quick", "deep"] as const).map((value) => (
+                  <button
+                    aria-label={value === "quick" ? "Research Quick" : "Research Deep"}
+                    className={`rounded-lg border px-3 py-2 text-sm font-semibold capitalize ${mode === value ? "border-orange-300 bg-orange-50 text-orange-800" : "border-slate-200 bg-white text-slate-700"}`}
+                    disabled={busy}
+                    key={value}
+                    onClick={() => void startResearch(value)}
+                    type="button"
+                  >
+                    {busy && mode === value ? "Researching…" : value}
+                  </button>
+                ))}
               </div>
             </div>
           </section>
@@ -238,7 +249,7 @@ export function ProfileResearchPanel({
           {error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p> : null}
           {applyMessage ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{applyMessage}</p> : null}
 
-          {run?.status === "failed" ? <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 className="font-bold text-amber-900">Research could not finish</h3><p className="mt-1 text-sm text-amber-800">{run.failureMessage ?? "The public research provider was unavailable."}</p><button className="mt-3 button-secondary" type="button" disabled={busy} onClick={() => void startResearch()}>Try again</button></section> : null}
+          {run?.status === "failed" ? <section className="rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 className="font-bold text-amber-900">Research could not finish</h3><p className="mt-1 text-sm text-amber-800">{run.failureMessage ?? "The public research provider was unavailable."}</p><button className="mt-3 button-secondary" type="button" disabled={busy} onClick={() => void startResearch(mode)}>Try again</button></section> : null}
 
           {run?.status === "complete" ? (
             <>

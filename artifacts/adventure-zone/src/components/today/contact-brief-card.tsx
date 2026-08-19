@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 
 import { apiGet } from "@/lib/auth-token";
+import { profileResearchGaps } from "@/features/profile-research/profile-research-gaps";
 
 type BriefItem = {
   key: string;
@@ -62,6 +64,7 @@ export function ContactBriefCard({ target }: { target: ContactBriefTarget }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [profileGapCount, setProfileGapCount] = useState(0);
 
   useEffect(() => {
     if (!context) {
@@ -89,12 +92,34 @@ export function ContactBriefCard({ target }: { target: ContactBriefTarget }) {
     };
   }, [context?.kind, context?.id, refreshKey]);
 
+  useEffect(() => {
+    if (!target.organizationId) {
+      setProfileGapCount(0);
+      return;
+    }
+    let active = true;
+    const qs = target.contactId ? `?contactId=${encodeURIComponent(target.contactId)}` : "";
+    apiGet<any>(`/event-profiles/${target.organizationId}${qs}`)
+      .then((profile) => {
+        if (active) setProfileGapCount(profileResearchGaps(profile).length);
+      })
+      .catch(() => {
+        if (active) setProfileGapCount(0);
+      });
+    return () => {
+      active = false;
+    };
+  }, [target.organizationId, target.contactId]);
+
   if (!context) return null;
 
   const usefulItems = brief?.items.filter((item) => item.key !== "next_action").slice(0, 4) ?? [];
   const talkingPoints = [
     ...new Set((brief?.items ?? []).map(talkingPointFor).filter((value): value is string => Boolean(value))),
   ].slice(0, 3);
+  const researchHref = target.organizationId
+    ? `/profiles/${target.organizationId}${target.contactId ? `?contactId=${encodeURIComponent(target.contactId)}&research=1` : "?research=1"}`
+    : null;
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" aria-label="Before you contact them">
@@ -132,6 +157,16 @@ export function ContactBriefCard({ target }: { target: ContactBriefTarget }) {
               <ul className="mt-1.5 grid gap-1 text-sm text-slate-700">
                 {talkingPoints.map((point) => <li key={point}>• {point}</li>)}
               </ul>
+            </div>
+          ) : null}
+
+          {profileGapCount > 0 && researchHref ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Missing profile info</p>
+                <p className="mt-1 text-sm text-amber-900">{profileGapCount} research gap{profileGapCount === 1 ? "" : "s"} could make this contact prep stronger.</p>
+              </div>
+              <Link className="text-sm font-semibold text-orange-700 hover:underline" href={researchHref}>Research profile</Link>
             </div>
           ) : null}
         </div>

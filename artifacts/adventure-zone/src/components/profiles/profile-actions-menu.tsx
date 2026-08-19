@@ -23,6 +23,7 @@ export function ProfileActionsMenu({
   const fullProfile = `/profiles/${profileId}`;
   const withContact = contactId ? `${fullProfile}?contactId=${encodeURIComponent(contactId)}` : fullProfile;
   const followUpHref = `${withContact}${withContact.includes("?") ? "&" : "?"}action=follow-up`;
+  const researchHref = `${withContact}${withContact.includes("?") ? "&" : "?"}research=1`;
 
   return (
     <DropdownMenu>
@@ -36,6 +37,7 @@ export function ProfileActionsMenu({
         <DropdownMenuSeparator />
         {showAddNote ? <DropdownMenuItem onSelect={() => onAddNote?.()}>Add note</DropdownMenuItem> : null}
         <DropdownMenuItem asChild><Link href={followUpHref}>Add follow-up</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href={researchHref}>Research profile</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/event-profiles/new">Add event</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
