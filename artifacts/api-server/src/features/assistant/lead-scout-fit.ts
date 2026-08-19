@@ -1,3 +1,4 @@
+import { isAdultSpecialInterestEvent } from "./lead-scout-priority";
 import type { LeadScoutFitInput } from "./lead-scout-types";
 
 function isMultiDay(startsAt: string | null, endsAt: string | null) {
@@ -18,6 +19,10 @@ export function scoreAdventureZoneFit(input: LeadScoutFitInput): {
   let score = 5;
   const reasons: string[] = [];
   const cautions: string[] = [];
+  const adultSpecialInterest = input.hasAdultSpecialInterestSignal
+    ?? isAdultSpecialInterestEvent(input.eventName, input.eventType);
+  const attendanceScale = input.attendanceScale
+    ?? (input.hasAttendanceEvidence ? "medium" : "unknown");
 
   if (input.hasPublicSource) {
     score += 5;
@@ -30,7 +35,7 @@ export function scoreAdventureZoneFit(input: LeadScoutFitInput): {
     score -= 30;
     cautions.push("No strong child/family-friendly audience signal has been confirmed.");
   }
-  if (input.hasAdultSpecialInterestSignal) {
+  if (adultSpecialInterest) {
     score -= 35;
     cautions.push("Adult or special-interest format is a weak fit for a bounce-house carnival.");
   }
@@ -55,16 +60,16 @@ export function scoreAdventureZoneFit(input: LeadScoutFitInput): {
     reasons.push("organizer contact is available");
   }
 
-  if (input.attendanceScale === "large") {
+  if (attendanceScale === "large") {
     score += 18;
     reasons.push("large public turnout supports a full Adventure Zone setup");
-  } else if (input.attendanceScale === "medium") {
+  } else if (attendanceScale === "medium") {
     score += 5;
     reasons.push("moderate attendance may support a smaller Adventure Zone setup");
-  } else if (input.attendanceScale === "small") {
+  } else if (attendanceScale === "small") {
     score -= 25;
     cautions.push("Published attendance appears small for a full bounce-house carnival setup.");
-  } else if (!input.hasAttendanceEvidence) {
+  } else {
     score -= 12;
     cautions.push("Event attendance/scale has not been confirmed yet.");
   }
