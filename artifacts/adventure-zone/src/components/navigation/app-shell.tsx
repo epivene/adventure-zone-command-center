@@ -18,6 +18,7 @@ const primaryNavigation = [
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const hideAssistantLauncher = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
   useEffect(() => {
     let active = true;
@@ -76,7 +77,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
 
-      <AssistantLauncher />
+      {!hideAssistantLauncher ? <AssistantLauncher /> : null}
       <AssistantDrawer />
       <MobileBottomNav />
     </div>
