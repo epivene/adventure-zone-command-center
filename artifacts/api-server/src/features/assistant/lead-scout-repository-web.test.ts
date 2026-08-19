@@ -10,17 +10,9 @@ import type {
 
 const criteria: LeadDiscoveryCriteria = {
   originalQuestion: "Find events between Montana and Utah in September 2026",
-  dateFrom: "2026-09-01",
-  dateThrough: "2026-09-30",
-  month: 9,
-  year: 2026,
-  regions: ["MT", "ID", "WY", "UT"],
-  cities: [],
-  geoMode: "corridor",
-  routeId: null,
-  legId: null,
-  eventKeywords: ["festival"],
-  fitIntent: "either",
+  dateFrom: "2026-09-01", dateThrough: "2026-09-30", month: 9, year: 2026,
+  regions: ["MT", "ID", "WY", "UT"], cities: [], geoMode: "corridor",
+  routeId: null, legId: null, eventKeywords: ["festival"], fitIntent: "either",
 };
 
 async function createDatabase() {
@@ -45,12 +37,14 @@ async function createDatabase() {
     );
     create table lead_scout_candidates (
       id uuid primary key default gen_random_uuid(), run_id uuid not null references lead_scout_runs(id) on delete cascade,
+      candidate_key text not null,
       name text not null, city text, region text, venue text, starts_at date, ends_at date,
       organizer_name text, organizer_email text, organizer_phone text, website text, event_type text,
       recurrence_summary text, attendance_summary text, vendor_summary text, application_deadline date,
       fit_score integer, fit_rationale text, crm_match_status text not null default 'new_prospect',
       matched_organization_id uuid, matched_booking_id uuid, review_status text not null default 'unreviewed',
-      saved_organization_id uuid, saved_booking_id uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+      saved_organization_id uuid, saved_booking_id uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+      unique(run_id, candidate_key)
     );
     create table lead_scout_candidate_facts (
       id uuid primary key default gen_random_uuid(), candidate_id uuid not null references lead_scout_candidates(id) on delete cascade,
@@ -62,36 +56,21 @@ async function createDatabase() {
 }
 
 async function crmReady(repository: LeadScoutRepository, actorId = "user-a") {
-  const runId = await repository.createRun({
-    actorId,
-    question: criteria.originalQuestion,
-    criteria: null,
-    criteriaSummary: null,
-  });
+  const runId = await repository.createRun({ actorId, question: criteria.originalQuestion, criteria: null, criteriaSummary: null });
   await repository.setCriteria(runId, { criteria, criteriaSummary: "September 2026 · MT to UT" });
   await repository.setCrmReady(runId, []);
   return runId;
 }
 
 const source: LeadScoutSourceInput = {
-  url: "https://example.org/events",
-  title: "Example events",
-  publisher: "Example",
-  category: "tourism_chamber",
-  retrievedAt: "2026-08-19T17:00:00.000Z",
-  excerpt: "September event calendar",
+  url: "https://example.org/events", title: "Example events", publisher: "Example",
+  category: "tourism_chamber", retrievedAt: "2026-08-19T17:00:00.000Z", excerpt: "September event calendar",
 };
 
 const candidate: LeadScoutCandidateInput = {
-  name: "Silver Valley Days",
-  city: "Kellogg",
-  region: "ID",
-  venue: "Downtown",
-  startsAt: "2026-09-11",
-  endsAt: "2026-09-13",
-  website: "https://example.org/silver-valley-days",
-  eventType: "community festival",
-  rationale: "Family festival with public vendor space.",
+  name: "Silver Valley Days", city: "Kellogg", region: "ID", venue: "Downtown",
+  startsAt: "2026-09-11", endsAt: "2026-09-13", website: "https://example.org/silver-valley-days",
+  eventType: "community festival", rationale: "Family festival with public vendor space.",
 };
 
 describe("LeadScoutRepository durable web state", () => {
@@ -110,26 +89,19 @@ describe("LeadScoutRepository durable web state", () => {
 
   it("leases a runnable run to one worker and allows stale lease recovery", async () => {
     const { client, repository } = await createDatabase(); clients.push(client);
-    const runId = await crmReady(repository);
-    await repository.startWeb(runId, "user-a");
+    const runId = await crmReady(repository); await repository.startWeb(runId, "user-a");
     const now = new Date("2026-08-19T18:00:00Z");
     const first = await repository.claimRunnable({ workerId: "worker-a", now, leaseMs: 30_000 });
     expect(first?.runId).toBe(runId);
     expect(await repository.claimRunnable({ workerId: "worker-b", now, leaseMs: 30_000 })).toBeNull();
-    const recovered = await repository.claimRunnable({
-      workerId: "worker-b",
-      now: new Date("2026-08-19T18:00:31Z"),
-      leaseMs: 30_000,
-    });
+    const recovered = await repository.claimRunnable({ workerId: "worker-b", now: new Date("2026-08-19T18:00:31Z"), leaseMs: 30_000 });
     expect(recovered?.runId).toBe(runId);
   });
 
   it("moves running to stopping, preserves partial data, and continues a stopped run", async () => {
     const { client, repository } = await createDatabase(); clients.push(client);
-    const runId = await crmReady(repository);
-    await repository.startWeb(runId, "user-a");
-    await repository.upsertSources(runId, [source]);
-    await repository.upsertCandidates(runId, [candidate]);
+    const runId = await crmReady(repository); await repository.startWeb(runId, "user-a");
+    await repository.upsertSources(runId, [source]); await repository.upsertCandidates(runId, [candidate]);
     expect(await repository.requestStop(runId, "user-a")).toBe(true);
     expect((await repository.getRun({ actorId: "user-a", runId }))?.status).toBe("stopping");
     expect(await repository.isCancellationRequested(runId)).toBe(true);
@@ -137,9 +109,7 @@ describe("LeadScoutRepository durable web state", () => {
     expect((await repository.getRun({ actorId: "user-a", runId }))?.status).toBe("stopped");
     expect(await repository.continueWeb(runId, "user-a")).toBe(true);
     const resumed = await repository.getRun({ actorId: "user-a", runId });
-    expect(resumed?.status).toBe("running");
-    expect(resumed?.sources).toHaveLength(1);
-    expect(resumed?.candidates).toHaveLength(1);
+    expect(resumed?.status).toBe("running"); expect(resumed?.sources).toHaveLength(1); expect(resumed?.candidates).toHaveLength(1);
   });
 
   it("upserts sources and candidates idempotently", async () => {
@@ -148,18 +118,14 @@ describe("LeadScoutRepository durable web state", () => {
     await repository.upsertSources(runId, [source, { ...source, title: "Updated calendar" }]);
     await repository.upsertCandidates(runId, [candidate, { ...candidate, rationale: "Updated fit rationale" }]);
     const run = await repository.getRun({ actorId: "user-a", runId });
-    expect(run?.sources).toHaveLength(1);
-    expect(run?.sources[0]?.title).toBe("Updated calendar");
-    expect(run?.candidates).toHaveLength(1);
-    expect(run?.candidates[0]?.fitRationale).toBe("Updated fit rationale");
+    expect(run?.sources).toHaveLength(1); expect(run?.sources[0]?.title).toBe("Updated calendar");
+    expect(run?.candidates).toHaveLength(1); expect(run?.candidates[0]?.fitRationale).toBe("Updated fit rationale");
   });
 
   it("keeps completed candidates when a later stage fails", async () => {
     const { client, repository } = await createDatabase(); clients.push(client);
-    const runId = await crmReady(repository);
-    await repository.startWeb(runId, "user-a");
-    await repository.upsertCandidates(runId, [candidate]);
-    await repository.failRun(runId, "provider unavailable");
+    const runId = await crmReady(repository); await repository.startWeb(runId, "user-a");
+    await repository.upsertCandidates(runId, [candidate]); await repository.failRun(runId, "provider unavailable");
     const run = await repository.getRun({ actorId: "user-a", runId });
     expect(run?.status).toBe("failed");
     expect(run?.candidates.map((item) => item.name)).toEqual(["Silver Valley Days"]);
