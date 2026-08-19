@@ -15,6 +15,11 @@ import {
   type CompleteCallResult,
 } from "@/components/calls/call-workspace";
 import { callWorkspaceHref } from "@/components/today/next-call-card";
+import {
+  CopilotReason,
+  type BookingCopilotReason,
+} from "@/components/today/copilot-reason";
+import { ContactBriefCard } from "@/components/today/contact-brief-card";
 import { apiGet } from "@/lib/auth-token";
 
 export type CallQueueItem = {
@@ -31,6 +36,7 @@ export type CallQueueItem = {
   kind: string;
   dueAt: Date | string;
   status: string;
+  copilot?: BookingCopilotReason | null;
 };
 
 type CallingConfig = {
@@ -254,7 +260,7 @@ export function CallQueueWorkspace({
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold">Calls to make</h2>
-            <p className="mt-1 text-sm text-slate-600">Prioritized follow-ups for today.</p>
+            <p className="mt-1 text-sm text-slate-600">Prioritized follow-ups with the reason each one is here.</p>
           </div>
           <span className="whitespace-nowrap rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">
             {total} remaining
@@ -296,6 +302,7 @@ export function CallQueueWorkspace({
                           : "Not contacted yet"}
                       </span>
                     </span>
+                    <CopilotReason copilot={followUp.copilot} compact />
                   </button>
                 </li>
               );
@@ -306,7 +313,15 @@ export function CallQueueWorkspace({
         )}
       </div>
 
-      <div className="order-1 min-w-0 lg:order-2" data-testid="selected-call-workspace">
+      <div className="order-1 grid min-w-0 gap-3 lg:order-2" data-testid="selected-call-workspace">
+        {selected ? (
+          <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-800">Up Next</p>
+            <p className="mt-1 text-lg font-bold text-slate-950">{selected.contactName ?? selected.bookingName}</p>
+            <CopilotReason copilot={selected.copilot} />
+          </div>
+        ) : null}
+        {selected ? <ContactBriefCard target={selected} /> : null}
         {!selected ? (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
             Select a caller from the queue.
