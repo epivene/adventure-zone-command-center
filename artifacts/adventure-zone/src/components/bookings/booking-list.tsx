@@ -42,10 +42,12 @@ export function BookingList({
   bookings,
   now = new Date(),
   initialStatus = "",
+  initialShowPast = false,
 }: {
   bookings: BookingListItem[];
   now?: Date;
   initialStatus?: BookingStatus | "";
+  initialShowPast?: boolean;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [probability, setProbability] = useState("");
@@ -53,7 +55,7 @@ export function BookingList({
   const [travelLegId, setTravelLegId] = useState("");
   const [startsAfter, setStartsAfter] = useState("");
   const [startsBefore, setStartsBefore] = useState("");
-  const [showPast, setShowPast] = useState(false);
+  const [showPast, setShowPast] = useState(initialShowPast);
 
   const regions = [...new Set(bookings.map((booking) => booking.region))].sort();
   const travelLegs = [
