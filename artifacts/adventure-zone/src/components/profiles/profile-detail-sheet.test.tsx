@@ -18,23 +18,30 @@ describe("ProfileDetailSheet Option C", () => {
     expect(source.match(/>Edit<\/button>/g)?.length ?? 0).toBe(1);
     expect(source.match(/>Add note<\/button>/g)?.length ?? 0).toBe(1);
     expect(source.match(/ProfileActionsMenu/g)?.length ?? 0).toBe(2); // import + one render
+    expect(source).toContain("showAddNote={false}");
     expect(source).not.toContain("Open full profile");
+  });
+
+  it("moves address and category into the identity card", () => {
+    expect(source).toContain("fullAddress");
+    expect(source).toContain("place.placeType");
+    expect(source).not.toContain("More details");
+    expect(source).not.toContain('detailSection === "details"');
+  });
+
+  it("does not repeat the recent note in the notes drawer", () => {
+    expect(source).toContain("const olderNotes = meaningfulNotes.slice(1)");
+    expect(source).toContain('detailRow("Note history", olderNotes.length');
+    expect(source).toContain("olderNotes.map");
+    expect(source).not.toContain('detailRow("Notes", meaningfulNotes.length');
   });
 
   it("uses quick contact actions and compact counts", () => {
     expect(source).toContain("phoneHref");
     expect(source).toContain("mailto:");
     expect(source).toContain("websiteHref");
-    expect(source).toContain("Contacts");
-    expect(source).toContain("Bookings");
-  });
-
-  it("keeps details collapsed until requested", () => {
-    expect(source).toContain('detailSection === "notes"');
-    expect(source).toContain('detailSection === "events"');
-    expect(source).toContain('detailSection === "details"');
-    expect(source).toContain("Recent note");
-    expect(source).toContain("More details");
+    expect(source).toContain("contacts.length");
+    expect(source).toContain("bookings.length");
   });
 
   it("supports inline editing and a working note composer", () => {
