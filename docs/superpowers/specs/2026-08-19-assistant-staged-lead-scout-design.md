@@ -36,7 +36,7 @@ The user asks General Command Center something like:
 - `I need a family event near Leg 4 between June 10 and June 25.`
 - `Find fall events on the route from Montana to Utah.`
 
-The assistant parses the request into a bounded structured search intent.
+The assistant creates a persistent discovery run and parses the request into a bounded structured search intent.
 
 Example:
 
@@ -61,9 +61,11 @@ The model may help interpret ambiguous wording, but it must return this bounded 
 
 For a phrase such as `between Montana and Utah`, the assistant should preserve that as **corridor intent** rather than pretending it knows an exact driving route. Search may include plausible corridor regions (for example Montana, Idaho, Wyoming, and Utah where geographically relevant), and result cards should explain why a location is considered a corridor match. If an actual Command Center route/trip/leg is selected, real route context should outrank generic corridor inference.
 
+If the date/geography is too ambiguous to search responsibly, the assistant should show its interpretation and ask for a correction before any web search. It must not silently invent a year, route, or exact corridor.
+
 ### 2. Search Command Center first
 
-Before any public web research, the assistant searches existing:
+The same persistent run searches existing:
 
 - organizations/profiles,
 - bookings/events,
@@ -73,6 +75,8 @@ Before any public web research, the assistant searches existing:
 - package history,
 - follow-up/relationship history where relevant,
 - route/leg location context where available.
+
+No public-web provider is called during this CRM-first stage.
 
 Results are ranked as **existing possibilities**, not just text matches.
 
@@ -95,6 +99,8 @@ Likely recurring results must never be labeled as confirmed dates.
 #### Broader relationship matches
 
 Existing profiles with useful geographic/event-family/history fit but weaker date evidence.
+
+After this stage the run is `crm_ready`. The assistant shows the CRM shortlist and waits. Web research does not begin until the user explicitly chooses **Find me new leads**.
 
 ### 3. Existing-match result cards
 
@@ -139,7 +145,7 @@ The assistant should show a bounded shortlist first, typically 5–10 strong res
 
 After CRM results are shown, a prominent **Find me new leads** action appears whether matches were found or not.
 
-Pressing it starts public-web Lead Scout using the **same parsed criteria**. The user should not need to repeat `Montana to Utah / September 2026`.
+Pressing it starts the public-web stages of the **same run**, using the already normalized criteria. The user should not need to repeat `Montana to Utah / September 2026`.
 
 If there are zero CRM matches, the assistant may emphasize this action, but must still wait for the user's click before starting web research.
 
@@ -151,7 +157,7 @@ It should reuse existing Profile Research / Source Scout normalization, URL safe
 
 ### Stages
 
-A run proceeds through explicit operational stages:
+The persisted discovery run moves through explicit operational stages:
 
 1. **Understanding request**
    - validate/normalize date and geographic criteria,
@@ -160,9 +166,10 @@ A run proceeds through explicit operational stages:
 
 2. **Searching Command Center**
    - collect existing confirmed, recurring, and broader relationship matches,
-   - this stage completes before web research is offered.
+   - transition to `crm_ready`,
+   - pause for the user's decision.
 
-3. **Finding public sources**
+3. **Finding public sources** — only after **Find me new leads**
    - search official event sites,
    - tourism/community calendars,
    - city/county/parks/fair/chamber sources,
@@ -217,7 +224,7 @@ A run proceeds through explicit operational stages:
    - timing/application deadline,
    - conflicts such as an existing carnival provider.
 
-The UI should begin showing candidates before every stage is finished.
+The UI should begin showing candidates before every web stage is finished.
 
 ## Source and evidence hierarchy
 
@@ -289,7 +296,7 @@ The fit score is a ranking aid, not an automatic booking decision.
 
 ## Persistent Scout runs
 
-A Lead Scout run must survive drawer closure/navigation and preserve partial results.
+A Lead Scout run begins with the original General Command Center request, survives drawer closure/navigation, and preserves CRM matches plus any partial web results.
 
 Suggested tables:
 
@@ -308,7 +315,8 @@ Fields should include:
 - actor/user id,
 - original question,
 - normalized criteria JSON,
-- status: `crm_ready | running | stopping | stopped | complete | failed`,
+- CRM-match summary/result JSON or normalized linked result records,
+- status: `interpreting | crm_search | crm_ready | running | stopping | stopped | complete | failed`,
 - current stage,
 - progress JSON/counts,
 - cancel requested at,
@@ -418,13 +426,16 @@ Example:
 ```text
 Understanding your request                         Done
 Searching Command Center                           7 matches
+Waiting for web-search approval                    Ready
 Finding public event sources                       18 sources checked
 Checking candidate events                          9 of 16
 Reviewing vendor/review/social evidence            5 of 9
 Comparing with Command Center                      6 checked
 ```
 
-Below the progress area, completed candidate cards appear immediately.
+Before **Find me new leads** is pressed, only the first two stages are complete and the run remains `crm_ready`.
+
+Below the progress area, completed candidate cards appear immediately after web research begins.
 
 The UI may show safe activity labels such as:
 
@@ -451,29 +462,30 @@ The worker should check cancellation before each provider call and periodically 
 
 A stopped run offers **Continue search**. Continuing resumes the remaining stage/work items using the same criteria and already collected evidence rather than deleting and recreating the run.
 
-Closing the assistant drawer should **not** implicitly delete or cancel a run. When reopened, General Command Center should be able to restore the latest relevant Scout run and its partial/completed candidates.
+Closing the assistant drawer should **not** implicitly delete or cancel a run. When reopened, General Command Center should be able to restore the latest relevant Scout run and its CRM/partial/completed candidate results.
 
 ## Job execution architecture
 
-Use a persistent DB-backed job/run model rather than keeping the whole search in one browser request.
+Use a persistent DB-backed run/job model rather than keeping the whole search in one browser request.
 
 Recommended flow:
 
 ```text
-POST /assistant/lead-discovery/interpret
-  -> normalized criteria + CRM matches
-
 POST /assistant/lead-scout/runs
-  -> create persistent run from approved criteria
+  body: { question }
+  -> create run, normalize criteria, search CRM, return crm_ready run + matches
+
+POST /assistant/lead-scout/runs/:id/start
+  -> explicit Find me new leads; begin web stages
 
 GET /assistant/lead-scout/runs/:id
-  -> status, progress, candidates, sources
+  -> criteria, CRM matches, status, progress, candidates, sources
 
 POST /assistant/lead-scout/runs/:id/stop
   -> request cancellation
 
 POST /assistant/lead-scout/runs/:id/continue
-  -> resume remaining work
+  -> resume remaining web work
 
 POST /assistant/lead-scout/runs/:id/candidates/:candidateId/deepen
   -> candidate-specific enrichment
@@ -484,6 +496,8 @@ POST /assistant/lead-scout/runs/:id/candidates/:candidateId/dismiss
 POST /assistant/lead-scout/runs/:id/candidates/:candidateId/save
   -> explicit CRM intake after final next-action confirmation
 ```
+
+The initial POST may complete deterministic criteria parsing/CRM matching synchronously when fast, but the run is persisted before those results are returned. If interpretation/search becomes slow, the same status model supports polling without changing the product contract.
 
 The frontend may poll the run endpoint on a short interval for durable progress. Streaming can be added where useful, but correctness must not depend on one long-lived browser connection.
 
@@ -510,7 +524,6 @@ Do not place the entire run into one enormous prompt. Smaller explicit stages im
 - partial-result persistence,
 - source quality,
 - retry behavior,
-- testing,
 - cost control.
 
 Each provider response must use cited public URLs and bounded structured JSON.
@@ -655,15 +668,18 @@ A high score should never erase uncertainty labels.
 
 ### Release 1 — Criteria + CRM-first discovery
 
+- persistent discovery run created from natural-language request,
 - parse month/year/date range/region/corridor/route intent,
 - structured CRM query for current matches,
 - likely recurring classification,
 - ranked result cards with reasons,
+- `crm_ready` pause,
 - Find me new leads CTA carrying preserved criteria.
 
 ### Release 2 — Persistent staged Lead Scout
 
 - run/candidate/source persistence,
+- explicit `/start` web-search transition,
 - source discovery,
 - candidate discovery,
 - CRM comparison,
@@ -716,13 +732,16 @@ Cover:
 - route/corridor fit,
 - canonical duplicate handling,
 - bounded ranking,
-- zero results.
+- zero results,
+- no web provider call before explicit `/start`.
 
 ### Lead Scout jobs
 
 Cover:
 
-- persistent run creation,
+- persistent run created before CRM response,
+- `crm_ready` pause,
+- explicit start required for web search,
 - stage transitions,
 - partial candidate persistence,
 - polling response,
@@ -779,16 +798,17 @@ A request like:
 
 should result in this experience:
 
-1. the assistant understands the date and geographic intent,
-2. it searches Command Center first,
+1. the assistant creates a persistent discovery run and understands the date/geographic intent,
+2. it searches Command Center first without invoking public web research,
 3. it returns existing confirmed matches and clearly labeled likely recurring matches,
-4. the user can choose **Find me new leads** without retyping the request,
-5. the Scout visibly shows what stage it is performing,
-6. partial web discoveries appear as persistent **Unsaved prospect** profile previews,
-7. candidates contain useful official/vendor/contact/fit evidence plus public review/social context when available,
-8. the user can stop and later continue the search without losing completed work,
-9. every candidate is compared against Command Center,
-10. nothing becomes a real lead until the user chooses **Save as lead**, reviews it, and sets the first action/follow-up.
+4. it pauses at `crm_ready`,
+5. the user can choose **Find me new leads** without retyping the request,
+6. the Scout visibly shows what stage it is performing,
+7. partial web discoveries appear as persistent **Unsaved prospect** profile previews,
+8. candidates contain useful official/vendor/contact/fit evidence plus public review/social context when available,
+9. the user can stop and later continue the search without losing completed work,
+10. every candidate is compared against Command Center,
+11. nothing becomes a real lead until the user chooses **Save as lead**, reviews it, and sets the first action/follow-up.
 
 ## Non-goals
 
