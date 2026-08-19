@@ -7,6 +7,7 @@ import { ProfileResearchPanel } from "@/components/profiles/profile-research-pan
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
+import { profileResearchGaps } from "@/features/profile-research/profile-research-gaps";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
@@ -33,6 +34,7 @@ export default function EventProfilePage() {
   const contactId = params.get("contactId") ?? undefined;
   const bookingId = params.get("bookingId") ?? undefined;
   const followUpId = params.get("followUpId") ?? undefined;
+  const researchRequested = params.get("research") === "1";
   const requestedAction = params.get("action");
   const action = requestedAction === "call" || requestedAction === "follow-up"
     ? (requestedAction as "call" | "follow-up")
@@ -91,6 +93,9 @@ export default function EventProfilePage() {
   }
 
   useEffect(() => { void loadProfile(); }, [profileId, contactId]);
+  useEffect(() => {
+    if (researchRequested && data && !profileEditing) setResearchOpen(true);
+  }, [researchRequested, Boolean(data), profileEditing]);
 
   async function saveProfileImage(dataUrl: string | null) {
     if (!profileId) return;
@@ -130,6 +135,7 @@ export default function EventProfilePage() {
     ? recoveredActNotes.filter((note) => note.toLowerCase().includes(normalizedActSearch))
     : recoveredActNotes;
   const profileLabel = String(data.name ?? data.organization?.name ?? data.place?.name ?? "Profile");
+  const researchGaps = profileResearchGaps(data);
 
   function toggleActNote(note: string) {
     setExpandedActNotes((current) => {
@@ -152,7 +158,11 @@ export default function EventProfilePage() {
         >
           <span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : "Back"}
         </button>
-        {!profileEditing && profileId ? <button className="button-secondary" type="button" onClick={() => setResearchOpen(true)}>Research profile</button> : null}
+        {!profileEditing && profileId ? (
+          <button className="button-secondary" type="button" onClick={() => setResearchOpen(true)}>
+            Research profile{researchGaps.length ? ` · ${researchGaps.length} gaps` : ""}
+          </button>
+        ) : null}
       </div>
 
       <SimpleFullProfile
