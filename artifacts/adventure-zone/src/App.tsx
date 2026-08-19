@@ -46,6 +46,7 @@ import RoutesPage from "@/pages/RoutesPage";
 import TripDetailPage from "@/pages/TripDetailPage";
 import CallWorkspacePage from "@/pages/CallWorkspacePage";
 import MobileCallLogPage from "@/pages/MobileCallLogPage";
+import NeedsAnswerPage from "@/pages/NeedsAnswerPage";
 import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
@@ -220,6 +221,7 @@ function AdminProtectedApp() {
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
           <Route path="/calls/workspace" component={CallWorkspacePage} />
           <Route path="/calls/mobile" component={MobileCallLogPage} />
+          <Route path="/needs-answer" component={NeedsAnswerPage} />
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
           <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
           <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
