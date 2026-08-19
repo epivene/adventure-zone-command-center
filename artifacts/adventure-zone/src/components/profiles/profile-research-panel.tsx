@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ExternalLink, Search, X } from "lucide-react";
 
 import { apiGet, apiPost } from "@/lib/auth-token";
+import { ProfileResearchNextActions } from "@/components/profiles/profile-research-next-actions";
 import { SourceScoutBulkIntake } from "@/components/profiles/source-scout-bulk-intake";
 
 type Source = {
@@ -336,7 +337,7 @@ export function ProfileResearchPanel({
                   </div>
                 </div>
                 {run.summary?.identity?.rationale ? <p className="mt-3 text-sm text-slate-700"><strong>Identity match:</strong> {run.summary.identity.rationale}</p> : null}
-                {run.summary?.deepSummary ? <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><p className="font-semibold">Booking research brief</p><p className="mt-1 whitespace-pre-wrap">{run.summary.deepSummary}</p></div> : null}
+                {run.summary?.deepSummary ? <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><p className="font-semibold">Booking research brief</p><p className="mt-1 whitespace-pre-wrap">{run.summary.deepSummary}</p><ProfileResearchNextActions sources={run.sources} onScout={openScout} /></div> : null}
               </section>
 
               {run.sources.some((source) => source.url) ? (
