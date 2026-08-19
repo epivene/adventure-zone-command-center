@@ -174,7 +174,7 @@ export default function ManagerEventWrapUpPage({ bookingId }: { bookingId: strin
           </select>
         </label>
         <label className="grid gap-1 text-sm font-semibold text-slate-700">
-          Event notes
+          Site / organizer notes
           <textarea className="min-h-20 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" disabled={!editable} value={siteCheck.eventNotes} onChange={(event) => updateSiteCheck({ eventNotes: event.target.value })} placeholder="Anything about the organizer, setup, site, utilities, weather, traffic, or operations." />
         </label>
         <label className="grid gap-1 text-sm font-semibold text-slate-700">
