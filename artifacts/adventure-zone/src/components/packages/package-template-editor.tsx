@@ -13,6 +13,7 @@ export type PackageTemplateSettingsRecord = {
   id: string;
   code: string;
   name: string;
+  basePriceCents?: number | null;
   baseAttractionCount: number;
   minimumAttractionCount?: number;
   maximumAttractionCount?: number;
@@ -22,6 +23,12 @@ export type PackageTemplateSettingsRecord = {
   setupNotes?: string | null;
   active: boolean;
 };
+
+function dollarsForInput(cents: number | null): string {
+  if (cents === null) return "";
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
+}
 
 function PackageTemplateForm({
   template,
@@ -35,6 +42,7 @@ function PackageTemplateForm({
   const [value, setValue] = useState<PackageTemplateInput>({
     id: template.id,
     name: template.name,
+    basePriceCents: template.basePriceCents ?? null,
     baseAttractionCount: template.baseAttractionCount,
     minimumAttractionCount:
       template.minimumAttractionCount ?? template.baseAttractionCount,
@@ -91,7 +99,7 @@ function PackageTemplateForm({
       className="grid gap-4 rounded-xl border border-slate-200 p-4"
       onSubmit={handleSubmit}
     >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <label className="grid gap-1 text-sm font-semibold">
           Stable code
           <input
@@ -109,6 +117,27 @@ function PackageTemplateForm({
             type="text"
             value={value.name}
           />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Base price ($)
+          <input
+            aria-label={`${template.name} base price`}
+            min={0}
+            onChange={(event) => {
+              const raw = event.currentTarget.value;
+              update(
+                "basePriceCents",
+                raw === "" ? null : Math.round(Number(raw) * 100),
+              );
+            }}
+            placeholder="Unknown"
+            step="0.01"
+            type="number"
+            value={dollarsForInput(value.basePriceCents)}
+          />
+          <span className="text-xs font-normal text-slate-500">
+            Editable starting price; leave blank if unknown.
+          </span>
         </label>
         <label className="grid gap-1 text-sm font-semibold">
           Suggested count
@@ -152,7 +181,7 @@ function PackageTemplateForm({
       </div>
 
       <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-        These are normal guidelines, not limits. Bookings can still go above or below this range.
+        Prices and package sizes are starting points, not locked quotes. Bookings can still be customized for each event.
       </p>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -249,7 +278,7 @@ export function PackageTemplateEditor({
           Package templates
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Set the normal package size and keep booking and setup knowledge in one place. Equipment remains editable for each event.
+          Set editable starting prices, normal package sizes, and booking/setup knowledge in one place. Equipment remains editable for each event.
         </p>
       </div>
       <div className="grid gap-4">
