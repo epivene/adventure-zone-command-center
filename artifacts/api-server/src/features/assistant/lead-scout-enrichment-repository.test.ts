@@ -80,7 +80,6 @@ describe("LeadScoutRepository candidate enrichment", () => {
       { ...fact, key: "bad_cross_run", sourceUrls: ["https://other.example/source"] },
     ]);
     await db.repository.replaceCandidateFacts(db.runId, db.candidateId, [{ ...fact, value: "2027-06-02" }]);
-
     const rows = (await db.client.query(`select fact_key, fact_value, source_ids from lead_scout_candidate_facts`)).rows;
     expect(rows).toHaveLength(1);
     expect(rows[0]?.fact_key).toBe("vendor_deadline");
@@ -92,11 +91,18 @@ describe("LeadScoutRepository candidate enrichment", () => {
     const db = await database(); clients.push(db.client);
     expect(await db.repository.queueCandidateDeepen(db.runId, "owner-b", db.candidateId)).toBe(false);
     expect(await db.repository.queueCandidateDeepen(db.runId, "owner-a", db.candidateId)).toBe(true);
-
     const run = await db.repository.getRun({ actorId: "owner-a", runId: db.runId });
     expect(run?.status).toBe("running");
     expect(run?.stage).toBe("candidate_enrichment");
     expect(run?.candidates[0]?.enrichmentStatus).toBe("needs_enrichment");
+  });
+
+  it("persists Not a fit as a candidate review decision without deleting the prospect or touching CRM", async () => {
+    const db = await database(); clients.push(db.client);
+    expect(await db.repository.dismissCandidate(db.runId, "owner-b", db.candidateId)).toBe(false);
+    expect(await db.repository.dismissCandidate(db.runId, "owner-a", db.candidateId)).toBe(true);
+    const rows = (await db.client.query(`select id, review_status, saved_organization_id, saved_booking_id from lead_scout_candidates where id=$1`, [db.candidateId])).rows;
+    expect(rows).toEqual([{ id: db.candidateId, review_status: "dismissed", saved_organization_id: null, saved_booking_id: null }]);
   });
 
   it("does not reactivate dismissed or saved candidates", async () => {
