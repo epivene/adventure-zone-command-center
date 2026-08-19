@@ -14,7 +14,10 @@ function harness(results: Array<"idle" | "progress">) {
     cancel(handle) { cancelled.push(handle as object); },
   };
   const worker = {
-    runOne: vi.fn(async () => ({ kind: results.shift() ?? "idle" as const })),
+    runOne: vi.fn(async (): Promise<{ kind: "idle" | "progress" }> => {
+      const kind: "idle" | "progress" = results.shift() ?? "idle";
+      return { kind };
+    }),
   };
   const loop = new LeadScoutWorkerLoop({
     worker,
@@ -31,7 +34,8 @@ describe("LeadScoutWorkerLoop", () => {
     h.loop.start();
     expect(h.scheduled[0]?.delayMs).toBe(0);
     h.scheduled.shift()?.task();
-    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(h.worker.runOne).toHaveBeenCalledTimes(1);
     expect(h.scheduled[0]?.delayMs).toBe(2000);
     await h.loop.close();
@@ -41,7 +45,8 @@ describe("LeadScoutWorkerLoop", () => {
     const h = harness(["progress"]);
     h.loop.start();
     h.scheduled.shift()?.task();
-    await Promise.resolve(); await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(h.scheduled[0]?.delayMs).toBe(0);
     await h.loop.close();
   });
