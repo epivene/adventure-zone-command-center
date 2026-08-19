@@ -17,6 +17,7 @@ type Matcher = (
 type WorkerRepository = Pick<
   LeadScoutRepository,
   | "claimRunnable"
+  | "renewLease"
   | "getRun"
   | "isCancellationRequested"
   | "upsertSources"
@@ -67,6 +68,7 @@ export class LeadScoutWorker {
   private readonly matcher: Matcher;
   private readonly cancellationPollMs: number;
   private readonly leaseMs: number;
+  private readonly leaseHeartbeatMs: number;
 
   constructor(options: {
     repository?: WorkerRepository;
@@ -74,30 +76,40 @@ export class LeadScoutWorker {
     matcher?: Matcher;
     cancellationPollMs?: number;
     leaseMs?: number;
+    leaseHeartbeatMs?: number;
   } = {}) {
     this.repository = options.repository ?? new LeadScoutRepository();
     this.provider = options.provider ?? new OpenAiLeadScoutProvider();
     this.matcher = options.matcher ?? ((events) => matchRelatedEventsAgainstCrm(db, events));
     this.cancellationPollMs = Math.max(1, options.cancellationPollMs ?? 500);
     this.leaseMs = Math.max(5_000, options.leaseMs ?? 60_000);
+    this.leaseHeartbeatMs = Math.max(1_000, Math.min(options.leaseHeartbeatMs ?? 10_000, Math.floor(this.leaseMs / 2)));
   }
 
   private async cancelled(runId: string) {
     return this.repository.isCancellationRequested(runId);
   }
 
-  private async providerCall<T>(runId: string, operation: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  private async providerCall<T>(
+    runId: string,
+    workerId: string,
+    operation: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
     const controller = new AbortController();
     if (await this.cancelled(runId)) controller.abort();
-    const timer = setInterval(() => {
+    const cancelTimer = setInterval(() => {
       void this.cancelled(runId)
         .then((cancelled) => { if (cancelled) controller.abort(); })
         .catch(() => undefined);
     }, this.cancellationPollMs);
+    const leaseTimer = setInterval(() => {
+      void this.repository.renewLease(runId, workerId, new Date(), this.leaseMs).catch(() => undefined);
+    }, this.leaseHeartbeatMs);
     try {
       return await operation(controller.signal);
     } finally {
-      clearInterval(timer);
+      clearInterval(cancelTimer);
+      clearInterval(leaseTimer);
     }
   }
 
@@ -116,7 +128,7 @@ export class LeadScoutWorker {
 
     try {
       if (claim.stage === "source_discovery") {
-        const sources = await this.providerCall(claim.runId, (signal) =>
+        const sources = await this.providerCall(claim.runId, claim.workerId, (signal) =>
           this.provider.discoverSources(claim.criteria, signal));
         await this.repository.upsertSources(claim.runId, sources);
         if (await this.cancelled(claim.runId)) {
@@ -135,7 +147,7 @@ export class LeadScoutWorker {
         const run = await this.repository.getRun({ actorId: claim.actorId, runId: claim.runId });
         if (!run) throw new Error("Lead Scout run disappeared during candidate discovery.");
         const sources: LeadScoutSourceInput[] = run.sources.map((source) => ({ ...source, excerpt: "" }));
-        const candidates = await this.providerCall(claim.runId, (signal) =>
+        const candidates = await this.providerCall(claim.runId, claim.workerId, (signal) =>
           this.provider.discoverCandidates({ criteria: claim.criteria, sources, signal }));
         await this.repository.upsertCandidates(claim.runId, candidates);
         if (await this.cancelled(claim.runId)) {
