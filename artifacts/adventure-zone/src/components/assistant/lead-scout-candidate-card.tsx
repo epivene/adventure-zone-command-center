@@ -29,19 +29,29 @@ function evidenceLabel(fact: LeadScoutCandidateFact) {
   return fact.category === "social_review" ? "Public social/review signal" : fact.key.replace(/_/g, " ");
 }
 
-export function LeadScoutCandidateCard({ candidate, sources, onResearchDeeper }: {
+export function LeadScoutCandidateCard({
+  candidate,
+  sources,
+  canDismiss,
+  onResearchDeeper,
+  onNotFit,
+}: {
   candidate: LeadScoutCandidate;
   sources: LeadScoutSource[];
+  canDismiss: boolean;
   onResearchDeeper(candidateId: string): void;
+  onNotFit(candidateId: string): void;
 }) {
   const location = [candidate.city, candidate.region].filter(Boolean).join(", ");
   const badge = candidate.crmMatchStatus === "existing" ? "Already in Command Center"
     : candidate.crmMatchStatus === "possible_match" ? "Possible match" : "Unsaved prospect";
   const relevantSourceIds = new Set(candidate.facts.flatMap((fact) => fact.sourceIds));
   const relevantSources = sources.filter((source) => relevantSourceIds.has(source.id));
-  const canDeepen = candidate.reviewStatus !== "dismissed" && candidate.reviewStatus !== "saved";
+  const reviewable = candidate.reviewStatus !== "dismissed" && candidate.reviewStatus !== "saved";
+  const canDeepen = reviewable;
   const deepResearchPending = candidate.enrichmentStatus === "enriching"
     || (candidate.enrichmentStatus === "needs_enrichment" && Boolean(candidate.deepenRequestedAt));
+  const showNotFit = reviewable && candidate.crmMatchStatus !== "existing";
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -108,6 +118,17 @@ export function LeadScoutCandidateCard({ candidate, sources, onResearchDeeper }:
         {canDeepen ? (
           <button className="button-secondary" disabled={deepResearchPending} onClick={() => onResearchDeeper(candidate.id)} type="button">
             {deepResearchPending ? "Researching deeper…" : "Research deeper"}
+          </button>
+        ) : null}
+        {showNotFit ? (
+          <button
+            className="button-secondary"
+            disabled={!canDismiss}
+            onClick={() => onNotFit(candidate.id)}
+            title={canDismiss ? undefined : "Stop the active Scout before dismissing a prospect."}
+            type="button"
+          >
+            Not a fit
           </button>
         ) : null}
       </div>
