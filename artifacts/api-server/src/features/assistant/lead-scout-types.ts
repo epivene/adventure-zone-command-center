@@ -30,6 +30,45 @@ export type LeadScoutSourceCategory =
   | "review_forum"
   | "other";
 
+export type LeadScoutEvidenceCategory =
+  | "identity"
+  | "schedule"
+  | "vendor"
+  | "attendance"
+  | "logistics"
+  | "recurrence"
+  | "social_review"
+  | "competition"
+  | "contact";
+
+export type LeadScoutEvidenceFact = {
+  key: string;
+  value: string;
+  category: LeadScoutEvidenceCategory;
+  confidence: "high" | "medium" | "low";
+  sourceUrls: string[];
+  rationale: string;
+};
+
+export type LeadScoutFitInput = {
+  eventName: string;
+  eventType: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  applicationDeadline: string | null;
+  now: Date;
+  hasPublicSource: boolean;
+  hasFamilySignal: boolean;
+  hasOutdoorSignal: boolean;
+  hasVendorPath: boolean;
+  hasEntertainmentPath: boolean;
+  hasOrganizerContact: boolean;
+  hasAttendanceEvidence: boolean;
+  hasLogisticsEvidence: boolean;
+  hasExclusiveCarnivalProvider: boolean;
+  existenceConfidence: "high" | "medium" | "low";
+};
+
 export type LeadDiscoveryCriteria = {
   originalQuestion: string;
   dateFrom: string | null;
