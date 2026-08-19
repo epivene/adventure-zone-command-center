@@ -5,17 +5,15 @@ export function NeedsAttention({
   newLeadCount,
   contractCount,
   visibleRouteWarningCount,
-  newLeadHref,
 }: {
   followUpCount: number;
   newLeadCount: number;
   contractCount: number;
   visibleRouteWarningCount: number;
-  newLeadHref?: string;
 }) {
   const items = [
     followUpCount > 0 ? { label: "Follow-ups due", count: followUpCount, href: "/today#follow-ups" } : null,
-    newLeadCount > 0 ? { label: "New leads", count: newLeadCount, href: newLeadHref ?? "/profiles" } : null,
+    newLeadCount > 0 ? { label: "New leads", count: newLeadCount, href: "/bookings?status=new_lead" } : null,
     contractCount > 0 ? { label: "Contracts needing attention", count: contractCount, href: "/bookings" } : null,
     visibleRouteWarningCount > 0 ? { label: "Route issues", count: visibleRouteWarningCount, href: "/manager-issues" } : null,
   ].filter((item): item is { label: string; count: number; href: string } => Boolean(item));

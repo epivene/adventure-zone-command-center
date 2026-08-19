@@ -141,8 +141,6 @@ export default function TodayPage() {
   const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({ ...e, startsAt: e.startsAt ? new Date(e.startsAt) : null }));
   const nextStepItems = (dashboard.needsFollowUpPlan ?? []).filter((booking: any) => !hiddenNextSteps.has(booking.id));
   const displayedNextStepItems = showAllNextSteps ? nextStepItems : nextStepItems.slice(0, 8);
-  const firstNewLead = nextStepItems.find((b: any) => b.status === "new_lead");
-  const newLeadHref = firstNewLead ? eventProfileHref({ organizationId: firstNewLead.organizationId ?? null, contactId: firstNewLead.primaryContactId, bookingId: firstNewLead.id, mode: "prospect" }) ?? undefined : undefined;
   const overdueCount = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
   const queueCount = followUps.length + nextStepItems.length;
 
@@ -201,7 +199,7 @@ export default function TodayPage() {
 
       <section className="grid gap-3" aria-labelledby="needs-attention-title">
         <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Exceptions</p><h2 className="mt-1 text-2xl font-bold" id="needs-attention-title">Needs Attention</h2></div>
-        <NeedsAttention contractCount={dashboard.contractCount ?? 0} followUpCount={dashboard.followUpCount ?? 0} newLeadCount={dashboard.newLeadCount ?? 0} newLeadHref={newLeadHref} visibleRouteWarningCount={dashboard.visibleRouteWarningCount ?? 0} />
+        <NeedsAttention contractCount={dashboard.contractCount ?? 0} followUpCount={dashboard.followUpCount ?? 0} newLeadCount={dashboard.newLeadCount ?? 0} visibleRouteWarningCount={dashboard.visibleRouteWarningCount ?? 0} />
       </section>
 
       <section className="grid gap-3" aria-labelledby="coming-up-title">

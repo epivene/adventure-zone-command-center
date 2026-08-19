@@ -8,6 +8,7 @@ import type { BookingListRecord } from "@/features/bookings/booking-repository";
 import {
   bookingStatusValues,
   probabilityValues,
+  type BookingStatus,
 } from "@/features/bookings/booking-types";
 import {
   isBookingCurrentOrFuture,
@@ -40,11 +41,13 @@ function formatLabel(value: string) {
 export function BookingList({
   bookings,
   now = new Date(),
+  initialStatus = "",
 }: {
   bookings: BookingListItem[];
   now?: Date;
+  initialStatus?: BookingStatus | "";
 }) {
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
   const [probability, setProbability] = useState("");
   const [region, setRegion] = useState("");
   const [travelLegId, setTravelLegId] = useState("");
@@ -104,7 +107,7 @@ export function BookingList({
       >
         <label className="grid gap-1 text-sm font-semibold">
           Booking status
-          <select onChange={(event) => setStatus(event.target.value)} value={status}>
+          <select onChange={(event) => setStatus(event.target.value as BookingStatus | "")} value={status}>
             <option value="">All statuses</option>
             {bookingStatusValues.map((value) => (
               <option key={value} value={value}>
