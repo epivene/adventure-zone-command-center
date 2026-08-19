@@ -157,6 +157,7 @@ export function SimpleFullProfile({
   function openNoteComposer() {
     setNoteError("");
     setNoteComposerOpen(true);
+    window.setTimeout(() => document.getElementById("profile-activity-timeline")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   async function saveNote() {
@@ -294,7 +295,7 @@ export function SimpleFullProfile({
           </dl>
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section id="profile-activity-timeline" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
             <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
@@ -333,6 +334,7 @@ export function SimpleFullProfile({
                 deleteActivity={deleteActivityAction}
                 loadRevisions={listActivityRevisionsAction}
                 loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
+                collapseLongBodies
               />
             )}
           </div>
