@@ -8,7 +8,7 @@ const uuidSchema = z.uuid().transform((value) => value.toLowerCase());
 
 type LeadScoutRouteService = Pick<
   LeadScoutService,
-  "createCrmDiscovery" | "getRun" | "getLatestRun" | "startWeb" | "stopWeb" | "continueWeb" | "deepenCandidate"
+  "createCrmDiscovery" | "getRun" | "getLatestRun" | "startWeb" | "stopWeb" | "continueWeb" | "deepenCandidate" | "dismissCandidate"
 >;
 
 function actorId(req: any) {
@@ -26,6 +26,10 @@ function sendError(req: any, res: any, error: unknown) {
   }
   if (error instanceof Error && error.message === "LEAD_SCOUT_CANDIDATE_NOT_DEEPENABLE") {
     res.status(409).json({ error: "That prospect cannot be researched deeper in its current state." });
+    return;
+  }
+  if (error instanceof Error && error.message === "LEAD_SCOUT_CANDIDATE_NOT_DISMISSIBLE") {
+    res.status(409).json({ error: "Stop the active Scout before marking this prospect Not a fit." });
     return;
   }
   req.log?.error?.({ err: error }, "Lead Scout route failed");
@@ -73,6 +77,15 @@ export function createAssistantLeadScoutRouter(
     return { actorId: actorId(req), runId: parsed.data };
   }
 
+  function parseCandidate(req: any, res: any) {
+    const parsed = uuidSchema.safeParse(req.params.candidateId);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Review the Lead Scout prospect id." });
+      return null;
+    }
+    return parsed.data;
+  }
+
   router.post("/assistant/lead-scout/runs/:runId/start", async (req, res): Promise<void> => {
     const input = parseRun(req, res); if (!input) return;
     try { res.json({ run: await service.startWeb(input) }); } catch (error) { sendError(req, res, error); }
@@ -90,13 +103,19 @@ export function createAssistantLeadScoutRouter(
 
   router.post("/assistant/lead-scout/runs/:runId/candidates/:candidateId/deepen", async (req, res): Promise<void> => {
     const input = parseRun(req, res); if (!input) return;
-    const candidateId = uuidSchema.safeParse(req.params.candidateId);
-    if (!candidateId.success) {
-      res.status(400).json({ error: "Review the Lead Scout prospect id." });
-      return;
-    }
+    const candidateId = parseCandidate(req, res); if (!candidateId) return;
     try {
-      res.json({ run: await service.deepenCandidate({ ...input, candidateId: candidateId.data }) });
+      res.json({ run: await service.deepenCandidate({ ...input, candidateId }) });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  });
+
+  router.post("/assistant/lead-scout/runs/:runId/candidates/:candidateId/dismiss", async (req, res): Promise<void> => {
+    const input = parseRun(req, res); if (!input) return;
+    const candidateId = parseCandidate(req, res); if (!candidateId) return;
+    try {
+      res.json({ run: await service.dismissCandidate({ ...input, candidateId }) });
     } catch (error) {
       sendError(req, res, error);
     }
