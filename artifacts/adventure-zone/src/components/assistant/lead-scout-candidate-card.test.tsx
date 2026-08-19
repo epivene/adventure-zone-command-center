@@ -30,9 +30,21 @@ function candidate(status: LeadScoutCandidate["crmMatchStatus"]): LeadScoutCandi
   };
 }
 
+function renderCard(item: LeadScoutCandidate, options?: { canDismiss?: boolean; onResearchDeeper?: ReturnType<typeof vi.fn>; onNotFit?: ReturnType<typeof vi.fn> }) {
+  return render(
+    <LeadScoutCandidateCard
+      candidate={item}
+      sources={sources}
+      canDismiss={options?.canDismiss ?? true}
+      onResearchDeeper={options?.onResearchDeeper ?? vi.fn()}
+      onNotFit={options?.onNotFit ?? vi.fn()}
+    />,
+  );
+}
+
 describe("LeadScoutCandidateCard", () => {
   it("shows enriched new prospects as compact unsaved profiles", () => {
-    render(<LeadScoutCandidateCard candidate={candidate("new_prospect")} sources={sources} onResearchDeeper={vi.fn()} />);
+    renderCard(candidate("new_prospect"));
     expect(screen.getByText("Unsaved prospect")).toBeTruthy();
     expect(screen.getByText("Silver Valley Days")).toBeTruthy();
     expect(screen.getByText(/Sep 11.*Sep 13/i)).toBeTruthy();
@@ -43,10 +55,11 @@ describe("LeadScoutCandidateCard", () => {
     expect(screen.getByText(/Confirm available attraction footprint/i)).toBeTruthy();
     expect(screen.getByText(/No official power requirements/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Research deeper" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Not a fit" })).toBeTruthy();
   });
 
   it("shows source-backed research details and labels social/review evidence qualitatively", () => {
-    render(<LeadScoutCandidateCard candidate={candidate("new_prospect")} sources={sources} onResearchDeeper={vi.fn()} />);
+    renderCard(candidate("new_prospect"));
     fireEvent.click(screen.getByText("Research details"));
     expect(screen.getByText(/Public social\/review signal/i)).toBeTruthy();
     expect(screen.getByText(/Public comments and photos show strong family turnout/i)).toBeTruthy();
@@ -56,31 +69,63 @@ describe("LeadScoutCandidateCard", () => {
 
   it("fires Research deeper and disables duplicate requests while enriching", () => {
     const onResearchDeeper = vi.fn();
-    const { rerender } = render(<LeadScoutCandidateCard candidate={candidate("new_prospect")} sources={sources} onResearchDeeper={onResearchDeeper} />);
+    const view = renderCard(candidate("new_prospect"), { onResearchDeeper });
     fireEvent.click(screen.getByRole("button", { name: "Research deeper" }));
     expect(onResearchDeeper).toHaveBeenCalledWith("c1");
 
-    rerender(<LeadScoutCandidateCard candidate={{ ...candidate("new_prospect"), enrichmentStatus: "enriching" }} sources={sources} onResearchDeeper={onResearchDeeper} />);
+    view.rerender(
+      <LeadScoutCandidateCard
+        candidate={{ ...candidate("new_prospect"), enrichmentStatus: "enriching" }}
+        sources={sources}
+        canDismiss={false}
+        onResearchDeeper={onResearchDeeper}
+        onNotFit={vi.fn()}
+      />,
+    );
     expect(screen.getByRole("button", { name: "Researching deeper…" })).toHaveProperty("disabled", true);
   });
 
+  it("fires Not a fit only when the Scout is not actively running", () => {
+    const onNotFit = vi.fn();
+    const view = renderCard(candidate("new_prospect"), { canDismiss: false, onNotFit });
+    expect(screen.getByRole("button", { name: "Not a fit" })).toHaveProperty("disabled", true);
+
+    view.rerender(
+      <LeadScoutCandidateCard
+        candidate={candidate("new_prospect")}
+        sources={sources}
+        canDismiss
+        onResearchDeeper={vi.fn()}
+        onNotFit={onNotFit}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not a fit" }));
+    expect(onNotFit).toHaveBeenCalledWith("c1");
+  });
+
   it("keeps a failed enrichment visible as Needs more research", () => {
-    render(<LeadScoutCandidateCard
-      candidate={{ ...candidate("new_prospect"), enrichmentStatus: "enrichment_failed", enrichmentError: "Vendor page unavailable" }}
-      sources={sources}
-      onResearchDeeper={vi.fn()}
-    />);
+    renderCard({ ...candidate("new_prospect"), enrichmentStatus: "enrichment_failed", enrichmentError: "Vendor page unavailable" });
     expect(screen.getByText("Needs more research")).toBeTruthy();
     expect(screen.getByText(/Vendor page unavailable/i)).toBeTruthy();
   });
 
   it("labels existing and possible CRM matches instead of presenting them as new", () => {
-    const { rerender } = render(<LeadScoutCandidateCard candidate={candidate("existing")} sources={sources} onResearchDeeper={vi.fn()} />);
+    const view = renderCard(candidate("existing"));
     expect(screen.getByText("Already in Command Center")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open profile" })).toHaveAttribute("href", "/profiles/org-1");
+    expect(screen.queryByRole("button", { name: "Not a fit" })).toBeNull();
 
-    rerender(<LeadScoutCandidateCard candidate={candidate("possible_match")} sources={sources} onResearchDeeper={vi.fn()} />);
+    view.rerender(
+      <LeadScoutCandidateCard
+        candidate={candidate("possible_match")}
+        sources={sources}
+        canDismiss
+        onResearchDeeper={vi.fn()}
+        onNotFit={vi.fn()}
+      />,
+    );
     expect(screen.getByText("Possible match")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review match" })).toHaveAttribute("href", "/profiles/org-1");
+    expect(screen.getByRole("button", { name: "Not a fit" })).toBeTruthy();
   });
 });
