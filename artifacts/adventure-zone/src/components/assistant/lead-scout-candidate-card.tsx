@@ -8,12 +8,7 @@ function formatDate(value: string | null) {
   if (!value) return null;
   const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(date);
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date);
 }
 
 function dateRange(candidate: LeadScoutCandidate) {
@@ -21,8 +16,7 @@ function dateRange(candidate: LeadScoutCandidate) {
   const end = formatDate(candidate.endsAt);
   if (!start) return "Date still being researched";
   if (!end || end === start) return start;
-  const startShort = start.replace(/, \d{4}$/, "");
-  return `${startShort} – ${end}`;
+  return `${start.replace(/, \d{4}$/, "")} – ${end}`;
 }
 
 function factValue(fact: LeadScoutCandidateFact) {
@@ -35,25 +29,19 @@ function evidenceLabel(fact: LeadScoutCandidateFact) {
   return fact.category === "social_review" ? "Public social/review signal" : fact.key.replace(/_/g, " ");
 }
 
-export function LeadScoutCandidateCard({
-  candidate,
-  sources,
-  onResearchDeeper,
-}: {
+export function LeadScoutCandidateCard({ candidate, sources, onResearchDeeper }: {
   candidate: LeadScoutCandidate;
   sources: LeadScoutSource[];
   onResearchDeeper(candidateId: string): void;
 }) {
   const location = [candidate.city, candidate.region].filter(Boolean).join(", ");
-  const badge = candidate.crmMatchStatus === "existing"
-    ? "Already in Command Center"
-    : candidate.crmMatchStatus === "possible_match"
-      ? "Possible match"
-      : "Unsaved prospect";
+  const badge = candidate.crmMatchStatus === "existing" ? "Already in Command Center"
+    : candidate.crmMatchStatus === "possible_match" ? "Possible match" : "Unsaved prospect";
   const relevantSourceIds = new Set(candidate.facts.flatMap((fact) => fact.sourceIds));
   const relevantSources = sources.filter((source) => relevantSourceIds.has(source.id));
   const canDeepen = candidate.reviewStatus !== "dismissed" && candidate.reviewStatus !== "saved";
-  const enriching = candidate.enrichmentStatus === "enriching";
+  const deepResearchPending = candidate.enrichmentStatus === "enriching"
+    || (candidate.enrichmentStatus === "needs_enrichment" && Boolean(candidate.deepenRequestedAt));
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -64,7 +52,6 @@ export function LeadScoutCandidateCard({
         </div>
         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{badge}</span>
       </div>
-
       <p className="mt-2 text-sm font-semibold text-slate-800">{dateRange(candidate)}</p>
       {candidate.eventType ? <p className="mt-1 text-xs text-slate-500">{candidate.eventType}</p> : null}
 
@@ -77,9 +64,7 @@ export function LeadScoutCandidateCard({
 
       <div className="mt-3 grid gap-2 text-sm text-slate-700">
         {candidate.vendorSummary ? <p><span className="font-semibold">Opportunity:</span> {candidate.vendorSummary}</p> : null}
-        {candidate.organizerName || candidate.organizerEmail || candidate.organizerPhone ? (
-          <p><span className="font-semibold">Contact:</span> {[candidate.organizerName, candidate.organizerEmail, candidate.organizerPhone].filter(Boolean).join(" · ")}</p>
-        ) : null}
+        {candidate.organizerName || candidate.organizerEmail || candidate.organizerPhone ? <p><span className="font-semibold">Contact:</span> {[candidate.organizerName, candidate.organizerEmail, candidate.organizerPhone].filter(Boolean).join(" · ")}</p> : null}
         {candidate.attendanceSummary ? <p><span className="font-semibold">Attendance:</span> {candidate.attendanceSummary}</p> : null}
         {candidate.applicationDeadline ? <p><span className="font-semibold">Application deadline:</span> {formatDate(candidate.applicationDeadline)}</p> : null}
         {candidate.recurrenceSummary ? <p><span className="font-semibold">History:</span> {candidate.recurrenceSummary}</p> : null}
@@ -89,40 +74,28 @@ export function LeadScoutCandidateCard({
         <div className="mt-3 rounded-lg bg-slate-50 p-3">
           <p className="text-sm font-bold text-slate-900">Adventure Zone fit: {candidate.fitScore}/100</p>
           {candidate.fitReasons.length ? <p className="mt-1 text-xs text-slate-600">{candidate.fitReasons.slice(0, 3).join(" · ")}</p> : candidate.fitRationale ? <p className="mt-1 text-xs text-slate-600">{candidate.fitRationale}</p> : null}
-          {candidate.fitCautions.length ? (
-            <ul className="mt-2 grid gap-1 text-xs text-amber-800">
-              {candidate.fitCautions.slice(0, 3).map((caution) => <li key={caution}>Caution: {caution}</li>)}
-            </ul>
-          ) : null}
+          {candidate.fitCautions.length ? <ul className="mt-2 grid gap-1 text-xs text-amber-800">{candidate.fitCautions.slice(0, 3).map((caution) => <li key={caution}>Caution: {caution}</li>)}</ul> : null}
         </div>
       ) : null}
 
-      {candidate.coverageGaps.length ? (
-        <p className="mt-3 text-xs text-slate-500">Still missing: {candidate.coverageGaps.slice(0, 2).join(" · ")}</p>
-      ) : null}
+      {candidate.coverageGaps.length ? <p className="mt-3 text-xs text-slate-500">Still missing: {candidate.coverageGaps.slice(0, 2).join(" · ")}</p> : null}
 
       <details className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
         <summary className="cursor-pointer text-sm font-semibold text-slate-800">Research details</summary>
         <div className="mt-3 grid gap-3">
-          {candidate.facts.length ? (
-            <ul className="grid gap-2">
-              {candidate.facts.map((fact) => (
-                <li className="rounded-lg bg-white p-2 text-xs text-slate-700" key={fact.id}>
-                  <p className="font-bold text-slate-900">{evidenceLabel(fact)}</p>
-                  <p className="mt-0.5">{factValue(fact)}</p>
-                  <p className="mt-1 text-slate-500">{fact.confidence} confidence · {fact.rationale}</p>
-                </li>
-              ))}
-            </ul>
-          ) : <p className="text-xs text-slate-500">No detailed evidence has been saved yet.</p>}
+          {candidate.facts.length ? <ul className="grid gap-2">{candidate.facts.map((fact) => (
+            <li className="rounded-lg bg-white p-2 text-xs text-slate-700" key={fact.id}>
+              <p className="font-bold text-slate-900">{evidenceLabel(fact)}</p>
+              <p className="mt-0.5">{factValue(fact)}</p>
+              <p className="mt-1 text-slate-500">{fact.confidence} confidence · {fact.rationale}</p>
+            </li>
+          ))}</ul> : <p className="text-xs text-slate-500">No detailed evidence has been saved yet.</p>}
           {relevantSources.length ? (
             <div>
-              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Sources</p>
-              <div className="mt-1 flex flex-wrap gap-2">
-                {relevantSources.map((source) => (
-                  <a className="text-xs font-semibold text-orange-700 hover:underline" href={source.url} key={source.id} rel="noreferrer" target="_blank">{source.title}</a>
-                ))}
-              </div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Open sources</p>
+              <div className="mt-1 flex flex-wrap gap-2">{relevantSources.map((source) => (
+                <a className="text-xs font-semibold text-orange-700 hover:underline" href={source.url} key={source.id} rel="noreferrer" target="_blank">{source.title}</a>
+              ))}</div>
             </div>
           ) : null}
         </div>
@@ -133,8 +106,8 @@ export function LeadScoutCandidateCard({
         {candidate.crmMatchStatus === "existing" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Open profile</a> : null}
         {candidate.crmMatchStatus === "possible_match" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Review match</a> : null}
         {canDeepen ? (
-          <button className="button-secondary" disabled={enriching} onClick={() => onResearchDeeper(candidate.id)} type="button">
-            {enriching ? "Researching deeper…" : "Research deeper"}
+          <button className="button-secondary" disabled={deepResearchPending} onClick={() => onResearchDeeper(candidate.id)} type="button">
+            {deepResearchPending ? "Researching deeper…" : "Research deeper"}
           </button>
         ) : null}
       </div>
