@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupStep } from "./lib/startup-step";
@@ -11,6 +13,11 @@ import { ensureBookingProbabilitySchema } from "./features/bookings/booking-prob
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
+import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
+import {
+  LeadScoutWorkerLoop,
+  systemLeadScoutWorkerLoopScheduler,
+} from "./features/assistant/lead-scout-worker-loop";
 import { ensureCrewWorkerLegMembershipSchema } from "./features/leg-manager/crew-worker-membership-schema";
 import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
@@ -95,12 +102,20 @@ logger.info(
     : "No imported location families need consolidation",
 );
 
+const leadScoutLoop = new LeadScoutWorkerLoop({
+  worker: new LeadScoutWorker(),
+  workerId: `lead-scout-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemLeadScoutWorkerLoopScheduler,
+});
+
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let shutdownRequested = false;
 
 const server = app.listen(port, async () => {
   logger.info({ port }, "Server listening");
+  if (!shutdownRequested) leadScoutLoop.start();
 
   try {
     extractionRuntimePromise = createActExtractionRuntime();
@@ -129,7 +144,10 @@ const shutdown = createActServerShutdown({
   async closeRuntime() {
     const runtime =
       extractionRuntime ?? (await extractionRuntimePromise?.catch(() => null));
-    await runtime?.close();
+    await Promise.all([
+      runtime?.close(),
+      leadScoutLoop.close(),
+    ]);
   },
   closeServer() {
     return new Promise<void>((resolve, reject) => {

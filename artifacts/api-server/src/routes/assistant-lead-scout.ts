@@ -8,7 +8,7 @@ const runIdSchema = z.uuid().transform((value) => value.toLowerCase());
 
 type LeadScoutRouteService = Pick<
   LeadScoutService,
-  "createCrmDiscovery" | "getRun" | "getLatestRun"
+  "createCrmDiscovery" | "getRun" | "getLatestRun" | "startWeb" | "stopWeb" | "continueWeb"
 >;
 
 function actorId(req: any) {
@@ -18,6 +18,10 @@ function actorId(req: any) {
 function sendError(req: any, res: any, error: unknown) {
   if (error instanceof Error && error.message === "LEAD_SCOUT_RUN_NOT_FOUND") {
     res.status(404).json({ error: "Lead Scout run not found." });
+    return;
+  }
+  if (error instanceof Error && error.message === "LEAD_SCOUT_INVALID_STATE") {
+    res.status(409).json({ error: "That Lead Scout action is not available in the run's current state." });
     return;
   }
   req.log?.error?.({ err: error }, "Lead Scout route failed");
@@ -54,6 +58,45 @@ export function createAssistantLeadScoutRouter(
     try {
       const run = await service.getLatestRun(actorId(req));
       res.json({ run });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  });
+
+  async function parseControl(req: any, res: any) {
+    const parsed = runIdSchema.safeParse(req.params.runId);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Review the Lead Scout run id." });
+      return null;
+    }
+    return { actorId: actorId(req), runId: parsed.data };
+  }
+
+  router.post("/assistant/lead-scout/runs/:runId/start", async (req, res): Promise<void> => {
+    const input = await parseControl(req, res);
+    if (!input) return;
+    try {
+      res.json({ run: await service.startWeb(input) });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  });
+
+  router.post("/assistant/lead-scout/runs/:runId/stop", async (req, res): Promise<void> => {
+    const input = await parseControl(req, res);
+    if (!input) return;
+    try {
+      res.json({ run: await service.stopWeb(input) });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  });
+
+  router.post("/assistant/lead-scout/runs/:runId/continue", async (req, res): Promise<void> => {
+    const input = await parseControl(req, res);
+    if (!input) return;
+    try {
+      res.json({ run: await service.continueWeb(input) });
     } catch (error) {
       sendError(req, res, error);
     }

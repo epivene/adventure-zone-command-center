@@ -2,6 +2,8 @@ import type {
   AssistantLeadMatch,
   LeadScoutRunView,
 } from "@/features/assistant/assistant-types";
+import { LeadScoutCandidateCard } from "./lead-scout-candidate-card";
+import { LeadScoutProgress } from "./lead-scout-progress";
 
 function formatSavedDate(value: string | null) {
   if (!value) return null;
@@ -93,7 +95,7 @@ function MatchGroup({
       </div>
       {matches.map((match) => (
         <MatchCard
-          key={match.organizationId}
+          key={`${match.organizationId}:${match.bookingId ?? "profile"}`}
           match={match}
           requestedYear={requestedYear}
           onOpenProfile={onOpenProfile}
@@ -110,16 +112,21 @@ export function LeadDiscoveryResults({
   onOpenProfile,
   onUseContext,
   onFindNewLeads,
+  onStopSearch = () => undefined,
+  onContinueSearch = () => undefined,
 }: {
   run: LeadScoutRunView;
   webScoutAvailable: boolean;
   onOpenProfile(match: AssistantLeadMatch): void;
   onUseContext(match: AssistantLeadMatch): void;
   onFindNewLeads(): void;
+  onStopSearch?: () => void;
+  onContinueSearch?: () => void;
 }) {
   const confirmed = run.crmMatches.filter((match) => match.dateConfidence === "confirmed");
   const recurring = run.crmMatches.filter((match) => match.dateConfidence === "likely_recurring");
   const other = run.crmMatches.filter((match) => match.dateConfidence === "unknown");
+  const webStarted = run.status !== "crm_ready" && run.status !== "crm_search" && run.status !== "interpreting";
 
   return (
     <div className="grid gap-4">
@@ -143,22 +150,33 @@ export function LeadDiscoveryResults({
         </p>
       )}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4">
-        <p className="font-semibold text-slate-950">Didn't find the right one?</p>
-        <p className="mt-1 text-sm text-slate-600">
-          {webScoutAvailable
-            ? "Search public event sources for new prospects that are not already in Command Center."
-            : "Web scouting is not enabled yet in this release. Your search criteria have been saved for the next Lead Scout release."}
-        </p>
-        <button
-          className="button-secondary mt-3"
-          disabled={!webScoutAvailable}
-          onClick={onFindNewLeads}
-          type="button"
-        >
-          Find me new leads
-        </button>
-      </section>
+      {webStarted ? (
+        <LeadScoutProgress run={run} onStop={onStopSearch} onContinue={onContinueSearch} />
+      ) : null}
+
+      {run.candidates.length ? (
+        <section className="grid gap-2">
+          <div>
+            <h3 className="font-bold text-slate-950">Web Scout prospects</h3>
+            <p className="mt-0.5 text-xs text-slate-500">These are Scout results, not saved CRM profiles unless they already match Command Center.</p>
+          </div>
+          {run.candidates.map((candidate) => <LeadScoutCandidateCard candidate={candidate} key={candidate.id} />)}
+        </section>
+      ) : null}
+
+      {run.status === "crm_ready" ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="font-semibold text-slate-950">Didn't find the right one?</p>
+          <p className="mt-1 text-sm text-slate-600">
+            {webScoutAvailable
+              ? "Search public event sources for new prospects using the same criteria above."
+              : "Web scouting is not enabled yet in this release. Your search criteria have been saved."}
+          </p>
+          <button className="button-secondary mt-3" disabled={!webScoutAvailable} onClick={onFindNewLeads} type="button">
+            Find me new leads
+          </button>
+        </section>
+      ) : null}
     </div>
   );
 }

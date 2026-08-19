@@ -7,7 +7,15 @@ type Interpreter = (question: string, now?: Date) => LeadDiscoveryInterpretation
 
 type Repository = Pick<
   LeadScoutRepository,
-  "createRun" | "getRun" | "getLatestRun" | "setCriteria" | "setCrmReady" | "setFailed"
+  | "createRun"
+  | "getRun"
+  | "getLatestRun"
+  | "setCriteria"
+  | "setCrmReady"
+  | "setFailed"
+  | "startWeb"
+  | "requestStop"
+  | "continueWeb"
 >;
 
 export type LeadScoutClarification = {
@@ -59,9 +67,7 @@ export class LeadScoutService {
       });
       const matches = await this.crmSearch.search(interpretation.criteria, 10);
       await this.repository.setCrmReady(runId, matches);
-      const run = await this.repository.getRun({ actorId: input.actorId, runId });
-      if (!run) throw new Error("LEAD_SCOUT_RUN_NOT_FOUND");
-      return run;
+      return await this.requireRun({ actorId: input.actorId, runId });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Lead discovery failed";
       await this.repository.setFailed(runId, message).catch(() => undefined);
@@ -69,13 +75,53 @@ export class LeadScoutService {
     }
   }
 
-  async getRun(input: { actorId: string; runId: string }): Promise<LeadScoutRunView> {
+  private async requireRun(input: { actorId: string; runId: string }): Promise<LeadScoutRunView> {
     const run = await this.repository.getRun(input);
     if (!run) throw new Error("LEAD_SCOUT_RUN_NOT_FOUND");
     return run;
   }
 
+  async getRun(input: { actorId: string; runId: string }): Promise<LeadScoutRunView> {
+    return this.requireRun(input);
+  }
+
   async getLatestRun(actorId: string): Promise<LeadScoutRunView | null> {
     return this.repository.getLatestRun(actorId);
+  }
+
+  async startWeb(input: { actorId: string; runId: string }): Promise<LeadScoutRunView> {
+    const current = await this.requireRun(input);
+    if (current.status === "running") return current;
+    if (current.status !== "crm_ready") throw new Error("LEAD_SCOUT_INVALID_STATE");
+    if (!await this.repository.startWeb(input.runId, input.actorId)) {
+      const latest = await this.requireRun(input);
+      if (latest.status === "running") return latest;
+      throw new Error("LEAD_SCOUT_INVALID_STATE");
+    }
+    return this.requireRun(input);
+  }
+
+  async stopWeb(input: { actorId: string; runId: string }): Promise<LeadScoutRunView> {
+    const current = await this.requireRun(input);
+    if (current.status === "stopping" || current.status === "stopped") return current;
+    if (current.status !== "running") throw new Error("LEAD_SCOUT_INVALID_STATE");
+    if (!await this.repository.requestStop(input.runId, input.actorId)) {
+      const latest = await this.requireRun(input);
+      if (latest.status === "stopping" || latest.status === "stopped") return latest;
+      throw new Error("LEAD_SCOUT_INVALID_STATE");
+    }
+    return this.requireRun(input);
+  }
+
+  async continueWeb(input: { actorId: string; runId: string }): Promise<LeadScoutRunView> {
+    const current = await this.requireRun(input);
+    if (current.status === "running") return current;
+    if (current.status !== "stopped") throw new Error("LEAD_SCOUT_INVALID_STATE");
+    if (!await this.repository.continueWeb(input.runId, input.actorId)) {
+      const latest = await this.requireRun(input);
+      if (latest.status === "running") return latest;
+      throw new Error("LEAD_SCOUT_INVALID_STATE");
+    }
+    return this.requireRun(input);
   }
 }

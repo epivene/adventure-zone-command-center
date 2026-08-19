@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import { runActReviewMigrationsAtStartup } from "./act-review-startup";
 
-function fakeClient(options?: { locked?: boolean; researchReady?: boolean }) {
+function fakeClient(options?: {
+  locked?: boolean;
+  researchReady?: boolean;
+  leadScoutRelease2Ready?: boolean;
+}) {
   const queries: string[] = [];
   let released = false;
   const client = {
@@ -14,11 +18,12 @@ function fakeClient(options?: { locked?: boolean; researchReady?: boolean }) {
       if (sql.includes("profile_research_runs") && sql.includes("AS ready")) {
         return { rows: [{ ready: options?.researchReady ?? true }] };
       }
+      if (sql.includes("candidate_key") && sql.includes("AS ready")) {
+        return { rows: [{ ready: options?.leadScoutRelease2Ready ?? true }] };
+      }
       return { rows: [] };
     },
-    release() {
-      released = true;
-    },
+    release() { released = true; },
   };
   return { client, queries, wasReleased: () => released };
 }
@@ -28,26 +33,20 @@ describe("runActReviewMigrationsAtStartup", () => {
     const { client, queries, wasReleased } = fakeClient();
     const runMigrations = vi.fn(async (options: any) => {
       const migrationClient = await options.pool.connect();
-      await migrationClient.query(
-        "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
-      );
+      await migrationClient.query("SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))");
       migrationClient.release();
       return ["043_act_archive_full_recovery.sql"];
     });
 
-    const applied = await runActReviewMigrationsAtStartup({
-      pool: { connect: async () => client },
-      runMigrations,
-    });
+    const applied = await runActReviewMigrationsAtStartup({ pool: { connect: async () => client }, runMigrations });
 
     expect(applied).toEqual(["043_act_archive_full_recovery.sql"]);
     expect(queries[0]).toContain("pg_try_advisory_lock");
     expect(queries).toContain("SET lock_timeout = '5s'");
     expect(queries).toContain("SET statement_timeout = '20s'");
     expect(queries.some((sql) => sql.includes("profile_research_runs") && sql.includes("lead_scout_runs") && sql.includes("AS ready"))).toBe(true);
-    expect(queries).toContain(
-      "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
-    );
+    expect(queries.some((sql) => sql.includes("candidate_key") && sql.includes("AS ready"))).toBe(true);
+    expect(queries).toContain("SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))");
     expect(queries).toContain("RESET statement_timeout");
     expect(queries).toContain("RESET lock_timeout");
     expect(queries.at(-1)).toContain("pg_advisory_unlock");
@@ -58,10 +57,7 @@ describe("runActReviewMigrationsAtStartup", () => {
     const { client, queries } = fakeClient({ researchReady: false });
     const runMigrations = vi.fn(async () => []);
 
-    const applied = await runActReviewMigrationsAtStartup({
-      pool: { connect: async () => client },
-      runMigrations,
-    });
+    const applied = await runActReviewMigrationsAtStartup({ pool: { connect: async () => client }, runMigrations });
 
     expect(applied).toEqual(["061_profile_research_runs.sql", "063_lead_scout_runs.sql"]);
     expect(queries.some((sql) => sql.includes("create table if not exists profile_research_runs"))).toBe(true);
@@ -70,15 +66,24 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(runMigrations).toHaveBeenCalledTimes(1);
   });
 
+  it("adds the Release 2 candidate identity schema when the base Lead Scout tables already exist", async () => {
+    const { client, queries } = fakeClient({ leadScoutRelease2Ready: false });
+    const runMigrations = vi.fn(async () => []);
+
+    const applied = await runActReviewMigrationsAtStartup({ pool: { connect: async () => client }, runMigrations });
+
+    expect(applied).toEqual(["064_lead_scout_candidate_key.sql"]);
+    expect(queries.some((sql) => sql.includes("add column if not exists candidate_key"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("lead_scout_candidates_run_candidate_key_uidx"))).toBe(true);
+  });
+
   it("does not block startup when another process owns the migration lock", async () => {
     const { client, queries, wasReleased } = fakeClient({ locked: false });
     const runMigrations = vi.fn(async () => ["unexpected.sql"]);
     const onLockUnavailable = vi.fn();
 
     const applied = await runActReviewMigrationsAtStartup({
-      pool: { connect: async () => client },
-      runMigrations,
-      onLockUnavailable,
+      pool: { connect: async () => client }, runMigrations, onLockUnavailable,
     });
 
     expect(applied).toEqual([]);
@@ -92,14 +97,10 @@ describe("runActReviewMigrationsAtStartup", () => {
   it("releases the pre-acquired lock when the migration runner fails", async () => {
     const { client, queries, wasReleased } = fakeClient();
 
-    await expect(
-      runActReviewMigrationsAtStartup({
-        pool: { connect: async () => client },
-        runMigrations: async () => {
-          throw new Error("migration failed");
-        },
-      }),
-    ).rejects.toThrow("migration failed");
+    await expect(runActReviewMigrationsAtStartup({
+      pool: { connect: async () => client },
+      runMigrations: async () => { throw new Error("migration failed"); },
+    })).rejects.toThrow("migration failed");
 
     expect(queries).toContain("RESET statement_timeout");
     expect(queries).toContain("RESET lock_timeout");
