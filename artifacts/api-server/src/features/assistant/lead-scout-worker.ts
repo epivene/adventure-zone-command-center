@@ -234,6 +234,16 @@ export class LeadScoutWorker {
         if (await this.cancelled(claim.runId)) { await this.repository.stopRun(claim.runId); return { kind: "progress" }; }
         if (!await this.repository.startCandidateEnrichment(claim.runId, candidate.id)) return { kind: "progress" };
         const knownSources: LeadScoutSourceInput[] = run.sources.map((source) => ({ ...source, excerpt: "" }));
+        if (candidate.website && !knownSources.some((source) => source.url === candidate.website)) {
+          knownSources.push({
+            url: candidate.website,
+            title: `${candidate.name} event page`,
+            publisher: null,
+            category: "other",
+            retrievedAt: input.now.toISOString(),
+            excerpt: "Candidate event page discovered by Lead Scout.",
+          });
+        }
         try {
           const enrichment = await this.providerCall(claim.runId, claim.workerId, (signal) =>
             this.provider.enrichCandidate({ criteria: claim.criteria, candidate: candidateInput(candidate), knownSources, signal }));
@@ -262,12 +272,7 @@ export class LeadScoutWorker {
         return { kind: "progress" };
       }
 
-      if (claim.stage === "fit_rank") {
-        await this.repository.completeRun(claim.runId);
-        return { kind: "progress" };
-      }
-
-      if (claim.stage === "complete") {
+      if (claim.stage === "fit_rank" || claim.stage === "complete") {
         await this.repository.completeRun(claim.runId);
         return { kind: "progress" };
       }
