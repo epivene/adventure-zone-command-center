@@ -41,14 +41,11 @@ export async function runActReviewMigrationsAtStartup(options?: {
     await client.query("SET statement_timeout = '20s'");
     timeoutsApplied = true;
 
-    // Keep profile research schema creation under the same startup migration lock.
-    // This makes migration 061 effective in production even though the legacy
-    // migration registry is an explicit allow-list of older migration files.
+    // Keep profile research + Lead Scout recovery under the same startup lock.
+    // The legacy migration registry is an explicit allow-list, so this recovery
+    // path guarantees the newer research tables exist on production deploys.
     const researchApplied = await ensureProfileResearchSchema(client);
 
-    // The migration runner acquires the same session-level advisory lock.
-    // Reusing this already-locked client makes that acquisition immediate,
-    // while its no-op release lets this wrapper perform the final unlock.
     const migrationClient: MigrationClient = {
       query: (sql) => client.query(sql),
       release() {},
@@ -59,7 +56,9 @@ export async function runActReviewMigrationsAtStartup(options?: {
         connect: async () => migrationClient,
       },
     });
-    return researchApplied ? ["061_profile_research_runs.sql", ...applied] : applied;
+    return researchApplied
+      ? ["061_profile_research_runs.sql", "063_lead_scout_runs.sql", ...applied]
+      : applied;
   } finally {
     if (timeoutsApplied) {
       await client.query("RESET statement_timeout").catch(() => undefined);
