@@ -71,6 +71,14 @@ function bundle(): BookingAssistantContextBundle {
         status: "confirmed",
         sourceIds: ["src-activity-1"],
       },
+      {
+        id: "fact-price",
+        factKind: "historical_price",
+        summary: "2025 ACT note says Adventure Zone + paintball was quoted at $7,500.",
+        confidence: "high",
+        status: "confirmed",
+        sourceIds: ["src-price"],
+      },
     ],
     businessKnowledge: [],
     sources: [
@@ -80,6 +88,7 @@ function bundle(): BookingAssistantContextBundle {
       { id: "src-contact", kind: "activity", recordId: "contact-1", label: "Lisa Smith", occurredAt: null },
       { id: "src-route", kind: "route", recordId: "route-1", label: "Leg 3 nearby", occurredAt: null },
       { id: "src-activity-1", kind: "activity", recordId: "activity-1", label: "2025 booking note", occurredAt: "2025-07-11T12:00:00.000Z" },
+      { id: "src-price", kind: "activity", recordId: "activity-price", label: "2025 pricing note", occurredAt: "2025-06-02T12:00:00.000Z" },
     ],
     generatedAt: "2026-08-17T21:00:00.000Z",
   };
@@ -93,12 +102,26 @@ describe("buildBookingBrief", () => {
       expect.arrayContaining([
         expect.objectContaining({ key: "package_history", sourceIds: ["src-prior"] }),
         expect.objectContaining({ key: "last_outcome", sourceIds: ["src-activity-1"] }),
+        expect.objectContaining({ key: "historical_price", sourceIds: ["src-price"] }),
         expect.objectContaining({ key: "attraction_count", sourceIds: ["src-current", "src-prior"] }),
         expect.objectContaining({ key: "follow_up", sourceIds: ["src-follow"] }),
         expect.objectContaining({ key: "route_fit", sourceIds: ["src-route"] }),
         expect.objectContaining({ key: "next_action", sourceIds: ["src-follow"] }),
       ]),
     );
+    expect(result.items.find((item) => item.key === "historical_price")?.text).toContain(
+      "Historical pricing only",
+    );
+  });
+
+  it("does not surface unconfirmed historical prices as booking facts", () => {
+    const context = bundle();
+    const price = context.derivedFacts.find((fact) => fact.factKind === "historical_price");
+    if (price) price.status = "proposed";
+
+    const result = buildBookingBrief(context);
+
+    expect(result.items.some((item) => item.key === "historical_price")).toBe(false);
   });
 
   it("omits unsupported claims for a sparse customer", () => {
@@ -111,6 +134,7 @@ describe("buildBookingBrief", () => {
     const result = buildBookingBrief(sparse);
     expect(result.items.some((item) => item.key === "package_history")).toBe(false);
     expect(result.items.some((item) => item.key === "last_outcome")).toBe(false);
+    expect(result.items.some((item) => item.key === "historical_price")).toBe(false);
     expect(result.items.some((item) => item.key === "route_fit")).toBe(false);
   });
 

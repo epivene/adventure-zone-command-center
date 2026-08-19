@@ -8,6 +8,7 @@ import {
 } from "@/features/assistant/assistant-api";
 
 function prettyKind(kind: string) {
+  if (kind === "historical_price") return "historical price";
   return kind.replaceAll("_", " ");
 }
 
@@ -43,7 +44,7 @@ export function DerivedFactsReview({ organizationId }: { organizationId: string 
       setMessage(
         result.activityCount === 0
           ? "There was no imported history available to analyze."
-          : `Reviewed ${result.activityCount} recent history items and found ${result.candidateCount} possible fact${result.candidateCount === 1 ? "" : "s"}.`,
+          : `Reviewed ${result.activityCount} relevant ACT history items and found ${result.candidateCount} possible fact${result.candidateCount === 1 ? "" : "s"}.`,
       );
       await load();
     } catch (cause) {
@@ -76,10 +77,10 @@ export function DerivedFactsReview({ organizationId }: { organizationId: string 
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm text-slate-600">
-              Analyze recent imported ACT! notes/history for useful booking facts. Original ACT! records are never changed.
+              Analyze imported ACT! notes/history for useful booking facts. Pricing, package, setup, water, power, and load-out details are prioritized even when they are in older notes. Original ACT! records are never changed.
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Findings stay proposed until you confirm them.
+              Findings stay proposed until you confirm them. Historical prices are never treated as current quotes automatically.
             </p>
           </div>
           <button
