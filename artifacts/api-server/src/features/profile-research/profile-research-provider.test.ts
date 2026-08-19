@@ -8,9 +8,9 @@ const context: ProfileResearchContext = {
   profileName: "River Days",
   mode: "quick",
   knownFacts: [
-    { key: "city", value: "Fargo", source: "crm" },
-    { key: "region", value: "ND", source: "crm" },
-    { key: "contact:20000000-0000-4000-8000-000000000001", value: "Melissa Anderson · Events Coordinator", source: "crm" },
+    { key: "location", value: "Fargo, ND", source: "crm" },
+    { key: "primary_contact", value: "Melissa Anderson", source: "crm" },
+    { key: "primary_contact_role", value: "Events Coordinator", source: "crm" },
   ],
   searchClues: ["River Days Fargo ND"],
   gaps: [],
