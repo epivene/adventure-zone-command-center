@@ -13,6 +13,7 @@ export type PackageIntelligenceSettingsRecord = {
   id: string;
   code: string;
   name: string;
+  basePriceCents: number | null;
   baseAttractionCount: number;
   minimumAttractionCount: number;
   maximumAttractionCount: number;
@@ -34,6 +35,7 @@ type DrizzleDatabase = typeof database;
 
 type IntelligenceRow = {
   id: string;
+  base_price_cents: number | null;
   minimum_attraction_count: number | null;
   maximum_attraction_count: number | null;
   customer_description: string | null;
@@ -62,6 +64,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       this.database.execute(sql`
         select
           id,
+          base_price_cents,
           minimum_attraction_count,
           maximum_attraction_count,
           customer_description,
@@ -79,6 +82,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       const extra = intelligenceById.get(record.id);
       return {
         ...record,
+        basePriceCents: extra?.base_price_cents ?? null,
         minimumAttractionCount:
           extra?.minimum_attraction_count ?? record.baseAttractionCount,
         maximumAttractionCount:
@@ -107,6 +111,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
     await this.database.execute(sql`
       update package_templates
       set
+        base_price_cents = ${data.basePriceCents},
         minimum_attraction_count = ${data.minimumAttractionCount},
         maximum_attraction_count = ${data.maximumAttractionCount},
         customer_description = ${data.customerDescription},
@@ -119,6 +124,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
 
     return {
       ...base,
+      basePriceCents: data.basePriceCents,
       minimumAttractionCount: data.minimumAttractionCount,
       maximumAttractionCount: data.maximumAttractionCount,
       customerDescription: data.customerDescription,
