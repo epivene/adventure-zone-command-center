@@ -17,6 +17,7 @@ type Repository = Pick<
   | "requestStop"
   | "continueWeb"
   | "queueCandidateDeepen"
+  | "dismissCandidate"
 >;
 
 export type LeadScoutClarification = {
@@ -116,6 +117,17 @@ export class LeadScoutService {
     await this.requireRun({ actorId: input.actorId, runId: input.runId });
     if (!await this.repository.queueCandidateDeepen(input.runId, input.actorId, input.candidateId)) {
       throw new Error("LEAD_SCOUT_CANDIDATE_NOT_DEEPENABLE");
+    }
+    return this.requireRun({ actorId: input.actorId, runId: input.runId });
+  }
+
+  async dismissCandidate(input: { actorId: string; runId: string; candidateId: string }): Promise<LeadScoutRunView> {
+    const current = await this.requireRun({ actorId: input.actorId, runId: input.runId });
+    if (current.status === "running" || current.status === "stopping") {
+      throw new Error("LEAD_SCOUT_CANDIDATE_NOT_DISMISSIBLE");
+    }
+    if (!await this.repository.dismissCandidate(input.runId, input.actorId, input.candidateId)) {
+      throw new Error("LEAD_SCOUT_CANDIDATE_NOT_DISMISSIBLE");
     }
     return this.requireRun({ actorId: input.actorId, runId: input.runId });
   }
