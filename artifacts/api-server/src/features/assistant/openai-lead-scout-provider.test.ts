@@ -5,17 +5,9 @@ import type { LeadDiscoveryCriteria, LeadScoutSourceInput } from "./lead-scout-t
 
 const criteria: LeadDiscoveryCriteria = {
   originalQuestion: "Find events between Montana and Utah in September 2026",
-  dateFrom: "2026-09-01",
-  dateThrough: "2026-09-30",
-  month: 9,
-  year: 2026,
-  regions: ["MT", "ID", "WY", "UT"],
-  cities: [],
-  geoMode: "corridor",
-  routeId: null,
-  legId: null,
-  eventKeywords: ["festival"],
-  fitIntent: "either",
+  dateFrom: "2026-09-01", dateThrough: "2026-09-30", month: 9, year: 2026,
+  regions: ["MT", "ID", "WY", "UT"], cities: [], geoMode: "corridor",
+  routeId: null, legId: null, eventKeywords: ["festival"], fitIntent: "either",
 };
 
 function response(output: unknown, citations: string[]) {
@@ -30,9 +22,12 @@ function response(output: unknown, citations: string[]) {
   } as Response;
 }
 
+type FetchInput = string | URL | Request;
+type MockFetch = (input: FetchInput, init?: RequestInit) => Promise<Response>;
+
 describe("OpenAiLeadScoutProvider", () => {
   it("keeps only cited safe bounded public sources", async () => {
-    const fetchFn = vi.fn(async () => response({
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => response({
       sources: [
         { url: "https://visitidaho.org/events", title: "Idaho events", publisher: "Visit Idaho", category: "tourism_chamber", excerpt: "x".repeat(1800) },
         { url: "https://uncited.example/events", title: "Uncited", publisher: null, category: "other", excerpt: "no" },
@@ -44,11 +39,7 @@ describe("OpenAiLeadScoutProvider", () => {
     const sources = await provider.discoverSources(criteria);
 
     expect(sources).toHaveLength(1);
-    expect(sources[0]).toMatchObject({
-      url: "https://visitidaho.org/events",
-      title: "Idaho events",
-      category: "tourism_chamber",
-    });
+    expect(sources[0]).toMatchObject({ url: "https://visitidaho.org/events", title: "Idaho events", category: "tourism_chamber" });
     expect((sources[0]?.excerpt ?? "").length).toBeLessThanOrEqual(1200);
     const body = JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body));
     expect(body.store).toBe(false);
@@ -61,14 +52,10 @@ describe("OpenAiLeadScoutProvider", () => {
 
   it("keeps only cited candidates in the requested region and date window", async () => {
     const source: LeadScoutSourceInput = {
-      url: "https://visitidaho.org/events",
-      title: "Idaho events",
-      publisher: "Visit Idaho",
-      category: "tourism_chamber",
-      retrievedAt: "2026-08-19T18:00:00.000Z",
-      excerpt: "events",
+      url: "https://visitidaho.org/events", title: "Idaho events", publisher: "Visit Idaho",
+      category: "tourism_chamber", retrievedAt: "2026-08-19T18:00:00.000Z", excerpt: "events",
     };
-    const fetchFn = vi.fn(async () => response({
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => response({
       candidates: [
         { name: "Silver Valley Days", city: "Kellogg", region: "ID", startsAt: "2026-09-11", endsAt: "2026-09-13", venue: "Downtown", url: "https://visitidaho.org/silver-valley", eventType: "community festival", rationale: "Family event" },
         { name: "Colorado Event", city: "Denver", region: "CO", startsAt: "2026-09-12", endsAt: null, venue: null, url: "https://example.org/co", eventType: "festival", rationale: "Outside corridor" },
@@ -81,18 +68,14 @@ describe("OpenAiLeadScoutProvider", () => {
     const candidates = await provider.discoverCandidates({ criteria, sources: [source] });
 
     expect(candidates).toEqual([expect.objectContaining({
-      name: "Silver Valley Days",
-      city: "Kellogg",
-      region: "ID",
-      startsAt: "2026-09-11",
+      name: "Silver Valley Days", city: "Kellogg", region: "ID", startsAt: "2026-09-11",
       website: "https://visitidaho.org/silver-valley",
     })]);
   });
 
   it("returns an empty bounded result for malformed model output and caps candidate count", async () => {
-    const malformed = vi.fn(async () => ({
-      ok: true,
-      status: 200,
+    const malformed = vi.fn<MockFetch>(async (_input, _init) => ({
+      ok: true, status: 200,
       json: async () => ({ output_text: "not json", output: [] }),
       text: async () => "",
     } as Response));
@@ -104,14 +87,14 @@ describe("OpenAiLeadScoutProvider", () => {
       venue: null, url: `https://example.org/event-${index}`, eventType: "festival", rationale: "fit",
     }));
     const citations = many.map((item) => item.url);
-    const fetchFn = vi.fn(async () => response({ candidates: many }, citations));
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => response({ candidates: many }, citations));
     const provider = new OpenAiLeadScoutProvider(fetchFn as typeof fetch, "test-key");
     const candidates = await provider.discoverCandidates({ criteria, sources: [] });
     expect(candidates).toHaveLength(40);
   });
 
   it("passes cancellation through to the web request", async () => {
-    const fetchFn = vi.fn(async () => response({ sources: [] }, []));
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => response({ sources: [] }, []));
     const provider = new OpenAiLeadScoutProvider(fetchFn as typeof fetch, "test-key");
     const controller = new AbortController();
     await provider.discoverSources(criteria, controller.signal);
