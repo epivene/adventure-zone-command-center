@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { DrizzleEventProfileRepository, type EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { db } from "@/db/client";
 import { buildProfileResearchContext } from "./profile-research-context";
+import { extractProfileHistoryIdentityClues } from "./profile-research-history-clues";
 import { OpenAiProfileResearchProvider } from "./openai-profile-research-provider";
 import type { ProfileResearchProvider, ProfileResearchCandidateFact } from "./profile-research-provider";
 import { ProfileResearchRepository } from "./profile-research-repository";
@@ -63,7 +64,12 @@ export class ProfileResearchService {
     const profile = await this.profiles.getEventProfile(input.profileId, input.contactId);
     if (!profile) throw new Error("PROFILE_NOT_FOUND");
 
-    const context = buildProfileResearchContext({ profile, mode: input.mode });
+    const historyIdentityClues = extractProfileHistoryIdentityClues(profile);
+    const context = buildProfileResearchContext({
+      profile,
+      mode: input.mode,
+      historyIdentityClues,
+    });
     const runId = await this.runs.createRun({
       profileId: input.profileId,
       mode: input.mode,
@@ -106,6 +112,7 @@ export class ProfileResearchService {
         identity: result.identity,
         deepSummary: result.deepSummary,
         searchedClues: context.searchClues,
+        historyClueCount: historyIdentityClues.length,
         gapCount: context.gaps.length,
         suggestionCount: suggestions.length,
       };
