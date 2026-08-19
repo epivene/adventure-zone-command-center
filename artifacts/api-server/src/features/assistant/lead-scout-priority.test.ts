@@ -10,6 +10,11 @@ describe("Lead Scout Adventure Zone priority signals", () => {
     expect(classifyAttendanceScale("Attendance was not published")).toBe("unknown");
   });
 
+  it("does not mistake an event year for the attendance count", () => {
+    expect(classifyAttendanceScale("2026 attendance: about 250 people")).toBe("small");
+    expect(classifyAttendanceScale("In 2025, the festival drew approximately 8,000 visitors")).toBe("large");
+  });
+
   it("recognizes adult/special-interest formats that are a weak bounce-house fit", () => {
     expect(isAdultSpecialInterestEvent("Paranormal Investigation", "special-interest public event / entertainment")).toBe(true);
     expect(isAdultSpecialInterestEvent("Downtown Bar Crawl", "nightlife event")).toBe(true);
