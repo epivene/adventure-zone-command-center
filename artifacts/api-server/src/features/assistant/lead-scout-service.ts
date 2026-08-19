@@ -16,6 +16,7 @@ type Repository = Pick<
   | "startWeb"
   | "requestStop"
   | "continueWeb"
+  | "queueCandidateDeepen"
 >;
 
 export type LeadScoutClarification = {
@@ -44,27 +45,13 @@ export class LeadScoutService {
     question: string;
   }): Promise<LeadScoutRunView | LeadScoutClarification> {
     const question = input.question.trim();
-    const runId = await this.repository.createRun({
-      actorId: input.actorId,
-      question,
-      criteria: null,
-      criteriaSummary: null,
-    });
-
+    const runId = await this.repository.createRun({ actorId: input.actorId, question, criteria: null, criteriaSummary: null });
     try {
       const interpretation = this.interpreter(question);
       if (interpretation.kind === "needs_clarification") {
-        return {
-          kind: "needs_clarification",
-          runId,
-          message: interpretation.message,
-        };
+        return { kind: "needs_clarification", runId, message: interpretation.message };
       }
-
-      await this.repository.setCriteria(runId, {
-        criteria: interpretation.criteria,
-        criteriaSummary: interpretation.summary,
-      });
+      await this.repository.setCriteria(runId, { criteria: interpretation.criteria, criteriaSummary: interpretation.summary });
       const matches = await this.crmSearch.search(interpretation.criteria, 10);
       await this.repository.setCrmReady(runId, matches);
       return await this.requireRun({ actorId: input.actorId, runId });
@@ -123,5 +110,13 @@ export class LeadScoutService {
       throw new Error("LEAD_SCOUT_INVALID_STATE");
     }
     return this.requireRun(input);
+  }
+
+  async deepenCandidate(input: { actorId: string; runId: string; candidateId: string }): Promise<LeadScoutRunView> {
+    await this.requireRun({ actorId: input.actorId, runId: input.runId });
+    if (!await this.repository.queueCandidateDeepen(input.runId, input.actorId, input.candidateId)) {
+      throw new Error("LEAD_SCOUT_CANDIDATE_NOT_DEEPENABLE");
+    }
+    return this.requireRun({ actorId: input.actorId, runId: input.runId });
   }
 }
