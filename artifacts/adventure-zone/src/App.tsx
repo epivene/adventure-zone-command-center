@@ -49,6 +49,7 @@ import MobileCallLogPage from "@/pages/MobileCallLogPage";
 import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
+import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
@@ -215,6 +216,7 @@ function AdminProtectedApp() {
           <Route path="/schedule" component={SchedulePage} />
           <Route path="/calendar" component={CalendarPage} />
           <Route path="/routes" component={RoutesPage} />
+          <Route path="/research-sources" component={ResearchSourcesPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
           <Route path="/calls/workspace" component={CallWorkspacePage} />
           <Route path="/calls/mobile" component={MobileCallLogPage} />
