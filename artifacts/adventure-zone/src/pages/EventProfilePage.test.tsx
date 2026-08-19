@@ -206,3 +206,19 @@ describe("EventProfilePage recovered ACT history", () => {
     expect(screen.queryByRole("heading", { name: "Recovered ACT notes & history" })).not.toBeInTheDocument();
   });
 });
+
+describe("EventProfilePage ratings", () => {
+  it("shows a zero-star rating summary even before the first rating exists", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path.startsWith("/event-profiles/")) return Promise.resolve(profile);
+      if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
+      return Promise.resolve(contactDetail(null));
+    });
+
+    render(<EventProfilePage />);
+
+    expect(await screen.findByText("☆☆☆☆☆")).toBeVisible();
+    expect(screen.getByText("0.0 / 5")).toBeVisible();
+    expect(screen.getByText("0 rated occurrences")).toBeVisible();
+  });
+});
