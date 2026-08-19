@@ -5,6 +5,7 @@ import {
   getTodayDashboard,
   TODAY_UPCOMING_EVENT_LIMIT,
 } from "@/features/follow-ups/today-query";
+import { applyTodaySeasonResetFromDb } from "@/features/follow-ups/today-season-reset";
 import { withBookingCopilotMetadata } from "@/features/follow-ups/today-copilot";
 import { listTodayUpcomingEvents } from "@/features/follow-ups/today-upcoming-events";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
@@ -37,10 +38,11 @@ router.get("/today", async (req, res): Promise<void> => {
       listTodayUpcomingEvents(db, start, TODAY_UPCOMING_EVENT_LIMIT),
       listTripsInWindow(db, start, end),
     ]);
-    const dashboard = await enrichTodayDashboardOperations(
+    const enrichedDashboard = await enrichTodayDashboardOperations(
       { ...baseDashboard, upcomingEvents },
       operationsProvider,
     );
+    const dashboard = await applyTodaySeasonResetFromDb(db, enrichedDashboard, now);
     const needsFollowUpPlan = await filterClearedTodayNextSteps(db, dashboard.needsFollowUpPlan);
     const copilotDashboard = withBookingCopilotMetadata(
       { ...dashboard, needsFollowUpPlan },
@@ -93,7 +95,7 @@ router.post("/today/next-step/reopen", async (req, res): Promise<void> => {
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to reopen Today next-step items");
-    res.status(500).json({ ok: false, error: "Could not restore the selected items." });
+    res.status(500).json({ ok: false, error: "Could not restore the cleared items." });
   }
 });
 
