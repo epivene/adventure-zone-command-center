@@ -83,7 +83,7 @@ export default function ManagerHomePage() {
             <h2 className="text-xl font-bold">{currentEvent.bookingName || "Current event"}</h2>
             <p className="mt-1 text-sm text-slate-700">{[currentEvent.city, currentEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
             <div className="mt-3"><EventLifecycleAction bookingId={currentEvent.bookingId} /></div>
-            <div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(currentEvent, "Current event")}>Ask Assistant</button></div>
+            <div className="mt-3 flex flex-wrap gap-2"><Link className="button-primary inline-flex" href={`/manager/events/${currentEvent.bookingId}/wrap-up#site-check`}>Event notes / site check</Link><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(currentEvent, "Current event")}>Ask Assistant</button></div>
           </div>
         </section>
 
