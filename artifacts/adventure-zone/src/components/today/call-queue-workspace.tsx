@@ -19,6 +19,7 @@ import {
   CopilotReason,
   type BookingCopilotReason,
 } from "@/components/today/copilot-reason";
+import { ContactBriefCard } from "@/components/today/contact-brief-card";
 import { apiGet } from "@/lib/auth-token";
 
 export type CallQueueItem = {
@@ -312,14 +313,15 @@ export function CallQueueWorkspace({
         )}
       </div>
 
-      <div className="order-1 min-w-0 lg:order-2" data-testid="selected-call-workspace">
+      <div className="order-1 grid min-w-0 gap-3 lg:order-2" data-testid="selected-call-workspace">
         {selected ? (
-          <div className="mb-3 rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
+          <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
             <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-800">Up Next</p>
             <p className="mt-1 text-lg font-bold text-slate-950">{selected.contactName ?? selected.bookingName}</p>
             <CopilotReason copilot={selected.copilot} />
           </div>
         ) : null}
+        {selected ? <ContactBriefCard target={selected} /> : null}
         {!selected ? (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
             Select a caller from the queue.
