@@ -12,8 +12,10 @@ import type {
 import type { LeadScoutProvider } from "./lead-scout-provider";
 
 type UrlCitation = { type: "url_citation"; url: string; title?: string };
+type WebSearchSource = { type?: string; url?: string };
+type WebSearchAction = { type?: string; url?: string; sources?: unknown[] };
 type ResponseContent = { type?: string; text?: string; annotations?: unknown[] };
-type ResponseOutput = { type?: string; content?: ResponseContent[] };
+type ResponseOutput = { type?: string; content?: ResponseContent[]; action?: WebSearchAction };
 type ResponsesPayload = { output_text?: string; output?: ResponseOutput[] };
 
 const sourceCategories = new Set<LeadScoutSourceCategory>([
@@ -36,16 +38,53 @@ function parseOutput(payload: ResponsesPayload) {
   try { return JSON.parse(text || "{}"); } catch { return {}; }
 }
 
-function citations(payload: ResponsesPayload) {
-  const urls = new Set<string>();
-  for (const annotation of (payload.output ?? []).flatMap((item) =>
-    (item.content ?? []).flatMap((content) => content.annotations ?? []))) {
-    if (!annotation || typeof annotation !== "object") continue;
-    const value = annotation as Partial<UrlCitation>;
-    if (value.type !== "url_citation" || typeof value.url !== "string") continue;
-    if (isSafeResearchUrl(value.url)) urls.add(value.url);
+function publicEvidence(payload: ResponsesPayload) {
+  const urls = new Map<string, { url: string; title: string | null }>();
+  const add = (url: unknown, title?: unknown) => {
+    if (typeof url !== "string" || !isSafeResearchUrl(url)) return;
+    const current = urls.get(url);
+    urls.set(url, {
+      url,
+      title: typeof title === "string" && title.trim() ? title.trim() : current?.title ?? null,
+    });
+  };
+
+  for (const item of payload.output ?? []) {
+    for (const annotation of (item.content ?? []).flatMap((content) => content.annotations ?? [])) {
+      if (!annotation || typeof annotation !== "object") continue;
+      const value = annotation as Partial<UrlCitation>;
+      if (value.type === "url_citation") add(value.url, value.title);
+    }
+
+    if (item.type !== "web_search_call" || !item.action) continue;
+    if (item.action.type === "open_page" || item.action.type === "find_in_page") add(item.action.url);
+    if (Array.isArray(item.action.sources)) {
+      for (const source of item.action.sources) {
+        if (!source || typeof source !== "object") continue;
+        const value = source as WebSearchSource;
+        if (value.type === "url" || typeof value.url === "string") add(value.url);
+      }
+    }
   }
+
   return urls;
+}
+
+function citations(payload: ResponsesPayload) {
+  return new Set(publicEvidence(payload).keys());
+}
+
+function fallbackSource(url: string, title: string | null): LeadScoutSourceInput {
+  let publisher: string | null = null;
+  try { publisher = new URL(url).hostname; } catch { /* URL was already safety-checked. */ }
+  return {
+    url,
+    title: boundedExcerpt(title || publisher || url, 300),
+    publisher,
+    category: "other",
+    retrievedAt: new Date().toISOString(),
+    excerpt: "Used by the public web-search tool for this Lead Scout run.",
+  };
 }
 
 function category(value: unknown): LeadScoutSourceCategory {
@@ -97,6 +136,18 @@ function normalizeSources(raw: unknown, allowedUrls: Set<string>) {
     if (result.length >= 32) break;
   }
   return result;
+}
+
+function sourcesWithFallback(raw: unknown, payload: ResponsesPayload, limit: number) {
+  const evidence = publicEvidence(payload);
+  const allowed = new Set(evidence.keys());
+  const normalized = normalizeSources(raw, allowed);
+  const merged = new Map(normalized.map((source) => [source.url, source] as const));
+  for (const [url, detail] of evidence) {
+    if (!merged.has(url)) merged.set(url, fallbackSource(url, detail.title));
+    if (merged.size >= limit) break;
+  }
+  return [...merged.values()].slice(0, limit);
 }
 
 function normalizeCandidates(raw: unknown, criteria: LeadDiscoveryCriteria, allowedUrls: Set<string>) {
@@ -218,7 +269,7 @@ export class OpenAiLeadScoutProvider implements LeadScoutProvider {
       signal,
     );
     const parsed = parseOutput(payload);
-    return normalizeSources(parsed.sources, citations(payload));
+    return sourcesWithFallback(parsed.sources, payload, 24);
   }
 
   async discoverCandidates(input: { criteria: LeadDiscoveryCriteria; sources: LeadScoutSourceInput[]; signal?: AbortSignal }): Promise<LeadScoutCandidateInput[]> {
@@ -244,9 +295,9 @@ export class OpenAiLeadScoutProvider implements LeadScoutProvider {
     );
     const allowed = citations(payload);
     const parsed = parseOutput(payload);
-    const newSources = normalizeSources(parsed.sources, allowed);
+    const currentSources = sourcesWithFallback(parsed.sources, payload, 32);
     const mergedSources = new Map<string, LeadScoutSourceInput>();
-    for (const source of [...input.knownSources, ...newSources]) mergedSources.set(source.url, source);
+    for (const source of [...input.knownSources, ...currentSources]) mergedSources.set(source.url, source);
     const evidenceSources = [...mergedSources.values()].filter((source) => allowed.has(source.url));
     return {
       sources: evidenceSources,
