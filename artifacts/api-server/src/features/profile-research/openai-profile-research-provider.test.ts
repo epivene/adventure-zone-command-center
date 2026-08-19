@@ -34,6 +34,8 @@ describe("OpenAiProfileResearchProvider", () => {
               { targetKind: "organization", targetId: null, field: "website", value: "https://riverdays.example", rationale: "Official site", sourceUrls: ["https://riverdays.example"] },
               { targetKind: "organization", targetId: null, field: "phone", value: "701-555-1212", rationale: "Uncited number", sourceUrls: ["https://uncited.example"] },
             ],
+            findings: [],
+            relatedEvents: [],
             deepSummary: null,
           }),
           annotations: [{ type: "url_citation", url: "https://riverdays.example", title: "River Days" }],
@@ -48,11 +50,39 @@ describe("OpenAiProfileResearchProvider", () => {
     expect(result.candidates[0]).toEqual(expect.objectContaining({ field: "website", sourceUrls: ["https://riverdays.example"] }));
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]?.url).toBe("https://riverdays.example");
+    expect(result.relatedEvents).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith("https://api.openai.com/v1/responses", expect.objectContaining({ method: "POST" }));
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(String(request.body));
     expect(body.store).toBe(false);
     expect(body.tools).toEqual([expect.objectContaining({ type: "web_search" })]);
+  });
+
+  it("preserves cited key findings and related event opportunities during deep research", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    const calendarUrl = "https://gobreck.example/events";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      output: [{ type: "message", content: [{
+        type: "output_text",
+        text: JSON.stringify({
+          identity: { confidence: "high", rationale: "Official tourism source matched." },
+          candidates: [],
+          findings: [{ label: "2026 dates", value: "June 11–13, 2026", rationale: "Official calendar", sourceUrls: [calendarUrl] }],
+          relatedEvents: [
+            { name: "Bluegrass + Beer Festival", city: "Breckenridge", region: "CO", startsAt: "2026-09-11", endsAt: "2026-09-13", venue: "Main Street Station", url: calendarUrl, rationale: "Listed on the same official seasonal calendar." },
+            { name: "Uncited Mystery Fest", city: "Breckenridge", region: "CO", url: "https://uncited.example", rationale: "Not cited" },
+          ],
+          deepSummary: "Useful broader event calendar discovered.",
+        }),
+        annotations: [{ type: "url_citation", url: calendarUrl, title: "Breckenridge Events" }],
+      }] }],
+    }), { status: 200 })));
+
+    const result = await new OpenAiProfileResearchProvider().research({ context: { ...context, mode: "deep" }, mode: "deep" });
+
+    expect(result.findings).toEqual([expect.objectContaining({ label: "2026 dates", value: "June 11–13, 2026" })]);
+    expect(result.relatedEvents).toEqual([expect.objectContaining({ name: "Bluegrass + Beer Festival", url: calendarUrl })]);
+    expect(result.deepSummary).toContain("broader event calendar");
   });
 
   it("fails clearly when no public research provider key is configured", async () => {

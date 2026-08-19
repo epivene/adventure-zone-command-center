@@ -5,6 +5,7 @@ import type {
   ResearchMode,
   ResearchTargetKind,
 } from "./profile-research-types";
+import type { RelatedEventOpportunity, ResearchFinding } from "./profile-research-discovery";
 
 export type ProfileResearchCandidateFact = {
   targetKind: ResearchTargetKind;
@@ -22,6 +23,8 @@ export type ProfileResearchProviderResult = {
   };
   sources: ProfileResearchSource[];
   candidates: ProfileResearchCandidateFact[];
+  findings: ResearchFinding[];
+  relatedEvents: RelatedEventOpportunity[];
   deepSummary: string | null;
 };
 
