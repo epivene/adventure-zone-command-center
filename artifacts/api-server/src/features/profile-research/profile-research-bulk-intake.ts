@@ -2,6 +2,7 @@ import { parseBusinessDateInput } from "@/lib/business-date";
 import { isSafeResearchUrl } from "./profile-research-matching";
 import type { RelatedEventOpportunity } from "./profile-research-discovery";
 import {
+  isResearchProspectValidationError,
   ResearchProspectIntakeService,
   type ResearchProspectSaveInput,
 } from "./research-prospect-intake";
@@ -58,8 +59,7 @@ export class ProfileResearchBulkIntakeService {
         }
         created.push({ name, url: event.url, profileId: result.profileId, bookingId: result.bookingId });
       } catch (error) {
-        const message = error instanceof Error ? error.message : "";
-        if (message.startsWith("RESEARCH_PROSPECT_")) {
+        if (isResearchProspectValidationError(error)) {
           skipped.push({ name, reason: "missing_required_info" });
           continue;
         }
