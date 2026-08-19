@@ -15,6 +15,13 @@ export default function EventProfileNewPage() {
   const initialPhone = params.get("phone") ?? "";
   const initialFamilyId = params.get("familyId") ?? "";
   const initialOrganizationId = params.get("organizationId") ?? "";
+  const initialEventName = params.get("name") ?? "";
+  const initialCity = params.get("city") ?? "";
+  const initialRegion = params.get("region") ?? "";
+  const initialSourceUrl = params.get("sourceUrl") ?? "";
+  const initialStartsAt = params.get("startsAt") ?? "";
+  const initialEndsAt = params.get("endsAt") ?? "";
+  const sourceScoutIntake = params.get("source") === "scout";
 
   const [travelLegs, setTravelLegs] = useState<any[]>([]);
   const [events, setEvents] = useState<any[]>([]);
@@ -73,6 +80,13 @@ export default function EventProfileNewPage() {
         travelLegs={travelLegs}
         initialContactId={initialContactId}
         initialPhone={initialPhone}
+        initialEventName={initialEventName}
+        initialCity={initialCity}
+        initialRegion={initialRegion}
+        initialWebsite={initialSourceUrl}
+        initialStartsAt={initialStartsAt}
+        initialEndsAt={initialEndsAt}
+        sourceScoutIntake={sourceScoutIntake}
         loadEventProfile={loadEventProfileAction}
         onSubmit={async (input) => {
           const res = await createEventProfileAction(input);
