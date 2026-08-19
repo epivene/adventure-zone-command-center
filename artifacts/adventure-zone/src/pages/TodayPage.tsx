@@ -162,12 +162,12 @@ export default function TodayPage() {
       </header>
 
       <section className="grid gap-2" aria-labelledby="up-next-title">
-        <div className="flex items-baseline justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Do this first</p><h2 className="mt-1 text-2xl font-bold" id="up-next-title">Up Next</h2></div></div>
+        <h2 className="text-2xl font-bold" id="up-next-title">Up Next</h2>
         {callingConfig.assistedCallingEnabled ? <CallQueueWorkspace callingConfig={callingConfig} followUps={followUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 }; }} remainingCount={dashboard.followUpTotal ?? followUps.length} /> : <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />}
       </section>
 
       <section className="grid gap-3" aria-labelledby="today-queue-title">
-        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Keep moving</p><h2 className="mt-1 text-2xl font-bold" id="today-queue-title">Today's Queue</h2><p className="mt-1 text-sm text-slate-600">Everything that needs a decision, contact, or next step.</p></div>
+        <h2 className="text-2xl font-bold" id="today-queue-title">Today's Queue</h2>
 
         {!callingConfig.assistedCallingEnabled ? <FollowUpList followUps={followUps} now={now} /> : null}
 
@@ -198,12 +198,12 @@ export default function TodayPage() {
       </section>
 
       <section className="grid gap-3" aria-labelledby="needs-attention-title">
-        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Exceptions</p><h2 className="mt-1 text-2xl font-bold" id="needs-attention-title">Needs Attention</h2></div>
+        <h2 className="text-2xl font-bold" id="needs-attention-title">Needs Attention</h2>
         <NeedsAttention contractCount={dashboard.contractCount ?? 0} followUpCount={dashboard.followUpCount ?? 0} newLeadCount={dashboard.newLeadCount ?? 0} visibleRouteWarningCount={dashboard.visibleRouteWarningCount ?? 0} />
       </section>
 
       <section className="grid gap-3" aria-labelledby="coming-up-title">
-        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Awareness, not urgency</p><h2 className="mt-1 text-2xl font-bold" id="coming-up-title">Coming Up</h2><p className="mt-1 text-sm text-slate-600">Future events, trips, and renewals stay here until you need them.</p></div>
+        <h2 className="text-2xl font-bold" id="coming-up-title">Coming Up</h2>
 
         <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <summary className="cursor-pointer font-bold">Upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary>
