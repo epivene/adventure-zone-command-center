@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const component = fs.readFileSync(path.resolve(__dirname, "research-sources-attention.tsx"), "utf8");
-const today = fs.readFileSync(path.resolve(__dirname, "../../pages/TodayPage.tsx"), "utf8");
+const needsAttention = fs.readFileSync(path.resolve(__dirname, "needs-attention.tsx"), "utf8");
 
 describe("Today research source reminders", () => {
   it("surfaces never-scouted and elapsed-window sources without auto-scouting", () => {
@@ -16,7 +16,7 @@ describe("Today research source reminders", () => {
   });
 
   it("lives under Today Needs Attention and links to the reusable source library", () => {
-    expect(today).toContain("ResearchSourcesAttention");
+    expect(needsAttention).toContain("ResearchSourcesAttention");
     expect(component).toContain('href="/research-sources"');
   });
 });
