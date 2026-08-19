@@ -5,6 +5,7 @@ import {
   getTodayDashboard,
   TODAY_UPCOMING_EVENT_LIMIT,
 } from "@/features/follow-ups/today-query";
+import { withBookingCopilotMetadata } from "@/features/follow-ups/today-copilot";
 import { listTodayUpcomingEvents } from "@/features/follow-ups/today-upcoming-events";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
 import {
@@ -41,9 +42,12 @@ router.get("/today", async (req, res): Promise<void> => {
       operationsProvider,
     );
     const needsFollowUpPlan = await filterClearedTodayNextSteps(db, dashboard.needsFollowUpPlan);
+    const copilotDashboard = withBookingCopilotMetadata(
+      { ...dashboard, needsFollowUpPlan },
+      now,
+    );
     res.json({
-      ...dashboard,
-      needsFollowUpPlan,
+      ...copilotDashboard,
       needsFollowUpPlanTotal: needsFollowUpPlan.length,
       todayTrips: todayTrips.map((trip) => ({
         id: trip.id,
