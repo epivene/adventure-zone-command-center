@@ -36,6 +36,13 @@ type Props = {
   travelLegs?: { id: string; name: string; color: string }[];
   initialContactId?: string;
   initialPhone?: string;
+  initialEventName?: string;
+  initialCity?: string;
+  initialRegion?: string;
+  initialWebsite?: string;
+  initialStartsAt?: string;
+  initialEndsAt?: string;
+  sourceScoutIntake?: boolean;
   onSubmit: (input: EventProfileCreationInput) => Promise<{ ok: true; profileId: string } | { ok: false; error: string }>;
 };
 
@@ -59,15 +66,22 @@ export function EventProfileForm({
   travelLegs = [],
   initialContactId = "",
   initialPhone = "",
+  initialEventName = "",
+  initialCity = "",
+  initialRegion = "",
+  initialWebsite = "",
+  initialStartsAt = "",
+  initialEndsAt = "",
+  sourceScoutIntake = false,
   onSubmit,
 }: Props) {
   const [, navigate] = useLocation();
   const [eventId, setEventId] = useState("");
-  const [eventName, setEventName] = useState("");
+  const [eventName, setEventName] = useState(initialEventName);
   const [familyId, setFamilyId] = useState(initialFamilyId);
   const [loadedProfiles, setLoadedProfiles] = useState<Record<string, EventProfileSeed>>({});
   const [contactDrafts, setContactDrafts] = useState<ContactDraft[]>([blankContact(initialContactId, "", initialPhone)]);
-  const [includeBooking, setIncludeBooking] = useState(false);
+  const [includeBooking, setIncludeBooking] = useState(sourceScoutIntake);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const selectedProfile = eventProfiles[eventId] ?? loadedProfiles[eventId];
@@ -151,6 +165,18 @@ export function EventProfileForm({
     <form className="grid gap-6" noValidate onSubmit={handleSubmit}>
       {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}
 
+      {sourceScoutIntake ? (
+        <section className="rounded-xl border border-orange-200 bg-orange-50 p-4" aria-label="Source Scout lead handoff">
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-orange-800">Source Scout</p>
+          <p className="mt-1 font-semibold text-slate-950">Review this discovered event before adding it as a lead.</p>
+          <div className="mt-2 grid gap-1 text-sm text-slate-700">
+            {initialStartsAt ? <p><strong>Found dates:</strong> {initialStartsAt}{initialEndsAt && initialEndsAt !== initialStartsAt ? ` – ${initialEndsAt}` : ""}</p> : null}
+            {initialWebsite ? <p className="break-all"><strong>Public source:</strong> <a className="text-orange-700 underline" href={initialWebsite} target="_blank" rel="noreferrer noopener">{initialWebsite}</a></p> : null}
+          </div>
+          <p className="mt-2 text-xs text-slate-600">Nothing is saved until you review the form and choose the first follow-up below.</p>
+        </section>
+      ) : null}
+
       <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.12em] text-orange-700">Start here</p>
@@ -179,8 +205,8 @@ export function EventProfileForm({
 
         {!eventId ? (
           <div className="grid gap-4 sm:grid-cols-3">
-            <label className="grid gap-1.5 font-medium sm:col-span-2">City <span className="text-xs font-normal text-slate-500">optional until booking</span><input name="city" /></label>
-            <label className="grid gap-1.5 font-medium">State <span className="text-xs font-normal text-slate-500">optional</span><input name="region" maxLength={2} /></label>
+            <label className="grid gap-1.5 font-medium sm:col-span-2">City <span className="text-xs font-normal text-slate-500">optional until booking</span><input defaultValue={initialCity} name="city" /></label>
+            <label className="grid gap-1.5 font-medium">State <span className="text-xs font-normal text-slate-500">optional</span><input defaultValue={initialRegion} name="region" maxLength={2} /></label>
           </div>
         ) : null}
 
@@ -227,13 +253,13 @@ export function EventProfileForm({
         </div>
       </details>
 
-      <details className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <details className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" open={sourceScoutIntake}>
         <summary className="cursor-pointer text-lg font-bold">Booking & follow-up <span className="text-sm font-normal text-slate-500">optional</span></summary>
         <div className="mt-4 grid gap-4">
           <label className="flex items-center gap-2 font-medium"><input checked={includeBooking} onChange={(event) => setIncludeBooking(event.currentTarget.checked)} type="checkbox" />Create a booking opportunity now</label>
           {includeBooking ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1.5 font-medium sm:col-span-2">Booking name<input name="bookingName" required /></label>
+              <label className="grid gap-1.5 font-medium sm:col-span-2">Booking name<input defaultValue={initialEventName} name="bookingName" required /></label>
               <label className="grid gap-1.5 font-medium">Travel leg<select defaultValue="" name="travelLegId"><option value="">Unassigned</option>{travelLegs.map((leg) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label>
               <label className="grid gap-1.5 font-medium">Next action<select defaultValue="call" name="nextActionKind"><option value="call">Call</option><option value="email">Email</option><option value="prepare_quote">Prepare quote</option></select></label>
               <label className="grid gap-1.5 font-medium">Next follow-up date<input name="nextActionDueAt" required type="date" /></label>
