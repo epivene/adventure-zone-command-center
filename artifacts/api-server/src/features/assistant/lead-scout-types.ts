@@ -69,6 +69,12 @@ export type LeadScoutFitInput = {
   existenceConfidence: "high" | "medium" | "low";
 };
 
+export type LeadScoutEnrichmentStatus =
+  | "needs_enrichment"
+  | "enriching"
+  | "enriched"
+  | "enrichment_failed";
+
 export type LeadDiscoveryCriteria = {
   originalQuestion: string;
   dateFrom: string | null;
@@ -172,10 +178,17 @@ export type LeadScoutCandidateView = {
   applicationDeadline: string | null;
   fitScore: number | null;
   fitRationale: string | null;
+  fitReasons: string[];
+  fitCautions: string[];
   crmMatchStatus: LeadScoutCrmMatchStatus;
   matchedOrganizationId: string | null;
   matchedBookingId: string | null;
   reviewStatus: "unreviewed" | "shortlisted" | "dismissed" | "saved";
+  enrichmentStatus: LeadScoutEnrichmentStatus;
+  coverageGaps: string[];
+  enrichmentError: string | null;
+  enrichedAt: string | null;
+  deepenRequestedAt: string | null;
   savedOrganizationId: string | null;
   savedBookingId: string | null;
   facts: LeadScoutCandidateFactView[];
