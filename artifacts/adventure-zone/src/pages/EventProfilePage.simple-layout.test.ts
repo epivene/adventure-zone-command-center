@@ -20,6 +20,16 @@ describe("compact full profile", () => {
     expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 
+  it("makes the summary cards useful shortcuts to real profile sections", () => {
+    expect(simple).toContain('"profile-contacts"');
+    expect(simple).toContain('"profile-events"');
+    expect(simple).toContain('"profile-activity-timeline"');
+    expect(simple).toContain('id="profile-contacts"');
+    expect(simple).toContain('id="profile-events"');
+    expect(simple).toContain('id="profile-activity-timeline"');
+    expect(simple).toContain("scrollIntoView");
+  });
+
   it("keeps notes searchable and addable from the compact profile", () => {
     expect(simple).toContain("Search notes & history");
     expect(simple).toContain("Add note");
@@ -36,11 +46,17 @@ describe("compact full profile", () => {
     expect(page).not.toContain("DerivedFactsReview");
   });
 
-  it("removes redundant Open Full Profile and gives Add note a real action", () => {
+  it("keeps Actions flat and limited to things that actually do something", () => {
+    expect(actions).toContain("Add note");
+    expect(actions).toContain("Add follow-up");
+    expect(actions).toContain("Add event");
     expect(actions).not.toContain("Open Full Profile");
-    expect(actions).toContain("onAddNote");
-    expect(actions).toContain(">Note<");
-    expect(actions).toContain(">Follow-up<");
+    expect(actions).not.toContain("DropdownMenuSub");
+    expect(actions).not.toContain("Status");
+    expect(actions).not.toContain("Add to Organization");
+    expect(actions).not.toContain("Add to Event Family");
+    expect(actions).not.toContain("Archive / Delete");
+    expect(actions).not.toContain(">More<");
   });
 
   it("shows only contact, event and note stat cards plus one color-coded follow-up card", () => {

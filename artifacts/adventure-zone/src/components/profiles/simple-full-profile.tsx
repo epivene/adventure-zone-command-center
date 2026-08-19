@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { Camera, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
@@ -55,12 +56,17 @@ async function resizeProfilePhoto(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
-function statCard(value: number, label: string) {
+function statCard(value: number, label: string, targetId: string) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+    <button
+      aria-label={`View ${label.toLowerCase()}`}
+      className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm transition hover:border-orange-300 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400"
+      onClick={() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+      type="button"
+    >
       <p className="text-2xl font-bold text-slate-950">{value}</p>
       <p className="mt-1 text-sm text-slate-600">{label}</p>
-    </div>
+    </button>
   );
 }
 
@@ -264,9 +270,9 @@ export function SimpleFullProfile({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,0.75fr))_minmax(0,2.2fr)]">
-        {statCard(profile.contacts.length, `Contact${profile.contacts.length === 1 ? "" : "s"}`)}
-        {statCard(profile.bookings.length, `Event${profile.bookings.length === 1 ? "" : "s"}`)}
-        {statCard(meaningfulNotes.length, `Note${meaningfulNotes.length === 1 ? "" : "s"}`)}
+        {statCard(profile.contacts.length, `Contact${profile.contacts.length === 1 ? "" : "s"}`, "profile-contacts")}
+        {statCard(profile.bookings.length, `Event${profile.bookings.length === 1 ? "" : "s"}`, "profile-events")}
+        {statCard(meaningfulNotes.length, `Note${meaningfulNotes.length === 1 ? "" : "s"}`, "profile-activity-timeline")}
         {!nextFollowUp ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
             <p className="font-bold text-emerald-900">No open follow-ups</p>
@@ -295,51 +301,86 @@ export function SimpleFullProfile({
           </dl>
         </section>
 
-        <section id="profile-activity-timeline" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
-            <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
-          </div>
-
-          <label className="relative mt-4 block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              aria-label="Search notes & history"
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
-              placeholder="Search notes & history"
-              value={noteSearch}
-              onChange={(event) => setNoteSearch(event.target.value)}
-            />
-          </label>
-
-          {noteComposerOpen ? (
-            <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                New note
-                <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
-              </label>
-              {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
-              <div className="flex flex-wrap gap-2">
-                <button className="button-primary" type="button" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()}>{noteSaving ? "Saving…" : "Save note"}</button>
-                <button className="button-secondary" type="button" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}>Cancel</button>
-              </div>
+        <section id="profile-contacts" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold">Contacts</h2>
+          {profile.contacts.length ? (
+            <div className="mt-3 grid gap-2">
+              {profile.contacts.map((contact) => (
+                <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/contacts/${contact.id}`} key={contact.id}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-slate-900">{contact.name}</span>
+                    {contact.isPrimary ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">Primary</span> : null}
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{[contact.role, contact.phone, contact.email].filter(Boolean).join(" · ") || "Contact details not recorded"}</p>
+                </Link>
+              ))}
             </div>
-          ) : null}
-
-          <div className="mt-4">
-            {normalizedSearch && filteredActivities.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No notes or history match “{noteSearch.trim()}”.</p> : (
-              <ActivityTimeline
-                activities={filteredActivities}
-                editActivity={editActivityAction}
-                deleteActivity={deleteActivityAction}
-                loadRevisions={listActivityRevisionsAction}
-                loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
-                collapseLongBodies
-              />
-            )}
-          </div>
+          ) : <p className="mt-3 text-sm text-slate-600">No contacts have been added yet.</p>}
         </section>
       </div>
+
+      <section id="profile-events" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-bold">Events</h2>
+        {profile.bookings.length ? (
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {profile.bookings.map((booking) => (
+              <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/bookings/${booking.id}`} key={booking.id}>
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-slate-900">{booking.name}</span>
+                  <span className="text-xs font-semibold capitalize text-slate-500">{booking.status.replaceAll("_", " ")}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p>
+              </Link>
+            ))}
+          </div>
+        ) : <p className="mt-3 text-sm text-slate-600">No events have been added yet.</p>}
+      </section>
+
+      <section id="profile-activity-timeline" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
+          <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
+        </div>
+
+        <label className="relative mt-4 block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            aria-label="Search notes & history"
+            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
+            placeholder="Search notes & history"
+            value={noteSearch}
+            onChange={(event) => setNoteSearch(event.target.value)}
+          />
+        </label>
+
+        {noteComposerOpen ? (
+          <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+            <label className="grid gap-1 text-sm font-semibold text-slate-700">
+              New note
+              <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
+            </label>
+            {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              <button className="button-primary" type="button" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()}>{noteSaving ? "Saving…" : "Save note"}</button>
+              <button className="button-secondary" type="button" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}>Cancel</button>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-4">
+          {normalizedSearch && filteredActivities.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No notes or history match “{noteSearch.trim()}”.</p> : (
+            <ActivityTimeline
+              activities={filteredActivities}
+              editActivity={editActivityAction}
+              deleteActivity={deleteActivityAction}
+              loadRevisions={listActivityRevisionsAction}
+              loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
+              collapseLongBodies
+            />
+          )}
+        </div>
+      </section>
     </div>
   );
 }
