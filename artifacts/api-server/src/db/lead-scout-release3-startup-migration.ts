@@ -23,7 +23,15 @@ export async function ensureLeadScoutRelease3Schema(client: {
   query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
 }): Promise<boolean> {
   const marker = await client.query(`
-    select count(*) = 7 as ready
+    select
+      count(*) = 7
+      and to_regclass(current_schema() || '.lead_scout_candidates_run_enrichment_idx') is not null
+      and exists (
+        select 1 from pg_constraint
+        where conrelid = to_regclass(current_schema() || '.lead_scout_candidates')
+          and conname = 'lead_scout_candidates_enrichment_status_check'
+          and contype = 'c'
+      ) as ready
     from information_schema.columns
     where table_schema = current_schema()
       and table_name = 'lead_scout_candidates'
