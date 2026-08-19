@@ -3,6 +3,7 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
+import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
@@ -136,6 +137,9 @@ export default function EventProfilePage() {
     : recoveredActNotes;
   const profileLabel = String(data.name ?? data.organization?.name ?? data.place?.name ?? "Profile");
   const researchGaps = profileResearchGaps(data);
+  const primaryContact = (data.contacts ?? []).find((contact: any) => contact.isPrimary) ?? data.contacts?.[0] ?? null;
+  const actionContactId = contactId ?? data.selectedContactId ?? primaryContact?.id ?? null;
+  const actionPhone = actionContactId ? callablePhoneByContactId[actionContactId] ?? null : null;
 
   function toggleActNote(note: string) {
     setExpandedActNotes((current) => {
@@ -164,6 +168,19 @@ export default function EventProfilePage() {
           </button>
         ) : null}
       </div>
+
+      {!profileEditing && profileId ? (
+        <ProfilePrimaryActions
+          profileId={profileId}
+          selectedContactId={actionContactId}
+          bookingId={bookingId}
+          followUpId={followUpId}
+          mode={mode}
+          assistedCallingEnabled={data.assistedCallingEnabled === true}
+          callablePhone={actionPhone}
+          onEdit={() => setProfileEditing(true)}
+        />
+      ) : null}
 
       <SimpleFullProfile
         profile={data}
@@ -210,9 +227,8 @@ export default function EventProfilePage() {
       ) : null}
 
       <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={action === "follow-up"}>
-        <summary className="cursor-pointer font-semibold text-slate-800">Advanced profile tools</summary>
-        <p className="mt-2 text-sm text-slate-600">Organization relationships, locations, calling tools, family notes, and the original detailed workspace.</p>
-        <div className="mt-4">
+        <summary className="cursor-pointer font-semibold text-slate-800">More profile tools</summary>
+        <div className="mt-3 [&>div>header:first-child]:hidden">
           <EventProfileWorkspace
             profile={data}
             assistedCallingEnabled={data.assistedCallingEnabled === true}
