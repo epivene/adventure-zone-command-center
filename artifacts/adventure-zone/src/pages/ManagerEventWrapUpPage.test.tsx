@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const navigate = vi.hoisted(() => vi.fn());
+
+vi.mock("wouter", () => ({
+  Link: ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>,
+  useLocation: () => ["/manager/events/booking-a/wrap-up", navigate],
+}));
+
 import ManagerEventWrapUpPage from "./ManagerEventWrapUpPage";
 
 const payload = {
@@ -20,8 +28,14 @@ const payload = {
 
 const api = vi.fn(async (path: string, options?: RequestInit) => {
   if (path === "/manager/wrap-ups/booking-a" && (!options?.method || options.method === "GET")) return payload;
-  if (path === "/manager/wrap-ups/booking-a" && options?.method === "PUT") return payload;
+  if (path === "/manager/wrap-ups/booking-a" && options?.method === "PUT") {
+    const body = JSON.parse(String(options.body));
+    return { ...payload, wrapUp: { ...payload.wrapUp, ...body } };
+  }
+  if (path === "/manager/events/booking-a/wrap-up/review") return { review: { id: "review-a" } };
   if (path === "/manager/wrap-ups/booking-a/submit") return { ...payload, wrapUp: { ...payload.wrapUp, status: "submitted" } };
+  if (path === "/manager/events/booking-a/wrap-up/finish") return { lifecycle: { bookingId: "booking-a" } };
+  if (path === "/manager/events/booking-a/wrap-up/finish-later") return { lifecycle: { bookingId: "booking-a" } };
   throw new Error(`Unexpected ${path}`);
 });
 vi.mock("@/lib/manager-auth-context", () => ({ useManagerAuth: () => ({ managerApi: api }) }));
@@ -29,39 +43,55 @@ vi.mock("@/lib/manager-auth-context", () => ({ useManagerAuth: () => ({ managerA
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("ManagerEventWrapUpPage", () => {
-  it("shows the approved single-screen wrap-up sections without the old return recommendation", async () => {
+  it("shows event-day site notes alongside the existing wrap-up sections", async () => {
     render(<ManagerEventWrapUpPage bookingId="booking-a" />);
     expect(await screen.findByRole("heading", { name: "Event Wrap-Up" })).toBeInTheDocument();
-    expect(screen.getByText("Dickinson Fair")).toBeInTheDocument();
-    expect(screen.getByText("How did it go?")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Event notes / site check" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Location/address was accurate")).toBeInTheDocument();
+    expect(screen.getByLabelText("Showers available")).toBeInTheDocument();
+    expect(screen.getByLabelText("Forklift/loader available")).toBeInTheDocument();
+    expect(screen.getByLabelText("Would we want to come back?")).toBeInTheDocument();
     expect(screen.getByText("Money check")).toBeInTheDocument();
-    expect(screen.getByText("Receipts & expenses")).toBeInTheDocument();
-    expect(screen.getByText("Travel share")).toBeInTheDocument();
     expect(screen.getByText("Profitability")).toBeInTheDocument();
-    expect(screen.getByText("$15.00 short")).toBeInTheDocument();
-    expect(screen.getByText("$2,515.00")).toBeInTheDocument();
-    expect(screen.getByText(/Crew wage cost is incomplete/)).toBeInTheDocument();
-    expect(screen.queryByText(/Recommend return/i)).not.toBeInTheDocument();
   });
 
-  it("saves stars, one notes field, cash count and discrepancy note as a draft", async () => {
+  it("saves site observations before the event is fully wrapped up", async () => {
+    render(<ManagerEventWrapUpPage bookingId="booking-a" />);
+    await screen.findByText("Dickinson Fair");
+
+    fireEvent.click(screen.getByLabelText("Location/address was accurate"));
+    fireEvent.click(screen.getByLabelText("Forklift/loader available"));
+    fireEvent.change(screen.getByLabelText("Site / organizer notes"), { target: { value: "Setup moved behind the grandstand." } });
+    fireEvent.change(screen.getByLabelText("Remember for follow-up / next year"), { target: { value: "Confirm forklift two days ahead." } });
+    fireEvent.change(screen.getByLabelText("Would we want to come back?"), { target: { value: "yes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save event notes" }));
+
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/manager/wrap-ups/booking-a", expect.objectContaining({ method: "PUT" })));
+    const call = api.mock.calls.find((entry) => entry[0] === "/manager/wrap-ups/booking-a" && entry[1]?.method === "PUT");
+    const body = JSON.parse(String(call?.[1]?.body));
+    expect(body.ratingNotes).toContain("[Event site check]");
+    expect(body.ratingNotes).toContain("- [x] Location/address was accurate");
+    expect(body.ratingNotes).toContain("- [x] Forklift/loader available");
+    expect(body.ratingNotes).toContain("Event notes: Setup moved behind the grandstand.");
+    expect(body.ratingNotes).toContain("Follow-up notes: Confirm forklift two days ahead.");
+    expect(body.ratingNotes).toContain("Return recommendation: yes");
+    expect(await screen.findByText("Event notes saved.")).toBeInTheDocument();
+  });
+
+  it("keeps the checklist in the final review feedback when finishing the event", async () => {
     render(<ManagerEventWrapUpPage bookingId="booking-a" />);
     await screen.findByText("Dickinson Fair");
     fireEvent.click(screen.getByRole("button", { name: "5 stars" }));
-    fireEvent.change(screen.getByLabelText("Event notes"), { target: { value: "Excellent event" } });
+    fireEvent.click(screen.getByLabelText("Contact communication was good"));
     fireEvent.change(screen.getByLabelText("Actual cash on hand"), { target: { value: "1720.00" } });
-    fireEvent.change(screen.getByLabelText("Cash difference note"), { target: { value: "Small count difference" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/manager/wrap-ups/booking-a", expect.objectContaining({ method: "PUT" })));
-    const call = api.mock.calls.find((entry) => entry[0] === "/manager/wrap-ups/booking-a" && entry[1]?.method === "PUT");
-    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ ratingStars: 5, ratingNotes: "Excellent event", actualCashOnHandCents: 172000, cashDifferenceNote: "Small count difference" });
-  });
+    fireEvent.click(screen.getByRole("button", { name: "Finish wrap-up" }));
 
-  it("submits the saved wrap-up for admin review", async () => {
-    render(<ManagerEventWrapUpPage bookingId="booking-a" />);
-    await screen.findByText("Dickinson Fair");
-    fireEvent.click(screen.getByRole("button", { name: "Submit wrap-up" }));
-    await waitFor(() => expect(api).toHaveBeenCalledWith("/manager/wrap-ups/booking-a/submit", expect.objectContaining({ method: "POST" })));
-    expect(await screen.findByText("Submitted for admin review")).toBeInTheDocument();
+    await waitFor(() => expect(api).toHaveBeenCalledWith("/manager/events/booking-a/wrap-up/review", expect.objectContaining({ method: "POST" })));
+    const reviewCall = api.mock.calls.find((entry) => entry[0] === "/manager/events/booking-a/wrap-up/review");
+    const reviewBody = JSON.parse(String(reviewCall?.[1]?.body));
+    expect(reviewBody.rating).toBe(5);
+    expect(reviewBody.feedback).toContain("- [x] Contact communication was good");
+    expect(api).toHaveBeenCalledWith("/manager/events/booking-a/wrap-up/finish", expect.objectContaining({ method: "POST" }));
+    expect(navigate).toHaveBeenCalledWith("/manager");
   });
 });
