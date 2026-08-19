@@ -58,9 +58,15 @@ export function applyTodaySeasonReset(
   const carriedForwardBookingIds = new Set(
     currentFollowUps.flatMap((followUp) => followUp.bookingId ? [followUp.bookingId] : []),
   );
-  const currentPlans = dashboard.needsFollowUpPlan.filter((item) =>
-    bookingBelongsToFreshSeason(bookingSignals.get(item.id), carriedForwardBookingIds),
-  );
+  const currentPlans = dashboard.needsFollowUpPlan.filter((item) => {
+    const inlineSignal = item as typeof item & Partial<TodaySeasonBookingSignal>;
+    const signal = bookingSignals.get(item.id) ?? (
+      inlineSignal.createdAt instanceof Date && inlineSignal.updatedAt instanceof Date
+        ? inlineSignal as TodaySeasonBookingSignal
+        : undefined
+    );
+    return bookingBelongsToFreshSeason(signal, carriedForwardBookingIds);
+  });
 
   const visibleNewLeadIds = new Set<string>();
   const visibleContractIds = new Set<string>();
