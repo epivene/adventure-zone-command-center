@@ -7,6 +7,7 @@ import {
 import type { RelatedEventOpportunity } from "@/features/profile-research/profile-research-discovery";
 import { isOperationallyReliableFact, selectBestFact } from "./lead-scout-evidence";
 import { scoreAdventureZoneFit } from "./lead-scout-fit";
+import { classifyAttendanceScale, isAdultSpecialInterestEvent } from "./lead-scout-priority";
 import { LeadScoutRepository } from "./lead-scout-repository";
 import { OpenAiLeadScoutProvider } from "./openai-lead-scout-provider";
 import type { LeadScoutProvider } from "./lead-scout-provider";
@@ -121,6 +122,8 @@ function evidenceFit(
   const deadline = reliableSelected(facts, sources, "vendor", /deadline/i)?.value ?? candidate.applicationDeadline;
   const applicationDeadline = deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : null;
   const operationalFacts = facts.filter((fact) => isOperationallyReliableFact(fact, sources));
+  const attendanceFact = reliableSelected(facts, sources, "attendance");
+  const attendanceScale = classifyAttendanceScale(attendanceFact?.value ?? candidate.attendanceSummary);
   const text = `${candidate.name} ${candidate.eventType ?? ""} ${candidate.venue ?? ""}`;
   return scoreAdventureZoneFit({
     eventName: candidate.name,
@@ -130,12 +133,14 @@ function evidenceFit(
     applicationDeadline,
     now,
     hasPublicSource: Boolean(candidate.website || sources.length),
-    hasFamilySignal: /family|kids?|children|community|fair|festival/i.test(text) || contains(facts, /family|kids?|children/i),
+    hasFamilySignal: /family|kids?|children|all ages|youth|fair|festival/i.test(text) || contains(facts, /family|kids?|children|all ages|youth/i),
+    hasAdultSpecialInterestSignal: isAdultSpecialInterestEvent(candidate.name, candidate.eventType),
     hasOutdoorSignal: /outdoor|park|fairground|downtown|street|festival|fair/i.test(text) || contains(facts, /outdoor|space|fairground|park/i),
     hasVendorPath: contains(operationalFacts.filter((fact) => fact.category === "vendor"), /vendor|exhibitor|application|booth|participat/i),
     hasEntertainmentPath: contains(operationalFacts, /entertainment|attraction|amusement|carnival|inflatable|ride/i),
     hasOrganizerContact: operationalFacts.some((fact) => fact.category === "contact"),
-    hasAttendanceEvidence: operationalFacts.some((fact) => fact.category === "attendance"),
+    hasAttendanceEvidence: Boolean(attendanceFact),
+    attendanceScale,
     hasLogisticsEvidence: operationalFacts.some((fact) => fact.category === "logistics"),
     hasExclusiveCarnivalProvider: contains(operationalFacts.filter((fact) => fact.category === "competition"), /exclusive|incumbent|contracted|midway|carnival provider/i),
     existenceConfidence,

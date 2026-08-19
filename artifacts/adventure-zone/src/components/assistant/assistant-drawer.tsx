@@ -43,6 +43,10 @@ function resultHref(result: AssistantProfileSearchResult) {
   return `/event-families/${result.id}`;
 }
 
+function isTransientPollFailure(cause: unknown) {
+  return cause instanceof TypeError && /failed to fetch|network|load failed|networkerror/i.test(cause.message);
+}
+
 export function AssistantDrawer() {
   const { activeContext, explicitContext, clearExplicitContext, selectExplicitContext, closeAssistant, isOpen, prefill } = useAssistantContext();
   const [, setLocation] = useLocation();
@@ -56,6 +60,7 @@ export function AssistantDrawer() {
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
   const [scoutActionBusy, setScoutActionBusy] = useState(false);
+  const [scoutPollingWarning, setScoutPollingWarning] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +76,7 @@ export function AssistantDrawer() {
   useEffect(() => {
     if (!isOpen) return;
     setAnswers([]); setConversationId(undefined); setContextBundle(null); setBrief(null); setGeneralResponse(null);
-    setLeadScoutRun(null); setError(null); setOffline(false); setSavedAt(null);
+    setLeadScoutRun(null); setError(null); setScoutPollingWarning(null); setOffline(false); setSavedAt(null);
 
     let cancelled = false;
     if (!activeContext) {
@@ -107,8 +112,19 @@ export function AssistantDrawer() {
     const runId = leadScoutRun.id;
     const interval = window.setInterval(() => {
       void getLeadScoutRun(runId)
-        .then((run) => { if (!cancelled) setLeadScoutRun(run); })
-        .catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Could not refresh Lead Scout."); });
+        .then((run) => {
+          if (cancelled) return;
+          setLeadScoutRun(run);
+          setScoutPollingWarning(null);
+        })
+        .catch((cause) => {
+          if (cancelled) return;
+          if (isTransientPollFailure(cause)) {
+            setScoutPollingWarning("Reconnecting to Lead Scout…");
+            return;
+          }
+          setError(cause instanceof Error ? cause.message : "Could not refresh Lead Scout.");
+        });
     }, 1500);
     return () => { cancelled = true; window.clearInterval(interval); };
   }, [activeContext, isOpen, leadScoutRun?.id, leadScoutRun?.status]);
@@ -255,6 +271,7 @@ export function AssistantDrawer() {
                 />
               ) : null}
               <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} />
+              {scoutPollingWarning ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{scoutPollingWarning}</p> : null}
               {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
             </div>
           ) : loading ? <p className="py-10 text-center text-sm text-slate-500">Building Booking Brief…</p> : (
