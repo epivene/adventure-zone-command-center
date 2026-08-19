@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation, useSearch } from "wouter";
-import { apiGet } from "@/lib/auth-token";
+import { apiGet, apiPost } from "@/lib/auth-token";
 import { EventProfileForm } from "@/components/event-profiles/event-profile-form";
 import {
   loadEventProfileAction,
@@ -90,6 +90,13 @@ export default function EventProfileNewPage() {
         loadEventProfile={loadEventProfileAction}
         onSubmit={async (input) => {
           const res = await createEventProfileAction(input);
+          if (res.ok && sourceScoutIntake && initialSourceUrl) {
+            await apiPost(`/event-profiles/${res.profileId}/research-intake-context`, {
+              sourceUrl: initialSourceUrl,
+              startsAt: initialStartsAt,
+              endsAt: initialEndsAt,
+            }).catch(() => null);
+          }
           if (res.ok) navigate(`/event-profiles/${res.profileId}`);
           return res;
         }}
