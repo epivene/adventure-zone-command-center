@@ -5,7 +5,7 @@ import {
   type RelatedEventCrmMatch,
 } from "@/features/profile-research/profile-research-related-event-matcher";
 import type { RelatedEventOpportunity } from "@/features/profile-research/profile-research-discovery";
-import { selectBestFact } from "./lead-scout-evidence";
+import { isOperationallyReliableFact, selectBestFact } from "./lead-scout-evidence";
 import { scoreAdventureZoneFit } from "./lead-scout-fit";
 import { LeadScoutRepository } from "./lead-scout-repository";
 import { OpenAiLeadScoutProvider } from "./openai-lead-scout-provider";
@@ -85,16 +85,26 @@ function selectedByCategory(
   );
 }
 
+function reliableSelected(
+  facts: LeadScoutEvidenceFact[],
+  sources: LeadScoutSourceInput[],
+  category: LeadScoutEvidenceFact["category"],
+  keyPattern?: RegExp,
+) {
+  const selected = selectedByCategory(facts, sources, category, keyPattern);
+  return isOperationallyReliableFact(selected, sources) ? selected : null;
+}
+
 function evidenceSummary(facts: LeadScoutEvidenceFact[], sources: LeadScoutSourceInput[]) {
-  const organizerName = selectedByCategory(facts, sources, "contact", /organizer.*name|contact.*name/i)?.value ?? null;
-  const organizerEmail = selectedByCategory(facts, sources, "contact", /email/i)?.value ?? null;
-  const organizerPhone = selectedByCategory(facts, sources, "contact", /phone|telephone/i)?.value ?? null;
-  const attendanceSummary = selectedByCategory(facts, sources, "attendance")?.value ?? null;
-  const vendorSummary = selectedByCategory(facts, sources, "vendor", /path|application|vendor|exhibitor|booth/i)?.value
-    ?? selectedByCategory(facts, sources, "vendor")?.value
+  const organizerName = reliableSelected(facts, sources, "contact", /organizer.*name|contact.*name/i)?.value ?? null;
+  const organizerEmail = reliableSelected(facts, sources, "contact", /email/i)?.value ?? null;
+  const organizerPhone = reliableSelected(facts, sources, "contact", /phone|telephone/i)?.value ?? null;
+  const attendanceSummary = reliableSelected(facts, sources, "attendance")?.value ?? null;
+  const vendorSummary = reliableSelected(facts, sources, "vendor", /path|application|vendor|exhibitor|booth/i)?.value
+    ?? reliableSelected(facts, sources, "vendor")?.value
     ?? null;
-  const recurrenceSummary = selectedByCategory(facts, sources, "recurrence")?.value ?? null;
-  const deadline = selectedByCategory(facts, sources, "vendor", /deadline/i)?.value ?? null;
+  const recurrenceSummary = reliableSelected(facts, sources, "recurrence")?.value ?? null;
+  const deadline = reliableSelected(facts, sources, "vendor", /deadline/i)?.value ?? null;
   const applicationDeadline = deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : null;
   return { organizerName, organizerEmail, organizerPhone, attendanceSummary, vendorSummary, recurrenceSummary, applicationDeadline };
 }
@@ -108,8 +118,9 @@ function evidenceFit(
   const schedule = selectedByCategory(facts, sources, "schedule");
   const identity = selectedByCategory(facts, sources, "identity");
   const existenceConfidence = schedule?.confidence ?? identity?.confidence ?? (candidate.startsAt ? "medium" : "low");
-  const deadline = selectedByCategory(facts, sources, "vendor", /deadline/i)?.value ?? candidate.applicationDeadline;
+  const deadline = reliableSelected(facts, sources, "vendor", /deadline/i)?.value ?? candidate.applicationDeadline;
   const applicationDeadline = deadline && /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : null;
+  const operationalFacts = facts.filter((fact) => isOperationallyReliableFact(fact, sources));
   const text = `${candidate.name} ${candidate.eventType ?? ""} ${candidate.venue ?? ""}`;
   return scoreAdventureZoneFit({
     eventName: candidate.name,
@@ -121,12 +132,12 @@ function evidenceFit(
     hasPublicSource: Boolean(candidate.website || sources.length),
     hasFamilySignal: /family|kids?|children|community|fair|festival/i.test(text) || contains(facts, /family|kids?|children/i),
     hasOutdoorSignal: /outdoor|park|fairground|downtown|street|festival|fair/i.test(text) || contains(facts, /outdoor|space|fairground|park/i),
-    hasVendorPath: contains(facts.filter((fact) => fact.category === "vendor"), /vendor|exhibitor|application|booth|participat/i),
-    hasEntertainmentPath: contains(facts, /entertainment|attraction|amusement|carnival|inflatable|ride/i),
-    hasOrganizerContact: facts.some((fact) => fact.category === "contact"),
-    hasAttendanceEvidence: facts.some((fact) => fact.category === "attendance"),
-    hasLogisticsEvidence: facts.some((fact) => fact.category === "logistics"),
-    hasExclusiveCarnivalProvider: contains(facts.filter((fact) => fact.category === "competition"), /exclusive|incumbent|contracted|midway|carnival provider/i),
+    hasVendorPath: contains(operationalFacts.filter((fact) => fact.category === "vendor"), /vendor|exhibitor|application|booth|participat/i),
+    hasEntertainmentPath: contains(operationalFacts, /entertainment|attraction|amusement|carnival|inflatable|ride/i),
+    hasOrganizerContact: operationalFacts.some((fact) => fact.category === "contact"),
+    hasAttendanceEvidence: operationalFacts.some((fact) => fact.category === "attendance"),
+    hasLogisticsEvidence: operationalFacts.some((fact) => fact.category === "logistics"),
+    hasExclusiveCarnivalProvider: contains(operationalFacts.filter((fact) => fact.category === "competition"), /exclusive|incumbent|contracted|midway|carnival provider/i),
     existenceConfidence,
   });
 }
