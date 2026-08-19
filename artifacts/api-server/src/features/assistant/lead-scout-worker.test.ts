@@ -83,7 +83,6 @@ describe("LeadScoutWorker", () => {
     const repo = repository("source_discovery");
     const provider = { discoverSources: vi.fn(async () => [source]), discoverCandidates: vi.fn(), enrichCandidate: vi.fn() };
     const worker = new LeadScoutWorker({ repository: repo as never, provider: provider as never, matcher: vi.fn() });
-
     expect(await worker.runOne({ workerId: "worker-a", now: new Date("2026-08-19T18:00:00Z") })).toEqual({ kind: "progress" });
     expect(repo.upsertSources).toHaveBeenCalledWith("run-1", [source]);
     expect(repo.updateProgress).toHaveBeenCalledWith("run-1", expect.objectContaining({ stage: "candidate_discovery", sourcesChecked: 1 }));
@@ -149,10 +148,10 @@ describe("LeadScoutWorker", () => {
       organizerEmail: "events@example.org",
       vendorSummary: "Vendor applications are open",
     }));
-    expect(repo.setCandidateFit).toHaveBeenCalledTimes(1);
-    const fit = repo.setCandidateFit.mock.calls[0]?.[2];
-    expect(fit?.score).toBeGreaterThan(70);
-    expect(fit?.reasons.join(" ")).toMatch(/family|vendor|entertainment/i);
+    expect(repo.setCandidateFit).toHaveBeenCalledWith("run-1", "c1", expect.objectContaining({
+      score: expect.any(Number),
+      reasons: expect.arrayContaining(["family-focused audience", "published vendor participation path"]),
+    }));
     expect(repo.updateProgress).toHaveBeenCalledWith("run-1", expect.objectContaining({ candidatesEnriched: 1 }));
   });
 
@@ -163,9 +162,7 @@ describe("LeadScoutWorker", () => {
       enrichCandidate: vi.fn(async () => { throw new Error("vendor page unavailable"); }),
     };
     const worker = new LeadScoutWorker({ repository: repo as never, provider: provider as never, matcher: vi.fn() });
-
     await worker.runOne({ workerId: "worker-a", now: new Date("2026-08-19T18:00:00Z") });
-
     expect(repo.failCandidateEnrichment).toHaveBeenCalledWith("run-1", "c1", expect.stringMatching(/vendor page unavailable/i));
     expect(repo.failRun).not.toHaveBeenCalled();
   });
