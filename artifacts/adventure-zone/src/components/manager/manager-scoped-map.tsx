@@ -50,7 +50,7 @@ export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFoc
   const label = readOnlyPreview ? "Manager preview map" : variant === "events" ? "Manager events map" : "Manager operations map";
 
   return (
-    <section className="grid gap-3" aria-label={label}>
+    <section className="relative z-0 isolate grid gap-3" aria-label={label}>
       {variant === "operations" ? <ManagerTripNavigationActions trip={focusedTrip} mode={mode} /> : null}
       <div className={variant === "events" ? "max-h-[24rem] overflow-hidden rounded-xl border border-slate-200" : "overflow-hidden rounded-xl border border-slate-200"}>
         <ManagerRouteMapShell viewport={viewport}>

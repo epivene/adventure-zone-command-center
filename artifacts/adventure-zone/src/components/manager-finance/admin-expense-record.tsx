@@ -40,6 +40,7 @@ export type FinanceEventOption = {
   id: string;
   name: string;
   travelLegId: string | null;
+  startsAt: string | null;
 };
 
 const categories = [
@@ -125,7 +126,9 @@ export function AdminExpenseRecordCard({
   }
 
   const scope = record.bookingName || (record.assignmentSource === "unassigned" ? "General / Unassigned" : label(record.assignmentSource));
-  const legEvents = events.filter((event) => !event.travelLegId || event.travelLegId === record.legId);
+  const legEvents = events
+    .filter((event) => event.travelLegId === record.legId || event.id === record.bookingId)
+    .sort((a, b) => new Date(b.startsAt ?? 0).getTime() - new Date(a.startsAt ?? 0).getTime());
 
   return <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <button className="w-full p-4 text-left" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>

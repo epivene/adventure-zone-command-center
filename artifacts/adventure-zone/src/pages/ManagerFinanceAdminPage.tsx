@@ -71,6 +71,7 @@ export default function ManagerFinanceAdminPage() {
         id: String(event.id),
         name: String(event.name ?? "Unnamed event"),
         travelLegId: event.travelLegId ?? null,
+        startsAt: event.startsAt ?? null,
       })));
     } catch (cause) {
       setRecordsError(cause instanceof Error ? cause.message : "Could not load submitted expenses.");
