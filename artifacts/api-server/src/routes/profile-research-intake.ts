@@ -6,6 +6,7 @@ import { db } from "@workspace/db";
 import { bookings, organizations } from "@/db/schema";
 import { parseBusinessDateInput } from "@/lib/business-date";
 import { isSafeResearchUrl } from "@/features/profile-research/profile-research-matching";
+import { ProfileResearchBulkIntakeService } from "@/features/profile-research/profile-research-bulk-intake";
 
 const router: IRouter = Router();
 const uuid = z.string().uuid();
@@ -23,6 +24,23 @@ const intakeSchema = z.object({
   if (input.endsAt && !end) context.addIssue({ code: "custom", message: "Review the discovered end date.", path: ["endsAt"] });
   if (start && end && end.getTime() < start.getTime()) context.addIssue({ code: "custom", message: "End date cannot be before start date.", path: ["endsAt"] });
 });
+
+const bulkEventSchema = z.object({
+  name: z.string().trim().min(1),
+  city: z.string().trim().nullable(),
+  region: z.string().trim().nullable(),
+  startsAt: z.string().trim().nullable(),
+  endsAt: z.string().trim().nullable(),
+  venue: z.string().trim().nullable(),
+  url: z.string().trim().min(1),
+  rationale: z.string().trim().default("Found by Source Scout."),
+}).strict();
+
+const bulkIntakeSchema = z.object({
+  events: z.array(bulkEventSchema).min(1).max(20),
+  nextActionKind: z.enum(["call", "email", "prepare_quote"]),
+  nextActionDueAt: z.string().trim().min(1),
+}).strict();
 
 router.post("/event-profiles/:id/research-intake-context", async (req, res): Promise<void> => {
   const profileId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -85,6 +103,27 @@ router.post("/event-profiles/:id/research-intake-context", async (req, res): Pro
   } catch (error) {
     req.log.error({ err: error, profileId: parsedId.data }, "Failed to save Source Scout intake context");
     res.status(500).json({ ok: false, error: "The lead was created, but its Source Scout context could not be saved." });
+  }
+});
+
+router.post("/profile-research/bulk-intake", async (req, res): Promise<void> => {
+  const parsed = bulkIntakeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Review the selected Source Scout prospects." });
+    return;
+  }
+
+  try {
+    const result = await new ProfileResearchBulkIntakeService().create(parsed.data);
+    res.status(201).json({ ok: true, ...result });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (["BULK_PROSPECT_EMPTY", "BULK_PROSPECT_LIMIT", "BULK_PROSPECT_ACTION_REQUIRED", "INVALID_BULK_FOLLOW_UP_DATE"].includes(message)) {
+      res.status(400).json({ ok: false, error: "Review the selected prospects and first follow-up." });
+      return;
+    }
+    req.log.error({ err: error }, "Failed to create Source Scout prospects in bulk");
+    res.status(500).json({ ok: false, error: "Could not create the selected prospects." });
   }
 });
 
