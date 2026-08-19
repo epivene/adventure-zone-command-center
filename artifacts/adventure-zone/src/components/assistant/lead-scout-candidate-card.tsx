@@ -33,18 +33,28 @@ export function LeadScoutCandidateCard({
   candidate,
   sources,
   canDismiss,
+  canSave = false,
   onResearchDeeper,
   onNotFit,
+  onSaveAsLead = () => undefined,
 }: {
   candidate: LeadScoutCandidate;
   sources: LeadScoutSource[];
   canDismiss: boolean;
+  canSave?: boolean;
   onResearchDeeper(candidateId: string): void;
   onNotFit(candidateId: string): void;
+  onSaveAsLead?: (candidateId: string) => void;
 }) {
   const location = [candidate.city, candidate.region].filter(Boolean).join(", ");
-  const badge = candidate.crmMatchStatus === "existing" ? "Already in Command Center"
-    : candidate.crmMatchStatus === "possible_match" ? "Possible match" : "Unsaved prospect";
+  const savedProfileId = candidate.savedOrganizationId ?? candidate.matchedOrganizationId;
+  const badge = candidate.reviewStatus === "saved"
+    ? "In Command Center"
+    : candidate.crmMatchStatus === "existing"
+      ? "Already in Command Center"
+      : candidate.crmMatchStatus === "possible_match"
+        ? "Possible match"
+        : "Unsaved prospect";
   const relevantSourceIds = new Set(candidate.facts.flatMap((fact) => fact.sourceIds));
   const relevantSources = sources.filter((source) => relevantSourceIds.has(source.id));
   const reviewable = candidate.reviewStatus !== "dismissed" && candidate.reviewStatus !== "saved";
@@ -52,6 +62,7 @@ export function LeadScoutCandidateCard({
   const deepResearchPending = candidate.enrichmentStatus === "enriching"
     || (candidate.enrichmentStatus === "needs_enrichment" && Boolean(candidate.deepenRequestedAt));
   const showNotFit = reviewable && candidate.crmMatchStatus !== "existing";
+  const showSave = reviewable && candidate.crmMatchStatus === "new_prospect";
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -113,8 +124,12 @@ export function LeadScoutCandidateCard({
 
       <div className="mt-3 flex flex-wrap gap-2">
         {candidate.website ? <a className="button-secondary" href={candidate.website} rel="noreferrer" target="_blank">Open event page</a> : null}
-        {candidate.crmMatchStatus === "existing" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Open profile</a> : null}
+        {candidate.reviewStatus === "saved" && savedProfileId ? <a className="button-primary" href={`/profiles/${savedProfileId}`}>Open profile</a> : null}
+        {candidate.reviewStatus !== "saved" && candidate.crmMatchStatus === "existing" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Open profile</a> : null}
         {candidate.crmMatchStatus === "possible_match" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Review match</a> : null}
+        {showSave ? (
+          <button className="button-primary" disabled={!canSave} onClick={() => onSaveAsLead(candidate.id)} title={canSave ? undefined : "Stop the active Scout before saving this prospect."} type="button">Save as lead</button>
+        ) : null}
         {canDeepen ? (
           <button className="button-secondary" disabled={deepResearchPending} onClick={() => onResearchDeeper(candidate.id)} type="button">
             {deepResearchPending ? "Researching deeper…" : "Research deeper"}
