@@ -9,6 +9,23 @@ export type BookingCopilotReason = {
   reasons: string[];
 };
 
+export type CopilotFollowUpSummary = FollowUpSummary & {
+  copilot: BookingCopilotReason;
+};
+
+export type CopilotFollowUpPlanItem = FollowUpPlanItem & {
+  copilot: BookingCopilotReason;
+};
+
+export type TodayDashboardWithCopilot = Omit<
+  TodayDashboard,
+  "nextCall" | "followUps" | "needsFollowUpPlan"
+> & {
+  nextCall: CopilotFollowUpSummary | null;
+  followUps: CopilotFollowUpSummary[];
+  needsFollowUpPlan: CopilotFollowUpPlanItem[];
+};
+
 const pendingContractStatuses = new Set(["pending_contract", "contract_received"]);
 
 function hasRouteWarning(item: { operations?: { warnings?: Array<{ kind: string; message?: string }> } | null }) {
@@ -113,14 +130,10 @@ export function explainFollowUpPlanAction(
   return { priority, headline, reasons: reasons.slice(0, 3) };
 }
 
-export function withBookingCopilotMetadata<T extends TodayDashboard>(
-  dashboard: T,
+export function withBookingCopilotMetadata(
+  dashboard: TodayDashboard,
   now: Date,
-): T & {
-  nextCall: (FollowUpSummary & { copilot: BookingCopilotReason }) | null;
-  followUps: Array<FollowUpSummary & { copilot: BookingCopilotReason }>;
-  needsFollowUpPlan: Array<FollowUpPlanItem & { copilot: BookingCopilotReason }>;
-} {
+): TodayDashboardWithCopilot {
   return {
     ...dashboard,
     nextCall: dashboard.nextCall
