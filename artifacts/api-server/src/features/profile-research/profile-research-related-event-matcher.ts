@@ -18,30 +18,36 @@ export type RelatedEventCrmMatch =
   | { status: "possible_match"; organizationId: string; bookingId?: string; matchedName: string }
   | { status: "new_prospect" };
 
-function normalize(value: string | null | undefined) {
+function exactNormalize(value: string | null | undefined) {
   return (value ?? "")
     .toLowerCase()
     .replace(/&/g, " and ")
     .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function fuzzyNormalize(value: string | null | undefined) {
+  return exactNormalize(value)
     .replace(/\b(the|festival|fest|event|events)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function tokenOverlap(left: string, right: string) {
-  const a = new Set(normalize(left).split(" ").filter(Boolean));
-  const b = new Set(normalize(right).split(" ").filter(Boolean));
+  const a = new Set(fuzzyNormalize(left).split(" ").filter(Boolean));
+  const b = new Set(fuzzyNormalize(right).split(" ").filter(Boolean));
   if (!a.size || !b.size) return 0;
   const intersection = [...a].filter((token) => b.has(token)).length;
   return intersection / Math.min(a.size, b.size);
 }
 
 function sameLocation(event: RelatedEventOpportunity, record: RelatedEventRecord) {
-  const eventRegion = normalize(event.region);
-  const recordRegion = normalize(record.region);
+  const eventRegion = exactNormalize(event.region);
+  const recordRegion = exactNormalize(record.region);
   if (eventRegion && recordRegion && eventRegion !== recordRegion) return false;
-  const eventCity = normalize(event.city);
-  const recordCity = normalize(record.city);
+  const eventCity = exactNormalize(event.city);
+  const recordCity = exactNormalize(record.city);
   if (eventCity && recordCity && eventCity !== recordCity) return false;
   return true;
 }
@@ -51,7 +57,7 @@ export function classifyRelatedEventAgainstRecords(
   records: RelatedEventRecord[],
 ): RelatedEventCrmMatch {
   const locationMatches = records.filter((record) => sameLocation(event, record));
-  const exact = locationMatches.find((record) => normalize(record.name) === normalize(event.name));
+  const exact = locationMatches.find((record) => exactNormalize(record.name) === exactNormalize(event.name));
   if (exact) {
     return {
       status: "existing",
@@ -84,15 +90,16 @@ export async function matchRelatedEventsAgainstCrm(
 ) {
   if (!events.length) return [];
   const regions = [...new Set(events.map((event) => event.region?.trim().toUpperCase()).filter(Boolean))] as string[];
+  const regionCondition = regions.length ? or(...regions.map((region) => eq(organizations.region, region))) : undefined;
+  const bookingRegionCondition = regions.length ? or(...regions.map((region) => eq(bookings.region, region))) : undefined;
   const organizationRows = await db.select({
-    kind: organizations.id,
     id: organizations.id,
     organizationId: organizations.id,
     name: organizations.name,
     city: organizations.city,
     region: organizations.region,
   }).from(organizations)
-    .where(regions.length ? or(...regions.map((region) => eq(organizations.region, region))) : undefined)
+    .where(regionCondition)
     .orderBy(asc(organizations.name));
   const bookingRows = await db.select({
     id: bookings.id,
@@ -101,7 +108,7 @@ export async function matchRelatedEventsAgainstCrm(
     city: bookings.city,
     region: bookings.region,
   }).from(bookings)
-    .where(regions.length ? or(...regions.map((region) => eq(bookings.region, region))) : undefined)
+    .where(bookingRegionCondition)
     .orderBy(asc(bookings.name));
 
   const records: RelatedEventRecord[] = [
