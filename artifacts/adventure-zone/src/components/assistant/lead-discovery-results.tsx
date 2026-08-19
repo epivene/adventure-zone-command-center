@@ -1,9 +1,16 @@
+import { useState } from "react";
+
 import type {
   AssistantLeadMatch,
   LeadScoutRunView,
 } from "@/features/assistant/assistant-types";
+import type {
+  LeadScoutSaveResult,
+  LeadScoutSaveSubmission,
+} from "@/features/assistant/lead-scout-api";
 import { LeadScoutCandidateCard } from "./lead-scout-candidate-card";
 import { LeadScoutProgress } from "./lead-scout-progress";
+import { LeadScoutSaveDialog } from "./lead-scout-save-dialog";
 
 function formatSavedDate(value: string | null) {
   if (!value) return null;
@@ -75,6 +82,7 @@ export function LeadDiscoveryResults({
   onContinueSearch = () => undefined,
   onResearchDeeper = () => undefined,
   onNotFit = () => undefined,
+  onSaveCandidate,
 }: {
   run: LeadScoutRunView;
   webScoutAvailable: boolean;
@@ -85,13 +93,16 @@ export function LeadDiscoveryResults({
   onContinueSearch?: () => void;
   onResearchDeeper?: (candidateId: string) => void;
   onNotFit?: (candidateId: string) => void;
+  onSaveCandidate?: (candidateId: string, input: LeadScoutSaveSubmission) => Promise<LeadScoutSaveResult>;
 }) {
+  const [saveCandidateId, setSaveCandidateId] = useState<string | null>(null);
   const confirmed = run.crmMatches.filter((match) => match.dateConfidence === "confirmed");
   const recurring = run.crmMatches.filter((match) => match.dateConfidence === "likely_recurring");
   const other = run.crmMatches.filter((match) => match.dateConfidence === "unknown");
   const webStarted = run.status !== "crm_ready" && run.status !== "crm_search" && run.status !== "interpreting";
   const visibleCandidates = run.candidates.filter((candidate) => candidate.reviewStatus !== "dismissed");
-  const canDismiss = run.status !== "running" && run.status !== "stopping";
+  const canReview = run.status !== "running" && run.status !== "stopping";
+  const selectedCandidate = saveCandidateId ? run.candidates.find((candidate) => candidate.id === saveCandidateId) ?? null : null;
 
   return (
     <div className="grid gap-4">
@@ -119,10 +130,12 @@ export function LeadDiscoveryResults({
             <LeadScoutCandidateCard
               candidate={candidate}
               sources={run.sources}
-              canDismiss={canDismiss}
+              canDismiss={canReview}
+              canSave={canReview && Boolean(onSaveCandidate)}
               key={candidate.id}
               onResearchDeeper={onResearchDeeper}
               onNotFit={onNotFit}
+              onSaveAsLead={setSaveCandidateId}
             />
           ))}
         </section>
@@ -136,6 +149,14 @@ export function LeadDiscoveryResults({
           <p className="mt-1 text-sm text-slate-600">{webScoutAvailable ? "Search public event sources for new prospects using the same criteria above." : "Web scouting is not enabled yet in this release. Your search criteria have been saved."}</p>
           <button className="button-secondary mt-3" disabled={!webScoutAvailable} onClick={onFindNewLeads} type="button">Find me new leads</button>
         </section>
+      ) : null}
+
+      {selectedCandidate && onSaveCandidate ? (
+        <LeadScoutSaveDialog
+          candidate={selectedCandidate}
+          onClose={() => setSaveCandidateId(null)}
+          onSave={(input) => onSaveCandidate(selectedCandidate.id, input)}
+        />
       ) : null}
     </div>
   );
