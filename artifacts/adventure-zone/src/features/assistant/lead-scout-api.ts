@@ -1,6 +1,40 @@
 import { apiGet, apiPost } from "@/lib/auth-token";
 import type { LeadScoutRunView } from "./assistant-types";
 
+export type LeadScoutSaveSubmission = {
+  accepted: {
+    name: string;
+    city: string;
+    region: string;
+    startsAt: string | null;
+    endsAt: string | null;
+    website: string;
+    contactName?: string | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+  };
+  nextActionKind: "call" | "email" | "prepare_quote";
+  nextActionDueAt: string;
+};
+
+export type LeadScoutSaveResult =
+  | {
+      kind: "created";
+      profileId: string;
+      bookingId: string;
+      run: LeadScoutRunView;
+    }
+  | {
+      kind: "duplicate";
+      match: {
+        status: "existing" | "possible_match";
+        organizationId: string;
+        bookingId?: string;
+        matchedName: string;
+      };
+      run: LeadScoutRunView;
+    };
+
 export async function getLeadScoutRun(runId: string): Promise<LeadScoutRunView> {
   const response = await apiGet<{ run: LeadScoutRunView }>(`/assistant/lead-scout/runs/${runId}`);
   return response.run;
@@ -40,4 +74,15 @@ export async function dismissLeadScoutCandidate(runId: string, candidateId: stri
     {},
   );
   return response.run;
+}
+
+export async function saveLeadScoutCandidate(
+  runId: string,
+  candidateId: string,
+  submission: LeadScoutSaveSubmission,
+): Promise<LeadScoutSaveResult> {
+  return apiPost<LeadScoutSaveResult>(
+    `/assistant/lead-scout/runs/${runId}/candidates/${candidateId}/save`,
+    submission,
+  );
 }
