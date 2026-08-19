@@ -6,14 +6,10 @@ const source = fs.readFileSync(path.resolve(__dirname, "TodayPage.tsx"), "utf8")
 
 describe("Today page information hierarchy", () => {
   it("organizes the workday around Up Next, queue, attention, and coming up", () => {
-    expect(source).toContain("Today's Queue");
-    expect(source).toContain("Needs Attention");
-    expect(source).toContain("Coming Up");
-
-    const upNext = source.indexOf("Up Next");
-    const queue = source.indexOf("Today's Queue");
-    const attention = source.indexOf("Needs Attention");
-    const comingUp = source.indexOf("Coming Up");
+    const upNext = source.indexOf('aria-labelledby="up-next-title"');
+    const queue = source.indexOf('aria-labelledby="today-queue-title"');
+    const attention = source.indexOf('aria-labelledby="needs-attention-title"');
+    const comingUp = source.indexOf('aria-labelledby="coming-up-title"');
 
     expect(upNext).toBeGreaterThan(-1);
     expect(queue).toBeGreaterThan(upNext);
@@ -22,6 +18,7 @@ describe("Today page information hierarchy", () => {
   });
 
   it("uses compact workload summary pills instead of another full stats panel", () => {
+    expect(source).toContain('aria-label="Today summary"');
     expect(source).toContain("Overdue");
     expect(source).toContain("Contracts");
     expect(source).toContain("New leads");
@@ -29,9 +26,10 @@ describe("Today page information hierarchy", () => {
   });
 
   it("groups future-looking material under Coming Up", () => {
-    expect(source).toContain("Upcoming events");
-    expect(source).toContain("Today's trips");
-    expect(source).toContain("Renewals");
+    const comingUp = source.indexOf('aria-labelledby="coming-up-title"');
+    expect(source.indexOf("Upcoming events", comingUp)).toBeGreaterThan(comingUp);
+    expect(source.indexOf("Today's trips", comingUp)).toBeGreaterThan(comingUp);
+    expect(source.indexOf("Renewals", comingUp)).toBeGreaterThan(comingUp);
     expect(source).not.toContain("More for later");
   });
 });
