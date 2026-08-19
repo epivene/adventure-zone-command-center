@@ -41,6 +41,7 @@ describe("ManagerHomePage current event state", () => {
     expect(screen.getByText("Next County Fair")).toBeInTheDocument();
     expect(screen.queryByText("Next Stop")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Checked in Aug 17, 8:58 PM/)).toHaveLength(1);
+    expect(screen.getByRole("link", { name: "Event notes / site check" })).toHaveAttribute("href", "/manager/events/event-1/wrap-up#site-check");
   });
 
   it("keeps Next Stop when there is no checked-in event", async () => {
@@ -56,5 +57,6 @@ describe("ManagerHomePage current event state", () => {
     render(<ManagerHomePage />);
     await waitFor(() => expect(screen.getByText("Next Stop")).toBeInTheDocument());
     expect(screen.queryByText("Current Event")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Event notes / site check" })).not.toBeInTheDocument();
   });
 });
