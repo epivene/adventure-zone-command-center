@@ -10,6 +10,7 @@ import {
   editActivityAction,
   listActivityRevisionsAction,
 } from "@/actions/activities";
+import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import {
   CallWorkspace,
   type CompleteCallResult,
@@ -135,28 +136,36 @@ function defaultRenderWorkspace(
     : null;
 
   return (
-    <CallWorkspace
-      activityParent={data.activityParent}
-      assistedCallingEnabled={callingConfig.assistedCallingEnabled}
-      booking={booking}
-      briefing={data.briefing ?? null}
-      contact={contact}
-      contextSummary={data.contextSummary ?? null}
-      createActivity={createActivityAction}
-      defaultScriptKind={data.defaultScriptKind}
-      editActivity={editActivityAction}
-      followUp={followUp}
-      loadRevisions={listActivityRevisionsAction}
-      mode="compact"
-      onComplete={onComplete}
-      operations={data.operations ?? null}
-      organization={context.organization ?? null}
-      phones={data.phones ?? []}
-      recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
-      scriptPrompts={data.scriptPrompts ?? []}
-      timeline={coerceTimeline(data.timeline)}
-      voicemailLauncherUrl={callingConfig.voicemailLauncherUrl}
-    />
+    <div className="grid gap-5">
+      <CallAssistantPanel
+        bookingId={context.booking?.id ?? null}
+        contactId={context.contact?.id ?? null}
+        followUpId={context.followUp?.id ?? null}
+        organizationId={context.organization?.id ?? null}
+      />
+      <CallWorkspace
+        activityParent={data.activityParent}
+        assistedCallingEnabled={callingConfig.assistedCallingEnabled}
+        booking={booking}
+        briefing={data.briefing ?? null}
+        contact={contact}
+        contextSummary={data.contextSummary ?? null}
+        createActivity={createActivityAction}
+        defaultScriptKind={data.defaultScriptKind}
+        editActivity={editActivityAction}
+        followUp={followUp}
+        loadRevisions={listActivityRevisionsAction}
+        mode="compact"
+        onComplete={onComplete}
+        operations={data.operations ?? null}
+        organization={context.organization ?? null}
+        phones={data.phones ?? []}
+        recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
+        scriptPrompts={data.scriptPrompts ?? []}
+        timeline={coerceTimeline(data.timeline)}
+        voicemailLauncherUrl={callingConfig.voicemailLauncherUrl}
+      />
+    </div>
   );
 }
 
