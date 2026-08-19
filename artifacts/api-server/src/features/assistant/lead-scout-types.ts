@@ -19,6 +19,16 @@ export type LeadScoutStage =
   | "complete";
 
 export type LeadScoutCrmMatchStatus = "existing" | "possible_match" | "new_prospect";
+export type LeadScoutSourceCategory =
+  | "official_event"
+  | "government"
+  | "tourism_chamber"
+  | "vendor_application"
+  | "venue_partner"
+  | "news_recap"
+  | "social"
+  | "review_forum"
+  | "other";
 
 export type LeadDiscoveryCriteria = {
   originalQuestion: string;
@@ -62,22 +72,36 @@ export type LeadScoutProgress = {
   candidatesCompared: number;
 };
 
+export type LeadScoutProgressPatch = Partial<LeadScoutProgress> & { stage?: LeadScoutStage };
+
+export type LeadScoutSourceInput = {
+  url: string;
+  title: string;
+  publisher: string | null;
+  category: LeadScoutSourceCategory;
+  retrievedAt: string;
+  excerpt?: string;
+};
+
 export type LeadScoutSourceView = {
   id: string;
   url: string;
   title: string;
   publisher: string | null;
-  category:
-    | "official_event"
-    | "government"
-    | "tourism_chamber"
-    | "vendor_application"
-    | "venue_partner"
-    | "news_recap"
-    | "social"
-    | "review_forum"
-    | "other";
+  category: LeadScoutSourceCategory;
   retrievedAt: string;
+};
+
+export type LeadScoutCandidateInput = {
+  name: string;
+  city: string | null;
+  region: string | null;
+  venue: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  website: string | null;
+  eventType: string | null;
+  rationale: string | null;
 };
 
 export type LeadScoutCandidateFactView = {
@@ -134,4 +158,13 @@ export type LeadScoutRunView = {
   createdAt: string;
   updatedAt: string;
   failureMessage: string | null;
+};
+
+export type LeadScoutWorkClaim = {
+  runId: string;
+  actorId: string;
+  criteria: LeadDiscoveryCriteria;
+  stage: LeadScoutStage;
+  workerId: string;
+  leaseExpiresAt: string;
 };
