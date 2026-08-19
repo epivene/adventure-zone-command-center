@@ -6,6 +6,7 @@ import type {
 export type BookingBriefItemKey =
   | "package_history"
   | "last_outcome"
+  | "historical_price"
   | "timing"
   | "attraction_count"
   | "contact"
@@ -143,6 +144,21 @@ export function buildBookingBrief(
       text: priorOutcome.summary,
       confidence: priorOutcome.confidence,
       sourceIds: priorOutcome.sourceIds,
+    });
+  }
+
+  const historicalPrice = bundle.derivedFacts.find(
+    (fact) =>
+      fact.factKind === "historical_price" &&
+      fact.status === "confirmed" &&
+      fact.sourceIds.length > 0,
+  );
+  if (historicalPrice) {
+    items.push({
+      key: "historical_price",
+      text: `Historical pricing only — ${historicalPrice.summary} Confirm current pricing before quoting.`,
+      confidence: historicalPrice.confidence,
+      sourceIds: historicalPrice.sourceIds,
     });
   }
 
