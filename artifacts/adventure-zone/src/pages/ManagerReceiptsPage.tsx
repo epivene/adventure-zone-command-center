@@ -40,7 +40,7 @@ type Expense = {
 
 type Notice = { state: "saved_offline" | "synced" | "needs_attention"; text?: string } | null;
 
-type CurrentLifecycleResponse = { lifecycle: null | { bookingId: string } };
+type CurrentLifecycleResponse = { lifecycle: null | { bookingId: string; bookingName?: string | null; checkedInAt?: string | null } };
 type ManagerRouteResponse = { events?: Array<{ bookingId: string; bookingName: string; startsAt?: string | null }> };
 
 function dollars(cents: number) { return (cents / 100).toFixed(2); }
@@ -206,8 +206,13 @@ export default function ManagerReceiptsPage() {
       managerApi<CurrentLifecycleResponse>("/manager/events/lifecycle/current").catch(() => ({ lifecycle: null })),
       managerApi<ManagerRouteResponse>("/manager/route").catch(() => ({ events: [] })),
     ]).then(([lifecycleData, routeData]) => {
-      setCurrentBookingId(lifecycleData.lifecycle?.bookingId ?? null);
-      setEventOptions((routeData.events ?? []).map((event) => ({ id: event.bookingId, name: event.bookingName, startsAt: event.startsAt ?? null })));
+      const current = lifecycleData.lifecycle;
+      setCurrentBookingId(current?.bookingId ?? null);
+      const options = (routeData.events ?? []).map((event) => ({ id: event.bookingId, name: event.bookingName, startsAt: event.startsAt ?? null }));
+      if (current && !options.some((event) => event.id === current.bookingId)) {
+        options.push({ id: current.bookingId, name: current.bookingName ?? "Current checked-in event", startsAt: current.checkedInAt ?? null });
+      }
+      setEventOptions(options);
     });
   }, [managerApi]);
 
