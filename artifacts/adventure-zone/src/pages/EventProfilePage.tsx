@@ -136,14 +136,12 @@ export default function EventProfilePage() {
 
       <SimpleFullProfile profile={data} onProfileSaved={loadProfile} />
 
-      {profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
+      <EventRatingSummary
+        average={data.wrapUpRatingSummary?.average ?? null}
+        count={data.wrapUpRatingSummary?.count ?? 0}
+      />
 
-      {(data.wrapUpRatingSummary?.count ?? 0) > 0 ? (
-        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer font-semibold text-slate-800">Reviews & rating ({data.wrapUpRatingSummary.count})</summary>
-          <div className="mt-3"><EventRatingSummary average={data.wrapUpRatingSummary?.average ?? null} count={data.wrapUpRatingSummary?.count ?? 0} /></div>
-        </details>
-      ) : null}
+      {profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
       {recoveredActNotes.length ? (
         <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -157,7 +155,7 @@ export default function EventProfilePage() {
         </details>
       ) : null}
 
-      <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={action === "follow-up"}>
         <summary className="cursor-pointer font-semibold text-slate-800">Advanced profile tools</summary>
         <p className="mt-2 text-sm text-slate-600">Organization relationships, locations, calling tools, family notes, and the original detailed workspace.</p>
         <div className="mt-4">

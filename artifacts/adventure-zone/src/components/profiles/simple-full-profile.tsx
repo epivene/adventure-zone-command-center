@@ -35,6 +35,10 @@ function formatDateTime(value: Date | string | null | undefined) {
 export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventProfile; onProfileSaved?: () => Promise<void> | void }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [editing, setEditing] = useState(false);
+  const [quickNoteOpen, setQuickNoteOpen] = useState(false);
+  const [quickNoteBody, setQuickNoteBody] = useState("");
+  const [quickNoteSaving, setQuickNoteSaving] = useState(false);
+  const [quickNoteError, setQuickNoteError] = useState("");
   const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
@@ -52,6 +56,10 @@ export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventP
   const visiblePhone = primaryContact?.phone ?? profile.place.phone ?? null;
   const phoneText = formatPhoneDisplay(visiblePhone);
   const phoneLink = phoneHref(visiblePhone);
+  const followUpHref = `/profiles/${profile.id}?${new URLSearchParams({
+    ...(primaryContact?.id ? { contactId: primaryContact.id } : {}),
+    action: "follow-up",
+  }).toString()}`;
 
   async function loadSimpleNotesPage(page: number) {
     const result = await loadTimelinePageAction({ organizationId: profile.id }, page);
@@ -67,6 +75,34 @@ export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventP
   async function handleSaved() {
     await onProfileSaved?.();
     setEditing(false);
+  }
+
+  async function saveQuickNote() {
+    const body = quickNoteBody.trim();
+    if (!body || quickNoteSaving) return;
+    setQuickNoteSaving(true);
+    setQuickNoteError("");
+    try {
+      const result = await createActivityAction({
+        organizationId: profile.id,
+        contactId: primaryContact?.id ?? undefined,
+        kind: "note",
+        body,
+        occurredAt: new Date(),
+      });
+      if (!result.ok) {
+        setQuickNoteError(result.error);
+        return;
+      }
+      setQuickNoteBody("");
+      setQuickNoteOpen(false);
+      setTab("notes");
+      await onProfileSaved?.();
+    } catch (cause) {
+      setQuickNoteError(cause instanceof Error ? cause.message : "Could not save note.");
+    } finally {
+      setQuickNoteSaving(false);
+    }
   }
 
   if (editing) {
@@ -104,6 +140,24 @@ export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventP
             {websiteHref ? <a className="font-medium text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">{profile.place.website}</a> : null}
           </div>
         </div>
+
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+          <button className="button-primary" type="button" onClick={() => { setQuickNoteOpen((current) => !current); setQuickNoteError(""); }}>Add note</button>
+          <Link className="button-secondary inline-flex" href={followUpHref}>Add follow-up</Link>
+          <button className="button-secondary" type="button" onClick={() => setTab("notes")}>View notes</button>
+        </div>
+
+        {quickNoteOpen ? <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            New note
+            <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" maxLength={4000} value={quickNoteBody} onChange={(event) => setQuickNoteBody(event.target.value)} autoFocus />
+          </label>
+          {quickNoteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{quickNoteError}</p> : null}
+          <div className="flex gap-2">
+            <button className="button-primary" type="button" disabled={quickNoteSaving || !quickNoteBody.trim()} onClick={() => void saveQuickNote()}>{quickNoteSaving ? "Saving…" : "Save note"}</button>
+            <button className="button-secondary" type="button" disabled={quickNoteSaving} onClick={() => { setQuickNoteOpen(false); setQuickNoteBody(""); setQuickNoteError(""); }}>Cancel</button>
+          </div>
+        </div> : null}
       </section>
 
       <div role="tablist" aria-label="Full profile sections" className="grid grid-cols-3 rounded-xl bg-slate-100 p-1">
