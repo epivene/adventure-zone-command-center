@@ -3,6 +3,7 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
+import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
@@ -21,6 +22,7 @@ export default function EventProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
   const [profileEditing, setProfileEditing] = useState(false);
+  const [researchOpen, setResearchOpen] = useState(false);
   const [actHistorySearch, setActHistorySearch] = useState("");
   const [expandedActNotes, setExpandedActNotes] = useState<Set<string>>(() => new Set());
   const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
@@ -141,14 +143,17 @@ export default function EventProfilePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
-      <button
-        aria-label="Back"
-        className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-        onClick={goBack}
-        type="button"
-      >
-        <span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : "Back"}
-      </button>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button
+          aria-label="Back"
+          className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+          onClick={goBack}
+          type="button"
+        >
+          <span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : "Back"}
+        </button>
+        {!profileEditing && profileId ? <button className="button-secondary" type="button" onClick={() => setResearchOpen(true)}>Research profile</button> : null}
+      </div>
 
       <SimpleFullProfile
         profile={data}
@@ -160,6 +165,8 @@ export default function EventProfilePage() {
         editing={profileEditing}
         onEditingChange={setProfileEditing}
       />
+
+      {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
       {recoveredActNotes.length ? (
         <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
