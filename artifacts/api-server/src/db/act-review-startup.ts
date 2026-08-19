@@ -1,6 +1,7 @@
 import { pool as defaultPool } from "@workspace/db";
 import { runActReviewMigrations } from "@workspace/db/migrations";
 import { ensureProfileResearchSchema } from "./profile-research-startup-migration";
+import { ensureLeadScoutRelease2Schema } from "./lead-scout-release2-startup-migration";
 
 const advisoryTryLockSql =
   "SELECT pg_try_advisory_lock(hashtext('adventure-zone:act-review-migrations')) AS locked";
@@ -41,10 +42,11 @@ export async function runActReviewMigrationsAtStartup(options?: {
     await client.query("SET statement_timeout = '20s'");
     timeoutsApplied = true;
 
-    // Keep profile research + Lead Scout recovery under the same startup lock.
-    // The legacy migration registry is an explicit allow-list, so this recovery
-    // path guarantees the newer research tables exist on production deploys.
+    // Keep Profile Research + Lead Scout recovery under the same startup lock.
+    // The legacy migration registry is an explicit allow-list, so these recovery
+    // paths guarantee newer research tables/columns exist on production deploys.
     const researchApplied = await ensureProfileResearchSchema(client);
+    const leadScoutRelease2Applied = await ensureLeadScoutRelease2Schema(client);
 
     const migrationClient: MigrationClient = {
       query: (sql) => client.query(sql),
@@ -56,9 +58,11 @@ export async function runActReviewMigrationsAtStartup(options?: {
         connect: async () => migrationClient,
       },
     });
-    return researchApplied
-      ? ["061_profile_research_runs.sql", "063_lead_scout_runs.sql", ...applied]
-      : applied;
+    return [
+      ...(researchApplied ? ["061_profile_research_runs.sql", "063_lead_scout_runs.sql"] : []),
+      ...(leadScoutRelease2Applied ? ["064_lead_scout_candidate_key.sql"] : []),
+      ...applied,
+    ];
   } finally {
     if (timeoutsApplied) {
       await client.query("RESET statement_timeout").catch(() => undefined);
