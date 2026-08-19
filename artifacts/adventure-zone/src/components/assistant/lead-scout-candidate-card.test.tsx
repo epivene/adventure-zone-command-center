@@ -30,14 +30,22 @@ function candidate(status: LeadScoutCandidate["crmMatchStatus"]): LeadScoutCandi
   };
 }
 
-function renderCard(item: LeadScoutCandidate, options?: { canDismiss?: boolean; onResearchDeeper?: ReturnType<typeof vi.fn>; onNotFit?: ReturnType<typeof vi.fn> }) {
+function renderCard(item: LeadScoutCandidate, options?: {
+  canDismiss?: boolean;
+  canSave?: boolean;
+  onResearchDeeper?: ReturnType<typeof vi.fn>;
+  onNotFit?: ReturnType<typeof vi.fn>;
+  onSaveAsLead?: ReturnType<typeof vi.fn>;
+}) {
   return render(
     <LeadScoutCandidateCard
       candidate={item}
       sources={sources}
       canDismiss={options?.canDismiss ?? true}
+      canSave={options?.canSave ?? false}
       onResearchDeeper={options?.onResearchDeeper ?? vi.fn()}
       onNotFit={options?.onNotFit ?? vi.fn()}
+      onSaveAsLead={options?.onSaveAsLead ?? vi.fn()}
     />,
   );
 }
@@ -56,6 +64,41 @@ describe("LeadScoutCandidateCard", () => {
     expect(screen.getByText(/No official power requirements/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Research deeper" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Not a fit" })).toBeTruthy();
+  });
+
+  it("only enables Save as lead for a reviewable new prospect", () => {
+    const onSaveAsLead = vi.fn();
+    const view = renderCard(candidate("new_prospect"), { canSave: false, onSaveAsLead });
+    expect(screen.getByRole("button", { name: "Save as lead" })).toHaveProperty("disabled", true);
+
+    view.rerender(
+      <LeadScoutCandidateCard
+        candidate={candidate("new_prospect")}
+        sources={sources}
+        canDismiss
+        canSave
+        onResearchDeeper={vi.fn()}
+        onNotFit={vi.fn()}
+        onSaveAsLead={onSaveAsLead}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save as lead" }));
+    expect(onSaveAsLead).toHaveBeenCalledWith("c1");
+  });
+
+  it("shows a successfully linked prospect as In Command Center", () => {
+    renderCard({
+      ...candidate("existing"),
+      reviewStatus: "saved",
+      matchedOrganizationId: "profile-1",
+      matchedBookingId: "booking-1",
+      savedOrganizationId: "profile-1",
+      savedBookingId: "booking-1",
+    });
+    expect(screen.getByText("In Command Center")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Open profile" })).toHaveAttribute("href", "/profiles/profile-1");
+    expect(screen.queryByRole("button", { name: "Save as lead" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Not a fit" })).toBeNull();
   });
 
   it("shows source-backed research details and labels social/review evidence qualitatively", () => {
@@ -78,6 +121,7 @@ describe("LeadScoutCandidateCard", () => {
         candidate={{ ...candidate("new_prospect"), enrichmentStatus: "enriching" }}
         sources={sources}
         canDismiss={false}
+        canSave={false}
         onResearchDeeper={onResearchDeeper}
         onNotFit={vi.fn()}
       />,
@@ -95,6 +139,7 @@ describe("LeadScoutCandidateCard", () => {
         candidate={candidate("new_prospect")}
         sources={sources}
         canDismiss
+        canSave={false}
         onResearchDeeper={vi.fn()}
         onNotFit={onNotFit}
       />,
@@ -114,18 +159,22 @@ describe("LeadScoutCandidateCard", () => {
     expect(screen.getByText("Already in Command Center")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open profile" })).toHaveAttribute("href", "/profiles/org-1");
     expect(screen.queryByRole("button", { name: "Not a fit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save as lead" })).toBeNull();
 
     view.rerender(
       <LeadScoutCandidateCard
         candidate={candidate("possible_match")}
         sources={sources}
         canDismiss
+        canSave
         onResearchDeeper={vi.fn()}
         onNotFit={vi.fn()}
+        onSaveAsLead={vi.fn()}
       />,
     );
     expect(screen.getByText("Possible match")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Review match" })).toHaveAttribute("href", "/profiles/org-1");
     expect(screen.getByRole("button", { name: "Not a fit" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save as lead" })).toBeNull();
   });
 });
