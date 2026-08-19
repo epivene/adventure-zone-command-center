@@ -16,7 +16,7 @@ export type ProfileSheetTarget = {
   bookingId?: string;
 };
 
-type DetailSection = "notes" | "events" | "details" | null;
+type DetailSection = "notes" | "events" | null;
 
 function formatDate(value: unknown) {
   if (!value) return null;
@@ -32,11 +32,13 @@ function formatDateTime(value: unknown) {
   return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function contactName(contact: any) {
-  return contact?.name ?? ([contact?.firstName, contact?.lastName].filter(Boolean).join(" ") || "Contact");
-}
-
-function detailRow(label: string, count: number | null, section: Exclude<DetailSection, null>, active: boolean, onToggle: (section: Exclude<DetailSection, null>) => void) {
+function detailRow(
+  label: string,
+  count: number,
+  section: Exclude<DetailSection, null>,
+  active: boolean,
+  onToggle: (section: Exclude<DetailSection, null>) => void,
+) {
   return (
     <button
       aria-expanded={active}
@@ -45,12 +47,20 @@ function detailRow(label: string, count: number | null, section: Exclude<DetailS
       type="button"
     >
       <span>{active ? "▾" : "▸"} {label}</span>
-      {count != null ? <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{count}</span> : null}
+      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{count}</span>
     </button>
   );
 }
 
-export function ProfileDetailSheet({ target, open, onOpenChange }: { target: ProfileSheetTarget | null; open: boolean; onOpenChange(open: boolean): void }) {
+export function ProfileDetailSheet({
+  target,
+  open,
+  onOpenChange,
+}: {
+  target: ProfileSheetTarget | null;
+  open: boolean;
+  onOpenChange(open: boolean): void;
+}) {
   const [data, setData] = useState<any>(null);
   const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -99,7 +109,10 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
     setEditing(false);
   }
 
-  const title = useMemo(() => data?.place?.name ?? data?.organization?.name ?? data?.name ?? "Profile", [data]);
+  const title = useMemo(
+    () => data?.place?.name ?? data?.organization?.name ?? data?.name ?? "Profile",
+    [data],
+  );
   if (!target || !profileId) return null;
 
   const place = data?.place ?? {};
@@ -107,11 +120,20 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
   const notes = Array.isArray(data?.notes) ? data.notes : [];
   const bookings = Array.isArray(data?.bookings) ? data.bookings : [];
   const followUps = Array.isArray(data?.followUps) ? data.followUps : [];
-  const selectedContactId = target.contactId ?? data?.selectedContactId ?? contacts.find((contact: any) => contact.isPrimary)?.id ?? contacts[0]?.id ?? null;
+  const selectedContactId = target.contactId
+    ?? data?.selectedContactId
+    ?? contacts.find((contact: any) => contact.isPrimary)?.id
+    ?? contacts[0]?.id
+    ?? null;
   const selectedContact = contacts.find((contact: any) => contact.id === selectedContactId) ?? contacts[0] ?? null;
   const location = [place.city, place.region].filter(Boolean).join(", ");
+  const fullAddress = [
+    [place.address1, place.address2].filter(Boolean).join(", "),
+    [place.city, place.region, place.postalCode].filter(Boolean).join(" "),
+  ].filter(Boolean).join(" · ");
   const meaningfulNotes = notes.filter((note: any) => historyCategory(note) !== "system");
   const recentNote = meaningfulNotes[0] ?? null;
+  const olderNotes = meaningfulNotes.slice(1);
   const openFollowUps = [...followUps]
     .filter((item: any) => !item.completedAt)
     .sort((a: any, b: any) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
@@ -128,7 +150,6 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
   }
 
   function openNoteComposer() {
-    setDetailSection("notes");
     setNoteComposerOpen(true);
     setNoteError("");
   }
@@ -153,7 +174,6 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
       setNoteBody("");
       setNoteComposerOpen(false);
       await loadProfile(false);
-      setDetailSection("notes");
     } catch (cause) {
       setNoteError(cause instanceof Error ? cause.message : "Could not save note.");
     } finally {
@@ -162,11 +182,25 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
   }
 
   return (
-    <ResponsiveDetailSheet fullPageHref={`/profiles/${profileId}${selectedContactId ? `?contactId=${encodeURIComponent(selectedContactId)}` : ""}`} onOpenChange={onOpenChange} open={open} title={title}>
-      {loading && !data ? <p className="text-sm text-slate-500">Loading profile…</p> : error && !data ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p> : data ? (
+    <ResponsiveDetailSheet
+      fullPageHref={`/profiles/${profileId}${selectedContactId ? `?contactId=${encodeURIComponent(selectedContactId)}` : ""}`}
+      onOpenChange={onOpenChange}
+      open={open}
+      title={title}
+    >
+      {loading && !data ? (
+        <p className="text-sm text-slate-500">Loading profile…</p>
+      ) : error && !data ? (
+        <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>
+      ) : data ? (
         <div className="grid gap-3 pb-2">
           {editing ? (
-            <ProfileInlineEditor profile={data} contactId={selectedContactId} onSaved={handleInlineSaved} onCancel={() => setEditing(false)} />
+            <ProfileInlineEditor
+              profile={data}
+              contactId={selectedContactId}
+              onSaved={handleInlineSaved}
+              onCancel={() => setEditing(false)}
+            />
           ) : (
             <>
               {!nextFollowUp ? (
@@ -177,27 +211,50 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
               ) : followUpOverdue ? (
                 <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
                   <p className="font-bold text-rose-900">Follow-up overdue</p>
-                  <p className="mt-1 text-sm capitalize text-rose-800">{String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
+                  <p className="mt-1 text-sm capitalize text-rose-800">
+                    {String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}
+                  </p>
                 </section>
               ) : (
                 <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="font-bold text-amber-900">Follow-up needed</p>
-                  <p className="mt-1 text-sm capitalize text-amber-800">{String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
+                  <p className="mt-1 text-sm capitalize text-amber-800">
+                    {String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}
+                  </p>
                 </section>
               )}
 
               <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="flex items-start gap-3">
                   {profileImageDataUrl ? (
-                    <img alt={`${title} profile`} className="h-16 w-16 shrink-0 rounded-full object-cover shadow-sm" src={profileImageDataUrl} />
+                    <img
+                      alt={`${title} profile`}
+                      className="h-16 w-16 shrink-0 rounded-full object-cover shadow-sm"
+                      src={profileImageDataUrl}
+                    />
                   ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-700"><UserRound className="h-7 w-7" /></div>
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-700">
+                      <UserRound className="h-7 w-7" />
+                    </div>
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="inline-flex items-center gap-1 font-bold text-slate-950"><MapPin className="h-4 w-4" />{location || "Location not set"}</p>
-                        {place.placeType ? <p className="mt-1"><span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold capitalize text-slate-700">{String(place.placeType).replaceAll("_", " ")}</span></p> : null}
+                      <div className="min-w-0">
+                        <p className="inline-flex items-center gap-1 font-bold text-slate-950">
+                          <MapPin className="h-4 w-4 shrink-0" />
+                          {location || "Location not set"}
+                        </p>
+                        {fullAddress ? <p className="mt-1 text-sm text-slate-600">{fullAddress}</p> : null}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {place.placeType ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold capitalize text-slate-700">
+                              {String(place.placeType).replaceAll("_", " ")}
+                            </span>
+                          ) : null}
+                          {place.lastResort ? (
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">Last Resort</span>
+                          ) : null}
+                        </div>
                       </div>
                       <button className="button-secondary shrink-0" onClick={() => setEditing(true)} type="button">Edit</button>
                     </div>
@@ -205,56 +262,128 @@ export function ProfileDetailSheet({ target, open, onOpenChange }: { target: Pro
                 </div>
 
                 <div className="mt-4 flex items-center gap-2">
-                  {phoneLink ? <a aria-label={phoneText ? `Call ${phoneText}` : "Call"} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700" href={phoneLink}><Phone className="h-5 w-5" /></a> : null}
-                  {email ? <a aria-label={`Email ${email}`} className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700" href={`mailto:${email}`}><Mail className="h-5 w-5" /></a> : null}
-                  {websiteHref ? <a aria-label="Open website" className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank"><ExternalLink className="h-5 w-5" /></a> : null}
+                  {phoneLink ? (
+                    <a
+                      aria-label={phoneText ? `Call ${phoneText}` : "Call"}
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
+                      href={phoneLink}
+                    >
+                      <Phone className="h-5 w-5" />
+                    </a>
+                  ) : null}
+                  {email ? (
+                    <a
+                      aria-label={`Email ${email}`}
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
+                      href={`mailto:${email}`}
+                    >
+                      <Mail className="h-5 w-5" />
+                    </a>
+                  ) : null}
+                  {websiteHref ? (
+                    <a
+                      aria-label="Open website"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
+                      href={websiteHref}
+                      rel="noreferrer noopener"
+                      target="_blank"
+                    >
+                      <ExternalLink className="h-5 w-5" />
+                    </a>
+                  ) : null}
                 </div>
 
                 <div className="mt-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
-                  <div><p className="text-sm font-bold text-slate-900">{contacts.length} contact{contacts.length === 1 ? "" : "s"}</p></div>
-                  <div><p className="text-sm font-bold text-slate-900">{bookings.length} booking{bookings.length === 1 ? "" : "s"}</p></div>
+                  <p className="text-sm font-bold text-slate-900">{contacts.length} contact{contacts.length === 1 ? "" : "s"}</p>
+                  <p className="text-sm font-bold text-slate-900">{bookings.length} booking{bookings.length === 1 ? "" : "s"}</p>
                 </div>
               </section>
 
               {recentNote ? (
                 <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-2"><h3 className="font-bold">Recent note</h3>{formatDate(recentNote.occurredAt ?? recentNote.createdAt) ? <span className="text-xs text-slate-500">{formatDate(recentNote.occurredAt ?? recentNote.createdAt)}</span> : null}</div>
-                  <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 ${recentNoteExpanded ? "" : "line-clamp-4"}`}>{simplifyHistoryText(recentNote.body ?? "")}</p>
-                  {simplifyHistoryText(recentNote.body ?? "").length > 220 ? <button className="mt-2 text-sm font-semibold text-orange-700" onClick={() => setRecentNoteExpanded((current) => !current)} type="button">{recentNoteExpanded ? "Show less" : "More"}</button> : null}
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold">Recent note</h3>
+                    {formatDate(recentNote.occurredAt ?? recentNote.createdAt) ? (
+                      <span className="text-xs text-slate-500">{formatDate(recentNote.occurredAt ?? recentNote.createdAt)}</span>
+                    ) : null}
+                  </div>
+                  <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 ${recentNoteExpanded ? "" : "line-clamp-4"}`}>
+                    {simplifyHistoryText(recentNote.body ?? "")}
+                  </p>
+                  {simplifyHistoryText(recentNote.body ?? "").length > 220 ? (
+                    <button
+                      className="mt-2 text-sm font-semibold text-orange-700"
+                      onClick={() => setRecentNoteExpanded((current) => !current)}
+                      type="button"
+                    >
+                      {recentNoteExpanded ? "Show less" : "More"}
+                    </button>
+                  ) : null}
+                </section>
+              ) : null}
+
+              {noteComposerOpen ? (
+                <section className="grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+                  <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                    New note
+                    <textarea
+                      autoFocus
+                      className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal"
+                      value={noteBody}
+                      onChange={(event) => setNoteBody(event.target.value)}
+                    />
+                  </label>
+                  {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
+                  <div className="flex gap-2">
+                    <button className="button-primary" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">
+                      {noteSaving ? "Saving…" : "Save note"}
+                    </button>
+                    <button
+                      className="button-secondary"
+                      disabled={noteSaving}
+                      onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}
+                      type="button"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </section>
               ) : null}
 
               <div className="grid gap-2">
-                {detailRow("Notes", meaningfulNotes.length, "notes", detailSection === "notes", toggleDetail)}
-                {detailSection === "notes" ? (
+                {olderNotes.length > 0 ? detailRow("Note history", olderNotes.length, "notes", detailSection === "notes", toggleDetail) : null}
+                {detailSection === "notes" && olderNotes.length > 0 ? (
                   <section className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    {noteComposerOpen ? (
-                      <div className="grid gap-2 rounded-lg bg-white p-3">
-                        <label className="grid gap-1 text-sm font-semibold text-slate-700">New note<textarea autoFocus className="min-h-24 rounded-md border border-slate-300 px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} /></label>
-                        {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
-                        <div className="flex gap-2"><button className="button-primary" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">{noteSaving ? "Saving…" : "Save note"}</button><button className="button-secondary" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }} type="button">Cancel</button></div>
-                      </div>
-                    ) : null}
-                    {meaningfulNotes.length ? meaningfulNotes.slice(0, 12).map((note: any) => <article className="rounded-lg bg-white p-3" key={note.id ?? `${note.kind}-${note.occurredAt}`}><div className="flex items-baseline justify-between gap-2"><span className="text-xs font-bold uppercase tracking-wide text-slate-500">{String(note.kind ?? "note").replaceAll("_", " ")}</span>{formatDate(note.occurredAt ?? note.createdAt) ? <span className="text-xs text-slate-500">{formatDate(note.occurredAt ?? note.createdAt)}</span> : null}</div><p className="mt-1 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(note.body ?? "")}</p></article>) : <p className="text-sm text-slate-600">No notes yet.</p>}
+                    {olderNotes.map((note: any) => (
+                      <article className="rounded-lg bg-white p-3" key={note.id ?? `${note.kind}-${note.occurredAt}`}>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            {String(note.kind ?? "note").replaceAll("_", " ")}
+                          </span>
+                          {formatDate(note.occurredAt ?? note.createdAt) ? (
+                            <span className="text-xs text-slate-500">{formatDate(note.occurredAt ?? note.createdAt)}</span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">
+                          {simplifyHistoryText(note.body ?? "")}
+                        </p>
+                      </article>
+                    ))}
                   </section>
                 ) : null}
 
-                {detailRow("Events", bookings.length, "events", detailSection === "events", toggleDetail)}
-                {detailSection === "events" ? (
+                {bookings.length > 0 ? detailRow("Events", bookings.length, "events", detailSection === "events", toggleDetail) : null}
+                {detailSection === "events" && bookings.length > 0 ? (
                   <section className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    {bookings.length ? bookings.map((booking: any) => <article className="rounded-lg bg-white p-3" key={booking.id}><h3 className="font-semibold">{booking.name ?? "Event"}</h3><p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p></article>) : <p className="text-sm text-slate-600">No events yet.</p>}
-                  </section>
-                ) : null}
-
-                {detailRow("More details", null, "details", detailSection === "details", toggleDetail)}
-                {detailSection === "details" ? (
-                  <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                    <dl className="grid gap-3">
-                      <div><dt className="font-semibold text-slate-500">Address</dt><dd>{[place.address1, place.address2, place.city, place.region, place.postalCode].filter(Boolean).join(", ") || "Not set"}</dd></div>
-                      <div><dt className="font-semibold text-slate-500">Primary contact</dt><dd>{selectedContact ? contactName(selectedContact) : "Not set"}</dd></div>
-                      {selectedContact?.role ? <div><dt className="font-semibold text-slate-500">Role</dt><dd>{selectedContact.role}</dd></div> : null}
-                      {place.placeType ? <div><dt className="font-semibold text-slate-500">Category</dt><dd className="capitalize">{String(place.placeType).replaceAll("_", " ")}</dd></div> : null}
-                    </dl>
+                    {bookings.map((booking: any) => (
+                      <article className="rounded-lg bg-white p-3" key={booking.id}>
+                        <h3 className="font-semibold">{booking.name ?? "Event"}</h3>
+                        <p className="mt-1 text-sm text-slate-600">
+                          {[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p>
+                      </article>
+                    ))}
                   </section>
                 ) : null}
               </div>
