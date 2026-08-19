@@ -20,6 +20,7 @@ const adminMenuGroups: MenuGroup[] = [
     items: [
       { href: "/bookings", label: "Bookings" },
       { href: "/calls/workspace", label: "Calls" },
+      { href: "/research-sources", label: "Research Sources" },
       { href: "/quick-add", label: "Quick add" },
       { href: "/contacts", label: "All contacts" },
     ],
