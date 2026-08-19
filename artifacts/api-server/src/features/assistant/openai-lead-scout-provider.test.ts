@@ -38,6 +38,27 @@ function response(output: unknown, citations: string[]) {
   } as Response;
 }
 
+function responseWithWebSearchSources(output: unknown, sources: string[]) {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      output_text: JSON.stringify(output),
+      output: [
+        {
+          type: "web_search_call",
+          action: {
+            type: "search",
+            sources: sources.map((url) => ({ type: "url", url })),
+          },
+        },
+        { type: "message", content: [{ type: "output_text", text: JSON.stringify(output), annotations: [] }] },
+      ],
+    }),
+    text: async () => "",
+  } as Response;
+}
+
 type FetchInput = string | URL | Request;
 type MockFetch = (input: FetchInput, init?: RequestInit) => Promise<Response>;
 
@@ -64,6 +85,39 @@ describe("OpenAiLeadScoutProvider", () => {
     expect(body.input).toMatch(/2026-09-01.*2026-09-30/s);
     expect(body.input).toMatch(/MT.*ID.*WY.*UT/s);
     expect(body.input).not.toMatch(/private CRM notes/i);
+  });
+
+  it("retains actual web_search_call sources even when the JSON response has no URL annotations", async () => {
+    const urls = [
+      "https://www.visitmt.com/events",
+      "https://www.visitutah.com/events",
+    ];
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => responseWithWebSearchSources({ sources: [] }, urls));
+    const provider = new OpenAiLeadScoutProvider(fetchFn as typeof fetch, "test-key");
+
+    const sources = await provider.discoverSources(criteria);
+
+    expect(sources.map((source) => source.url)).toEqual(urls);
+    expect(sources.every((source) => source.category === "other")).toBe(true);
+    expect(sources.every((source) => source.title.length > 0)).toBe(true);
+  });
+
+  it("keeps candidates backed by web_search_call sources even without text annotations", async () => {
+    const source: LeadScoutSourceInput = {
+      url: "https://visitidaho.org/events", title: "Idaho events", publisher: "Visit Idaho",
+      category: "tourism_chamber", retrievedAt: "2026-08-19T18:00:00.000Z", excerpt: "events",
+    };
+    const eventUrl = "https://visitidaho.org/silver-valley";
+    const fetchFn = vi.fn<MockFetch>(async (_input, _init) => responseWithWebSearchSources({
+      candidates: [
+        { name: "Silver Valley Days", city: "Kellogg", region: "ID", startsAt: "2026-09-11", endsAt: "2026-09-13", venue: "Downtown", url: eventUrl, eventType: "community festival", rationale: "Family event" },
+      ],
+    }, [eventUrl]));
+    const provider = new OpenAiLeadScoutProvider(fetchFn as typeof fetch, "test-key");
+
+    const candidates = await provider.discoverCandidates({ criteria, sources: [source] });
+
+    expect(candidates).toEqual([expect.objectContaining({ name: "Silver Valley Days", website: eventUrl })]);
   });
 
   it("keeps only cited candidates in the requested region and date window", async () => {
