@@ -33,6 +33,12 @@ function tokenOverlap(left: string, right: string) {
   return intersection / Math.min(a.size, b.size);
 }
 
+function savedLocation(context: ProfileResearchContext) {
+  const location = context.knownFacts.find((fact) => fact.key === "location")?.value ?? "";
+  const [city = "", region = ""] = location.split(",").map((part) => part.trim());
+  return { city, region };
+}
+
 export function evaluateIdentityMatch(
   context: ProfileResearchContext,
   evidence: IdentityEvidence,
@@ -41,18 +47,17 @@ export function evaluateIdentityMatch(
     return { confidence: "low", rationale: "The page could not be opened and verified.", writable: false };
   }
 
-  const regionFact = context.knownFacts.find((fact) => fact.key === "region")?.value ?? "";
-  const cityFact = context.knownFacts.find((fact) => fact.key === "city")?.value ?? "";
+  const saved = savedLocation(context);
   const profileName = context.profileName;
 
-  if (regionFact && evidence.region && normalize(regionFact) !== normalize(evidence.region)) {
+  if (saved.region && evidence.region && normalize(saved.region) !== normalize(evidence.region)) {
     return { confidence: "low", rationale: "A same-name result is in a different state or region.", writable: false };
   }
 
   const nameScore = tokenOverlap(profileName, evidence.name ?? evidence.title);
-  const cityMatches = !cityFact || !evidence.city || normalize(cityFact) === normalize(evidence.city);
+  const cityMatches = !saved.city || !evidence.city || normalize(saved.city) === normalize(evidence.city);
   const contactFacts = context.knownFacts
-    .filter((fact) => fact.key.startsWith("contact:"))
+    .filter((fact) => fact.key === "primary_contact" || fact.key.startsWith("history_clue:"))
     .map((fact) => normalize(fact.value));
   const contactMatch = (evidence.contactNames ?? []).some((name) =>
     contactFacts.some((fact) => fact.includes(normalize(name)) || normalize(name).includes(fact)),
