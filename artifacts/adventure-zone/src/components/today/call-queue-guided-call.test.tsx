@@ -98,7 +98,7 @@ describe("Today guided call action", () => {
     expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
     const callLinks = screen.getAllByRole("link", { name: "Start guided call" });
     expect(callLinks[0]).toHaveAttribute("href", "tel:7015550199");
-    expect(callLinks[1]).toHaveAttribute("href", "tel:7015550112;ext=4");
+    expect(callLinks[1]).toHaveAttribute("href", "tel:7015550112");
 
     callLinks[1].addEventListener("click", (event) => event.preventDefault(), { capture: true });
     fireEvent.click(callLinks[1]);
