@@ -84,7 +84,7 @@ export function scoreAdventureZoneFit(input: LeadScoutFitInput): {
     cautions.push("An exclusive or incumbent carnival/amusement provider may block participation.");
   }
   if (deadlinePassed(input.applicationDeadline, input.now)) {
-    score -= 40;
+    score -= 45;
     cautions.push("The published application deadline has passed.");
   }
   if (!input.hasVendorPath && !input.hasEntertainmentPath) {
