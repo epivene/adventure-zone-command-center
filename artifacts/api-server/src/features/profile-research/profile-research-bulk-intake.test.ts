@@ -53,4 +53,17 @@ describe("ProfileResearchBulkIntakeService", () => {
       .rejects.toThrow("BULK_PROSPECT_LIMIT");
     expect(intake.create).not.toHaveBeenCalled();
   });
+
+  it("propagates database creation failures instead of mislabeling them as missing info", async () => {
+    const intake = {
+      create: vi.fn(async () => { throw new Error("RESEARCH_PROSPECT_PROFILE_CREATE_FAILED"); }),
+    };
+    const service = new ProfileResearchBulkIntakeService(intake as any);
+
+    await expect(service.create({
+      events: [prospect("Bluegrass Festival")],
+      nextActionKind: "call",
+      nextActionDueAt: "2026-08-24",
+    })).rejects.toThrow("RESEARCH_PROSPECT_PROFILE_CREATE_FAILED");
+  });
 });
