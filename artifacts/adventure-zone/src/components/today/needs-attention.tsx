@@ -19,20 +19,11 @@ export function NeedsAttention({
   return (
     <div className="grid gap-3">
       {items.length ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" aria-labelledby="needs-attention-title">
-          <div className="flex items-baseline justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-bold" id="needs-attention-title">Needs attention</h2>
-              <p className="mt-1 text-sm text-slate-600">Exceptions that need a decision before normal work can keep moving.</p>
-            </div>
-            <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">
-              {items.reduce((sum, item) => sum + item.count, 0)}
-            </span>
-          </div>
-          <div className="mt-3 divide-y divide-slate-100">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" aria-label="Needs attention items">
+          <div className="divide-y divide-slate-100">
             {items.map((item) => (
               <Link
-                className="flex items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-800 hover:text-orange-700"
+                className="flex items-center justify-between gap-3 py-3 text-sm font-semibold text-slate-800 first:pt-0 last:pb-0 hover:text-orange-700"
                 href={item.href}
                 key={item.label}
               >
