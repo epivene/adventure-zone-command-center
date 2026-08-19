@@ -38,6 +38,12 @@ export type CallQueueItem = {
   kind: string;
   dueAt: Date | string;
   status: string;
+  callPhone?: {
+    id: string;
+    number: string;
+    extension: string | null;
+    type: string;
+  } | null;
   copilot?: BookingCopilotReason | null;
 };
 
@@ -89,20 +95,6 @@ function coerceTimeline(items: any[]) {
     createdAt: item.createdAt ? new Date(item.createdAt) : item.createdAt,
     updatedAt: item.updatedAt ? new Date(item.updatedAt) : item.updatedAt,
   }));
-}
-
-function callablePhone(data: any) {
-  const phones = Array.isArray(data?.phones) ? data.phones : [];
-  return phones.find((phone: any) => phone.primary && !phone.doNotCallAt)
-    ?? phones.find((phone: any) => !phone.doNotCallAt)
-    ?? null;
-}
-
-function launchWorkspacePhone(data: any) {
-  const phone = callablePhone(data);
-  if (!phone?.number) return false;
-  window.location.assign(buildTelHref({ number: phone.number, extension: phone.extension ?? null }));
-  return true;
 }
 
 function defaultRenderWorkspace(
@@ -198,7 +190,6 @@ export function CallQueueWorkspace({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
-  const [pendingLaunchId, setPendingLaunchId] = useState<string | null>(null);
 
   const selected = queue.find(({ id }) => id === selectedId) ?? null;
 
@@ -239,20 +230,14 @@ export function CallQueueWorkspace({
     };
   }, [selected?.id, retryKey, loadWorkspace]);
 
-  useEffect(() => {
-    if (!pendingLaunchId || workspace?.followUpId !== pendingLaunchId) return;
-    launchWorkspacePhone(workspace);
-    setPendingLaunchId(null);
-  }, [pendingLaunchId, workspace]);
-
   function startGuidedCall(followUp: CallQueueItem) {
-    if (workspace?.followUpId === followUp.id && launchWorkspacePhone(workspace)) {
-      setSelectedId(followUp.id);
-      setPendingLaunchId(null);
-      return;
-    }
-    setPendingLaunchId(followUp.id);
     setSelectedId(followUp.id);
+    if (followUp.callPhone?.number) {
+      window.location.assign(buildTelHref({
+        number: followUp.callPhone.number,
+        extension: followUp.callPhone.extension,
+      }));
+    }
   }
 
   async function handleComplete(input: any): Promise<CompleteCallResult> {
@@ -337,10 +322,11 @@ export function CallQueueWorkspace({
                       ) : null}
                     </button>
                     <button
-                      aria-label={`Call ${label}`}
-                      className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-white text-lg shadow-sm transition hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                      aria-label="Start guided call"
+                      className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-white text-lg shadow-sm transition hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!followUp.callPhone?.number}
                       onClick={() => startGuidedCall(followUp)}
-                      title={`Call ${label}`}
+                      title={followUp.callPhone?.number ? `Call ${label}` : `No callable number for ${label}`}
                       type="button"
                     >
                       <span aria-hidden>📞</span>
