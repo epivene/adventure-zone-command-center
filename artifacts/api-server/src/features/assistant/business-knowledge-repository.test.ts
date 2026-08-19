@@ -75,4 +75,33 @@ describe("business knowledge", () => {
     expect(keys).toContain("resource-paintball-shared");
     expect(keys).toContain("global-family-business-flexibility");
   });
+
+  it("ships reviewed website knowledge for package setup and pricing guidance", () => {
+    const byKey = new Map(
+      initialBusinessKnowledgeSeed.map((entry) => [entry.seedKey, entry]),
+    );
+
+    expect(byKey.get("package-adventure-zone-site-requirements")).toMatchObject({
+      target: { kind: "package", code: "adventure_zone" },
+      sourceUrl: "https://www.the-adventure-zone.com/general-5",
+      sourceLabel: "Adventure Zone website FAQ",
+    });
+    expect(byKey.get("package-pirates-rebellion-site-requirements")).toMatchObject({
+      target: { kind: "package", code: "pirates_rebellion" },
+      sourceUrl: "https://www.the-adventure-zone.com/general-5",
+    });
+    expect(byKey.get("package-warriors-playground-site-requirements")).toMatchObject({
+      target: { kind: "package", code: "weekend_warriors" },
+      sourceUrl: "https://www.the-adventure-zone.com/general-5",
+    });
+    expect(byKey.get("global-event-pricing-model")).toMatchObject({
+      target: { kind: "global" },
+      sourceUrl: "https://www.the-adventure-zone.com/general-5",
+    });
+
+    expect(byKey.get("global-event-pricing-model")?.body).toMatch(/event-specific/i);
+    expect(byKey.get("global-event-pricing-model")?.body).toMatch(/historical/i);
+    expect(byKey.get("package-pirates-rebellion-site-requirements")?.body).toMatch(/2 days/i);
+    expect(byKey.get("package-warriors-playground-site-requirements")?.body).toMatch(/25 KW/i);
+  });
 });
