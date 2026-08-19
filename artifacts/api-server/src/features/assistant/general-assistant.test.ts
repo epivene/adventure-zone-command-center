@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerGeneralAssistant } from "./general-assistant";
+import { answerGeneralAssistant, isLeadDiscoveryQuestion } from "./general-assistant";
 import type { ProfileSearchRepository } from "./profile-search-repository";
 import type { ProfileSearchRequest } from "./profile-search-types";
 
@@ -11,6 +11,26 @@ function fakeRepo(calls: ProfileSearchRequest[]): ProfileSearchRepository {
     },
   };
 }
+
+describe("isLeadDiscoveryQuestion", () => {
+  it("recognizes the approved corridor + date discovery prompt", () => {
+    expect(isLeadDiscoveryQuestion("I need to find an event for, between Montana and Utah in September 2026")).toBe(true);
+  });
+
+  it("recognizes date-window vendor/fair discovery", () => {
+    expect(isLeadDiscoveryQuestion("Find vendor opportunities at fairs in Idaho in August 2027")).toBe(true);
+  });
+
+  it("does not steal simple named-profile searches", () => {
+    expect(isLeadDiscoveryQuestion("Find Water Lantern Festival")).toBe(false);
+    expect(isLeadDiscoveryQuestion("Find Morton County Fair")).toBe(false);
+  });
+
+  it("does not treat ordinary workflow questions as lead scouting", () => {
+    expect(isLeadDiscoveryQuestion("Who has overdue follow-ups?")).toBe(false);
+    expect(isLeadDiscoveryQuestion("What should I work on today?")).toBe(false);
+  });
+});
 
 describe("answerGeneralAssistant", () => {
   it("routes a named profile lookup to structured search", async () => {

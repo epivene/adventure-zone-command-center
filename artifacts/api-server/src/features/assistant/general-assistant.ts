@@ -1,9 +1,12 @@
 import type { AssistantAnswer } from "./assistant-types";
+import type { LeadScoutRunView } from "./lead-scout-types";
 import type { ProfileSearchRepository } from "./profile-search-repository";
 import type { AssistantProfileSearchResult, ProfileSearchRequest } from "./profile-search-types";
 
 export type GeneralAssistantResponse =
   | { kind: "profile_results"; text: string; results: AssistantProfileSearchResult[] }
+  | { kind: "lead_discovery"; text: string; run: LeadScoutRunView }
+  | { kind: "lead_discovery_clarification"; text: string; runId: string }
   | { kind: "answer"; answer: AssistantAnswer }
   | { kind: "needs_context"; text: string };
 
@@ -22,6 +25,18 @@ const stateNames: Record<string, string> = {
 
 const namedEventCategories = /^(christmas|halloween|oktoberfest|octoberfest|fourth of july|4th of july|independence day|holiday|winter carnival|summer festival)$/i;
 const genericEventPhrase = /^(.+?)\s+(events?|fairs?|festivals?|parades?|celebrations?)$/i;
+const discoveryNoun = /\b(events?|fairs?|festivals?|vendors?|leads?|opportunit(?:y|ies)|parades?|celebrations?|carnivals?)\b/i;
+const discoveryVerb = /\b(find|search|look for|need|show me)\b/i;
+const monthOrSeason = /\b(january|february|march|april|may|june|july|august|september|october|november|december|spring|summer|fall|autumn|winter)\b/i;
+
+export function isLeadDiscoveryQuestion(question: string): boolean {
+  const value = question.trim();
+  if (!discoveryVerb.test(value) || !discoveryNoun.test(value)) return false;
+  const hasExplicitTimeScope = monthOrSeason.test(value) || /\b20\d{2}\b/.test(value) || /\b\d{4}-\d{2}-\d{2}\b/.test(value);
+  const hasRouteScope = /\bbetween\b.+\band\b/i.test(value) || /\bleg\s*\d+\b/i.test(value) || /\b(route|corridor)\b/i.test(value);
+  const hasOpportunityScope = /\b(vendor|exhibitor|booth|sponsor(?:ship)?|book(?:ed|ing)?\s+.*entertainment)\b/i.test(value);
+  return hasExplicitTimeScope || hasRouteScope || hasOpportunityScope;
+}
 
 function cleanSearchSubject(value: string) {
   return value

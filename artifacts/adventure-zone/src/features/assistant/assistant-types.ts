@@ -180,6 +180,8 @@ export type LeadScoutRunView = {
 
 export type GeneralAssistantResponse =
   | { kind: "profile_results"; text: string; results: AssistantProfileSearchResult[] }
+  | { kind: "lead_discovery"; text: string; run: LeadScoutRunView }
+  | { kind: "lead_discovery_clarification"; text: string; runId: string }
   | { kind: "answer"; answer: AssistantAnswer }
   | { kind: "needs_context"; text: string };
 

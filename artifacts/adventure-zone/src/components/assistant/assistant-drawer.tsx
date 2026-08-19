@@ -12,12 +12,15 @@ import { useAssistantContext } from "@/features/assistant/assistant-context";
 import type {
   AssistantAnswer,
   AssistantContextBundle,
+  AssistantLeadMatch,
   AssistantProfileSearchResult,
   BookingBrief,
   GeneralAssistantResponse,
+  LeadScoutRunView,
 } from "@/features/assistant/assistant-types";
 import { AssistantMessage } from "./assistant-message";
 import { BookingBriefCard } from "./booking-brief-card";
+import { LeadDiscoveryResults } from "./lead-discovery-results";
 import { ProfileSearchResults } from "./profile-search-results";
 
 const generalPrompts = [
@@ -50,6 +53,7 @@ export function AssistantDrawer() {
   const [question, setQuestion] = useState("");
   const [answers, setAnswers] = useState<AssistantAnswer[]>([]);
   const [generalResponse, setGeneralResponse] = useState<GeneralAssistantResponse | null>(null);
+  const [leadScoutRun, setLeadScoutRun] = useState<LeadScoutRunView | null>(null);
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -73,6 +77,7 @@ export function AssistantDrawer() {
     setContextBundle(null);
     setBrief(null);
     setGeneralResponse(null);
+    setLeadScoutRun(null);
     setError(null);
     setOffline(false);
     setSavedAt(null);
@@ -127,6 +132,7 @@ export function AssistantDrawer() {
     try {
       if (!activeContext) {
         if (!navigator.onLine) {
+          setLeadScoutRun(null);
           setGeneralResponse({
             kind: "needs_context",
             text: "I'm offline. General profile search needs a connection because Command Center does not cache the full CRM. Previously opened profiles can still be used from their saved context.",
@@ -134,7 +140,13 @@ export function AssistantDrawer() {
           return;
         }
         const result = await askGeneralAssistant(submitted);
-        setGeneralResponse(result);
+        if (result.kind === "lead_discovery") {
+          setGeneralResponse(null);
+          setLeadScoutRun(result.run);
+        } else {
+          setLeadScoutRun(null);
+          setGeneralResponse(result);
+        }
         return;
       }
 
@@ -159,12 +171,25 @@ export function AssistantDrawer() {
   function useResultAsContext(result: AssistantProfileSearchResult) {
     selectExplicitContext({ kind: result.kind, recordId: result.id, label: result.label });
     setGeneralResponse(null);
+    setLeadScoutRun(null);
     setQuestion("");
   }
 
   function openResult(result: AssistantProfileSearchResult) {
     clearExplicitContext();
     setLocation(resultHref(result));
+  }
+
+  function useLeadMatchAsContext(match: AssistantLeadMatch) {
+    selectExplicitContext({ kind: "organization", recordId: match.organizationId, label: match.label });
+    setGeneralResponse(null);
+    setLeadScoutRun(null);
+    setQuestion("");
+  }
+
+  function openLeadMatch(match: AssistantLeadMatch) {
+    clearExplicitContext();
+    setLocation(`/profiles/${match.organizationId}`);
   }
 
   if (!isOpen) return null;
@@ -199,7 +224,7 @@ export function AssistantDrawer() {
             <div className="grid gap-4">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <h3 className="font-bold text-slate-950">General Command Center</h3>
-                <p className="mt-1 text-sm text-slate-600">Find a customer, contact, event family, seasonal event, overdue follow-up, or package-history match. Pick a result and I’ll use it for your next questions.</p>
+                <p className="mt-1 text-sm text-slate-600">Find a customer, contact, event family, seasonal event, overdue follow-up, or ask for events in a specific date/route area. Pick a result and I’ll use it for your next questions.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {generalPrompts.map((prompt) => (
                     <button className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100" key={prompt} onClick={() => setQuestion(prompt)} type="button">{prompt}</button>
@@ -207,6 +232,15 @@ export function AssistantDrawer() {
                 </div>
               </div>
               {generalResponse ? <p className="text-sm text-slate-700">{generalResponse.kind === "answer" ? generalResponse.answer.text : generalResponse.text}</p> : null}
+              {leadScoutRun ? (
+                <LeadDiscoveryResults
+                  run={leadScoutRun}
+                  webScoutAvailable={false}
+                  onOpenProfile={openLeadMatch}
+                  onUseContext={useLeadMatchAsContext}
+                  onFindNewLeads={() => undefined}
+                />
+              ) : null}
               <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} />
               {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
             </div>
@@ -230,12 +264,12 @@ export function AssistantDrawer() {
             id="booking-assistant-question"
             maxLength={4000}
             onChange={(event) => setQuestion(event.currentTarget.value)}
-            placeholder={generalMode ? "Find a profile, Christmas events, who needs follow-up, or search by city…" : "Ask what happened last year, what they normally book, what you may be forgetting…"}
+            placeholder={generalMode ? "Find a profile, or ask for events by date, state, route, or leg…" : "Ask what happened last year, what they normally book, what you may be forgetting…"}
             value={question}
           />
           <div className="mt-2 flex items-center justify-between gap-3">
             <p className="text-xs text-slate-500">
-              {generalMode ? "General search uses structured Command Center records." : offline ? "Offline questions use the saved brief when possible." : "Routine questions use saved Command Center data first."}
+              {generalMode ? "General search uses structured Command Center records first." : offline ? "Offline questions use the saved brief when possible." : "Routine questions use saved Command Center data first."}
             </p>
             <button className="button-primary min-w-24" disabled={asking || !question.trim()} type="submit">{asking ? "Thinking…" : "Ask"}</button>
           </div>

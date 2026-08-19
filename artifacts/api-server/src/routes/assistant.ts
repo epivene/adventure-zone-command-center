@@ -11,7 +11,8 @@ import { BookingContextRepository } from "@/features/assistant/booking-context-r
 import { ContactContextRepository } from "@/features/assistant/contact-context-repository";
 import { extractDerivedFactsForProfile } from "@/features/assistant/derived-fact-job";
 import { DerivedFactRepository } from "@/features/assistant/derived-fact-repository";
-import { answerGeneralAssistant } from "@/features/assistant/general-assistant";
+import { answerGeneralAssistant, isLeadDiscoveryQuestion } from "@/features/assistant/general-assistant";
+import { LeadScoutService } from "@/features/assistant/lead-scout-service";
 import { profileSearchInputSchema } from "@/features/assistant/profile-search-input";
 import { PostgresProfileSearchRepository } from "@/features/assistant/profile-search-repository";
 import { ProfileContextRepository } from "@/features/assistant/profile-context-repository";
@@ -24,6 +25,7 @@ import type {
 const router: IRouter = Router();
 const canonicalUuid = z.uuid().transform((value) => value.toLowerCase());
 const profileSearch = new PostgresProfileSearchRepository();
+const leadScout = new LeadScoutService();
 const allowedProfileSearchKeys = new Set(["q", "city", "region", "packageName", "overdueFollowUp", "limit"]);
 const generalAskSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const factProfileInputSchema = z
@@ -101,6 +103,29 @@ router.post("/assistant/general/ask", async (req, res): Promise<void> => {
     return;
   }
   try {
+    if (isLeadDiscoveryQuestion(parsed.data.question)) {
+      const actorId = String((req as any).userId ?? "");
+      const discovery = await leadScout.createCrmDiscovery({
+        actorId,
+        question: parsed.data.question,
+      });
+      if ("kind" in discovery && discovery.kind === "needs_clarification") {
+        res.json({
+          kind: "lead_discovery_clarification",
+          text: discovery.message,
+          runId: discovery.runId,
+        });
+        return;
+      }
+      res.json({
+        kind: "lead_discovery",
+        text: discovery.crmMatches.length
+          ? `I found ${discovery.crmMatches.length} existing Command Center ${discovery.crmMatches.length === 1 ? "possibility" : "possibilities"}.`
+          : "I did not find a strong existing Command Center match for those criteria.",
+        run: discovery,
+      });
+      return;
+    }
     res.json(await answerGeneralAssistant({ question: parsed.data.question, profileSearch }));
   } catch (err) {
     req.log.error({ err }, "General Booking Assistant ask failed");

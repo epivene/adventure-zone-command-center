@@ -44,7 +44,7 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(queries[0]).toContain("pg_try_advisory_lock");
     expect(queries).toContain("SET lock_timeout = '5s'");
     expect(queries).toContain("SET statement_timeout = '20s'");
-    expect(queries.some((sql) => sql.includes("profile_research_runs") && sql.includes("AS ready"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("profile_research_runs") && sql.includes("lead_scout_runs") && sql.includes("AS ready"))).toBe(true);
     expect(queries).toContain(
       "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
     );
@@ -54,7 +54,7 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(wasReleased()).toBe(true);
   });
 
-  it("creates the profile research schema before running the legacy registry", async () => {
+  it("creates the profile research and lead scout schemas before running the legacy registry", async () => {
     const { client, queries } = fakeClient({ researchReady: false });
     const runMigrations = vi.fn(async () => []);
 
@@ -63,8 +63,10 @@ describe("runActReviewMigrationsAtStartup", () => {
       runMigrations,
     });
 
-    expect(applied).toEqual(["061_profile_research_runs.sql"]);
+    expect(applied).toEqual(["061_profile_research_runs.sql", "063_lead_scout_runs.sql"]);
     expect(queries.some((sql) => sql.includes("create table if not exists profile_research_runs"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("create table if not exists lead_scout_runs"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("create table if not exists lead_scout_candidates"))).toBe(true);
     expect(runMigrations).toHaveBeenCalledTimes(1);
   });
 
