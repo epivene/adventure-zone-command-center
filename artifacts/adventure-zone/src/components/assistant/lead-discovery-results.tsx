@@ -74,6 +74,7 @@ export function LeadDiscoveryResults({
   onStopSearch = () => undefined,
   onContinueSearch = () => undefined,
   onResearchDeeper = () => undefined,
+  onNotFit = () => undefined,
 }: {
   run: LeadScoutRunView;
   webScoutAvailable: boolean;
@@ -83,11 +84,14 @@ export function LeadDiscoveryResults({
   onStopSearch?: () => void;
   onContinueSearch?: () => void;
   onResearchDeeper?: (candidateId: string) => void;
+  onNotFit?: (candidateId: string) => void;
 }) {
   const confirmed = run.crmMatches.filter((match) => match.dateConfidence === "confirmed");
   const recurring = run.crmMatches.filter((match) => match.dateConfidence === "likely_recurring");
   const other = run.crmMatches.filter((match) => match.dateConfidence === "unknown");
   const webStarted = run.status !== "crm_ready" && run.status !== "crm_search" && run.status !== "interpreting";
+  const visibleCandidates = run.candidates.filter((candidate) => candidate.reviewStatus !== "dismissed");
+  const canDismiss = run.status !== "running" && run.status !== "stopping";
 
   return (
     <div className="grid gap-4">
@@ -105,16 +109,25 @@ export function LeadDiscoveryResults({
 
       {webStarted ? <LeadScoutProgress run={run} onStop={onStopSearch} onContinue={onContinueSearch} /> : null}
 
-      {run.candidates.length ? (
+      {visibleCandidates.length ? (
         <section className="grid gap-2">
           <div>
             <h3 className="font-bold text-slate-950">Web Scout prospects</h3>
             <p className="mt-0.5 text-xs text-slate-500">These are Scout results, not saved CRM profiles unless they already match Command Center.</p>
           </div>
-          {run.candidates.map((candidate) => (
-            <LeadScoutCandidateCard candidate={candidate} sources={run.sources} key={candidate.id} onResearchDeeper={onResearchDeeper} />
+          {visibleCandidates.map((candidate) => (
+            <LeadScoutCandidateCard
+              candidate={candidate}
+              sources={run.sources}
+              canDismiss={canDismiss}
+              key={candidate.id}
+              onResearchDeeper={onResearchDeeper}
+              onNotFit={onNotFit}
+            />
           ))}
         </section>
+      ) : run.candidates.some((candidate) => candidate.reviewStatus === "dismissed") ? (
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">No Scout prospects remain in this review. Prospects marked Not a fit stay dismissed in this Scout run.</p>
       ) : null}
 
       {run.status === "crm_ready" ? (
