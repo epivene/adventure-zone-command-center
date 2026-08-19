@@ -36,6 +36,13 @@ function safeDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function normalizeBookingEndDate(value: Date | null) {
+  if (!value) return null;
+  // ACT/open-ended imports can use a far-future sentinel instead of a real
+  // event end date. Keep Lead Scout consistent with the Calendar behavior.
+  return value.getUTCFullYear() >= 2100 ? null : value;
+}
+
 function dateOnly(value: Date | null) {
   return value ? value.toISOString().slice(0, 10) : null;
 }
@@ -188,7 +195,7 @@ export class PostgresLeadScoutCrmSearch implements LeadScoutCrmSearch {
           city: row.booking_city ?? null,
           region: row.booking_region ?? null,
           startsAt: safeDate(row.starts_at),
-          endsAt: safeDate(row.ends_at),
+          endsAt: normalizeBookingEndDate(safeDate(row.ends_at)),
           status: row.status ?? null,
           createdAt: safeDate(row.booking_created_at) ?? new Date(0),
         });
@@ -196,8 +203,10 @@ export class PostgresLeadScoutCrmSearch implements LeadScoutCrmSearch {
       groups.set(id, group);
     }
 
+    const hasExplicitDateWindow = Boolean(requestedBounds(criteria));
     return [...groups.values()]
       .map((group) => rankGroup(group, criteria))
+      .filter((match) => !hasExplicitDateWindow || match.dateConfidence !== "unknown")
       .sort((left, right) => right.fitScore - left.fitScore || left.label.localeCompare(right.label))
       .slice(0, boundedLimit);
   }
