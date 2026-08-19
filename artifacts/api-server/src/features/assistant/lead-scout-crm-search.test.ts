@@ -51,7 +51,8 @@ async function createDatabase() {
       ('10000000-0000-4000-8000-000000000002', 'Idaho Harvest Festival', 'Idaho Falls', 'ID'),
       ('10000000-0000-4000-8000-000000000003', 'Wyoming October Fair', 'Casper', 'WY'),
       ('10000000-0000-4000-8000-000000000004', 'Utah Family Celebration', 'Ogden', 'UT'),
-      ('10000000-0000-4000-8000-000000000005', 'Old Duplicate Fair', 'Bozeman', 'MT');
+      ('10000000-0000-4000-8000-000000000005', 'Old Duplicate Fair', 'Bozeman', 'MT'),
+      ('10000000-0000-4000-8000-000000000006', 'ACT Open End Sentinel Event', 'Ogden', 'UT');
 
     update organizations
       set consolidated_into_id = '10000000-0000-4000-8000-000000000001'
@@ -62,7 +63,8 @@ async function createDatabase() {
       ('20000000-0000-4000-8000-000000000002', '10000000-0000-4000-8000-000000000002', 'Idaho Harvest Festival 2024', 'Idaho Falls', 'ID', '2024-09-14T12:00:00Z', '2024-09-15T23:00:00Z', 'confirmed'),
       ('20000000-0000-4000-8000-000000000003', '10000000-0000-4000-8000-000000000002', 'Idaho Harvest Festival 2025', 'Idaho Falls', 'ID', '2025-09-13T12:00:00Z', '2025-09-14T23:00:00Z', 'confirmed'),
       ('20000000-0000-4000-8000-000000000004', '10000000-0000-4000-8000-000000000003', 'Wyoming October Fair 2025', 'Casper', 'WY', '2025-10-05T12:00:00Z', '2025-10-06T23:00:00Z', 'confirmed'),
-      ('20000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000005', 'Duplicate September Fair', 'Bozeman', 'MT', '2026-09-20T12:00:00Z', '2026-09-20T23:00:00Z', 'new_lead');
+      ('20000000-0000-4000-8000-000000000005', '10000000-0000-4000-8000-000000000005', 'Duplicate September Fair', 'Bozeman', 'MT', '2026-09-20T12:00:00Z', '2026-09-20T23:00:00Z', 'new_lead'),
+      ('20000000-0000-4000-8000-000000000006', '10000000-0000-4000-8000-000000000006', 'ACT Open End Sentinel Event 2026', 'Ogden', 'UT', '2026-06-19T12:00:00Z', '9999-12-31T00:00:00Z', 'confirmed');
   `);
 
   return { client, search: new PostgresLeadScoutCrmSearch(client as never) };
@@ -75,7 +77,7 @@ describe("PostgresLeadScoutCrmSearch", () => {
     await Promise.all(clients.splice(0).map((client) => client.close()));
   });
 
-  it("ranks requested-year date matches ahead of likely recurring and broader matches", async () => {
+  it("returns only confirmed in-window and likely recurring matches for an explicit date window", async () => {
     const { client, search } = await createDatabase();
     clients.push(client);
 
@@ -95,9 +97,19 @@ describe("PostgresLeadScoutCrmSearch", () => {
     expect(recurring?.reasons.join(" ")).toMatch(/usually occurs in september/i);
     expect(recurring?.relationshipSummary).toMatch(/2 prior bookings/i);
 
-    const october = results.find((result) => result.organizationId === "10000000-0000-4000-8000-000000000003");
-    expect(october?.dateConfidence).toBe("unknown");
-    expect(october?.reasons.join(" ")).not.toMatch(/usually occurs in september/i);
+    expect(results.map((result) => result.organizationId)).not.toContain("10000000-0000-4000-8000-000000000003");
+    expect(results.map((result) => result.organizationId)).not.toContain("10000000-0000-4000-8000-000000000004");
+  });
+
+  it("does not treat ACT far-future end-date sentinels as an event spanning the requested window", async () => {
+    const { client, search } = await createDatabase();
+    clients.push(client);
+
+    const results = await search.search(criteria, 10);
+    const sentinel = results.find((result) => result.organizationId === "10000000-0000-4000-8000-000000000006");
+
+    expect(sentinel).toBeUndefined();
+    expect(results.some((result) => result.dateThrough?.startsWith("9999"))).toBe(false);
   });
 
   it("excludes consolidated duplicate organizations", async () => {
@@ -114,7 +126,7 @@ describe("PostgresLeadScoutCrmSearch", () => {
 
     await client.exec(`
       insert into organizations (id, name, city, region)
-      values ('10000000-0000-4000-8000-000000000006', 'Texas Fair', 'Austin', 'TX');
+      values ('10000000-0000-4000-8000-000000000007', 'Texas Fair', 'Austin', 'TX');
     `);
 
     const results = await search.search(criteria, 2);
