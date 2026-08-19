@@ -2,6 +2,10 @@ import { Link } from "wouter";
 
 import type { FollowUpSummary } from "@/features/follow-ups/today-query";
 import { BookingOperations } from "@/components/today/booking-operations";
+import {
+  CopilotReason,
+  type BookingCopilotReason,
+} from "@/components/today/copilot-reason";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 
 function formatDate(value: Date) {
@@ -56,7 +60,11 @@ export function followUpHref(followUp: FollowUpSummary) {
   return `/organizations/${followUp.organizationId}`;
 }
 
-export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null }) {
+type CopilotFollowUp = FollowUpSummary & {
+  copilot?: BookingCopilotReason | null;
+};
+
+export function NextCallCard({ followUp }: { followUp: CopilotFollowUp | null }) {
   const profileHref = followUp
     ? eventProfileHref({
         organizationId: followUp.organizationId,
@@ -86,6 +94,7 @@ export function NextCallCard({ followUp }: { followUp: FollowUpSummary | null })
           <p className="mt-1 text-sm text-slate-700">
             Call due {formatDate(followUp.dueAt)}
           </p>
+          <CopilotReason copilot={followUp.copilot} />
           <BookingOperations operations={followUp.operations} />
           <div className="mt-4 flex flex-wrap gap-2">
             <Link className="button-primary" href={profileHref ?? callWorkspaceHref(followUp)}>Open</Link>
