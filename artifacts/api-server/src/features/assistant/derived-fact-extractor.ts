@@ -12,6 +12,7 @@ export const derivedFactKindValues = [
   "promised_follow_up",
   "prior_outcome",
   "special_requirement",
+  "historical_price",
 ] as const;
 
 export type DerivedFactKind = (typeof derivedFactKindValues)[number];
@@ -136,7 +137,8 @@ export function buildDerivedFactPrompt(input: {
     "Extract only explicit or strongly supported CRM facts from the supplied Adventure Zone activity history.",
     `Allowed fact kinds: ${derivedFactKindValues.join(", ")}.`,
     "Do not infer package history or attraction counts when those should come from structured booking records.",
-    "Do not invent dates, people, decisions, objections, promises, preferences, or requirements.",
+    "For historical_price, extract only an explicitly stated prior quote, fee, paid amount, percentage/revenue-share arrangement, or price range. Preserve the event year/date and pricing model when the source states them. Never turn an old price into a current price.",
+    "Do not invent dates, people, decisions, objections, promises, preferences, requirements, or pricing.",
     "Every fact must cite exactly one sourceActivityId from the input.",
     "Return ONLY JSON: {\"facts\":[{\"factKind\":string,\"summary\":string,\"value\":object|string|number|boolean|null,\"confidence\":\"high\"|\"medium\"|\"low\",\"sourceActivityId\":string}]}",
     "",
