@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
-import { apiGet } from "@/lib/auth-token";
+import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
-import { EventRatingSummary } from "@/components/event-profiles/event-rating-summary";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
@@ -19,6 +18,7 @@ export default function EventProfilePage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
   const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
   const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
   const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
@@ -38,8 +38,11 @@ export default function EventProfilePage() {
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     try {
-      const d = await apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`);
-      const ratingSummary = await apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 }));
+      const [d, ratingSummary, photo] = await Promise.all([
+        apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`),
+        apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 })),
+        apiGet<{ dataUrl: string | null }>(`/event-profiles/${profileId}/photo`).catch(() => ({ dataUrl: null })),
+      ]);
       const toDate = (value: any) => (value ? new Date(value) : null);
       const normalized = {
         ...d,
@@ -65,6 +68,7 @@ export default function EventProfilePage() {
         return [contact.id as string, callablePhone?.number ?? null] as const;
       }));
 
+      setProfileImageDataUrl(photo.dataUrl ?? null);
       setCallablePhoneByContactId(Object.fromEntries(callablePhones));
       setFamilyNotes([]);
       setFamilyNotesError(null);
@@ -81,6 +85,12 @@ export default function EventProfilePage() {
   }
 
   useEffect(() => { void loadProfile(); }, [profileId, contactId]);
+
+  async function saveProfileImage(dataUrl: string | null) {
+    if (!profileId) return;
+    const result = await apiPatch<{ ok: boolean; dataUrl: string | null }>(`/event-profiles/${profileId}/photo`, { dataUrl });
+    setProfileImageDataUrl(result.dataUrl ?? null);
+  }
 
   function retryFamilyNotes() {
     if (data?.familyContext?.kind !== "event_family") return;
@@ -105,40 +115,27 @@ export default function EventProfilePage() {
       .map((note: string) => note.trim())
       .filter(Boolean),
   )];
-  const profileLabel = String(data.name ?? data.organization?.name ?? "Profile");
+  const profileLabel = String(data.name ?? data.organization?.name ?? data.place?.name ?? "Profile");
 
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
-      {profileId ? (
-        <AssistantContextRegistration
-          kind="organization"
-          label={profileLabel}
-          recordId={profileId}
-        />
-      ) : null}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <button
-          aria-label="Back"
-          className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-          onClick={goBack}
-          type="button"
-        >
-          <span aria-hidden="true">←</span> Back
-        </button>
-        <button
-          className="button-secondary"
-          onClick={() => openAssistant("What do I need to know before I contact them?")}
-          type="button"
-        >
-          Ask Assistant
-        </button>
-      </div>
+      {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
+      <button
+        aria-label="Back"
+        className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+        onClick={goBack}
+        type="button"
+      >
+        <span aria-hidden="true">←</span> Back
+      </button>
 
-      <SimpleFullProfile profile={data} onProfileSaved={loadProfile} />
-
-      <EventRatingSummary
-        average={data.wrapUpRatingSummary?.average ?? null}
-        count={data.wrapUpRatingSummary?.count ?? 0}
+      <SimpleFullProfile
+        profile={data}
+        onProfileSaved={loadProfile}
+        ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
+        onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
+        profileImageDataUrl={profileImageDataUrl}
+        onProfileImageChange={saveProfileImage}
       />
 
       {profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
