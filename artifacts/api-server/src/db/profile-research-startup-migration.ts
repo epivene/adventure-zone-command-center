@@ -47,6 +47,21 @@ create table if not exists profile_research_suggestions (
 );
 create index if not exists profile_research_suggestions_run_status_idx
   on profile_research_suggestions(run_id, review_status);
+create table if not exists profile_research_saved_sources (
+  id uuid primary key default gen_random_uuid(),
+  url text not null unique,
+  title text not null,
+  notes text,
+  last_scouted_at timestamptz,
+  last_scout_start_date date,
+  last_scout_end_date date,
+  last_scout_results jsonb not null default '[]'::jsonb,
+  archived_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists profile_research_saved_sources_active_idx
+  on profile_research_saved_sources(archived_at, last_scouted_at desc, created_at desc);
 `;
 
 export async function ensureProfileResearchSchema(client: {
@@ -55,7 +70,8 @@ export async function ensureProfileResearchSchema(client: {
   const marker = await client.query(
     "SELECT to_regclass(current_schema() || '.profile_research_runs') IS NOT NULL " +
       "AND to_regclass(current_schema() || '.profile_research_sources') IS NOT NULL " +
-      "AND to_regclass(current_schema() || '.profile_research_suggestions') IS NOT NULL AS ready",
+      "AND to_regclass(current_schema() || '.profile_research_suggestions') IS NOT NULL " +
+      "AND to_regclass(current_schema() || '.profile_research_saved_sources') IS NOT NULL AS ready",
   );
   if (marker.rows[0]?.["ready"] === true) return false;
   await client.query(profileResearchSchemaSql);
