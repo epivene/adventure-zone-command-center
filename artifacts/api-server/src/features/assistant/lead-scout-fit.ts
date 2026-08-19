@@ -15,44 +15,62 @@ export function scoreAdventureZoneFit(input: LeadScoutFitInput): {
   reasons: string[];
   cautions: string[];
 } {
-  let score = 20;
+  let score = 5;
   const reasons: string[] = [];
   const cautions: string[] = [];
 
   if (input.hasPublicSource) {
-    score += 8;
+    score += 5;
     reasons.push("public event evidence is available");
   }
   if (input.hasFamilySignal) {
-    score += 16;
-    reasons.push("family-focused audience");
+    score += 30;
+    reasons.push("child/family-focused audience");
+  } else {
+    score -= 30;
+    cautions.push("No strong child/family-friendly audience signal has been confirmed.");
+  }
+  if (input.hasAdultSpecialInterestSignal) {
+    score -= 35;
+    cautions.push("Adult or special-interest format is a weak fit for a bounce-house carnival.");
   }
   if (input.hasOutdoorSignal) {
-    score += 8;
+    score += 5;
     reasons.push("outdoor/community format can fit traveling attractions");
   }
   if (isMultiDay(input.startsAt, input.endsAt)) {
-    score += 8;
+    score += 18;
     reasons.push("multi-day event");
   }
   if (input.hasVendorPath) {
-    score += 14;
+    score += 10;
     reasons.push("published vendor participation path");
   }
   if (input.hasEntertainmentPath) {
-    score += 16;
+    score += 12;
     reasons.push("published entertainment or attraction booking path");
   }
   if (input.hasOrganizerContact) {
-    score += 8;
+    score += 5;
     reasons.push("organizer contact is available");
   }
-  if (input.hasAttendanceEvidence) {
+
+  if (input.attendanceScale === "large") {
+    score += 18;
+    reasons.push("large public turnout supports a full Adventure Zone setup");
+  } else if (input.attendanceScale === "medium") {
     score += 5;
-    reasons.push("attendance evidence is available");
+    reasons.push("moderate attendance may support a smaller Adventure Zone setup");
+  } else if (input.attendanceScale === "small") {
+    score -= 25;
+    cautions.push("Published attendance appears small for a full bounce-house carnival setup.");
+  } else if (!input.hasAttendanceEvidence) {
+    score -= 12;
+    cautions.push("Event attendance/scale has not been confirmed yet.");
   }
+
   if (input.hasLogisticsEvidence) {
-    score += 5;
+    score += 3;
     reasons.push("site/logistics evidence is available");
   }
 
