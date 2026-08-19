@@ -84,7 +84,7 @@ describe("OpenAiLeadScoutProvider", () => {
     expect(body.input).toMatch(/untrusted data/i);
     expect(body.input).toMatch(/2026-09-01.*2026-09-30/s);
     expect(body.input).toMatch(/MT.*ID.*WY.*UT/s);
-    expect(body.input).not.toMatch(/private CRM notes/i);
+    expect(body.input).toMatch(/do not use or request private CRM notes/i);
   });
 
   it("retains actual web_search_call sources even when the JSON response has no URL annotations", async () => {
