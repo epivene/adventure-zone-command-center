@@ -17,13 +17,14 @@ export type ScheduleFilterProps = {
   legId?: string;
   status?: string;
   embedded?: boolean;
+  onVisibleMonthChange?: (month: string) => void;
 };
 
 function isActActivity(event: CalendarEvent) {
   return event.source === "act_activity";
 }
 
-export function CalendarContent({ season, legId, status, embedded = false }: ScheduleFilterProps) {
+export function CalendarContent({ season, legId, status, embedded = false, onVisibleMonthChange }: ScheduleFilterProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +80,10 @@ export function CalendarContent({ season, legId, status, embedded = false }: Sch
     return scopedEvents.filter((event) => isActActivity(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
   }, [scopedEvents, hasExplicitStatusFilter, showPotential]);
 
-  const handleMonthChange = useCallback((month: string) => setActiveMonth(month), []);
+  const handleMonthChange = useCallback((month: string) => {
+    setActiveMonth(month);
+    onVisibleMonthChange?.(month);
+  }, [onVisibleMonthChange]);
 
   const calendarTools = (
     <div className="flex flex-wrap items-center justify-end gap-2">

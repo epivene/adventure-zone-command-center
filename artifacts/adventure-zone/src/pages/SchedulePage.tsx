@@ -41,6 +41,13 @@ export default function SchedulePage() {
     syncUrl({ view: next });
   }
 
+  function handleCalendarMonthChange(month: string) {
+    const visibleSeason = month.slice(0, 4);
+    if (!/^\d{4}$/.test(visibleSeason) || visibleSeason === season) return;
+    setSeason(visibleSeason);
+    syncUrl({ season: visibleSeason });
+  }
+
   const extraFilterCount = Number(Boolean(legId)) + Number(status !== "all");
 
   return (
@@ -88,7 +95,7 @@ export default function SchedulePage() {
         {extraFilterCount ? <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">{legId ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{legs.find((leg) => leg.id === legId)?.name ?? "Selected leg"}</span> : null}{status !== "all" ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">{status}</span> : null}</div> : null}
       </div>
 
-      {view === "calendar" ? <CalendarContent embedded legId={legId || undefined} season={season} status={status} /> : <RoutesContent embedded legId={legId || undefined} season={season} status={status} />}
+      {view === "calendar" ? <CalendarContent embedded legId={legId || undefined} season={season} status={status} onVisibleMonthChange={handleCalendarMonthChange} /> : <RoutesContent embedded legId={legId || undefined} season={season} status={status} />}
     </div>
   );
 }
