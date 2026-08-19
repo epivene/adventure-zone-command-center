@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Camera, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
+import { Camera, ChevronDown, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
@@ -16,6 +16,8 @@ import {
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { formatPhoneDisplay, phoneHref } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
+
+type OpenSection = "contacts" | "events" | "notes" | null;
 
 function formatDateTime(value: Date | string | null | undefined) {
   if (!value) return null;
@@ -56,16 +58,19 @@ async function resizeProfilePhoto(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.82);
 }
 
-function statCard(value: number, label: string, targetId: string) {
+function statCard({ value, label, active, onClick }: { value: number; label: string; active: boolean; onClick: () => void }) {
   return (
     <button
-      aria-label={`View ${label.toLowerCase()}`}
-      className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm transition hover:border-orange-300 hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-orange-400"
-      onClick={() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+      aria-expanded={active}
+      className={`rounded-xl border px-4 py-4 text-center shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-400 ${active ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50"}`}
+      onClick={onClick}
       type="button"
     >
       <p className="text-2xl font-bold text-slate-950">{value}</p>
-      <p className="mt-1 text-sm text-slate-600">{label}</p>
+      <span className="mt-1 inline-flex items-center gap-1 text-sm text-slate-600">
+        {label}
+        <ChevronDown className={`h-4 w-4 transition-transform ${active ? "rotate-180" : ""}`} />
+      </span>
     </button>
   );
 }
@@ -90,6 +95,7 @@ export function SimpleFullProfile({
   onEditingChange?: (editing: boolean) => void;
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
+  const [openSection, setOpenSection] = useState<OpenSection>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [noteSearch, setNoteSearch] = useState("");
@@ -119,6 +125,10 @@ export function SimpleFullProfile({
   function setEditing(next: boolean) {
     if (editing === undefined) setInternalEditing(next);
     onEditingChange?.(next);
+  }
+
+  function toggleSection(section: Exclude<OpenSection, null>) {
+    setOpenSection((current) => current === section ? null : section);
   }
 
   async function loadSimpleNotesPage(page: number) {
@@ -162,8 +172,8 @@ export function SimpleFullProfile({
 
   function openNoteComposer() {
     setNoteError("");
+    setOpenSection("notes");
     setNoteComposerOpen(true);
-    window.setTimeout(() => document.getElementById("profile-activity-timeline")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   async function saveNote() {
@@ -270,9 +280,9 @@ export function SimpleFullProfile({
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,0.75fr))_minmax(0,2.2fr)]">
-        {statCard(profile.contacts.length, `Contact${profile.contacts.length === 1 ? "" : "s"}`, "profile-contacts")}
-        {statCard(profile.bookings.length, `Event${profile.bookings.length === 1 ? "" : "s"}`, "profile-events")}
-        {statCard(meaningfulNotes.length, `Note${meaningfulNotes.length === 1 ? "" : "s"}`, "profile-activity-timeline")}
+        {statCard({ value: profile.contacts.length, label: `Contact${profile.contacts.length === 1 ? "" : "s"}`, active: openSection === "contacts", onClick: () => toggleSection("contacts") })}
+        {statCard({ value: profile.bookings.length, label: `Event${profile.bookings.length === 1 ? "" : "s"}`, active: openSection === "events", onClick: () => toggleSection("events") })}
+        {statCard({ value: meaningfulNotes.length, label: `Note${meaningfulNotes.length === 1 ? "" : "s"}`, active: openSection === "notes", onClick: () => toggleSection("notes") })}
         {!nextFollowUp ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
             <p className="font-bold text-emerald-900">No open follow-ups</p>
@@ -291,20 +301,11 @@ export function SimpleFullProfile({
         )}
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,2fr)]">
+      {openSection === "contacts" ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-bold">About</h2>
-          <dl className="mt-4 grid gap-3 text-sm">
-            <div><dt className="font-semibold text-slate-500">Address</dt><dd className="mt-1 whitespace-pre-line text-slate-800">{[profile.place.address1, profile.place.address2, [profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(" ")].filter(Boolean).join("\n") || "Not set"}</dd></div>
-            <div><dt className="font-semibold text-slate-500">Category</dt><dd className="mt-1 capitalize text-slate-800">{profile.place.placeType?.replaceAll("_", " ") || "Other"}</dd></div>
-            {profile.familyContext ? <div><dt className="font-semibold text-slate-500">Group</dt><dd className="mt-1 text-slate-800">{profile.familyContext.name}</dd></div> : null}
-          </dl>
-        </section>
-
-        <section id="profile-contacts" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-lg font-bold">Contacts</h2>
           {profile.contacts.length ? (
-            <div className="mt-3 grid gap-2">
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {profile.contacts.map((contact) => (
                 <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/contacts/${contact.id}`} key={contact.id}>
                   <div className="flex flex-wrap items-center gap-2">
@@ -317,69 +318,82 @@ export function SimpleFullProfile({
             </div>
           ) : <p className="mt-3 text-sm text-slate-600">No contacts have been added yet.</p>}
         </section>
-      </div>
+      ) : null}
 
-      <section id="profile-events" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-bold">Events</h2>
-        {profile.bookings.length ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {profile.bookings.map((booking) => (
-              <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/bookings/${booking.id}`} key={booking.id}>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-semibold text-slate-900">{booking.name}</span>
-                  <span className="text-xs font-semibold capitalize text-slate-500">{booking.status.replaceAll("_", " ")}</span>
-                </div>
-                <p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p>
-              </Link>
-            ))}
-          </div>
-        ) : <p className="mt-3 text-sm text-slate-600">No events have been added yet.</p>}
-      </section>
-
-      <section id="profile-activity-timeline" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
-          <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
-        </div>
-
-        <label className="relative mt-4 block">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            aria-label="Search notes & history"
-            className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
-            placeholder="Search notes & history"
-            value={noteSearch}
-            onChange={(event) => setNoteSearch(event.target.value)}
-          />
-        </label>
-
-        {noteComposerOpen ? (
-          <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
-            <label className="grid gap-1 text-sm font-semibold text-slate-700">
-              New note
-              <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
-            </label>
-            {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
-            <div className="flex flex-wrap gap-2">
-              <button className="button-primary" type="button" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()}>{noteSaving ? "Saving…" : "Save note"}</button>
-              <button className="button-secondary" type="button" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}>Cancel</button>
+      {openSection === "events" ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold">Events</h2>
+          {profile.bookings.length ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {profile.bookings.map((booking) => (
+                <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/bookings/${booking.id}`} key={booking.id}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-semibold text-slate-900">{booking.name}</span>
+                    <span className="text-xs font-semibold capitalize text-slate-500">{booking.status.replaceAll("_", " ")}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p>
+                </Link>
+              ))}
             </div>
-          </div>
-        ) : null}
+          ) : <p className="mt-3 text-sm text-slate-600">No events have been added yet.</p>}
+        </section>
+      ) : null}
 
-        <div className="mt-4">
-          {normalizedSearch && filteredActivities.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No notes or history match “{noteSearch.trim()}”.</p> : (
-            <ActivityTimeline
-              activities={filteredActivities}
-              editActivity={editActivityAction}
-              deleteActivity={deleteActivityAction}
-              loadRevisions={listActivityRevisionsAction}
-              loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
-              collapseLongBodies
+      {openSection === "notes" ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
+            <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
+          </div>
+
+          <label className="relative mt-4 block">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              aria-label="Search notes & history"
+              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
+              placeholder="Search notes & history"
+              value={noteSearch}
+              onChange={(event) => setNoteSearch(event.target.value)}
             />
-          )}
-        </div>
+          </label>
+
+          {noteComposerOpen ? (
+            <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+                New note
+                <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
+              </label>
+              {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
+              <div className="flex flex-wrap gap-2">
+                <button className="button-primary" type="button" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()}>{noteSaving ? "Saving…" : "Save note"}</button>
+                <button className="button-secondary" type="button" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}>Cancel</button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-4">
+            {normalizedSearch && filteredActivities.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No notes or history match “{noteSearch.trim()}”.</p> : (
+              <ActivityTimeline
+                activities={filteredActivities}
+                editActivity={editActivityAction}
+                deleteActivity={deleteActivityAction}
+                loadRevisions={listActivityRevisionsAction}
+                loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
+                collapseLongBodies
+              />
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 className="text-lg font-bold">About</h2>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div><dt className="font-semibold text-slate-500">Address</dt><dd className="mt-1 whitespace-pre-line text-slate-800">{[profile.place.address1, profile.place.address2, [profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(" ")].filter(Boolean).join("\n") || "Not set"}</dd></div>
+          <div><dt className="font-semibold text-slate-500">Category</dt><dd className="mt-1 capitalize text-slate-800">{profile.place.placeType?.replaceAll("_", " ") || "Other"}</dd></div>
+          {profile.familyContext ? <div><dt className="font-semibold text-slate-500">Group</dt><dd className="mt-1 text-slate-800">{profile.familyContext.name}</dd></div> : null}
+        </dl>
       </section>
     </div>
   );
