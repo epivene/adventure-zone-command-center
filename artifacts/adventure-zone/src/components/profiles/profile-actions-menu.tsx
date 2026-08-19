@@ -13,10 +13,12 @@ export function ProfileActionsMenu({
   profileId,
   contactId,
   onAddNote,
+  showAddNote = true,
 }: {
   profileId: string;
   contactId?: string | null;
   onAddNote?: () => void;
+  showAddNote?: boolean;
 }) {
   const fullProfile = `/profiles/${profileId}`;
   const withContact = contactId ? `${fullProfile}?contactId=${encodeURIComponent(contactId)}` : fullProfile;
@@ -32,7 +34,7 @@ export function ProfileActionsMenu({
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuLabel>Profile actions</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => onAddNote?.()}>Add note</DropdownMenuItem>
+        {showAddNote ? <DropdownMenuItem onSelect={() => onAddNote?.()}>Add note</DropdownMenuItem> : null}
         <DropdownMenuItem asChild><Link href={followUpHref}>Add follow-up</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/event-profiles/new">Add event</Link></DropdownMenuItem>
       </DropdownMenuContent>
