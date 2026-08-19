@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Search } from "lucide-react";
-import { Link } from "wouter";
-import { apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import { Link, useSearch } from "wouter";
+import { apiGet, apiPost } from "@/lib/auth-token";
 
 type CrmMatch =
   | { status: "existing"; organizationId: string; bookingId?: string; matchedName: string }
@@ -70,11 +70,13 @@ function eventAction(event: ScoutEvent) {
 }
 
 export default function ResearchSourcesPage() {
+  const search = useSearch();
+  const initialParams = useMemo(() => new URLSearchParams(search), [search]);
   const [sources, setSources] = useState<SavedSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
+  const [url, setUrl] = useState(() => initialParams.get("url") ?? "");
+  const [title, setTitle] = useState(() => initialParams.get("title") ?? "");
   const [activeScout, setActiveScout] = useState<string | null>(null);
   const [scoutFrom, setScoutFrom] = useState("");
   const [scoutThrough, setScoutThrough] = useState("");
