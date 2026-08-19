@@ -93,7 +93,7 @@ export class ProfileResearchBulkIntakeService {
     if (!input.nextActionKind.trim()) throw new Error("BULK_PROSPECT_ACTION_REQUIRED");
     if (!parseBusinessDateInput(input.nextActionDueAt)) throw new Error("INVALID_BULK_FOLLOW_UP_DATE");
 
-    const created: Array<{ name: string; profileId: string; bookingId: string }> = [];
+    const created: Array<{ name: string; url: string; profileId: string; bookingId: string }> = [];
     const skipped: Array<{ name: string; reason: string }> = [];
 
     for (const event of input.events) {
@@ -116,7 +116,7 @@ export class ProfileResearchBulkIntakeService {
           nextActionDueAt: input.nextActionDueAt,
         },
       });
-      created.push({ name, ...result });
+      created.push({ name, url: event.url, ...result });
     }
 
     return { created, skipped };
