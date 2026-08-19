@@ -40,6 +40,41 @@ describe("parseDerivedFactCandidates", () => {
     });
   });
 
+  it("accepts explicit historical pricing as source-linked evidence", () => {
+    const [fact] = parseDerivedFactCandidates(
+      JSON.stringify({
+        facts: [
+          {
+            factKind: "historical_price",
+            summary: "The 2025 event was quoted at $7,500.",
+            confidence: "high",
+            sourceActivityId: "activity-1",
+            value: {
+              amount: 7500,
+              currency: "USD",
+              year: 2025,
+              pricingModel: "flat_event_fee",
+            },
+          },
+        ],
+      }),
+      activities,
+    );
+
+    expect(fact).toMatchObject({
+      factKind: "historical_price",
+      summary: "The 2025 event was quoted at $7,500.",
+      confidence: "high",
+      sourceActivityId: "activity-1",
+      value: {
+        amount: 7500,
+        currency: "USD",
+        year: 2025,
+        pricingModel: "flat_event_fee",
+      },
+    });
+  });
+
   it("drops unknown kinds and invented source ids", () => {
     const result = parseDerivedFactCandidates(
       JSON.stringify({
