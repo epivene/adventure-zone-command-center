@@ -81,4 +81,16 @@ describe("Lead Scout candidate save route", () => {
     expect(response.body.match).toMatchObject({ status: "possible_match", organizationId: "org-existing" });
     expect(response.body.profileId).toBeUndefined();
   });
+
+  it("returns 500 for persistence failures instead of misclassifying them as validation", async () => {
+    const fake = service({
+      saveCandidate: vi.fn(async () => { throw new Error("RESEARCH_PROSPECT_PROFILE_CREATE_FAILED"); }),
+    });
+    const response = await request(appWith(fake))
+      .post(`/assistant/lead-scout/runs/${runId}/candidates/${candidateId}/save`)
+      .send({ accepted, nextActionKind: "call", nextActionDueAt: "2026-08-24" })
+      .expect(500);
+
+    expect(response.body.error).toMatch(/could not complete/i);
+  });
 });
