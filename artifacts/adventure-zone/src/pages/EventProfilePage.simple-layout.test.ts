@@ -12,25 +12,31 @@ describe("compact full profile", () => {
     expect(page.indexOf("<SimpleFullProfile")).toBeLessThan(page.indexOf("Advanced profile tools"));
   });
 
-  it("uses the approved compact header and timeline instead of the old tab strip", () => {
-    expect(simple).toContain("Activity timeline");
+  it("uses the approved compact header instead of the old tab strip", () => {
     expect(simple).toContain("About");
     expect(simple).toContain("Ask Assistant");
     expect(simple).toContain("profileImageDataUrl");
     expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 
-  it("makes the summary cards useful shortcuts to real profile sections", () => {
-    expect(simple).toContain('"profile-contacts"');
-    expect(simple).toContain('"profile-events"');
-    expect(simple).toContain('"profile-activity-timeline"');
-    expect(simple).toContain('id="profile-contacts"');
-    expect(simple).toContain('id="profile-events"');
-    expect(simple).toContain('id="profile-activity-timeline"');
-    expect(simple).toContain("scrollIntoView");
+  it("keeps contact, event and note detail panels hidden until their card is clicked", () => {
+    expect(simple).toContain('type OpenSection = "contacts" | "events" | "notes" | null');
+    expect(simple).toContain("useState<OpenSection>(null)");
+    expect(simple).toContain('openSection === "contacts"');
+    expect(simple).toContain('openSection === "events"');
+    expect(simple).toContain('openSection === "notes"');
+    expect(simple).toContain('toggleSection("contacts")');
+    expect(simple).toContain('toggleSection("events")');
+    expect(simple).toContain('toggleSection("notes")');
+    expect(simple).not.toContain("scrollIntoView");
   });
 
-  it("keeps notes searchable and addable from the compact profile", () => {
+  it("opens notes automatically when Add note is used", () => {
+    expect(simple).toContain('setOpenSection("notes")');
+    expect(simple).toContain("setNoteComposerOpen(true)");
+  });
+
+  it("keeps notes searchable and addable when the Notes card is open", () => {
     expect(simple).toContain("Search notes & history");
     expect(simple).toContain("Add note");
     expect(simple).toContain("createActivityAction");
