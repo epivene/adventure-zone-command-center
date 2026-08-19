@@ -59,7 +59,12 @@ export default function BookingsPage() {
           <p className="text-rose-700">{error}</p>
         </div>
       ) : (
-        <BookingList bookings={bookings} now={now} initialStatus={initialStatus} />
+        <BookingList
+          bookings={bookings}
+          now={now}
+          initialStatus={initialStatus}
+          initialShowPast={initialStatus === "new_lead"}
+        />
       )}
     </div>
   );
