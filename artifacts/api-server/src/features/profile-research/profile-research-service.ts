@@ -7,6 +7,8 @@ import { extractProfileHistoryIdentityClues } from "./profile-research-history-c
 import { OpenAiProfileResearchProvider } from "./openai-profile-research-provider";
 import type { ProfileResearchProvider, ProfileResearchCandidateFact } from "./profile-research-provider";
 import { ProfileResearchRepository } from "./profile-research-repository";
+import { matchRelatedEventsAgainstCrm } from "./profile-research-related-event-matcher";
+import type { RelatedEventOpportunity } from "./profile-research-discovery";
 import type { ProfileResearchSource, ProfileResearchSuggestion, ResearchMode } from "./profile-research-types";
 
 const ORGANIZATION_FIELDS = new Set(["website", "phone", "address1", "address2", "city", "region", "postalCode", "placeType"]);
@@ -34,7 +36,6 @@ function resolveCandidateTarget(profile: EventProfile, candidate: ProfileResearc
     const contact = candidate.targetId
       ? profile.contacts.find((item) => item.id === candidate.targetId)
       : profile.contacts.find((item) => item.isPrimary) ?? profile.contacts[0];
-    // Research may identify a new organizer, but Release 1 never creates a contact automatically.
     if (!contact) return null;
     return { targetId: contact.id, currentValue: clean((contact as any)[candidate.field]) };
   }
@@ -43,16 +44,18 @@ function resolveCandidateTarget(profile: EventProfile, candidate: ProfileResearc
   const booking = candidate.targetId
     ? profile.bookings.find((item) => item.id === candidate.targetId)
     : profile.bookings[0];
-  // Likewise, discovered future dates do not silently create a new booking.
   if (!booking) return null;
   return { targetId: booking.id, currentValue: clean((booking as any)[candidate.field]) };
 }
+
+type RelatedEventMatcher = (events: RelatedEventOpportunity[]) => Promise<any[]>;
 
 export class ProfileResearchService {
   constructor(
     private readonly runs = new ProfileResearchRepository(),
     private readonly provider: ProfileResearchProvider = new OpenAiProfileResearchProvider(),
     private readonly profiles = new DrizzleEventProfileRepository(db),
+    private readonly matchRelatedEvents: RelatedEventMatcher = (events) => matchRelatedEventsAgainstCrm(db, events),
   ) {}
 
   async start(input: {
@@ -108,13 +111,19 @@ export class ProfileResearchService {
             }];
           });
 
+      const relatedEvents = input.mode === "deep"
+        ? await this.matchRelatedEvents(result.relatedEvents ?? [])
+        : [];
       const summary = {
         identity: result.identity,
         deepSummary: result.deepSummary,
+        findings: result.findings ?? [],
+        relatedEvents,
         searchedClues: context.searchClues,
         historyClueCount: historyIdentityClues.length,
         gapCount: context.gaps.length,
         suggestionCount: suggestions.length,
+        relatedEventCount: relatedEvents.length,
       };
       await this.runs.completeRun({
         runId,
