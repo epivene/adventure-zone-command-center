@@ -3,8 +3,6 @@ import { Link } from "wouter";
 import { ResearchSourcesAttention } from "./research-sources-attention";
 
 export function NeedsAttention({
-  followUpCount,
-  newLeadCount,
   contractCount,
   visibleRouteWarningCount,
 }: {
@@ -14,8 +12,6 @@ export function NeedsAttention({
   visibleRouteWarningCount: number;
 }) {
   const items = [
-    followUpCount > 0 ? { label: "Follow-ups due", count: followUpCount, href: "/today#follow-ups" } : null,
-    newLeadCount > 0 ? { label: "New leads", count: newLeadCount, href: "/bookings?status=new_lead" } : null,
     contractCount > 0 ? { label: "Contracts needing attention", count: contractCount, href: "/bookings" } : null,
     visibleRouteWarningCount > 0 ? { label: "Route issues", count: visibleRouteWarningCount, href: "/manager-issues" } : null,
   ].filter((item): item is { label: string; count: number; href: string } => Boolean(item));
@@ -27,7 +23,7 @@ export function NeedsAttention({
           <div className="flex items-baseline justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold" id="needs-attention-title">Needs attention</h2>
-              <p className="mt-1 text-sm text-slate-600">Just the things that need a decision or follow-up.</p>
+              <p className="mt-1 text-sm text-slate-600">Exceptions that need a decision before normal work can keep moving.</p>
             </div>
             <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">
               {items.reduce((sum, item) => sum + item.count, 0)}
