@@ -11,6 +11,7 @@ import {
 import {
   continueLeadScout,
   deepenLeadScoutCandidate,
+  dismissLeadScoutCandidate,
   getLatestLeadScoutRun,
   getLeadScoutRun,
   startLeadScout,
@@ -173,6 +174,14 @@ export function AssistantDrawer() {
     );
   }
 
+  function markNotFit(candidateId: string) {
+    if (!leadScoutRun) return;
+    void runScoutAction(
+      () => dismissLeadScoutCandidate(leadScoutRun.id, candidateId),
+      "Could not mark this prospect Not a fit.",
+    );
+  }
+
   function useResultAsContext(result: AssistantProfileSearchResult) {
     selectExplicitContext({ kind: result.kind, recordId: result.id, label: result.label });
     setGeneralResponse(null); setLeadScoutRun(null); setQuestion("");
@@ -217,6 +226,7 @@ export function AssistantDrawer() {
                   onStopSearch={() => { void stopSearch(); }}
                   onContinueSearch={continueSearch}
                   onResearchDeeper={researchDeeper}
+                  onNotFit={markNotFit}
                 />
               ) : null}
               <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} />
