@@ -12,10 +12,11 @@ const categories = [
 
 type Suggestions = { merchant: string | null; totalCents: number | null; taxCents: number | null; occurredAt: string | null };
 type SaveState = "saved_offline" | "synced" | "needs_attention";
+export type ReceiptEventOption = { id: string; name: string; startsAt?: string | null };
 const dollars = (cents: number | null | undefined) => cents == null ? "" : (cents / 100).toFixed(2);
 const toCents = (value: string) => Math.round((Number(value) || 0) * 100);
 
-export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "receipt" | "manual"; bookingId?: string | null; onDone?: (state: SaveState) => void }) {
+export function ReceiptExpenseForm({ mode, bookingId = null, events = [], onDone }: { mode: "receipt" | "manual"; bookingId?: string | null; events?: ReceiptEventOption[]; onDone?: (state: SaveState) => void }) {
   const { manager, managerApi } = useManagerAuth();
   const [file, setFile] = useState<File | null>(null);
   const cameraRef = useRef<HTMLInputElement | null>(null);
@@ -29,6 +30,7 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
   const [category, setCategory] = useState("fuel");
   const [source, setSource] = useState("adventure_zone_debit");
   const [notes, setNotes] = useState("");
+  const [selectedBookingId, setBookingId] = useState(bookingId ?? "");
   const [extracting, setExtracting] = useState(false);
   const [extractionMessage, setExtractionMessage] = useState("");
   const [state, setState] = useState<"saved_offline" | "syncing" | "synced" | "needs_attention" | null>(null);
@@ -78,7 +80,7 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
       path: "/manager/expenses",
       body: {
         id: expenseId,
-        bookingId,
+        bookingId: selectedBookingId || null,
         tripId: null,
         tripSegmentId: null,
         category,
@@ -139,9 +141,11 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
     onDone?.(finalState);
   }
 
+  const sortedEvents = [...events].sort((a, b) => new Date(b.startsAt ?? 0).getTime() - new Date(a.startsAt ?? 0).getTime());
+
   return <form onSubmit={save} className="grid gap-3 rounded-xl border bg-white p-4">
     <h2 className="font-bold">{mode === "receipt" ? "Add receipt" : "Add expense manually"}</h2>
-    {bookingId ? <p className="text-xs font-semibold text-orange-700">This expense will be attached to the event wrap-up.</p> : null}
+    {selectedBookingId ? <p className="text-xs font-semibold text-orange-700">This expense is attached to an event. Change it below if needed.</p> : null}
     {mode === "receipt" ? <div className="grid gap-2">
       <span className="text-sm font-semibold">Receipt photo</span>
       <div className="grid grid-cols-2 gap-2">
@@ -158,6 +162,7 @@ export function ReceiptExpenseForm({ mode, bookingId = null, onDone }: { mode: "
     <label className="grid gap-1 text-sm font-semibold">Date<input type="date" value={date} onChange={event => setDate(event.target.value)} /></label>
     <label className="grid gap-1 text-sm font-semibold">Category<select value={category} onChange={event => setCategory(event.target.value)}>{categories.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
     <label className="grid gap-1 text-sm font-semibold">Payment source<select value={source} onChange={event => setSource(event.target.value)}><option value="adventure_zone_cash">Adventure Zone cash</option><option value="adventure_zone_debit">Adventure Zone company debit</option><option value="personal">Personal money/card</option></select></label>
+    <label className="grid gap-1 text-sm font-semibold">Event assignment<select value={selectedBookingId} onChange={event => setBookingId(event.target.value)}><option value="">General / Unassigned</option>{sortedEvents.map(event => <option value={event.id} key={event.id}>{event.name}</option>)}</select></label>
     <label className="grid gap-1 text-sm font-semibold">Notes<textarea rows={3} value={notes} onChange={event => setNotes(event.target.value)} /></label>
     <button className="button-primary" disabled={extracting || state === "syncing"}>{extracting ? "Reading receipt…" : state === "syncing" ? "Saving…" : "Save expense"}</button>
     {state ? <ManagerSyncStatus state={state} /> : null}
