@@ -15,12 +15,13 @@ export type TodayUpcomingEventRecord = {
   city: string;
   region: string;
   startsAt: Date;
+  endsAt: Date;
 };
 
 /**
  * ACT imports can carry a far-future end date to mean "no real end date".
  * Treat those rows as single-date events, otherwise old January prospects can
- * incorrectly remain in Today's Upcoming Events for the rest of the year.
+ * incorrectly remain in Today's current/upcoming event list for the rest of the year.
  */
 export async function listTodayUpcomingEvents(
   database: DrizzleDatabase,
@@ -43,11 +44,12 @@ export async function listTodayUpcomingEvents(
       city: bookings.city,
       region: bookings.region,
       startsAt: bookings.startsAt,
+      endsAt: effectiveEnd,
     })
     .from(bookings)
     .where(sql`${bookings.startsAt} is not null and ${effectiveEnd} >= ${startToday.toISOString()}`)
     .orderBy(asc(bookings.startsAt), asc(bookings.id))
     .limit(Math.max(1, limit));
 
-  return rows.flatMap((row) => row.startsAt ? [{ ...row, startsAt: row.startsAt }] : []);
+  return rows.flatMap((row) => row.startsAt && row.endsAt ? [{ ...row, startsAt: row.startsAt, endsAt: row.endsAt }] : []);
 }
