@@ -257,7 +257,7 @@ const migrationFiles = [
           AND confdeltype = 'a'
           AND confupdtype = 'a'
           AND position('FOREIGN KEY (SOURCE_RECORD_ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
-          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
+          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY, STREAM_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
       )
       AND EXISTS (
         SELECT 1 FROM pg_constraint
@@ -404,13 +404,13 @@ const migrationFiles = [
     markerSql: "SELECT to_regclass(current_schema() || '.crew_workers') IS NOT NULL AND to_regclass(current_schema() || '.crew_work_history') IS NOT NULL AND to_regclass(current_schema() || '.crew_manager_notes') IS NOT NULL AS ready",
   },
   {
-  name: "039_event_manager_reviews.sql",
-  markerSql: "SELECT to_regclass(current_schema() || '.event_manager_reviews') IS NOT NULL AS ready",
-},
+    name: "039_event_manager_reviews.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.event_manager_reviews') IS NOT NULL AS ready",
+  },
   {
-  name: "040_leg_incidents.sql",
-  markerSql: "SELECT to_regclass(current_schema() || '.leg_incidents') IS NOT NULL AND to_regclass(current_schema() || '.leg_incident_attachments') IS NOT NULL AS ready",
-},
+    name: "040_leg_incidents.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.leg_incidents') IS NOT NULL AND to_regclass(current_schema() || '.leg_incident_attachments') IS NOT NULL AS ready",
+  },
   {
     name: "042_manual_organization_membership.sql",
     markerSql: `SELECT EXISTS (
@@ -439,6 +439,15 @@ const migrationFiles = [
       )
       AND to_regclass(current_schema() || '.leg_finance_audit') IS NOT NULL
       AS ready`,
+  },
+  {
+    name: "060_profile_photos.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'organizations'
+        AND column_name = 'profile_image_data_url'
+    ) AS ready`,
   },
 ] as const;
 

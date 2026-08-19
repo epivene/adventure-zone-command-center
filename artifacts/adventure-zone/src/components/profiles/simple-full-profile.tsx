@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Camera, MapPin, MessageCircle, UserRound } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import {
-  createActivityAction,
   deleteActivityAction,
   editActivityAction,
   listActivityRevisionsAction,
@@ -16,50 +15,88 @@ import type { EventProfile } from "@/features/event-profiles/event-profile-repos
 import { formatPhoneDisplay, phoneHref } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
-type Tab = "overview" | "notes" | "events";
-
-function formatDate(value: Date | string | null | undefined) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "America/Denver" }).format(date);
-}
-
 function formatDateTime(value: Date | string | null | undefined) {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Denver" }).format(date);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "America/Denver",
+  }).format(date);
 }
 
-export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventProfile; onProfileSaved?: () => Promise<void> | void }) {
-  const [tab, setTab] = useState<Tab>("overview");
+async function resizeProfilePhoto(file: File): Promise<string> {
+  const source = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read that image."));
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.readAsDataURL(file);
+  });
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const next = new Image();
+    next.onload = () => resolve(next);
+    next.onerror = () => reject(new Error("Could not open that image."));
+    next.src = source;
+  });
+  const side = Math.min(image.naturalWidth, image.naturalHeight);
+  const sx = (image.naturalWidth - side) / 2;
+  const sy = (image.naturalHeight - side) / 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = 320;
+  canvas.height = 320;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not prepare that image.");
+  context.drawImage(image, sx, sy, side, side, 0, 0, 320, 320);
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+function statCard(value: number, label: string) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-center shadow-sm">
+      <p className="text-2xl font-bold text-slate-950">{value}</p>
+      <p className="mt-1 text-sm text-slate-600">{label}</p>
+    </div>
+  );
+}
+
+export function SimpleFullProfile({
+  profile,
+  onProfileSaved,
+  ratingSummary,
+  onAskAssistant,
+  profileImageDataUrl,
+  onProfileImageChange,
+}: {
+  profile: EventProfile;
+  onProfileSaved?: () => Promise<void> | void;
+  ratingSummary?: { average: number | null; count: number };
+  onAskAssistant?: () => void;
+  profileImageDataUrl?: string | null;
+  onProfileImageChange?: (dataUrl: string | null) => Promise<void>;
+}) {
   const [editing, setEditing] = useState(false);
-  const [quickNoteOpen, setQuickNoteOpen] = useState(false);
-  const [quickNoteBody, setQuickNoteBody] = useState("");
-  const [quickNoteSaving, setQuickNoteSaving] = useState(false);
-  const [quickNoteError, setQuickNoteError] = useState("");
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
   const meaningfulNotes = useMemo(() => profile.notes.filter((note) => historyCategory(note) !== "system"), [profile.notes]);
-
-  const nextFollowUp = useMemo(() => [...profile.followUps]
+  const openFollowUps = useMemo(() => [...profile.followUps]
     .filter((item) => !item.completedAt && item.dueAt)
-    .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime())[0] ?? null, [profile.followUps]);
-
-  const nextEvent = useMemo(() => [...profile.bookings]
-    .filter((item) => item.startsAt && item.startsAt.getTime() >= Date.now())
-    .sort((left, right) => (left.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER) - (right.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER))[0] ?? null, [profile.bookings]);
-
-  const recentNote = meaningfulNotes[0] ?? null;
+    .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime()), [profile.followUps]);
+  const nextFollowUp = openFollowUps[0] ?? null;
+  const followUpOverdue = Boolean(nextFollowUp && nextFollowUp.dueAt.getTime() < Date.now());
   const visiblePhone = primaryContact?.phone ?? profile.place.phone ?? null;
   const phoneText = formatPhoneDisplay(visiblePhone);
   const phoneLink = phoneHref(visiblePhone);
-  const followUpHref = `/profiles/${profile.id}?${new URLSearchParams({
-    ...(primaryContact?.id ? { contactId: primaryContact.id } : {}),
-    action: "follow-up",
-  }).toString()}`;
+  const average = ratingSummary?.average ?? 0;
+  const ratingCount = ratingSummary?.count ?? 0;
+  const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
+  const stars = `${"★".repeat(filledStars)}${"☆".repeat(5 - filledStars)}`;
 
   async function loadSimpleNotesPage(page: number) {
     const result = await loadTimelinePageAction({ organizationId: profile.id }, page);
@@ -77,170 +114,146 @@ export function SimpleFullProfile({ profile, onProfileSaved }: { profile: EventP
     setEditing(false);
   }
 
-  async function saveQuickNote() {
-    const body = quickNoteBody.trim();
-    if (!body || quickNoteSaving) return;
-    setQuickNoteSaving(true);
-    setQuickNoteError("");
+  async function changePhoto(file: File | undefined) {
+    if (!file || !onProfileImageChange) return;
+    if (!file.type.startsWith("image/")) { setPhotoError("Choose an image file."); return; }
+    setPhotoBusy(true);
+    setPhotoError("");
     try {
-      const result = await createActivityAction({
-        organizationId: profile.id,
-        contactId: primaryContact?.id ?? undefined,
-        kind: "note",
-        body,
-        occurredAt: new Date(),
-      });
-      if (!result.ok) {
-        setQuickNoteError(result.error);
-        return;
-      }
-      setQuickNoteBody("");
-      setQuickNoteOpen(false);
-      setTab("notes");
-      await onProfileSaved?.();
-    } catch (cause) {
-      setQuickNoteError(cause instanceof Error ? cause.message : "Could not save note.");
+      await onProfileImageChange(await resizeProfilePhoto(file));
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Could not save profile photo.");
     } finally {
-      setQuickNoteSaving(false);
+      setPhotoBusy(false);
     }
   }
 
-  if (editing) {
-    return (
-      <div className="grid gap-4">
-        <ProfileInlineEditor profile={profile as any} contactId={primaryContact?.id ?? null} onSaved={handleSaved} onCancel={() => setEditing(false)} />
-      </div>
-    );
+  async function removePhoto() {
+    if (!onProfileImageChange || photoBusy) return;
+    setPhotoBusy(true);
+    setPhotoError("");
+    try { await onProfileImageChange(null); }
+    catch (error) { setPhotoError(error instanceof Error ? error.message : "Could not remove profile photo."); }
+    finally { setPhotoBusy(false); }
   }
+
+  if (editing) {
+    return <ProfileInlineEditor profile={profile as any} contactId={primaryContact?.id ?? null} onSaved={handleSaved} onCancel={() => setEditing(false)} />;
+  }
+
+  const activities = meaningfulNotes.map((note) => ({
+    id: note.id,
+    organizationId: profile.id,
+    contactId: note.contactId,
+    bookingId: note.bookingId,
+    kind: note.kind as any,
+    body: simplifyHistoryText(note.body),
+    occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+    createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
+    updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
+    revisionCount: 0,
+    callOutcome: null,
+    hasLinkedCallSession: false,
+    importedFromAct: Boolean(note.importedFromAct),
+    actSourceType: note.actSourceType === "note" || note.actSourceType === "history" || note.actSourceType === "activity" ? note.actSourceType : null,
+  }));
 
   return (
     <div className="grid gap-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
-            {location ? <p className="mt-1 text-sm font-medium text-slate-600">{location}</p> : null}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {profile.place.placeType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{profile.place.placeType.replaceAll("_", " ")}</span> : null}
-              {profile.place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
-              {profile.familyContext ? <span className="rounded-full bg-orange-50 px-2.5 py-1 text-xs font-semibold text-orange-800">{profile.familyContext.kind === "event_family" ? "Family" : "Organization"}: {profile.familyContext.name}</span> : null}
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit</button>
-            <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} />
-          </div>
-        </div>
-
-        <div className="mt-4 border-t border-slate-100 pt-3">
-          {primaryContact ? <p className="font-semibold text-slate-900">{primaryContact.name}{primaryContact.role ? <span className="font-normal text-slate-500"> · {primaryContact.role}</span> : null}</p> : null}
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-            {phoneText && phoneLink ? <a className="font-medium text-orange-700" href={phoneLink}>{phoneText}</a> : null}
-            {primaryContact?.email ? <a className="font-medium text-orange-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
-            {websiteHref ? <a className="font-medium text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">{profile.place.website}</a> : null}
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-          <button className="button-primary" type="button" onClick={() => { setQuickNoteOpen((current) => !current); setQuickNoteError(""); }}>Add note</button>
-          <Link className="button-secondary inline-flex" href={followUpHref}>Add follow-up</Link>
-          <button className="button-secondary" type="button" onClick={() => setTab("notes")}>View notes</button>
-        </div>
-
-        {quickNoteOpen ? <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            New note
-            <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" maxLength={4000} value={quickNoteBody} onChange={(event) => setQuickNoteBody(event.target.value)} autoFocus />
-          </label>
-          {quickNoteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{quickNoteError}</p> : null}
-          <div className="flex gap-2">
-            <button className="button-primary" type="button" disabled={quickNoteSaving || !quickNoteBody.trim()} onClick={() => void saveQuickNote()}>{quickNoteSaving ? "Saving…" : "Save note"}</button>
-            <button className="button-secondary" type="button" disabled={quickNoteSaving} onClick={() => { setQuickNoteOpen(false); setQuickNoteBody(""); setQuickNoteError(""); }}>Cancel</button>
-          </div>
-        </div> : null}
-      </section>
-
-      <div role="tablist" aria-label="Full profile sections" className="grid grid-cols-3 rounded-xl bg-slate-100 p-1">
-        {(["overview", "notes", "events"] as Tab[]).map((value) => (
-          <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={`rounded-lg px-3 py-2 text-sm font-semibold capitalize ${tab === value ? "bg-white text-orange-700 shadow-sm" : "text-slate-600"}`}>{value}</button>
-        ))}
+      <div className="flex flex-wrap justify-end gap-2">
+        <button className="button-secondary inline-flex items-center gap-2" type="button" onClick={onAskAssistant}>
+          <MessageCircle className="h-4 w-4" /> Ask Assistant
+        </button>
+        <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit</button>
+        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} />
       </div>
 
-      {tab === "overview" ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="font-bold">What matters next</h2>
-            <div className="mt-3 grid gap-3">
-              {nextFollowUp ? <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Next follow-up</p><p className="mt-1 font-semibold capitalize">{nextFollowUp.kind.replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p></div> : <p className="text-sm text-slate-600">No open follow-up.</p>}
-              {nextEvent ? <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Next event</p><p className="mt-1 font-semibold">{nextEvent.name}</p><p className="text-sm text-slate-600">{formatDateTime(nextEvent.startsAt)}</p></div> : null}
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
+          <div className="flex flex-col items-center gap-1">
+            <label className="group relative block cursor-pointer" title="Change profile photo">
+              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} onChange={(event) => void changePhoto(event.target.files?.[0])} />
+              {profileImageDataUrl ? (
+                <img src={profileImageDataUrl} alt={`${profile.place.name} profile`} className="h-24 w-24 rounded-full border-2 border-white object-cover shadow-md sm:h-28 sm:w-28" />
+              ) : (
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-orange-50 text-orange-700 shadow-inner sm:h-28 sm:w-28">
+                  <UserRound className="h-10 w-10" />
+                </div>
+              )}
+              <span className="absolute bottom-0 right-0 rounded-full border border-slate-200 bg-white p-1.5 shadow-sm"><Camera className="h-4 w-4" /></span>
+            </label>
+            {profileImageDataUrl ? <button className="text-xs font-medium text-slate-500 hover:text-rose-700" type="button" disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button> : null}
+          </div>
+
+          <div className="min-w-0">
+            <h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+              {location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{location}</span> : null}
+              {profile.place.placeType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{profile.place.placeType.replaceAll("_", " ")}</span> : null}
+              {profile.place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
             </div>
-          </section>
-
-          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="font-bold">Profile details</h2>
-            <div className="mt-3 grid gap-2 text-sm text-slate-700">
-              {profile.place.address1 ? <p>{[profile.place.address1, profile.place.address2, profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(", ")}</p> : null}
-              <p>{profile.contacts.length} contact{profile.contacts.length === 1 ? "" : "s"} · {profile.bookings.length} event{profile.bookings.length === 1 ? "" : "s"}</p>
+            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+              {primaryContact ? <span className="font-semibold text-slate-800">{primaryContact.name}</span> : null}
+              {phoneText && phoneLink ? <a className="font-medium text-slate-700 hover:text-orange-700" href={phoneLink}>{phoneText}</a> : null}
+              {primaryContact?.email ? <a className="font-medium text-slate-700 hover:text-orange-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
+              {websiteHref ? <a className="font-medium text-slate-700 hover:text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">{profile.place.website}</a> : null}
             </div>
-          </section>
+            {photoError ? <p className="mt-2 text-sm font-semibold text-rose-700" role="alert">{photoError}</p> : null}
+          </div>
 
-          {recentNote ? <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Recent note</p><p className="mt-2 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">{simplifyHistoryText(recentNote.body)}</p></section> : null}
-
-          {profile.contacts.length > 1 ? (
-            <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:col-span-2">
-              <summary className="cursor-pointer font-semibold">All contacts ({profile.contacts.length})</summary>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {profile.contacts.map((contact) => <Link key={contact.id} href={`/contacts/${contact.id}`} className="rounded-lg border border-slate-200 p-3 hover:border-orange-300"><p className="font-semibold">{contact.name}</p><p className="mt-1 text-sm text-slate-600">{contact.role || "Contact"}</p></Link>)}
-              </div>
-            </details>
-          ) : null}
+          <div className="min-w-40 md:text-right">
+            <p className="text-xl font-bold text-slate-950">{average.toFixed(1)} <span className="text-sm font-medium text-slate-500">/ 5</span></p>
+            <p className="mt-1 text-2xl tracking-wide text-orange-600" aria-label={`${filledStars} of 5 stars`}>{stars}</p>
+            <p className="mt-1 text-sm text-slate-500">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</p>
+          </div>
         </div>
-      ) : null}
+      </section>
 
-      {tab === "notes" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-          <div><h2 className="text-lg font-bold">Notes & communication</h2><p className="mt-1 text-sm text-slate-600">Add notes and keep useful call context in one place.</p></div>
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,0.75fr))_minmax(0,2.2fr)]">
+        {statCard(profile.contacts.length, `Contact${profile.contacts.length === 1 ? "" : "s"}`)}
+        {statCard(profile.bookings.length, `Event${profile.bookings.length === 1 ? "" : "s"}`)}
+        {statCard(meaningfulNotes.length, `Note${meaningfulNotes.length === 1 ? "" : "s"}`)}
+        {!nextFollowUp ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <p className="font-bold text-emerald-900">No open follow-ups</p>
+            <p className="mt-1 text-sm text-emerald-800">You’re all caught up!</p>
+          </div>
+        ) : followUpOverdue ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
+            <p className="font-bold text-rose-900">Follow-up overdue</p>
+            <p className="mt-1 text-sm capitalize text-rose-800">{nextFollowUp.kind.replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <p className="font-bold text-amber-900">Follow-up needed</p>
+            <p className="mt-1 text-sm capitalize text-amber-800">{nextFollowUp.kind.replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
+          </div>
+        )}
+      </section>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.8fr)_minmax(0,2fr)]">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-bold">About</h2>
+          <dl className="mt-4 grid gap-3 text-sm">
+            <div><dt className="font-semibold text-slate-500">Address</dt><dd className="mt-1 whitespace-pre-line text-slate-800">{[profile.place.address1, profile.place.address2, [profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(" ")].filter(Boolean).join("\n") || "Not set"}</dd></div>
+            <div><dt className="font-semibold text-slate-500">Category</dt><dd className="mt-1 capitalize text-slate-800">{profile.place.placeType?.replaceAll("_", " ") || "Other"}</dd></div>
+            {profile.familyContext ? <div><dt className="font-semibold text-slate-500">Group</dt><dd className="mt-1 text-slate-800">{profile.familyContext.name}</dd></div> : null}
+          </dl>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
           <div className="mt-4">
             <ActivityTimeline
-              noteComposer
-              activities={meaningfulNotes.map((note) => ({
-                id: note.id,
-                organizationId: profile.id,
-                contactId: note.contactId,
-                bookingId: note.bookingId,
-                kind: note.kind as any,
-                body: simplifyHistoryText(note.body),
-                occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
-                createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
-                updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
-                revisionCount: 0,
-                callOutcome: null,
-                hasLinkedCallSession: false,
-                importedFromAct: Boolean(note.importedFromAct),
-                actSourceType: note.actSourceType === "note" || note.actSourceType === "history" || note.actSourceType === "activity" ? note.actSourceType : null,
-              }))}
-              parent={{ organizationId: profile.id }}
-              createActivity={createActivityAction}
+              activities={activities}
               editActivity={editActivityAction}
               deleteActivity={deleteActivityAction}
               loadRevisions={listActivityRevisionsAction}
               loadPage={loadSimpleNotesPage}
             />
           </div>
-          {profile.followUps.length ? <details className="mt-4 border-t border-slate-100 pt-3"><summary className="cursor-pointer text-sm font-semibold text-slate-700">Follow-ups ({profile.followUps.length})</summary><ul className="mt-2 grid gap-2">{profile.followUps.map((item) => <li className="rounded-lg bg-slate-50 p-3 text-sm" key={item.id}><span className="font-semibold capitalize">{item.kind.replaceAll("_", " ")}</span><span className="ml-2 text-slate-600">{formatDate(item.dueAt)}</span></li>)}</ul></details> : null}
         </section>
-      ) : null}
-
-      {tab === "events" ? (
-        <section className="grid gap-2">
-          {profile.bookings.length ? profile.bookings.map((booking) => (
-            <Link key={booking.id} href={`/bookings/${booking.id}`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-orange-300">
-              <div className="flex items-start justify-between gap-3"><div><h2 className="font-bold text-slate-950">{booking.name}</h2><p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ")}</p></div><span className="text-sm font-semibold capitalize text-slate-500">{booking.status.replaceAll("_", " ")}</span></div>
-              <p className="mt-2 text-sm text-slate-600">{formatDate(booking.startsAt) ?? "Date not set"}</p>
-            </Link>
-          )) : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">No events yet.</div>}
-        </section>
-      ) : null}
+      </div>
     </div>
   );
 }

@@ -4,27 +4,34 @@ import { describe, expect, it } from "vitest";
 const page = readFileSync("src/pages/EventProfilePage.tsx", "utf8");
 const simple = readFileSync("src/components/profiles/simple-full-profile.tsx", "utf8");
 
-describe("simple full profile", () => {
-  it("uses the simple profile surface before advanced tools", () => {
-    expect(page).toContain("<SimpleFullProfile profile={data} />");
+describe("compact full profile", () => {
+  it("uses the compact profile surface before advanced tools", () => {
+    expect(page).toContain("<SimpleFullProfile");
     expect(page).toContain("Advanced profile tools");
-    expect(page.indexOf("<SimpleFullProfile profile={data} />")).toBeLessThan(page.indexOf("Advanced profile tools"));
+    expect(page.indexOf("<SimpleFullProfile")).toBeLessThan(page.indexOf("Advanced profile tools"));
   });
 
-  it("keeps Overview Notes Events as the main full-profile sections", () => {
-    expect(simple).toContain('["overview", "notes", "events"]');
-    expect(simple).toContain("What matters next");
-    expect(simple).toContain("Notes & communication");
-    expect(simple).toContain("All contacts");
+  it("uses the approved compact header and timeline instead of the old tab strip", () => {
+    expect(simple).toContain("Activity timeline");
+    expect(simple).toContain("About");
+    expect(simple).toContain("Ask Assistant");
+    expect(simple).toContain("profileImageDataUrl");
+    expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 
-  it("keeps secondary data collapsed by default", () => {
-    expect(page).toContain("Reviews & rating");
-    expect(page).toContain("Imported ACT history");
-    expect(page).toContain("<details");
+  it("shows only contact, event and note stat cards plus one color-coded follow-up card", () => {
+    expect(simple).toContain("Contact");
+    expect(simple).toContain("Events");
+    expect(simple).toContain("Note");
+    expect(simple).toContain("No open follow-ups");
+    expect(simple).toContain("Follow-up overdue");
+    expect(simple).toContain("Follow-up needed");
+    expect(simple).toContain("bg-emerald-50");
+    expect(simple).toContain("bg-rose-50");
+    expect(simple).toContain("bg-amber-50");
   });
 
-  it("sanitizes imported ACT bodies before either full-profile surface receives them", () => {
+  it("sanitizes imported ACT bodies before the profile surface receives them", () => {
     expect(page).toContain("note.importedFromAct ? simplifyHistoryText");
   });
 });
