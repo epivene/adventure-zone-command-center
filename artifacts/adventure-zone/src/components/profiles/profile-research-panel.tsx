@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { ExternalLink, Search, X } from "lucide-react";
 
 import { apiGet, apiPost } from "@/lib/auth-token";
@@ -23,6 +24,28 @@ type Suggestion = {
   sourceIds: string[];
   conflict: boolean;
   reviewStatus: "pending" | "accepted" | "dismissed";
+};
+
+type ResearchFinding = {
+  label: string;
+  value: string;
+  rationale: string;
+  sourceUrls: string[];
+};
+
+type RelatedEvent = {
+  name: string;
+  city: string | null;
+  region: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  venue: string | null;
+  url: string;
+  rationale: string;
+  crmMatch?:
+    | { status: "existing"; organizationId: string; bookingId?: string; matchedName: string }
+    | { status: "possible_match"; organizationId: string; bookingId?: string; matchedName: string }
+    | { status: "new_prospect" };
 };
 
 type ResearchRun = {
@@ -61,6 +84,17 @@ function confidenceClass(confidence: Suggestion["confidence"]) {
   return "bg-slate-100 text-slate-700";
 }
 
+function crmMatchLabel(match: RelatedEvent["crmMatch"]) {
+  if (match?.status === "existing") return { label: "Already in Command Center", className: "bg-emerald-100 text-emerald-800" };
+  if (match?.status === "possible_match") return { label: "Possible match", className: "bg-amber-100 text-amber-800" };
+  return { label: "New prospect", className: "bg-blue-100 text-blue-800" };
+}
+
+function eventDateLabel(event: RelatedEvent) {
+  if (!event.startsAt) return "Date not confirmed";
+  return event.endsAt && event.endsAt !== event.startsAt ? `${event.startsAt} – ${event.endsAt}` : event.startsAt;
+}
+
 export function ProfileResearchPanel({
   profileId,
   contactId,
@@ -80,7 +114,10 @@ export function ProfileResearchPanel({
   const [applyMessage, setApplyMessage] = useState("");
 
   const sourceById = useMemo(() => new Map((run?.sources ?? []).map((source) => [source.id, source])), [run?.sources]);
+  const sourceByUrl = useMemo(() => new Map((run?.sources ?? []).flatMap((source) => source.url ? [[source.url, source] as const] : [])), [run?.sources]);
   const pending = (run?.suggestions ?? []).filter((suggestion) => suggestion.reviewStatus === "pending");
+  const findings = (run?.summary?.findings ?? []) as ResearchFinding[];
+  const relatedEvents = (run?.summary?.relatedEvents ?? []) as RelatedEvent[];
 
   async function startResearch(nextMode = mode) {
     if (busy) return;
@@ -189,7 +226,7 @@ export function ProfileResearchPanel({
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="font-semibold">Research depth</p>
-                <p className="mt-1 text-sm text-slate-600">Quick fills obvious gaps. Deep also builds a broader booking brief.</p>
+                <p className="mt-1 text-sm text-slate-600">Quick checks the current profile. Deep investigates the event more fully and scouts useful event calendars/directories it finds.</p>
               </div>
               <div className="flex gap-2">
                 {(["quick", "deep"] as const).map((value) => <button key={value} type="button" onClick={() => setMode(value)} className={`rounded-lg border px-3 py-2 text-sm font-semibold capitalize ${mode === value ? "border-orange-300 bg-orange-50 text-orange-800" : "border-slate-200 bg-white text-slate-700"}`}>{value}</button>)}
@@ -207,7 +244,7 @@ export function ProfileResearchPanel({
             <>
               <section className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div><h3 className="font-bold">Research summary</h3><p className="mt-1 text-sm text-slate-600">{run.mode === "deep" ? "Deep research" : "Quick research"} · {run.suggestions.length} suggestion{run.suggestions.length === 1 ? "" : "s"} found</p></div>
+                  <div><h3 className="font-bold">Research summary</h3><p className="mt-1 text-sm text-slate-600">{run.mode === "deep" ? "Deep research" : "Quick research"} · {run.suggestions.length} profile update{run.suggestions.length === 1 ? "" : "s"} · {findings.length} key finding{findings.length === 1 ? "" : "s"}{run.mode === "deep" ? ` · ${relatedEvents.length} related event${relatedEvents.length === 1 ? "" : "s"}` : ""}</p></div>
                   <div className="flex flex-wrap gap-2">
                     <button className="button-secondary" type="button" disabled={busy || !pending.some((item) => item.confidence === "high" && !item.conflict)} onClick={() => void applyHighConfidence()}>Add all high-confidence</button>
                     <button className="button-primary" type="button" disabled={busy || !selected.size} onClick={() => void applySelected()}>Add selected ({selected.size})</button>
@@ -217,8 +254,20 @@ export function ProfileResearchPanel({
                 {run.summary?.deepSummary ? <div className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-700"><p className="font-semibold">Booking research brief</p><p className="mt-1 whitespace-pre-wrap">{run.summary.deepSummary}</p></div> : null}
               </section>
 
+              {findings.length ? (
+                <section className="grid gap-3">
+                  <div><h3 className="text-lg font-bold">Key findings</h3><p className="text-sm text-slate-600">Useful researched information that may not belong in a single editable profile field.</p></div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {findings.map((finding, index) => {
+                      const sources = finding.sourceUrls.flatMap((url) => { const source = sourceByUrl.get(url); return source ? [source] : []; });
+                      return <article className="rounded-xl border border-slate-200 bg-white p-4" key={`${finding.label}-${index}`}><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{finding.label}</p><p className="mt-1 font-semibold text-slate-950">{finding.value}</p><p className="mt-2 text-sm text-slate-600">{finding.rationale}</p>{sources.length ? <div className="mt-3 flex flex-wrap gap-2">{sources.map((source) => source.url ? <a key={source.id} className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline" href={source.url} target="_blank" rel="noreferrer noopener"><ExternalLink className="h-3.5 w-3.5" />{source.title}</a> : null)}</div> : null}</article>;
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
               <section className="grid gap-3">
-                <div><h3 className="text-lg font-bold">Suggested updates</h3><p className="text-sm text-slate-600">Nothing changes until you approve it.</p></div>
+                <div><h3 className="text-lg font-bold">Suggested profile updates</h3><p className="text-sm text-slate-600">Nothing changes until you approve it.</p></div>
                 {run.suggestions.length ? run.suggestions.map((suggestion) => {
                   const sources = suggestion.sourceIds.flatMap((id) => { const source = sourceById.get(id); return source ? [source] : []; });
                   const pendingSuggestion = suggestion.reviewStatus === "pending";
@@ -236,8 +285,21 @@ export function ProfileResearchPanel({
                       </div>
                     </article>
                   );
-                }) : <p className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No evidence-backed profile updates were found. You can try Deep Research or add more identifying information to the profile first.</p>}
+                }) : <p className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No evidence-backed profile field changes were found. The key findings above may still contain useful booking information.</p>}
               </section>
+
+              {run.mode === "deep" ? (
+                <section className="grid gap-3">
+                  <div><h3 className="text-lg font-bold">Other event opportunities found</h3><p className="text-sm text-slate-600">Deep Research checks broader calendars/directories it encounters and compares discoveries with Command Center.</p></div>
+                  {relatedEvents.length ? <div className="grid gap-3">{relatedEvents.map((event, index) => {
+                    const match = crmMatchLabel(event.crmMatch);
+                    const crmHref = event.crmMatch?.status === "existing" || event.crmMatch?.status === "possible_match"
+                      ? event.crmMatch.bookingId ? `/bookings/${event.crmMatch.bookingId}` : `/profiles/${event.crmMatch.organizationId}`
+                      : `/profiles?q=${encodeURIComponent(event.name)}`;
+                    return <article className="rounded-xl border border-slate-200 bg-white p-4" key={`${event.name}-${event.startsAt ?? index}`}><div className="flex flex-wrap items-start justify-between gap-2"><div><h4 className="font-bold text-slate-950">{event.name}</h4><p className="mt-1 text-sm text-slate-600">{[event.venue, [event.city, event.region].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "Location not confirmed"}</p><p className="mt-1 text-sm font-semibold text-slate-700">{eventDateLabel(event)}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${match.className}`}>{match.label}</span></div><p className="mt-2 text-sm text-slate-600">{event.rationale}</p>{event.crmMatch?.status === "possible_match" ? <p className="mt-2 text-xs font-semibold text-amber-800">Possible CRM match: {event.crmMatch.matchedName}</p> : null}<div className="mt-3 flex flex-wrap gap-2"><a className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-orange-300" href={event.url} target="_blank" rel="noreferrer noopener"><ExternalLink className="h-3.5 w-3.5" />Open source</a><Link className="rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:border-orange-300" href={crmHref}>{event.crmMatch?.status === "existing" ? "Open in Command Center" : event.crmMatch?.status === "possible_match" ? "Review possible match" : "Check profiles"}</Link></div></article>;
+                  })}</div> : <p className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-600">No additional prospect-worthy events were confidently found on the sources researched this time.</p>}
+                </section>
+              ) : null}
             </>
           ) : null}
         </div>
