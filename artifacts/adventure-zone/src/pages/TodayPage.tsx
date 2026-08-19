@@ -10,9 +10,15 @@ import { NeedsAttention } from "@/components/today/needs-attention";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
 import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
+import { classifyTodayEventTiming, countQueueNewLeads } from "@/features/today/today-summary-labels";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
+}
+
+function formatEventDateRange(startsAt: Date, endsAt: Date | null) {
+  if (!endsAt || startsAt.toDateString() === endsAt.toDateString()) return formatDate(startsAt);
+  return `${formatDate(startsAt)} – ${formatDate(endsAt)}`;
 }
 
 function formatToday(value: Date) {
@@ -138,11 +144,16 @@ export default function TodayPage() {
 
   const followUps = coerceFollowUps(dashboard.followUps ?? []);
   const renewals = coerceRenewals(dashboard.renewals ?? []);
-  const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({ ...e, startsAt: e.startsAt ? new Date(e.startsAt) : null }));
+  const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({
+    ...e,
+    startsAt: e.startsAt ? new Date(e.startsAt) : null,
+    endsAt: e.endsAt ? new Date(e.endsAt) : null,
+  }));
   const nextStepItems = (dashboard.needsFollowUpPlan ?? []).filter((booking: any) => !hiddenNextSteps.has(booking.id));
   const displayedNextStepItems = showAllNextSteps ? nextStepItems : nextStepItems.slice(0, 8);
   const overdueCount = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
   const queueCount = followUps.length + nextStepItems.length;
+  const queueNewLeadCount = countQueueNewLeads(nextStepItems, followUps);
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6 pb-8" onClickCapture={handleProfileLink}>
@@ -157,7 +168,7 @@ export default function TodayPage() {
         <div className="flex flex-wrap gap-2" aria-label="Today summary">
           <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${overdueCount ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-600"}`}>{overdueCount} Overdue</span>
           <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{dashboard.contractCount ?? 0} Contracts</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{dashboard.newLeadCount ?? 0} New leads</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{queueNewLeadCount} New leads in queue</span>
         </div>
       </header>
 
@@ -206,9 +217,12 @@ export default function TodayPage() {
         <h2 className="text-2xl font-bold" id="coming-up-title">Coming Up</h2>
 
         <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer font-bold">Upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary>
+          <summary className="cursor-pointer font-bold">Current & upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary>
           <div className="mt-3 flex justify-end"><Link className="text-sm font-semibold text-orange-700" href="/schedule">Open Schedule</Link></div>
-          {upcomingEvents.length ? <ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => <li className="flex items-start justify-between gap-3 py-3" key={event.id}><div className="min-w-0"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: event.organizationId ?? null, contactId: event.primaryContactId, bookingId: event.id }) ?? `/bookings/${event.id}`}>{event.name}</Link><BookingOperations operations={event.operations} /></div>{event.startsAt ? <span className="whitespace-nowrap text-sm text-slate-600">{formatDate(event.startsAt)}</span> : null}</li>)}</ul> : <p className="mt-3 text-sm text-slate-600">No upcoming event dates are set.</p>}
+          {upcomingEvents.length ? <ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => {
+            const timing = classifyTodayEventTiming(event, now);
+            return <li className="flex items-start justify-between gap-3 py-3" key={event.id}><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: event.organizationId ?? null, contactId: event.primaryContactId, bookingId: event.id }) ?? `/bookings/${event.id}`}>{event.name}</Link><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${timing === "in_progress" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{timing === "in_progress" ? "In progress" : "Upcoming"}</span></div><BookingOperations operations={event.operations} /></div>{event.startsAt ? <span className="whitespace-nowrap text-sm text-slate-600">{formatEventDateRange(event.startsAt, event.endsAt)}</span> : null}</li>;
+          })}</ul> : <p className="mt-3 text-sm text-slate-600">No current or upcoming event dates are set.</p>}
         </details>
 
         {(dashboard.todayTrips ?? []).length ? <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><summary className="cursor-pointer font-bold">Today's trips <span className="ml-1 text-slate-500">({dashboard.todayTrips.length})</span></summary><ul className="mt-3 divide-y divide-slate-100">{dashboard.todayTrips.map((trip: any) => <li className="py-3" key={trip.id}><Link className="font-semibold hover:text-orange-700" href={`/trips/${trip.id}`}>{trip.name}</Link><span className="ml-2 text-sm text-slate-600">{trip.legName ? `${trip.legName} · ` : ""}{trip.stopCount} stops</span></li>)}</ul></details> : null}
