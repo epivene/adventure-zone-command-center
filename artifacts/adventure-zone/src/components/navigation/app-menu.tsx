@@ -39,6 +39,7 @@ const adminMenuGroups: MenuGroup[] = [
   {
     label: "Imports & Data",
     items: [
+      { href: "/settings/paper-notes", label: "Paper notes" },
       { href: "/settings/act-migration", label: "Act! import" },
       { href: "/settings/act-recovery", label: "ACT recovery" },
     ],
