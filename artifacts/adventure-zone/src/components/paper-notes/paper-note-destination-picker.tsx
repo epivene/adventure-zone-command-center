@@ -9,12 +9,14 @@ export function PaperNoteDestinationPicker({
   onChooseExisting,
   onChooseNewLocation,
   onChooseNewProfile,
+  onNewLocationChange,
 }: {
   review: PaperNoteReviewDraft;
   matches: PaperNoteMatch[];
   onChooseExisting(match: PaperNoteMatch): void;
   onChooseNewLocation(match: PaperNoteMatch): void;
   onChooseNewProfile(): void;
+  onNewLocationChange(patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>): void;
 }) {
   const destination = review.destination;
 
@@ -90,8 +92,16 @@ export function PaperNoteDestinationPicker({
             <input
               aria-label="New location label"
               className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
-              readOnly
               value={destination.newLocation.label}
+              onChange={(event) => onNewLocationChange({ label: event.target.value })}
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Venue name
+            <input
+              className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+              value={destination.newLocation.venueName ?? ""}
+              onChange={(event) => onNewLocationChange({ venueName: event.target.value || null })}
             />
           </label>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -100,8 +110,8 @@ export function PaperNoteDestinationPicker({
               <input
                 aria-label="New location city"
                 className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
-                readOnly
                 value={destination.newLocation.city ?? ""}
+                onChange={(event) => onNewLocationChange({ city: event.target.value || null })}
               />
             </label>
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
@@ -109,8 +119,9 @@ export function PaperNoteDestinationPicker({
               <input
                 aria-label="New location state"
                 className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal uppercase"
-                readOnly
+                maxLength={2}
                 value={destination.newLocation.region ?? ""}
+                onChange={(event) => onNewLocationChange({ region: event.target.value.toUpperCase() || null })}
               />
             </label>
           </div>
