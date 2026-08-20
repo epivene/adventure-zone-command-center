@@ -1,0 +1,97 @@
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import { afterEach, describe, expect, it } from "vitest";
+
+import * as schema from "@/db/schema";
+import { PaperNoteRecoveryService } from "./paper-note-recovery-service";
+
+const batchId = "10000000-0000-4000-8000-000000000001";
+const pageId = "20000000-0000-4000-8000-000000000001";
+
+async function setup() {
+  const client = new PGlite();
+  await client.exec(`
+    create table paper_note_batches (
+      id uuid primary key, name text, status text not null, created_by text not null,
+      page_count integer not null default 0, import_request_key uuid, import_summary jsonb,
+      failure_code text, failure_message text, extraction_started_at timestamptz,
+      review_started_at timestamptz, import_started_at timestamptz, imported_at timestamptz,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+    );
+    create table paper_note_pages (
+      id uuid primary key, batch_id uuid not null references paper_note_batches(id) on delete cascade,
+      sort_order integer not null, original_filename text not null, mime_type text not null,
+      size_bytes integer not null, width integer, height integer, rotation_degrees integer not null default 0,
+      original_object_key text not null, analysis_object_key text, sha256 text, status text not null,
+      current_stage text, page_heading text, page_activity_date date, page_context jsonb not null default '{}'::jsonb,
+      rough_transcription text, attempt_count integer not null default 0, lease_token text,
+      lease_expires_at timestamptz, last_error_code text, last_error_message text, extracted_at timestamptz,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+    );
+    create table paper_note_entries (
+      id uuid primary key default gen_random_uuid(), batch_id uuid not null references paper_note_batches(id) on delete cascade,
+      page_id uuid not null references paper_note_pages(id) on delete cascade, source_order integer not null,
+      source_region jsonb, extraction_payload jsonb not null, review_payload jsonb not null default '{}'::jsonb,
+      review_version integer not null default 0, state text not null, destination_mode text,
+      selected_organization_id uuid, selected_organization_location_id uuid, target_snapshot jsonb,
+      validation_issues jsonb not null default '[]'::jsonb, approved_at timestamptz,
+      imported_organization_id uuid, imported_organization_location_id uuid, imported_activity_id uuid,
+      import_result jsonb, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+    );
+    insert into paper_note_batches (id, status, created_by, page_count)
+    values ('${batchId}', 'review', 'owner', 1);
+    insert into paper_note_pages (
+      id, batch_id, sort_order, original_filename, mime_type, size_bytes, original_object_key,
+      status, last_error_code, last_error_message
+    ) values (
+      '${pageId}', '${batchId}', 0, 'page.png', 'image/png', 100,
+      'paper-notes/${batchId}/${pageId}/original', 'needs_retry', 'PROVIDER_UNAVAILABLE', 'AI reading is unavailable right now.'
+    );
+  `);
+  const db = drizzle(client, { schema });
+  return { client, service: new PaperNoteRecoveryService(db as never) };
+}
+
+describe("PaperNoteRecoveryService", () => {
+  const clients: PGlite[] = [];
+  afterEach(async () => Promise.all(clients.splice(0).map((client) => client.close())));
+
+  it("queues only a retryable owner page and clears its safe error", async () => {
+    const { client, service } = await setup();
+    clients.push(client);
+    await service.retryPage({ createdBy: "owner", batchId, pageId, now: new Date("2026-08-20T20:30:00Z") });
+    expect((await client.query(`select status, last_error_code, lease_token from paper_note_pages where id='${pageId}'`)).rows)
+      .toEqual([{ status: "queued", last_error_code: null, lease_token: null }]);
+    expect((await client.query(`select status from paper_note_batches where id='${batchId}'`)).rows)
+      .toEqual([{ status: "queued" }]);
+  });
+
+  it("creates a manual needs-review entry without inventing structured facts", async () => {
+    const { client, service } = await setup();
+    clients.push(client);
+    await service.addManualEntry({
+      createdBy: "owner", batchId, pageId, transcription: "Example Fair — number hard to read",
+      now: new Date("2026-08-20T20:30:00Z"),
+    });
+    const row = (await client.query(`select state, extraction_payload from paper_note_entries where page_id='${pageId}'`)).rows[0] as any;
+    expect(row.state).toBe("needs_review");
+    expect(row.extraction_payload).toMatchObject({
+      source: "manual",
+      transcription: "Example Fair — number hard to read",
+      event: { name: null },
+      starredOnPaper: false,
+    });
+    expect((await client.query(`select status from paper_note_pages where id='${pageId}'`)).rows)
+      .toEqual([{ status: "extracted" }]);
+  });
+
+  it("marks an empty failed page terminal without creating an entry", async () => {
+    const { client, service } = await setup();
+    clients.push(client);
+    await service.markReviewedEmpty({ createdBy: "owner", batchId, pageId, now: new Date("2026-08-20T20:30:00Z") });
+    expect((await client.query(`select status from paper_note_pages where id='${pageId}'`)).rows)
+      .toEqual([{ status: "reviewed_empty" }]);
+    expect((await client.query(`select count(*)::int as count from paper_note_entries`)).rows)
+      .toEqual([{ count: 0 }]);
+  });
+});
