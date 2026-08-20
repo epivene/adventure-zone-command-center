@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import {
   paperNoteReviewPayloadSchema,
   validatePaperNoteReview,
@@ -93,7 +94,7 @@ describe("paper-note review validation", () => {
         { ...structuredPhone("office-2"), number: "208-555-0143" },
       ],
     });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+    expect(validatePaperNotePrimaryPhones(input)).toContainEqual(expect.objectContaining({
       fieldPath: "organizationPhones",
       severity: "blocking",
     }));
@@ -115,7 +116,7 @@ describe("paper-note review validation", () => {
         ],
       }],
     });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+    expect(validatePaperNotePrimaryPhones(input)).toContainEqual(expect.objectContaining({
       fieldPath: "contacts.0.phones",
       severity: "blocking",
     }));
