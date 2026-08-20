@@ -1,5 +1,10 @@
 import { apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
-import type { PaperNoteBatchListItem, PaperNoteBatchView } from "./paper-note-types";
+import type {
+  PaperNoteBatchListItem,
+  PaperNoteBatchPreflight,
+  PaperNoteBatchView,
+  PaperNoteImportSummary,
+} from "./paper-note-types";
 import type {
   PaperNoteMatch,
   PaperNoteReviewDraft,
@@ -171,4 +176,29 @@ export function unapprovePaperNoteEntry(entryId: string, expectedVersion: number
 
 export function skipPaperNoteEntry(entryId: string, expectedVersion: number) {
   return paperNoteEntryStateAction(entryId, "skip", expectedVersion);
+}
+
+export async function preflightPaperNoteBatch(batchId: string) {
+  const response = await apiFetch(`/paper-notes/batches/${batchId}/preflight`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const payload = await response.json().catch(() => ({})) as {
+    preflight?: PaperNoteBatchPreflight;
+    error?: string;
+  };
+  if (payload.preflight) return payload.preflight;
+  throw new Error(payload.error ?? `API ${response.status}`);
+}
+
+export async function importPaperNoteBatch(batchId: string, requestKey: string) {
+  const result = await apiPost<{ summary: PaperNoteImportSummary }>(
+    `/paper-notes/batches/${batchId}/import`,
+    { requestKey },
+  );
+  return result.summary;
+}
+
+export function archivePaperNoteBatch(batchId: string) {
+  return apiPost<{ ok: true }>(`/paper-notes/batches/${batchId}/archive`, {});
 }
