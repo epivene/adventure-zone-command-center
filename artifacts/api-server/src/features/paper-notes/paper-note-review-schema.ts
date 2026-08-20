@@ -206,7 +206,7 @@ const phoneConflictSchema = z.object({
   existingPhoneId: z.string().uuid().nullable(),
 });
 
-export const paperNoteReviewPayloadSchema: z.ZodType<PaperNoteReviewPayload> = z.object({
+const reviewBaseShape = {
   event: z.object({
     name: z.string().max(300),
     city: z.string().max(200),
@@ -228,7 +228,6 @@ export const paperNoteReviewPayloadSchema: z.ZodType<PaperNoteReviewPayload> = z
   oldReminder: z.string().max(2000),
   starredOnPaper: z.boolean(),
   generalNotes: z.array(z.string().max(2000)).max(40),
-  destination: destinationSchema,
   conflicts: z.record(z.string(), z.union([fieldConflictSchema, phoneConflictSchema])),
   currentFollowUp: z.object({
     enabled: z.boolean(),
@@ -236,6 +235,17 @@ export const paperNoteReviewPayloadSchema: z.ZodType<PaperNoteReviewPayload> = z
     dueOn: dateValue,
     contactKey: z.string().max(120).nullable(),
   }),
+} as const;
+
+const reviewPayloadObjectSchema = z.object({
+  ...reviewBaseShape,
+  destination: destinationSchema,
+});
+
+export const paperNoteReviewPayloadSchema: z.ZodType<PaperNoteReviewPayload> = reviewPayloadObjectSchema;
+export const paperNoteReviewDraftSchema = z.object({
+  ...reviewBaseShape,
+  destination: destinationSchema.nullable(),
 });
 
 function validNorthAmericanPhone(value: string) {
