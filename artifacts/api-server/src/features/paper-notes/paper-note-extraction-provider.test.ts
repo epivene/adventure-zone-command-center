@@ -45,7 +45,7 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     await provider.segmentPage({ bytes: new Uint8Array([1, 2]), mimeType: "image/jpeg" });
 
     const call = vi.mocked(ai.completeImage!).mock.calls[0]?.[0];
-    expect(call?.maxTokens).toBe(2400);
+    expect(call?.maxTokens).toBe(4096);
     expect(call?.prompt).toContain("Page headings are context, not event entries");
     expect(call?.prompt).toContain("never invent missing digits or letters");
     expect(call?.prompt).toContain("old reminder");
@@ -53,7 +53,7 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("crossed-out");
   });
 
-  it("uses the entry budget and keeps communication dates separate from event dates", async () => {
+  it("uses valid enum examples and keeps communication dates separate from event dates", async () => {
     const ai = client([entry]);
     const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
 
@@ -68,15 +68,36 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("separate event dates from communication dates");
     expect(call?.prompt).toContain("extension");
     expect(call?.prompt).toContain("Starred on original paper");
+    expect(call?.prompt).toContain('"dateSource":"unknown"');
+    expect(call?.prompt).toContain('"method":"unknown"');
+    expect(call?.prompt).toContain('"type":"unknown"');
+    expect(call?.prompt).not.toContain('"dateSource":"entry|page_heading|unknown"');
+    expect(call?.prompt).not.toContain('"type":"mobile|office|alternate|unknown"');
+    expect(call?.prompt).toContain("Allowed dateSource values");
+    expect(call?.prompt).toContain("Allowed phone type values");
   });
 
-  it("retries malformed output once and then succeeds", async () => {
+  it("accepts harmless wrapper text around one complete JSON object", async () => {
+    const ai = client([`Here is the JSON you requested:\n${segmentation}\nDone.`]);
+    const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
+
+    await expect(provider.segmentPage({ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }))
+      .resolves.toMatchObject({ pageHeading: "Monday Call List" });
+    expect(ai.completeImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries malformed output once with an explicit corrective JSON instruction", async () => {
     const ai = client(["not json", segmentation]);
     const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
 
     await expect(provider.segmentPage({ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }))
       .resolves.toMatchObject({ pageHeading: "Monday Call List" });
     expect(ai.completeImage).toHaveBeenCalledTimes(2);
+    const firstPrompt = vi.mocked(ai.completeImage!).mock.calls[0]?.[0].prompt ?? "";
+    const retryPrompt = vi.mocked(ai.completeImage!).mock.calls[1]?.[0].prompt ?? "";
+    expect(retryPrompt).not.toBe(firstPrompt);
+    expect(retryPrompt).toContain("previous response was invalid or truncated");
+    expect(retryPrompt).toContain("compact JSON only");
   });
 
   it("reports malformed output after the one bounded retry", async () => {

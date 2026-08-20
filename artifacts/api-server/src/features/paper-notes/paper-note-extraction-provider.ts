@@ -73,6 +73,8 @@ Rules:
 - Only set pageActivityDate when a full calendar date is actually written or unambiguously present. "Monday Call List" supplies no date.
 - Coordinates are normalized 0..1 relative to the interpreted orientation. If a reliable region cannot be identified, return region:null.
 - Keep entries in visual reading order and number sourceOrder from 0.
+- Keep roughTranscription concise; it is only page context, not a second full transcription.
+- Keep each roughText concise and focused on identifying that entry so the JSON stays compact even on dense pages.
 - never invent missing digits or letters.
 - separate event dates from communication dates; segmentation only identifies page-level communication context.
 - preserve phone extension and calling-instruction text in roughText.
@@ -103,15 +105,18 @@ Return JSON only with this shape:
   "mayContinue":false,
   "event":{"name":null,"city":null,"region":null,"venue":null},
   "eventDates":[{"rawText":"","startsOn":null,"endsOn":null,"derivedFromPageYear":false}],
-  "activity":{"rawDateText":null,"occurredOn":null,"dateSource":"entry|page_heading|unknown","method":"call|email|mail|text|unknown","outcome":null,"summary":null},
-  "contacts":[{"name":null,"role":null,"email":null,"phones":[{"number":null,"extension":null,"type":"mobile|office|alternate|unknown","label":null,"instructions":null,"crossedOut":false}]}],
-  "organizationPhones":[{"number":null,"extension":null,"type":"mobile|office|alternate|unknown","label":null,"instructions":null,"crossedOut":false}],
+  "activity":{"rawDateText":null,"occurredOn":null,"dateSource":"unknown","method":"unknown","outcome":null,"summary":null},
+  "contacts":[{"name":null,"role":null,"email":null,"phones":[{"number":null,"extension":null,"type":"unknown","label":null,"instructions":null,"crossedOut":false}]}],
+  "organizationPhones":[{"number":null,"extension":null,"type":"unknown","label":null,"instructions":null,"crossedOut":false}],
   "oldReminder":null,
   "starredOnPaper":false,
   "generalNotes":[]
 }
 
 Rules:
+- Allowed dateSource values: "entry", "page_heading", or "unknown". Return exactly one value.
+- Allowed method values: "call", "email", "mail", "text", or "unknown". Return exactly one value.
+- Allowed phone type values: "mobile", "office", "alternate", or "unknown". Return exactly one value.
 - never invent missing digits or letters. Use null or preserve uncertain text in transcription when a structured value cannot be read reliably.
 - separate event dates from communication dates. A written event date like "June 22" is not the date of an April call.
 - A page date may populate activity.occurredOn only when the entry has no more-specific communication date; then dateSource must be "page_heading".
@@ -133,6 +138,20 @@ function isUnavailable(error: unknown) {
   );
 }
 
+function providerJson(raw: string) {
+  const trimmed = raw.trim();
+  const firstObject = trimmed.indexOf("{");
+  const lastObject = trimmed.lastIndexOf("}");
+  if (firstObject >= 0 && lastObject > firstObject) {
+    return trimmed.slice(firstObject, lastObject + 1);
+  }
+  return trimmed;
+}
+
+function correctiveJsonPrompt(prompt: string) {
+  return `${prompt}\n\nIMPORTANT RETRY: Your previous response was invalid or truncated and could not be parsed. Return compact JSON only. Do not include prose, markdown fences, explanations, or any text before or after the JSON object. Keep optional/context text brief so the complete closing brace fits in the response.`;
+}
+
 export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionProvider {
   constructor(private readonly clientFactory: ClientFactory = createAiClient) {}
 
@@ -145,7 +164,7 @@ export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionPr
       bytes: input.bytes,
       mimeType: input.mimeType,
       prompt: segmentationPrompt(input.rotationDegrees),
-      maxTokens: 2400,
+      maxTokens: 4096,
       parse: parsePaperNotePageSegmentation,
     });
   }
@@ -201,7 +220,7 @@ export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionPr
       let raw: string;
       try {
         raw = await client.completeImage({
-          prompt: input.prompt,
+          prompt: attempt === 0 ? input.prompt : correctiveJsonPrompt(input.prompt),
           mimeType: input.mimeType,
           base64,
           maxTokens: input.maxTokens,
@@ -220,7 +239,7 @@ export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionPr
       }
 
       try {
-        return input.parse(raw);
+        return input.parse(providerJson(raw));
       } catch {
         if (attempt === 1) break;
       }
