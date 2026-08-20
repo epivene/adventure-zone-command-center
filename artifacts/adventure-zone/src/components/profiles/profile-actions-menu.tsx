@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
 import { MoreHorizontal } from "lucide-react";
+import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
 import {
   ProfileLastResortDialog,
   useProfileLastResortState,
@@ -26,6 +27,7 @@ export function ProfileActionsMenu({
   showAddNote?: boolean;
 }) {
   const [lastResortOpen, setLastResortOpen] = useState(false);
+  const [eventFamilyOpen, setEventFamilyOpen] = useState(false);
   const { state: lastResortState, refresh: refreshLastResort } = useProfileLastResortState(profileId);
   const fullProfile = `/profiles/${profileId}`;
   const withContact = contactId ? `${fullProfile}?contactId=${encodeURIComponent(contactId)}` : fullProfile;
@@ -46,11 +48,13 @@ export function ProfileActionsMenu({
           <DropdownMenuSeparator />
           {showAddNote ? <DropdownMenuItem onSelect={() => onAddNote?.()}>Add note</DropdownMenuItem> : null}
           <DropdownMenuItem asChild><Link href={followUpHref}>Add follow-up</Link></DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setEventFamilyOpen(true)}>Add to Event Family</DropdownMenuItem>
           <DropdownMenuItem onSelect={() => setLastResortOpen(true)}>{lastResortLabel}</DropdownMenuItem>
           <DropdownMenuItem asChild><Link href={researchHref}>Research profile</Link></DropdownMenuItem>
           <DropdownMenuItem asChild><Link href="/event-profiles/new">Add event</Link></DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ManualEventFamilyDialog onOpenChange={setEventFamilyOpen} open={eventFamilyOpen} seedProfileId={profileId} />
       <ProfileLastResortDialog onChanged={async () => { await refreshLastResort(); }} onOpenChange={setLastResortOpen} open={lastResortOpen} profileId={profileId} />
     </>
   );

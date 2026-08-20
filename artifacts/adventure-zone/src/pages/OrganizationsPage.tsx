@@ -6,6 +6,7 @@ import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
+import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
 import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 
@@ -40,6 +41,7 @@ export default function OrganizationsPage() {
   const [dupLoading, setDupLoading] = useState(false);
   const [dupError, setDupError] = useState<string | null>(null);
   const [dupGroups, setDupGroups] = useState<DuplicateGroup[] | null>(null);
+  const [eventFamilyOpen, setEventFamilyOpen] = useState(false);
 
   const loadProfiles = useCallback(async () => {
     const qs = new URLSearchParams();
@@ -109,10 +111,13 @@ export default function OrganizationsPage() {
 
   return (
     <div className="mx-auto grid max-w-7xl gap-5">
-      <header>
-        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Relationships</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
-        {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Search places and people, then tap a profile to work it without losing your place.</p> : null}
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Relationships</p>
+          <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
+          {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Search places and people, then tap a profile to work it without losing your place.</p> : null}
+        </div>
+        {!showDuplicates ? <button className="button-primary" onClick={() => setEventFamilyOpen(true)} type="button">+ Event Family</button> : null}
       </header>
 
       {!showDuplicates && families.length > 0 ? (
@@ -144,6 +149,7 @@ export default function OrganizationsPage() {
         </div>
       )}
 
+      <ManualEventFamilyDialog onChanged={loadProfiles} onOpenChange={setEventFamilyOpen} open={eventFamilyOpen} />
       {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label={profileTarget.label ?? "Side profile"} /> : null}
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
     </div>
