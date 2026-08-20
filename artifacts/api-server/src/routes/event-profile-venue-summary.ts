@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { asc, desc, eq, gte, lt, or } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { bookings } from "@/db/schema";
@@ -27,16 +27,6 @@ router.get("/event-profiles/:id/venue-summary", async (req, res): Promise<void> 
 
   try {
     const now = new Date();
-    const [upcoming] = await db
-      .select(fields)
-      .from(bookings)
-      .where(
-        or(
-          eq(bookings.organizationId, id),
-        ),
-      )
-      .orderBy(asc(bookings.startsAt), asc(bookings.id));
-
     const candidates = await db
       .select(fields)
       .from(bookings)
@@ -48,9 +38,8 @@ router.get("/event-profiles/:id/venue-summary", async (req, res): Promise<void> 
       .sort((left, right) => Number(left.startsAt) - Number(right.startsAt))[0];
     const recent = candidates
       .filter((booking) => !booking.startsAt || booking.startsAt < now)[0];
-    const selected = next ?? recent ?? upcoming ?? null;
 
-    res.json({ venue: selected });
+    res.json({ venue: next ?? recent ?? null });
   } catch (err) {
     req.log.error({ err }, "Failed to load event venue summary");
     res.status(500).json({ error: "Could not load event venue." });
