@@ -105,15 +105,18 @@ Return JSON only with this shape:
   "mayContinue":false,
   "event":{"name":null,"city":null,"region":null,"venue":null},
   "eventDates":[{"rawText":"","startsOn":null,"endsOn":null,"derivedFromPageYear":false}],
-  "activity":{"rawDateText":null,"occurredOn":null,"dateSource":"entry|page_heading|unknown","method":"call|email|mail|text|unknown","outcome":null,"summary":null},
-  "contacts":[{"name":null,"role":null,"email":null,"phones":[{"number":null,"extension":null,"type":"mobile|office|alternate|unknown","label":null,"instructions":null,"crossedOut":false}]}],
-  "organizationPhones":[{"number":null,"extension":null,"type":"mobile|office|alternate|unknown","label":null,"instructions":null,"crossedOut":false}],
+  "activity":{"rawDateText":null,"occurredOn":null,"dateSource":"unknown","method":"unknown","outcome":null,"summary":null},
+  "contacts":[{"name":null,"role":null,"email":null,"phones":[{"number":null,"extension":null,"type":"unknown","label":null,"instructions":null,"crossedOut":false}]}],
+  "organizationPhones":[{"number":null,"extension":null,"type":"unknown","label":null,"instructions":null,"crossedOut":false}],
   "oldReminder":null,
   "starredOnPaper":false,
   "generalNotes":[]
 }
 
 Rules:
+- Allowed dateSource values: "entry", "page_heading", or "unknown". Return exactly one value.
+- Allowed method values: "call", "email", "mail", "text", or "unknown". Return exactly one value.
+- Allowed phone type values: "mobile", "office", "alternate", or "unknown". Return exactly one value.
 - never invent missing digits or letters. Use null or preserve uncertain text in transcription when a structured value cannot be read reliably.
 - separate event dates from communication dates. A written event date like "June 22" is not the date of an April call.
 - A page date may populate activity.occurredOn only when the entry has no more-specific communication date; then dateSource must be "page_heading".
