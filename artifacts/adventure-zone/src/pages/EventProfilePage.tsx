@@ -7,6 +7,7 @@ import { ProfileDetailsCard } from "@/components/profiles/profile-details-card";
 import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
+import { PaperNoteHistorySources } from "@/components/paper-notes/paper-note-history-sources";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { DerivedFactsReview } from "@/components/assistant/derived-facts-review";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
@@ -207,6 +208,8 @@ export default function EventProfilePage() {
       {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
       {!profileEditing && profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
+
+      {!profileEditing && profileId ? <PaperNoteHistorySources profileId={profileId} /> : null}
 
       {recoveredActNotes.length ? (
         <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
