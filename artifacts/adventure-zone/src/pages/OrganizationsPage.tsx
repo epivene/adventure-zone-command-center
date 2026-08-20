@@ -4,6 +4,7 @@ import { apiGet } from "@/lib/auth-token";
 import { OrganizationList } from "@/components/organizations/organization-list";
 import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/duplicates-view";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
+import { hideRetiredProfileResults } from "@/features/organizations/hide-retired-profile-results";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
@@ -29,6 +30,7 @@ export default function OrganizationsPage() {
     showMembers: params.get("showMembers") ?? undefined,
     contact: params.get("contact") ?? undefined,
     activity: params.get("activity") ?? undefined,
+    includeRetired: params.get("includeRetired") ?? undefined,
     page: params.get("page") ?? undefined,
     pageSize: params.get("pageSize") ?? undefined,
   });
@@ -56,6 +58,7 @@ export default function OrganizationsPage() {
     if (query.hasBooking) qs.set("hasBooking", "yes");
     if (query.hasLocations) qs.set("hasLocations", "yes");
     if (query.showMembers) qs.set("showMembers", "yes");
+    if (query.includeRetired) qs.set("includeRetired", "yes");
     if (query.page > 1) qs.set("page", String(query.page));
     if (query.pageSize !== 50) qs.set("pageSize", String(query.pageSize));
 
@@ -64,7 +67,7 @@ export default function OrganizationsPage() {
     try { setData(await apiGet<any>(`/organizations?${qs.toString()}`)); }
     catch (e: any) { setError(e?.message ?? "Failed to load profiles"); }
     finally { setLoading(false); }
-  }, [query.search, query.lastResort, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.page, query.pageSize]);
+  }, [query.search, query.lastResort, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.includeRetired, query.page, query.pageSize]);
 
   useEffect(() => { void loadProfiles(); }, [loadProfiles]);
 
@@ -108,6 +111,10 @@ export default function OrganizationsPage() {
   }
 
   const families = data?.families ?? [];
+  const organizationPage = hideRetiredProfileResults(
+    data?.organizations ?? data ?? { records: [] },
+    query.includeRetired || query.showMembers,
+  );
 
   return (
     <div className="mx-auto grid max-w-7xl gap-5">
@@ -138,7 +145,7 @@ export default function OrganizationsPage() {
         </div>
       ) : (
         <div onClickCapture={handleProfileLink}>
-          {loading ? <p className="text-slate-500">Loading places…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={data.organizations ?? data} query={query} travelLegs={data.travelLegs ?? []} /> : null}
+          {loading ? <p className="text-slate-500">Loading places…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} /> : null}
 
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
