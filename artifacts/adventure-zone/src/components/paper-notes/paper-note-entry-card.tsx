@@ -184,6 +184,16 @@ export function PaperNoteEntryCard({
     }));
   }
 
+  function updateNewProfileFamily(familyId: string | null) {
+    setReview((current) => {
+      if (current.destination?.mode !== "new_profile") return current;
+      return {
+        ...current,
+        destination: { ...current.destination, eventFamilyId: familyId },
+      };
+    });
+  }
+
   function updateNewLocation(
     patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>,
   ) {
@@ -346,6 +356,7 @@ export function PaperNoteEntryCard({
         onChooseNewLocation={chooseNewLocation}
         onChooseNewProfile={chooseNewProfile}
         onNewLocationChange={updateNewLocation}
+        onNewProfileFamilyChange={updateNewProfileFamily}
         onRememberMatch={rememberMatch}
       />
 
