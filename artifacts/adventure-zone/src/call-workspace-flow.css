@@ -16,14 +16,33 @@
   order: 0;
 }
 
-/* Step 1: choose the number and launch Phone Link. */
+/* Step 1: profile identity and phone controls behave like one call-profile card. */
 [data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="phone-actions-title"] {
   order: 1;
+  margin-top: -1.25rem;
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  padding-top: 0.75rem;
 }
 
-/* Step 2: who this is, why we are calling, status, route, and warnings. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="phone-actions-title"] > h2 {
+  display: none;
+}
+
+[data-testid="call-workspace"][data-mode="full"] > section[aria-label="Call profile"] {
+  order: 1;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* Step 2: why we are calling, status, route, and warnings. */
 [data-testid="call-workspace"][data-mode="full"] > :not(header):not(:last-child) {
   order: 2;
+}
+
+[data-testid="call-workspace"][data-mode="full"] > section[aria-label="Call profile"] {
+  order: 1;
 }
 
 /* Step 3: the words to say and the caller's likely responses. */
