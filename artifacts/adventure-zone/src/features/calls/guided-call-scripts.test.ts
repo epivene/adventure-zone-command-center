@@ -26,6 +26,11 @@ describe("guided call scripts", () => {
     expect(opening.say.toLowerCase()).not.toContain("how many people");
   });
 
+  it("offers to email detailed pricing options instead of overexplaining on the phone", () => {
+    const script = getGuidedCallScript("first_outreach");
+    expect(script.nodes.pricing.say).toContain("I can email you more detailed info on the options we have and we can go from there.");
+  });
+
   it("renders only trusted placeholders supplied by the workspace", () => {
     expect(renderGuidedText(
       "Hi {{contactName}}, I'm calling about {{eventName}}.",
