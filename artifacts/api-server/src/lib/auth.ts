@@ -2,6 +2,11 @@ import type { NextFunction, Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // ~30 days
+// Password auth currently represents one owner rather than a user table row.
+// Keep the existing blank actor namespace so already-saved Lead Scout runs
+// remain owned by the same actor while protected routes receive a real string.
+const SINGLE_OWNER_ACTOR_ID = "";
+type OwnerAuthenticatedRequest = Request & { userId: string };
 
 /**
  * Logs a startup warning if OWNER_PASSWORD or SESSION_SECRET is not
@@ -98,5 +103,6 @@ export function requireOwnerMiddleware(
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+  (req as OwnerAuthenticatedRequest).userId = SINGLE_OWNER_ACTOR_ID;
   next();
 }
