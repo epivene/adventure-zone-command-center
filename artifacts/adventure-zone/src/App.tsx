@@ -220,6 +220,8 @@ function AdminProtectedApp() {
           <Route path="/routes" component={RoutesPage} />
           <Route path="/research-sources" component={ResearchSourcesPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
+          <Route path="/calls/new" component={CallWorkspacePage} />
+          <Route path="/calls/log" component={MobileCallLogPage} />
           <Route path="/calls/workspace" component={CallWorkspacePage} />
           <Route path="/calls/mobile" component={MobileCallLogPage} />
           <Route path="/needs-answer" component={NeedsAnswerPage} />
