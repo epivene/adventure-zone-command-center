@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { activities } from "@/db/schema";
@@ -40,21 +40,11 @@ export async function enrichPaperNoteTimeline(
       occurredAt: activities.occurredAt,
     })
     .from(activities)
-    .where(
-      inArray(
-        activities.id,
-        items.map((item) => item.id),
-      ),
-    );
-  const sourceRows = await database
-    .select({ id: activities.id })
-    .from(activities)
-    .where(eq(activities.sourceType, "paper_note"));
-  const paperIds = new Set(sourceRows.map((row) => row.id));
-  return decoratePaperNoteTimeline(
-    items,
-    rows.filter((row) => paperIds.has(row.id)),
-  );
+    .where(and(
+      inArray(activities.id, items.map((item) => item.id)),
+      eq(activities.sourceType, "paper_note"),
+    ));
+  return decoratePaperNoteTimeline(items, rows);
 }
 
 export async function isPaperNoteActivity(
@@ -62,9 +52,12 @@ export async function isPaperNoteActivity(
   activityId: string,
 ): Promise<boolean> {
   const [row] = await database
-    .select({ sourceType: activities.sourceType })
+    .select({ id: activities.id })
     .from(activities)
-    .where(inArray(activities.id, [activityId]))
+    .where(and(
+      eq(activities.id, activityId),
+      eq(activities.sourceType, "paper_note"),
+    ))
     .limit(1);
-  return row?.sourceType === "paper_note";
+  return Boolean(row);
 }
