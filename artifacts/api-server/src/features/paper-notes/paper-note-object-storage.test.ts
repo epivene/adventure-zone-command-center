@@ -15,14 +15,14 @@ describe("paper note object storage", () => {
       `paper-notes/${batchId}/${pageId}/original`,
     );
     expect(paperNoteAnalysisObjectKey(batchId, pageId)).toBe(
-      `paper-notes/${batchId}/${pageId}/analysis.webp`,
+      `paper-notes/${batchId}/${pageId}/analysis`,
     );
     expect(() => paperNoteOriginalObjectKey("not-a-uuid", pageId)).toThrow(
       "Paper note storage IDs must be UUIDs",
     );
   });
 
-  it("stores originals and analysis derivatives at the scoped keys", async () => {
+  it("stores originals and analysis copies at the scoped keys using their real content type", async () => {
     const put = vi.fn(async () => undefined);
     const storage = {
       put,
@@ -43,8 +43,8 @@ describe("paper note object storage", () => {
       batchId,
       pageId,
       bytes: new Uint8Array([2]),
-      mimeType: "image/webp",
-    })).resolves.toBe(`paper-notes/${batchId}/${pageId}/analysis.webp`);
+      mimeType: "image/jpeg",
+    })).resolves.toBe(`paper-notes/${batchId}/${pageId}/analysis`);
 
     expect(put).toHaveBeenNthCalledWith(
       1,
@@ -54,9 +54,9 @@ describe("paper note object storage", () => {
     );
     expect(put).toHaveBeenNthCalledWith(
       2,
-      `paper-notes/${batchId}/${pageId}/analysis.webp`,
+      `paper-notes/${batchId}/${pageId}/analysis`,
       new Uint8Array([2]),
-      "image/webp",
+      "image/jpeg",
     );
   });
 
@@ -73,11 +73,11 @@ describe("paper note object storage", () => {
 
     await subject.deletePageObjects({
       originalObjectKey: `paper-notes/${batchId}/${pageId}/original`,
-      analysisObjectKey: `paper-notes/${batchId}/${pageId}/analysis.webp`,
+      analysisObjectKey: `paper-notes/${batchId}/${pageId}/analysis`,
     });
 
     expect(calls).toEqual([
-      `paper-notes/${batchId}/${pageId}/analysis.webp`,
+      `paper-notes/${batchId}/${pageId}/analysis`,
       `paper-notes/${batchId}/${pageId}/original`,
     ]);
   });
