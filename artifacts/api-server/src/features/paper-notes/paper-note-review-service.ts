@@ -1,5 +1,7 @@
 import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
 import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
+import { validatePaperNotePrimaryContact } from "./paper-note-primary-contact-validation";
+import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import type { PaperNoteEntryState } from "./paper-note-types";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import {
@@ -38,35 +40,15 @@ export interface PaperNoteReviewStore {
     now: Date;
   }): Promise<PaperNoteReviewMutationView>;
   getForReview(actorId: string, entryId: string): Promise<PaperNoteReviewEntryDetails | null>;
-  approve(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }): Promise<PaperNoteReviewMutationView>;
-  unapprove(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }): Promise<PaperNoteReviewMutationView>;
-  skip(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }): Promise<PaperNoteReviewMutationView>;
+  approve(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }): Promise<PaperNoteReviewMutationView>;
+  unapprove(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }): Promise<PaperNoteReviewMutationView>;
+  skip(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }): Promise<PaperNoteReviewMutationView>;
 }
 
-export type PaperNoteReviewServiceErrorCode =
-  | "ENTRY_NOT_FOUND"
-  | "ENTRY_NOT_READY";
+export type PaperNoteReviewServiceErrorCode = "ENTRY_NOT_FOUND" | "ENTRY_NOT_READY";
 
 export class PaperNoteReviewServiceError extends Error {
-  constructor(
-    public readonly code: PaperNoteReviewServiceErrorCode,
-    message: string,
-  ) {
+  constructor(public readonly code: PaperNoteReviewServiceErrorCode, message: string) {
     super(message);
     this.name = "PaperNoteReviewServiceError";
   }
@@ -83,6 +65,8 @@ function validateDraft(review: PaperNoteReviewDraft): PaperNoteReviewIssue[] {
   return [
     ...validatePaperNoteReview(review as PaperNoteReviewPayload),
     ...validatePaperNoteEventDate(review.event),
+    ...validatePaperNotePrimaryContact(review),
+    ...validatePaperNotePrimaryPhones(review),
   ];
 }
 
@@ -91,12 +75,7 @@ export class PaperNoteReviewService {
 
   async getEntry(actorId: string, entryId: string) {
     const current = await this.store.getForReview(actorId, entryId);
-    if (!current) {
-      throw new PaperNoteReviewServiceError(
-        "ENTRY_NOT_FOUND",
-        "Paper-note entry was not found.",
-      );
-    }
+    if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
     return { id: entryId, ...current };
   }
 
@@ -108,55 +87,25 @@ export class PaperNoteReviewService {
     now: Date;
   }) {
     const issues = validateDraft(input.review);
-    const state = issues.some((issue) => issue.severity === "blocking")
-      ? "needs_review"
-      : "ready";
-    return this.store.saveReview({
-      ...input,
-      state,
-      validationIssues: issues,
-      approvedAt: null,
-    });
+    const state = issues.some((issue) => issue.severity === "blocking") ? "needs_review" : "ready";
+    return this.store.saveReview({ ...input, state, validationIssues: issues, approvedAt: null });
   }
 
-  async approveEntry(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }) {
+  async approveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     const current = await this.store.getForReview(input.actorId, input.entryId);
-    if (!current) {
-      throw new PaperNoteReviewServiceError(
-        "ENTRY_NOT_FOUND",
-        "Paper-note entry was not found.",
-      );
-    }
+    if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
     const issues = validateDraft(current.review);
     if (issues.some((issue) => issue.severity === "blocking")) {
-      throw new PaperNoteReviewServiceError(
-        "ENTRY_NOT_READY",
-        "Review the highlighted paper-note fields before approving this entry.",
-      );
+      throw new PaperNoteReviewServiceError("ENTRY_NOT_READY", "Review the highlighted paper-note fields before approving this entry.");
     }
     return this.store.approve(input);
   }
 
-  unapproveEntry(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }) {
+  unapproveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     return this.store.unapprove(input);
   }
 
-  skipEntry(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }) {
+  skipEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     return this.store.skip(input);
   }
 }

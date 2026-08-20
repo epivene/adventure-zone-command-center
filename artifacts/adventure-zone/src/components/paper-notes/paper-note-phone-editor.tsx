@@ -39,6 +39,7 @@ export function PaperNotePhoneEditor({
   savedPhones = [],
   conflict,
   requireDecision = false,
+  allowPrimaryChoice = false,
   onChange,
   onConflict,
 }: {
@@ -48,6 +49,7 @@ export function PaperNotePhoneEditor({
   savedPhones?: PaperNoteSavedPhone[];
   conflict?: unknown;
   requireDecision?: boolean;
+  allowPrimaryChoice?: boolean;
   onChange(patch: Partial<PaperNoteReviewedPhone>): void;
   onConflict(value: PhoneConflict | null): void;
 }) {
@@ -58,7 +60,6 @@ export function PaperNotePhoneEditor({
   const primary = savedPhones.find((saved) => saved.primary && saved.status === "active") ?? null;
   const defaultTarget = exact ?? primary ?? savedPhones[0] ?? null;
   const selectedExistingId = currentConflict?.existingPhoneId ?? defaultTarget?.id ?? null;
-  const labelPrefix = prefix ? `${prefix} ` : "";
 
   function chooseDecision(decision: PhoneConflict["decision"] | "") {
     if (!decision) {
@@ -155,6 +156,17 @@ export function PaperNotePhoneEditor({
         Import as structured phone
         <span className="font-normal text-slate-500">Uncheck to keep it only in the historical paper note.</span>
       </label>
+      {allowPrimaryChoice && phone.importAsStructuredValue ? (
+        <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700 sm:col-span-2">
+          <input
+            aria-label={prefix ? `${prefix} primary phone` : "Primary phone"}
+            type="checkbox"
+            checked={phone.primary}
+            onChange={(event) => onChange({ primary: event.target.checked })}
+          />
+          Primary phone for this {prefix ? "profile" : "contact"}
+        </label>
+      ) : null}
       {phone.crossedOut ? (
         <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900 sm:col-span-2">
           Crossed out on the original paper. Nothing will be deactivated automatically.

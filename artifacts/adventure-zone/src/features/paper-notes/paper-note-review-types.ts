@@ -70,6 +70,7 @@ export type PaperNoteReviewEntryDetails = {
   extraction: {
     transcription: string;
     sourceRegion?: { x: number; y: number; width: number; height: number } | null;
+    mayContinue?: boolean;
     warnings?: Array<{ fieldPath: string; message: string; severity: "warning" | "blocking" }>;
   };
 };

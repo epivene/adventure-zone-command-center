@@ -37,6 +37,7 @@ export function PaperNoteOrganizationPhonesEditor({
           savedPhones={savedPhones}
           conflict={conflicts[`organizationPhones.${index}`]}
           requireDecision={requireDecision}
+          allowPrimaryChoice={!requireDecision}
           onChange={(patch) => onPhoneChange(index, patch)}
           onConflict={(value) => onConflictChange(`organizationPhones.${index}`, value)}
         />
