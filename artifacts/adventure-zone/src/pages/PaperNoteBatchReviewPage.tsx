@@ -1,12 +1,23 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronDown, ChevronUp, RotateCw, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  FilePenLine,
+  RefreshCw,
+  RotateCw,
+  Trash2,
+} from "lucide-react";
 import { Link } from "wouter";
 
 import {
+  addManualPaperNoteEntry,
   deletePaperNotePage,
   getPaperNoteBatch,
+  markPaperNotePageReviewedEmpty,
   reorderPaperNotePages,
+  retryPaperNotePage,
   rotatePaperNotePage,
   startPaperNoteExtraction,
 } from "@/features/paper-notes/paper-note-client";
@@ -16,6 +27,14 @@ function nextRotation(value: 0 | 90 | 180 | 270): 0 | 90 | 180 | 270 {
   if (value === 90) return 180;
   if (value === 180) return 270;
   return 0;
+}
+
+function progressLabel(stage: "prepare" | "segment" | "extract_entries" | "complete" | null) {
+  if (stage === "prepare") return "Preparing photo";
+  if (stage === "segment") return "Finding entries";
+  if (stage === "extract_entries") return "Reading entries";
+  if (stage === "complete") return "Reading complete";
+  return null;
 }
 
 export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string }) {
@@ -29,6 +48,7 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [manualByPage, setManualByPage] = useState<Record<string, string>>({});
 
   async function action(key: string, work: () => Promise<unknown>) {
     if (busy) return;
@@ -57,6 +77,7 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
   const data = batch.data;
   const editable = data.status === "draft" || data.status === "failed";
   const uploaded = data.pages.length > 0 && data.pages.every((page) => page.status === "uploaded");
+  const attentionCount = data.pages.filter((page) => page.status === "needs_retry").length;
 
   async function move(index: number, direction: -1 | 1) {
     const target = index + direction;
@@ -64,6 +85,13 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
     const ids = data.pages.map((page) => page.id);
     [ids[index], ids[target]] = [ids[target]!, ids[index]!];
     await action("order", () => reorderPaperNotePages(batchId, ids));
+  }
+
+  async function saveManual(pageId: string) {
+    const transcription = (manualByPage[pageId] ?? "").trim();
+    if (!transcription) return;
+    await action(`manual:${pageId}`, () => addManualPaperNoteEntry(batchId, pageId, transcription));
+    setManualByPage((current) => ({ ...current, [pageId]: "" }));
   }
 
   return (
@@ -76,8 +104,9 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
         <h1 className="mt-1 text-2xl font-bold text-slate-950">{data.name || "Untitled paper notes"}</h1>
         <p className="mt-2 text-sm text-slate-600">
           {data.status === "draft" ? "Check the saved pages, rotate them if needed, then read the notes." : null}
-          {data.status === "queued" || data.status === "extracting" ? "Reading is queued. You can leave this page; progress is saved." : null}
-          {data.status === "review" ? `${data.needsReviewCount} entries need review.` : null}
+          {data.status === "queued" || data.status === "extracting" ? "Reading is in progress. You can leave this page; progress is saved." : null}
+          {data.status === "review" && attentionCount === 0 ? `${data.needsReviewCount} entries need review.` : null}
+          {data.status === "review" && attentionCount > 0 ? `${attentionCount} page${attentionCount === 1 ? "" : "s"} need attention before review is finished.` : null}
           {data.status === "imported" ? "This batch has been imported and its source pages are preserved." : null}
           {data.status === "failed" ? "One or more pages need attention before reading can continue." : null}
         </p>
@@ -91,27 +120,84 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
           <span className="text-sm font-semibold text-slate-500">{data.pages.length}/25</span>
         </div>
         <div className="mt-3 grid gap-3">
-          {data.pages.map((page, index) => (
-            <article className="rounded-xl border border-slate-200 bg-white p-4" key={page.id}>
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-slate-900">{index + 1}. {page.originalFilename}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {page.status.replaceAll("_", " ")} · rotation {page.rotationDegrees}°
-                    {page.width && page.height ? ` · ${page.width}×${page.height}` : ""}
-                  </p>
+          {data.pages.map((page, index) => {
+            const stage = progressLabel(page.currentStage);
+            const manualValue = manualByPage[page.id] ?? "";
+            return (
+              <article className="rounded-xl border border-slate-200 bg-white p-4" key={page.id}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-slate-900">{index + 1}. {page.originalFilename}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {page.status.replaceAll("_", " ")} · rotation {page.rotationDegrees}°
+                      {page.width && page.height ? ` · ${page.width}×${page.height}` : ""}
+                    </p>
+                    {stage && (page.status === "queued" || page.status === "extracting") ? (
+                      <p className="mt-2 text-sm font-semibold text-orange-800">{stage}</p>
+                    ) : null}
+                    {page.pageHeading ? <p className="mt-2 text-sm text-slate-700">Page heading: {page.pageHeading}</p> : null}
+                    {page.pageActivityDate ? <p className="mt-1 text-sm text-slate-700">Historical page date: {page.pageActivityDate}</p> : null}
+                  </div>
+                  {editable ? (
+                    <div className="flex flex-wrap gap-1">
+                      <button aria-label={`Move page ${index + 1} up`} className="min-h-11 min-w-11 rounded-lg border border-slate-200" disabled={Boolean(busy) || index === 0} onClick={() => void move(index, -1)} type="button"><ChevronUp className="mx-auto h-4 w-4" /></button>
+                      <button aria-label={`Move page ${index + 1} down`} className="min-h-11 min-w-11 rounded-lg border border-slate-200" disabled={Boolean(busy) || index === data.pages.length - 1} onClick={() => void move(index, 1)} type="button"><ChevronDown className="mx-auto h-4 w-4" /></button>
+                      <button aria-label={`Rotate page ${index + 1}`} className="min-h-11 min-w-11 rounded-lg border border-slate-200" disabled={Boolean(busy)} onClick={() => void action(page.id, () => rotatePaperNotePage(batchId, page.id, nextRotation(page.rotationDegrees)))} type="button"><RotateCw className="mx-auto h-4 w-4" /></button>
+                      <button aria-label={`Delete page ${index + 1}`} className="min-h-11 min-w-11 rounded-lg border border-rose-200 text-rose-700" disabled={Boolean(busy)} onClick={() => void action(page.id, () => deletePaperNotePage(batchId, page.id))} type="button"><Trash2 className="mx-auto h-4 w-4" /></button>
+                    </div>
+                  ) : null}
                 </div>
-                {editable ? (
-                  <div className="flex flex-wrap gap-1">
-                    <button aria-label={`Move page ${index + 1} up`} className="min-h-11 min-w-11 rounded-lg border border-slate-200" disabled={Boolean(busy) || index === 0} onClick={() => void move(index, -1)} type="button"><ChevronUp className="mx-auto h-4 w-4" /></button>
-                    <button aria-label={`Move page ${index + 1} down`} className="min-h-11 min-w-11 rounded-lg border border-slate-200" disabled={Boolean(busy) || index === data.pages.length - 1} onClick={() => void move(index, 1)} type="button"><ChevronDown className="mx-auto h-4 w-4" /></button>
-                    <button aria-label={`Rotate page ${index + 1}`} className="min-h-11 min-w-11 rounded-lg border border-slate-200" disabled={Boolean(busy)} onClick={() => void action(page.id, () => rotatePaperNotePage(batchId, page.id, nextRotation(page.rotationDegrees)))} type="button"><RotateCw className="mx-auto h-4 w-4" /></button>
-                    <button aria-label={`Delete page ${index + 1}`} className="min-h-11 min-w-11 rounded-lg border border-rose-200 text-rose-700" disabled={Boolean(busy)} onClick={() => void action(page.id, () => deletePaperNotePage(batchId, page.id))} type="button"><Trash2 className="mx-auto h-4 w-4" /></button>
+
+                {page.status === "needs_retry" ? (
+                  <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                    <p className="font-semibold text-amber-950">This page needs attention</p>
+                    <p className="mt-1 text-sm text-amber-900">
+                      {page.lastErrorMessage || "The handwriting reader could not finish this page."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+                        disabled={Boolean(busy)}
+                        onClick={() => void action(`retry:${page.id}`, () => retryPaperNotePage(batchId, page.id))}
+                        type="button"
+                      >
+                        <RefreshCw className="h-4 w-4" /> {busy === `retry:${page.id}` ? "Queueing…" : "Retry reading"}
+                      </button>
+                      <button
+                        className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50"
+                        disabled={Boolean(busy)}
+                        onClick={() => void action(`empty:${page.id}`, () => markPaperNotePageReviewedEmpty(batchId, page.id))}
+                        type="button"
+                      >
+                        No importable entries
+                      </button>
+                    </div>
+                    <div className="mt-4 border-t border-amber-200 pt-4">
+                      <label className="grid gap-2 text-sm font-semibold text-slate-800" htmlFor={`manual-${page.id}`}>
+                        Add an entry manually
+                        <textarea
+                          className="min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+                          id={`manual-${page.id}`}
+                          maxLength={12_000}
+                          onChange={(event) => setManualByPage((current) => ({ ...current, [page.id]: event.target.value }))}
+                          placeholder="Type only what you can read from this paper entry. You can structure and match it on the next review screen."
+                          value={manualValue}
+                        />
+                      </label>
+                      <button
+                        className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50"
+                        disabled={!manualValue.trim() || Boolean(busy)}
+                        onClick={() => void saveManual(page.id)}
+                        type="button"
+                      >
+                        <FilePenLine className="h-4 w-4" /> {busy === `manual:${page.id}` ? "Saving…" : "Save manual entry"}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
-              </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       </section>
 
