@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Camera, ChevronDown, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
 
@@ -6,6 +6,7 @@ import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
+import { mergeOptimisticActivities } from "@/components/profiles/profile-note-display";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -13,6 +14,7 @@ import {
   listActivityRevisionsAction,
   loadTimelinePageAction,
 } from "@/actions/activities";
+import type { ActivityTimelineItem } from "@/features/activities/activity-types";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { formatPhoneDisplay, phoneHref } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
@@ -103,6 +105,11 @@ export function SimpleFullProfile({
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
+
+  useEffect(() => {
+    setOptimisticActivities([]);
+  }, [profile.id]);
 
   const isEditing = editing ?? internalEditing;
   const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
@@ -193,6 +200,10 @@ export function SimpleFullProfile({
         setNoteError(result.error);
         return;
       }
+      setOptimisticActivities((current) => [
+        result.activity,
+        ...current.filter((activity) => activity.id !== result.activity.id),
+      ]);
       setNoteBody("");
       setNoteComposerOpen(false);
       await onProfileSaved?.();
@@ -207,7 +218,7 @@ export function SimpleFullProfile({
     return <ProfileInlineEditor profile={profile as any} contactId={primaryContact?.id ?? null} onSaved={handleSaved} onCancel={() => setEditing(false)} />;
   }
 
-  const activities = meaningfulNotes.map((note) => ({
+  const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map((note) => ({
     id: note.id,
     organizationId: profile.id,
     contactId: note.contactId,
@@ -223,6 +234,7 @@ export function SimpleFullProfile({
     importedFromAct: Boolean(note.importedFromAct),
     actSourceType: note.actSourceType === "note" || note.actSourceType === "history" || note.actSourceType === "activity" ? note.actSourceType : null,
   }));
+  const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
   const normalizedSearch = noteSearch.trim().toLowerCase();
   const filteredActivities = normalizedSearch
     ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
@@ -282,7 +294,7 @@ export function SimpleFullProfile({
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,0.75fr))_minmax(0,2.2fr)]">
         {statCard({ value: profile.contacts.length, label: `Contact${profile.contacts.length === 1 ? "" : "s"}`, active: openSection === "contacts", onClick: () => toggleSection("contacts") })}
         {statCard({ value: profile.bookings.length, label: `Event${profile.bookings.length === 1 ? "" : "s"}`, active: openSection === "events", onClick: () => toggleSection("events") })}
-        {statCard({ value: meaningfulNotes.length, label: `Note${meaningfulNotes.length === 1 ? "" : "s"}`, active: openSection === "notes", onClick: () => toggleSection("notes") })}
+        {statCard({ value: activities.length, label: `Note${activities.length === 1 ? "" : "s"}`, active: openSection === "notes", onClick: () => toggleSection("notes") })}
         {!nextFollowUp ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
             <p className="font-bold text-emerald-900">No open follow-ups</p>
