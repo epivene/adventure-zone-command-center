@@ -157,7 +157,15 @@ export function OrganizationList({ organizations, query, travelLegs }: { organiz
 
                     {(organization.phone || organization.email) ? (
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700">
-                        {organization.phone ? <a className="font-medium hover:text-orange-700" href={`tel:${organization.phone}`}>{organization.phone}</a> : null}
+                        {organization.phone ? (
+                          <Link
+                            aria-label={`Open call workspace for ${organization.phone}`}
+                            className="font-medium hover:text-orange-700"
+                            href={`/calls/new?organizationId=${encodeURIComponent(organization.id)}`}
+                          >
+                            {organization.phone}
+                          </Link>
+                        ) : null}
                         {organization.email ? <a className="break-all font-medium hover:text-orange-700" href={`mailto:${organization.email}`}>{organization.email}</a> : null}
                       </div>
                     ) : null}
