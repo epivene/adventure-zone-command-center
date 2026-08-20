@@ -1,5 +1,10 @@
 import { apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 import type { PaperNoteBatchListItem, PaperNoteBatchView } from "./paper-note-types";
+import type {
+  PaperNoteMatch,
+  PaperNoteReviewDraft,
+  PaperNoteReviewEntryDetails,
+} from "./paper-note-review-types";
 
 async function errorMessage(response: Response) {
   const payload = await response.json().catch(() => ({})) as { error?: string };
@@ -116,4 +121,54 @@ export function getPaperNoteEntrySource(
   return apiGet<{ url: string; kind: "original" | "analysis" }>(
     `/paper-notes/entries/${entryId}/source-url?kind=${kind}`,
   );
+}
+
+export async function getPaperNoteEntryReview(entryId: string) {
+  const result = await apiGet<{ entry: PaperNoteReviewEntryDetails }>(
+    `/paper-notes/entries/${entryId}/review`,
+  );
+  return result.entry;
+}
+
+export async function getPaperNoteEntryMatches(entryId: string) {
+  const result = await apiGet<{ matches: PaperNoteMatch[] }>(
+    `/paper-notes/entries/${entryId}/matches`,
+  );
+  return result.matches;
+}
+
+export async function savePaperNoteEntryReview(
+  entryId: string,
+  review: PaperNoteReviewDraft,
+  expectedVersion: number,
+) {
+  const result = await apiPatch<{ entry: PaperNoteReviewEntryDetails }>(
+    `/paper-notes/entries/${entryId}`,
+    { review, expectedVersion },
+  );
+  return result.entry;
+}
+
+async function paperNoteEntryStateAction(
+  entryId: string,
+  action: "approve" | "unapprove" | "skip",
+  expectedVersion: number,
+) {
+  const result = await apiPost<{ entry: PaperNoteReviewEntryDetails }>(
+    `/paper-notes/entries/${entryId}/${action}`,
+    { expectedVersion },
+  );
+  return result.entry;
+}
+
+export function approvePaperNoteEntry(entryId: string, expectedVersion: number) {
+  return paperNoteEntryStateAction(entryId, "approve", expectedVersion);
+}
+
+export function unapprovePaperNoteEntry(entryId: string, expectedVersion: number) {
+  return paperNoteEntryStateAction(entryId, "unapprove", expectedVersion);
+}
+
+export function skipPaperNoteEntry(entryId: string, expectedVersion: number) {
+  return paperNoteEntryStateAction(entryId, "skip", expectedVersion);
 }
