@@ -53,7 +53,7 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("crossed-out");
   });
 
-  it("uses the entry budget and keeps communication dates separate from event dates", async () => {
+  it("uses valid enum examples and keeps communication dates separate from event dates", async () => {
     const ai = client([entry]);
     const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
 
@@ -68,6 +68,13 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("separate event dates from communication dates");
     expect(call?.prompt).toContain("extension");
     expect(call?.prompt).toContain("Starred on original paper");
+    expect(call?.prompt).toContain('"dateSource":"unknown"');
+    expect(call?.prompt).toContain('"method":"unknown"');
+    expect(call?.prompt).toContain('"type":"unknown"');
+    expect(call?.prompt).not.toContain('"dateSource":"entry|page_heading|unknown"');
+    expect(call?.prompt).not.toContain('"type":"mobile|office|alternate|unknown"');
+    expect(call?.prompt).toContain("Allowed dateSource values");
+    expect(call?.prompt).toContain("Allowed phone type values");
   });
 
   it("accepts harmless wrapper text around one complete JSON object", async () => {
