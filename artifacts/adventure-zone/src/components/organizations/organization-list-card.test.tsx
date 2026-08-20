@@ -71,4 +71,47 @@ describe("OrganizationList profile summary cards", () => {
     expect(screen.getByText("2 rated occurrences")).toBeVisible();
     expect(screen.getByRole("img", { name: "10 Mile Pride (Breckenridge) CO profile" })).toHaveAttribute("src", "data:image/png;base64,aA==");
   });
+
+  it("uses the compact card density for long profile lists", () => {
+    render(
+      <Router>
+        <OrganizationList
+          organizations={{
+            records: [{
+              id: "10000000-0000-4000-8000-000000000001",
+              name: "10 Mile Pride (Breckenridge) CO",
+              city: "Breckenridge",
+              region: "CO",
+              lastResort: false,
+              lastResortReason: null,
+              lastResortChangedAt: null,
+              contactCount: 3,
+              bookingCount: 1,
+              primaryContactName: null,
+              locationCount: 0,
+              matchedLocation: null,
+              parentContext: null,
+              phone: null,
+              email: null,
+              website: null,
+              placeType: "other",
+              profileImageDataUrl: null,
+              ratingAverage: null,
+              ratingCount: 0,
+            }],
+            total: 1,
+            page: 1,
+            pageSize: 50,
+            pageCount: 1,
+          }}
+          query={query}
+          travelLegs={[]}
+        />
+      </Router>,
+    );
+
+    expect(screen.getByTestId("profile-summary-card")).toHaveClass("p-3");
+    expect(screen.getByTestId("profile-avatar-link")).toHaveClass("size-20");
+    expect(screen.getByTestId("profile-rating-summary")).toHaveClass("min-w-[7rem]");
+  });
 });
