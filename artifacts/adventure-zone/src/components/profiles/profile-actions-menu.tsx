@@ -51,7 +51,7 @@ export function ProfileActionsMenu({
           <DropdownMenuItem asChild><Link href="/event-profiles/new">Add event</Link></DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <ProfileLastResortDialog onChanged={refreshLastResort} onOpenChange={setLastResortOpen} open={lastResortOpen} profileId={profileId} />
+      <ProfileLastResortDialog onChanged={async () => { await refreshLastResort(); }} onOpenChange={setLastResortOpen} open={lastResortOpen} profileId={profileId} />
     </>
   );
 }
