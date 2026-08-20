@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, CircleAlert, Plus, SkipForward } from "lucide-react";
+import { Check, CircleAlert, SkipForward } from "lucide-react";
 
 import { PaperNoteContactEditor } from "./paper-note-contact-editor";
+import { PaperNoteDestinationPicker } from "./paper-note-destination-picker";
+import { PaperNoteEventDateReview } from "./paper-note-event-date-review";
 import { PaperNoteOrganizationPhonesEditor } from "./paper-note-organization-phones-editor";
 import { PaperNoteSourceViewer } from "./paper-note-source-viewer";
 import type {
@@ -63,6 +65,10 @@ export function PaperNoteEntryCard({
     setReview((current) => ({ ...current, event: { ...current.event, [key]: value } }));
   }
 
+  function updateEventPatch(patch: Partial<PaperNoteReviewDraft["event"]>) {
+    setReview((current) => ({ ...current, event: { ...current.event, ...patch } }));
+  }
+
   function updateActivity<K extends keyof PaperNoteReviewDraft["activity"]>(
     key: K,
     value: PaperNoteReviewDraft["activity"][K],
@@ -116,6 +122,12 @@ export function PaperNoteEntryCard({
     });
   }
 
+  function resetExistingContactChoices(current: PaperNoteReviewDraft) {
+    return current.contacts.map((contact) => contact.mode === "existing_contact"
+      ? { ...contact, mode: "new_contact" as const, selectedContactId: null }
+      : contact);
+  }
+
   function chooseExistingMatch(match: PaperNoteMatch) {
     setReview((current) => ({
       ...current,
@@ -124,9 +136,28 @@ export function PaperNoteEntryCard({
         organizationId: match.organizationId,
         organizationLocationId: match.organizationLocationId,
       },
-      contacts: current.contacts.map((contact) => contact.mode === "existing_contact"
-        ? { ...contact, mode: "new_contact", selectedContactId: null }
-        : contact),
+      contacts: resetExistingContactChoices(current),
+      conflicts: {},
+    }));
+  }
+
+  function chooseNewLocation(match: PaperNoteMatch) {
+    setReview((current) => ({
+      ...current,
+      destination: {
+        mode: "existing_profile_new_location",
+        organizationId: match.organizationId,
+        newLocation: {
+          label: current.event.city.trim() || current.event.venue.trim() || "New location",
+          venueName: current.event.venue.trim() || null,
+          address1: null,
+          address2: null,
+          city: current.event.city.trim() || null,
+          region: current.event.region.trim().toUpperCase() || null,
+          postalCode: null,
+        },
+      },
+      contacts: resetExistingContactChoices(current),
       conflicts: {},
     }));
   }
@@ -135,11 +166,24 @@ export function PaperNoteEntryCard({
     setReview((current) => ({
       ...current,
       destination: { mode: "new_profile", eventFamilyId: null },
-      contacts: current.contacts.map((contact) => contact.mode === "existing_contact"
-        ? { ...contact, mode: "new_contact", selectedContactId: null }
-        : contact),
+      contacts: resetExistingContactChoices(current),
       conflicts: {},
     }));
+  }
+
+  function updateNewLocation(
+    patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>,
+  ) {
+    setReview((current) => {
+      if (current.destination?.mode !== "existing_profile_new_location") return current;
+      return {
+        ...current,
+        destination: {
+          ...current.destination,
+          newLocation: { ...current.destination.newLocation, ...patch },
+        },
+      };
+    });
   }
 
   async function stateAction(work: (expectedVersion: number) => Promise<PaperNoteReviewEntryDetails>) {
@@ -218,10 +262,7 @@ export function PaperNoteEntryCard({
           Venue
           <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.venue} onChange={(event) => updateEvent("venue", event.target.value)} />
         </label>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">
-          Event date as written
-          <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.eventDateText} onChange={(event) => updateEvent("eventDateText", event.target.value)} />
-        </label>
+        <PaperNoteEventDateReview event={review.event} onChange={updateEventPatch} />
       </section>
 
       <section className="mt-6 grid gap-3 border-t border-slate-200 pt-5">
@@ -279,51 +320,37 @@ export function PaperNoteEntryCard({
         onConflictChange={updateConflict}
       />
 
-      <section className="mt-6 border-t border-slate-200 pt-5">
-        <h3 className="font-bold text-slate-900">Where this entry belongs</h3>
-        <p className="mt-1 text-sm text-slate-600">Suggestions are evidence only. You choose the destination.</p>
-        <div className="mt-3 grid gap-2">
-          {matches.map((match) => (
-            <div className="rounded-xl border border-slate-200 p-3" key={`${match.organizationId}:${match.organizationLocationId ?? "profile"}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-bold text-slate-900">{match.name}</p>
-                  <p className="text-sm text-slate-500">{[match.city, match.region].filter(Boolean).join(", ") || "Location not saved"}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {match.reasons.map((reason) => <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700" key={reason}>{reason}</span>)}
-                  </div>
-                  {match.contacts.length ? <p className="mt-2 text-xs text-slate-500">{match.contacts.length} saved contact{match.contacts.length === 1 ? "" : "s"} available to link</p> : null}
-                </div>
-                <button
-                  aria-label={`Use ${match.name}`}
-                  className="min-h-11 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-900"
-                  onClick={() => chooseExistingMatch(match)}
-                  type="button"
-                >Use this profile</button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            aria-label="Create new profile"
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white"
-            onClick={chooseNewProfile}
-            type="button"
-          ><Plus className="h-4 w-4" /> Create new profile</button>
-          <button
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
-            disabled={actionBusy}
-            onClick={() => void stateAction(onSkip)}
-            type="button"
-          ><SkipForward className="h-4 w-4" /> Skip this entry</button>
-        </div>
-        {review.destination ? (
-          <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">
-            Destination: {review.destination.mode === "new_profile" ? "Create new profile" : review.destination.mode === "existing_profile" ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}` : review.destination.mode.replaceAll("_", " ")}
-          </p>
-        ) : null}
-      </section>
+      <PaperNoteDestinationPicker
+        review={review}
+        matches={matches}
+        onChooseExisting={chooseExistingMatch}
+        onChooseNewLocation={chooseNewLocation}
+        onChooseNewProfile={chooseNewProfile}
+        onNewLocationChange={updateNewLocation}
+      />
+
+      <div className="mt-3">
+        <button
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
+          disabled={actionBusy}
+          onClick={() => void stateAction(onSkip)}
+          type="button"
+        >
+          <SkipForward className="h-4 w-4" /> Skip this entry
+        </button>
+      </div>
+
+      {review.destination ? (
+        <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">
+          Destination: {review.destination.mode === "new_profile"
+            ? "Create new profile"
+            : review.destination.mode === "existing_profile"
+              ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}`
+              : review.destination.mode === "existing_profile_new_location"
+                ? `New location under${selectedMatch ? ` ${selectedMatch.name}` : " existing profile"}`
+                : review.destination.mode.replaceAll("_", " ")}
+        </p>
+      ) : null}
 
       <section className="mt-6 border-t border-slate-200 pt-5">
         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700">
