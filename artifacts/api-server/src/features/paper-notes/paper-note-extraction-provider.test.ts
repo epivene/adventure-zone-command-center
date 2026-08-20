@@ -70,6 +70,15 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("Starred on original paper");
   });
 
+  it("accepts harmless wrapper text around one complete JSON object", async () => {
+    const ai = client([`Here is the JSON you requested:\n${segmentation}\nDone.`]);
+    const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
+
+    await expect(provider.segmentPage({ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }))
+      .resolves.toMatchObject({ pageHeading: "Monday Call List" });
+    expect(ai.completeImage).toHaveBeenCalledTimes(1);
+  });
+
   it("retries malformed output once with an explicit corrective JSON instruction", async () => {
     const ai = client(["not json", segmentation]);
     const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
