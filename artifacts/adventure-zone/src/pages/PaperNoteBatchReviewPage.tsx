@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -11,20 +11,26 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 
+import { PaperNoteBatchPreflightDialog } from "@/components/paper-notes/paper-note-batch-preflight-dialog";
 import { PaperNoteEntryNavigator } from "@/components/paper-notes/paper-note-entry-navigator";
 import { PaperNoteEntryPanel } from "@/components/paper-notes/paper-note-entry-panel";
+import { PaperNoteImportSummary } from "@/components/paper-notes/paper-note-import-summary";
 import { PaperNoteSourceViewer } from "@/components/paper-notes/paper-note-source-viewer";
 import {
   addManualPaperNoteEntry,
+  archivePaperNoteBatch,
   deletePaperNotePage,
   getPaperNoteBatch,
   getPaperNotePageSource,
+  importPaperNoteBatch,
   markPaperNotePageReviewedEmpty,
+  preflightPaperNoteBatch,
   reorderPaperNotePages,
   retryPaperNotePage,
   rotatePaperNotePage,
   startPaperNoteExtraction,
 } from "@/features/paper-notes/paper-note-client";
+import type { PaperNoteBatchPreflight } from "@/features/paper-notes/paper-note-types";
 
 function nextRotation(value: 0 | 90 | 180 | 270): 0 | 90 | 180 | 270 {
   if (value === 0) return 90;
@@ -47,13 +53,15 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
     queryFn: () => getPaperNoteBatch(batchId),
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status === "queued" || status === "extracting" ? 3000 : false;
+      return status === "queued" || status === "extracting" || status === "importing" ? 3000 : false;
     },
   });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [manualByPage, setManualByPage] = useState<Record<string, string>>({});
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<PaperNoteBatchPreflight | null>(null);
+  const importRequestKey = useRef<string | null>(null);
 
   useEffect(() => {
     const entries = batch.data?.entries ?? [];
@@ -69,6 +77,12 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
     setSelectedEntryId(next?.id ?? null);
   }, [batch.data?.entries, selectedEntryId]);
 
+  useEffect(() => {
+    if (batch.data?.status === "imported" || batch.data?.status === "archived") {
+      setPreflight(null);
+    }
+  }, [batch.data?.status]);
+
   const refreshBatch = useCallback(async () => {
     await batch.refetch();
   }, [batch]);
@@ -82,6 +96,35 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
       await batch.refetch();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The paper-note batch could not be updated.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function checkImportReadiness() {
+    if (busy) return;
+    setBusy("preflight");
+    setError("");
+    try {
+      setPreflight(await preflightPaperNoteBatch(batchId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not check this paper-note batch.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function confirmImport() {
+    if (busy || !preflight?.ready) return;
+    setBusy("import");
+    setError("");
+    try {
+      importRequestKey.current ??= crypto.randomUUID();
+      await importPaperNoteBatch(batchId, importRequestKey.current);
+      setPreflight(null);
+      await batch.refetch();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The paper-note import could not be completed.");
     } finally {
       setBusy(null);
     }
@@ -130,12 +173,30 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
           {data.status === "queued" || data.status === "extracting" ? "Reading is in progress. You can leave this page; progress is saved." : null}
           {data.status === "review" && attentionCount === 0 ? `${data.needsReviewCount} entries need review.` : null}
           {data.status === "review" && attentionCount > 0 ? `${attentionCount} page${attentionCount === 1 ? "" : "s"} need attention before review is finished.` : null}
+          {data.status === "importing" ? "Importing approved entries…" : null}
           {data.status === "imported" ? "This batch has been imported and its source pages are preserved." : null}
+          {data.status === "archived" ? "This completed paper-note batch is archived; its source provenance is still preserved." : null}
           {data.status === "failed" ? "One or more pages need attention before reading can continue." : null}
         </p>
       </header>
 
       {error ? <p className="mt-4 rounded-xl bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
+
+      {data.importSummary ? (
+        <div className="mt-5">
+          <PaperNoteImportSummary summary={data.importSummary} />
+          {data.status === "imported" ? (
+            <button
+              className="mt-3 min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50"
+              disabled={Boolean(busy)}
+              onClick={() => void action("archive", () => archivePaperNoteBatch(batchId))}
+              type="button"
+            >
+              {busy === "archive" ? "Archiving…" : "Archive completed batch"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <section className="mt-6">
         <div className="flex items-center justify-between gap-3">
@@ -274,6 +335,30 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
             </>
           ) : null}
         </section>
+      ) : null}
+
+      {data.status === "review" && data.entries.length ? (
+        <section className="mt-8 rounded-2xl border border-orange-200 bg-orange-50 p-5">
+          <h2 className="text-xl font-bold text-orange-950">Ready to import?</h2>
+          <p className="mt-1 text-sm text-orange-900">The server will re-check every page and entry first. CRM records are still unchanged.</p>
+          <button
+            className="mt-4 min-h-12 rounded-xl bg-orange-600 px-4 py-3 font-bold text-white disabled:opacity-50"
+            disabled={Boolean(busy)}
+            onClick={() => void checkImportReadiness()}
+            type="button"
+          >
+            {busy === "preflight" ? "Checking…" : "Check import readiness"}
+          </button>
+        </section>
+      ) : null}
+
+      {preflight ? (
+        <PaperNoteBatchPreflightDialog
+          preflight={preflight}
+          busy={busy === "import"}
+          onClose={() => !busy && setPreflight(null)}
+          onConfirm={() => void confirmImport()}
+        />
       ) : null}
     </div>
   );
