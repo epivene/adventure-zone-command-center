@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
+import { ensureDefaultPackageTemplates } from "./package-defaults";
 import {
   packageTemplateInputSchema,
   type PackageTemplateInput,
@@ -101,6 +102,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
 
   async listPackageTemplates(): Promise<PackageIntelligenceSettingsRecord[]> {
     await this.ensureBasePriceSchema();
+    await ensureDefaultPackageTemplates(this.database);
     const [base, intelligenceResult] = await Promise.all([
       this.baseRepository.listPackageTemplates(),
       this.database.execute(sql`
