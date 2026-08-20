@@ -25,10 +25,12 @@ export function PaperNoteHistorySources({
   useEffect(() => {
     if (notes) {
       setLoadedNotes(notes);
+      setError("");
       return;
     }
     if (!profileId) return;
     let cancelled = false;
+    setError("");
     apiGet<{ ok: true; items: PaperNoteHistoryItem[] }>(
       `/activities/timeline?organizationId=${encodeURIComponent(profileId)}`,
     ).then((result) => {
@@ -40,7 +42,13 @@ export function PaperNoteHistorySources({
   }, [notes, profileId]);
 
   const paperNotes = loadedNotes.filter((note) => note.paperNoteSource?.activityId);
-  if (!paperNotes.length) return null;
+  if (!paperNotes.length) {
+    return error ? (
+      <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+        {error}
+      </div>
+    ) : null;
+  }
 
   async function openSource(activityId: string) {
     if (opening) return;
