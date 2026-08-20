@@ -1,0 +1,75 @@
+import { apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import type { PaperNoteBatchListItem, PaperNoteBatchView } from "./paper-note-types";
+
+async function errorMessage(response: Response) {
+  const payload = await response.json().catch(() => ({})) as { error?: string };
+  return payload.error ?? `API ${response.status}`;
+}
+
+export async function createPaperNoteBatch(name: string | null) {
+  return apiPost<{ batchId: string }>("/paper-notes/batches", { name });
+}
+
+export async function listPaperNoteBatches() {
+  const result = await apiGet<{ batches: PaperNoteBatchListItem[] }>("/paper-notes/batches");
+  return result.batches;
+}
+
+export async function getPaperNoteBatch(batchId: string) {
+  const result = await apiGet<{ batch: PaperNoteBatchView }>(`/paper-notes/batches/${batchId}`);
+  return result.batch;
+}
+
+export async function createPaperNotePage(input: {
+  batchId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+}) {
+  return apiPost<{ pageId: string }>(`/paper-notes/batches/${input.batchId}/pages`, {
+    filename: input.filename,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+  });
+}
+
+export async function uploadPaperNotePageImage(input: {
+  batchId: string;
+  pageId: string;
+  file: File;
+}) {
+  const response = await apiFetch(
+    `/paper-notes/batches/${input.batchId}/pages/${input.pageId}/image`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": input.file.type },
+      body: input.file,
+    },
+  );
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return response.json() as Promise<{ ok: true }>;
+}
+
+export function reorderPaperNotePages(batchId: string, orderedPageIds: string[]) {
+  return apiPatch<{ ok: true }>(`/paper-notes/batches/${batchId}/pages`, { orderedPageIds });
+}
+
+export function rotatePaperNotePage(batchId: string, pageId: string, rotationDegrees: 0 | 90 | 180 | 270) {
+  return apiPatch<{ ok: true }>(`/paper-notes/batches/${batchId}/pages`, {
+    rotation: { pageId, rotationDegrees },
+  });
+}
+
+export async function deletePaperNotePage(batchId: string, pageId: string) {
+  const response = await apiFetch(`/paper-notes/batches/${batchId}/pages/${pageId}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await errorMessage(response));
+}
+
+export async function deletePaperNoteBatch(batchId: string) {
+  const response = await apiFetch(`/paper-notes/batches/${batchId}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await errorMessage(response));
+}
+
+export function startPaperNoteExtraction(batchId: string) {
+  return apiPost<{ ok: true }>(`/paper-notes/batches/${batchId}/extract`, {});
+}

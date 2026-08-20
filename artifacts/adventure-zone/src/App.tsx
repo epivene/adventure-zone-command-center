@@ -52,6 +52,8 @@ import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
+import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
+import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
 import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
@@ -229,6 +231,8 @@ function AdminProtectedApp() {
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
           <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
           <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
+          <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
+          <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
           <Route path="/settings/act-migration" component={ActMigrationPage} />

@@ -23,6 +23,13 @@ import { ensureCrewWorkerLegMembershipSchema } from "./features/leg-manager/crew
 import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
 import { ensureManagerAssistantSchema } from "./features/manager-assistant/manager-assistant-schema";
+import { PaperNoteExtractionRepository } from "./features/paper-notes/paper-note-extraction-repository";
+import { createPaperNoteExtractionWorker } from "./features/paper-notes/paper-note-extraction-worker";
+import { createPaperNoteObjectStorage } from "./features/paper-notes/paper-note-object-storage";
+import {
+  PaperNoteWorkerLoop,
+  systemPaperNoteWorkerLoopScheduler,
+} from "./features/paper-notes/paper-note-worker-loop";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -42,6 +49,17 @@ const leadScoutLoop = new LeadScoutWorkerLoop({
   workerId: `lead-scout-${randomUUID()}`,
   clock: { now: () => new Date() },
   scheduler: systemLeadScoutWorkerLoopScheduler,
+});
+
+const paperNoteStorage = createPaperNoteObjectStorage();
+const paperNoteLoop = new PaperNoteWorkerLoop({
+  worker: createPaperNoteExtractionWorker({
+    repository: new PaperNoteExtractionRepository(db),
+    storage: paperNoteStorage,
+  }),
+  workerId: `paper-notes-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemPaperNoteWorkerLoopScheduler,
 });
 
 let extractionRuntime: ActExtractionRuntime | null = null;
@@ -72,6 +90,7 @@ const shutdown = createActServerShutdown({
     await Promise.all([
       runtime?.close(),
       leadScoutLoop.close(),
+      paperNoteLoop.close(),
     ]);
   },
   closeServer() {
@@ -172,6 +191,7 @@ async function runPostListenMaintenance() {
 async function startBackgroundWorkers() {
   if (shutdownRequested) return;
   leadScoutLoop.start();
+  paperNoteLoop.start();
 
   if (!shouldStartActBackgroundWorkers()) {
     logger.info("ACT background extraction/recovery workers are disabled");
