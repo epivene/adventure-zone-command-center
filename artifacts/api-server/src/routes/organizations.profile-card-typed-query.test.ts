@@ -1,23 +1,22 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { getTableColumns } from "drizzle-orm";
-
-import { organizations } from "@/db/schema";
 
 const routeSource = fs.readFileSync(path.resolve(__dirname, "organizations.ts"), "utf8");
 
 describe("profile card enrichment query contract", () => {
-  it("maps the existing profile photo column in the Drizzle organization schema", () => {
-    const columns = getTableColumns(organizations) as Record<string, { name: string }>;
-    expect(columns.profileImageDataUrl?.name).toBe("profile_image_data_url");
+  it("loads profile photos with individually parameterized UUIDs instead of one array parameter", () => {
+    expect(routeSource).toContain("profile_image_data_url");
+    expect(routeSource).toContain("sql.join");
+    expect(routeSource).not.toContain("any(${ids}::uuid[])");
   });
 
-  it("loads card details through typed organization and primary-contact queries", () => {
-    expect(routeSource).toContain("inArray(organizations.id, ids)");
-    expect(routeSource).toContain("organizationContacts.isPrimary");
-    expect(routeSource).toContain("contacts.email");
+  it("uses the active primary contact for card email/phone instead of a nonexistent organization email column", () => {
+    expect(routeSource).toContain("organization_contacts");
+    expect(routeSource).toContain("is_primary");
+    expect(routeSource).toContain("contacts");
+    expect(routeSource).toContain("coalesce(c.phone, o.phone)");
+    expect(routeSource).toContain("c.email");
     expect(routeSource).not.toContain("o.email");
-    expect(routeSource).not.toContain("any(${ids}::uuid[])");
   });
 });
