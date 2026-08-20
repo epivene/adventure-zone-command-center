@@ -14,6 +14,9 @@ vi.mock("@/features/paper-notes/paper-note-client", () => ({
     contacts: [],
     organizationPhones: [],
   }]),
+  listPaperNoteEventFamilies: vi.fn(async () => [
+    { id: "90000000-0000-4000-8000-000000000001", name: "Water Lantern Festival", memberCount: 12 },
+  ]),
 }));
 
 import { PaperNoteDestinationPicker } from "./paper-note-destination-picker";
@@ -38,6 +41,7 @@ describe("PaperNoteDestinationPicker", () => {
         onChooseNewLocation={vi.fn()}
         onChooseNewProfile={vi.fn()}
         onNewLocationChange={vi.fn()}
+        onNewProfileFamilyChange={vi.fn()}
         onRememberMatch={onRememberMatch}
       />,
     );
@@ -49,5 +53,26 @@ describe("PaperNoteDestinationPicker", () => {
 
     await waitFor(() => expect(onRememberMatch).toHaveBeenCalledWith(expect.objectContaining({ name: "Hidden County Fair" })));
     expect(onChooseExisting).toHaveBeenCalledWith(expect.objectContaining({ name: "Hidden County Fair" }));
+  });
+
+  it("offers an optional existing event family when creating a new profile", async () => {
+    const onNewProfileFamilyChange = vi.fn();
+    render(
+      <PaperNoteDestinationPicker
+        review={{ ...review, destination: { mode: "new_profile", eventFamilyId: null } } as any}
+        matches={[]}
+        onChooseExisting={vi.fn()}
+        onChooseNewLocation={vi.fn()}
+        onChooseNewProfile={vi.fn()}
+        onNewLocationChange={vi.fn()}
+        onNewProfileFamilyChange={onNewProfileFamilyChange}
+        onRememberMatch={vi.fn()}
+      />,
+    );
+
+    const family = await screen.findByLabelText("Event family (optional)");
+    expect(screen.getByRole("option", { name: /Water Lantern Festival/ })).toBeInTheDocument();
+    fireEvent.change(family, { target: { value: "90000000-0000-4000-8000-000000000001" } });
+    expect(onNewProfileFamilyChange).toHaveBeenCalledWith("90000000-0000-4000-8000-000000000001");
   });
 });
