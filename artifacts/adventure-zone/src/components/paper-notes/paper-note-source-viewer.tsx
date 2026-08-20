@@ -1,21 +1,23 @@
 import { useRef, useState } from "react";
-import { FileImage, X } from "lucide-react";
+import { FileImage, Upload, X } from "lucide-react";
 
 export function PaperNoteSourceViewer({
   label,
   loadSource,
+  restoreSource,
 }: {
   label: string;
   loadSource(): Promise<{ url: string; kind: "original" | "analysis" }>;
+  restoreSource?(file: File): Promise<void>;
 }) {
   const openerRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [error, setError] = useState("");
 
-  async function show() {
-    setOpen(true);
+  async function load() {
     setLoading(true);
     setError("");
     setUrl(null);
@@ -26,6 +28,25 @@ export function PaperNoteSourceViewer({
       setError(caught instanceof Error ? caught.message : "Could not open the source paper.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function show() {
+    setOpen(true);
+    await load();
+  }
+
+  async function restore(file: File) {
+    if (!restoreSource || restoring) return;
+    setRestoring(true);
+    setError("");
+    try {
+      await restoreSource(file);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The original paper photo could not be restored.");
+    } finally {
+      setRestoring(false);
     }
   }
 
@@ -75,7 +96,32 @@ export function PaperNoteSourceViewer({
             </div>
             <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3 text-center sm:p-5">
               {loading ? <p className="py-12 text-sm font-semibold text-slate-600">Opening private source…</p> : null}
-              {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
+              {error ? (
+                <div className="mx-auto max-w-lg rounded-xl bg-rose-50 p-4 text-left text-sm text-rose-900" role="alert">
+                  <p>{error}</p>
+                  {restoreSource ? (
+                    <label className="mt-3 inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-2 font-bold text-rose-900">
+                      <Upload className="h-4 w-4" />
+                      {restoring ? "Restoring…" : "Restore original photo"}
+                      <input
+                        accept="image/jpeg,image/png,image/webp"
+                        aria-label="Restore original photo"
+                        className="sr-only"
+                        disabled={restoring}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) void restore(file);
+                          event.currentTarget.value = "";
+                        }}
+                        type="file"
+                      />
+                    </label>
+                  ) : null}
+                  {restoreSource ? (
+                    <p className="mt-2 text-xs text-rose-800">Choose the exact same photo that was originally uploaded. A different image will be rejected.</p>
+                  ) : null}
+                </div>
+              ) : null}
               {url ? (
                 <img
                   alt={`Original paper photo for ${label}`}
