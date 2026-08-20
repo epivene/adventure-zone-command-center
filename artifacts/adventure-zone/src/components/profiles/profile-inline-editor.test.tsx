@@ -68,10 +68,10 @@ describe("ProfileInlineEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(apiPatch).toHaveBeenCalledWith(
-      "/event-profiles/profile-1",
-      expect.objectContaining({
+      "/event-profiles/profile-1/description",
+      {
         description: "An annual downtown street fair featuring local vendors, food, live music, and family-friendly activities.",
-      }),
+      },
     ));
   });
 
