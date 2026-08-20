@@ -121,10 +121,18 @@ create index if not exists manager_message_attachments_message_idx
 `);
 
 export class CommunicationRepository {
+  private schemaReady: Promise<void> | null = null;
+
   constructor(private readonly database: DrizzleDatabase) {}
 
   async ensureSchema() {
-    await this.database.execute(ensureSql);
+    this.schemaReady ??= this.database.execute(ensureSql)
+      .then(() => undefined)
+      .catch((error) => {
+        this.schemaReady = null;
+        throw error;
+      });
+    await this.schemaReady;
   }
 
   private async conversationExists(id: string) {
