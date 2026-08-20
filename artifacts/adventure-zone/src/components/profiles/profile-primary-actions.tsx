@@ -1,5 +1,7 @@
 import { Link } from "wouter";
 
+import { ProfileLastResortButton } from "@/components/profiles/profile-last-resort-action";
+
 type Props = {
   profileId: string;
   selectedContactId?: string | null;
@@ -44,6 +46,7 @@ export function ProfilePrimaryActions(props: Props) {
       )}
       <Link className="button-secondary" href={logCallHref}>Log call</Link>
       <button className="button-secondary" type="button" onClick={onEdit}>Edit profile</button>
+      <ProfileLastResortButton profileId={profileId} />
       <Link className="button-secondary" href="/event-profiles/new">Add Event / Lead</Link>
     </div>
   );
