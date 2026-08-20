@@ -34,50 +34,18 @@ function draft(): PaperNoteReviewDraft {
 
 describe("PaperNoteReviewService", () => {
   it("keeps an unresolved destination in needs_review", async () => {
-    const saveReview = vi.fn(async (input: any) => ({
-      ...input,
-      id: "entry-1",
-      reviewVersion: input.expectedVersion + 1,
-    }));
-    const service = new PaperNoteReviewService({
-      saveReview,
-      approve: vi.fn(),
-      unapprove: vi.fn(),
-      skip: vi.fn(),
-    } as any);
-
-    const result = await service.updateEntry({
-      actorId: "owner",
-      entryId: "entry-1",
-      expectedVersion: 2,
-      review: draft(),
-      now: new Date("2026-08-20T18:00:00Z"),
-    });
-
-    expect(saveReview).toHaveBeenCalledWith(expect.objectContaining({
-      state: "needs_review",
-      expectedVersion: 2,
-      approvedAt: null,
-    }));
+    const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: input.expectedVersion + 1 }));
+    const service = new PaperNoteReviewService({ saveReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
+    const result = await service.updateEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 2, review: draft(), now: new Date("2026-08-20T18:00:00Z") });
+    expect(saveReview).toHaveBeenCalledWith(expect.objectContaining({ state: "needs_review", expectedVersion: 2, approvedAt: null }));
     expect(result.reviewVersion).toBe(3);
   });
 
   it("marks a fully decided valid entry ready but does not auto-approve it", async () => {
-    const ready = {
-      ...draft(),
-      destination: { mode: "new_profile", eventFamilyId: null } as const,
-    };
+    const ready = { ...draft(), destination: { mode: "new_profile", eventFamilyId: null } as const };
     const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: 4 }));
     const service = new PaperNoteReviewService({ saveReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
-
-    await service.updateEntry({
-      actorId: "owner",
-      entryId: "entry-1",
-      expectedVersion: 3,
-      review: ready,
-      now: new Date(),
-    });
-
+    await service.updateEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 3, review: ready, now: new Date() });
     expect(saveReview).toHaveBeenCalledWith(expect.objectContaining({ state: "ready", approvedAt: null }));
   });
 
@@ -88,15 +56,23 @@ describe("PaperNoteReviewService", () => {
       approve,
       unapprove: vi.fn(),
       skip: vi.fn(),
-      getForReview: vi.fn(async () => ({ review: draft(), validationIssues: [] })),
+      getForReview: vi.fn(async () => ({ review: draft(), validationIssues: [], state: "needs_review" })),
     } as any);
+    await expect(service.approveEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 1, now: new Date() })).rejects.toMatchObject({ code: "ENTRY_NOT_READY" });
+    expect(approve).not.toHaveBeenCalled();
+  });
 
-    await expect(service.approveEntry({
-      actorId: "owner",
-      entryId: "entry-1",
-      expectedVersion: 1,
-      now: new Date(),
-    })).rejects.toMatchObject({ code: "ENTRY_NOT_READY" });
+  it("refuses direct approval after stale preflight returned the entry to needs_review", async () => {
+    const approve = vi.fn();
+    const readyReview = { ...draft(), destination: { mode: "new_profile", eventFamilyId: null } as const };
+    const service = new PaperNoteReviewService({
+      saveReview: vi.fn(),
+      approve,
+      unapprove: vi.fn(),
+      skip: vi.fn(),
+      getForReview: vi.fn(async () => ({ review: readyReview, validationIssues: [], state: "needs_review" })),
+    } as any);
+    await expect(service.approveEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 5, now: new Date() })).rejects.toMatchObject({ code: "ENTRY_NOT_READY" });
     expect(approve).not.toHaveBeenCalled();
   });
 });
