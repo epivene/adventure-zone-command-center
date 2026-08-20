@@ -150,64 +150,77 @@ export class ProfileContextRepository {
     familyId: string,
   ): Promise<BookingAssistantContextBundle | null> {
     const familyResult = await this.pool.query(
-      `SELECT id, name FROM event_families WHERE id = $1`,
+      `SELECT id, name, description FROM event_families WHERE id = $1`,
       [familyId],
     );
     const family = familyResult.rows[0];
     if (!family) return null;
 
-    const latestResult = await this.pool.query(
-      `SELECT b.id
-       FROM bookings b
-       JOIN event_family_members efm ON efm.organization_id = b.organization_id
+    const membersResult = await this.pool.query(
+      `SELECT
+         o.id,
+         o.name,
+         o.city,
+         o.region,
+         o.place_type,
+         COUNT(b.id)::int AS booking_count
+       FROM event_family_members efm
+       JOIN organizations o ON o.id = efm.organization_id
+       LEFT JOIN bookings b
+         ON b.organization_id = o.id
+        AND b.status NOT IN ('cancelled','declined')
        WHERE efm.family_id = $1
-         AND b.status NOT IN ('cancelled','declined')
-       ORDER BY b.starts_at DESC NULLS LAST, b.created_at DESC
-       LIMIT 1`,
+         AND o.consolidated_into_id IS NULL
+       GROUP BY o.id, o.name, o.city, o.region, o.place_type
+       ORDER BY o.name`,
       [familyId],
     );
-    const latestBookingId = latestResult.rows[0]?.id as string | undefined;
-    if (latestBookingId) {
-      const bundle = await this.bookingContext.getBookingContext(latestBookingId);
-      if (bundle) {
-        return {
-          ...bundle,
-          context: {
-            kind: "event_family",
-            recordId: familyId,
-            label: family.name,
-          },
-          profile: {
-            ...bundle.profile,
-            eventFamilyId: familyId,
-          },
-        };
-      }
-    }
 
-    const organizationResult = await this.pool.query(
-      `SELECT organization_id
-       FROM event_family_members
-       WHERE family_id = $1
-       ORDER BY created_at
-       LIMIT 1`,
-      [familyId],
-    );
-    const organizationId = organizationResult.rows[0]?.organization_id as string | undefined;
-    if (organizationId) {
-      const bundle = await this.getOrganizationContext(organizationId);
-      if (bundle) {
-        return {
-          ...bundle,
-          context: {
-            kind: "event_family",
-            recordId: familyId,
-            label: family.name,
-          },
-          profile: { ...bundle.profile, eventFamilyId: familyId },
-        };
-      }
-    }
+    const members = membersResult.rows;
+    const memberCount = members.length;
+    const membersWithBookings = members.filter((member) => Number(member.booking_count ?? 0) > 0).length;
+    const membersWithoutBookings = memberCount - membersWithBookings;
+    const locations = [...new Set(
+      members
+        .map((member) => [member.city, member.region].filter(Boolean).join(", "))
+        .filter(Boolean),
+    )];
+    const profileTypes = [...new Set(
+      members
+        .map((member) => String(member.place_type ?? "").trim())
+        .filter(Boolean),
+    )];
+    const memberNames = members.map((member) => String(member.name));
+
+    const familyKnowledge = [
+      family.description
+        ? {
+            id: `event-family:${familyId}:description`,
+            title: "Family description",
+            body: String(family.description),
+          }
+        : null,
+      {
+        id: `event-family:${familyId}:members`,
+        title: "Family members",
+        body: `${memberCount} member profile${memberCount === 1 ? "" : "s"}${memberNames.length ? `: ${memberNames.join(", ")}` : ""}.`,
+      },
+      {
+        id: `event-family:${familyId}:locations`,
+        title: "Family locations",
+        body: locations.length ? locations.join("; ") : "No member locations are saved yet.",
+      },
+      {
+        id: `event-family:${familyId}:types`,
+        title: "Family profile types",
+        body: profileTypes.length ? profileTypes.join(", ") : "No profile types are saved yet.",
+      },
+      {
+        id: `event-family:${familyId}:booking-history`,
+        title: "Family booking history coverage",
+        body: `${membersWithBookings} member profile${membersWithBookings === 1 ? " has" : "s have"} booking history; ${membersWithoutBookings} ${membersWithoutBookings === 1 ? "does" : "do"} not yet.`,
+      },
+    ].filter((entry): entry is { id: string; title: string; body: string } => Boolean(entry));
 
     return buildBookingContextBundle({
       context: { kind: "event_family", recordId: familyId, label: family.name },
@@ -223,7 +236,7 @@ export class ProfileContextRepository {
       packageHistorySignals: [],
       routeContext: null,
       derivedFacts: [],
-      businessKnowledge: [],
+      businessKnowledge: familyKnowledge,
       generatedAt: new Date(),
     });
   }
