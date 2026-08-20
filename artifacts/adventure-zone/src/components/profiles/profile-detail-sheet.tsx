@@ -16,8 +16,6 @@ export type ProfileSheetTarget = {
   bookingId?: string;
 };
 
-type DetailSection = "notes" | "events" | null;
-
 function formatDate(value: unknown) {
   if (!value) return null;
   const date = new Date(String(value));
@@ -30,26 +28,6 @@ function formatDateTime(value: unknown) {
   const date = new Date(String(value));
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function detailRow(
-  label: string,
-  count: number,
-  section: Exclude<DetailSection, null>,
-  active: boolean,
-  onToggle: (section: Exclude<DetailSection, null>) => void,
-) {
-  return (
-    <button
-      aria-expanded={active}
-      className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left font-semibold text-slate-800 shadow-sm transition hover:border-orange-300 hover:bg-orange-50"
-      onClick={() => onToggle(section)}
-      type="button"
-    >
-      <span>{active ? "▾" : "▸"} {label}</span>
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{count}</span>
-    </button>
-  );
 }
 
 export function ProfileDetailSheet({
@@ -66,12 +44,12 @@ export function ProfileDetailSheet({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [detailSection, setDetailSection] = useState<DetailSection>(null);
   const [recentNoteExpanded, setRecentNoteExpanded] = useState(false);
   const [noteComposerOpen, setNoteComposerOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [optimisticRecentNote, setOptimisticRecentNote] = useState<any>(null);
   const profileId = target?.profileId;
 
   const loadProfile = useCallback(async (reset = false) => {
@@ -80,11 +58,11 @@ export function ProfileDetailSheet({
     setError(null);
     if (reset) {
       setEditing(false);
-      setDetailSection(null);
       setRecentNoteExpanded(false);
       setNoteComposerOpen(false);
       setNoteBody("");
       setNoteError("");
+      setOptimisticRecentNote(null);
     }
     const qs = new URLSearchParams();
     if (target?.contactId) qs.set("contactId", target.contactId);
@@ -95,6 +73,11 @@ export function ProfileDetailSheet({
       ]);
       setData(next);
       setProfileImageDataUrl(photo.dataUrl ?? null);
+      setOptimisticRecentNote((current: any) => {
+        if (!current) return current;
+        const refreshedNotes = Array.isArray(next?.notes) ? next.notes : [];
+        return refreshedNotes.some((note: any) => note.id === current.id) ? null : current;
+      });
     } catch (cause: any) {
       setError(cause?.message ?? "Could not load profile");
     } finally {
@@ -132,8 +115,7 @@ export function ProfileDetailSheet({
     [place.city, place.region, place.postalCode].filter(Boolean).join(" "),
   ].filter(Boolean).join(" · ");
   const meaningfulNotes = notes.filter((note: any) => historyCategory(note) !== "system");
-  const recentNote = meaningfulNotes[0] ?? null;
-  const olderNotes = meaningfulNotes.slice(1);
+  const recentNote = optimisticRecentNote ?? meaningfulNotes[0] ?? null;
   const openFollowUps = [...followUps]
     .filter((item: any) => !item.completedAt)
     .sort((a: any, b: any) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
@@ -144,10 +126,6 @@ export function ProfileDetailSheet({
   const phoneLink = phoneHref(visiblePhone);
   const email = selectedContact?.email ?? null;
   const websiteHref = normalizeExternalWebsite(place.website);
-
-  function toggleDetail(section: Exclude<DetailSection, null>) {
-    setDetailSection((current) => current === section ? null : section);
-  }
 
   function openNoteComposer() {
     setNoteComposerOpen(true);
@@ -171,6 +149,8 @@ export function ProfileDetailSheet({
         setNoteError(result.error);
         return;
       }
+      setOptimisticRecentNote(result.activity);
+      setRecentNoteExpanded(false);
       setNoteBody("");
       setNoteComposerOpen(false);
       await loadProfile(false);
@@ -349,44 +329,6 @@ export function ProfileDetailSheet({
                   </div>
                 </section>
               ) : null}
-
-              <div className="grid gap-2">
-                {olderNotes.length > 0 ? detailRow("Note history", olderNotes.length, "notes", detailSection === "notes", toggleDetail) : null}
-                {detailSection === "notes" && olderNotes.length > 0 ? (
-                  <section className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    {olderNotes.map((note: any) => (
-                      <article className="rounded-lg bg-white p-3" key={note.id ?? `${note.kind}-${note.occurredAt}`}>
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                            {String(note.kind ?? "note").replaceAll("_", " ")}
-                          </span>
-                          {formatDate(note.occurredAt ?? note.createdAt) ? (
-                            <span className="text-xs text-slate-500">{formatDate(note.occurredAt ?? note.createdAt)}</span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 line-clamp-5 whitespace-pre-wrap text-sm text-slate-700">
-                          {simplifyHistoryText(note.body ?? "")}
-                        </p>
-                      </article>
-                    ))}
-                  </section>
-                ) : null}
-
-                {bookings.length > 0 ? detailRow("Events", bookings.length, "events", detailSection === "events", toggleDetail) : null}
-                {detailSection === "events" && bookings.length > 0 ? (
-                  <section className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    {bookings.map((booking: any) => (
-                      <article className="rounded-lg bg-white p-3" key={booking.id}>
-                        <h3 className="font-semibold">{booking.name ?? "Event"}</h3>
-                        <p className="mt-1 text-sm text-slate-600">
-                          {[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}
-                        </p>
-                        <p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p>
-                      </article>
-                    ))}
-                  </section>
-                ) : null}
-              </div>
 
               <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 pt-3 backdrop-blur">
                 <button className="button-primary" onClick={openNoteComposer} type="button">Add note</button>

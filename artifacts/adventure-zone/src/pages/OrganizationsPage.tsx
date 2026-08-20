@@ -4,7 +4,6 @@ import { apiGet } from "@/lib/auth-token";
 import { OrganizationList } from "@/components/organizations/organization-list";
 import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/duplicates-view";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
-import { Toaster } from "@/components/ui/toaster";
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
@@ -147,7 +146,6 @@ export default function OrganizationsPage() {
 
       {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label={profileTarget.label ?? "Side profile"} /> : null}
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
-      <Toaster />
     </div>
   );
 }
