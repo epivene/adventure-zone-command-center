@@ -179,6 +179,13 @@ export async function getPaperNoteEntryMatches(entryId: string) {
   return result.matches;
 }
 
+export async function searchPaperNoteProfiles(query: string) {
+  const result = await apiGet<{ matches: PaperNoteMatch[] }>(
+    `/paper-notes/profiles/search?q=${encodeURIComponent(query)}`,
+  );
+  return result.matches;
+}
+
 export async function savePaperNoteEntryReview(
   entryId: string,
   review: PaperNoteReviewDraft,
