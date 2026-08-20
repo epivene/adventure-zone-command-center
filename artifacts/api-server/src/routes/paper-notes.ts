@@ -10,6 +10,10 @@ import { PaperNoteImportService } from "@/features/paper-notes/paper-note-import
 import { PaperNoteIntakeRepository } from "@/features/paper-notes/paper-note-intake-repository";
 import { PaperNoteIntakeService } from "@/features/paper-notes/paper-note-intake-service";
 import {
+  PaperNoteManualProfileSearchService,
+  PostgresPaperNoteManualProfileSearchRepository,
+} from "@/features/paper-notes/paper-note-manual-profile-search";
+import {
   PaperNoteMatchingService,
   PostgresPaperNoteMatchRepository,
 } from "@/features/paper-notes/paper-note-matching-service";
@@ -38,6 +42,7 @@ import { createPaperNoteExtractionRouter } from "./paper-note-extraction";
 import { createPaperNoteHealthRouter } from "./paper-note-health";
 import { createPaperNoteImportRouter } from "./paper-note-import";
 import { createPaperNoteIntakeRouter } from "./paper-note-intake";
+import { createPaperNoteManualProfileSearchRouter } from "./paper-note-manual-profile-search";
 import { createPaperNoteMatchingRouter } from "./paper-note-matching";
 import { createPaperNoteRereadRouter } from "./paper-note-reread";
 import { createPaperNoteReviewRouter } from "./paper-note-review";
@@ -66,6 +71,9 @@ const reviewService = new PaperNoteReviewService(new PaperNoteReviewRepository(d
 const matchingService = new PaperNoteMatchingService(
   new PostgresPaperNoteMatchRepository(db),
 );
+const manualProfileSearchService = new PaperNoteManualProfileSearchService(
+  new PostgresPaperNoteManualProfileSearchRepository(db),
+);
 const sourceService = new PaperNoteSourceService(
   new DrizzlePaperNoteSourceResolver(db),
   objectStorage,
@@ -92,6 +100,7 @@ router.use(createPaperNoteMatchingRouter({
   getEntry: reviewService.getEntry.bind(reviewService),
   match: matchingService.match.bind(matchingService),
 }));
+router.use(createPaperNoteManualProfileSearchRouter(manualProfileSearchService));
 router.use(createPaperNoteSourceRestoreRouter({
   restore: restoreService.restore.bind(restoreService),
 }));
