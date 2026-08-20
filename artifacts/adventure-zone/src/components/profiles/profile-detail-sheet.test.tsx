@@ -42,8 +42,10 @@ describe("ProfileDetailSheet Option C", () => {
     expect(source).toContain("const recentNote = optimisticRecentNote ?? meaningfulNotes[0] ?? null");
   });
 
-  it("uses quick contact actions and compact counts", () => {
-    expect(source).toContain("phoneHref");
+  it("uses guided calling plus the remaining quick contact actions", () => {
+    expect(source).toContain("callHref");
+    expect(source).toContain("/calls/new?");
+    expect(source).not.toContain("phoneHref");
     expect(source).toContain("mailto:");
     expect(source).toContain("websiteHref");
     expect(source).toContain("contacts.length");
