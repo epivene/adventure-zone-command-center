@@ -63,8 +63,8 @@ Owner-authenticated endpoints live with the existing Settings API:
 - `sayText` is required after trimming and capped at 2,000 characters.
 - `coachText` is nullable and capped at 2,000 characters.
 - Only the six known guided script kinds are accepted.
-- Only node ids that exist in the selected code-default script are accepted.
-- Only the five supported placeholders are accepted.
+- Only node ids from the protected code-default graph are accepted.
+- Only the five supported placeholders are accepted in `sayText`.
 - Saving text identical to the default is allowed but the UI should normally offer Reset instead; server persistence remains deterministic.
 
 ## Frontend editor
@@ -93,9 +93,9 @@ The editor is mobile friendly: cards are one column, controls are full-width whe
 
 The frontend keeps the complete safe default graph in `guided-call-scripts.ts`.
 
-Add a pure merge function that takes one default script and a list of overrides and returns a script with only `say` and `coach` replaced. All response objects remain from the code-default graph.
+A pure merge helper can create the visible configured script by replacing only `say` and `coach`; all response objects remain references to the code-default graph.
 
-`CallWorkspacePage` receives overrides in the workspace API payload and passes them into `CallWorkspace`. Every place that creates or advances `GuidedCallState` must use the configured script, not a raw default script. This includes initial state, changing script kinds, response branching, and resetting/discarding a call draft.
+`CallWorkspacePage` receives overrides in the workspace API payload and provides them to the visible guided-script card. The **call state/branch engine intentionally continues to use the raw code-default graph** for initialization, script-kind changes, response branching, and draft reset. Because response labels/ids/destinations are not editable, the rendered wording and the protected state graph remain aligned while custom text can never become executable workflow configuration.
 
 ## Schema lifecycle
 
@@ -104,6 +104,7 @@ Use a small feature-owned idempotent schema initializer for `call_script_overrid
 ## Safety and compatibility
 
 - No script edit can change a call outcome or branch destination.
+- The state/branch engine never consumes database-provided workflow structure.
 - Existing saved drafts remain compatible because drafts persist script kind/state data, not editable text.
 - Unknown/removed node overrides are ignored by the live merge and can be cleaned manually later.
 - If the settings database read fails while loading a call, the workspace should fail in the existing API error path rather than silently presenting stale customized wording as authoritative.
