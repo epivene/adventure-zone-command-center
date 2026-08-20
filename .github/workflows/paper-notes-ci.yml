@@ -1,0 +1,33 @@
+name: Paper Notes CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/paper-notes/**"
+      - "artifacts/api-server/src/routes/paper-note*.ts"
+      - "artifacts/adventure-zone/src/features/paper-notes/**"
+      - "artifacts/adventure-zone/src/components/paper-notes/**"
+      - "artifacts/adventure-zone/src/pages/PaperNote*.tsx"
+      - "lib/db/migrations/*paper_notes*"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/src/migrations.ts"
+      - ".github/workflows/paper-notes-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  paper-notes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Paper notes focused tests
+        run: pnpm --filter @workspace/api-server test -- src/features/paper-notes/paper-note-types.test.ts
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
