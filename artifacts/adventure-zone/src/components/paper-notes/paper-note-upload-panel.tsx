@@ -13,6 +13,7 @@ type LocalFile = { key: string; file: File };
 type FailedUpload = { index: number; pageId: string | null; error: string };
 
 const accepted = new Set(["image/jpeg", "image/png", "image/webp"]);
+const acceptedInput = "image/jpeg,image/png,image/webp";
 
 export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: string): void }) {
   const [name, setName] = useState("");
@@ -121,7 +122,7 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
         <div className="rounded-xl bg-orange-100 p-2 text-orange-700"><Camera className="h-5 w-5" /></div>
         <div>
           <h2 className="text-lg font-bold text-slate-900">New paper notes import</h2>
-          <p className="mt-1 text-sm text-slate-600">Take photos or choose several call-sheet photos. Nothing is added to profiles yet.</p>
+          <p className="mt-1 text-sm text-slate-600">Take a new photo or choose several call-sheet photos from your gallery. Nothing is added to profiles yet.</p>
         </div>
       </div>
 
@@ -138,18 +139,32 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
       </label>
 
       {!batchId ? (
-        <label className="mt-4 flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-orange-300 bg-white px-4 py-3 text-sm font-bold text-orange-800 hover:bg-orange-50">
-          <FileImage className="h-5 w-5" />
-          Take photos / choose photos
-          <input
-            accept="image/jpeg,image/png,image/webp"
-            capture="environment"
-            className="sr-only"
-            multiple
-            onChange={(event) => { addFiles(event.currentTarget.files); event.currentTarget.value = ""; }}
-            type="file"
-          />
-        </label>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-orange-300 bg-white px-4 py-3 text-sm font-bold text-orange-800 hover:bg-orange-50">
+            <FileImage className="h-5 w-5" />
+            Choose photos
+            <input
+              accept={acceptedInput}
+              aria-label="Choose photos from gallery"
+              className="sr-only"
+              multiple
+              onChange={(event) => { addFiles(event.currentTarget.files); event.currentTarget.value = ""; }}
+              type="file"
+            />
+          </label>
+          <label className="flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl border border-orange-300 bg-orange-100 px-4 py-3 text-sm font-bold text-orange-900 hover:bg-orange-200">
+            <Camera className="h-5 w-5" />
+            Take photo
+            <input
+              accept={acceptedInput}
+              aria-label="Take a paper note photo"
+              capture="environment"
+              className="sr-only"
+              onChange={(event) => { addFiles(event.currentTarget.files); event.currentTarget.value = ""; }}
+              type="file"
+            />
+          </label>
+        </div>
       ) : null}
 
       {files.length ? (
