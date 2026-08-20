@@ -1,10 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { searchPaperNoteProfiles } from "@/features/paper-notes/paper-note-client";
+import {
+  listPaperNoteEventFamilies,
+  searchPaperNoteProfiles,
+} from "@/features/paper-notes/paper-note-client";
 import type {
   PaperNoteMatch,
   PaperNoteReviewDraft,
 } from "@/features/paper-notes/paper-note-review-types";
+
+type EventFamilyOption = { id: string; name: string; memberCount: number };
 
 export function PaperNoteDestinationPicker({
   review,
@@ -13,6 +18,7 @@ export function PaperNoteDestinationPicker({
   onChooseNewLocation,
   onChooseNewProfile,
   onNewLocationChange,
+  onNewProfileFamilyChange,
   onRememberMatch,
 }: {
   review: PaperNoteReviewDraft;
@@ -21,6 +27,7 @@ export function PaperNoteDestinationPicker({
   onChooseNewLocation(match: PaperNoteMatch): void;
   onChooseNewProfile(): void;
   onNewLocationChange(patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>): void;
+  onNewProfileFamilyChange(familyId: string | null): void;
   onRememberMatch(match: PaperNoteMatch): void;
 }) {
   const destination = review.destination;
@@ -28,6 +35,24 @@ export function PaperNoteDestinationPicker({
   const [manualMatches, setManualMatches] = useState<PaperNoteMatch[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
+  const [families, setFamilies] = useState<EventFamilyOption[]>([]);
+  const [familiesLoaded, setFamiliesLoaded] = useState(false);
+
+  useEffect(() => {
+    if (destination?.mode !== "new_profile" || familiesLoaded) return;
+    let cancelled = false;
+    void listPaperNoteEventFamilies()
+      .then((result) => {
+        if (!cancelled) setFamilies(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFamilies([]);
+      })
+      .finally(() => {
+        if (!cancelled) setFamiliesLoaded(true);
+      });
+    return () => { cancelled = true; };
+  }, [destination?.mode, familiesLoaded]);
 
   const visibleMatches = useMemo(() => {
     const deduped = new Map<string, PaperNoteMatch>();
@@ -159,6 +184,28 @@ export function PaperNoteDestinationPicker({
           Create new profile
         </button>
       </div>
+
+      {destination?.mode === "new_profile" ? (
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            Event family (optional)
+            <select
+              aria-label="Event family (optional)"
+              className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+              value={destination.eventFamilyId ?? ""}
+              onChange={(event) => onNewProfileFamilyChange(event.target.value || null)}
+            >
+              <option value="">No event family</option>
+              {families.map((family) => (
+                <option key={family.id} value={family.id}>
+                  {family.name} · {family.memberCount} profile{family.memberCount === 1 ? "" : "s"}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!familiesLoaded ? <p className="mt-1 text-xs text-slate-500">Loading event families…</p> : null}
+        </div>
+      ) : null}
 
       {destination?.mode === "existing_profile_new_location" ? (
         <div className="mt-4 grid gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
