@@ -38,11 +38,14 @@ export function PaperNoteEntryCard({
 
   useEffect(() => {
     setReview(entry.review);
-    setManualMatches([]);
     baseline.current = JSON.stringify(entry.review);
     version.current = entry.reviewVersion;
     setSaveState("saved");
   }, [entry.id, entry.review, entry.reviewVersion]);
+
+  useEffect(() => {
+    setManualMatches([]);
+  }, [entry.id]);
 
   useEffect(() => {
     const serialized = JSON.stringify(review);
