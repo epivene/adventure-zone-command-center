@@ -166,7 +166,9 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
     setSaving(true);
     setError("");
     try {
-      await apiPatch(`/event-profiles/${profile.id}`, profileValues);
+      const { description, ...legacyProfileValues } = profileValues;
+      await apiPatch(`/event-profiles/${profile.id}`, legacyProfileValues);
+      await apiPatch(`/event-profiles/${profile.id}/description`, { description });
       if (selectedContact?.id && contactLoaded) {
         await apiPut(`/contacts/${selectedContact.id}`, {
           contact: contactValues,
