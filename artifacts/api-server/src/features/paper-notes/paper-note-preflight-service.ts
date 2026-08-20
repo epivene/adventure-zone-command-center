@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
+import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
 import type { PaperNoteImportSummary } from "./paper-note-types";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
@@ -155,7 +156,10 @@ export class PaperNotePreflightService {
         });
         continue;
       }
-      const reviewIssues = validatePaperNoteReview(entry.review as PaperNoteReviewPayload);
+      const reviewIssues = [
+        ...validatePaperNoteReview(entry.review as PaperNoteReviewPayload),
+        ...validatePaperNoteEventDate(entry.review.event),
+      ];
       for (const issue of reviewIssues.filter((issue) => issue.severity === "blocking")) {
         blocking.push({ entryId: entry.id, code: "ENTRY_INVALID", message: issue.message });
       }
