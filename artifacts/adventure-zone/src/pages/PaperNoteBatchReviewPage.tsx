@@ -11,10 +11,12 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 
+import { PaperNoteSourceViewer } from "@/components/paper-notes/paper-note-source-viewer";
 import {
   addManualPaperNoteEntry,
   deletePaperNotePage,
   getPaperNoteBatch,
+  getPaperNotePageSource,
   markPaperNotePageReviewedEmpty,
   reorderPaperNotePages,
   retryPaperNotePage,
@@ -147,6 +149,15 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
                     </div>
                   ) : null}
                 </div>
+
+                {page.status !== "uploading" ? (
+                  <div className="mt-3">
+                    <PaperNoteSourceViewer
+                      label={`Page ${index + 1}`}
+                      loadSource={() => getPaperNotePageSource(batchId, page.id)}
+                    />
+                  </div>
+                ) : null}
 
                 {page.status === "needs_retry" ? (
                   <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
