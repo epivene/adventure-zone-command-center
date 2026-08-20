@@ -7,6 +7,7 @@ function fakeClient(options?: {
   researchReady?: boolean;
   leadScoutRelease2Ready?: boolean;
   leadScoutRelease3Ready?: boolean;
+  paperNotesReady?: boolean;
 }) {
   const queries: string[] = [];
   let released = false;
@@ -18,6 +19,9 @@ function fakeClient(options?: {
       if (sql.includes("candidate_key") && sql.includes("AS ready")) return { rows: [{ ready: options?.leadScoutRelease2Ready ?? true }] };
       if (sql.includes("enrichment_status") && sql.includes("coverage_gaps") && sql.includes("as ready")) {
         return { rows: [{ ready: options?.leadScoutRelease3Ready ?? true }] };
+      }
+      if (sql.includes("paper_note_batches") && sql.includes("paper_note_pages") && sql.includes("as ready")) {
+        return { rows: [{ ready: options?.paperNotesReady ?? true }] };
       }
       return { rows: [] };
     },
@@ -45,6 +49,7 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(queries.some((sql) => sql.includes("profile_research_runs") && sql.includes("lead_scout_runs") && sql.includes("AS ready"))).toBe(true);
     expect(queries.some((sql) => sql.includes("candidate_key") && sql.includes("AS ready"))).toBe(true);
     expect(queries.some((sql) => sql.includes("enrichment_status") && sql.includes("coverage_gaps"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("paper_note_batches") && sql.includes("paper_note_pages"))).toBe(true);
     expect(queries).toContain("SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))");
     expect(queries).toContain("RESET statement_timeout");
     expect(queries).toContain("RESET lock_timeout");
@@ -79,6 +84,16 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(queries.some((sql) => sql.includes("add column if not exists enrichment_status"))).toBe(true);
     expect(queries.some((sql) => sql.includes("fit_cautions"))).toBe(true);
     expect(queries.some((sql) => sql.includes("lead_scout_candidates_run_enrichment_idx"))).toBe(true);
+  });
+
+  it("repairs the Paper Notes schema before running the legacy registry", async () => {
+    const { client, queries } = fakeClient({ paperNotesReady: false });
+    const runMigrations = vi.fn(async () => []);
+    const applied = await runActReviewMigrationsAtStartup({ pool: { connect: async () => client }, runMigrations });
+    expect(applied).toContain("066_paper_notes_importer.sql");
+    expect(queries.some((sql) => sql.includes("create table if not exists paper_note_batches"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("create table if not exists paper_note_pages"))).toBe(true);
+    expect(runMigrations).toHaveBeenCalledTimes(1);
   });
 
   it("does not block startup when another process owns the migration lock", async () => {
