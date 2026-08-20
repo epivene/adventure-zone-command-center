@@ -5,17 +5,28 @@ import { PaperNoteIntakeRepository } from "@/features/paper-notes/paper-note-int
 import { PaperNoteIntakeService } from "@/features/paper-notes/paper-note-intake-service";
 import { createPaperNoteObjectStorage } from "@/features/paper-notes/paper-note-object-storage";
 import { PaperNoteRecoveryRepository } from "@/features/paper-notes/paper-note-recovery-repository";
+import {
+  DrizzlePaperNoteSourceResolver,
+  PaperNoteSourceService,
+} from "@/features/paper-notes/paper-note-source-service";
 import { createPaperNoteExtractionRouter } from "./paper-note-extraction";
 import { createPaperNoteIntakeRouter } from "./paper-note-intake";
+import { createPaperNoteSourceRouter } from "./paper-note-source";
 
 const router: IRouter = Router();
+const objectStorage = createPaperNoteObjectStorage();
 const service = new PaperNoteIntakeService(
   new PaperNoteIntakeRepository(db),
-  createPaperNoteObjectStorage(),
+  objectStorage,
 );
 const recoveryRepository = new PaperNoteRecoveryRepository(db);
+const sourceService = new PaperNoteSourceService(
+  new DrizzlePaperNoteSourceResolver(db),
+  objectStorage,
+);
 
 router.use(createPaperNoteIntakeRouter(service));
 router.use(createPaperNoteExtractionRouter(recoveryRepository));
+router.use(createPaperNoteSourceRouter(sourceService));
 
 export default router;
