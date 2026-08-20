@@ -12,6 +12,7 @@ describe("guided calling console visual hierarchy", () => {
     expect(queue).toContain("Selected");
     expect(queue).toContain("Start guided call");
     expect(queue).toContain("size-12");
+    expect(queue).toContain("Assistant & Needs Answer");
   });
 
   it("makes the active script dominant and mobile-sticky", () => {
@@ -19,12 +20,14 @@ describe("guided calling console visual hierarchy", () => {
     expect(script).toContain("text-2xl");
     expect(script).toContain("min-h-14");
     expect(script).toContain("sticky");
+    expect(script).toContain("Call outcome & save");
+    expect(script).toContain('href="#call-details-title"');
   });
 
-  it("keeps quick facts and history secondary while making outcome/save easier to reach", () => {
+  it("keeps quick facts and history secondary", () => {
     expect(briefing).toContain("Quick facts & history");
-    expect(workspace).toContain("Call outcome & save");
-    expect(workspace).toContain("sticky");
+    expect(briefing).toContain("<details");
     expect(workspace).toContain("Recent history");
+    expect(workspace).toContain("<details");
   });
 });
