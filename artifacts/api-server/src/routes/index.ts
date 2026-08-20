@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { db } from "@workspace/db";
 import healthRouter from "./health";
 import todayRouter from "./today";
 import assistantRouter from "./assistant";
@@ -53,9 +54,11 @@ import eventWrapUpAdminRouter from "./event-wrap-up-admin";
 import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
 import managerAssistantAdminRouter from "./manager-assistant-admin";
+import { cleanupLeakedConsolidationTestFixtures } from "@/features/organizations/test-fixture-cleanup";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();
+let leakedFixtureCleanup: Promise<void> | null = null;
 
 router.use(healthRouter);
 router.use(authRouter);
@@ -73,6 +76,16 @@ router.use(managerMeetupsRouter);
 router.use(managerAssistantRouter);
 
 router.use(requireOwnerMiddleware);
+router.use(async (req, _res, next) => {
+  leakedFixtureCleanup ??= cleanupLeakedConsolidationTestFixtures(db);
+  try {
+    await leakedFixtureCleanup;
+  } catch (err) {
+    leakedFixtureCleanup = null;
+    req.log.error({ err }, "Failed to clean leaked consolidation test fixtures");
+  }
+  next();
+});
 router.use(managerAdminRouter);
 router.use(managerFinanceAdminRouter);
 router.use(managerWorkerDeleteAdminRouter);
