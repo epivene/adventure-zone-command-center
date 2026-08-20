@@ -121,7 +121,7 @@ create table if not exists organization_phones (
   label text,
   instructions text,
   status phone_status not null default 'active',
-  primary boolean not null default false,
+  "primary" boolean not null default false,
   source text not null default 'local'
     check (source in ('local', 'legacy_backfill', 'paper_note')),
   source_paper_note_entry_id uuid references paper_note_entries(id) on delete set null,
@@ -142,10 +142,10 @@ create unique index if not exists organization_phones_location_destination_uniqu
   where organization_location_id is not null and normalized_number is not null;
 create unique index if not exists organization_phones_one_active_primary_general
   on organization_phones(organization_id)
-  where organization_location_id is null and primary and status = 'active';
+  where organization_location_id is null and "primary" and status = 'active';
 create unique index if not exists organization_phones_one_active_primary_location
   on organization_phones(organization_location_id)
-  where organization_location_id is not null and primary and status = 'active';
+  where organization_location_id is not null and "primary" and status = 'active';
 
 create or replace function validate_organization_phone_location()
 returns trigger
@@ -178,7 +178,7 @@ insert into organization_phones (
   normalized_number,
   type,
   status,
-  primary,
+  "primary",
   source
 )
 select
