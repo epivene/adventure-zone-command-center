@@ -36,7 +36,7 @@ function ProfileAvatar({ name, image }: { name: string; image?: string | null })
   }
   return (
     <div aria-label={`${name} profile placeholder`} className="flex h-full w-full items-center justify-center text-orange-700" role="img">
-      <svg aria-hidden="true" className="h-16 w-16" fill="none" viewBox="0 0 64 64">
+      <svg aria-hidden="true" className="h-11 w-11" fill="none" viewBox="0 0 64 64">
         <circle cx="32" cy="22" r="11" stroke="currentColor" strokeWidth="3.5" />
         <path d="M14 52c0-10 8-18 18-18s18 8 18 18" stroke="currentColor" strokeLinecap="round" strokeWidth="3.5" />
       </svg>
@@ -48,10 +48,10 @@ function RatingSummary({ average, count }: { average?: number | null; count?: nu
   const rating = average ?? 0;
   const total = count ?? 0;
   return (
-    <div className="min-w-[10rem] text-left sm:text-right">
-      <p className="text-2xl font-bold text-slate-950">{rating.toFixed(1)} <span className="text-base font-semibold text-slate-400">/ 5</span></p>
-      <div aria-label={`${rating.toFixed(1)} out of 5 stars`} className="mt-2 text-3xl leading-none tracking-tight text-orange-600">☆☆☆☆☆</div>
-      <p className="mt-2 text-sm text-slate-500">{total} rated occurrence{total === 1 ? "" : "s"}</p>
+    <div className="min-w-[7rem] text-right" data-testid="profile-rating-summary">
+      <p className="text-xl font-bold leading-tight text-slate-950">{rating.toFixed(1)} <span className="text-sm font-semibold text-slate-400">/ 5</span></p>
+      <div aria-label={`${rating.toFixed(1)} out of 5 stars`} className="mt-1 text-2xl leading-none tracking-tight text-orange-600">☆☆☆☆☆</div>
+      <p className="mt-1 text-xs text-slate-500">{total} rated occurrence{total === 1 ? "" : "s"}</p>
     </div>
   );
 }
@@ -132,45 +132,47 @@ export function OrganizationList({ organizations, query, travelLegs }: { organiz
       <p aria-live="polite" className="text-sm text-slate-600">Showing {organizations.records.length} of {organizations.total} profiles</p>
 
       {organizations.records.length ? (
-        <ul className="grid gap-3">
+        <ul className="grid gap-2">
           {organizations.records.map((organization) => {
             const websiteHref = normalizeExternalWebsite(organization.website ?? null);
             const placeType = organization.placeType || "other";
             const location = [organization.city, organization.region].filter(Boolean).join(", ");
             return (
-              <li className="overflow-hidden rounded-[1.6rem] border border-slate-200 bg-white shadow-sm transition hover:border-orange-200 hover:shadow-md" key={organization.id}>
-                <div className="grid gap-5 p-5 sm:grid-cols-[7.5rem_minmax(0,1fr)] lg:grid-cols-[8.5rem_minmax(0,1fr)_11rem] lg:items-center lg:p-6">
-                  <Link className="mx-auto block size-28 overflow-hidden rounded-full bg-orange-50 sm:mx-0 sm:size-30 lg:size-32" href={detailHref(organization.id, query)}>
+              <li className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-orange-200 hover:shadow-md" data-testid="profile-summary-card" key={organization.id}>
+                <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[5rem_minmax(0,1fr)_9rem]">
+                  <Link className="block size-20 overflow-hidden rounded-full bg-orange-50" data-testid="profile-avatar-link" href={detailHref(organization.id, query)}>
                     <ProfileAvatar image={organization.profileImageDataUrl} name={organization.name} />
                   </Link>
 
                   <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link className="break-words text-2xl font-bold tracking-tight text-slate-950 hover:text-orange-700" href={detailHref(organization.id, query)}>{organization.name}</Link>
-                      {organization.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Link className="break-words text-xl font-bold tracking-tight text-slate-950 hover:text-orange-700" href={detailHref(organization.id, query)}>{organization.name}</Link>
+                      {organization.lastResort ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-800">Last Resort</span> : null}
                     </div>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                      {location ? <span className="inline-flex items-center gap-1.5"><span aria-hidden className="text-lg">⌖</span>{location}</span> : null}
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold lowercase text-slate-700">{placeType}</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">
+                      {location ? <span className="inline-flex items-center gap-1"><span aria-hidden>⌖</span>{location}</span> : null}
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold lowercase text-slate-700">{placeType}</span>
                     </div>
 
-                    {organization.parentContext ? <p className="mt-2 text-xs font-semibold text-orange-700">{organization.parentContext.kind === "event_family" ? "Part of" : "Location of"} {organization.parentContext.name}</p> : null}
+                    {organization.parentContext ? <p className="mt-1 text-xs font-semibold text-orange-700">{organization.parentContext.kind === "event_family" ? "Part of" : "Location of"} {organization.parentContext.name}</p> : null}
 
-                    <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700">
-                      {organization.phone ? <a className="font-medium hover:text-orange-700" href={`tel:${organization.phone}`}>{organization.phone}</a> : null}
-                      {organization.email ? <a className="break-all font-medium hover:text-orange-700" href={`mailto:${organization.email}`}>{organization.email}</a> : null}
-                    </div>
+                    {(organization.phone || organization.email) ? (
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700">
+                        {organization.phone ? <a className="font-medium hover:text-orange-700" href={`tel:${organization.phone}`}>{organization.phone}</a> : null}
+                        {organization.email ? <a className="break-all font-medium hover:text-orange-700" href={`mailto:${organization.email}`}>{organization.email}</a> : null}
+                      </div>
+                    ) : null}
 
-                    {websiteHref ? <a className="mt-3 block break-all text-sm font-medium text-slate-700 hover:text-orange-700 hover:underline" href={websiteHref} rel="noreferrer" target="_blank">{organization.website}</a> : null}
+                    {websiteHref ? <a className="mt-1 block max-w-full truncate text-sm font-medium text-slate-700 hover:text-orange-700 hover:underline" href={websiteHref} rel="noreferrer" target="_blank">{organization.website}</a> : null}
 
-                    <p className="mt-3 text-xs font-medium text-slate-500">
+                    <p className="mt-2 text-xs font-medium text-slate-500">
                       {organization.locationCount > 0 ? `${organization.locationCount} location${organization.locationCount === 1 ? "" : "s"} · ` : ""}
                       {organization.contactCount} contact{organization.contactCount === 1 ? "" : "s"} · {organization.bookingCount} booking{organization.bookingCount === 1 ? "" : "s"}
                     </p>
                   </div>
 
-                  <div className="border-t border-slate-100 pt-4 sm:col-start-2 lg:col-start-3 lg:border-0 lg:pt-0">
+                  <div className="col-start-2 self-center sm:col-start-3 sm:row-start-1">
                     <RatingSummary average={organization.ratingAverage} count={organization.ratingCount} />
                   </div>
                 </div>

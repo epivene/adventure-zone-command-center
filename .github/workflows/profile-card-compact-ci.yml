@@ -1,0 +1,29 @@
+name: Profile Card Compact CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/components/organizations/organization-list.tsx"
+      - "artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx"
+      - ".github/workflows/profile-card-compact-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  profile-card-compact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Compact profile card test
+        run: pnpm exec vitest run artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
