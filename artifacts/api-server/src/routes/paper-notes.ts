@@ -2,6 +2,10 @@ import { Router, type IRouter } from "express";
 
 import { db } from "@/db/client";
 import { PaperNoteArchiveService } from "@/features/paper-notes/paper-note-archive-service";
+import {
+  DrizzlePaperNoteHealthRepository,
+  PaperNoteHealthService,
+} from "@/features/paper-notes/paper-note-health-service";
 import { PaperNoteImportService } from "@/features/paper-notes/paper-note-import-service";
 import { PaperNoteIntakeRepository } from "@/features/paper-notes/paper-note-intake-repository";
 import { PaperNoteIntakeService } from "@/features/paper-notes/paper-note-intake-service";
@@ -31,6 +35,7 @@ import {
   PaperNoteSourceService,
 } from "@/features/paper-notes/paper-note-source-service";
 import { createPaperNoteExtractionRouter } from "./paper-note-extraction";
+import { createPaperNoteHealthRouter } from "./paper-note-health";
 import { createPaperNoteImportRouter } from "./paper-note-import";
 import { createPaperNoteIntakeRouter } from "./paper-note-intake";
 import { createPaperNoteMatchingRouter } from "./paper-note-matching";
@@ -54,6 +59,9 @@ const restoreService = new PaperNoteSourceRestoreService(
   new DrizzlePaperNoteRestoreRepository(db),
   objectStorage,
 );
+const healthService = new PaperNoteHealthService(
+  new DrizzlePaperNoteHealthRepository(db),
+);
 const reviewService = new PaperNoteReviewService(new PaperNoteReviewRepository(db));
 const matchingService = new PaperNoteMatchingService(
   new PostgresPaperNoteMatchRepository(db),
@@ -73,6 +81,7 @@ const importService = new PaperNoteImportService(
 );
 const archiveService = new PaperNoteArchiveService(db);
 
+router.use(createPaperNoteHealthRouter(healthService));
 router.use(createPaperNoteIntakeRouter(service));
 router.use(createPaperNoteExtractionRouter(recoveryRepository));
 router.use(createPaperNoteRereadRouter({
