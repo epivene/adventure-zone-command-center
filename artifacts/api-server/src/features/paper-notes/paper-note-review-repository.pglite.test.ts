@@ -32,6 +32,7 @@ async function harness() {
       review_payload jsonb not null default '{}'::jsonb,
       review_version integer not null default 0,
       state text not null default 'needs_review',
+      target_snapshot jsonb,
       validation_issues jsonb not null default '[]'::jsonb,
       approved_at timestamptz,
       updated_at timestamptz not null default now()
@@ -93,6 +94,11 @@ describe("PaperNoteReviewRepository", () => {
     });
     expect(saved.reviewVersion).toBe(1);
     expect(saved.state).toBe("ready");
+    const snapshot = await client.query<{ target_snapshot: unknown }>(
+      `select target_snapshot from paper_note_entries where id = $1`,
+      [entryId],
+    );
+    expect(snapshot.rows[0]?.target_snapshot).toBeNull();
 
     await expect(repository.saveReview({
       actorId: "owner",

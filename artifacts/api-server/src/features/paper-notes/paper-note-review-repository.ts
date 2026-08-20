@@ -8,6 +8,7 @@ import type {
   PaperNoteReviewMutationView,
   PaperNoteReviewStore,
 } from "./paper-note-review-service";
+import { capturePaperNoteTargetSnapshot } from "./paper-note-target-snapshot";
 
 type DrizzleDatabase = typeof database;
 
@@ -61,9 +62,7 @@ function mutationView(row: ReviewRow): PaperNoteReviewMutationView {
     reviewVersion: Number(row.reviewVersion),
     state: row.state,
     validationIssues: issuesFrom(row.validationIssues),
-    approvedAt: row.approvedAt
-      ? new Date(row.approvedAt).toISOString()
-      : null,
+    approvedAt: row.approvedAt ? new Date(row.approvedAt).toISOString() : null,
   };
 }
 
@@ -108,6 +107,7 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
     approvedAt: null;
     now: Date;
   }) {
+    const targetSnapshot = await capturePaperNoteTargetSnapshot(this.database, input.review);
     const result = await this.database.execute(sql`
       update paper_note_entries entries
       set
@@ -115,6 +115,7 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
         review_version = entries.review_version + 1,
         state = ${input.state},
         validation_issues = ${JSON.stringify(input.validationIssues)}::jsonb,
+        target_snapshot = ${targetSnapshot ? JSON.stringify(targetSnapshot) : null}::jsonb,
         approved_at = null,
         updated_at = ${input.now}
       from paper_note_batches batches
@@ -137,40 +138,20 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
     return mutationView(row!);
   }
 
-  approve(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }) {
+  approve(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     return this.changeState(input, "approved", input.now);
   }
 
-  unapprove(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }) {
+  unapprove(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     return this.changeState(input, "ready", null);
   }
 
-  skip(input: {
-    actorId: string;
-    entryId: string;
-    expectedVersion: number;
-    now: Date;
-  }) {
+  skip(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     return this.changeState(input, "skipped", null);
   }
 
   private async changeState(
-    input: {
-      actorId: string;
-      entryId: string;
-      expectedVersion: number;
-      now: Date;
-    },
+    input: { actorId: string; entryId: string; expectedVersion: number; now: Date },
     state: "approved" | "ready" | "skipped",
     approvedAt: Date | null,
   ) {
@@ -211,27 +192,11 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
       limit 1
     `);
     const row = (result as { rows?: Array<{ reviewVersion: number; state: string }> }).rows?.[0];
-    if (!row) {
-      throw new PaperNoteReviewRepositoryError(
-        "ENTRY_NOT_FOUND",
-        "Paper-note entry was not found.",
-      );
-    }
-    if (row.state === "imported") {
-      throw new PaperNoteReviewRepositoryError(
-        "ENTRY_NOT_EDITABLE",
-        "Imported paper-note entries are read-only.",
-      );
-    }
+    if (!row) throw new PaperNoteReviewRepositoryError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
+    if (row.state === "imported") throw new PaperNoteReviewRepositoryError("ENTRY_NOT_EDITABLE", "Imported paper-note entries are read-only.");
     if (Number(row.reviewVersion) !== expectedVersion) {
-      throw new PaperNoteReviewRepositoryError(
-        "STALE_REVIEW_VERSION",
-        "This paper-note entry changed since you opened it. Reload the latest review before saving again.",
-      );
+      throw new PaperNoteReviewRepositoryError("STALE_REVIEW_VERSION", "This paper-note entry changed since you opened it. Reload the latest review before saving again.");
     }
-    throw new PaperNoteReviewRepositoryError(
-      "ENTRY_NOT_EDITABLE",
-      "This paper-note entry cannot be changed right now.",
-    );
+    throw new PaperNoteReviewRepositoryError("ENTRY_NOT_EDITABLE", "This paper-note entry cannot be changed right now.");
   }
 }

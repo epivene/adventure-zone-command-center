@@ -8,6 +8,13 @@ import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
 import type { PaperNoteImportSummary } from "./paper-note-types";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import { validatePaperNoteReview, type PaperNoteReviewPayload } from "./paper-note-review-schema";
+import {
+  loadPaperNoteTargetSnapshotValue,
+  paperNoteTargetChanged,
+  paperNoteTargetSnapshotHasMissing,
+  type PaperNoteStoredTargetSnapshot,
+  type PaperNoteTargetSnapshotValue,
+} from "./paper-note-target-snapshot";
 
 export type PaperNoteBatchPreflight = {
   ready: boolean;
@@ -22,12 +29,20 @@ export type PaperNotePreflightBatch = {
   id: string;
   status: string;
   pages: Array<{ id: string; status: string; originalObjectKey: string | null }>;
-  entries: Array<{ id: string; pageId: string; state: string; review: PaperNoteReviewDraft }>;
+  entries: Array<{
+    id: string;
+    pageId: string;
+    state: string;
+    review: PaperNoteReviewDraft;
+    targetSnapshot: PaperNoteStoredTargetSnapshot | null;
+  }>;
 };
 
 export interface PaperNotePreflightRepository {
   loadBatch(actorId: string, batchId: string): Promise<PaperNotePreflightBatch | null>;
   targetExists(destination: NonNullable<PaperNoteReviewDraft["destination"]>): Promise<boolean>;
+  currentTargetSnapshot(review: PaperNoteReviewDraft): Promise<PaperNoteTargetSnapshotValue | null>;
+  returnEntryToReview(entryId: string, message: string, now: Date): Promise<void>;
 }
 
 type Storage = Pick<PaperNoteObjectStorage, "exists">;
@@ -70,6 +85,10 @@ function addPreview(summary: PaperNoteImportSummary, entry: PaperNotePreflightBa
   if (entry.review.currentFollowUp.enabled) summary.followUpsCreated += 1;
 }
 
+function isExistingDestination(destination: NonNullable<PaperNoteReviewDraft["destination"]>) {
+  return destination.mode === "existing_profile" || destination.mode === "existing_profile_new_location";
+}
+
 export class PaperNotePreflightService {
   constructor(
     private readonly repository: PaperNotePreflightRepository,
@@ -77,7 +96,6 @@ export class PaperNotePreflightService {
   ) {}
 
   async preflight(input: { actorId: string; batchId: string; now: Date }): Promise<PaperNoteBatchPreflight> {
-    void input.now;
     const batch = await this.repository.loadBatch(input.actorId, input.batchId);
     const preview = emptySummary();
     const blocking: PaperNoteBatchPreflight["blocking"] = [];
@@ -104,21 +122,23 @@ export class PaperNotePreflightService {
       }
     }
 
-    const approved = batch.entries.filter((entry) => entry.state === "approved");
     const skipped = batch.entries.filter((entry) => entry.state === "skipped");
-    if (!approved.length) blocking.push({ entryId: null, code: "NO_APPROVED_ENTRIES", message: "Approve at least one paper entry before importing the batch." });
+    let approvedCount = batch.entries.filter((entry) => entry.state === "approved").length;
 
     for (const entry of batch.entries) {
       if (entry.state !== "approved" && entry.state !== "skipped") {
         blocking.push({ entryId: entry.id, code: "ENTRY_NOT_FINAL", message: "Every paper entry must be Approved or Skipped before import." });
         continue;
       }
-      addPreview(preview, entry);
-      if (entry.state === "skipped") continue;
+      if (entry.state === "skipped") {
+        addPreview(preview, entry);
+        continue;
+      }
       if (!entry.review.destination) {
         blocking.push({ entryId: entry.id, code: "DESTINATION_MISSING", message: "Choose where this paper entry belongs." });
         continue;
       }
+
       const reviewIssues = [
         ...validatePaperNoteReview(entry.review as PaperNoteReviewPayload),
         ...validatePaperNoteEventDate(entry.review.event),
@@ -128,20 +148,50 @@ export class PaperNotePreflightService {
       for (const issue of reviewIssues.filter((issue) => issue.severity === "blocking")) {
         blocking.push({ entryId: entry.id, code: "ENTRY_INVALID", message: issue.message });
       }
-      if (
-        entry.review.destination.mode === "existing_profile" ||
-        entry.review.destination.mode === "existing_profile_new_location"
-      ) {
+
+      if (isExistingDestination(entry.review.destination)) {
         if (!(await this.repository.targetExists(entry.review.destination))) {
-          blocking.push({ entryId: entry.id, code: "TARGET_MISSING", message: "The selected CRM profile or location is no longer available. Review this entry again." });
+          const message = "The selected CRM profile or location is no longer available. Review this entry again.";
+          await this.repository.returnEntryToReview(entry.id, message, input.now);
+          approvedCount = Math.max(0, approvedCount - 1);
+          blocking.push({ entryId: entry.id, code: "TARGET_MISSING", message });
+          continue;
+        }
+        if (!entry.targetSnapshot) {
+          const message = "This CRM destination was approved before stale-data protection was available. Review and approve this paper entry again.";
+          await this.repository.returnEntryToReview(entry.id, message, input.now);
+          approvedCount = Math.max(0, approvedCount - 1);
+          blocking.push({ entryId: entry.id, code: "TARGET_REVIEW_REQUIRED", message });
+          continue;
+        }
+        const currentTarget = await this.repository.currentTargetSnapshot(entry.review);
+        if (!currentTarget || paperNoteTargetSnapshotHasMissing(currentTarget)) {
+          const message = "A saved CRM record used by this paper entry is no longer available. Review the entry again before importing.";
+          await this.repository.returnEntryToReview(entry.id, message, input.now);
+          approvedCount = Math.max(0, approvedCount - 1);
+          blocking.push({ entryId: entry.id, code: "TARGET_CHANGED", message });
+          continue;
+        }
+        if (paperNoteTargetChanged(entry.targetSnapshot, currentTarget)) {
+          const message = "The CRM information used for this paper entry changed since this paper entry was reviewed. Review it again before importing.";
+          await this.repository.returnEntryToReview(entry.id, message, input.now);
+          approvedCount = Math.max(0, approvedCount - 1);
+          blocking.push({ entryId: entry.id, code: "TARGET_CHANGED", message });
+          continue;
         }
       }
+
+      addPreview(preview, entry);
+    }
+
+    if (approvedCount === 0) {
+      blocking.push({ entryId: null, code: "NO_APPROVED_ENTRIES", message: "Approve at least one paper entry before importing the batch." });
     }
 
     return {
       ready: blocking.length === 0,
       batchId: batch.id,
-      approvedCount: approved.length,
+      approvedCount,
       skippedCount: skipped.length,
       blocking,
       preview,
@@ -150,7 +200,15 @@ export class PaperNotePreflightService {
 }
 
 type DrizzleDatabase = typeof database;
-type EntryRow = { id: string; pageId: string; state: string; reviewPayload: unknown };
+type EntryRow = { id: string; pageId: string; state: string; reviewPayload: unknown; targetSnapshot: unknown };
+
+function targetSnapshotFrom(value: unknown): PaperNoteStoredTargetSnapshot | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Partial<PaperNoteStoredTargetSnapshot>;
+  return candidate.version === 1 && typeof candidate.fingerprint === "string"
+    ? candidate as PaperNoteStoredTargetSnapshot
+    : null;
+}
 
 export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRepository {
   constructor(private readonly database: DrizzleDatabase) {}
@@ -173,7 +231,12 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
         order by sort_order asc
       `),
       this.database.execute(sql`
-        select id, page_id as "pageId", state, review_payload as "reviewPayload"
+        select
+          id,
+          page_id as "pageId",
+          state,
+          review_payload as "reviewPayload",
+          target_snapshot as "targetSnapshot"
         from paper_note_entries
         where batch_id = ${batchId}::uuid
         order by page_id asc, source_order asc
@@ -189,6 +252,7 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
         pageId: entry.pageId,
         state: entry.state,
         review: entry.reviewPayload as PaperNoteReviewDraft,
+        targetSnapshot: targetSnapshotFrom(entry.targetSnapshot),
       })),
     };
   }
@@ -218,5 +282,24 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
       limit 1
     `);
     return Boolean((result as { rows?: unknown[] }).rows?.length);
+  }
+
+  currentTargetSnapshot(review: PaperNoteReviewDraft) {
+    return loadPaperNoteTargetSnapshotValue(this.database, review);
+  }
+
+  async returnEntryToReview(entryId: string, message: string, now: Date) {
+    const issue = { fieldPath: "destination", severity: "blocking", message };
+    await this.database.execute(sql`
+      update paper_note_entries
+      set
+        state = 'needs_review',
+        approved_at = null,
+        review_version = review_version + 1,
+        validation_issues = ${JSON.stringify([issue])}::jsonb,
+        updated_at = ${now}
+      where id = ${entryId}::uuid
+        and state = 'approved'
+    `);
   }
 }

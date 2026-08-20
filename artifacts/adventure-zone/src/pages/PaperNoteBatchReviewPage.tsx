@@ -108,8 +108,11 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
     setBusy("preflight");
     setError("");
     try {
-      setPreflight(await preflightPaperNoteBatch(batchId));
+      const result = await preflightPaperNoteBatch(batchId);
+      setPreflight(result);
+      if (!result.ready) await batch.refetch();
     } catch (caught) {
+      await batch.refetch();
       setError(caught instanceof Error ? caught.message : "Could not check this paper-note batch.");
     } finally {
       setBusy(null);
@@ -126,6 +129,8 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
       setPreflight(null);
       await batch.refetch();
     } catch (caught) {
+      setPreflight(null);
+      await batch.refetch();
       setError(caught instanceof Error ? caught.message : "The paper-note import could not be completed.");
     } finally {
       setBusy(null);
