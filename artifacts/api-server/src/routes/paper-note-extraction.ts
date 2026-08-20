@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod/v4";
 
 import {
@@ -11,13 +11,13 @@ const manualEntrySchema = z.object({
   transcription: z.string().trim().min(1).max(12_000),
 });
 
-type OwnerRequest = Express.Request & { userId?: string };
+type OwnerRequest = Request & { userId?: string };
 
-function actorId(request: unknown) {
-  return (request as { userId?: string }).userId ?? "";
+function actorId(request: OwnerRequest) {
+  return request.userId ?? "";
 }
 
-function mapError(error: unknown, response: Express.Response) {
+function mapError(error: unknown, response: Response) {
   if (error instanceof PaperNoteRecoveryError) {
     const status = error.code === "PAGE_NOT_FOUND" || error.code === "BATCH_NOT_FOUND" ? 404 : 409;
     response.status(status).json({ error: error.message, code: error.code });
