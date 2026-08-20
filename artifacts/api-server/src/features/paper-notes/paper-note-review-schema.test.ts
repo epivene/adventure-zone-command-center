@@ -55,6 +55,21 @@ describe("paper-note review validation", () => {
     }));
   });
 
+  it("requires confirmation when a structured event date still has an inferred page year", () => {
+    const input = review({
+      event: {
+        ...review().event,
+        eventDateText: "June 22",
+        startsOn: "2026-06-22",
+        pageYearConfirmed: false,
+      },
+    });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+      fieldPath: "event.pageYearConfirmed",
+      severity: "blocking",
+    }));
+  });
+
   it("blocks a current follow-up without a new absolute date", () => {
     const input = review({
       currentFollowUp: { enabled: true, kind: "call", dueOn: null, contactKey: null },
