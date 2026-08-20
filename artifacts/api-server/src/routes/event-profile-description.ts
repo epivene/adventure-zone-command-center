@@ -9,6 +9,13 @@ const descriptionSchema = z.object({
   description: z.union([z.string().max(5000), z.null()]).transform((value) => value?.trim() || null),
 }).strict();
 
+function rowsOf<T>(result: unknown): T[] {
+  if (result && typeof result === "object" && "rows" in result) {
+    return ((result as { rows?: T[] }).rows ?? []);
+  }
+  return Array.isArray(result) ? (result as T[]) : [];
+}
+
 async function ensureDescriptionColumn() {
   await db.execute(sql.raw("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS description text"));
 }
@@ -22,7 +29,7 @@ router.get("/event-profiles/:id/description", async (req, res): Promise<void> =>
   try {
     await ensureDescriptionColumn();
     const result = await db.execute(sql`select description from organizations where id = ${id}::uuid limit 1`);
-    const row = (result as any).rows?.[0];
+    const row = rowsOf<{ description: string | null }>(result)[0];
     if (!row) {
       res.status(404).json({ error: "Profile not found." });
       return;
@@ -38,8 +45,12 @@ router.patch("/event-profiles/:id/description", async (req, res): Promise<void> 
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const parsedId = uuid.safeParse(id);
   const parsed = descriptionSchema.safeParse(req.body);
-  if (!parsedId.success || !parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error?.issues[0]?.message ?? "Review the event description." });
+  if (!parsedId.success) {
+    res.status(400).json({ ok: false, error: "Invalid profile ID." });
+    return;
+  }
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Review the event description." });
     return;
   }
   try {
@@ -50,7 +61,7 @@ router.patch("/event-profiles/:id/description", async (req, res): Promise<void> 
       where id = ${id}::uuid
       returning id
     `);
-    if (!(result as any).rows?.[0]) {
+    if (!rowsOf<{ id: string }>(result)[0]) {
       res.status(404).json({ ok: false, error: "Profile not found." });
       return;
     }
