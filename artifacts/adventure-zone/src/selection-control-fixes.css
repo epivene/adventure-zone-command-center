@@ -1,0 +1,16 @@
+/*
+ * Selection controls must not inherit the app's text-input sizing.
+ * index.css intentionally gives text fields a 44px minimum height, 100% width,
+ * and internal padding; those same rules make native checkboxes/radios balloon
+ * inside flex/grid rows and can squeeze the row label into a tiny column.
+ */
+input[type='checkbox'],
+input[type='radio'] {
+  min-height: 1rem;
+  width: 1rem;
+  height: 1rem;
+  max-width: 1rem;
+  padding: 0;
+  flex: 0 0 1rem;
+  box-sizing: border-box;
+}
