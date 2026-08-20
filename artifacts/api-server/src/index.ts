@@ -69,6 +69,12 @@ const appliedMigrations = await runStartupStep(
         "Act review migrations are already running elsewhere; startup will continue",
       );
     },
+    onLockTimeout: () => {
+      logger.warn(
+        { startupStep: "act review migrations", errorCode: "55P03" },
+        "Act review migrations deferred due to database lock; startup will continue",
+      );
+    },
   }),
 );
 if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
