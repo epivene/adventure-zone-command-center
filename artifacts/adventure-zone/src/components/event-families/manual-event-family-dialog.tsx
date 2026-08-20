@@ -107,40 +107,42 @@ export function ManualEventFamilyDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="bg-white text-slate-950 shadow-2xl sm:rounded-2xl">
         <DialogHeader>
           <DialogTitle>{seedProfileId ? "Add to Event Family" : "Create Event Family"}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-slate-600">
             Event families group related event profiles, like the same festival or holiday event in multiple cities.
           </DialogDescription>
         </DialogHeader>
 
         {seedProfileId ? (
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
-            <button className={mode === "existing" ? "rounded-lg bg-white px-3 py-2 text-sm font-bold shadow-sm" : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-600"} onClick={() => { setMode("existing"); setError(null); }} type="button">Add to existing family</button>
-            <button className={mode === "new" ? "rounded-lg bg-white px-3 py-2 text-sm font-bold shadow-sm" : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-600"} onClick={() => { setMode("new"); setError(null); }} type="button">Create new family</button>
+            <button className={mode === "existing" ? "rounded-lg bg-white px-3 py-2 text-sm font-bold text-slate-950 shadow-sm" : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-600"} onClick={() => { setMode("existing"); setError(null); }} type="button">Add to existing family</button>
+            <button className={mode === "new" ? "rounded-lg bg-white px-3 py-2 text-sm font-bold text-slate-950 shadow-sm" : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-600"} onClick={() => { setMode("new"); setError(null); }} type="button">Create new family</button>
           </div>
         ) : null}
 
         {mode === "existing" && seedProfileId ? (
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
               Event family
-              <select disabled={loadingFamilies || saving} onChange={(event) => setFamilyId(event.currentTarget.value)} value={familyId}>
+              <select className="bg-white text-slate-950" disabled={loadingFamilies || saving} onChange={(event) => setFamilyId(event.currentTarget.value)} value={familyId}>
                 <option value="">Choose a family…</option>
                 {families.map((family) => <option key={family.id} value={family.id}>{family.name}{typeof family.memberCount === "number" ? ` (${family.memberCount})` : ""}</option>)}
               </select>
             </label>
             {!loadingFamilies && families.length === 0 ? <p className="text-sm text-slate-500">No event families yet. Create a new family instead.</p> : null}
-            <button className="button-primary w-fit" disabled={!familyId || saving || loadingFamilies} onClick={() => void addToExisting()} type="button">
-              {saving ? "Adding…" : "Add to family"}
-            </button>
+            <div className="-mx-6 -mb-6 mt-2 flex justify-end border-t border-slate-200 bg-white px-6 py-4" data-testid="event-family-dialog-footer">
+              <button className="button-primary" disabled={!familyId || saving || loadingFamilies} onClick={() => void addToExisting()} type="button">
+                {saving ? "Adding…" : "Add to family"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid gap-4">
             <label className="grid gap-1 text-sm font-semibold text-slate-700">
               Family name
-              <input maxLength={160} onChange={(event) => setName(event.currentTarget.value)} placeholder="Example: Water Lantern Festival" value={name} />
+              <input className="bg-white text-slate-950" maxLength={160} onChange={(event) => setName(event.currentTarget.value)} placeholder="Example: Water Lantern Festival" value={name} />
             </label>
 
             {seedProfileId ? <p className="text-sm text-slate-600">This profile is already selected. Search for at least one more related profile.</p> : <p className="text-sm text-slate-600">Choose at least 2 related profiles.</p>}
@@ -153,13 +155,17 @@ export function ManualEventFamilyDialog({
               onSelectMany={(ids) => setSelectedIds((current) => [...new Set([...current, ...ids])])}
             />
 
-            <button className="button-primary w-fit" disabled={saving || !name.trim() || creationIds.length < 2} onClick={() => void createFamily()} type="button">
-              {saving ? "Creating…" : "Create event family"}
-            </button>
+            {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
+
+            <div className="-mx-6 -mb-6 mt-2 flex justify-end border-t border-slate-200 bg-white px-6 py-4" data-testid="event-family-dialog-footer">
+              <button className="button-primary" disabled={saving || !name.trim() || creationIds.length < 2} onClick={() => void createFamily()} type="button">
+                {saving ? "Creating…" : "Create event family"}
+              </button>
+            </div>
           </div>
         )}
 
-        {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
+        {mode === "existing" && error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
       </DialogContent>
     </Dialog>
   );

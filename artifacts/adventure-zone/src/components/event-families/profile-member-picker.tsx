@@ -92,10 +92,11 @@ export function ProfileMemberPicker({
           void search();
         }}
       >
-        <label className="grid min-w-0 flex-1 gap-1 text-sm font-semibold">
+        <label className="grid min-w-0 flex-1 gap-1 text-sm font-semibold text-slate-700">
           Search profiles
           <input
             aria-label="Search profiles"
+            className="bg-white text-slate-950"
             disabled={disabled}
             onChange={(event) => setQuery(event.currentTarget.value)}
             placeholder="Name, city, contact, phone, or email"
@@ -115,29 +116,29 @@ export function ProfileMemberPicker({
       ) : null}
 
       {!error && hasSearched ? (
-        <div className="max-h-64 overflow-y-auto rounded-lg border border-slate-200">
+        <div className="max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2">
           {results.length ? (
-            <ul className="divide-y divide-slate-100">
+            <ul className="grid gap-2">
               {results.map((candidate) => {
                 const label = membershipLabel(candidate);
                 const selected = selectedIds.has(candidate.id);
                 return (
                   <li key={candidate.id}>
                     <label className={label
-                      ? "flex cursor-not-allowed items-start gap-3 bg-slate-50 px-3 py-2 opacity-60"
+                      ? "flex cursor-not-allowed items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 opacity-60"
                       : selected
-                        ? "flex cursor-pointer items-start gap-3 bg-orange-50 px-3 py-2"
-                        : "flex cursor-pointer items-start gap-3 px-3 py-2 hover:bg-slate-50"}
+                        ? "flex cursor-pointer items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-3 py-3"
+                        : "flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white px-3 py-3 hover:border-orange-200 hover:bg-orange-50/40"}
                     >
                       <input
                         checked={selected}
-                        className="mt-1"
+                        className="mt-1 size-5 shrink-0"
                         disabled={disabled || Boolean(label)}
                         onChange={() => toggleCandidate(candidate)}
                         type="checkbox"
                       />
                       <span className="grid min-w-0 flex-1 gap-0.5">
-                        <span className="font-semibold">{candidate.name}</span>
+                        <span className="font-semibold text-slate-950">{candidate.name}</span>
                         <span className="text-sm text-slate-600">
                           {[candidate.city, candidate.region].filter(Boolean).join(", ") || "Location not set"}
                         </span>
