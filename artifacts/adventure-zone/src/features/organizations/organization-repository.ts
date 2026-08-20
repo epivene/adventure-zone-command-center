@@ -22,6 +22,13 @@ export type OrganizationListRecord = {
   matchedLocation: { id: string; label: string; city: string | null; region: string | null } | null;
   eventFamilyId?: string | null;
   parentContext?: ProfileParentContext;
+  phone?: string | null;
+  email?: string | null;
+  website?: string | null;
+  placeType?: string | null;
+  profileImageDataUrl?: string | null;
+  ratingAverage?: number | null;
+  ratingCount?: number;
 };
 
 export type OrganizationListPage = {

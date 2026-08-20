@@ -1,4 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import {
@@ -58,6 +59,51 @@ const addProfileInputSchema = z.object({
   label: z.string().trim().min(1).max(240).optional(),
 });
 
+type ProfileCardDetails = {
+  id: string;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  placeType: string | null;
+  profileImageDataUrl: string | null;
+  ratingAverage: number | null;
+  ratingCount: number;
+};
+
+async function loadProfileCardDetails(ids: string[]): Promise<Map<string, ProfileCardDetails>> {
+  if (!ids.length) return new Map();
+  try {
+    const result = await db.execute(sql`
+      select
+        o.id,
+        o.phone,
+        o.email,
+        o.website,
+        o.place_type as "placeType",
+        o.profile_image_data_url as "profileImageDataUrl",
+        avg(w.rating_stars)::float as "ratingAverage",
+        count(w.rating_stars)::int as "ratingCount"
+      from organizations o
+      left join bookings b on b.organization_id = o.id
+      left join event_wrap_ups w on w.booking_id = b.id and w.rating_stars is not null
+      where o.id = any(${ids}::uuid[])
+      group by o.id, o.phone, o.email, o.website, o.place_type, o.profile_image_data_url
+    `);
+    return new Map(((result as any).rows ?? []).map((row: any) => [row.id, {
+      id: row.id,
+      phone: row.phone ?? null,
+      email: row.email ?? null,
+      website: row.website ?? null,
+      placeType: row.placeType ?? null,
+      profileImageDataUrl: row.profileImageDataUrl ?? null,
+      ratingAverage: row.ratingAverage == null ? null : Number(row.ratingAverage),
+      ratingCount: Number(row.ratingCount ?? 0),
+    }]));
+  } catch {
+    return new Map();
+  }
+}
+
 router.get("/organizations", async (req, res): Promise<void> => {
   const query = organizationListQuerySchema.parse({
     q: req.query.q ?? undefined,
@@ -79,8 +125,24 @@ router.get("/organizations", async (req, res): Promise<void> => {
   });
   try {
     const organizationPage = await orgRepo().listOrganizations(query);
+    const cardDetails = await loadProfileCardDetails(organizationPage.records.map((record) => record.id));
+    const enrichedPage = {
+      ...organizationPage,
+      records: organizationPage.records.map((record) => ({
+        ...record,
+        ...(cardDetails.get(record.id) ?? {
+          phone: null,
+          email: null,
+          website: null,
+          placeType: null,
+          profileImageDataUrl: null,
+          ratingAverage: null,
+          ratingCount: 0,
+        }),
+      })),
+    };
     const [{ organizations, families }, travelLegs] = await Promise.all([
-      attachEventFamiliesToOrganizationPage(db, query, organizationPage),
+      attachEventFamiliesToOrganizationPage(db, query, enrichedPage),
       new DrizzleTravelLegRepository(db).listTravelLegs(),
     ]);
     res.json({ organizations, families, travelLegs });
@@ -90,7 +152,6 @@ router.get("/organizations", async (req, res): Promise<void> => {
   }
 });
 
-// Static sub-routes must come before /:id so Express doesn't match them as params
 router.get("/organizations/duplicates", async (req, res): Promise<void> => {
   try {
     const groups = await orgRepo().findDuplicates();
@@ -101,16 +162,9 @@ router.get("/organizations/duplicates", async (req, res): Promise<void> => {
   }
 });
 
-function organizationReviewError(
-  req: Request,
-  res: Response,
-  err: unknown,
-): void {
+function organizationReviewError(req: Request, res: Response, err: unknown): void {
   if (err instanceof z.ZodError) {
-    res.status(400).json({
-      ok: false,
-      error: err.issues[0]?.message ?? "Invalid input",
-    });
+    res.status(400).json({ ok: false, error: err.issues[0]?.message ?? "Invalid input" });
     return;
   }
   if (err instanceof OrganizationConflictError) {
@@ -118,10 +172,7 @@ function organizationReviewError(
     return;
   }
   req.log.error({ err }, "Failed to update organization review");
-  res.status(500).json({
-    ok: false,
-    error: "Could not update organization review",
-  });
+  res.status(500).json({ ok: false, error: "Could not update organization review" });
 }
 
 router.post("/organizations/family-review", async (req, res): Promise<void> => {
@@ -134,8 +185,6 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
   }
 });
 
-// Location CRUD routes nested under /organizations/:id/locations.
-// Must be registered before /:id to prevent Express matching "locations" as a param.
 router.use("/organizations/:id/locations", locationRoutes);
 
 router.post("/organizations/:id/add-profile", async (req, res): Promise<void> => {
@@ -146,11 +195,7 @@ router.post("/organizations/:id/add-profile", async (req, res): Promise<void> =>
     return;
   }
   try {
-    const result = await addProfileAsLocation(db, {
-      canonicalOrgId,
-      sourceOrgId: parsed.data.sourceOrgId,
-      label: parsed.data.label,
-    }, new Date());
+    const result = await addProfileAsLocation(db, { canonicalOrgId, sourceOrgId: parsed.data.sourceOrgId, label: parsed.data.label }, new Date());
     res.json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof OrganizationConflictError) {
@@ -165,13 +210,8 @@ router.post("/organizations/:id/add-profile", async (req, res): Promise<void> =>
 router.get("/organizations/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
-    // Check for consolidation redirect before loading the full summary.
     const redirect = await getConsolidationRedirect(db, id);
-    if (redirect) {
-      res.json({ consolidatedInto: redirect });
-      return;
-    }
-
+    if (redirect) { res.json({ consolidatedInto: redirect }); return; }
     const locRepo = new DrizzleLocationRepository(db);
     const [organization, timelinePage, orgLocations, orgLocationRollup] = await Promise.all([
       orgRepo().getOrganizationSummary(id),
@@ -180,13 +220,7 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
       locRepo.rollupForOrganization(id),
     ]);
     if (!organization) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({
-      organization,
-      timeline: timelinePage.items,
-      timelineNextPage: timelinePage.nextPage,
-      orgLocations,
-      orgLocationRollup,
-    });
+    res.json({ organization, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage, orgLocations, orgLocationRollup });
   } catch (err) {
     req.log.error({ err }, "Failed to get organization");
     res.status(500).json({ error: "Failed to get organization" });
@@ -195,29 +229,16 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
 
 router.post("/organizations/merge", async (req, res): Promise<void> => {
   const parsed = mergeInputSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
   const { primaryId, duplicateIds } = parsed.data;
-  if (duplicateIds.includes(primaryId)) {
-    res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" });
-    return;
-  }
+  if (duplicateIds.includes(primaryId)) { res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" }); return; }
   try {
-    // Do the same family/location safety check before moving dependent rows so
-    // a known conflict cannot partially prepare a merge that will be rejected.
-    await db.transaction((transaction) =>
-      assertOrganizationsMergeable(transaction, [primaryId, ...duplicateIds]),
-    );
+    await db.transaction((transaction) => assertOrganizationsMergeable(transaction, [primaryId, ...duplicateIds]));
     await prepareOrganizationMergeReferences(db, primaryId, duplicateIds);
     await orgRepo().mergeOrganizations(primaryId, duplicateIds);
     res.json({ ok: true });
   } catch (err) {
-    if (err instanceof OrganizationConflictError) {
-      res.status(409).json({ ok: false, error: err.message });
-      return;
-    }
+    if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
     req.log.error({ err }, "Failed to merge organizations");
     res.status(500).json({ ok: false, error: "Failed to merge organizations" });
   }
@@ -225,10 +246,7 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
 
 router.post("/organizations/last-resort", async (req, res): Promise<void> => {
   const parsed = setLastResortInputSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
   try {
     await setOrganizationLastResort(db, parsed.data, new Date());
     res.json({ ok: true });
@@ -238,8 +256,6 @@ router.post("/organizations/last-resort", async (req, res): Promise<void> => {
   }
 });
 
-// Consolidation
-
 const consolidationPreviewBodySchema = z.object({
   canonicalOrgId: z.string().uuid().nullable().default(null),
   proposedCanonicalName: z.string().trim().min(1).max(240).optional(),
@@ -248,19 +264,13 @@ const consolidationPreviewBodySchema = z.object({
 
 router.post("/organizations/consolidation-preview", async (req, res): Promise<void> => {
   const parsed = consolidationPreviewBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
   const input: ConsolidationPreviewInput = parsed.data;
   try {
     const preview = await buildConsolidationPreview(db, input);
     res.json({ ok: true, preview });
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Canonical organization not found")) {
-      res.status(404).json({ ok: false, error: err.message });
-      return;
-    }
+    if (err instanceof Error && err.message.startsWith("Canonical organization not found")) { res.status(404).json({ ok: false, error: err.message }); return; }
     req.log.error({ err }, "Failed to build consolidation preview");
     res.status(500).json({ ok: false, error: "Could not build consolidation preview" });
   }
@@ -273,33 +283,21 @@ const consolidationApplyBodySchema = z.object({
     website: z.string().trim().max(2048).nullable().optional(),
     phone: z.string().trim().max(80).nullable().optional(),
   }).optional(),
-  locationAssignments: z.array(z.object({
-    sourceOrgId: z.string().uuid(),
-    label: z.string().trim().min(1).max(240),
-  })).min(2).max(20).refine(
-    (assignments) => {
-      const ids = assignments.map((a) => a.sourceOrgId);
-      return new Set(ids).size === ids.length;
-    },
+  locationAssignments: z.array(z.object({ sourceOrgId: z.string().uuid(), label: z.string().trim().min(1).max(240) })).min(2).max(20).refine(
+    (assignments) => new Set(assignments.map((a) => a.sourceOrgId)).size === assignments.length,
     { message: "locationAssignments.sourceOrgId values must be unique" },
   ),
 });
 
 router.post("/organizations/consolidation-apply", async (req, res): Promise<void> => {
   const parsed = consolidationApplyBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
-    return;
-  }
+  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
   const input: ConsolidationApplyInput = parsed.data;
   try {
     const result = await applyConsolidation(db, input, new Date());
     res.json({ ok: true, ...result });
   } catch (err) {
-    if (err instanceof OrganizationConflictError) {
-      res.status(409).json({ ok: false, error: err.message });
-      return;
-    }
+    if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
     req.log.error({ err }, "Failed to apply consolidation");
     res.status(500).json({ ok: false, error: "Could not apply consolidation" });
   }
