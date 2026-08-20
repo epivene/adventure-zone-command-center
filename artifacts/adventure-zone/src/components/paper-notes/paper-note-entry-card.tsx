@@ -32,11 +32,13 @@ export function PaperNoteEntryCard({
   const [review, setReview] = useState(entry.review);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [actionBusy, setActionBusy] = useState(false);
+  const [manualMatches, setManualMatches] = useState<PaperNoteMatch[]>([]);
   const baseline = useRef(JSON.stringify(entry.review));
   const version = useRef(entry.reviewVersion);
 
   useEffect(() => {
     setReview(entry.review);
+    setManualMatches([]);
     baseline.current = JSON.stringify(entry.review);
     version.current = entry.reviewVersion;
     setSaveState("saved");
@@ -128,6 +130,14 @@ export function PaperNoteEntryCard({
       : contact);
   }
 
+  function rememberMatch(match: PaperNoteMatch) {
+    setManualMatches((current) => current.some((candidate) =>
+      candidate.organizationId === match.organizationId
+      && candidate.organizationLocationId === match.organizationLocationId)
+      ? current
+      : [...current, match]);
+  }
+
   function chooseExistingMatch(match: PaperNoteMatch) {
     setReview((current) => ({
       ...current,
@@ -200,11 +210,17 @@ export function PaperNoteEntryCard({
 
   const blocking = entry.validationIssues.filter((issue) => issue.severity === "blocking");
   const canApprove = entry.state === "ready" && saveState === "saved" && !blocking.length;
+  const allMatches = [
+    ...matches,
+    ...manualMatches.filter((manual) => !matches.some((suggested) =>
+      suggested.organizationId === manual.organizationId
+      && suggested.organizationLocationId === manual.organizationLocationId)),
+  ];
   const selectedOrganizationId = review.destination && "organizationId" in review.destination
     ? review.destination.organizationId
     : null;
   const selectedMatch = selectedOrganizationId
-    ? matches.find((match) => match.organizationId === selectedOrganizationId) ?? null
+    ? allMatches.find((match) => match.organizationId === selectedOrganizationId) ?? null
     : null;
   const existingDestination = review.destination?.mode === "existing_profile"
     || review.destination?.mode === "existing_profile_new_location";
@@ -322,11 +338,12 @@ export function PaperNoteEntryCard({
 
       <PaperNoteDestinationPicker
         review={review}
-        matches={matches}
+        matches={allMatches}
         onChooseExisting={chooseExistingMatch}
         onChooseNewLocation={chooseNewLocation}
         onChooseNewProfile={chooseNewProfile}
         onNewLocationChange={updateNewLocation}
+        onRememberMatch={rememberMatch}
       />
 
       <div className="mt-3">
