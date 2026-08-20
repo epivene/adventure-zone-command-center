@@ -9,10 +9,19 @@
 
 export const NOT_CONFIGURED_ERROR = "NO_AI_PROVIDER_CONFIGURED";
 
+export function imageTokenBudget(value?: number) {
+  return Math.max(256, Math.min(4096, value ?? 1200));
+}
+
 export type AiCompletionClient = {
   providerName: string;
   complete(prompt: string): Promise<string>;
-  completeImage?(input: { prompt: string; mimeType: string; base64: string }): Promise<string>;
+  completeImage?(input: {
+    prompt: string;
+    mimeType: string;
+    base64: string;
+    maxTokens?: number;
+  }): Promise<string>;
 };
 
 type AnthropicMessage = { content: Array<{ type: string; text?: string }> };
@@ -33,10 +42,10 @@ function anthropicClient(providerName: string, anthropic: AnthropicClient, model
       const block = msg.content[0];
       return block?.type === "text" ? block.text ?? "[]" : "[]";
     },
-    async completeImage({ prompt, mimeType, base64 }): Promise<string> {
+    async completeImage({ prompt, mimeType, base64, maxTokens }): Promise<string> {
       const msg = await anthropic.messages.create({
         model,
-        max_tokens: 1200,
+        max_tokens: imageTokenBudget(maxTokens),
         messages: [{
           role: "user",
           content: [
@@ -83,10 +92,10 @@ export async function createAiClient(): Promise<AiCompletionClient> {
         });
         return response.choices[0]?.message?.content ?? "[]";
       },
-      async completeImage({ prompt, mimeType, base64 }): Promise<string> {
+      async completeImage({ prompt, mimeType, base64, maxTokens }): Promise<string> {
         const response = await client.chat.completions.create({
           model: "gpt-4o-mini",
-          max_tokens: 1200,
+          max_tokens: imageTokenBudget(maxTokens),
           messages: [{
             role: "user",
             content: [
