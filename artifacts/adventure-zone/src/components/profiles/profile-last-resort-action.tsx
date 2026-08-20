@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { setLastResortAction } from "@/actions/organizations";
 import {
@@ -22,6 +22,17 @@ async function loadLastResortState(profileId: string): Promise<ProfileLastResort
     lastResort: Boolean(place.lastResort),
     lastResortReason: typeof place.lastResortReason === "string" ? place.lastResortReason : null,
   };
+}
+
+export function useProfileLastResortState(profileId: string) {
+  const [state, setState] = useState<ProfileLastResortState | null>(null);
+  const refresh = useCallback(async () => {
+    const next = await loadLastResortState(profileId);
+    setState(next);
+    return next;
+  }, [profileId]);
+  useEffect(() => { void refresh().catch(() => undefined); }, [refresh]);
+  return { state, refresh };
 }
 
 export function ProfileLastResortDialog({
@@ -105,37 +116,25 @@ export function ProfileLastResortDialog({
           <DialogTitle>{isLastResort ? "Remove Last Resort" : "Mark Last Resort"}</DialogTitle>
           <DialogDescription>
             {isLastResort
-              ? "This profile will return to normal follow-up." 
+              ? "This profile will return to normal follow-up."
               : "Last Resort profiles stay out of routine follow-up until you remove the status."}
           </DialogDescription>
         </DialogHeader>
-
         {loading ? <p className="text-sm text-slate-500">Loading status…</p> : null}
         {!loading && state ? (
           <div className="grid gap-4">
             {isLastResort ? (
-              <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">
-                Current reason: {state.lastResortReason || "Not recorded"}
-              </p>
+              <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700">Current reason: {state.lastResortReason || "Not recorded"}</p>
             ) : (
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Last Resort reason
-                <textarea
-                  className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
-                  maxLength={2000}
-                  onChange={(event) => setReason(event.target.value)}
-                  value={reason}
-                />
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">Last Resort reason
+                <textarea className="min-h-24 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" maxLength={2000} onChange={(event) => setReason(event.target.value)} value={reason} />
               </label>
             )}
-
             <label className="flex items-start gap-2 text-sm font-semibold text-slate-700">
               <input checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} type="checkbox" />
               <span>{isLastResort ? "I confirm this profile should be removed from Last Resort." : "I confirm this profile should be marked Last Resort."}</span>
             </label>
-
             {error ? <p className="text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
-
             <div className="flex flex-wrap justify-end gap-2">
               <button className="button-secondary" disabled={saving} onClick={() => onOpenChange(false)} type="button">Cancel</button>
               <button className={isLastResort ? "button-secondary" : "button-primary"} disabled={saving} onClick={() => void save()} type="button">
@@ -152,10 +151,12 @@ export function ProfileLastResortDialog({
 
 export function ProfileLastResortButton({ profileId }: { profileId: string }) {
   const [open, setOpen] = useState(false);
+  const { state, refresh } = useProfileLastResortState(profileId);
+  const label = state?.lastResort ? "Remove Last Resort" : "Mark Last Resort";
   return (
     <>
-      <button className="button-secondary" onClick={() => setOpen(true)} type="button">Last Resort</button>
-      <ProfileLastResortDialog onOpenChange={setOpen} open={open} profileId={profileId} />
+      <button className="button-secondary" onClick={() => setOpen(true)} type="button">{label}</button>
+      <ProfileLastResortDialog onChanged={refresh} onOpenChange={setOpen} open={open} profileId={profileId} />
     </>
   );
 }
