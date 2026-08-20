@@ -47,6 +47,7 @@ export function PaperNoteContactEditor({
     onContactChange({
       mode,
       selectedContactId: mode === "existing_contact" ? contact.selectedContactId : null,
+      primary: mode === "note_only" ? false : contact.primary,
     });
     onConflictChange(namePath, null);
     onConflictChange(emailPath, null);
@@ -83,6 +84,19 @@ export function PaperNoteContactEditor({
           <option value="note_only">History only — do not create/change a contact</option>
         </select>
       </label>
+
+      {contact.mode !== "note_only" ? (
+        <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700">
+          <input
+            aria-label="Primary contact for this paper entry"
+            type="checkbox"
+            checked={contact.primary}
+            onChange={(event) => onContactChange({ primary: event.target.checked })}
+          />
+          Primary contact for this paper entry
+          <span className="font-normal text-slate-500">Used for the imported history and as the default for a new follow-up.</span>
+        </label>
+      ) : null}
 
       {contact.mode === "existing_contact" ? (
         <label className="grid gap-1 text-sm font-semibold text-slate-700">
