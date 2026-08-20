@@ -36,79 +36,6 @@ if (!rawPort) throw new Error("PORT environment variable is required but was not
 const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${rawPort}"`);
 
-const staleLockRecovery = await runStartupStep(
-  "stale database lock recovery",
-  recoverStaleDatabaseLockConvoys,
-);
-if (staleLockRecovery.terminated.length > 0) {
-  logger.warn(
-    {
-      terminatedBlockers: staleLockRecovery.terminated,
-      recoveryPasses: staleLockRecovery.passes,
-    },
-    "Terminated stale database sessions that were blocking the CRM",
-  );
-}
-
-await runStartupStep("booking probability schema", ensureBookingProbabilitySchema);
-await runStartupStep("package intelligence schema", ensurePackageIntelligenceSchema);
-const assistantSchemaApplied = await runStartupStep(
-  "booking assistant schema",
-  ensureBookingAssistantSchema,
-);
-const managerAssistantSchemaApplied = await runStartupStep(
-  "manager assistant schema",
-  ensureManagerAssistantSchema,
-);
-const appliedMigrations = await runStartupStep(
-  "act review migrations",
-  () => runActReviewMigrationsAtStartup({
-    onLockUnavailable: () => {
-      logger.warn(
-        { startupStep: "act review migrations" },
-        "Act review migrations are already running elsewhere; startup will continue",
-      );
-    },
-    onLockTimeout: () => {
-      logger.warn(
-        { startupStep: "act review migrations", errorCode: "55P03" },
-        "Act review migrations deferred due to database lock; startup will continue",
-      );
-    },
-  }),
-);
-if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
-if (managerAssistantSchemaApplied) appliedMigrations.push("046_manager_assistant_questions.sql");
-await runStartupStep("event family schema", ensureEventFamilySchema);
-await runStartupStep("activity delete schema", ensureActivityDeleteSchema);
-await runStartupStep("crew worker leg membership schema", ensureCrewWorkerLegMembershipSchema);
-await runStartupStep("event leg lifecycle schema", ensureEventLegLifecycleSchema);
-await runStartupStep("booking assistant business knowledge seed", () =>
-  new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
-    "system:booking-assistant-seed",
-  ),
-);
-logger.info(
-  {
-    appliedMigrations,
-    releaseCommit: process.env["RENDER_GIT_COMMIT"] ?? "local",
-  },
-  appliedMigrations.length > 0
-    ? "Database migrations applied"
-    : "Database schema is current",
-);
-
-const importedLocationFamilies = await runStartupStep(
-  "imported location family consolidation",
-  () => autoConsolidateImportedLocationFamilies(db, new Date()),
-);
-logger.info(
-  importedLocationFamilies,
-  importedLocationFamilies.families > 0
-    ? "Imported organization profiles consolidated into locations"
-    : "No imported location families need consolidation",
-);
-
 const leadScoutLoop = new LeadScoutWorkerLoop({
   worker: new LeadScoutWorker(),
   workerId: `lead-scout-${randomUUID()}`,
@@ -120,31 +47,16 @@ let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let shutdownRequested = false;
 
-const server = app.listen(port, async () => {
+const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
-  if (!shutdownRequested) leadScoutLoop.start();
-
-  if (!shouldStartActBackgroundWorkers()) {
-    logger.info("ACT background extraction/recovery workers are disabled");
-    return;
-  }
-
-  try {
-    extractionRuntimePromise = createActExtractionRuntime();
-    const runtime = await extractionRuntimePromise;
-    extractionRuntime = runtime;
-    if (!shutdownRequested) runtime.start();
-  } catch (err) {
-    logger.error(
-      {
-        errorCode:
-          err && typeof err === "object" && "code" in err
-            ? String((err as { code?: unknown }).code)
-            : "unknown",
-      },
-      "Act extraction worker could not be started",
-    );
-  }
+  void runPostListenMaintenance()
+    .then(() => startBackgroundWorkers())
+    .catch((err) => {
+      logger.error(
+        { err },
+        "Post-listen database maintenance failed; server remains available",
+      );
+    });
 });
 
 server.on("error", (err) => {
@@ -179,3 +91,105 @@ process.once("SIGTERM", () => {
   shutdownRequested = true;
   void shutdown();
 });
+
+async function runPostListenMaintenance() {
+  const staleLockRecovery = await runStartupStep(
+    "stale database lock recovery",
+    recoverStaleDatabaseLockConvoys,
+  );
+  if (staleLockRecovery.terminated.length > 0) {
+    logger.warn(
+      {
+        terminatedBlockers: staleLockRecovery.terminated,
+        recoveryPasses: staleLockRecovery.passes,
+      },
+      "Terminated stale database sessions that were blocking the CRM",
+    );
+  }
+
+  await runStartupStep("booking probability schema", ensureBookingProbabilitySchema);
+  await runStartupStep("package intelligence schema", ensurePackageIntelligenceSchema);
+  const assistantSchemaApplied = await runStartupStep(
+    "booking assistant schema",
+    ensureBookingAssistantSchema,
+  );
+  const managerAssistantSchemaApplied = await runStartupStep(
+    "manager assistant schema",
+    ensureManagerAssistantSchema,
+  );
+  const appliedMigrations = await runStartupStep(
+    "act review migrations",
+    () => runActReviewMigrationsAtStartup({
+      onLockUnavailable: () => {
+        logger.warn(
+          { startupStep: "act review migrations" },
+          "Act review migrations are already running elsewhere; startup will continue",
+        );
+      },
+      onLockTimeout: () => {
+        logger.warn(
+          { startupStep: "act review migrations", errorCode: "55P03" },
+          "Act review migrations deferred due to database lock; startup will continue",
+        );
+      },
+    }),
+  );
+  if (assistantSchemaApplied) appliedMigrations.push("045_booking_assistant.sql");
+  if (managerAssistantSchemaApplied) appliedMigrations.push("046_manager_assistant_questions.sql");
+  await runStartupStep("event family schema", ensureEventFamilySchema);
+  await runStartupStep("activity delete schema", ensureActivityDeleteSchema);
+  await runStartupStep("crew worker leg membership schema", ensureCrewWorkerLegMembershipSchema);
+  await runStartupStep("event leg lifecycle schema", ensureEventLegLifecycleSchema);
+  await runStartupStep("booking assistant business knowledge seed", () =>
+    new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
+      "system:booking-assistant-seed",
+    ),
+  );
+  logger.info(
+    {
+      appliedMigrations,
+      releaseCommit: process.env["RENDER_GIT_COMMIT"] ?? "local",
+    },
+    appliedMigrations.length > 0
+      ? "Database migrations applied"
+      : "Database schema is current",
+  );
+
+  const importedLocationFamilies = await runStartupStep(
+    "imported location family consolidation",
+    () => autoConsolidateImportedLocationFamilies(db, new Date()),
+  );
+  logger.info(
+    importedLocationFamilies,
+    importedLocationFamilies.families > 0
+      ? "Imported organization profiles consolidated into locations"
+      : "No imported location families need consolidation",
+  );
+}
+
+async function startBackgroundWorkers() {
+  if (shutdownRequested) return;
+  leadScoutLoop.start();
+
+  if (!shouldStartActBackgroundWorkers()) {
+    logger.info("ACT background extraction/recovery workers are disabled");
+    return;
+  }
+
+  try {
+    extractionRuntimePromise = createActExtractionRuntime();
+    const runtime = await extractionRuntimePromise;
+    extractionRuntime = runtime;
+    if (!shutdownRequested) runtime.start();
+  } catch (err) {
+    logger.error(
+      {
+        errorCode:
+          err && typeof err === "object" && "code" in err
+            ? String((err as { code?: unknown }).code)
+            : "unknown",
+      },
+      "Act extraction worker could not be started",
+    );
+  }
+}
