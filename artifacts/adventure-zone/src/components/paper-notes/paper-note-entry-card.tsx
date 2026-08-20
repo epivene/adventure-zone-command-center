@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, SkipForward } from "lucide-react";
 
 import { PaperNoteContactEditor } from "./paper-note-contact-editor";
+import { PaperNoteCurrentFollowUpEditor } from "./paper-note-current-follow-up-editor";
 import { PaperNoteDestinationPicker } from "./paper-note-destination-picker";
 import { PaperNoteEventDateReview } from "./paper-note-event-date-review";
 import { PaperNoteGeneralNotesEditor } from "./paper-note-general-notes-editor";
@@ -320,10 +321,14 @@ export function PaperNoteEntryCard({
 
       {review.destination ? <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">Destination: {review.destination.mode === "new_profile" ? "Create new profile" : review.destination.mode === "existing_profile" ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}` : review.destination.mode === "existing_profile_new_location" ? `New location under${selectedMatch ? ` ${selectedMatch.name}` : " existing profile"}` : review.destination.mode.replaceAll("_", " ")}</p> : null}
 
-      <section className="mt-6 border-t border-slate-200 pt-5">
-        <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={review.currentFollowUp.enabled} onChange={(event) => setReview((current) => ({ ...current, currentFollowUp: { ...current.currentFollowUp, enabled: event.target.checked, dueOn: event.target.checked ? current.currentFollowUp.dueOn : null } }))} />Create a current follow-up</label>
-        {review.currentFollowUp.enabled ? <label className="mt-2 grid gap-1 text-sm font-semibold text-slate-700">New current follow-up date<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" type="date" value={review.currentFollowUp.dueOn ?? ""} onChange={(event) => setReview((current) => ({ ...current, currentFollowUp: { ...current.currentFollowUp, dueOn: event.target.value || null } }))} /></label> : null}
-      </section>
+      <PaperNoteCurrentFollowUpEditor
+        followUp={review.currentFollowUp}
+        contacts={review.contacts}
+        onChange={(patch) => setReview((current) => ({
+          ...current,
+          currentFollowUp: { ...current.currentFollowUp, ...patch },
+        }))}
+      />
 
       <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
         {entry.state === "approved" ? <button className="min-h-12 rounded-xl border border-slate-300 px-4 py-3 font-bold text-slate-800 disabled:opacity-50" disabled={actionBusy || saveState === "saving"} onClick={() => void stateAction(onUnapprove)} type="button">Unapprove</button> : <button className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-orange-600 px-4 py-3 font-bold text-white disabled:opacity-50" disabled={!canApprove || actionBusy} onClick={() => void stateAction(onApprove)} type="button"><Check className="h-4 w-4" /> Approve entry</button>}
