@@ -13,6 +13,7 @@ import { ensureBookingProbabilitySchema } from "./features/bookings/booking-prob
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
+import { ensureCallScriptSettingsSchema } from "./features/calls/call-script-settings";
 import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
 import {
   LeadScoutWorkerLoop,
@@ -117,6 +118,7 @@ async function runPostListenMaintenance() {
     "manager assistant schema",
     ensureManagerAssistantSchema,
   );
+  await runStartupStep("call script settings schema", () => ensureCallScriptSettingsSchema(db));
   const appliedMigrations = await runStartupStep(
     "act review migrations",
     () => runActReviewMigrationsAtStartup({

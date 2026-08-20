@@ -46,6 +46,7 @@ const adminMenuGroups: MenuGroup[] = [
   {
     label: "Settings",
     items: [
+      { href: "/settings/call-scripts", label: "Call scripts" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
       { href: "/settings", label: "Settings" },
     ],

@@ -9,6 +9,7 @@ import {
   DrizzleCallWorkspaceContextRepository,
   activityTimelineParent,
 } from "@/features/calls/call-workspace-context";
+import { DrizzleCallScriptSettingsRepository } from "@/features/calls/call-script-settings";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { loadCallWorkspace } from "@/features/calls/call-workspace-query";
@@ -117,7 +118,10 @@ router.get("/calls/workspace", requireAssistedCalling, async (req, res): Promise
       return;
     }
     const activityParent = activityTimelineParent(result.value.context);
-    const timelinePage = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline(activityParent);
+    const [timelinePage, guidedScriptOverrides] = await Promise.all([
+      new ActivityService(new DrizzleActivityRepository(db)).listTimeline(activityParent),
+      new DrizzleCallScriptSettingsRepository(db).listOverrides(),
+    ]);
     const briefing = {
       ...result.value.briefing,
       historySummary: recentHistorySummary(timelinePage.items),
@@ -128,6 +132,7 @@ router.get("/calls/workspace", requireAssistedCalling, async (req, res): Promise
       activityParent,
       timeline: timelinePage.items,
       timelineNextPage: timelinePage.nextPage,
+      guidedScriptOverrides,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load call workspace");

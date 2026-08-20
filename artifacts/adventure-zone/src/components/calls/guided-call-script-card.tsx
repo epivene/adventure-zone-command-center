@@ -3,10 +3,11 @@
 import type { GuidedCallScriptKind } from "@/features/calls/call-types";
 import {
   GUIDED_CALL_SCRIPT_KINDS,
-  getGuidedCallScript,
+  getConfiguredGuidedCallScript,
   renderGuidedText,
   type GuidedCallRenderContext,
 } from "@/features/calls/guided-call-scripts";
+import { useGuidedCallScriptOverrides } from "@/features/calls/guided-call-script-settings-context";
 import type { GuidedCallState } from "@/features/calls/guided-call-state";
 
 const labels: Record<GuidedCallScriptKind, string> = {
@@ -31,7 +32,8 @@ export function GuidedCallScriptCard({
   onChooseResponse: (responseId: string) => void;
   onChangeKind: (kind: GuidedCallScriptKind) => void;
 }) {
-  const script = getGuidedCallScript(kind);
+  const overrides = useGuidedCallScriptOverrides();
+  const script = getConfiguredGuidedCallScript(kind, overrides);
   const node = script.nodes[state.nodeId] ?? script.nodes[script.startNodeId];
 
   return (

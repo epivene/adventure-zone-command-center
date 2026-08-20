@@ -10,6 +10,10 @@ import {
 } from "@/features/resources/resource-intelligence-settings";
 import { ResourceSettingsError } from "@/features/resources/resource-repository";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
+import {
+  DrizzleCallScriptSettingsRepository,
+  callScriptOverrideInputSchema,
+} from "@/features/calls/call-script-settings";
 
 const router: IRouter = Router();
 
@@ -29,6 +33,57 @@ router.get("/settings/packages-resources", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to load settings");
     res.status(500).json({ error: "Failed to load settings" });
+  }
+});
+
+router.get("/settings/call-scripts", async (req, res): Promise<void> => {
+  try {
+    const overrides = await new DrizzleCallScriptSettingsRepository(db).listOverrides();
+    res.json({ overrides });
+  } catch (err) {
+    req.log.error({ err }, "Failed to load call script settings");
+    res.status(500).json({ error: "Failed to load call scripts" });
+  }
+});
+
+router.put("/settings/call-scripts/:scriptKind/:nodeId", async (req, res): Promise<void> => {
+  const parsed = callScriptOverrideInputSchema.safeParse({
+    scriptKind: req.params.scriptKind,
+    nodeId: req.params.nodeId,
+    sayText: req.body?.sayText,
+    coachText: req.body?.coachText ?? null,
+  });
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Review this script step." });
+    return;
+  }
+
+  const actorId = String((req as any).userId ?? "owner");
+  try {
+    const record = await new DrizzleCallScriptSettingsRepository(db).upsertOverride(parsed.data, actorId);
+    res.json({ ok: true, record });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save call script setting");
+    res.status(500).json({ ok: false, error: "Could not save call script" });
+  }
+});
+
+router.delete("/settings/call-scripts/:scriptKind/:nodeId", async (req, res): Promise<void> => {
+  const parsed = callScriptOverrideInputSchema.pick({ scriptKind: true, nodeId: true }).safeParse({
+    scriptKind: req.params.scriptKind,
+    nodeId: req.params.nodeId,
+  });
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: "Unknown call script step." });
+    return;
+  }
+
+  try {
+    await new DrizzleCallScriptSettingsRepository(db).deleteOverride(parsed.data.scriptKind, parsed.data.nodeId);
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to reset call script setting");
+    res.status(500).json({ ok: false, error: "Could not reset call script" });
   }
 });
 
