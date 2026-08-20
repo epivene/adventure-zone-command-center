@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { activities } from "@/db/schema";
@@ -33,7 +33,6 @@ export async function enrichPaperNoteTimeline(
   items: ActivityTimelineItem[],
 ): Promise<ActivityTimelineItem[]> {
   if (!items.length) return items;
-  const ids = items.map((item) => item.id);
   const rows = await database
     .select({
       id: activities.id,
@@ -41,12 +40,21 @@ export async function enrichPaperNoteTimeline(
       occurredAt: activities.occurredAt,
     })
     .from(activities)
-    .where(inArray(activities.id, ids));
-  const paperRows = rows.filter((row) => {
-    const item = items.find((candidate) => candidate.id === row.id);
-    return Boolean(item?.body.startsWith("Imported from paper notes"));
-  });
-  return decoratePaperNoteTimeline(items, paperRows);
+    .where(
+      inArray(
+        activities.id,
+        items.map((item) => item.id),
+      ),
+    );
+  const sourceRows = await database
+    .select({ id: activities.id })
+    .from(activities)
+    .where(eq(activities.sourceType, "paper_note"));
+  const paperIds = new Set(sourceRows.map((row) => row.id));
+  return decoratePaperNoteTimeline(
+    items,
+    rows.filter((row) => paperIds.has(row.id)),
+  );
 }
 
 export async function isPaperNoteActivity(
@@ -54,9 +62,9 @@ export async function isPaperNoteActivity(
   activityId: string,
 ): Promise<boolean> {
   const [row] = await database
-    .select({ sourceType: activities.sourceType, body: activities.body })
+    .select({ sourceType: activities.sourceType })
     .from(activities)
     .where(inArray(activities.id, [activityId]))
     .limit(1);
-  return row?.sourceType === "paper_note" || row?.body.startsWith("Imported from paper notes") === true;
+  return row?.sourceType === "paper_note";
 }
