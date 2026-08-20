@@ -48,7 +48,7 @@ export function PaperNoteEventDateReview({
           {!event.pageYearConfirmed ? (
             <label className="flex min-h-11 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
               <input
-                aria-label="Confirm event year from paper context"
+                aria-label="Confirm event year from paper/context"
                 className="mt-1"
                 type="checkbox"
                 checked={event.pageYearConfirmed}
