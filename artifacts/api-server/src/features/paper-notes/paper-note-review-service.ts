@@ -1,3 +1,4 @@
+import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
 import type { PaperNoteEntryState } from "./paper-note-types";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import {
@@ -15,6 +16,15 @@ export type PaperNoteReviewMutationView = {
   approvedAt: string | null;
 };
 
+export type PaperNoteReviewEntryDetails = {
+  review: PaperNoteReviewDraft;
+  validationIssues: PaperNoteReviewIssue[];
+  state: PaperNoteEntryState;
+  reviewVersion: number;
+  extraction: PaperNoteExtraction;
+  approvedAt: string | null;
+};
+
 export interface PaperNoteReviewStore {
   saveReview(input: {
     actorId: string;
@@ -26,11 +36,7 @@ export interface PaperNoteReviewStore {
     approvedAt: null;
     now: Date;
   }): Promise<PaperNoteReviewMutationView>;
-  getForReview(actorId: string, entryId: string): Promise<{
-    review: PaperNoteReviewDraft;
-    validationIssues: PaperNoteReviewIssue[];
-    state?: PaperNoteEntryState;
-  } | null>;
+  getForReview(actorId: string, entryId: string): Promise<PaperNoteReviewEntryDetails | null>;
   approve(input: {
     actorId: string;
     entryId: string;
@@ -78,6 +84,17 @@ function validateDraft(review: PaperNoteReviewDraft): PaperNoteReviewIssue[] {
 
 export class PaperNoteReviewService {
   constructor(private readonly store: PaperNoteReviewStore) {}
+
+  async getEntry(actorId: string, entryId: string) {
+    const current = await this.store.getForReview(actorId, entryId);
+    if (!current) {
+      throw new PaperNoteReviewServiceError(
+        "ENTRY_NOT_FOUND",
+        "Paper-note entry was not found.",
+      );
+    }
+    return { id: entryId, ...current };
+  }
 
   async updateEntry(input: {
     actorId: string;
