@@ -28,6 +28,7 @@ import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } fr
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/navigation/app-shell";
 import { OfflineBanner } from "@/components/connectivity/offline-banner";
+import { Toaster } from "@/components/ui/toaster";
 import { AssistantContextProvider } from "@/features/assistant/assistant-context";
 
 import TodayPage from "@/pages/TodayPage";
@@ -272,6 +273,7 @@ export default function App() {
         <AuthProvider>
           <OfflineBanner />
           <AppRoutes />
+          <Toaster />
         </AuthProvider>
       </WouterRouter>
     </QueryClientProvider>

@@ -29,11 +29,17 @@ describe("ProfileDetailSheet Option C", () => {
     expect(source).not.toContain('detailSection === "details"');
   });
 
-  it("does not repeat the recent note in the notes drawer", () => {
-    expect(source).toContain("const olderNotes = meaningfulNotes.slice(1)");
-    expect(source).toContain('detailRow("Note history", olderNotes.length');
-    expect(source).toContain("olderNotes.map");
-    expect(source).not.toContain('detailRow("Notes", meaningfulNotes.length');
+  it("keeps only the recent-note preview instead of redundant note-history and event drawers", () => {
+    expect(source).toContain("Recent note");
+    expect(source).not.toContain('detailRow("Note history"');
+    expect(source).not.toContain('detailRow("Events"');
+    expect(source).not.toContain("olderNotes.map");
+  });
+
+  it("shows a newly saved note immediately while the server refresh catches up", () => {
+    expect(source).toContain("optimisticRecentNote");
+    expect(source).toContain("setOptimisticRecentNote(result.activity)");
+    expect(source).toContain("const recentNote = optimisticRecentNote ?? meaningfulNotes[0] ?? null");
   });
 
   it("uses quick contact actions and compact counts", () => {

@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { mergeOptimisticActivities } from "./profile-note-display";
@@ -26,5 +28,18 @@ describe("mergeOptimisticActivities", () => {
       refreshed,
       persisted,
     ]);
+  });
+
+  it("confirms successful note saves even if a profile refresh is slow", () => {
+    const actionSource = fs.readFileSync(path.resolve(__dirname, "../../actions/activities.ts"), "utf8");
+    expect(actionSource).toContain('input.kind === "note"');
+    expect(actionSource).toContain('toast({ title: "Note saved" })');
+  });
+
+  it("mounts one global toaster so save confirmation is visible from any admin page", () => {
+    const appSource = fs.readFileSync(path.resolve(__dirname, "../../App.tsx"), "utf8");
+    const profilesPageSource = fs.readFileSync(path.resolve(__dirname, "../../pages/OrganizationsPage.tsx"), "utf8");
+    expect(appSource).toContain("<Toaster />");
+    expect(profilesPageSource).not.toContain("<Toaster />");
   });
 });

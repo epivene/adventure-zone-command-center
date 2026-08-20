@@ -1,4 +1,5 @@
 import { apiDelete, apiGet, apiPost } from "@/lib/auth-token";
+import { toast } from "@/hooks/use-toast";
 import type {
   ActivityParent,
   CreateActivityInput,
@@ -70,7 +71,9 @@ export async function createActivityAction(
   try {
     const result = await apiPost<SerializedActivityMutationResult>("/activities", input);
     if (!result.ok) return result;
-    return { ...result, activity: coerceActivityTimelineItem(result.activity) };
+    const activity = coerceActivityTimelineItem(result.activity);
+    if (input.kind === "note") toast({ title: "Note saved" });
+    return { ...result, activity };
   } catch (e: any) {
     return { ok: false, error: e.message };
   }
