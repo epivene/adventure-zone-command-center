@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -26,6 +26,10 @@ export interface PaperNoteSourceResolver {
   resolveEntry(
     createdBy: string,
     entryId: string,
+  ): Promise<PaperNoteResolvedSource | null>;
+  resolveActivity(
+    createdBy: string,
+    activityId: string,
   ): Promise<PaperNoteResolvedSource | null>;
 }
 
@@ -63,6 +67,15 @@ export class PaperNoteSourceService {
     kind: PaperNoteSourceKind,
   ) {
     const source = await this.resolver.resolveEntry(createdBy, entryId);
+    return this.sign(source, kind);
+  }
+
+  async activityUrl(
+    createdBy: string,
+    activityId: string,
+    kind: PaperNoteSourceKind,
+  ) {
+    const source = await this.resolver.resolveActivity(createdBy, activityId);
     return this.sign(source, kind);
   }
 
@@ -125,6 +138,26 @@ export class DrizzlePaperNoteSourceResolver implements PaperNoteSourceResolver {
         eq(paperNoteBatches.createdBy, createdBy),
       ))
       .limit(1);
+    return row ?? null;
+  }
+
+  async resolveActivity(createdBy: string, activityId: string) {
+    const result = await this.database.execute(sql`
+      select
+        batches.id as "batchId",
+        pages.id as "pageId",
+        pages.original_object_key as "originalObjectKey",
+        pages.analysis_object_key as "analysisObjectKey"
+      from activities activity
+      join paper_note_entries entries on entries.id = activity.paper_note_entry_id
+      join paper_note_pages pages on pages.id = entries.page_id
+      join paper_note_batches batches on batches.id = entries.batch_id
+      where activity.id = ${activityId}::uuid
+        and activity.source_type = 'paper_note'
+        and batches.created_by = ${createdBy}
+      limit 1
+    `);
+    const row = (result as { rows?: PaperNoteResolvedSource[] }).rows?.[0];
     return row ?? null;
   }
 }

@@ -26,7 +26,7 @@ function mapError(error: unknown, response: Response) {
 }
 
 export function createPaperNoteSourceRouter(
-  service: Pick<PaperNoteSourceService, "pageUrl" | "entryUrl">,
+  service: Pick<PaperNoteSourceService, "pageUrl" | "entryUrl" | "activityUrl">,
 ): IRouter {
   const router = Router();
 
@@ -65,6 +65,27 @@ export function createPaperNoteSourceRouter(
         res.json(await service.entryUrl(
           actorId(req as OwnerRequest),
           entryId.data,
+          kind.data,
+        ));
+      } catch (error) {
+        if (!mapError(error, res)) next(error);
+      }
+    },
+  );
+
+  router.get(
+    "/paper-notes/activities/:activityId/source-url",
+    async (req, res, next) => {
+      const activityId = idSchema.safeParse(req.params.activityId);
+      const kind = kindSchema.safeParse(req.query.kind ?? "original");
+      if (!activityId.success || !kind.success) {
+        res.status(400).json({ error: "Review the paper-note source request." });
+        return;
+      }
+      try {
+        res.json(await service.activityUrl(
+          actorId(req as OwnerRequest),
+          activityId.data,
           kind.data,
         ));
       } catch (error) {

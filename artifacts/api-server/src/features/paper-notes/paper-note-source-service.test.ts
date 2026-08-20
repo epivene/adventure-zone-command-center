@@ -14,7 +14,7 @@ const source = {
 
 describe("PaperNoteSourceService", () => {
   it("returns a 15-minute signed URL only after the private source exists", async () => {
-    const resolver = { resolvePage: vi.fn(async () => source), resolveEntry: vi.fn() };
+    const resolver = { resolvePage: vi.fn(async () => source), resolveEntry: vi.fn(), resolveActivity: vi.fn() };
     const storage = {
       exists: vi.fn(async () => true),
       signedReadUrl: vi.fn(async () => "https://signed.example/source"),
@@ -27,8 +27,31 @@ describe("PaperNoteSourceService", () => {
     expect(storage.signedReadUrl).toHaveBeenCalledWith(source.originalObjectKey, 900);
   });
 
+  it("resolves an imported timeline activity back to its source paper", async () => {
+    const resolver = {
+      resolvePage: vi.fn(),
+      resolveEntry: vi.fn(),
+      resolveActivity: vi.fn(async () => source),
+    };
+    const storage = {
+      exists: vi.fn(async () => true),
+      signedReadUrl: vi.fn(async () => "https://signed.example/activity-source"),
+    };
+    const service = new PaperNoteSourceService(resolver, storage);
+
+    await expect(service.activityUrl(
+      "owner",
+      "40000000-0000-4000-8000-000000000041",
+      "original",
+    )).resolves.toEqual({ url: "https://signed.example/activity-source", kind: "original" });
+    expect(resolver.resolveActivity).toHaveBeenCalledWith(
+      "owner",
+      "40000000-0000-4000-8000-000000000041",
+    );
+  });
+
   it("fails closed when the source object is missing", async () => {
-    const resolver = { resolvePage: vi.fn(async () => source), resolveEntry: vi.fn() };
+    const resolver = { resolvePage: vi.fn(async () => source), resolveEntry: vi.fn(), resolveActivity: vi.fn() };
     const service = new PaperNoteSourceService(resolver, {
       exists: vi.fn(async () => false),
       signedReadUrl: vi.fn(),
@@ -39,7 +62,7 @@ describe("PaperNoteSourceService", () => {
   });
 
   it("never falls back to another owner's page", async () => {
-    const resolver = { resolvePage: vi.fn(async () => null), resolveEntry: vi.fn() };
+    const resolver = { resolvePage: vi.fn(async () => null), resolveEntry: vi.fn(), resolveActivity: vi.fn() };
     const service = new PaperNoteSourceService(resolver, {
       exists: vi.fn(),
       signedReadUrl: vi.fn(),
