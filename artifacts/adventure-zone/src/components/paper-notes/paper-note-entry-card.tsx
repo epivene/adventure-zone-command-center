@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleAlert, Plus, SkipForward } from "lucide-react";
 
+import { PaperNoteContactEditor } from "./paper-note-contact-editor";
+import { PaperNoteOrganizationPhonesEditor } from "./paper-note-organization-phones-editor";
 import { PaperNoteSourceViewer } from "./paper-note-source-viewer";
 import type {
   PaperNoteMatch,
@@ -94,6 +96,52 @@ export function PaperNoteEntryCard({
     }));
   }
 
+  function updateOrganizationPhone(
+    phoneIndex: number,
+    patch: Partial<PaperNoteReviewDraft["organizationPhones"][number]>,
+  ) {
+    setReview((current) => ({
+      ...current,
+      organizationPhones: current.organizationPhones.map((phone, index) =>
+        index === phoneIndex ? { ...phone, ...patch } : phone),
+    }));
+  }
+
+  function updateConflict(path: string, value: unknown | null) {
+    setReview((current) => {
+      const conflicts = { ...current.conflicts };
+      if (value === null) delete conflicts[path];
+      else conflicts[path] = value;
+      return { ...current, conflicts };
+    });
+  }
+
+  function chooseExistingMatch(match: PaperNoteMatch) {
+    setReview((current) => ({
+      ...current,
+      destination: {
+        mode: "existing_profile",
+        organizationId: match.organizationId,
+        organizationLocationId: match.organizationLocationId,
+      },
+      contacts: current.contacts.map((contact) => contact.mode === "existing_contact"
+        ? { ...contact, mode: "new_contact", selectedContactId: null }
+        : contact),
+      conflicts: {},
+    }));
+  }
+
+  function chooseNewProfile() {
+    setReview((current) => ({
+      ...current,
+      destination: { mode: "new_profile", eventFamilyId: null },
+      contacts: current.contacts.map((contact) => contact.mode === "existing_contact"
+        ? { ...contact, mode: "new_contact", selectedContactId: null }
+        : contact),
+      conflicts: {},
+    }));
+  }
+
   async function stateAction(work: (expectedVersion: number) => Promise<PaperNoteReviewEntryDetails>) {
     if (actionBusy || saveState === "saving") return;
     setActionBusy(true);
@@ -108,6 +156,14 @@ export function PaperNoteEntryCard({
 
   const blocking = entry.validationIssues.filter((issue) => issue.severity === "blocking");
   const canApprove = entry.state === "ready" && saveState === "saved" && !blocking.length;
+  const selectedOrganizationId = review.destination && "organizationId" in review.destination
+    ? review.destination.organizationId
+    : null;
+  const selectedMatch = selectedOrganizationId
+    ? matches.find((match) => match.organizationId === selectedOrganizationId) ?? null
+    : null;
+  const existingDestination = review.destination?.mode === "existing_profile"
+    || review.destination?.mode === "existing_profile_new_location";
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -192,44 +248,36 @@ export function PaperNoteEntryCard({
         </label>
         <label className="grid gap-1 text-sm font-semibold text-slate-700">
           Old reminder from paper
-          <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.oldReminder} onChange={(event) => setReview((current) => ({ ...current, oldReminder: event.target.value }))} />
+          <input aria-label="Old reminder from paper" className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.oldReminder} onChange={(event) => setReview((current) => ({ ...current, oldReminder: event.target.value }))} />
           <span className="font-normal text-slate-500">Historical only. This does not create a current task.</span>
         </label>
         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700">
-          <input type="checkbox" checked={review.starredOnPaper} onChange={(event) => setReview((current) => ({ ...current, starredOnPaper: event.target.checked }))} />
+          <input aria-label="Starred on original paper" type="checkbox" checked={review.starredOnPaper} onChange={(event) => setReview((current) => ({ ...current, starredOnPaper: event.target.checked }))} />
           Starred on original paper
         </label>
       </section>
 
       {review.contacts.map((contact, contactIndex) => (
-        <section className="mt-6 grid gap-3 border-t border-slate-200 pt-5" key={contact.key}>
-          <h3 className="font-bold text-slate-900">Contact {contactIndex + 1}</h3>
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Contact name
-            <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={contact.name} onChange={(event) => updateContact(contactIndex, { name: event.target.value })} />
-          </label>
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Email
-            <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" type="email" value={contact.email ?? ""} onChange={(event) => updateContact(contactIndex, { email: event.target.value || null })} />
-          </label>
-          {contact.phones.map((phone, phoneIndex) => (
-            <div className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2" key={phone.key}>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Phone number
-                <input aria-label="Phone number" className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={phone.number} onChange={(event) => updateContactPhone(contactIndex, phoneIndex, { number: event.target.value })} />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Extension
-                <input aria-label="Extension" className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={phone.extension ?? ""} onChange={(event) => updateContactPhone(contactIndex, phoneIndex, { extension: event.target.value || null })} />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700 sm:col-span-2">
-                Calling instruction
-                <input className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={phone.instructions ?? ""} onChange={(event) => updateContactPhone(contactIndex, phoneIndex, { instructions: event.target.value || null })} />
-              </label>
-            </div>
-          ))}
-        </section>
+        <PaperNoteContactEditor
+          key={contact.key}
+          contact={contact}
+          contactIndex={contactIndex}
+          savedContacts={selectedMatch?.contacts ?? []}
+          conflicts={review.conflicts}
+          onContactChange={(patch) => updateContact(contactIndex, patch)}
+          onPhoneChange={(phoneIndex, patch) => updateContactPhone(contactIndex, phoneIndex, patch)}
+          onConflictChange={updateConflict}
+        />
       ))}
+
+      <PaperNoteOrganizationPhonesEditor
+        phones={review.organizationPhones}
+        savedPhones={selectedMatch?.organizationPhones ?? []}
+        conflicts={review.conflicts}
+        requireDecision={Boolean(existingDestination)}
+        onPhoneChange={updateOrganizationPhone}
+        onConflictChange={updateConflict}
+      />
 
       <section className="mt-6 border-t border-slate-200 pt-5">
         <h3 className="font-bold text-slate-900">Where this entry belongs</h3>
@@ -244,18 +292,12 @@ export function PaperNoteEntryCard({
                   <div className="mt-2 flex flex-wrap gap-1">
                     {match.reasons.map((reason) => <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700" key={reason}>{reason}</span>)}
                   </div>
+                  {match.contacts.length ? <p className="mt-2 text-xs text-slate-500">{match.contacts.length} saved contact{match.contacts.length === 1 ? "" : "s"} available to link</p> : null}
                 </div>
                 <button
                   aria-label={`Use ${match.name}`}
                   className="min-h-11 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-900"
-                  onClick={() => setReview((current) => ({
-                    ...current,
-                    destination: {
-                      mode: "existing_profile",
-                      organizationId: match.organizationId,
-                      organizationLocationId: match.organizationLocationId,
-                    },
-                  }))}
+                  onClick={() => chooseExistingMatch(match)}
                   type="button"
                 >Use this profile</button>
               </div>
@@ -264,8 +306,9 @@ export function PaperNoteEntryCard({
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button
+            aria-label="Create new profile"
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white"
-            onClick={() => setReview((current) => ({ ...current, destination: { mode: "new_profile", eventFamilyId: null } }))}
+            onClick={chooseNewProfile}
             type="button"
           ><Plus className="h-4 w-4" /> Create new profile</button>
           <button
@@ -277,7 +320,7 @@ export function PaperNoteEntryCard({
         </div>
         {review.destination ? (
           <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">
-            Destination: {review.destination.mode === "new_profile" ? "Create new profile" : review.destination.mode === "existing_profile" ? "Existing profile" : review.destination.mode.replaceAll("_", " ")}
+            Destination: {review.destination.mode === "new_profile" ? "Create new profile" : review.destination.mode === "existing_profile" ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}` : review.destination.mode.replaceAll("_", " ")}
           </p>
         ) : null}
       </section>
