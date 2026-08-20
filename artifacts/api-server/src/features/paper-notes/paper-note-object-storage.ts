@@ -17,7 +17,7 @@ export function paperNoteOriginalObjectKey(batchId: string, pageId: string) {
 }
 
 export function paperNoteAnalysisObjectKey(batchId: string, pageId: string) {
-  return scopedKey(batchId, pageId, "analysis.webp");
+  return scopedKey(batchId, pageId, "analysis");
 }
 
 export interface PaperNoteObjectStorage {
