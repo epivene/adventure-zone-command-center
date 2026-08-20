@@ -70,6 +70,34 @@ export function rotatePaperNotePage(batchId: string, pageId: string, rotationDeg
   });
 }
 
+export function rereadPaperNotePage(
+  batchId: string,
+  pageId: string,
+  rotationDegrees: 0 | 90 | 180 | 270,
+) {
+  return apiPost<{ ok: true }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/re-read`,
+    { rotationDegrees, confirmDiscardReview: true },
+  );
+}
+
+export async function restorePaperNotePageSource(
+  batchId: string,
+  pageId: string,
+  file: File,
+) {
+  const response = await apiFetch(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/source`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    },
+  );
+  if (!response.ok) throw new Error(await errorMessage(response));
+  return response.json() as Promise<{ ok: true }>;
+}
+
 export async function deletePaperNotePage(batchId: string, pageId: string) {
   const response = await apiFetch(`/paper-notes/batches/${batchId}/pages/${pageId}`, { method: "DELETE" });
   if (!response.ok) throw new Error(await errorMessage(response));
@@ -125,6 +153,15 @@ export function getPaperNoteEntrySource(
 ) {
   return apiGet<{ url: string; kind: "original" | "analysis" }>(
     `/paper-notes/entries/${entryId}/source-url?kind=${kind}`,
+  );
+}
+
+export function getPaperNoteActivitySource(
+  activityId: string,
+  kind: "original" | "analysis" = "original",
+) {
+  return apiGet<{ url: string; kind: "original" | "analysis" }>(
+    `/paper-notes/activities/${activityId}/source-url?kind=${kind}`,
   );
 }
 
