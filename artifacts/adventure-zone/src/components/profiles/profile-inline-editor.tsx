@@ -15,6 +15,7 @@ type InlineProfile = {
   id: string;
   place: {
     name: string;
+    description?: string | null;
     phone?: string | null;
     website?: string | null;
     address1?: string | null;
@@ -28,6 +29,7 @@ type InlineProfile = {
 
 type ProfileDraft = {
   name: string;
+  description: string;
   phone: string;
   website: string;
   address1: string;
@@ -56,6 +58,7 @@ type ContactDetail = { contact: ContactDraft; phones: Array<Record<string, unkno
 function profileDraft(profile: InlineProfile): ProfileDraft {
   return {
     name: profile.place.name ?? "",
+    description: profile.place.description ?? "",
     phone: profile.place.phone ?? "",
     website: profile.place.website ?? "",
     address1: profile.place.address1 ?? "",
@@ -178,7 +181,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
     }
   }
 
-  const profileFields: Array<[keyof ProfileDraft, string, string]> = [
+  const profileFields: Array<[Exclude<keyof ProfileDraft, "description">, string, string]> = [
     ["name", "Profile name", "text"],
     ["phone", "Office phone", "tel"],
     ["website", "Website", "url"],
@@ -196,6 +199,16 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="font-bold">Profile</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+            Event description
+            <textarea
+              aria-label="Event description"
+              onChange={(event) => setProfileField("description", event.target.value)}
+              placeholder="A clean, public-safe description of the event for outreach, social posts, and proposals."
+              rows={4}
+              value={profileValues.description}
+            />
+          </label>
           {profileFields.map(([name, label, type]) => (
             <label className={`grid gap-1.5 text-sm font-medium ${name === "address1" || name === "address2" ? "sm:col-span-2" : ""}`} key={name}>
               {label}
