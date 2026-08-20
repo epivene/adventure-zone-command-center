@@ -55,6 +55,12 @@ function browserTimeZone(): string | undefined {
   }
 }
 
+function isAssistantNetworkFailure(cause: unknown): boolean {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return true;
+  return cause instanceof TypeError
+    && /failed to fetch|networkerror|network request failed|load failed/i.test(cause.message);
+}
+
 function normalizedText(value: string): string {
   return value
     .toLowerCase()
@@ -307,6 +313,7 @@ export async function loadAssistantSnapshot(
     await saveAssistantSnapshot({ contextRef, context, brief }).catch(() => undefined);
     return { context, brief, offline: false, savedAt: null };
   } catch (networkError) {
+    if (!isAssistantNetworkFailure(networkError)) throw networkError;
     const cached = await getAssistantSnapshot(contextRef).catch(() => null);
     if (cached) {
       return {
@@ -396,6 +403,7 @@ export async function askBookingAssistant(input: {
     }).catch(() => undefined);
     return result;
   } catch (networkError) {
+    if (!isAssistantNetworkFailure(networkError)) throw networkError;
     const cached = await getAssistantSnapshot(input.context).catch(() => null);
     if (!cached) throw networkError;
     const answer = offlineAnswer(input.question, cached);
