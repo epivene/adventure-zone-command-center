@@ -30,9 +30,9 @@ describe("mergeOptimisticActivities", () => {
     ]);
   });
 
-  it("confirms successful note saves on the full profile even if refresh is slow", () => {
-    const source = fs.readFileSync(path.resolve(__dirname, "simple-full-profile.tsx"), "utf8");
-    expect(source).toContain('toast({ title: "Note saved" })');
-    expect(source).toContain("setOptimisticActivities");
+  it("confirms successful note saves even if a profile refresh is slow", () => {
+    const actionSource = fs.readFileSync(path.resolve(__dirname, "../../actions/activities.ts"), "utf8");
+    expect(actionSource).toContain('input.kind === "note"');
+    expect(actionSource).toContain('toast({ title: "Note saved" })');
   });
 });
