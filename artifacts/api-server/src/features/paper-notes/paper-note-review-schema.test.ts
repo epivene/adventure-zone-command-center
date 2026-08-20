@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { validatePaperNoteCurrentFollowUp } from "./paper-note-follow-up-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import {
   paperNoteReviewPayloadSchema,
@@ -89,7 +90,7 @@ describe("paper-note review validation", () => {
       contacts: [baseContact],
       currentFollowUp: { enabled: true, kind: "call", dueOn: "2026-09-01", contactKey: "contact-0" },
     });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+    expect(validatePaperNoteCurrentFollowUp(input)).toContainEqual(expect.objectContaining({
       fieldPath: "currentFollowUp.contactKey",
       severity: "blocking",
     }));
@@ -98,7 +99,7 @@ describe("paper-note review validation", () => {
       contacts: [{ ...baseContact, mode: "new_contact" as const }],
       currentFollowUp: { enabled: true, kind: "call", dueOn: "2026-09-01", contactKey: "does-not-exist" },
     });
-    expect(validatePaperNoteReview(missing)).toContainEqual(expect.objectContaining({
+    expect(validatePaperNoteCurrentFollowUp(missing)).toContainEqual(expect.objectContaining({
       fieldPath: "currentFollowUp.contactKey",
       severity: "blocking",
     }));
