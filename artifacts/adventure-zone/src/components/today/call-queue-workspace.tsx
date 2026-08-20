@@ -10,6 +10,7 @@ import {
   editActivityAction,
   listActivityRevisionsAction,
 } from "@/actions/activities";
+import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import {
   CallWorkspace,
   type CompleteCallResult,
@@ -20,6 +21,7 @@ import {
   type BookingCopilotReason,
 } from "@/components/today/copilot-reason";
 import { ContactBriefCard } from "@/components/today/contact-brief-card";
+import { buildTelHref } from "@/features/calls/phone-launcher";
 import { apiGet } from "@/lib/auth-token";
 
 export type CallQueueItem = {
@@ -36,6 +38,12 @@ export type CallQueueItem = {
   kind: string;
   dueAt: Date | string;
   status: string;
+  callPhone?: {
+    id: string;
+    number: string;
+    extension: string | null;
+    type: string;
+  } | null;
   copilot?: BookingCopilotReason | null;
 };
 
@@ -120,26 +128,36 @@ function defaultRenderWorkspace(
     : null;
 
   return (
-    <CallWorkspace
-      activityParent={data.activityParent}
-      assistedCallingEnabled={callingConfig.assistedCallingEnabled}
-      booking={booking}
-      contact={contact}
-      contextSummary={data.contextSummary ?? null}
-      createActivity={createActivityAction}
-      defaultScriptKind={data.defaultScriptKind}
-      editActivity={editActivityAction}
-      followUp={followUp}
-      loadRevisions={listActivityRevisionsAction}
-      mode="compact"
-      onComplete={onComplete}
-      operations={data.operations ?? null}
-      organization={context.organization ?? null}
-      phones={data.phones ?? []}
-      scriptPrompts={data.scriptPrompts ?? []}
-      timeline={coerceTimeline(data.timeline)}
-      voicemailLauncherUrl={callingConfig.voicemailLauncherUrl}
-    />
+    <div className="grid gap-5">
+      <CallAssistantPanel
+        bookingId={context.booking?.id ?? null}
+        contactId={context.contact?.id ?? null}
+        followUpId={context.followUp?.id ?? null}
+        organizationId={context.organization?.id ?? null}
+      />
+      <CallWorkspace
+        activityParent={data.activityParent}
+        assistedCallingEnabled={callingConfig.assistedCallingEnabled}
+        booking={booking}
+        briefing={data.briefing ?? null}
+        contact={contact}
+        contextSummary={data.contextSummary ?? null}
+        createActivity={createActivityAction}
+        defaultScriptKind={data.defaultScriptKind}
+        editActivity={editActivityAction}
+        followUp={followUp}
+        loadRevisions={listActivityRevisionsAction}
+        mode="compact"
+        onComplete={onComplete}
+        operations={data.operations ?? null}
+        organization={context.organization ?? null}
+        phones={data.phones ?? []}
+        recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
+        scriptPrompts={data.scriptPrompts ?? []}
+        timeline={coerceTimeline(data.timeline)}
+        voicemailLauncherUrl={callingConfig.voicemailLauncherUrl}
+      />
+    </div>
   );
 }
 
@@ -272,23 +290,61 @@ export function CallQueueWorkspace({
             {queue.map((followUp) => {
               const active = followUp.id === selectedId;
               const label = followUp.contactName ?? followUp.bookingName;
+              const telHref = followUp.callPhone?.number
+                ? buildTelHref({
+                    number: followUp.callPhone.number,
+                    extension: followUp.callPhone.extension,
+                  })
+                : null;
               return (
-                <li key={followUp.id}>
+                <li
+                  className={`rounded-lg border p-3 transition ${
+                    active
+                      ? "border-orange-400 bg-orange-50"
+                      : "border-slate-200 bg-white hover:border-orange-300"
+                  }`}
+                  key={followUp.id}
+                >
+                  <div className="flex items-start gap-2">
+                    <button
+                      aria-current={active ? "true" : undefined}
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => setSelectedId(followUp.id)}
+                      type="button"
+                    >
+                      <span className="block font-bold text-slate-950">{label}</span>
+                      {followUp.organizationName ? (
+                        <span className="mt-0.5 block text-sm text-slate-600">{followUp.organizationName}</span>
+                      ) : null}
+                    </button>
+                    {telHref ? (
+                      <a
+                        aria-label="Start guided call"
+                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-white text-lg shadow-sm transition hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+                        href={telHref}
+                        onClick={() => setSelectedId(followUp.id)}
+                        title={`Call ${label}`}
+                      >
+                        <span aria-hidden>📞</span>
+                      </a>
+                    ) : (
+                      <button
+                        aria-label="No callable number"
+                        className="inline-flex size-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-lg opacity-50"
+                        disabled
+                        title={`No callable number for ${label}`}
+                        type="button"
+                      >
+                        <span aria-hidden>📞</span>
+                      </button>
+                    )}
+                  </div>
                   <button
-                    aria-current={active ? "true" : undefined}
-                    className={`w-full rounded-lg border p-3 text-left transition ${
-                      active
-                        ? "border-orange-400 bg-orange-50"
-                        : "border-slate-200 bg-white hover:border-orange-300"
-                    }`}
+                    className="mt-2 block w-full text-left"
                     onClick={() => setSelectedId(followUp.id)}
                     type="button"
                   >
-                    <span className="block font-bold text-slate-950">{label}</span>
-                    {followUp.organizationName ? (
-                      <span className="mt-0.5 block text-sm text-slate-600">{followUp.organizationName}</span>
-                    ) : null}
-                    <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
+                    <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
                       {followUp.bookingStatus ? <span>{formatStatus(followUp.bookingStatus)}</span> : null}
                       {followUp.routeLeg ? (
                         <span className="inline-flex items-center gap-1.5">

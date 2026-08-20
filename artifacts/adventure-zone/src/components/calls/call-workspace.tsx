@@ -12,8 +12,10 @@ import {
   type ActivityMutationResult,
   type ActivityRevisionResult,
 } from "@/components/activities/activity-timeline";
+import { CallBriefingCard } from "@/components/calls/call-briefing-card";
 import { CallContextRow } from "@/components/calls/call-context-row";
 import { CallScriptCard } from "@/components/calls/call-script-card";
+import { GuidedCallScriptCard } from "@/components/calls/guided-call-script-card";
 import { PhoneActions } from "@/components/calls/phone-actions";
 import type {
   ActivityParent,
@@ -29,12 +31,23 @@ import {
   loadCallDraft,
   saveCallDraft,
 } from "@/features/calls/call-draft";
+import {
+  getGuidedCallScript,
+  type GuidedCallRenderContext,
+} from "@/features/calls/guided-call-scripts";
+import {
+  chooseGuidedResponse,
+  createGuidedCallState,
+  type GuidedCallState,
+} from "@/features/calls/guided-call-state";
 import type {
+  CallBriefing,
   CallDirection,
   CallDisposition,
   CallMethod,
   CallScriptKind,
   CompleteCallInput,
+  GuidedCallScriptKind,
 } from "@/features/calls/call-types";
 import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
 import {
@@ -77,6 +90,37 @@ function scriptForDirection(direction: CallDirection, fallback: CallScriptKind):
   return fallback === "incoming_inquiry" ? "first_outreach" : fallback;
 }
 
+function persistedScriptKind(kind: GuidedCallScriptKind): CallScriptKind {
+  if (kind === "incoming_inquiry") return "incoming_inquiry";
+  if (kind === "proposal_contract") return "contract_follow_up";
+  if (kind === "first_outreach") return "first_outreach";
+  return "follow_up";
+}
+
+function dateInputForPreset(preset: GuidedCallState["staged"]["followUpPreset"]) {
+  if (!preset) return "";
+  const date = new Date();
+  if (preset === "tomorrow") date.setDate(date.getDate() + 1);
+  else if (preset === "next_week") date.setDate(date.getDate() + 7);
+  else if (preset === "next_season") date.setFullYear(date.getFullYear() + 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeSuggestedAction(value: string | null) {
+  if (!value) return "";
+  const aliases: Record<string, string> = {
+    send_info: "send_information",
+    send_proposal: "prepare_quote",
+    resend_proposal: "prepare_quote",
+    research: "send_information",
+    future_season: "call",
+  };
+  return aliases[value] ?? value;
+}
+
 type WorkspaceContact = {
   id: string;
   name: string;
@@ -109,6 +153,8 @@ type WorkspaceProps = {
   } | null;
   defaultScriptKind?: CallScriptKind;
   scriptPrompts?: string[];
+  briefing?: CallBriefing | null;
+  recommendedGuidedScriptKind?: GuidedCallScriptKind | null;
   assistedCallingEnabled?: boolean;
   voicemailLauncherUrl?: string | null;
   timeline: ActivityTimelineItem[];
@@ -130,6 +176,8 @@ export function CallWorkspace({
   contextSummary = null,
   defaultScriptKind = followUp ? "follow_up" : "first_outreach",
   scriptPrompts = [],
+  briefing = null,
+  recommendedGuidedScriptKind = null,
   assistedCallingEnabled = false,
   voicemailLauncherUrl = null,
   timeline,
@@ -142,12 +190,17 @@ export function CallWorkspace({
 }: WorkspaceProps) {
   const isMobileLog = mode === "mobile";
   const primaryPhone = phones.find((phone) => phone.primary) ?? phones[0] ?? null;
+  const initialGuidedKind: GuidedCallScriptKind =
+    recommendedGuidedScriptKind ??
+    (isMobileLog ? "incoming_inquiry" : defaultScriptKind === "contract_follow_up" ? "proposal_contract" : defaultScriptKind);
   const [startedAt, setStartedAt] = useState<Date | null>(() => isMobileLog ? new Date() : null);
   const [requestKey, setRequestKey] = useState<string | null>(() => isMobileLog ? crypto.randomUUID() : null);
   const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(primaryPhone?.id ?? null);
   const [direction, setDirection] = useState<CallDirection>(isMobileLog ? "incoming" : "outgoing");
   const [method, setMethod] = useState<CallMethod>(() => methodForPhone(isMobileLog, primaryPhone));
   const [scriptKind, setScriptKind] = useState<CallScriptKind>(() => scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
+  const [guidedKind, setGuidedKind] = useState<GuidedCallScriptKind>(initialGuidedKind);
+  const [guidedState, setGuidedState] = useState<GuidedCallState>(() => createGuidedCallState(getGuidedCallScript(initialGuidedKind)));
   const [note, setNote] = useState("");
   const [disposition, setDisposition] = useState<CallDisposition>("no_answer");
   const [nextActionKind, setNextActionKind] = useState("");
@@ -182,7 +235,18 @@ export function CallWorkspace({
       }
     : selectedPhoneRecord;
 
+  const guidedRenderContext: GuidedCallRenderContext = {
+    contactName: contact?.name ?? null,
+    eventName: briefing?.eventName ?? booking?.name ?? organization?.name ?? null,
+    eventDate: briefing?.eventDate ?? null,
+    location: briefing?.location ?? (booking ? [booking.city, booking.region].filter(Boolean).join(", ") : null),
+    packageInterest: briefing?.packageInterest ?? operations?.packageNames?.join(", ") ?? null,
+  };
+
   useEffect(() => {
+    const nextGuidedKind: GuidedCallScriptKind =
+      recommendedGuidedScriptKind ??
+      (isMobileLog ? "incoming_inquiry" : defaultScriptKind === "contract_follow_up" ? "proposal_contract" : defaultScriptKind);
     setDraftReady(false);
     setActiveDraftKey(null);
     setStartedAt(isMobileLog ? new Date() : null);
@@ -191,6 +255,8 @@ export function CallWorkspace({
     setDirection(isMobileLog ? "incoming" : "outgoing");
     setMethod(methodForPhone(isMobileLog, primaryPhone));
     setScriptKind(scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
+    setGuidedKind(nextGuidedKind);
+    setGuidedState(createGuidedCallState(getGuidedCallScript(nextGuidedKind)));
     setNote("");
     setDisposition("no_answer");
     setNextActionKind("");
@@ -231,7 +297,7 @@ export function CallWorkspace({
     }
     setActiveDraftKey(draftKey);
     setDraftReady(true);
-  }, [draftKey, isMobileLog]);
+  }, [draftKey, isMobileLog, defaultScriptKind, recommendedGuidedScriptKind]);
 
   useEffect(() => {
     if (!draftReady || activeDraftKey !== draftKey || !startedAt || !requestKey || isSaved) return;
@@ -273,6 +339,9 @@ export function CallWorkspace({
       setMethod("mobile_log");
       setScriptKind(scriptForDirection("incoming", defaultScriptKind));
     }
+    const script = getGuidedCallScript(initialGuidedKind);
+    setGuidedKind(initialGuidedKind);
+    setGuidedState(createGuidedCallState(script));
     setNote("");
     setDisposition("no_answer");
     setNextActionKind("");
@@ -296,6 +365,27 @@ export function CallWorkspace({
       setDoNotCallConfirmed(false);
       setDoNotCallReason("");
       setDoNotCallPhoneId(null);
+    }
+  }
+
+  function changeGuidedKind(kind: GuidedCallScriptKind) {
+    setGuidedKind(kind);
+    setGuidedState(createGuidedCallState(getGuidedCallScript(kind)));
+    setScriptKind(persistedScriptKind(kind));
+  }
+
+  function chooseGuided(responseId: string) {
+    const script = getGuidedCallScript(guidedKind);
+    const next = chooseGuidedResponse(script, guidedState, responseId);
+    setGuidedState(next);
+    if (next.staged.disposition) chooseDisposition(next.staged.disposition);
+    if (next.staged.nextAction) setNextActionKind(normalizeSuggestedAction(next.staged.nextAction));
+    if (next.staged.followUpPreset) setNextActionDueAt(dateInputForPreset(next.staged.followUpPreset));
+    if (next.staged.noteFragments.length) {
+      setNote((current) => {
+        const additions = next.staged.noteFragments.filter((fragment) => !current.includes(fragment));
+        return additions.length ? [current.trim(), ...additions].filter(Boolean).join("\n") : current;
+      });
     }
   }
 
@@ -405,11 +495,23 @@ export function CallWorkspace({
         travelLeg={contextSummary?.travelLeg}
       />
 
+      {briefing ? <CallBriefingCard briefing={briefing} /> : null}
+
       {organization?.lastResort ? (
         <aside className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950" role="alert">
           <strong>{organization.name} is marked Last Resort.</strong>{" "}
           {organization.lastResortReason || "Review this account before making any new commitments."}
         </aside>
+      ) : null}
+
+      {briefing ? (
+        <GuidedCallScriptCard
+          kind={guidedKind}
+          onChangeKind={changeGuidedKind}
+          onChooseResponse={chooseGuided}
+          renderContext={guidedRenderContext}
+          state={guidedState}
+        />
       ) : null}
 
       <div className={`grid gap-5 ${twoColumn} lg:items-start`}>
@@ -496,6 +598,7 @@ export function CallWorkspace({
                         const nextDirection = event.target.value as CallDirection;
                         setDirection(nextDirection);
                         setScriptKind(scriptForDirection(nextDirection, defaultScriptKind));
+                        changeGuidedKind(nextDirection === "incoming" ? "incoming_inquiry" : initialGuidedKind);
                       }}
                       value={direction}
                     >
@@ -611,12 +714,14 @@ export function CallWorkspace({
         </div>
 
         {!isMobileLog ? <aside className="grid gap-5">
-          <CallScriptCard
-            initialKind={defaultScriptKind}
-            initialPrompts={scriptPrompts}
-            kind={scriptKind}
-            onChange={setScriptKind}
-          />
+          {!briefing ? (
+            <CallScriptCard
+              initialKind={defaultScriptKind}
+              initialPrompts={scriptPrompts}
+              kind={scriptKind}
+              onChange={setScriptKind}
+            />
+          ) : null}
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="caller-title">
             <h2 className="text-xl font-bold" id="caller-title">Caller</h2>
             {contact ? (

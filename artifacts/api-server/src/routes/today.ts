@@ -9,6 +9,7 @@ import { applyTodaySeasonResetFromDb } from "@/features/follow-ups/today-season-
 import { withBookingCopilotMetadata } from "@/features/follow-ups/today-copilot";
 import { listTodayUpcomingEvents } from "@/features/follow-ups/today-upcoming-events";
 import { createBookingOperationsSummaryProvider } from "@/features/bookings/booking-operations-summary";
+import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
 import {
   clearTodayNextSteps,
   filterClearedTodayNextSteps,
@@ -20,6 +21,44 @@ import { listTripsInWindow } from "@/features/trips/trip-repository";
 import { businessDayBounds } from "@/lib/business-date";
 
 const router: IRouter = Router();
+
+type TodayCallablePhone = {
+  id: string;
+  number: string;
+  extension: string | null;
+  type: string;
+};
+
+async function addCallablePhones<T extends {
+  contactId: string | null;
+  kind: string;
+}>(items: T[]): Promise<Array<T & { callPhone: TodayCallablePhone | null }>> {
+  const phoneRepository = createContactPhoneRepository(db);
+  const contactIds = [...new Set(
+    items
+      .filter((item) => item.kind === "call" && item.contactId)
+      .map((item) => item.contactId as string),
+  )];
+  const phoneByContact = new Map<string, TodayCallablePhone | null>();
+  await Promise.all(contactIds.map(async (contactId) => {
+    const phones = await phoneRepository.listForContact(contactId);
+    const phone = phones.find((candidate) => candidate.primary && !candidate.doNotCallAt)
+      ?? phones.find((candidate) => !candidate.doNotCallAt)
+      ?? null;
+    phoneByContact.set(contactId, phone ? {
+      id: phone.id,
+      number: phone.number,
+      extension: phone.extension,
+      type: phone.type,
+    } : null);
+  }));
+  return items.map((item) => ({
+    ...item,
+    callPhone: item.kind === "call" && item.contactId
+      ? phoneByContact.get(item.contactId) ?? null
+      : null,
+  }));
+}
 
 router.get("/today", async (req, res): Promise<void> => {
   try {
@@ -48,8 +87,14 @@ router.get("/today", async (req, res): Promise<void> => {
       { ...dashboard, needsFollowUpPlan },
       now,
     );
+    const followUps = await addCallablePhones(copilotDashboard.followUps);
+    const nextCall = copilotDashboard.nextCall
+      ? (await addCallablePhones([copilotDashboard.nextCall]))[0] ?? null
+      : null;
     res.json({
       ...copilotDashboard,
+      followUps,
+      nextCall,
       needsFollowUpPlanTotal: needsFollowUpPlan.length,
       todayTrips: todayTrips.map((trip) => ({
         id: trip.id,

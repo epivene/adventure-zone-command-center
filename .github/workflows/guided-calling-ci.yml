@@ -1,0 +1,54 @@
+name: Guided Calling CI
+
+on:
+  push:
+    branches:
+      - feature/guided-calling-console
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/calls/**"
+      - "artifacts/api-server/src/features/needs-answer/**"
+      - "artifacts/api-server/src/routes/calls.ts"
+      - "artifacts/api-server/src/routes/needs-answer.ts"
+      - "artifacts/api-server/src/routes/today.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/calls/**"
+      - "artifacts/adventure-zone/src/features/assistant/**"
+      - "artifacts/adventure-zone/src/components/calls/**"
+      - "artifacts/adventure-zone/src/components/today/**"
+      - "artifacts/adventure-zone/src/pages/CallWorkspacePage.tsx"
+      - "artifacts/adventure-zone/src/pages/NeedsAnswerPage.tsx"
+      - "artifacts/adventure-zone/src/App.tsx"
+      - "lib/db/migrations/061_guided_call_needs_answer.sql"
+      - ".github/workflows/guided-calling-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  guided-calling:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Guided calling tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/features/calls/call-script.test.ts
+          artifacts/api-server/src/features/calls/call-script-guided.test.ts
+          artifacts/api-server/src/features/calls/call-workspace-query.test.ts
+          artifacts/api-server/src/routes/needs-answer.test.ts
+          artifacts/adventure-zone/src/features/calls/guided-call-scripts.test.ts
+          artifacts/adventure-zone/src/features/calls/guided-call-state.test.ts
+          artifacts/adventure-zone/src/components/calls/call-workspace.test.tsx
+          artifacts/adventure-zone/src/components/today/call-queue-workspace.test.tsx
+          artifacts/adventure-zone/src/components/today/call-queue-guided-call.test.tsx
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build

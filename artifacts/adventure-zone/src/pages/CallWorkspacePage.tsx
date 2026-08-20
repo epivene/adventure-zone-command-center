@@ -4,9 +4,10 @@ import { useLocation, useSearch } from "wouter";
 import { createActivityAction, editActivityAction, listActivityRevisionsAction } from "@/actions/activities";
 import { completeCallAction } from "@/actions/calls";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
+import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-unavailable";
+import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import { CallerFinder } from "@/components/calls/caller-finder";
 import { CallWorkspace } from "@/components/calls/call-workspace";
-import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-unavailable";
 import { apiGet } from "@/lib/auth-token";
 
 function toDate(value: unknown): Date | null {
@@ -113,12 +114,19 @@ export default function CallWorkspacePage() {
         : null;
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto grid max-w-7xl gap-5">
       {assistantContext ? <AssistantContextRegistration {...assistantContext} /> : null}
+      <CallAssistantPanel
+        bookingId={booking?.id ?? null}
+        contactId={contact?.id ?? null}
+        followUpId={followUp?.id ?? null}
+        organizationId={organization?.id ?? null}
+      />
       <CallWorkspace
         activityParent={data.activityParent}
         assistedCallingEnabled={config.assistedCallingEnabled}
         booking={booking}
+        briefing={data.briefing ?? null}
         contact={contact}
         contextSummary={data.contextSummary ?? null}
         createActivity={createActivityAction}
@@ -131,6 +139,7 @@ export default function CallWorkspacePage() {
         operations={data.operations ?? null}
         organization={organization}
         phones={data.phones ?? []}
+        recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
         scriptPrompts={data.scriptPrompts ?? []}
         timeline={coerceTimeline(data.timeline)}
         voicemailLauncherUrl={config.voicemailLauncherUrl}

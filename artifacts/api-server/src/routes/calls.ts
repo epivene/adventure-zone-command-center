@@ -40,6 +40,19 @@ function firstString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
+function recentHistorySummary(items: any[]): string | null {
+  const snippets = items
+    .filter((item) => typeof item?.body === "string" && item.body.trim())
+    .slice(0, 3)
+    .map((item) => {
+      const body = item.body.trim().replace(/\s+/g, " ");
+      const clipped = body.length > 180 ? `${body.slice(0, 177)}…` : body;
+      const kind = typeof item.kind === "string" ? item.kind.replaceAll("_", " ") : "history";
+      return `${kind}: ${clipped}`;
+    });
+  return snippets.length ? snippets.join(" · ") : null;
+}
+
 const callerFinderQuerySchema = z.object({
   phone: z.string().max(40).optional().default(""),
   q: z.string().max(120).optional().default(""),
@@ -105,7 +118,17 @@ router.get("/calls/workspace", requireAssistedCalling, async (req, res): Promise
     }
     const activityParent = activityTimelineParent(result.value.context);
     const timelinePage = await new ActivityService(new DrizzleActivityRepository(db)).listTimeline(activityParent);
-    res.json({ ...result.value, activityParent, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage });
+    const briefing = {
+      ...result.value.briefing,
+      historySummary: recentHistorySummary(timelinePage.items),
+    };
+    res.json({
+      ...result.value,
+      briefing,
+      activityParent,
+      timeline: timelinePage.items,
+      timelineNextPage: timelinePage.nextPage,
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to load call workspace");
     res.status(500).json({ error: "Failed to load call workspace" });

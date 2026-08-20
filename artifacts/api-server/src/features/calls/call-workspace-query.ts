@@ -4,6 +4,7 @@ import type {
 } from "@/features/bookings/booking-operations-summary";
 import type { BookingStatus } from "@/features/bookings/booking-types";
 import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-repository";
+import { buildCallBriefing, type CallBriefing } from "@/features/calls/call-briefing";
 import {
   loadCallWorkspaceContext,
   type CallWorkspaceContext,
@@ -13,8 +14,9 @@ import {
 import {
   callScriptPrompts,
   selectCallScript,
+  selectGuidedCallScriptKind,
 } from "@/features/calls/call-script";
-import type { CallScriptKind } from "@/features/calls/call-types";
+import type { CallScriptKind, GuidedCallScriptKind } from "@/features/calls/call-types";
 
 export type CallWorkspacePhoneRepository = {
   listForContact(contactId: string): Promise<ContactPhoneRecord[]>;
@@ -34,6 +36,8 @@ export type LoadedCallWorkspace = {
   contextSummary: CallWorkspaceContextSummary;
   defaultScriptKind: CallScriptKind;
   scriptPrompts: string[];
+  briefing: CallBriefing;
+  recommendedGuidedScriptKind: GuidedCallScriptKind;
 };
 
 function bookingStatusLabel(status: BookingStatus | null) {
@@ -60,11 +64,27 @@ export async function loadCallWorkspace(
     repository.findLastContactedAt(context.value),
   ]);
   const bookingStatus = context.value.booking?.status ?? null;
+  const followUpKind = context.value.followUp?.kind ?? null;
   const defaultScriptKind = selectCallScript({
     direction: "outgoing",
-    followUpKind: context.value.followUp?.kind ?? null,
+    followUpKind,
     bookingStatus,
   });
+  const recommendedGuidedScriptKind = selectGuidedCallScriptKind({
+    direction: "outgoing",
+    followUpKind,
+    bookingStatus,
+    callbackRequested: followUpKind === "callback",
+    priorBookedEvent: bookingStatus === "completed",
+    priorCompletedCallCount: lastContactedAt ? 1 : 0,
+  });
+  const briefing = buildCallBriefing({
+    context: context.value,
+    operations,
+    lastContactedAt,
+    guidedKind: recommendedGuidedScriptKind,
+  });
+
   return {
     ok: true,
     value: {
@@ -79,6 +99,8 @@ export async function loadCallWorkspace(
       },
       defaultScriptKind,
       scriptPrompts: [...callScriptPrompts[defaultScriptKind]],
+      briefing,
+      recommendedGuidedScriptKind,
     },
   };
 }
