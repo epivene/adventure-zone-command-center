@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 
+import { PaperNoteEntryNavigator } from "@/components/paper-notes/paper-note-entry-navigator";
+import { PaperNoteEntryPanel } from "@/components/paper-notes/paper-note-entry-panel";
 import { PaperNoteSourceViewer } from "@/components/paper-notes/paper-note-source-viewer";
 import {
   addManualPaperNoteEntry,
@@ -51,6 +53,25 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [manualByPage, setManualByPage] = useState<Record<string, string>>({});
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const entries = batch.data?.entries ?? [];
+    if (!entries.length) {
+      if (selectedEntryId !== null) setSelectedEntryId(null);
+      return;
+    }
+    if (selectedEntryId && entries.some((entry) => entry.id === selectedEntryId)) return;
+    const next = entries.find((entry) => entry.state === "needs_review")
+      ?? entries.find((entry) => entry.state === "ready")
+      ?? entries.find((entry) => entry.state === "approved")
+      ?? entries[0];
+    setSelectedEntryId(next?.id ?? null);
+  }, [batch.data?.entries, selectedEntryId]);
+
+  const refreshBatch = useCallback(async () => {
+    await batch.refetch();
+  }, [batch]);
 
   async function action(key: string, work: () => Promise<unknown>) {
     if (busy) return;
@@ -223,6 +244,37 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
         </button>
       ) : null}
       {editable && !uploaded ? <p className="mt-2 text-center text-sm text-slate-500">All retained photos must finish uploading first.</p> : null}
+
+      {data.entries.length ? (
+        <section className="mt-8 border-t border-slate-200 pt-7">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">Review</p>
+              <h2 className="mt-1 text-2xl font-bold text-slate-950">Review extracted entries</h2>
+              <p className="mt-1 text-sm text-slate-600">Correct what the paper says, choose where it belongs, then approve it. Nothing is written to the CRM yet.</p>
+            </div>
+            <div className="text-right text-xs font-semibold text-slate-500">
+              <p>{data.needsReviewCount} need review · {data.readyCount} ready</p>
+              <p>{data.approvedCount} approved · {data.skippedCount} skipped</p>
+            </div>
+          </div>
+          {selectedEntryId ? (
+            <>
+              <PaperNoteEntryNavigator
+                entries={data.entries}
+                selectedId={selectedEntryId}
+                onSelect={setSelectedEntryId}
+              />
+              <div className="mt-4">
+                <PaperNoteEntryPanel
+                  entryId={selectedEntryId}
+                  onChanged={refreshBatch}
+                />
+              </div>
+            </>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
