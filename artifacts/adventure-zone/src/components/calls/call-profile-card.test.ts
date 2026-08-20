@@ -1,30 +1,32 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const workspace = readFileSync("src/components/calls/call-workspace.tsx", "utf8");
-const card = readFileSync("src/components/calls/call-profile-card.tsx", "utf8");
+const contextRow = readFileSync("src/components/calls/call-context-row.tsx", "utf8");
+const flowCss = readFileSync("src/call-workspace-flow.css", "utf8");
 const phoneActions = readFileSync("src/components/calls/phone-actions.tsx", "utf8");
 
 describe("Call Profile Card", () => {
-  it("replaces the separate context strip and Phone utility box", () => {
-    expect(workspace).toContain("CallProfileCard");
-    expect(workspace).not.toContain("<CallContextRow");
-    expect(workspace).not.toContain('id="phone-actions-title">Phone</h2>');
+  it("turns the old context strip into a profile-style call identity card", () => {
+    expect(contextRow).toContain("Call profile");
+    expect(contextRow).toContain("UserRound");
+    expect(contextRow).toContain("Last contacted:");
+    expect(contextRow).toContain("/profiles/");
+    expect(contextRow).toContain("/bookings/");
+    expect(contextRow).toContain("bookingStatusLabel");
+    expect(contextRow).toContain("travelLeg");
+    expect(contextRow).toContain("Last Resort");
   });
 
-  it("keeps profile identity and call controls together", () => {
-    expect(card).toContain("Call profile");
-    expect(card).toContain("Last contacted:");
-    expect(card).toContain("Phone number");
-    expect(card).toContain("PhoneActions");
-    expect(card).toContain("/profiles/");
-    expect(card).toContain("/bookings/");
-    expect(card).toContain("bookingStatusLabel");
-    expect(card).toContain("travelLeg");
+  it("visually joins the identity header to the existing phone controls", () => {
+    expect(flowCss).toContain('section[aria-label="Call profile"]');
+    expect(flowCss).toContain('section[aria-labelledby="phone-actions-title"]');
+    expect(flowCss).toContain("margin-top: -1.25rem");
+    expect(flowCss).toContain('section[aria-labelledby="phone-actions-title"] > h2');
   });
 
-  it("allows the call action to be visually prominent without changing default PhoneActions styling", () => {
-    expect(phoneActions).toContain("prominentCall");
-    expect(phoneActions).toContain('prominentCall ? "button-primary" : "button-secondary"');
+  it("makes the actual call action primary while leaving copy as secondary", () => {
+    expect(phoneActions).toContain("PhoneCall");
+    expect(phoneActions).toContain('className="button-primary');
+    expect(phoneActions).toContain('className="button-secondary"');
   });
 });
