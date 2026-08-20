@@ -116,12 +116,6 @@ export default function CallWorkspacePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-5">
       {assistantContext ? <AssistantContextRegistration {...assistantContext} /> : null}
-      <CallAssistantPanel
-        bookingId={booking?.id ?? null}
-        contactId={contact?.id ?? null}
-        followUpId={followUp?.id ?? null}
-        organizationId={organization?.id ?? null}
-      />
       <CallWorkspace
         activityParent={data.activityParent}
         assistedCallingEnabled={config.assistedCallingEnabled}
@@ -143,6 +137,12 @@ export default function CallWorkspacePage() {
         scriptPrompts={data.scriptPrompts ?? []}
         timeline={coerceTimeline(data.timeline)}
         voicemailLauncherUrl={config.voicemailLauncherUrl}
+      />
+      <CallAssistantPanel
+        bookingId={booking?.id ?? null}
+        contactId={contact?.id ?? null}
+        followUpId={followUp?.id ?? null}
+        organizationId={organization?.id ?? null}
       />
     </div>
   );
