@@ -40,6 +40,10 @@ export type ActivityTimelineItem = {
   importedFromAct?: boolean;
   /** Original ACT timeline stream when importedFromAct is true. */
   actSourceType?: ActActivitySourceType | null;
+  /** True when the paper note had no reliable historical activity date. */
+  historicalDateUnknown?: boolean;
+  /** Present only for immutable paper-note history that can reopen its source image. */
+  paperNoteSource?: { activityId: string } | null;
 };
 
 export type ActivityRevision = {
