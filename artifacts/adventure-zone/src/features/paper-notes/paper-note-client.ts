@@ -186,6 +186,13 @@ export async function searchPaperNoteProfiles(query: string) {
   return result.matches;
 }
 
+export async function listPaperNoteEventFamilies() {
+  const result = await apiGet<{
+    families: Array<{ id: string; name: string; memberCount: number }>;
+  }>("/event-families");
+  return result.families;
+}
+
 export async function savePaperNoteEntryReview(
   entryId: string,
   review: PaperNoteReviewDraft,
