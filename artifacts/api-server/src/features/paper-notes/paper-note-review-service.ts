@@ -95,7 +95,7 @@ export class PaperNoteReviewService {
     const current = await this.store.getForReview(input.actorId, input.entryId);
     if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
     const issues = validateDraft(current.review);
-    if (issues.some((issue) => issue.severity === "blocking")) {
+    if (current.state !== "ready" || issues.some((issue) => issue.severity === "blocking")) {
       throw new PaperNoteReviewServiceError("ENTRY_NOT_READY", "Review the highlighted paper-note fields before approving this entry.");
     }
     return this.store.approve(input);
