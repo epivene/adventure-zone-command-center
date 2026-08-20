@@ -88,9 +88,7 @@ export default function ContactDetailPage() {
         </div>
         <div className="flex flex-wrap gap-3">
           <button className="button-secondary" onClick={() => openAssistant("What should I know before I call this person?")} type="button">Ask Assistant</button>
-          {!assistedCallingEnabled ? (
-            <span className="self-center text-sm font-semibold text-slate-600">Assisted calling is not enabled.</span>
-          ) : callSuppressed ? (
+          {callSuppressed ? (
             <button className="button-primary" disabled type="button">Call</button>
           ) : (
             <Link className="button-primary text-center" href={`/calls/new?contactId=${contactId}`}>Call</Link>
