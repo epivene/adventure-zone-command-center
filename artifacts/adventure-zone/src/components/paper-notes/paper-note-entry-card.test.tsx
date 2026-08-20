@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PaperNoteEntryCard } from "./paper-note-entry-card";
 
@@ -95,6 +95,10 @@ const existingMatch = {
   }],
 };
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("PaperNoteEntryCard", () => {
   it("shows the paper evidence and keeps phone extension/reminder/star meaning explicit", () => {
     render(<PaperNoteEntryCard
@@ -137,5 +141,50 @@ describe("PaperNoteEntryCard", () => {
     fireEvent.change(screen.getByLabelText("Contact handling"), { target: { value: "existing_contact" } });
     expect(screen.getByLabelText("Existing contact")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Tina Smith/ })).toBeInTheDocument();
+  });
+
+  it("queues edits made while a save is in flight instead of overlapping review versions", async () => {
+    vi.useFakeTimers();
+    let resolveFirst!: (value: any) => void;
+    const firstSave = new Promise((resolve) => { resolveFirst = resolve; });
+    const onSave = vi.fn()
+      .mockImplementationOnce(() => firstSave)
+      .mockImplementationOnce(async (review: any) => ({
+        ...entry,
+        review,
+        reviewVersion: 4,
+      }));
+
+    render(<PaperNoteEntryCard
+      entry={entry as any}
+      matches={[]}
+      loadSource={vi.fn()}
+      onSave={onSave}
+      onApprove={vi.fn()}
+      onUnapprove={vi.fn()}
+      onSkip={vi.fn()}
+    />);
+
+    fireEvent.change(screen.getByLabelText("Event / profile name"), {
+      target: { value: "Emmett Cherry Festival 2026" },
+    });
+    await act(async () => { vi.advanceTimersByTime(700); });
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[1]).toBe(2);
+
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Emmett City" } });
+    await act(async () => { vi.advanceTimersByTime(700); });
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    const firstReview = onSave.mock.calls[0]?.[0];
+    await act(async () => {
+      resolveFirst({ ...entry, review: firstReview, reviewVersion: 3 });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onSave).toHaveBeenCalledTimes(2);
+    expect(onSave.mock.calls[1]?.[0].event.city).toBe("Emmett City");
+    expect(onSave.mock.calls[1]?.[1]).toBe(3);
   });
 });
