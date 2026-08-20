@@ -85,8 +85,10 @@ export function PaperNoteEntryCard({
   function updateContact(index: number, patch: Partial<PaperNoteReviewDraft["contacts"][number]>) {
     setReview((current) => ({
       ...current,
-      contacts: current.contacts.map((contact, contactIndex) =>
-        contactIndex === index ? { ...contact, ...patch } : contact),
+      contacts: current.contacts.map((contact, contactIndex) => {
+        if (contactIndex === index) return { ...contact, ...patch };
+        return patch.primary === true ? { ...contact, primary: false } : contact;
+      }),
     }));
   }
 
