@@ -16,6 +16,7 @@ const profile = {
   id: "profile-1",
   place: {
     name: "16th Street Fair (Denver) CO",
+    description: "A downtown street fair with local vendors, food, music, and family activities.",
     phone: "7207277467",
     website: "https://example.com",
     address1: "1001 16th St",
@@ -52,6 +53,26 @@ describe("ProfileInlineEditor", () => {
     apiGet.mockResolvedValue(contactDetail);
     apiPatch.mockResolvedValue({ ok: true });
     apiPut.mockResolvedValue({ ok: true });
+  });
+
+  it("saves a clean event description with the profile", async () => {
+    render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} />);
+
+    expect(screen.getByLabelText("Event description")).toHaveValue(
+      "A downtown street fair with local vendors, food, music, and family activities.",
+    );
+
+    fireEvent.change(screen.getByLabelText("Event description"), {
+      target: { value: "An annual downtown street fair featuring local vendors, food, live music, and family-friendly activities." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(apiPatch).toHaveBeenCalledWith(
+      "/event-profiles/profile-1",
+      expect.objectContaining({
+        description: "An annual downtown street fair featuring local vendors, food, live music, and family-friendly activities.",
+      }),
+    ));
   });
 
   it("saves profile and selected contact through the existing APIs", async () => {
