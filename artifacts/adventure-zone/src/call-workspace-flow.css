@@ -39,7 +39,7 @@
 }
 
 /* Step 5: history is useful, but should not compete with the active call. */
-[data-testid="call-workspace"][data-mode="full"] details:has(summary:first-child) {
+[data-testid="call-workspace"][data-mode="full"] > div:last-child > div > details {
   order: 5;
 }
 
