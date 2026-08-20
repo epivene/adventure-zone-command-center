@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FileImage } from "lucide-react";
 
 import { getPaperNoteActivitySource } from "@/features/paper-notes/paper-note-client";
+import { apiGet } from "@/lib/auth-token";
 
 type PaperNoteHistoryItem = {
   id: string;
@@ -10,11 +11,35 @@ type PaperNoteHistoryItem = {
   paperNoteSource?: { activityId: string } | null;
 };
 
-export function PaperNoteHistorySources({ notes }: { notes: PaperNoteHistoryItem[] }) {
-  const paperNotes = notes.filter((note) => note.paperNoteSource?.activityId);
+export function PaperNoteHistorySources({
+  notes,
+  profileId,
+}: {
+  notes?: PaperNoteHistoryItem[];
+  profileId?: string;
+}) {
+  const [loadedNotes, setLoadedNotes] = useState<PaperNoteHistoryItem[]>(notes ?? []);
   const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (notes) {
+      setLoadedNotes(notes);
+      return;
+    }
+    if (!profileId) return;
+    let cancelled = false;
+    apiGet<{ ok: true; items: PaperNoteHistoryItem[] }>(
+      `/activities/timeline?organizationId=${encodeURIComponent(profileId)}`,
+    ).then((result) => {
+      if (!cancelled) setLoadedNotes(result.items ?? []);
+    }).catch(() => {
+      if (!cancelled) setError("Could not load paper-note history sources.");
+    });
+    return () => { cancelled = true; };
+  }, [notes, profileId]);
+
+  const paperNotes = loadedNotes.filter((note) => note.paperNoteSource?.activityId);
   if (!paperNotes.length) return null;
 
   async function openSource(activityId: string) {
@@ -43,7 +68,8 @@ export function PaperNoteHistorySources({ notes }: { notes: PaperNoteHistoryItem
       <ul className="mt-3 grid gap-2">
         {paperNotes.map((note) => {
           const activityId = note.paperNoteSource!.activityId;
-          const preview = String(note.body ?? "Imported from paper notes")
+          const fullBody = String(note.body ?? "Imported from paper notes");
+          const preview = fullBody
             .replace(/^Imported from paper notes\s*/i, "")
             .trim()
             .slice(0, 220);
@@ -55,7 +81,7 @@ export function PaperNoteHistorySources({ notes }: { notes: PaperNoteHistoryItem
                   {note.historicalDateUnknown ? (
                     <p className="mt-1 text-xs font-semibold text-amber-800">Historical date unknown</p>
                   ) : null}
-                  {preview ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{preview}{String(note.body ?? "").length > 220 ? "…" : ""}</p> : null}
+                  {preview ? <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">{preview}{fullBody.length > 220 ? "…" : ""}</p> : null}
                 </div>
                 <button
                   className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-900 disabled:opacity-50"
