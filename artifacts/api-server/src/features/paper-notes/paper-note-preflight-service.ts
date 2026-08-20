@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
+import { validatePaperNotePrimaryContact } from "./paper-note-primary-contact-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
 import type { PaperNoteImportSummary } from "./paper-note-types";
@@ -20,17 +21,8 @@ export type PaperNoteBatchPreflight = {
 export type PaperNotePreflightBatch = {
   id: string;
   status: string;
-  pages: Array<{
-    id: string;
-    status: string;
-    originalObjectKey: string | null;
-  }>;
-  entries: Array<{
-    id: string;
-    pageId: string;
-    state: string;
-    review: PaperNoteReviewDraft;
-  }>;
+  pages: Array<{ id: string; status: string; originalObjectKey: string | null }>;
+  entries: Array<{ id: string; pageId: string; state: string; review: PaperNoteReviewDraft }>;
 };
 
 export interface PaperNotePreflightRepository {
@@ -84,11 +76,7 @@ export class PaperNotePreflightService {
     private readonly storage: Storage,
   ) {}
 
-  async preflight(input: {
-    actorId: string;
-    batchId: string;
-    now: Date;
-  }): Promise<PaperNoteBatchPreflight> {
+  async preflight(input: { actorId: string; batchId: string; now: Date }): Promise<PaperNoteBatchPreflight> {
     void input.now;
     const batch = await this.repository.loadBatch(input.actorId, input.batchId);
     const preview = emptySummary();
@@ -104,62 +92,37 @@ export class PaperNotePreflightService {
       };
     }
 
-    if (batch.status === "importing") {
-      blocking.push({ entryId: null, code: "BATCH_IMPORTING", message: "This batch is already being imported." });
-    }
-    if (batch.status === "imported" || batch.status === "archived") {
-      blocking.push({ entryId: null, code: "BATCH_ALREADY_IMPORTED", message: "This paper-note batch has already been imported." });
-    }
+    if (batch.status === "importing") blocking.push({ entryId: null, code: "BATCH_IMPORTING", message: "This batch is already being imported." });
+    if (batch.status === "imported" || batch.status === "archived") blocking.push({ entryId: null, code: "BATCH_ALREADY_IMPORTED", message: "This paper-note batch has already been imported." });
 
     for (const page of batch.pages) {
       if (page.status !== "extracted" && page.status !== "reviewed_empty") {
-        blocking.push({
-          entryId: null,
-          code: "PAGE_NOT_RESOLVED",
-          message: "Every paper page must finish reading, be retried, or be marked as having no importable entries.",
-        });
+        blocking.push({ entryId: null, code: "PAGE_NOT_RESOLVED", message: "Every paper page must finish reading, be retried, or be marked as having no importable entries." });
       }
       if (!page.originalObjectKey || !(await this.storage.exists(page.originalObjectKey))) {
-        blocking.push({
-          entryId: null,
-          code: "SOURCE_MISSING",
-          message: "A source paper photo is missing and must be restored before import.",
-        });
+        blocking.push({ entryId: null, code: "SOURCE_MISSING", message: "A source paper photo is missing and must be restored before import." });
       }
     }
 
     const approved = batch.entries.filter((entry) => entry.state === "approved");
     const skipped = batch.entries.filter((entry) => entry.state === "skipped");
-    if (!approved.length) {
-      blocking.push({
-        entryId: null,
-        code: "NO_APPROVED_ENTRIES",
-        message: "Approve at least one paper entry before importing the batch.",
-      });
-    }
+    if (!approved.length) blocking.push({ entryId: null, code: "NO_APPROVED_ENTRIES", message: "Approve at least one paper entry before importing the batch." });
 
     for (const entry of batch.entries) {
       if (entry.state !== "approved" && entry.state !== "skipped") {
-        blocking.push({
-          entryId: entry.id,
-          code: "ENTRY_NOT_FINAL",
-          message: "Every paper entry must be Approved or Skipped before import.",
-        });
+        blocking.push({ entryId: entry.id, code: "ENTRY_NOT_FINAL", message: "Every paper entry must be Approved or Skipped before import." });
         continue;
       }
       addPreview(preview, entry);
       if (entry.state === "skipped") continue;
       if (!entry.review.destination) {
-        blocking.push({
-          entryId: entry.id,
-          code: "DESTINATION_MISSING",
-          message: "Choose where this paper entry belongs.",
-        });
+        blocking.push({ entryId: entry.id, code: "DESTINATION_MISSING", message: "Choose where this paper entry belongs." });
         continue;
       }
       const reviewIssues = [
         ...validatePaperNoteReview(entry.review as PaperNoteReviewPayload),
         ...validatePaperNoteEventDate(entry.review.event),
+        ...validatePaperNotePrimaryContact(entry.review),
         ...validatePaperNotePrimaryPhones(entry.review),
       ];
       for (const issue of reviewIssues.filter((issue) => issue.severity === "blocking")) {
@@ -170,11 +133,7 @@ export class PaperNotePreflightService {
         entry.review.destination.mode === "existing_profile_new_location"
       ) {
         if (!(await this.repository.targetExists(entry.review.destination))) {
-          blocking.push({
-            entryId: entry.id,
-            code: "TARGET_MISSING",
-            message: "The selected CRM profile or location is no longer available. Review this entry again.",
-          });
+          blocking.push({ entryId: entry.id, code: "TARGET_MISSING", message: "The selected CRM profile or location is no longer available. Review this entry again." });
         }
       }
     }
@@ -191,13 +150,7 @@ export class PaperNotePreflightService {
 }
 
 type DrizzleDatabase = typeof database;
-
-type EntryRow = {
-  id: string;
-  pageId: string;
-  state: string;
-  reviewPayload: unknown;
-};
+type EntryRow = { id: string; pageId: string; state: string; reviewPayload: unknown };
 
 export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRepository {
   constructor(private readonly database: DrizzleDatabase) {}
@@ -244,18 +197,15 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
     if (destination.mode === "new_profile" || destination.mode === "skip") return true;
     if (destination.mode === "existing_profile_new_location") {
       const result = await this.database.execute(sql`
-        select 1
-        from organizations
-        where id = ${destination.organizationId}::uuid
-          and consolidated_into_id is null
+        select 1 from organizations
+        where id = ${destination.organizationId}::uuid and consolidated_into_id is null
         limit 1
       `);
       return Boolean((result as { rows?: unknown[] }).rows?.length);
     }
     if (destination.organizationLocationId) {
       const result = await this.database.execute(sql`
-        select 1
-        from organization_locations
+        select 1 from organization_locations
         where id = ${destination.organizationLocationId}::uuid
           and organization_id = ${destination.organizationId}::uuid
         limit 1
@@ -263,10 +213,8 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
       return Boolean((result as { rows?: unknown[] }).rows?.length);
     }
     const result = await this.database.execute(sql`
-      select 1
-      from organizations
-      where id = ${destination.organizationId}::uuid
-        and consolidated_into_id is null
+      select 1 from organizations
+      where id = ${destination.organizationId}::uuid and consolidated_into_id is null
       limit 1
     `);
     return Boolean((result as { rows?: unknown[] }).rows?.length);
