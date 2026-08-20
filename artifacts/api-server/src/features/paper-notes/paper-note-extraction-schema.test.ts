@@ -26,17 +26,6 @@ describe("paper note extraction parsing", () => {
     expect(result.entries[1]?.region).toBeNull();
   });
 
-  it("accepts harmless prose wrapped around one complete JSON object", () => {
-    const result = parsePaperNotePageSegmentation(`Here is the JSON you requested:\n${JSON.stringify({
-      pageHeading: "Monday Call List",
-      pageActivityDate: null,
-      pageContext: [],
-      roughTranscription: "Monday Call List",
-      entries: [],
-    })}\nDone.`);
-    expect(result.pageHeading).toBe("Monday Call List");
-  });
-
   it("does not turn Monday Call List into a date", () => {
     const result = parsePaperNotePageSegmentation(JSON.stringify({
       pageHeading: "Monday Call List",
@@ -119,7 +108,7 @@ describe("paper note extraction parsing", () => {
     ]));
   });
 
-  it("still rejects prose when it contains no complete JSON object", () => {
+  it("rejects prose instead of trying to repair malformed output", () => {
     expect(() => parsePaperNoteEntryExtraction("Here is what I found: Example Fair"))
       .toThrow("Paper note AI output was not valid JSON");
   });
