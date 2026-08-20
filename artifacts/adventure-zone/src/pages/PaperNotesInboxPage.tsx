@@ -2,8 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
 import { PaperNoteBatchCard } from "@/components/paper-notes/paper-note-batch-card";
+import { PaperNoteHealthBanner } from "@/components/paper-notes/paper-note-health-banner";
 import { PaperNoteUploadPanel } from "@/components/paper-notes/paper-note-upload-panel";
 import { listPaperNoteBatches } from "@/features/paper-notes/paper-note-client";
+import { getPaperNoteHealth } from "@/features/paper-notes/paper-note-health-client";
 
 export default function PaperNotesInboxPage() {
   const [, navigate] = useLocation();
@@ -11,6 +13,13 @@ export default function PaperNotesInboxPage() {
     queryKey: ["paper-notes", "batches"],
     queryFn: listPaperNoteBatches,
     refetchOnWindowFocus: true,
+  });
+  const health = useQuery({
+    queryKey: ["paper-notes", "health"],
+    queryFn: getPaperNoteHealth,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    retry: 1,
   });
   const active = (batches.data ?? []).filter((batch) => batch.status !== "imported" && batch.status !== "archived");
   const completed = (batches.data ?? []).filter((batch) => batch.status === "imported" || batch.status === "archived");
@@ -24,6 +33,13 @@ export default function PaperNotesInboxPage() {
           Photograph the old call sheets, check what they say, and choose exactly what belongs in Command Center before anything is imported.
         </p>
       </header>
+
+      {health.data ? <PaperNoteHealthBanner health={health.data} /> : null}
+      {health.isError ? (
+        <p className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Paper Notes status could not be checked right now. Your saved batches are still available.
+        </p>
+      ) : null}
 
       <PaperNoteUploadPanel onUploaded={(batchId) => navigate(`/settings/paper-notes/${batchId}`)} />
 
