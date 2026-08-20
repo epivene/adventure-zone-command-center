@@ -81,6 +81,9 @@ export function GuidedCallScriptCard({
             </button>
           ))}
         </div>
+        <a className="mt-2 inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-bold text-orange-800 sm:hidden" href="#call-details-title">
+          Call outcome & save ↓
+        </a>
       </div>
 
       {node.coach ? (
