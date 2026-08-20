@@ -26,11 +26,13 @@ export interface ActExtractionRuntime {
 
 type ExtractionLoop = ActExtractionRuntime;
 
-// Render's small production instance has a ~256 MB Node heap. Four concurrent
-// ACT extractors plus organizer/recovery loops can exhaust that heap during bulk
-// recovery. Keep extraction serialized; checkpoint leasing still makes it safe
-// to raise this again later on a larger service.
 export const actExtractionWorkerConcurrency = 1;
+
+export function shouldStartActBackgroundWorkers(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return env.ACT_BACKGROUND_WORKERS_ENABLED?.trim().toLowerCase() === "true";
+}
 
 export function createActExtractionLoopPool(input: {
   concurrency: number;
@@ -71,7 +73,6 @@ export function createActServerShutdown(input: {
           try {
             input.onError(stage);
           } catch {
-            // Shutdown remains best-effort even if reporting is unavailable.
           }
         }
       }
@@ -249,9 +250,7 @@ async function createProductionConfiguredRuntime(
     { DrizzleActSourceArchiveRepository },
     { DrizzleActRequestAuditRepository },
     { ActExtractionWorker },
-    {
-      ActExtractionWorkerLoop,
-    },
+    { ActExtractionWorkerLoop },
     { ProductionActOrganizer, ProductionActOrganizerRecoveryWorker },
     { DrizzleActReviewCommandStore, DrizzleProductionOrganizerStore },
   ] = await Promise.all([
@@ -265,9 +264,7 @@ async function createProductionConfiguredRuntime(
     import("./review-sql-adapter"),
   ]);
 
-  const clientAdapter = createActExtractionClientAdapter(
-    new ActClient(config),
-  );
+  const clientAdapter = createActExtractionClientAdapter(new ActClient(config));
   const worker = new ActExtractionWorker({
     checkpoints: new DrizzleActReplacementCheckpointRepository(db),
     audits: new DrizzleActRequestAuditRepository(db),
@@ -366,34 +363,19 @@ function listRelationship(
     case "activity_company":
       return source.listCompaniesForActivity(parentId, request);
     case "activity_opportunity":
-      return source.listRelated({
-        parentKind: "activity",
-        parentId,
-        targetKind: "opportunity",
-        request,
-      });
+      return source.listRelated({ parentKind: "activity", parentId, targetKind: "opportunity", request });
     case "note_contact":
       return source.listContactsForNote(parentId, request);
     case "note_company":
       return source.listCompaniesForNote(parentId, request);
     case "note_opportunity":
-      return source.listRelated({
-        parentKind: "note",
-        parentId,
-        targetKind: "opportunity",
-        request,
-      });
+      return source.listRelated({ parentKind: "note", parentId, targetKind: "opportunity", request });
     case "history_contact":
       return source.listContactsForHistory(parentId, request);
     case "history_company":
       return source.listCompaniesForHistory(parentId, request);
     case "history_opportunity":
-      return source.listRelated({
-        parentKind: "history",
-        parentId,
-        targetKind: "opportunity",
-        request,
-      });
+      return source.listRelated({ parentKind: "history", parentId, targetKind: "opportunity", request });
     default:
       throw new Error("Act relationship checkpoint is invalid.");
   }
