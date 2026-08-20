@@ -19,6 +19,32 @@ describe("PaperNoteSourceViewer", () => {
     );
   });
 
+  it("offers exact source restoration and retries viewing afterward", async () => {
+    const loadSource = vi.fn()
+      .mockRejectedValueOnce(new Error("The original paper photo is missing and must be restored."))
+      .mockResolvedValueOnce({ url: "https://signed.example/restored", kind: "original" as const });
+    const restoreSource = vi.fn(async () => undefined);
+    render(
+      <PaperNoteSourceViewer
+        label="Page 4"
+        loadSource={loadSource}
+        restoreSource={restoreSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View paper" }));
+    const input = await screen.findByLabelText("Restore original photo");
+    const file = new File(["original"], "page.jpg", { type: "image/jpeg" });
+    fireEvent.change(input, { target: { files: [file] } });
+
+    await waitFor(() => expect(restoreSource).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(loadSource).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("img", { name: "Original paper photo for Page 4" })).toHaveAttribute(
+      "src",
+      "https://signed.example/restored",
+    );
+  });
+
   it("closes on Escape and returns focus to the opener", async () => {
     const loadSource = vi.fn(async () => ({ url: "https://signed.example/paper", kind: "original" as const }));
     render(<PaperNoteSourceViewer label="Page 1" loadSource={loadSource} />);
