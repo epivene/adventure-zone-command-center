@@ -138,4 +138,36 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByLabelText("Existing contact")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /Tina Smith/ })).toBeInTheDocument();
   });
+
+  it("lets the reviewer confirm an inferred event year and create a new location under a saved profile", () => {
+    render(<PaperNoteEntryCard
+      entry={{
+        ...entry,
+        review: {
+          ...entry.review,
+          event: {
+            ...entry.review.event,
+            eventDateText: "June 22",
+            startsOn: "2026-06-22",
+            endsOn: "2026-06-23",
+            pageYearConfirmed: false,
+          },
+        },
+      } as any}
+      matches={[existingMatch] as any}
+      loadSource={vi.fn()}
+      onSave={vi.fn()}
+      onApprove={vi.fn()}
+      onUnapprove={vi.fn()}
+      onSkip={vi.fn()}
+    />);
+
+    expect(screen.getByLabelText("Event start date")).toHaveValue("2026-06-22");
+    expect(screen.getByLabelText("Event end date")).toHaveValue("2026-06-23");
+    expect(screen.getByLabelText("Confirm event year from paper/context")).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Create new location under Emmett Cherry Festival" }));
+    expect(screen.getByLabelText("New location label")).toHaveValue("Emmett");
+    expect(screen.getByLabelText("New location city")).toHaveValue("Emmett");
+    expect(screen.getByLabelText("New location state")).toHaveValue("ID");
+  });
 });
