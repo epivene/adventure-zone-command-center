@@ -8,6 +8,7 @@ import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-
 import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import { CallerFinder } from "@/components/calls/caller-finder";
 import { CallWorkspace } from "@/components/calls/call-workspace";
+import { GuidedCallScriptOverridesProvider } from "@/features/calls/guided-call-script-settings-context";
 import { apiGet } from "@/lib/auth-token";
 
 function toDate(value: unknown): Date | null {
@@ -116,28 +117,30 @@ export default function CallWorkspacePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-5">
       {assistantContext ? <AssistantContextRegistration {...assistantContext} /> : null}
-      <CallWorkspace
-        activityParent={data.activityParent}
-        assistedCallingEnabled={config.assistedCallingEnabled}
-        booking={booking}
-        briefing={data.briefing ?? null}
-        contact={contact}
-        contextSummary={data.contextSummary ?? null}
-        createActivity={createActivityAction}
-        defaultScriptKind={data.defaultScriptKind}
-        editActivity={editActivityAction}
-        followUp={followUp}
-        loadRevisions={listActivityRevisionsAction}
-        mode="full"
-        onComplete={completeCallAction}
-        operations={data.operations ?? null}
-        organization={organization}
-        phones={data.phones ?? []}
-        recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
-        scriptPrompts={data.scriptPrompts ?? []}
-        timeline={coerceTimeline(data.timeline)}
-        voicemailLauncherUrl={config.voicemailLauncherUrl}
-      />
+      <GuidedCallScriptOverridesProvider overrides={data.guidedScriptOverrides ?? []}>
+        <CallWorkspace
+          activityParent={data.activityParent}
+          assistedCallingEnabled={config.assistedCallingEnabled}
+          booking={booking}
+          briefing={data.briefing ?? null}
+          contact={contact}
+          contextSummary={data.contextSummary ?? null}
+          createActivity={createActivityAction}
+          defaultScriptKind={data.defaultScriptKind}
+          editActivity={editActivityAction}
+          followUp={followUp}
+          loadRevisions={listActivityRevisionsAction}
+          mode="full"
+          onComplete={completeCallAction}
+          operations={data.operations ?? null}
+          organization={organization}
+          phones={data.phones ?? []}
+          recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
+          scriptPrompts={data.scriptPrompts ?? []}
+          timeline={coerceTimeline(data.timeline)}
+          voicemailLauncherUrl={config.voicemailLauncherUrl}
+        />
+      </GuidedCallScriptOverridesProvider>
       <CallAssistantPanel
         bookingId={booking?.id ?? null}
         contactId={contact?.id ?? null}
