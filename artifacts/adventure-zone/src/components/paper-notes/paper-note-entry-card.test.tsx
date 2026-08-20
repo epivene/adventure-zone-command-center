@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { PaperNoteEntryCard } from "./paper-note-entry-card";
@@ -20,7 +20,7 @@ const entry = {
       mode: "new_contact" as const,
       selectedContactId: null,
       name: "Tina",
-      role: null,
+      role: "Event coordinator",
       email: null,
       primary: true,
       phones: [{
@@ -29,14 +29,25 @@ const entry = {
         extension: "3115",
         type: "office" as const,
         label: "fair office",
-        instructions: null,
+        instructions: "Ask for Tina",
         status: "active" as const,
         primary: true,
         crossedOut: false,
         importAsStructuredValue: true,
       }],
     }],
-    organizationPhones: [],
+    organizationPhones: [{
+      key: "org-phone-0",
+      number: "208-555-0100",
+      extension: null,
+      type: "office" as const,
+      label: "main office",
+      instructions: "Call main office",
+      status: "active" as const,
+      primary: false,
+      crossedOut: false,
+      importAsStructuredValue: true,
+    }],
     oldReminder: "Call Monday",
     starredOnPaper: true,
     generalNotes: [],
@@ -44,6 +55,44 @@ const entry = {
     conflicts: {},
     currentFollowUp: { enabled: false, kind: "call", dueOn: null, contactKey: null },
   },
+};
+
+const existingMatch = {
+  organizationId: "10000000-0000-4000-8000-000000000001",
+  organizationLocationId: null,
+  name: "Emmett Cherry Festival",
+  city: "Emmett",
+  region: "ID",
+  strength: "strong" as const,
+  score: 200,
+  reasons: ["same phone number and extension", "same event/profile name and city/state"],
+  contacts: [{
+    id: "50000000-0000-4000-8000-000000000001",
+    name: "Tina Smith",
+    role: "Event coordinator",
+    email: "tina@example.test",
+    phones: [{
+      id: "60000000-0000-4000-8000-000000000001",
+      number: "208-555-0142",
+      extension: "3115",
+      type: "office" as const,
+      label: "office",
+      instructions: null,
+      status: "active" as const,
+      primary: true,
+    }],
+  }],
+  organizationPhones: [{
+    id: "70000000-0000-4000-8000-000000000001",
+    organizationLocationId: null,
+    number: "208-555-0100",
+    extension: null,
+    type: "office" as const,
+    label: "main office",
+    instructions: null,
+    status: "active" as const,
+    primary: true,
+  }],
 };
 
 describe("PaperNoteEntryCard", () => {
@@ -61,24 +110,21 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByText(/Emmett Cherry Festival — Tina — ext 3115/)).toBeInTheDocument();
     expect(screen.getByLabelText("Phone number")).toHaveValue("208-555-0142");
     expect(screen.getByLabelText("Extension")).toHaveValue("3115");
+    expect(screen.getByLabelText("Phone type")).toHaveValue("office");
+    expect(screen.getByLabelText("Phone label")).toHaveValue("fair office");
+    expect(screen.getByLabelText("Phone status")).toHaveValue("active");
+    expect(screen.getByLabelText("Import as structured phone")).toBeChecked();
     expect(screen.getByLabelText("Old reminder from paper")).toHaveValue("Call Monday");
     expect(screen.getByLabelText("Starred on original paper")).toBeChecked();
+    expect(screen.getByText("Organization / main office phones")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("208-555-0100")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create new profile" })).toBeInTheDocument();
   });
 
-  it("explains why an existing profile was suggested", () => {
+  it("explains why an existing profile was suggested and lets the contact link to a saved person", () => {
     render(<PaperNoteEntryCard
       entry={entry as any}
-      matches={[{
-        organizationId: "10000000-0000-4000-8000-000000000001",
-        organizationLocationId: null,
-        name: "Emmett Cherry Festival",
-        city: "Emmett",
-        region: "ID",
-        strength: "strong",
-        score: 200,
-        reasons: ["same phone number and extension", "same event/profile name and city/state"],
-      }]}
+      matches={[existingMatch] as any}
       loadSource={vi.fn()}
       onSave={vi.fn()}
       onApprove={vi.fn()}
@@ -86,6 +132,10 @@ describe("PaperNoteEntryCard", () => {
       onSkip={vi.fn()}
     />);
     expect(screen.getByText("same phone number and extension")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Use Emmett Cherry Festival" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use Emmett Cherry Festival" }));
+    expect(screen.getByLabelText("Contact handling")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Contact handling"), { target: { value: "existing_contact" } });
+    expect(screen.getByLabelText("Existing contact")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Tina Smith/ })).toBeInTheDocument();
   });
 });
