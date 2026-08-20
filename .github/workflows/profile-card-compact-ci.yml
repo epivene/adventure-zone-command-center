@@ -3,6 +3,8 @@ name: Profile Card Compact CI
 on:
   pull_request:
     paths:
+      - "artifacts/api-server/src/routes/organizations.ts"
+      - "artifacts/api-server/src/routes/organizations.profile-card-details.test.ts"
       - "artifacts/adventure-zone/src/components/organizations/organization-list.tsx"
       - "artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx"
       - ".github/workflows/profile-card-compact-ci.yml"
@@ -21,8 +23,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Compact profile card test
-        run: pnpm exec vitest run artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx
+      - name: Profile card tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/routes/organizations.profile-card-details.test.ts
+          artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx
       - name: Workspace typecheck
         run: pnpm run typecheck
       - name: Workspace build
