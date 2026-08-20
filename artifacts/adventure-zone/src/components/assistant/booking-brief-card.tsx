@@ -16,11 +16,12 @@ export function BookingBriefCard({
   brief: BookingBrief;
   context: AssistantContextBundle | null;
 }) {
+  const familyMode = context?.context.kind === "event_family";
   return (
     <section className="rounded-xl border border-orange-200 bg-orange-50/50 p-4">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">
-          Booking Brief
+          {familyMode ? "Family Overview" : "Booking Brief"}
         </p>
         <h3 className="mt-1 font-bold text-slate-950">{brief.headline}</h3>
         {context ? (
@@ -46,7 +47,9 @@ export function BookingBriefCard({
         </ul>
       ) : (
         <p className="mt-3 text-sm text-slate-600">
-          There isn’t enough saved booking history yet for a detailed brief. You can still ask about the current booking.
+          {familyMode
+            ? "There isn’t enough saved family context yet for a detailed overview. Add member details or notes, then try again."
+            : "There isn’t enough saved booking history yet for a detailed brief. You can still ask about the current booking."}
         </p>
       )}
     </section>

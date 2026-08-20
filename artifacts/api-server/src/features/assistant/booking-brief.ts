@@ -14,7 +14,12 @@ export type BookingBriefItemKey =
   | "follow_up"
   | "route_fit"
   | "year_over_year_change"
-  | "next_action";
+  | "next_action"
+  | "family_description"
+  | "family_members"
+  | "family_locations"
+  | "family_types"
+  | "family_booking_history";
 
 export type BookingBrief = {
   headline: string;
@@ -47,9 +52,31 @@ function sourceIdsForBookings(
   });
 }
 
+function buildEventFamilyOverview(bundle: BookingAssistantContextBundle): BookingBrief {
+  const byTitle = new Map(bundle.businessKnowledge.map((entry) => [entry.title, entry]));
+  const mappings: Array<[BookingBriefItemKey, string]> = [
+    ["family_description", "Family description"],
+    ["family_members", "Family members"],
+    ["family_locations", "Family locations"],
+    ["family_types", "Family profile types"],
+    ["family_booking_history", "Family booking history coverage"],
+  ];
+  const items = mappings.flatMap(([key, title]) => {
+    const entry = byTitle.get(title);
+    return entry ? [{ key, text: entry.body, confidence: "high" as const, sourceIds: entry.sourceIds }] : [];
+  });
+  return {
+    headline: `Family overview — ${bundle.context.label}`,
+    items,
+    generatedAt: bundle.generatedAt,
+  };
+}
+
 export function buildBookingBrief(
   bundle: BookingAssistantContextBundle,
 ): BookingBrief {
+  if (bundle.context.kind === "event_family") return buildEventFamilyOverview(bundle);
+
   const items: BookingBrief["items"] = [];
 
   const packageSignal = bundle.packageHistorySignals.find(
