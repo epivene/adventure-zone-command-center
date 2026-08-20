@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 import { PaperNoteImportError } from "@/features/paper-notes/paper-note-import-service";
 import type { PaperNoteBatchPreflight } from "@/features/paper-notes/paper-note-preflight-service";
