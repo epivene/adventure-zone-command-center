@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { ExternalLink, Mail, MapPin, Phone, UserRound } from "lucide-react";
 
 import { createActivityAction } from "@/actions/activities";
@@ -7,7 +8,7 @@ import { ResponsiveDetailSheet } from "@/components/navigation/responsive-detail
 import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInlineEditor } from "./profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "./history-summary";
-import { formatPhoneDisplay, phoneHref } from "@/features/contacts/phone-display";
+import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
 export type ProfileSheetTarget = {
@@ -123,7 +124,9 @@ export function ProfileDetailSheet({
   const followUpOverdue = Boolean(nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now());
   const visiblePhone = selectedContact?.phone ?? place.phone ?? null;
   const phoneText = formatPhoneDisplay(visiblePhone);
-  const phoneLink = phoneHref(visiblePhone);
+  const callQuery = new URLSearchParams({ organizationId: profileId });
+  if (selectedContactId) callQuery.set("contactId", selectedContactId);
+  const callHref = visiblePhone ? `/calls/new?${callQuery.toString()}` : null;
   const email = selectedContact?.email ?? null;
   const websiteHref = normalizeExternalWebsite(place.website);
 
@@ -242,14 +245,14 @@ export function ProfileDetailSheet({
                 </div>
 
                 <div className="mt-4 flex items-center gap-2">
-                  {phoneLink ? (
-                    <a
-                      aria-label={phoneText ? `Call ${phoneText}` : "Call"}
+                  {callHref ? (
+                    <Link
+                      aria-label={phoneText ? `Open call workspace for ${phoneText}` : "Open call workspace"}
                       className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
-                      href={phoneLink}
+                      href={callHref}
                     >
                       <Phone className="h-5 w-5" />
-                    </a>
+                    </Link>
                   ) : null}
                   {email ? (
                     <a

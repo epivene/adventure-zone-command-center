@@ -1,0 +1,56 @@
+/* Keep the full call workspace in the order a live conversation actually happens. */
+[data-testid="call-workspace"][data-mode="full"] {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Flatten the old desktop columns so the cards can form one clear top-to-bottom flow. */
+[data-testid="call-workspace"][data-mode="full"] > div:last-child,
+[data-testid="call-workspace"][data-mode="full"] > div:last-child > div,
+[data-testid="call-workspace"][data-mode="full"] > div:last-child > aside {
+  display: contents;
+}
+
+[data-testid="call-workspace"][data-mode="full"] > header {
+  order: 0;
+}
+
+/* Step 1: choose the number and launch Phone Link. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="phone-actions-title"] {
+  order: 1;
+}
+
+/* Step 2: who this is, why we are calling, status, route, and warnings. */
+[data-testid="call-workspace"][data-mode="full"] > :not(header):not(:last-child) {
+  order: 2;
+}
+
+/* Step 3: the words to say and the caller's likely responses. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="guided-script-title"],
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="conversation-guide-title"] {
+  order: 3;
+}
+
+/* Step 4: capture the outcome, dated next action, and save while the call is fresh. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="call-details-title"] {
+  order: 4;
+}
+
+/* Step 5: supporting facts stay available without leading the conversation. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="caller-title"],
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="booking-snapshot-title"] {
+  order: 5;
+}
+
+/* Step 6: history remains available at the bottom instead of competing with the live call. */
+[data-testid="call-workspace"][data-mode="full"] > div:last-child > div > details {
+  order: 6;
+}
+
+@media (max-width: 639px) {
+  [data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="phone-actions-title"] {
+    position: relative;
+    z-index: 21;
+  }
+}

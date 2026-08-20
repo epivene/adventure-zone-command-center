@@ -15,7 +15,7 @@ describe("guided call scripts", () => {
   it("uses a relationship-aware rebooking opening", () => {
     const script = getGuidedCallScript("rebooking");
     const opening = script.nodes[script.startNodeId];
-    expect(opening.say.toLowerCase()).toContain("worked with you before");
+    expect(opening.say.toLowerCase()).toContain("been part of");
     expect(opening.say.toLowerCase()).not.toContain("introduce");
   });
 

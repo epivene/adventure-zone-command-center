@@ -98,8 +98,8 @@ function commonNodes(): Record<string, GuidedCallNode> {
   return {
     details: {
       id: "details",
-      say: "Great. I just want to make sure I have the basics right. What date and location are you planning for, and about how many people do you expect?",
-      coach: "Confirm only missing details; do not make them repeat information already in the profile.",
+      say: "Wonderful. What date and location are you planning for, about how many guests do you expect, and what ages will make up most of the crowd? That helps us shape the right balance of attractions instead of giving you a one-size-fits-all answer.",
+      coach: "Confirm only what is missing. Use the saved event details first so the organizer does not have to repeat them.",
       responses: [
         { id: "details_captured", label: "Got the details", nextNodeId: "package_interest", suggestion: { collect: ["event_date", "location", "attendance"] } },
         commonPricing,
@@ -108,8 +108,8 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     package_interest: {
       id: "package_interest",
-      say: "Do you already have a package in mind, or would you like me to help narrow it down?",
-      coach: "Only mention package facts already stored in Adventure Zone data.",
+      say: "What kind of energy are you hoping for — younger-family bounce houses and slides, competitive obstacle courses and adrenaline attractions, classic carnival games, or a mix with something for everyone?",
+      coach: "Match the conversation to the crowd and event goals. Only name packages, attractions, prices, or capacities that are confirmed in Adventure Zone data.",
       responses: [
         { id: "package_known", label: "Package chosen", nextNodeId: "next_step", suggestion: { collect: ["package_interest"] } },
         commonPricing,
@@ -118,8 +118,8 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     pricing: {
       id: "pricing",
-      say: "I can go over the package information we have and make sure we match it to your event. I don't want to guess at anything that isn't confirmed.",
-      coach: "Use stored package/pricing data only. If the answer is not in the app, use Ask Assistant or Needs Answer.",
+      say: "I can walk through the confirmed package information and help match the attraction mix to your crowd, space, and goals. I would rather double-check a detail than guess and promise you the wrong thing.",
+      coach: "Use stored package and pricing data only. When the answer is not in the app, use Ask Assistant or Needs Answer and give a clear follow-up time.",
       responses: [
         { id: "pricing_answered", label: "Pricing answered", nextNodeId: "next_step", suggestion: { disposition: "interested" } },
         { id: "pricing_unknown", label: "Need to research", nextNodeId: "next_step", suggestion: { disposition: "follow_up_needed", nextAction: "research", noteFragment: "Need to confirm pricing/package details." } },
@@ -128,7 +128,7 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     next_step: {
       id: "next_step",
-      say: "What would be most helpful next — sending information, putting together a proposal, or setting a time to follow up?",
+      say: "What would make planning easiest for you next — photos and information to share with your team, a proposal built around the event, or a specific time for me to check back?",
       responses: [
         { id: "send_info", label: "Send information", nextNodeId: null, terminal: true, suggestion: { disposition: "interested", nextAction: "send_info", noteFragment: "Send event/package information." } },
         { id: "send_proposal", label: "Send proposal", nextNodeId: null, terminal: true, suggestion: { disposition: "proposal_contract_sent", nextAction: "send_proposal", noteFragment: "Contact requested a proposal." } },
@@ -137,7 +137,7 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     callback_time: {
       id: "callback_time",
-      say: "Absolutely. When would be a better time for me to call you back?",
+      say: "Absolutely — I do not want to catch you in the middle of everything. What day and time would be genuinely useful for me to call you back?",
       responses: [
         { id: "later_today", label: "Later today", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "call", followUpPreset: "later_today" } },
         { id: "tomorrow", label: "Tomorrow", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "call", followUpPreset: "tomorrow" } },
@@ -146,7 +146,7 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     decision_maker: {
       id: "decision_maker",
-      say: "No problem — who is the best person for me to speak with about the event, and what's the best way to reach them?",
+      say: "No worries. Who usually handles the entertainment or family-attraction side of the event, and what is the best way for me to reach them without making you play phone tag for us?",
       responses: [
         { id: "decision_maker_captured", label: "Got their info", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "call", collect: ["decision_maker"] } },
         { id: "unknown_decision_maker", label: "They don't know", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "research" } },
@@ -154,7 +154,7 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     close_declined: {
       id: "close_declined",
-      say: "Thanks for letting me know. Before I let you go, is that just for this event/year, or should we not reach out again?",
+      say: "Thanks for being straight with me. Before I let you get back to your day, is this just not a fit for this event or season, or would you rather The Adventure Zone not reach out again?",
       responses: [
         { id: "this_year_only", label: "This year only", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "future_season", followUpPreset: "next_season", noteFragment: "Booked/declined for this season only; revisit next season." } },
         { id: "do_not_call", label: "Do not call again", nextNodeId: null, terminal: true, suggestion: { disposition: "do_not_call", noteFragment: "Contact requested no further calls." } },
@@ -176,25 +176,26 @@ function script(kind: GuidedCallScriptKind, label: string, opening: GuidedCallNo
 const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
   first_outreach: script("first_outreach", "First outreach", {
     id: "opening",
-    say: "Hi {{contactName}}, this is Adventure Zone. I'm calling about {{eventName}} and wanted to see where you are in planning and whether we can help.",
-    coach: "Friendly introduction; do not assume they remember us.",
+    say: "Hi {{contactName}}, I’m calling from The Adventure Zone about {{eventName}}. We’re a traveling inflatable carnival with bounce houses, giant slides, obstacle courses, adrenaline attractions, and carnival games. I’d love to hear what kind of crowd and experience you’re planning and see whether we could be a good fit.",
+    coach: "Keep it warm and curious. The goal is to understand their event, not to unload every attraction in one breath.",
     responses: [commonInterested, commonPricing, { id: "already_booked", label: "Already booked someone", nextNodeId: "close_declined" }, commonCallback, commonNotInterested, commonWrongPerson],
   }),
   rebooking: script("rebooking", "Past customer / rebooking", {
     id: "opening",
-    say: "Hi {{contactName}}, this is Adventure Zone. We've worked with you before and I wanted to check in about {{eventName}} this season.",
-    coach: "Reference the existing relationship rather than giving a cold-call introduction.",
+    say: "Hi {{contactName}}, I’m calling from The Adventure Zone. We’ve been part of {{eventName}} before, and I wanted to see what you’re planning this season — whether you want a familiar setup or something fresh for the crowd.",
+    coach: "Treat this like a relationship, not a cold call. Reference saved history naturally, but never invent what happened before.",
     responses: [commonInterested, commonPricing, { id: "already_booked", label: "Already booked this year", nextNodeId: "close_declined" }, commonCallback, commonNotInterested, commonWrongPerson],
   }),
   follow_up: script("follow_up", "Follow-up", {
     id: "opening",
-    say: "Hi {{contactName}}, this is Adventure Zone following up about {{eventName}}. I wanted to pick up from our last conversation and see what you need next.",
+    say: "Hi {{contactName}}, I’m calling from The Adventure Zone to check back on {{eventName}}. I wanted to pick up where we left off and see what would help you feel comfortable choosing the right attraction mix for the event.",
+    coach: "Lead with the saved reason for the follow-up and the last conversation. Do not make them start over.",
     responses: [commonInterested, commonPricing, { id: "needs_time", label: "Still deciding", nextNodeId: "callback_time", suggestion: { disposition: "follow_up_needed" } }, commonCallback, commonNotInterested, commonWrongPerson],
   }),
   proposal_contract: script("proposal_contract", "Proposal / contract follow-up", {
     id: "opening",
-    say: "Hi {{contactName}}, this is Adventure Zone. I'm following up on the proposal or contract for {{eventName}} and wanted to make sure you received it and see if anything needs clarification.",
-    coach: "Do not restart basic discovery unless something materially changed.",
+    say: "Hi {{contactName}}, I’m calling from The Adventure Zone about the proposal or contract for {{eventName}}. I wanted to make sure it reached you and see whether anything about the attraction mix, setup, or next steps needs a clearer answer.",
+    coach: "Do not restart discovery unless the event changed. Focus on the specific decision, question, contract, or deposit holding things up.",
     responses: [
       { id: "ready", label: "Ready to move forward", nextNodeId: "next_step", suggestion: { disposition: "interested", noteFragment: "Ready to move forward with proposal/contract." } },
       { id: "question", label: "Has a question", nextNodeId: "pricing" },
@@ -205,7 +206,7 @@ const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
   }),
   callback: script("callback", "Requested callback", {
     id: "opening",
-    say: "Hi {{contactName}}, this is Adventure Zone returning your call about {{eventName}}. Is now still a good time?",
+    say: "Hi {{contactName}}, I’m calling from The Adventure Zone and returning your call about {{eventName}}. Is now still a good time to talk through what you’re planning?",
     responses: [
       { id: "yes", label: "Yes", nextNodeId: "details", suggestion: { disposition: "spoke_with_contact" } },
       commonPricing,
@@ -215,7 +216,8 @@ const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
   }),
   incoming_inquiry: script("incoming_inquiry", "Incoming inquiry", {
     id: "opening",
-    say: "Thanks for calling Adventure Zone. I can help with that. Let me get a few details about your event so I can point you in the right direction.",
+    say: "Thanks for calling The Adventure Zone! We bring a full inflatable-carnival experience to events, and I’d be happy to help. Tell me a little about the crowd and the kind of fun you want people to remember.",
+    coach: "Sound excited without rushing them. Start with their event and audience, then narrow the attractions and package.",
     responses: [commonInterested, commonPricing, { id: "just_question", label: "Just has a question", nextNodeId: "pricing" }, commonCallback],
   }),
 };
