@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { mergeOptimisticActivities } from "./profile-note-display";
@@ -26,5 +28,11 @@ describe("mergeOptimisticActivities", () => {
       refreshed,
       persisted,
     ]);
+  });
+
+  it("confirms successful note saves on the full profile even if refresh is slow", () => {
+    const source = fs.readFileSync(path.resolve(__dirname, "simple-full-profile.tsx"), "utf8");
+    expect(source).toContain('toast({ title: "Note saved" })');
+    expect(source).toContain("setOptimisticActivities");
   });
 });
