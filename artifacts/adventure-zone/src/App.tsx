@@ -52,6 +52,7 @@ import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
+import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
@@ -228,6 +229,7 @@ function AdminProtectedApp() {
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
           <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
           <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
+          <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />
