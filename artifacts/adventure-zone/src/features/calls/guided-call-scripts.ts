@@ -50,6 +50,14 @@ export type GuidedCallRenderContext = {
   packageInterest?: string | null;
 };
 
+export type GuidedCallScriptOverride = {
+  scriptKind: GuidedCallScriptKind;
+  nodeId: string;
+  sayText: string;
+  coachText: string | null;
+  updatedAt?: string;
+};
+
 const commonInterested: GuidedCallResponse = {
   id: "interested",
   label: "Interested",
@@ -224,6 +232,34 @@ const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
 
 export function getGuidedCallScript(kind: GuidedCallScriptKind): GuidedCallScript {
   return scripts[kind] ?? scripts.follow_up;
+}
+
+export function getConfiguredGuidedCallScript(
+  kind: GuidedCallScriptKind,
+  overrides: GuidedCallScriptOverride[] = [],
+): GuidedCallScript {
+  const base = getGuidedCallScript(kind);
+  const applicable = new Map(
+    overrides
+      .filter((override) => override.scriptKind === base.kind && Boolean(base.nodes[override.nodeId]))
+      .map((override) => [override.nodeId, override]),
+  );
+  if (applicable.size === 0) return base;
+
+  const nodes: Record<string, GuidedCallNode> = {};
+  for (const [nodeId, node] of Object.entries(base.nodes)) {
+    const override = applicable.get(nodeId);
+    if (!override) {
+      nodes[nodeId] = node;
+      continue;
+    }
+    nodes[nodeId] = {
+      ...node,
+      say: override.sayText,
+      coach: override.coachText ?? undefined,
+    };
+  }
+  return { ...base, nodes };
 }
 
 export function validateGuidedCallScript(scriptValue: GuidedCallScript): string[] {
