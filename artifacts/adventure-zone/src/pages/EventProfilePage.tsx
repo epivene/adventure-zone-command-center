@@ -48,14 +48,19 @@ export default function EventProfilePage() {
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     try {
-      const [d, ratingSummary, photo] = await Promise.all([
+      const [d, ratingSummary, photo, descriptionResult] = await Promise.all([
         apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`),
         apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 })),
         apiGet<{ dataUrl: string | null }>(`/event-profiles/${profileId}/photo`).catch(() => ({ dataUrl: null })),
+        apiGet<{ description: string | null }>(`/event-profiles/${profileId}/description`).catch(() => ({ description: null })),
       ]);
       const toDate = (value: any) => (value ? new Date(value) : null);
       const normalized = {
         ...d,
+        place: {
+          ...(d.place ?? {}),
+          description: descriptionResult.description ?? null,
+        },
         wrapUpRatingSummary: ratingSummary,
         notes: (d.notes ?? []).map((note: any) => ({
           ...note,
@@ -193,6 +198,13 @@ export default function EventProfilePage() {
         editing={profileEditing}
         onEditingChange={setProfileEditing}
       />
+
+      {!profileEditing && data.place?.description ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="event-description-title">
+          <h2 className="text-lg font-bold text-slate-900" id="event-description-title">Description</h2>
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{data.place.description}</p>
+        </section>
+      ) : null}
 
       {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
