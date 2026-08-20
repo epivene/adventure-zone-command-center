@@ -14,7 +14,7 @@ export const createActivityInputSchema = activityParentInputSchema
   .extend({
     kind: z.enum(activityKindValues),
     body: activityText,
-    occurredAt: z.date(),
+    occurredAt: z.coerce.date(),
   })
   .refine(
     (value) => Boolean(value.organizationId || value.contactId || value.bookingId),
