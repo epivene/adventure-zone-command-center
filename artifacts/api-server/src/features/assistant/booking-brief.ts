@@ -76,7 +76,8 @@ export function buildBookingBrief(
     (signal) => signal.kind === "main_attraction_difference",
   );
   if (
-    currentBooking?.physicalAttractionTotal !== null &&
+    currentBooking &&
+    currentBooking.physicalAttractionTotal != null &&
     countSignal?.kind === "main_attraction_difference"
   ) {
     const currentSource = sourceIdFor(
@@ -105,7 +106,7 @@ export function buildBookingBrief(
         sourceIds,
       });
     }
-  } else if (currentBooking?.physicalAttractionTotal !== null) {
+  } else if (currentBooking && currentBooking.physicalAttractionTotal != null) {
     const sourceId = sourceIdFor(bundle.sources, "booking", currentBooking.id);
     if (sourceId) {
       items.push({
