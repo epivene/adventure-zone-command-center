@@ -73,6 +73,8 @@ Rules:
 - Only set pageActivityDate when a full calendar date is actually written or unambiguously present. "Monday Call List" supplies no date.
 - Coordinates are normalized 0..1 relative to the interpreted orientation. If a reliable region cannot be identified, return region:null.
 - Keep entries in visual reading order and number sourceOrder from 0.
+- Keep roughTranscription concise; it is only page context, not a second full transcription.
+- Keep each roughText concise and focused on identifying that entry so the JSON stays compact even on dense pages.
 - never invent missing digits or letters.
 - separate event dates from communication dates; segmentation only identifies page-level communication context.
 - preserve phone extension and calling-instruction text in roughText.
@@ -133,6 +135,20 @@ function isUnavailable(error: unknown) {
   );
 }
 
+function providerJson(raw: string) {
+  const trimmed = raw.trim();
+  const firstObject = trimmed.indexOf("{");
+  const lastObject = trimmed.lastIndexOf("}");
+  if (firstObject >= 0 && lastObject > firstObject) {
+    return trimmed.slice(firstObject, lastObject + 1);
+  }
+  return trimmed;
+}
+
+function correctiveJsonPrompt(prompt: string) {
+  return `${prompt}\n\nIMPORTANT RETRY: Your previous response was invalid or truncated and could not be parsed. Return compact JSON only. Do not include prose, markdown fences, explanations, or any text before or after the JSON object. Keep optional/context text brief so the complete closing brace fits in the response.`;
+}
+
 export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionProvider {
   constructor(private readonly clientFactory: ClientFactory = createAiClient) {}
 
@@ -145,7 +161,7 @@ export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionPr
       bytes: input.bytes,
       mimeType: input.mimeType,
       prompt: segmentationPrompt(input.rotationDegrees),
-      maxTokens: 2400,
+      maxTokens: 4096,
       parse: parsePaperNotePageSegmentation,
     });
   }
@@ -201,7 +217,7 @@ export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionPr
       let raw: string;
       try {
         raw = await client.completeImage({
-          prompt: input.prompt,
+          prompt: attempt === 0 ? input.prompt : correctiveJsonPrompt(input.prompt),
           mimeType: input.mimeType,
           base64,
           maxTokens: input.maxTokens,
@@ -220,7 +236,7 @@ export class DefaultPaperNoteExtractionProvider implements PaperNoteExtractionPr
       }
 
       try {
-        return input.parse(raw);
+        return input.parse(providerJson(raw));
       } catch {
         if (attempt === 1) break;
       }
