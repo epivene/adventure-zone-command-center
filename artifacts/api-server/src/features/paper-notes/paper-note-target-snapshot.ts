@@ -57,8 +57,7 @@ export function paperNoteTargetSnapshotHasMissing(value: PaperNoteTargetSnapshot
     )
     || value.contacts.some(missingRecord)
     || value.phones.some((phone) =>
-      missingRecord((phone.paperExact as Record<string, unknown> | null) ?? null)
-      || missingRecord((phone.referenced as Record<string, unknown> | null) ?? null)),
+      missingRecord((phone.referenced as Record<string, unknown> | null) ?? null)),
   );
 }
 
@@ -107,7 +106,8 @@ async function loadContactPhone(
     order by case when id = ${input.id ?? null}::uuid then 0 else 1 end, id
     limit 1
   `));
-  return records[0] ?? { missing: true, id: input.id ?? null, contactId: input.contactId };
+  if (records[0]) return records[0];
+  return input.id ? { missing: true, id: input.id, contactId: input.contactId } : null;
 }
 
 async function loadOrganizationPhone(
@@ -148,12 +148,13 @@ async function loadOrganizationPhone(
     order by case when id = ${input.id ?? null}::uuid then 0 else 1 end, id
     limit 1
   `));
-  return records[0] ?? {
+  if (records[0]) return records[0];
+  return input.id ? {
     missing: true,
-    id: input.id ?? null,
+    id: input.id,
     organizationId: input.organizationId,
     organizationLocationId: input.organizationLocationId,
-  };
+  } : null;
 }
 
 export async function loadPaperNoteTargetSnapshotValue(
