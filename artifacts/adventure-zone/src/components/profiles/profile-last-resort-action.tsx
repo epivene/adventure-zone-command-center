@@ -156,7 +156,7 @@ export function ProfileLastResortButton({ profileId }: { profileId: string }) {
   return (
     <>
       <button className="button-secondary" onClick={() => setOpen(true)} type="button">{label}</button>
-      <ProfileLastResortDialog onChanged={refresh} onOpenChange={setOpen} open={open} profileId={profileId} />
+      <ProfileLastResortDialog onChanged={async () => { await refresh(); }} onOpenChange={setOpen} open={open} profileId={profileId} />
     </>
   );
 }
