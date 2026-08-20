@@ -3,6 +3,7 @@ import { runActReviewMigrations } from "@workspace/db/migrations";
 import { ensureProfileResearchSchema } from "./profile-research-startup-migration";
 import { ensureLeadScoutRelease2Schema } from "./lead-scout-release2-startup-migration";
 import { ensureLeadScoutRelease3Schema } from "./lead-scout-release3-startup-migration";
+import { ensurePaperNotesSchema } from "./paper-notes-startup-migration";
 
 const advisoryTryLockSql =
   "SELECT pg_try_advisory_lock(hashtext('adventure-zone:act-review-migrations')) AS locked";
@@ -57,6 +58,7 @@ export async function runActReviewMigrationsAtStartup(options?: {
       const researchApplied = await ensureProfileResearchSchema(client);
       const leadScoutRelease2Applied = await ensureLeadScoutRelease2Schema(client);
       const leadScoutRelease3Applied = await ensureLeadScoutRelease3Schema(client);
+      const paperNotesApplied = await ensurePaperNotesSchema(client);
 
       const migrationClient: MigrationClient = {
         query: (sql) => client.query(sql),
@@ -72,6 +74,7 @@ export async function runActReviewMigrationsAtStartup(options?: {
         ...(researchApplied ? ["061_profile_research_runs.sql", "063_lead_scout_runs.sql"] : []),
         ...(leadScoutRelease2Applied ? ["064_lead_scout_candidate_key.sql"] : []),
         ...(leadScoutRelease3Applied ? ["065_lead_scout_enrichment.sql"] : []),
+        ...(paperNotesApplied ? ["066_paper_notes_importer.sql"] : []),
         ...applied,
       ];
     } catch (error) {
