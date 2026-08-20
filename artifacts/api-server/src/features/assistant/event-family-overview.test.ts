@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const brief = readFileSync("src/features/assistant/booking-brief.ts", "utf8");
 const repository = readFileSync("src/features/assistant/profile-context-repository.ts", "utf8");
-const drawer = readFileSync("../adventure-zone/src/components/assistant/assistant-drawer.tsx", "utf8");
+const card = readFileSync("../adventure-zone/src/components/assistant/booking-brief-card.tsx", "utf8");
 
 describe("event family assistant overview", () => {
   it("builds a family overview instead of a booking brief", () => {
@@ -21,7 +21,8 @@ describe("event family assistant overview", () => {
     expect(repository).toContain("locations");
   });
 
-  it("uses family-specific loading language in the drawer", () => {
-    expect(drawer).toContain("Building Family Overview");
+  it("shows family-specific card language", () => {
+    expect(card).toContain("Family Overview");
+    expect(card).toContain("There isn’t enough saved family context yet");
   });
 });
