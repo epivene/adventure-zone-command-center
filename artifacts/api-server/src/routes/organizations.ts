@@ -78,6 +78,20 @@ export async function loadProfileCardDetailsWith(
 ): Promise<Map<string, ProfileCardDetails>> {
   if (!ids.length) return new Map();
 
+  let photoRows: any[] = [];
+  try {
+    const photoResult = await execute(sql`
+      select
+        o.id,
+        o.profile_image_data_url as "profileImageDataUrl"
+      from organizations o
+      where o.id = any(${ids}::uuid[])
+    `);
+    photoRows = photoResult.rows ?? [];
+  } catch {
+    photoRows = [];
+  }
+
   let coreRows: any[] = [];
   try {
     const coreResult = await execute(sql`
@@ -86,14 +100,13 @@ export async function loadProfileCardDetailsWith(
         o.phone,
         o.email,
         o.website,
-        o.place_type as "placeType",
-        o.profile_image_data_url as "profileImageDataUrl"
+        o.place_type as "placeType"
       from organizations o
       where o.id = any(${ids}::uuid[])
     `);
     coreRows = coreResult.rows ?? [];
   } catch {
-    return new Map();
+    coreRows = [];
   }
 
   let ratingRows: any[] = [];
@@ -113,20 +126,23 @@ export async function loadProfileCardDetailsWith(
     ratingRows = [];
   }
 
+  const photosById = new Map(photoRows.map((row) => [row.id, row.profileImageDataUrl ?? null]));
+  const coreById = new Map(coreRows.map((row) => [row.id, row]));
   const ratingsById = new Map(ratingRows.map((row) => [row.id, {
     ratingAverage: row.ratingAverage == null ? null : Number(row.ratingAverage),
     ratingCount: Number(row.ratingCount ?? 0),
   }]));
 
-  return new Map(coreRows.map((row) => {
-    const rating = ratingsById.get(row.id) ?? { ratingAverage: null, ratingCount: 0 };
-    return [row.id, {
-      id: row.id,
-      phone: row.phone ?? null,
-      email: row.email ?? null,
-      website: row.website ?? null,
-      placeType: row.placeType ?? null,
-      profileImageDataUrl: row.profileImageDataUrl ?? null,
+  return new Map(ids.map((id) => {
+    const core = coreById.get(id) ?? {};
+    const rating = ratingsById.get(id) ?? { ratingAverage: null, ratingCount: 0 };
+    return [id, {
+      id,
+      phone: core.phone ?? null,
+      email: core.email ?? null,
+      website: core.website ?? null,
+      placeType: core.placeType ?? null,
+      profileImageDataUrl: photosById.get(id) ?? null,
       ...rating,
     }];
   }));

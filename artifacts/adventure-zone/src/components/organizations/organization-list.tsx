@@ -135,7 +135,6 @@ export function OrganizationList({ organizations, query, travelLegs }: { organiz
         <ul className="grid gap-2">
           {organizations.records.map((organization) => {
             const websiteHref = normalizeExternalWebsite(organization.website ?? null);
-            const placeType = organization.placeType || "other";
             const location = [organization.city, organization.region].filter(Boolean).join(", ");
             return (
               <li className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-orange-200 hover:shadow-md" data-testid="profile-summary-card" key={organization.id}>
@@ -152,7 +151,6 @@ export function OrganizationList({ organizations, query, travelLegs }: { organiz
 
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">
                       {location ? <span className="inline-flex items-center gap-1"><span aria-hidden>⌖</span>{location}</span> : null}
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold lowercase text-slate-700">{placeType}</span>
                     </div>
 
                     {organization.parentContext ? <p className="mt-1 text-xs font-semibold text-orange-700">{organization.parentContext.kind === "event_family" ? "Part of" : "Location of"} {organization.parentContext.name}</p> : null}

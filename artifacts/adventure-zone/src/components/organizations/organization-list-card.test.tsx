@@ -23,7 +23,7 @@ const query = {
 afterEach(cleanup);
 
 describe("OrganizationList profile summary cards", () => {
-  it("shows the profile identity, contact details, website, type, and rating summary", () => {
+  it("shows the profile identity, contact details, website, and rating summary without a generic type pill", () => {
     render(
       <Router>
         <OrganizationList
@@ -63,7 +63,7 @@ describe("OrganizationList profile summary cards", () => {
 
     expect(screen.getByRole("link", { name: "10 Mile Pride (Breckenridge) CO" })).toBeVisible();
     expect(screen.getByText("Breckenridge, CO")).toBeVisible();
-    expect(screen.getByText("other")).toBeVisible();
+    expect(screen.queryByText("other")).not.toBeInTheDocument();
     expect(screen.getByText("(970) 547-3100")).toBeVisible();
     expect(screen.getByText("info@breckcreate.org")).toBeVisible();
     expect(screen.getByRole("link", { name: "https://gobreck.com/event/breck-pride/" })).toHaveAttribute("href", "https://gobreck.com/event/breck-pride/");
