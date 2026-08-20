@@ -262,6 +262,13 @@ function validEmail(value: string | null) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function conflictMissing(
+  review: PaperNoteReviewPayload,
+  path: string,
+) {
+  return !Object.hasOwn(review.conflicts, path);
+}
+
 export function validatePaperNoteReview(review: PaperNoteReviewPayload): PaperNoteReviewIssue[] {
   const issues: PaperNoteReviewIssue[] = [];
   const block = (fieldPath: string, message: string) => issues.push({ fieldPath, message, severity: "blocking" });
@@ -284,22 +291,42 @@ export function validatePaperNoteReview(review: PaperNoteReviewPayload): PaperNo
   }
 
   review.contacts.forEach((contact, contactIndex) => {
+    const namePath = `contacts.${contactIndex}.name`;
+    const emailPath = `contacts.${contactIndex}.email`;
     if (contact.mode === "new_contact" && !contact.name.trim()) {
-      block(`contacts.${contactIndex}.name`, "Enter the contact name before creating this contact.");
+      block(namePath, "Enter the contact name before creating this contact.");
     }
-    if (contact.mode === "existing_contact" && !contact.selectedContactId) {
-      block(`contacts.${contactIndex}.selectedContactId`, "Choose the existing contact to link.");
+    if (contact.mode === "existing_contact") {
+      if (!contact.selectedContactId) {
+        block(`contacts.${contactIndex}.selectedContactId`, "Choose the existing contact to link.");
+      }
+      if (contact.name.trim() && conflictMissing(review, namePath)) {
+        block(namePath, "Choose whether to keep the saved contact name or use the paper name.");
+      }
+      if (contact.email && conflictMissing(review, emailPath)) {
+        block(emailPath, "Choose whether to keep the saved email, replace it, or keep the paper value in history only.");
+      }
     }
     if (!validEmail(contact.email)) {
-      block(`contacts.${contactIndex}.email`, "Check the email address before importing it.");
+      block(emailPath, "Check the email address before importing it.");
     }
     contact.phones.forEach((phone, phoneIndex) => {
-      validatePhone(phone, `contacts.${contactIndex}.phones.${phoneIndex}`, block, warn);
+      const path = `contacts.${contactIndex}.phones.${phoneIndex}`;
+      validatePhone(phone, path, block, warn);
+      if (contact.mode === "existing_contact" && phone.importAsStructuredValue && conflictMissing(review, path)) {
+        block(path, "Choose what to do with this paper phone before linking the existing contact.");
+      }
     });
   });
 
+  const existingDestination = review.destination.mode === "existing_profile"
+    || review.destination.mode === "existing_profile_new_location";
   review.organizationPhones.forEach((phone, phoneIndex) => {
-    validatePhone(phone, `organizationPhones.${phoneIndex}`, block, warn);
+    const path = `organizationPhones.${phoneIndex}`;
+    validatePhone(phone, path, block, warn);
+    if (existingDestination && phone.importAsStructuredValue && conflictMissing(review, path)) {
+      block(path, "Choose what to do with this organization/main-office phone before importing it.");
+    }
   });
 
   return issues;

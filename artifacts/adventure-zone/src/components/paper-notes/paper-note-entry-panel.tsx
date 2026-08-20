@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PaperNoteEntryCard } from "./paper-note-entry-card";
@@ -11,7 +11,10 @@ import {
   skipPaperNoteEntry,
   unapprovePaperNoteEntry,
 } from "@/features/paper-notes/paper-note-client";
-import type { PaperNoteReviewDraft } from "@/features/paper-notes/paper-note-review-types";
+import type {
+  PaperNoteReviewDraft,
+  PaperNoteReviewEntryDetails,
+} from "@/features/paper-notes/paper-note-review-types";
 
 export function PaperNoteEntryPanel({
   entryId,
@@ -21,6 +24,11 @@ export function PaperNoteEntryPanel({
   onChanged(): void | Promise<void>;
 }) {
   const queryClient = useQueryClient();
+  const saveTail = useRef<Promise<void>>(Promise.resolve());
+  const saveSequence = useRef(0);
+  const versionRef = useRef<number | null>(null);
+  const latestSaved = useRef<PaperNoteReviewEntryDetails | null>(null);
+
   const entryQuery = useQuery({
     queryKey: ["paper-notes", "entry-review", entryId],
     queryFn: () => getPaperNoteEntryReview(entryId),
@@ -30,30 +38,92 @@ export function PaperNoteEntryPanel({
     queryFn: () => getPaperNoteEntryMatches(entryId),
   });
 
+  useEffect(() => {
+    versionRef.current = entryQuery.data?.reviewVersion ?? null;
+    latestSaved.current = entryQuery.data ?? null;
+    saveTail.current = Promise.resolve();
+    saveSequence.current = 0;
+  }, [entryId]);
+
+  useEffect(() => {
+    if (versionRef.current === null && entryQuery.data) {
+      versionRef.current = entryQuery.data.reviewVersion;
+      latestSaved.current = entryQuery.data;
+    }
+  }, [entryQuery.data]);
+
   const replaceEntry = useCallback(async (entry: Awaited<ReturnType<typeof getPaperNoteEntryReview>>) => {
+    versionRef.current = entry.reviewVersion;
+    latestSaved.current = entry;
     queryClient.setQueryData(["paper-notes", "entry-review", entryId], entry);
     await Promise.resolve(onChanged());
     return entry;
   }, [entryId, onChanged, queryClient]);
 
-  const save = useCallback(async (review: PaperNoteReviewDraft, expectedVersion: number) => {
-    const saved = await savePaperNoteEntryReview(entryId, review, expectedVersion);
-    queryClient.setQueryData(["paper-notes", "entry-review", entryId], saved);
-    await queryClient.invalidateQueries({ queryKey: ["paper-notes", "entry-matches", entryId] });
-    await Promise.resolve(onChanged());
-    return saved;
+  const save = useCallback((review: PaperNoteReviewDraft, expectedVersion: number) => {
+    const sequence = ++saveSequence.current;
+    let resolveResult!: (value: PaperNoteReviewEntryDetails) => void;
+    let rejectResult!: (reason: unknown) => void;
+    const result = new Promise<PaperNoteReviewEntryDetails>((resolve, reject) => {
+      resolveResult = resolve;
+      rejectResult = reject;
+    });
+
+    const execute = async () => {
+      try {
+        const version = versionRef.current ?? expectedVersion;
+        const saved = await savePaperNoteEntryReview(entryId, review, version);
+        versionRef.current = saved.reviewVersion;
+        latestSaved.current = saved;
+        await queryClient.invalidateQueries({ queryKey: ["paper-notes", "entry-matches", entryId] });
+        await Promise.resolve(onChanged());
+
+        if (sequence === saveSequence.current) {
+          queryClient.setQueryData(["paper-notes", "entry-review", entryId], saved);
+        }
+
+        // Do not let an earlier card save report completion while a newer queued
+        // save still exists; otherwise the card can briefly show Saved/Approve.
+        queueMicrotask(async () => {
+          try {
+            while (sequence < saveSequence.current) {
+              await saveTail.current;
+            }
+            resolveResult(latestSaved.current ?? saved);
+          } catch (error) {
+            rejectResult(error);
+          }
+        });
+      } catch (error) {
+        rejectResult(error);
+      }
+    };
+
+    const priorTail = saveTail.current;
+    const execution = priorTail.then(execute, execute);
+    saveTail.current = execution.then(() => undefined, () => undefined);
+    return result;
   }, [entryId, onChanged, queryClient]);
 
   const approve = useCallback(
-    (expectedVersion: number) => approvePaperNoteEntry(entryId, expectedVersion).then(replaceEntry),
+    (expectedVersion: number) => approvePaperNoteEntry(
+      entryId,
+      versionRef.current ?? expectedVersion,
+    ).then(replaceEntry),
     [entryId, replaceEntry],
   );
   const unapprove = useCallback(
-    (expectedVersion: number) => unapprovePaperNoteEntry(entryId, expectedVersion).then(replaceEntry),
+    (expectedVersion: number) => unapprovePaperNoteEntry(
+      entryId,
+      versionRef.current ?? expectedVersion,
+    ).then(replaceEntry),
     [entryId, replaceEntry],
   );
   const skip = useCallback(
-    (expectedVersion: number) => skipPaperNoteEntry(entryId, expectedVersion).then(replaceEntry),
+    (expectedVersion: number) => skipPaperNoteEntry(
+      entryId,
+      versionRef.current ?? expectedVersion,
+    ).then(replaceEntry),
     [entryId, replaceEntry],
   );
 

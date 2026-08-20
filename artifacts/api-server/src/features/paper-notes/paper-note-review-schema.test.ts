@@ -55,6 +55,21 @@ describe("paper-note review validation", () => {
     }));
   });
 
+  it("requires confirmation when a structured event date still has an inferred page year", () => {
+    const input = review({
+      event: {
+        ...review().event,
+        eventDateText: "June 22",
+        startsOn: "2026-06-22",
+        pageYearConfirmed: false,
+      },
+    });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+      fieldPath: "event.pageYearConfirmed",
+      severity: "blocking",
+    }));
+  });
+
   it("blocks a current follow-up without a new absolute date", () => {
     const input = review({
       currentFollowUp: { enabled: true, kind: "call", dueOn: null, contactKey: null },
@@ -93,5 +108,67 @@ describe("paper-note review validation", () => {
       }],
     });
     expect(validatePaperNoteReview(noteOnly).some((issue) => issue.fieldPath === "organizationPhones.0.number" && issue.severity === "blocking")).toBe(false);
+  });
+
+  it("requires explicit name email and phone decisions when linking an existing contact", () => {
+    const input = review({
+      destination: {
+        mode: "existing_profile",
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        organizationLocationId: null,
+      },
+      contacts: [{
+        key: "contact-0",
+        mode: "existing_contact",
+        selectedContactId: "50000000-0000-4000-8000-000000000001",
+        name: "Tina",
+        role: null,
+        email: "tina@example.test",
+        primary: true,
+        phones: [{
+          key: "phone-0",
+          number: "208-555-0142",
+          extension: "3115",
+          type: "office",
+          label: null,
+          instructions: null,
+          status: "active",
+          primary: true,
+          crossedOut: false,
+          importAsStructuredValue: true,
+        }],
+      }],
+    });
+
+    const issues = validatePaperNoteReview(input);
+    expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.name", severity: "blocking" }));
+    expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.email", severity: "blocking" }));
+    expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.phones.0", severity: "blocking" }));
+  });
+
+  it("requires an explicit organization-phone decision for an existing profile", () => {
+    const input = review({
+      destination: {
+        mode: "existing_profile",
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        organizationLocationId: null,
+      },
+      organizationPhones: [{
+        key: "office",
+        number: "208-555-0100",
+        extension: null,
+        type: "office",
+        label: "main office",
+        instructions: null,
+        status: "active",
+        primary: false,
+        crossedOut: false,
+        importAsStructuredValue: true,
+      }],
+    });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+      fieldPath: "organizationPhones.0",
+      severity: "blocking",
+    }));
   });
 });

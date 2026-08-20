@@ -5,9 +5,11 @@ on:
     paths:
       - "artifacts/api-server/src/features/paper-notes/**"
       - "artifacts/api-server/src/routes/paper-note*.ts"
+      - "artifacts/api-server/src/features/activities/**"
       - "artifacts/adventure-zone/src/features/paper-notes/**"
       - "artifacts/adventure-zone/src/components/paper-notes/**"
       - "artifacts/adventure-zone/src/pages/PaperNote*.tsx"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage.tsx"
       - "lib/db/migrations/*paper_notes*"
       - "lib/db/src/schema/index.ts"
       - "lib/db/src/migrations.ts"
@@ -27,7 +29,26 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Paper notes focused tests
-        run: pnpm --filter @workspace/api-server test -- src/features/paper-notes/paper-note-types.test.ts
+      - name: Paper Notes API tests
+        run: >-
+          pnpm --filter @workspace/api-server test --
+          src/features/paper-notes
+          src/routes/paper-note-extraction.test.ts
+          src/routes/paper-note-import.test.ts
+          src/routes/paper-note-matching.test.ts
+          src/routes/paper-note-review.test.ts
+          src/routes/paper-note-source.test.ts
+          src/routes/paper-note-manual-profile-search.test.ts
+      - name: Paper Notes frontend tests
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/components/paper-notes
+          src/features/paper-notes
       - name: API typecheck
         run: pnpm --filter @workspace/api-server typecheck
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Frontend build
+        run: pnpm --filter @workspace/adventure-zone build

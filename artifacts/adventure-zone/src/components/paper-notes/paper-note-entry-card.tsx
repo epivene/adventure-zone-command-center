@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, CircleAlert, Plus, SkipForward } from "lucide-react";
+import { Check, CircleAlert, SkipForward } from "lucide-react";
 
+import { PaperNoteContactEditor } from "./paper-note-contact-editor";
+import { PaperNoteDestinationPicker } from "./paper-note-destination-picker";
+import { PaperNoteEventDateReview } from "./paper-note-event-date-review";
+import { PaperNoteOrganizationPhonesEditor } from "./paper-note-organization-phones-editor";
 import { PaperNoteSourceViewer } from "./paper-note-source-viewer";
 import type {
   PaperNoteMatch,
@@ -28,6 +32,7 @@ export function PaperNoteEntryCard({
   const [review, setReview] = useState(entry.review);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "error">("saved");
   const [actionBusy, setActionBusy] = useState(false);
+  const [manualMatches, setManualMatches] = useState<PaperNoteMatch[]>([]);
   const baseline = useRef(JSON.stringify(entry.review));
   const version = useRef(entry.reviewVersion);
 
@@ -37,6 +42,10 @@ export function PaperNoteEntryCard({
     version.current = entry.reviewVersion;
     setSaveState("saved");
   }, [entry.id, entry.review, entry.reviewVersion]);
+
+  useEffect(() => {
+    setManualMatches([]);
+  }, [entry.id]);
 
   useEffect(() => {
     const serialized = JSON.stringify(review);
@@ -59,6 +68,10 @@ export function PaperNoteEntryCard({
     value: PaperNoteReviewDraft["event"][K],
   ) {
     setReview((current) => ({ ...current, event: { ...current.event, [key]: value } }));
+  }
+
+  function updateEventPatch(patch: Partial<PaperNoteReviewDraft["event"]>) {
+    setReview((current) => ({ ...current, event: { ...current.event, ...patch } }));
   }
 
   function updateActivity<K extends keyof PaperNoteReviewDraft["activity"]>(
@@ -94,6 +107,108 @@ export function PaperNoteEntryCard({
     }));
   }
 
+  function updateOrganizationPhone(
+    phoneIndex: number,
+    patch: Partial<PaperNoteReviewDraft["organizationPhones"][number]>,
+  ) {
+    setReview((current) => ({
+      ...current,
+      organizationPhones: current.organizationPhones.map((phone, index) =>
+        index === phoneIndex ? { ...phone, ...patch } : phone),
+    }));
+  }
+
+  function updateConflict(path: string, value: unknown | null) {
+    setReview((current) => {
+      const conflicts = { ...current.conflicts };
+      if (value === null) delete conflicts[path];
+      else conflicts[path] = value;
+      return { ...current, conflicts };
+    });
+  }
+
+  function resetExistingContactChoices(current: PaperNoteReviewDraft) {
+    return current.contacts.map((contact) => contact.mode === "existing_contact"
+      ? { ...contact, mode: "new_contact" as const, selectedContactId: null }
+      : contact);
+  }
+
+  function rememberMatch(match: PaperNoteMatch) {
+    setManualMatches((current) => current.some((candidate) =>
+      candidate.organizationId === match.organizationId
+      && candidate.organizationLocationId === match.organizationLocationId)
+      ? current
+      : [...current, match]);
+  }
+
+  function chooseExistingMatch(match: PaperNoteMatch) {
+    setReview((current) => ({
+      ...current,
+      destination: {
+        mode: "existing_profile",
+        organizationId: match.organizationId,
+        organizationLocationId: match.organizationLocationId,
+      },
+      contacts: resetExistingContactChoices(current),
+      conflicts: {},
+    }));
+  }
+
+  function chooseNewLocation(match: PaperNoteMatch) {
+    setReview((current) => ({
+      ...current,
+      destination: {
+        mode: "existing_profile_new_location",
+        organizationId: match.organizationId,
+        newLocation: {
+          label: current.event.city.trim() || current.event.venue.trim() || "New location",
+          venueName: current.event.venue.trim() || null,
+          address1: null,
+          address2: null,
+          city: current.event.city.trim() || null,
+          region: current.event.region.trim().toUpperCase() || null,
+          postalCode: null,
+        },
+      },
+      contacts: resetExistingContactChoices(current),
+      conflicts: {},
+    }));
+  }
+
+  function chooseNewProfile() {
+    setReview((current) => ({
+      ...current,
+      destination: { mode: "new_profile", eventFamilyId: null },
+      contacts: resetExistingContactChoices(current),
+      conflicts: {},
+    }));
+  }
+
+  function updateNewProfileFamily(familyId: string | null) {
+    setReview((current) => {
+      if (current.destination?.mode !== "new_profile") return current;
+      return {
+        ...current,
+        destination: { ...current.destination, eventFamilyId: familyId },
+      };
+    });
+  }
+
+  function updateNewLocation(
+    patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>,
+  ) {
+    setReview((current) => {
+      if (current.destination?.mode !== "existing_profile_new_location") return current;
+      return {
+        ...current,
+        destination: {
+          ...current.destination,
+          newLocation: { ...current.destination.newLocation, ...patch },
+        },
+      };
+    });
+  }
+
   async function stateAction(work: (expectedVersion: number) => Promise<PaperNoteReviewEntryDetails>) {
     if (actionBusy || saveState === "saving") return;
     setActionBusy(true);
@@ -108,6 +223,20 @@ export function PaperNoteEntryCard({
 
   const blocking = entry.validationIssues.filter((issue) => issue.severity === "blocking");
   const canApprove = entry.state === "ready" && saveState === "saved" && !blocking.length;
+  const allMatches = [
+    ...matches,
+    ...manualMatches.filter((manual) => !matches.some((suggested) =>
+      suggested.organizationId === manual.organizationId
+      && suggested.organizationLocationId === manual.organizationLocationId)),
+  ];
+  const selectedOrganizationId = review.destination && "organizationId" in review.destination
+    ? review.destination.organizationId
+    : null;
+  const selectedMatch = selectedOrganizationId
+    ? allMatches.find((match) => match.organizationId === selectedOrganizationId) ?? null
+    : null;
+  const existingDestination = review.destination?.mode === "existing_profile"
+    || review.destination?.mode === "existing_profile_new_location";
 
   return (
     <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
@@ -162,10 +291,7 @@ export function PaperNoteEntryCard({
           Venue
           <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.venue} onChange={(event) => updateEvent("venue", event.target.value)} />
         </label>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">
-          Event date as written
-          <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.eventDateText} onChange={(event) => updateEvent("eventDateText", event.target.value)} />
-        </label>
+        <PaperNoteEventDateReview event={review.event} onChange={updateEventPatch} />
       </section>
 
       <section className="mt-6 grid gap-3 border-t border-slate-200 pt-5">
@@ -192,95 +318,70 @@ export function PaperNoteEntryCard({
         </label>
         <label className="grid gap-1 text-sm font-semibold text-slate-700">
           Old reminder from paper
-          <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.oldReminder} onChange={(event) => setReview((current) => ({ ...current, oldReminder: event.target.value }))} />
+          <input aria-label="Old reminder from paper" className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.oldReminder} onChange={(event) => setReview((current) => ({ ...current, oldReminder: event.target.value }))} />
           <span className="font-normal text-slate-500">Historical only. This does not create a current task.</span>
         </label>
         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700">
-          <input type="checkbox" checked={review.starredOnPaper} onChange={(event) => setReview((current) => ({ ...current, starredOnPaper: event.target.checked }))} />
+          <input aria-label="Starred on original paper" type="checkbox" checked={review.starredOnPaper} onChange={(event) => setReview((current) => ({ ...current, starredOnPaper: event.target.checked }))} />
           Starred on original paper
         </label>
       </section>
 
       {review.contacts.map((contact, contactIndex) => (
-        <section className="mt-6 grid gap-3 border-t border-slate-200 pt-5" key={contact.key}>
-          <h3 className="font-bold text-slate-900">Contact {contactIndex + 1}</h3>
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Contact name
-            <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={contact.name} onChange={(event) => updateContact(contactIndex, { name: event.target.value })} />
-          </label>
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Email
-            <input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" type="email" value={contact.email ?? ""} onChange={(event) => updateContact(contactIndex, { email: event.target.value || null })} />
-          </label>
-          {contact.phones.map((phone, phoneIndex) => (
-            <div className="grid gap-3 rounded-xl bg-slate-50 p-3 sm:grid-cols-2" key={phone.key}>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Phone number
-                <input aria-label="Phone number" className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={phone.number} onChange={(event) => updateContactPhone(contactIndex, phoneIndex, { number: event.target.value })} />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
-                Extension
-                <input aria-label="Extension" className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={phone.extension ?? ""} onChange={(event) => updateContactPhone(contactIndex, phoneIndex, { extension: event.target.value || null })} />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700 sm:col-span-2">
-                Calling instruction
-                <input className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={phone.instructions ?? ""} onChange={(event) => updateContactPhone(contactIndex, phoneIndex, { instructions: event.target.value || null })} />
-              </label>
-            </div>
-          ))}
-        </section>
+        <PaperNoteContactEditor
+          key={contact.key}
+          contact={contact}
+          contactIndex={contactIndex}
+          savedContacts={selectedMatch?.contacts ?? []}
+          conflicts={review.conflicts}
+          onContactChange={(patch) => updateContact(contactIndex, patch)}
+          onPhoneChange={(phoneIndex, patch) => updateContactPhone(contactIndex, phoneIndex, patch)}
+          onConflictChange={updateConflict}
+        />
       ))}
 
-      <section className="mt-6 border-t border-slate-200 pt-5">
-        <h3 className="font-bold text-slate-900">Where this entry belongs</h3>
-        <p className="mt-1 text-sm text-slate-600">Suggestions are evidence only. You choose the destination.</p>
-        <div className="mt-3 grid gap-2">
-          {matches.map((match) => (
-            <div className="rounded-xl border border-slate-200 p-3" key={`${match.organizationId}:${match.organizationLocationId ?? "profile"}`}>
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
-                  <p className="font-bold text-slate-900">{match.name}</p>
-                  <p className="text-sm text-slate-500">{[match.city, match.region].filter(Boolean).join(", ") || "Location not saved"}</p>
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {match.reasons.map((reason) => <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700" key={reason}>{reason}</span>)}
-                  </div>
-                </div>
-                <button
-                  aria-label={`Use ${match.name}`}
-                  className="min-h-11 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-900"
-                  onClick={() => setReview((current) => ({
-                    ...current,
-                    destination: {
-                      mode: "existing_profile",
-                      organizationId: match.organizationId,
-                      organizationLocationId: match.organizationLocationId,
-                    },
-                  }))}
-                  type="button"
-                >Use this profile</button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white"
-            onClick={() => setReview((current) => ({ ...current, destination: { mode: "new_profile", eventFamilyId: null } }))}
-            type="button"
-          ><Plus className="h-4 w-4" /> Create new profile</button>
-          <button
-            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
-            disabled={actionBusy}
-            onClick={() => void stateAction(onSkip)}
-            type="button"
-          ><SkipForward className="h-4 w-4" /> Skip this entry</button>
-        </div>
-        {review.destination ? (
-          <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">
-            Destination: {review.destination.mode === "new_profile" ? "Create new profile" : review.destination.mode === "existing_profile" ? "Existing profile" : review.destination.mode.replaceAll("_", " ")}
-          </p>
-        ) : null}
-      </section>
+      <PaperNoteOrganizationPhonesEditor
+        phones={review.organizationPhones}
+        savedPhones={selectedMatch?.organizationPhones ?? []}
+        conflicts={review.conflicts}
+        requireDecision={Boolean(existingDestination)}
+        onPhoneChange={updateOrganizationPhone}
+        onConflictChange={updateConflict}
+      />
+
+      <PaperNoteDestinationPicker
+        review={review}
+        matches={allMatches}
+        onChooseExisting={chooseExistingMatch}
+        onChooseNewLocation={chooseNewLocation}
+        onChooseNewProfile={chooseNewProfile}
+        onNewLocationChange={updateNewLocation}
+        onNewProfileFamilyChange={updateNewProfileFamily}
+        onRememberMatch={rememberMatch}
+      />
+
+      <div className="mt-3">
+        <button
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700"
+          disabled={actionBusy}
+          onClick={() => void stateAction(onSkip)}
+          type="button"
+        >
+          <SkipForward className="h-4 w-4" /> Skip this entry
+        </button>
+      </div>
+
+      {review.destination ? (
+        <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">
+          Destination: {review.destination.mode === "new_profile"
+            ? "Create new profile"
+            : review.destination.mode === "existing_profile"
+              ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}`
+              : review.destination.mode === "existing_profile_new_location"
+                ? `New location under${selectedMatch ? ` ${selectedMatch.name}` : " existing profile"}`
+                : review.destination.mode.replaceAll("_", " ")}
+        </p>
+      ) : null}
 
       <section className="mt-6 border-t border-slate-200 pt-5">
         <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700">

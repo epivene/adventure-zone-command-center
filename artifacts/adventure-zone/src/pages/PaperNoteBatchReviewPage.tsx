@@ -26,6 +26,8 @@ import {
   markPaperNotePageReviewedEmpty,
   preflightPaperNoteBatch,
   reorderPaperNotePages,
+  rereadPaperNotePage,
+  restorePaperNotePageSource,
   retryPaperNotePage,
   rotatePaperNotePage,
   startPaperNoteExtraction,
@@ -160,6 +162,18 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
     setManualByPage((current) => ({ ...current, [pageId]: "" }));
   }
 
+  async function rotateAndReread(pageId: string, rotationDegrees: 0 | 90 | 180 | 270) {
+    const confirmed = window.confirm(
+      "Re-reading this page will discard its extracted entries and any review corrections for this page. The original photo will be kept. Continue?",
+    );
+    if (!confirmed) return;
+    await action(`reread:${pageId}`, () => rereadPaperNotePage(
+      batchId,
+      pageId,
+      nextRotation(rotationDegrees),
+    ));
+  }
+
   return (
     <div className="mx-auto max-w-4xl pb-12">
       <Link className="mb-4 inline-flex min-h-11 items-center gap-2 text-sm font-bold text-orange-700" href="/settings/paper-notes">
@@ -207,6 +221,8 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
           {data.pages.map((page, index) => {
             const stage = progressLabel(page.currentStage);
             const manualValue = manualByPage[page.id] ?? "";
+            const rereadable = !["imported", "archived", "importing"].includes(data.status)
+              && ["extracted", "needs_retry", "reviewed_empty"].includes(page.status);
             return (
               <article className="rounded-xl border border-slate-200 bg-white p-4" key={page.id}>
                 <div className="flex flex-wrap items-center gap-3">
@@ -233,11 +249,23 @@ export default function PaperNoteBatchReviewPage({ batchId }: { batchId: string 
                 </div>
 
                 {page.status !== "uploading" ? (
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <PaperNoteSourceViewer
                       label={`Page ${index + 1}`}
                       loadSource={() => getPaperNotePageSource(batchId, page.id)}
+                      restoreSource={(file) => restorePaperNotePageSource(batchId, page.id, file).then(() => undefined)}
                     />
+                    {rereadable ? (
+                      <button
+                        className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800 disabled:opacity-50"
+                        disabled={Boolean(busy)}
+                        onClick={() => void rotateAndReread(page.id, page.rotationDegrees)}
+                        type="button"
+                      >
+                        <RotateCw className="h-4 w-4" />
+                        {busy === `reread:${page.id}` ? "Re-reading…" : "Rotate & re-read"}
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
 

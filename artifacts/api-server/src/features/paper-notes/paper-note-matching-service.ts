@@ -4,6 +4,31 @@ import type { db as database } from "@/db/client";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 
+export type PaperNoteMatchPhone = {
+  id: string;
+  organizationLocationId?: string | null;
+  number: string;
+  extension: string | null;
+  type: "mobile" | "office" | "alternate" | "unknown";
+  label: string | null;
+  instructions: string | null;
+  status: "active" | "questionable" | "inactive";
+  primary: boolean;
+};
+
+export type PaperNoteMatchContact = {
+  id: string;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phones: PaperNoteMatchPhone[];
+};
+
+export type PaperNoteMatchDetails = {
+  contacts: PaperNoteMatchContact[];
+  organizationPhones: PaperNoteMatchPhone[];
+};
+
 export type PaperNoteMatchCandidate = {
   organizationId: string;
   organizationLocationId: string | null;
@@ -28,10 +53,13 @@ export type PaperNoteMatch = {
   strength: "strong" | "possible";
   score: number;
   reasons: string[];
+  contacts: PaperNoteMatchContact[];
+  organizationPhones: PaperNoteMatchPhone[];
 };
 
 export interface PaperNoteMatchRepository {
   findCandidates(review: PaperNoteReviewDraft): Promise<PaperNoteMatchCandidate[]>;
+  findDetails?(organizationIds: string[]): Promise<Map<string, PaperNoteMatchDetails>>;
 }
 
 function score(candidate: PaperNoteMatchCandidate) {
@@ -68,27 +96,36 @@ function score(candidate: PaperNoteMatchCandidate) {
   return { value, reasons };
 }
 
+const emptyDetails = (): PaperNoteMatchDetails => ({ contacts: [], organizationPhones: [] });
+
 export class PaperNoteMatchingService {
   constructor(private readonly repository: PaperNoteMatchRepository) {}
 
   async match(review: PaperNoteReviewDraft): Promise<PaperNoteMatch[]> {
     const candidates = await this.repository.findCandidates(review);
-    return candidates
+    const ranked = candidates
       .map((candidate) => {
-        const ranked = score(candidate);
+        const ranking = score(candidate);
         return {
           organizationId: candidate.organizationId,
           organizationLocationId: candidate.organizationLocationId,
           name: candidate.name,
           city: candidate.city,
           region: candidate.region,
-          strength: ranked.value >= 80 ? "strong" as const : "possible" as const,
-          score: ranked.value,
-          reasons: ranked.reasons.length ? ranked.reasons : ["similar profile/location details"],
+          strength: ranking.value >= 80 ? "strong" as const : "possible" as const,
+          score: ranking.value,
+          reasons: ranking.reasons.length ? ranking.reasons : ["similar profile/location details"],
         };
       })
       .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
       .slice(0, 5);
+    const details = this.repository.findDetails
+      ? await this.repository.findDetails([...new Set(ranked.map((candidate) => candidate.organizationId))])
+      : new Map<string, PaperNoteMatchDetails>();
+    return ranked.map((candidate) => ({
+      ...candidate,
+      ...(details.get(candidate.organizationId) ?? emptyDetails()),
+    }));
   }
 }
 
@@ -102,6 +139,18 @@ function firstSearchToken(value: string) {
   return normalizedName(value)
     .split(" ")
     .find((token) => token.length >= 4) ?? "";
+}
+
+function phoneType(value: unknown): PaperNoteMatchPhone["type"] {
+  return ["mobile", "office", "alternate", "unknown"].includes(String(value))
+    ? String(value) as PaperNoteMatchPhone["type"]
+    : "unknown";
+}
+
+function phoneStatus(value: unknown): PaperNoteMatchPhone["status"] {
+  return ["active", "questionable", "inactive"].includes(String(value))
+    ? String(value) as PaperNoteMatchPhone["status"]
+    : "active";
 }
 
 export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepository {
@@ -238,7 +287,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
           or exists (
             select 1 from organization_locations loc
             where loc.organization_id = org.id
-              and ((${city} <> '' and lower(coalesce(loc.city, '')) = lower(${city})) or (${venue} <> '' and lower(trim(coalesce(loc.venue_name, ''))) = lower(trim(${venue}))))
+              and ((${city} <> '' and lower(coalesce(loc.city, '')) = lower(${city}) or (${venue} <> '' and lower(trim(coalesce(loc.venue_name, ''))) = lower(trim(${venue}))))
           )
         )
       order by org.name asc
@@ -259,5 +308,110 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
       venueMatch: Boolean(row.venueMatch),
       contactNameMatch: Boolean(row.contactNameMatch),
     }));
+  }
+
+  async findDetails(organizationIds: string[]): Promise<Map<string, PaperNoteMatchDetails>> {
+    const output = new Map<string, PaperNoteMatchDetails>();
+    if (!organizationIds.length) return output;
+
+    const contactResult = await this.database.execute(sql`
+      select
+        oc.organization_id as "organizationId",
+        c.id,
+        trim(concat_ws(' ', c.first_name, c.last_name)) as name,
+        oc.role,
+        c.email
+      from organization_contacts oc
+      join contacts c on c.id = oc.contact_id
+      where oc.organization_id = any(${organizationIds}::uuid[])
+        and oc.active = true
+      order by oc.organization_id, oc.is_primary desc, c.last_name, c.first_name, c.id
+    `);
+    const contactRows = (contactResult as { rows?: Array<Record<string, unknown>> }).rows ?? [];
+    const contactIds = contactRows.map((row) => String(row.id));
+    const phonesByContact = new Map<string, PaperNoteMatchPhone[]>();
+    if (contactIds.length) {
+      const phoneResult = await this.database.execute(sql`
+        select
+          contact_id as "contactId",
+          id,
+          number,
+          extension,
+          type::text as type,
+          label,
+          instructions,
+          status::text as status,
+          primary
+        from contact_phones
+        where contact_id = any(${contactIds}::uuid[])
+        order by contact_id, primary desc, created_at, id
+      `);
+      for (const row of (phoneResult as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
+        const contactId = String(row.contactId);
+        const list = phonesByContact.get(contactId) ?? [];
+        list.push({
+          id: String(row.id),
+          number: String(row.number ?? ""),
+          extension: row.extension ? String(row.extension) : null,
+          type: phoneType(row.type),
+          label: row.label ? String(row.label) : null,
+          instructions: row.instructions ? String(row.instructions) : null,
+          status: phoneStatus(row.status),
+          primary: Boolean(row.primary),
+        });
+        phonesByContact.set(contactId, list);
+      }
+    }
+
+    for (const row of contactRows) {
+      const organizationId = String(row.organizationId);
+      const detail = output.get(organizationId) ?? emptyDetails();
+      detail.contacts.push({
+        id: String(row.id),
+        name: String(row.name ?? ""),
+        role: row.role ? String(row.role) : null,
+        email: row.email ? String(row.email) : null,
+        phones: phonesByContact.get(String(row.id)) ?? [],
+      });
+      output.set(organizationId, detail);
+    }
+
+    const organizationPhoneResult = await this.database.execute(sql`
+      select
+        organization_id as "organizationId",
+        organization_location_id as "organizationLocationId",
+        id,
+        number,
+        extension,
+        type::text as type,
+        label,
+        instructions,
+        status::text as status,
+        primary
+      from organization_phones
+      where organization_id = any(${organizationIds}::uuid[])
+      order by organization_id, primary desc, created_at, id
+    `);
+    for (const row of (organizationPhoneResult as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
+      const organizationId = String(row.organizationId);
+      const detail = output.get(organizationId) ?? emptyDetails();
+      detail.organizationPhones.push({
+        id: String(row.id),
+        organizationLocationId: row.organizationLocationId ? String(row.organizationLocationId) : null,
+        number: String(row.number ?? ""),
+        extension: row.extension ? String(row.extension) : null,
+        type: phoneType(row.type),
+        label: row.label ? String(row.label) : null,
+        instructions: row.instructions ? String(row.instructions) : null,
+        status: phoneStatus(row.status),
+        primary: Boolean(row.primary),
+      });
+      output.set(organizationId, detail);
+    }
+
+    for (const id of organizationIds) {
+      if (!output.has(id)) output.set(id, emptyDetails());
+    }
+    return output;
   }
 }

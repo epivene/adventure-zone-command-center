@@ -74,6 +74,26 @@ export type PaperNoteReviewEntryDetails = {
   };
 };
 
+export type PaperNoteSavedPhone = {
+  id: string;
+  organizationLocationId?: string | null;
+  number: string;
+  extension: string | null;
+  type: "mobile" | "office" | "alternate" | "unknown";
+  label: string | null;
+  instructions: string | null;
+  status: "active" | "questionable" | "inactive";
+  primary: boolean;
+};
+
+export type PaperNoteSavedContact = {
+  id: string;
+  name: string;
+  role: string | null;
+  email: string | null;
+  phones: PaperNoteSavedPhone[];
+};
+
 export type PaperNoteMatch = {
   organizationId: string;
   organizationLocationId: string | null;
@@ -83,4 +103,6 @@ export type PaperNoteMatch = {
   strength: "strong" | "possible";
   score: number;
   reasons: string[];
+  contacts: PaperNoteSavedContact[];
+  organizationPhones: PaperNoteSavedPhone[];
 };

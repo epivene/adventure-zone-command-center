@@ -1,4 +1,5 @@
 import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
+import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
 import type { PaperNoteEntryState } from "./paper-note-types";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import {
@@ -79,7 +80,10 @@ function validateDraft(review: PaperNoteReviewDraft): PaperNoteReviewIssue[] {
       severity: "blocking",
     }];
   }
-  return validatePaperNoteReview(review as PaperNoteReviewPayload);
+  return [
+    ...validatePaperNoteReview(review as PaperNoteReviewPayload),
+    ...validatePaperNoteEventDate(review.event),
+  ];
 }
 
 export class PaperNoteReviewService {
