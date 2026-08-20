@@ -11,9 +11,11 @@ describe("SimpleFullProfile inline editing", () => {
     expect(source).toContain("onProfileSaved");
   });
 
-  it("formats phone and keeps website beside contact methods", () => {
+  it("formats phone, opens guided calling, and keeps the website beside contact methods", () => {
     expect(source).toContain("formatPhoneDisplay");
-    expect(source).toContain("phoneHref");
+    expect(source).toContain("callHref");
+    expect(source).toContain("/calls/new?");
+    expect(source).not.toContain("phoneHref");
     expect(source).toContain("websiteHref");
     expect(source).toContain("profile.place.website");
   });
