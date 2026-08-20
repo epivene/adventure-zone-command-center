@@ -38,7 +38,6 @@ jobs:
           src/routes/paper-note-matching.test.ts
           src/routes/paper-note-review.test.ts
           src/routes/paper-note-source.test.ts
-          src/routes/paper-note-health.ts
           src/routes/paper-note-manual-profile-search.test.ts
       - name: Paper Notes frontend tests
         run: >-
