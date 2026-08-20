@@ -6,6 +6,7 @@ import { runStartupStep } from "./lib/startup-step";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
+import { ensurePaperNotesSchemaBeforeListen } from "./db/paper-notes-required-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
@@ -65,6 +66,11 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let shutdownRequested = false;
+
+await runStartupStep(
+  "required paper notes schema",
+  ensurePaperNotesSchemaBeforeListen,
+);
 
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
