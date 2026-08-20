@@ -20,7 +20,6 @@ import {
   CopilotReason,
   type BookingCopilotReason,
 } from "@/components/today/copilot-reason";
-import { ContactBriefCard } from "@/components/today/contact-brief-card";
 import { buildTelHref } from "@/features/calls/phone-launcher";
 import { apiGet } from "@/lib/auth-token";
 
@@ -128,13 +127,7 @@ function defaultRenderWorkspace(
     : null;
 
   return (
-    <div className="grid gap-5">
-      <CallAssistantPanel
-        bookingId={context.booking?.id ?? null}
-        contactId={context.contact?.id ?? null}
-        followUpId={context.followUp?.id ?? null}
-        organizationId={context.organization?.id ?? null}
-      />
+    <div className="grid gap-3">
       <CallWorkspace
         activityParent={data.activityParent}
         assistedCallingEnabled={callingConfig.assistedCallingEnabled}
@@ -157,6 +150,17 @@ function defaultRenderWorkspace(
         timeline={coerceTimeline(data.timeline)}
         voicemailLauncherUrl={callingConfig.voicemailLauncherUrl}
       />
+      <details className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+        <summary className="cursor-pointer text-sm font-bold text-slate-700">Assistant & Needs Answer</summary>
+        <div className="mt-3">
+          <CallAssistantPanel
+            bookingId={context.booking?.id ?? null}
+            contactId={context.contact?.id ?? null}
+            followUpId={context.followUp?.id ?? null}
+            organizationId={context.organization?.id ?? null}
+          />
+        </div>
+      </details>
     </div>
   );
 }
@@ -268,139 +272,85 @@ export function CallQueueWorkspace({
 
   return (
     <section
-      className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(18rem,.8fr)_minmax(0,1.2fr)] lg:items-start"
+      className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(17rem,.72fr)_minmax(0,1.28fr)] lg:items-start"
       data-testid="call-queue-layout"
     >
-      <div
-        className="order-2 rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:order-1"
-        data-testid="call-queue-panel"
-      >
-        <div className="flex items-baseline justify-between gap-3">
+      <div className="order-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:order-1" data-testid="call-queue-panel">
+        <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xl font-bold">Calls to make</h2>
-            <p className="mt-1 text-sm text-slate-600">Prioritized follow-ups with the reason each one is here.</p>
+            <h2 className="text-lg font-bold">Calls to make</h2>
+            <p className="text-xs text-slate-500">Tap a card to prep, or 📞 to start.</p>
           </div>
-          <span className="whitespace-nowrap rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">
-            {total} remaining
-          </span>
+          <span className="whitespace-nowrap rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">{total} remaining</span>
         </div>
 
         {queue.length ? (
-          <ol className="mt-4 grid gap-2">
+          <ol className="mt-3 grid gap-2">
             {queue.map((followUp) => {
               const active = followUp.id === selectedId;
               const label = followUp.contactName ?? followUp.bookingName;
               const telHref = followUp.callPhone?.number
-                ? buildTelHref({
-                    number: followUp.callPhone.number,
-                    extension: followUp.callPhone.extension,
-                  })
+                ? buildTelHref({ number: followUp.callPhone.number, extension: followUp.callPhone.extension })
                 : null;
               return (
-                <li
-                  className={`rounded-lg border p-3 transition ${
-                    active
-                      ? "border-orange-400 bg-orange-50"
-                      : "border-slate-200 bg-white hover:border-orange-300"
-                  }`}
-                  key={followUp.id}
-                >
-                  <div className="flex items-start gap-2">
-                    <button
-                      aria-current={active ? "true" : undefined}
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => setSelectedId(followUp.id)}
-                      type="button"
-                    >
-                      <span className="block font-bold text-slate-950">{label}</span>
-                      {followUp.organizationName ? (
-                        <span className="mt-0.5 block text-sm text-slate-600">{followUp.organizationName}</span>
-                      ) : null}
+                <li className={`rounded-xl border-2 p-3 transition ${active ? "border-orange-500 bg-orange-50 shadow-sm" : "border-slate-200 bg-white hover:border-orange-300"}`} key={followUp.id}>
+                  <div className="flex items-center gap-3">
+                    <button aria-current={active ? "true" : undefined} className="min-w-0 flex-1 text-left" onClick={() => setSelectedId(followUp.id)} type="button">
+                      <span className="flex items-center gap-2">
+                        <span className="truncate font-bold text-slate-950">{label}</span>
+                        {active ? <span className="rounded-full bg-orange-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Selected</span> : null}
+                      </span>
+                      {followUp.organizationName && followUp.organizationName !== label ? <span className="mt-0.5 block truncate text-xs text-slate-500">{followUp.organizationName}</span> : null}
+                      <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] font-semibold text-slate-600">
+                        {followUp.bookingStatus ? <span>{formatStatus(followUp.bookingStatus)}</span> : null}
+                        {followUp.routeLeg ? <span>{followUp.routeLeg.name}</span> : null}
+                        <span>{followUp.lastContactedAt ? `Last ${formatDate(followUp.lastContactedAt)}` : "Not contacted"}</span>
+                      </span>
                     </button>
                     {telHref ? (
-                      <a
-                        aria-label="Start guided call"
-                        className="inline-flex size-10 shrink-0 items-center justify-center rounded-full border border-orange-300 bg-white text-lg shadow-sm transition hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
-                        href={telHref}
-                        onClick={() => setSelectedId(followUp.id)}
-                        title={`Call ${label}`}
-                      >
-                        <span aria-hidden>📞</span>
-                      </a>
+                      <a aria-label="Start guided call" className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-orange-600 bg-orange-600 text-xl text-white shadow-md transition hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500" href={telHref} onClick={() => setSelectedId(followUp.id)} title={`Call ${label}`}><span aria-hidden>📞</span></a>
                     ) : (
-                      <button
-                        aria-label="No callable number"
-                        className="inline-flex size-10 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-lg opacity-50"
-                        disabled
-                        title={`No callable number for ${label}`}
-                        type="button"
-                      >
-                        <span aria-hidden>📞</span>
-                      </button>
+                      <button aria-label="No callable number" className="inline-flex size-12 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xl opacity-40" disabled type="button"><span aria-hidden>📞</span></button>
                     )}
                   </div>
-                  <button
-                    className="mt-2 block w-full text-left"
-                    onClick={() => setSelectedId(followUp.id)}
-                    type="button"
-                  >
-                    <span className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-slate-600">
-                      {followUp.bookingStatus ? <span>{formatStatus(followUp.bookingStatus)}</span> : null}
-                      {followUp.routeLeg ? (
-                        <span className="inline-flex items-center gap-1.5">
-                          <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: followUp.routeLeg.color }} />
-                          {followUp.routeLeg.name}
-                        </span>
-                      ) : null}
-                      <span>
-                        {followUp.lastContactedAt
-                          ? `Last contacted ${formatDate(followUp.lastContactedAt)}`
-                          : "Not contacted yet"}
-                      </span>
-                    </span>
-                    <CopilotReason copilot={followUp.copilot} compact />
-                  </button>
                 </li>
               );
             })}
           </ol>
-        ) : (
-          <p className="mt-4 text-sm text-slate-600">No open calls.</p>
-        )}
+        ) : <p className="mt-4 text-sm text-slate-600">No open calls.</p>}
       </div>
 
       <div className="order-1 grid min-w-0 gap-3 lg:order-2" data-testid="selected-call-workspace">
         {selected ? (
-          <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-800">Up Next</p>
-            <p className="mt-1 text-lg font-bold text-slate-950">{selected.contactName ?? selected.bookingName}</p>
-            <CopilotReason copilot={selected.copilot} />
-          </div>
+          <header className="rounded-xl border border-orange-200 bg-white p-3 shadow-sm" data-testid="call-prep-header">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-700">Call Prep</p>
+                <p className="mt-0.5 truncate text-lg font-bold text-slate-950">{selected.contactName ?? selected.bookingName}</p>
+                {selected.contactName && selected.bookingName !== selected.contactName ? <p className="truncate text-sm font-semibold text-slate-600">{selected.bookingName}</p> : null}
+              </div>
+              <div className="flex flex-wrap justify-end gap-1.5 text-[11px] font-bold text-slate-700">
+                {selected.bookingStatus ? <span className="rounded-full bg-slate-100 px-2 py-1">{formatStatus(selected.bookingStatus)}</span> : null}
+                {selected.routeLeg ? <span className="rounded-full bg-slate-100 px-2 py-1">{selected.routeLeg.name}</span> : null}
+                <span className="rounded-full bg-slate-100 px-2 py-1">{selected.lastContactedAt ? `Last contact ${formatDate(selected.lastContactedAt)}` : "No prior contact"}</span>
+              </div>
+            </div>
+            <CopilotReason copilot={selected.copilot} compact />
+          </header>
         ) : null}
-        {selected ? <ContactBriefCard target={selected} /> : null}
         {!selected ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-            Select a caller from the queue.
-          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Select a caller from the queue.</div>
         ) : loading ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-            Loading caller…
-          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Loading caller…</div>
         ) : error ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-6" role="alert">
             <p className="font-semibold text-rose-900">{error}</p>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button className="button-primary" onClick={() => setRetryKey((value) => value + 1)} type="button">
-                Try again
-              </button>
-              <a className="button-secondary" href={callWorkspaceHref(selected as any)}>
-                Open standalone workspace
-              </a>
+              <button className="button-primary" onClick={() => setRetryKey((value) => value + 1)} type="button">Try again</button>
+              <a className="button-secondary" href={callWorkspaceHref(selected as any)}>Open standalone workspace</a>
             </div>
           </div>
-        ) : workspace ? (
-          renderWorkspace(workspace, handleComplete, callingConfig)
-        ) : null}
+        ) : workspace ? renderWorkspace(workspace, handleComplete, callingConfig) : null}
       </div>
     </section>
   );
