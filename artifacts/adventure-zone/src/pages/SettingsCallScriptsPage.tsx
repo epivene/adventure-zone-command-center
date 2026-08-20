@@ -79,18 +79,11 @@ function StepEditor({
   onReset(nodeId: string): void;
 }) {
   const [sayText, setSayText] = useState(override?.sayText ?? node.say);
-  const [coachText, setCoachText] = useState(override?.coachText ?? node.coach ?? "");
+  const [coachText, setCoachText] = useState(override ? (override.coachText ?? "") : (node.coach ?? ""));
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    setSayText(override?.sayText ?? node.say);
-    setCoachText(override?.coachText ?? node.coach ?? "");
-    setMessage("");
-    setError("");
-  }, [scriptKind, node.id, node.say, node.coach, override?.sayText, override?.coachText]);
 
   function insertPlaceholder(token: string) {
     setSayText((current) => `${current}${current && !current.endsWith(" ") ? " " : ""}${token}`);
