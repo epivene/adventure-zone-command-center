@@ -20,10 +20,20 @@ interface MigrationPool {
 
 type MigrationRunner = (options: { pool: MigrationPool }) => Promise<string[]>;
 
+function isLockTimeout(error: unknown) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "55P03",
+  );
+}
+
 export async function runActReviewMigrationsAtStartup(options?: {
   pool?: MigrationPool;
   runMigrations?: MigrationRunner;
   onLockUnavailable?: () => void;
+  onLockTimeout?: () => void;
 }): Promise<string[]> {
   const pool = options?.pool ?? (defaultPool as unknown as MigrationPool);
   const runMigrations = options?.runMigrations ?? (runActReviewMigrations as MigrationRunner);
@@ -43,26 +53,32 @@ export async function runActReviewMigrationsAtStartup(options?: {
     await client.query("SET statement_timeout = '20s'");
     timeoutsApplied = true;
 
-    const researchApplied = await ensureProfileResearchSchema(client);
-    const leadScoutRelease2Applied = await ensureLeadScoutRelease2Schema(client);
-    const leadScoutRelease3Applied = await ensureLeadScoutRelease3Schema(client);
+    try {
+      const researchApplied = await ensureProfileResearchSchema(client);
+      const leadScoutRelease2Applied = await ensureLeadScoutRelease2Schema(client);
+      const leadScoutRelease3Applied = await ensureLeadScoutRelease3Schema(client);
 
-    const migrationClient: MigrationClient = {
-      query: (sql) => client.query(sql),
-      release() {},
-    };
+      const migrationClient: MigrationClient = {
+        query: (sql) => client.query(sql),
+        release() {},
+      };
 
-    const applied = await runMigrations({
-      pool: {
-        connect: async () => migrationClient,
-      },
-    });
-    return [
-      ...(researchApplied ? ["061_profile_research_runs.sql", "063_lead_scout_runs.sql"] : []),
-      ...(leadScoutRelease2Applied ? ["064_lead_scout_candidate_key.sql"] : []),
-      ...(leadScoutRelease3Applied ? ["065_lead_scout_enrichment.sql"] : []),
-      ...applied,
-    ];
+      const applied = await runMigrations({
+        pool: {
+          connect: async () => migrationClient,
+        },
+      });
+      return [
+        ...(researchApplied ? ["061_profile_research_runs.sql", "063_lead_scout_runs.sql"] : []),
+        ...(leadScoutRelease2Applied ? ["064_lead_scout_candidate_key.sql"] : []),
+        ...(leadScoutRelease3Applied ? ["065_lead_scout_enrichment.sql"] : []),
+        ...applied,
+      ];
+    } catch (error) {
+      if (!isLockTimeout(error)) throw error;
+      options?.onLockTimeout?.();
+      return [];
+    }
   } finally {
     if (timeoutsApplied) {
       await client.query("RESET statement_timeout").catch(() => undefined);
