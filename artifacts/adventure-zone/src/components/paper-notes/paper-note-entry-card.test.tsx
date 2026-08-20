@@ -114,11 +114,40 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByLabelText("Phone label")).toHaveValue("fair office");
     expect(screen.getByLabelText("Phone status")).toHaveValue("active");
     expect(screen.getByLabelText("Import as structured phone")).toBeChecked();
+    expect(screen.getByLabelText("Primary phone")).toBeChecked();
+    expect(screen.getByLabelText("Organization primary phone")).not.toBeChecked();
     expect(screen.getByLabelText("Old reminder from paper")).toHaveValue("Call Monday");
     expect(screen.getByLabelText("Starred on original paper")).toBeChecked();
     expect(screen.getByText("Organization / main office phones")).toBeInTheDocument();
     expect(screen.getByDisplayValue("208-555-0100")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create new profile" })).toBeInTheDocument();
+  });
+
+  it("shows every general paper note for correction and warns when the entry may continue", () => {
+    render(<PaperNoteEntryCard
+      entry={{
+        ...entry,
+        extraction: { ...entry.extraction, mayContinue: true },
+        review: {
+          ...entry.review,
+          generalNotes: ["Sent packet last year", "Use north gate"],
+        },
+      } as any}
+      matches={[]}
+      loadSource={vi.fn()}
+      onSave={vi.fn()}
+      onApprove={vi.fn()}
+      onUnapprove={vi.fn()}
+      onSkip={vi.fn()}
+    />);
+
+    expect(screen.getByText(/may continue elsewhere/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Other paper note 1")).toHaveValue("Sent packet last year");
+    expect(screen.getByLabelText("Other paper note 2")).toHaveValue("Use north gate");
+    fireEvent.change(screen.getByLabelText("Other paper note 2"), {
+      target: { value: "Use north entrance" },
+    });
+    expect(screen.getByLabelText("Other paper note 2")).toHaveValue("Use north entrance");
   });
 
   it("explains why an existing profile was suggested and lets the contact link to a saved person", () => {
