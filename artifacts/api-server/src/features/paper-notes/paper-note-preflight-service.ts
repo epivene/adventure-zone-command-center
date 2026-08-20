@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
+import { validatePaperNoteCurrentFollowUp } from "./paper-note-follow-up-validation";
 import { validatePaperNotePrimaryContact } from "./paper-note-primary-contact-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
@@ -142,6 +143,7 @@ export class PaperNotePreflightService {
       const reviewIssues = [
         ...validatePaperNoteReview(entry.review as PaperNoteReviewPayload),
         ...validatePaperNoteEventDate(entry.review.event),
+        ...validatePaperNoteCurrentFollowUp(entry.review),
         ...validatePaperNotePrimaryContact(entry.review),
         ...validatePaperNotePrimaryPhones(entry.review),
       ];
