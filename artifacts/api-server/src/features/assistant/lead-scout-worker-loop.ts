@@ -14,6 +14,10 @@ export const systemLeadScoutWorkerLoopScheduler: LeadScoutWorkerLoopScheduler = 
 type Worker = Pick<LeadScoutWorker, "runOne">;
 type Clock = { now(): Date };
 
+const IDLE_RETRY_MS = 30_000;
+const PROGRESS_RETRY_MS = 1_000;
+const ERROR_RETRY_MS = 60_000;
+
 export class LeadScoutWorkerLoop {
   private started = false;
   private stopped = false;
@@ -63,19 +67,21 @@ export class LeadScoutWorkerLoop {
   }
 
   private async runStep() {
-    let result: { kind: "idle" | "progress" } = { kind: "idle" };
+    let retryMs = IDLE_RETRY_MS;
     try {
-      result = await this.dependencies.worker.runOne({
+      const result = await this.dependencies.worker.runOne({
         workerId: this.dependencies.workerId,
         now: this.dependencies.clock.now(),
       });
+      retryMs = result.kind === "idle" ? IDLE_RETRY_MS : PROGRESS_RETRY_MS;
     } catch (error) {
+      retryMs = ERROR_RETRY_MS;
       logger.error({
         errorCode: error && typeof error === "object" && "code" in error
           ? String((error as { code?: unknown }).code)
           : "unknown",
       }, "Lead Scout worker step failed outside durable error handling");
     }
-    if (!this.stopped) this.schedule(result.kind === "idle" ? 2_000 : 0);
+    if (!this.stopped) this.schedule(retryMs);
   }
 }
