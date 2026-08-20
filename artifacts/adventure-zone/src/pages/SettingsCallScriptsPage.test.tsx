@@ -22,4 +22,8 @@ describe("Call Scripts settings page", () => {
     expect(page).toContain("Location");
     expect(page).toContain("Package interest");
   });
+
+  it("treats an intentionally blank customized coaching tip as blank", () => {
+    expect(page).toContain('override ? (override.coachText ?? "") : (node.coach ?? "")');
+  });
 });
