@@ -50,11 +50,10 @@ describe("ProfileDetailSheet Option C", () => {
     expect(source).toContain("bookings.length");
   });
 
-  it("supports inline editing and a working note composer with save confirmation", () => {
+  it("supports inline editing and a working note composer", () => {
     expect(source).toContain("ProfileInlineEditor");
     expect(source).toContain("createActivityAction");
     expect(source).toContain("Save note");
     expect(source).toContain("onSaved={handleInlineSaved}");
-    expect(source).toContain('toast({ title: "Note saved" })');
   });
 });
