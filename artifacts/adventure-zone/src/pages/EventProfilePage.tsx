@@ -3,6 +3,7 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
+import { ProfileDetailsCard } from "@/components/profiles/profile-details-card";
 import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
@@ -188,23 +189,20 @@ export default function EventProfilePage() {
         />
       ) : null}
 
-      <SimpleFullProfile
-        profile={data}
-        onProfileSaved={loadProfile}
-        ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
-        onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
-        profileImageDataUrl={profileImageDataUrl}
-        onProfileImageChange={saveProfileImage}
-        editing={profileEditing}
-        onEditingChange={setProfileEditing}
-      />
+      <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
+        <SimpleFullProfile
+          profile={data}
+          onProfileSaved={loadProfile}
+          ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
+          onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
+          profileImageDataUrl={profileImageDataUrl}
+          onProfileImageChange={saveProfileImage}
+          editing={profileEditing}
+          onEditingChange={setProfileEditing}
+        />
+      </div>
 
-      {!profileEditing && data.place?.description ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="event-description-title">
-          <h2 className="text-lg font-bold text-slate-900" id="event-description-title">Description</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{data.place.description}</p>
-        </section>
-      ) : null}
+      {!profileEditing ? <ProfileDetailsCard profile={data} /> : null}
 
       {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
