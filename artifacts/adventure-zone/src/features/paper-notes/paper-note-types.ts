@@ -42,6 +42,27 @@ export type PaperNoteEntrySummary = {
   updatedAt: string;
 };
 
+export type PaperNoteImportSummary = {
+  profilesCreated: number;
+  profilesUpdated: number;
+  locationsCreated: number;
+  contactsCreated: number;
+  contactsLinked: number;
+  phonesCreatedOrUpdated: number;
+  historicalNotesCreated: number;
+  followUpsCreated: number;
+  entriesSkipped: number;
+};
+
+export type PaperNoteBatchPreflight = {
+  ready: boolean;
+  batchId: string;
+  approvedCount: number;
+  skippedCount: number;
+  blocking: Array<{ entryId: string | null; code: string; message: string }>;
+  preview: PaperNoteImportSummary;
+};
+
 export type PaperNoteBatchListItem = {
   id: string;
   name: string | null;
@@ -61,7 +82,7 @@ export type PaperNoteBatchListItem = {
 export type PaperNoteBatchView = PaperNoteBatchListItem & {
   pages: PaperNotePageView[];
   entries: PaperNoteEntrySummary[];
-  importSummary: Record<string, number> | null;
+  importSummary: PaperNoteImportSummary | null;
   failureCode: string | null;
   failureMessage: string | null;
   extractionStartedAt: string | null;
