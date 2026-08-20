@@ -7,6 +7,10 @@ import {
   deleteActivityInputSchema,
   editActivityInputSchema,
 } from "@/features/activities/activity-input";
+import {
+  enrichPaperNoteTimeline,
+  isPaperNoteActivity,
+} from "@/features/paper-notes/paper-note-activity-provenance";
 
 const router: IRouter = Router();
 function activityService() { return new ActivityService(new DrizzleActivityRepository(db)); }
@@ -29,7 +33,8 @@ router.get("/activities/timeline", async (req, res): Promise<void> => {
   const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
   try {
     const timelinePage = await activityService().listTimeline(parent, page);
-    res.json({ ok: true, items: timelinePage.items, nextPage: timelinePage.nextPage });
+    const items = await enrichPaperNoteTimeline(db, timelinePage.items);
+    res.json({ ok: true, items, nextPage: timelinePage.nextPage });
   } catch (err) {
     req.log.error({ err }, "Failed to list timeline page");
     res.status(500).json({ ok: false, error: "Server error" });
@@ -59,6 +64,10 @@ router.post("/activities/edit", async (req, res): Promise<void> => {
     return;
   }
   try {
+    if (await isPaperNoteActivity(db, parsed.data.activityId)) {
+      res.status(400).json({ ok: false, error: "Imported paper-note history is read-only. Add a new note to record a correction." });
+      return;
+    }
     const result = await activityService().edit(parsed.data);
     if (!result.ok) { res.status(400).json({ ok: false, error: "Could not edit activity" }); return; }
     res.json({ ok: true, activity: result.value });
@@ -72,6 +81,10 @@ router.delete("/activities/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!id) { res.status(400).json({ ok: false, error: "Activity ID required" }); return; }
   try {
+    if (await isPaperNoteActivity(db, id)) {
+      res.status(400).json({ ok: false, error: "Imported paper-note history cannot be deleted." });
+      return;
+    }
     const result = await activityService().delete(id);
     if (!result.ok) {
       const msg =
