@@ -98,8 +98,8 @@ function commonNodes(): Record<string, GuidedCallNode> {
   return {
     details: {
       id: "details",
-      say: "Wonderful. What date and location are you planning for, about how many guests do you expect, and what ages will make up most of the crowd? That helps us shape the right balance of attractions instead of giving you a one-size-fits-all answer.",
-      coach: "Confirm only what is missing. Use the saved event details first so the organizer does not have to repeat them.",
+      say: "Awesome! Our Adventure Zone setup can include around 10–12 attractions, and we handle the setup, teardown, and staffing. What kind of crowd are you expecting this year?",
+      coach: "Use saved event details first. Let them describe the crowd naturally, then confirm only missing date, location, attendance, or age-mix details.",
       responses: [
         { id: "details_captured", label: "Got the details", nextNodeId: "package_interest", suggestion: { collect: ["event_date", "location", "attendance"] } },
         commonPricing,
@@ -118,8 +118,8 @@ function commonNodes(): Record<string, GuidedCallNode> {
     },
     pricing: {
       id: "pricing",
-      say: "I can walk through the confirmed package information and help match the attraction mix to your crowd, space, and goals. I would rather double-check a detail than guess and promise you the wrong thing.",
-      coach: "Use stored package and pricing data only. When the answer is not in the app, use Ask Assistant or Needs Answer and give a clear follow-up time.",
+      say: "We actually have a couple ways we can structure it. Depending on the event, there may be an option with no upfront cost to the event where we operate through ticket sales, or there’s a flat-fee option. I can email you more detailed info on the options we have and we can go from there.",
+      coach: "Do not promise the no-upfront-cost option until the event meets the confirmed requirements. Use stored pricing and package details only, and email the fuller breakdown when that is more useful than explaining everything live.",
       responses: [
         { id: "pricing_answered", label: "Pricing answered", nextNodeId: "next_step", suggestion: { disposition: "interested" } },
         { id: "pricing_unknown", label: "Need to research", nextNodeId: "next_step", suggestion: { disposition: "follow_up_needed", nextAction: "research", noteFragment: "Need to confirm pricing/package details." } },
@@ -176,8 +176,8 @@ function script(kind: GuidedCallScriptKind, label: string, opening: GuidedCallNo
 const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
   first_outreach: script("first_outreach", "First outreach", {
     id: "opening",
-    say: "Hi {{contactName}}, I’m calling from The Adventure Zone about {{eventName}}. We’re a traveling inflatable carnival with bounce houses, giant slides, obstacle courses, adrenaline attractions, and carnival games. I’d love to hear what kind of crowd and experience you’re planning and see whether we could be a good fit.",
-    coach: "Keep it warm and curious. The goal is to understand their event, not to unload every attraction in one breath.",
+    say: "Hi {{contactName}}, I’m calling with The Adventure Zone. We’re a traveling bounce-house carnival, and I’m calling about {{eventName}}. I just wanted to see what you’re planning this year and whether we might be a good fit.",
+    coach: "Keep the opener short. Who you are, what The Adventure Zone is, and why you are calling — then let them talk before explaining attractions.",
     responses: [commonInterested, commonPricing, { id: "already_booked", label: "Already booked someone", nextNodeId: "close_declined" }, commonCallback, commonNotInterested, commonWrongPerson],
   }),
   rebooking: script("rebooking", "Past customer / rebooking", {
