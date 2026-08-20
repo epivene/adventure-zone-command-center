@@ -32,19 +32,19 @@
   order: 3;
 }
 
-/* Step 4: supporting facts stay available without leading the conversation. */
-[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="caller-title"],
-[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="booking-snapshot-title"] {
+/* Step 4: capture the outcome, dated next action, and save while the call is fresh. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="call-details-title"] {
   order: 4;
 }
 
-/* Step 5: history is useful, but should not compete with the active call. */
-[data-testid="call-workspace"][data-mode="full"] > div:last-child > div > details {
+/* Step 5: supporting facts stay available without leading the conversation. */
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="caller-title"],
+[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="booking-snapshot-title"] {
   order: 5;
 }
 
-/* Step 6: finish with the outcome, next action, and save controls. */
-[data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="call-details-title"] {
+/* Step 6: history remains available at the bottom instead of competing with the live call. */
+[data-testid="call-workspace"][data-mode="full"] > div:last-child > div > details {
   order: 6;
 }
 
