@@ -70,38 +70,70 @@ type ProfileCardDetails = {
   ratingCount: number;
 };
 
-async function loadProfileCardDetails(ids: string[]): Promise<Map<string, ProfileCardDetails>> {
+type ExecuteQuery = (query: unknown) => Promise<{ rows?: any[] }>;
+
+export async function loadProfileCardDetailsWith(
+  ids: string[],
+  execute: ExecuteQuery,
+): Promise<Map<string, ProfileCardDetails>> {
   if (!ids.length) return new Map();
+
+  let coreRows: any[] = [];
   try {
-    const result = await db.execute(sql`
+    const coreResult = await execute(sql`
       select
         o.id,
         o.phone,
         o.email,
         o.website,
         o.place_type as "placeType",
-        o.profile_image_data_url as "profileImageDataUrl",
+        o.profile_image_data_url as "profileImageDataUrl"
+      from organizations o
+      where o.id = any(${ids}::uuid[])
+    `);
+    coreRows = coreResult.rows ?? [];
+  } catch {
+    return new Map();
+  }
+
+  let ratingRows: any[] = [];
+  try {
+    const ratingResult = await execute(sql`
+      select
+        b.organization_id as id,
         avg(w.rating_stars)::float as "ratingAverage",
         count(w.rating_stars)::int as "ratingCount"
-      from organizations o
-      left join bookings b on b.organization_id = o.id
-      left join event_wrap_ups w on w.booking_id = b.id and w.rating_stars is not null
-      where o.id = any(${ids}::uuid[])
-      group by o.id, o.phone, o.email, o.website, o.place_type, o.profile_image_data_url
+      from bookings b
+      inner join event_wrap_ups w on w.booking_id = b.id and w.rating_stars is not null
+      where b.organization_id = any(${ids}::uuid[])
+      group by b.organization_id
     `);
-    return new Map(((result as any).rows ?? []).map((row: any) => [row.id, {
+    ratingRows = ratingResult.rows ?? [];
+  } catch {
+    ratingRows = [];
+  }
+
+  const ratingsById = new Map(ratingRows.map((row) => [row.id, {
+    ratingAverage: row.ratingAverage == null ? null : Number(row.ratingAverage),
+    ratingCount: Number(row.ratingCount ?? 0),
+  }]));
+
+  return new Map(coreRows.map((row) => {
+    const rating = ratingsById.get(row.id) ?? { ratingAverage: null, ratingCount: 0 };
+    return [row.id, {
       id: row.id,
       phone: row.phone ?? null,
       email: row.email ?? null,
       website: row.website ?? null,
       placeType: row.placeType ?? null,
       profileImageDataUrl: row.profileImageDataUrl ?? null,
-      ratingAverage: row.ratingAverage == null ? null : Number(row.ratingAverage),
-      ratingCount: Number(row.ratingCount ?? 0),
-    }]));
-  } catch {
-    return new Map();
-  }
+      ...rating,
+    }];
+  }));
+}
+
+async function loadProfileCardDetails(ids: string[]): Promise<Map<string, ProfileCardDetails>> {
+  return loadProfileCardDetailsWith(ids, (query) => db.execute(query as any) as any);
 }
 
 router.get("/organizations", async (req, res): Promise<void> => {
