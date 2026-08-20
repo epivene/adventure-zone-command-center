@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request } from "express";
-import { z } from "zod/v4";
+import { z } from "zod";
 
 import type { PaperNoteMatchingService } from "@/features/paper-notes/paper-note-matching-service";
 import type { PaperNoteReviewService } from "@/features/paper-notes/paper-note-review-service";
