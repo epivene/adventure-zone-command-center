@@ -10,6 +10,7 @@ import {
   createActExtractionClientAdapter,
   createActExtractionLoopPool,
   createActServerShutdown,
+  shouldStartActBackgroundWorkers,
 } from "./runtime";
 
 const actConfig: ActConfig = {
@@ -19,58 +20,40 @@ const actConfig: ActConfig = {
   password: "private-password",
 };
 
+describe("ACT background worker startup", () => {
+  it("defaults background ACT workers off", () => {
+    expect(shouldStartActBackgroundWorkers({})).toBe(false);
+  });
+
+  it("starts background ACT workers only when explicitly enabled", () => {
+    expect(shouldStartActBackgroundWorkers({ ACT_BACKGROUND_WORKERS_ENABLED: "true" })).toBe(true);
+    expect(shouldStartActBackgroundWorkers({ ACT_BACKGROUND_WORKERS_ENABLED: "false" })).toBe(false);
+  });
+});
+
 describe("Act extraction server shutdown", () => {
   it("closes worker, drains server, then closes the shared pool exactly once", async () => {
     const events: string[] = [];
     const shutdown = createActServerShutdown({
-      async closeRuntime() {
-        events.push("runtime");
-      },
-      async closeServer() {
-        events.push("server");
-      },
-      async closePool() {
-        events.push("pool");
-      },
-      onError(stage) {
-        events.push(`error:${stage}`);
-      },
+      async closeRuntime() { events.push("runtime"); },
+      async closeServer() { events.push("server"); },
+      async closePool() { events.push("pool"); },
+      onError(stage) { events.push(`error:${stage}`); },
     });
-
     await Promise.all([shutdown(), shutdown(), shutdown()]);
-
     expect(events).toEqual(["runtime", "server", "pool"]);
   });
 
   it("continues every shutdown phase after errors without rejecting", async () => {
     const events: string[] = [];
     const shutdown = createActServerShutdown({
-      async closeRuntime() {
-        events.push("runtime");
-        throw new Error("runtime secret");
-      },
-      async closeServer() {
-        events.push("server");
-        throw new Error("server secret");
-      },
-      async closePool() {
-        events.push("pool");
-        throw new Error("pool secret");
-      },
-      onError(stage) {
-        events.push(`error:${stage}`);
-      },
+      async closeRuntime() { events.push("runtime"); throw new Error("runtime secret"); },
+      async closeServer() { events.push("server"); throw new Error("server secret"); },
+      async closePool() { events.push("pool"); throw new Error("pool secret"); },
+      onError(stage) { events.push(`error:${stage}`); },
     });
-
     await expect(shutdown()).resolves.toBeUndefined();
-    expect(events).toEqual([
-      "runtime",
-      "error:runtime",
-      "server",
-      "error:server",
-      "pool",
-      "error:pool",
-    ]);
+    expect(events).toEqual(["runtime","error:runtime","server","error:server","pool","error:pool"]);
   });
 });
 
@@ -79,39 +62,20 @@ describe("Act extraction runtime composition", () => {
     "starts and closes exactly one archive loop when ACT is %s",
     async (mode) => {
       const events: string[] = [];
-      const archive = {
-        start: vi.fn(() => events.push("archive:start")),
-        close: vi.fn(async () => { events.push("archive:close"); }),
-      };
-      const extraction = {
-        start: vi.fn(() => events.push("extraction:start")),
-        close: vi.fn(async () => { events.push("extraction:close"); }),
-      };
+      const archive = { start: vi.fn(() => events.push("archive:start")), close: vi.fn(async () => { events.push("archive:close"); }) };
+      const extraction = { start: vi.fn(() => events.push("extraction:start")), close: vi.fn(async () => { events.push("extraction:close"); }) };
       const createConfiguredRuntime = vi.fn(async () => extraction);
       const runtime = await createActExtractionRuntime({
-        getEnvironment: () => mode === "configured"
-          ? { configured: true, config: actConfig }
-          : { configured: false },
+        getEnvironment: () => mode === "configured" ? { configured: true, config: actConfig } : { configured: false },
         createArchiveRuntime: vi.fn(async () => archive),
         createConfiguredRuntime,
       });
-
       runtime.start();
       await runtime.close();
-
       expect(archive.start).toHaveBeenCalledTimes(1);
       expect(archive.close).toHaveBeenCalledTimes(1);
       expect(createConfiguredRuntime).toHaveBeenCalledTimes(mode === "configured" ? 1 : 0);
-      if (mode === "unconfigured") {
-        expect(events).toEqual(["archive:start", "archive:close"]);
-      } else {
-        expect(events).toEqual([
-          "extraction:start",
-          "archive:start",
-          "archive:close",
-          "extraction:close",
-        ]);
-      }
+      expect(events).toEqual(mode === "unconfigured" ? ["archive:start", "archive:close"] : ["extraction:start","archive:start","archive:close","extraction:close"]);
     },
   );
 
@@ -123,10 +87,8 @@ describe("Act extraction runtime composition", () => {
       createArchiveRuntime: vi.fn(async () => archive),
       createConfiguredRuntime,
     });
-
     runtime.start();
     await runtime.close();
-
     expect(archive.start).toHaveBeenCalledTimes(1);
     expect(archive.close).toHaveBeenCalledTimes(1);
     expect(createConfiguredRuntime).not.toHaveBeenCalled();
@@ -138,38 +100,24 @@ describe("Act extraction runtime composition", () => {
     const workerIds: string[] = [];
     const runtime = createArchiveProfileImportLoop({
       store: {
-        createOrGetJob: vi.fn(),
-        getStatus: vi.fn(),
-        async claimNext(input) {
-          workerIds.push(input.workerId);
-          return null;
-        },
-        loadBatch: vi.fn(),
-        commitBatch: vi.fn(),
-        failBatch: vi.fn(),
+        createOrGetJob: vi.fn(), getStatus: vi.fn(),
+        async claimNext(input) { workerIds.push(input.workerId); return null; },
+        loadBatch: vi.fn(), commitBatch: vi.fn(), failBatch: vi.fn(),
       },
       createAiClient: vi.fn(),
       clock: { now: () => new Date("2026-08-14T12:00:00.000Z") },
       scheduler: {
-        schedule(task) {
-          scheduled.push(task);
-          return task;
-        },
-        cancel(handle) {
-          cancelled.push(handle);
-        },
+        schedule(task) { scheduled.push(task); return task; },
+        cancel(handle) { cancelled.push(handle); },
       },
     });
-
     runtime.start();
     runtime.start();
     expect(scheduled).toHaveLength(1);
-
     scheduled.shift()!();
     await vi.waitFor(() => expect(workerIds).toHaveLength(1));
     expect(workerIds[0]).toMatch(/^act-archive-profile-import-\d+-[0-9a-f-]{36}$/);
     await vi.waitFor(() => expect(scheduled).toHaveLength(1));
-
     await runtime.close();
     expect(cancelled).toHaveLength(1);
   });
@@ -178,138 +126,50 @@ describe("Act extraction runtime composition", () => {
     const events: string[] = [];
     const pool = createActExtractionLoopPool({
       concurrency: 4,
-      createLoop(index) {
-        return {
-          start() {
-            events.push(`start:${index}`);
-          },
-          async close() {
-            events.push(`close:${index}`);
-          },
-        };
-      },
+      createLoop(index) { return { start() { events.push(`start:${index}`); }, async close() { events.push(`close:${index}`); } }; },
     });
-
     pool.start();
     await pool.close();
-
-    expect(events).toEqual([
-      "start:0",
-      "start:1",
-      "start:2",
-      "start:3",
-      "close:0",
-      "close:1",
-      "close:2",
-      "close:3",
-    ]);
+    expect(events).toEqual(["start:0","start:1","start:2","start:3","close:0","close:1","close:2","close:3"]);
   });
 
   it("single-flights authorization shared by concurrent extraction loops", async () => {
     let release!: () => void;
-    const pending = new Promise<void>((resolve) => {
-      release = resolve;
-    });
+    const pending = new Promise<void>((resolve) => { release = resolve; });
     const authorize = vi.fn(() => pending);
-    const adapter = createActExtractionClientAdapter({
-      authorize,
-      hasValidAuthorization: () => false,
-      getJsonAuthorized: vi.fn(),
-      rateLimit: { limit: null, remaining: null, reset: null },
-    });
-
+    const adapter = createActExtractionClientAdapter({ authorize, hasValidAuthorization: () => false, getJsonAuthorized: vi.fn(), rateLimit: { limit: null, remaining: null, reset: null } });
     const first = adapter.authorization.authorize();
     const second = adapter.authorization.authorize();
     expect(authorize).toHaveBeenCalledTimes(1);
-
     release();
-    await expect(Promise.all([first, second])).resolves.toEqual([
-      undefined,
-      undefined,
-    ]);
+    await expect(Promise.all([first, second])).resolves.toEqual([undefined, undefined]);
   });
 
   it("runs cold authorization and warm data as separate one-fetch worker steps", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ token: "private-token" }), {
-          status: 200,
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify([{ id: "company-1" }]), { status: 200 }),
-      );
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ token: "private-token" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ id: "company-1" }]), { status: 200 }));
     const client = new ActClient(actConfig, { fetcher });
     const adapter = createActExtractionClientAdapter(client);
-    const checkpoint = {
-      id: "checkpoint-1",
-      runId: "run-1",
-      sourceDatabaseKey: "database-a",
-      leaseOwner: "worker-a",
-      attemptCount: 1,
-      streamType: "company" as const,
-      checkpointKind: "list" as const,
-      partitionKey: "root:company",
-      requiredness: "required" as const,
-      parentSourceRecordId: null,
-      parentActRecordId: null,
-      sourceRecordId: null,
-      nextSkip: 0,
-      pageSize: 100,
-      queryMode: "projected" as const,
-      deriveDetails: true,
-    };
+    const checkpoint = { id:"checkpoint-1", runId:"run-1", sourceDatabaseKey:"database-a", leaseOwner:"worker-a", attemptCount:1, streamType:"company" as const, checkpointKind:"list" as const, partitionKey:"root:company", requiredness:"required" as const, parentSourceRecordId:null, parentActRecordId:null, sourceRecordId:null, nextSkip:0, pageSize:100, queryMode:"projected" as const, deriveDetails:true };
     const auditPaths: string[] = [];
     const archived: unknown[] = [];
     const releases: unknown[] = [];
     const worker = new ActExtractionWorker({
-      checkpoints: {
-        claimNext: async () => checkpoint,
-        releaseForAuthorization: async (input: unknown) => {
-          releases.push(input);
-        },
-      } as unknown as ActReplacementCheckpointRepository,
-      audits: {
-        begin: async (input) => {
-          auditPaths.push(input.pathTemplate);
-          return { auditId: `audit-${auditPaths.length}` };
-        },
-        finish: async () => {},
-      },
+      checkpoints: { claimNext: async () => checkpoint, releaseForAuthorization: async (input: unknown) => { releases.push(input); } } as unknown as ActReplacementCheckpointRepository,
+      audits: { begin: async (input) => { auditPaths.push(input.pathTemplate); return { auditId: `audit-${auditPaths.length}` }; }, finish: async () => {} },
       source: adapter.source,
       authorization: adapter.authorization,
-      archive: {
-        archiveCheckpointPage: async (input) => {
-          archived.push(input);
-          return {
-            responseRows: 1,
-            observedIdentities: 1,
-            archivedIdentities: 1,
-            completeIdentities: 0,
-            partialIdentities: 0,
-            failedIdentities: 0,
-            snapshotVersionsInserted: 1,
-          };
-        },
-      },
+      archive: { archiveCheckpointPage: async (input) => { archived.push(input); return { responseRows:1, observedIdentities:1, archivedIdentities:1, completeIdentities:0, partialIdentities:0, failedIdentities:0, snapshotVersionsInserted:1 }; } },
       clock: { now: () => new Date("2026-08-04T12:00:00.025Z") },
     });
-
-    await worker.runOne({
-      workerId: "worker-a",
-      now: new Date("2026-08-04T12:00:00.000Z"),
-    });
+    await worker.runOne({ workerId:"worker-a", now:new Date("2026-08-04T12:00:00.000Z") });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(String(fetcher.mock.calls[0]?.[0])).toContain("/authorize");
     expect(auditPaths).toEqual(["/authorize"]);
     expect(releases).toHaveLength(1);
     expect(archived).toHaveLength(0);
-
-    await worker.runOne({
-      workerId: "worker-a",
-      now: new Date("2026-08-04T12:00:01.000Z"),
-    });
+    await worker.runOne({ workerId:"worker-a", now:new Date("2026-08-04T12:00:01.000Z") });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(String(fetcher.mock.calls[1]?.[0])).toContain("/api/companies");
     expect(auditPaths).toEqual(["/authorize", "/api/companies"]);
@@ -317,63 +177,20 @@ describe("Act extraction runtime composition", () => {
   });
 
   it("audits a cold authorization failure and performs no data fetch", async () => {
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response("rejected", { status: 401 }));
-    const adapter = createActExtractionClientAdapter(
-      new ActClient(actConfig, { fetcher }),
-    );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValueOnce(new Response("rejected", { status: 401 }));
+    const adapter = createActExtractionClientAdapter(new ActClient(actConfig, { fetcher }));
     const checkpointActions: string[] = [];
     const auditPaths: string[] = [];
     const auditStates: string[] = [];
     const worker = new ActExtractionWorker({
-      checkpoints: {
-        claimNext: async () => ({
-          id: "checkpoint-1",
-          runId: "run-1",
-          sourceDatabaseKey: "database-a",
-          leaseOwner: "worker-a",
-          attemptCount: 1,
-          streamType: "company",
-          checkpointKind: "list",
-          partitionKey: "root:company",
-          requiredness: "required",
-          parentSourceRecordId: null,
-          parentActRecordId: null,
-          sourceRecordId: null,
-          nextSkip: 0,
-          pageSize: 100,
-          queryMode: "projected",
-          deriveDetails: true,
-        }),
-        markFailed: async () => {
-          checkpointActions.push("failed");
-        },
-      } as unknown as ActReplacementCheckpointRepository,
-      audits: {
-        begin: async (input) => {
-          auditPaths.push(input.pathTemplate);
-          return { auditId: "audit-1" };
-        },
-        finish: async (input) => {
-          auditStates.push(`${input.state}:${input.safeErrorCode}`);
-        },
-      },
+      checkpoints: { claimNext: async () => ({ id:"checkpoint-1",runId:"run-1",sourceDatabaseKey:"database-a",leaseOwner:"worker-a",attemptCount:1,streamType:"company",checkpointKind:"list",partitionKey:"root:company",requiredness:"required",parentSourceRecordId:null,parentActRecordId:null,sourceRecordId:null,nextSkip:0,pageSize:100,queryMode:"projected",deriveDetails:true }), markFailed: async () => { checkpointActions.push("failed"); } } as unknown as ActReplacementCheckpointRepository,
+      audits: { begin: async (input) => { auditPaths.push(input.pathTemplate); return { auditId:"audit-1" }; }, finish: async (input) => { auditStates.push(`${input.state}:${input.safeErrorCode}`); } },
       source: adapter.source,
       authorization: adapter.authorization,
-      archive: {
-        archiveCheckpointPage: async () => {
-          throw new Error("data archive must not run");
-        },
-      },
+      archive: { archiveCheckpointPage: async () => { throw new Error("data archive must not run"); } },
       clock: { now: () => new Date("2026-08-04T12:00:00.025Z") },
     });
-
-    await worker.runOne({
-      workerId: "worker-a",
-      now: new Date("2026-08-04T12:00:00.000Z"),
-    });
-
+    await worker.runOne({ workerId:"worker-a", now:new Date("2026-08-04T12:00:00.000Z") });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(String(fetcher.mock.calls[0]?.[0])).toContain("/authorize");
     expect(auditPaths).toEqual(["/authorize"]);
