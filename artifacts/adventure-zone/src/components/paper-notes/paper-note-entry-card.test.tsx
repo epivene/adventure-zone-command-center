@@ -150,6 +150,25 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByLabelText("Other paper note 2")).toHaveValue("Use north entrance");
   });
 
+  it("lets the reviewer choose the type, date, and reviewed contact for a new current follow-up", () => {
+    render(<PaperNoteEntryCard
+      entry={entry as any}
+      matches={[]}
+      loadSource={vi.fn()}
+      onSave={vi.fn()}
+      onApprove={vi.fn()}
+      onUnapprove={vi.fn()}
+      onSkip={vi.fn()}
+    />);
+
+    fireEvent.click(screen.getByLabelText("Create a current follow-up"));
+    expect(screen.getByLabelText("Current follow-up type")).toHaveValue("call");
+    expect(screen.getByLabelText("New current follow-up date")).toBeInTheDocument();
+    expect(screen.getByLabelText("Current follow-up contact")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Tina/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Use primary reviewed contact/i })).toBeInTheDocument();
+  });
+
   it("explains why an existing profile was suggested and lets the contact link to a saved person", () => {
     render(<PaperNoteEntryCard
       entry={entry as any}
