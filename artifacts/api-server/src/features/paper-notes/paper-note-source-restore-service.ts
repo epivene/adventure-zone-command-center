@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { preparePaperNoteImage } from "./paper-note-image";
+import { PaperNoteImageError, preparePaperNoteImage } from "./paper-note-image";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
 
 type DrizzleDatabase = typeof database;
@@ -25,7 +25,8 @@ export type PaperNoteSourceRestoreErrorCode =
   | "SOURCE_NOT_FOUND"
   | "SOURCE_HASH_UNAVAILABLE"
   | "SOURCE_HASH_MISMATCH"
-  | "SOURCE_STORAGE_MISMATCH";
+  | "SOURCE_STORAGE_MISMATCH"
+  | "INVALID_IMAGE";
 
 export class PaperNoteSourceRestoreError extends Error {
   constructor(
@@ -75,10 +76,21 @@ export class PaperNoteSourceRestoreService {
       );
     }
 
-    const prepared = await this.validateImage({
-      bytes: input.bytes,
-      declaredMimeType: input.mimeType,
-    });
+    let prepared;
+    try {
+      prepared = await this.validateImage({
+        bytes: input.bytes,
+        declaredMimeType: input.mimeType,
+      });
+    } catch (error) {
+      if (error instanceof PaperNoteImageError) {
+        throw new PaperNoteSourceRestoreError(
+          "INVALID_IMAGE",
+          "Choose the exact original JPEG, PNG, or WebP paper photo.",
+        );
+      }
+      throw error;
+    }
     if (prepared.sha256 !== target.sha256) {
       throw new PaperNoteSourceRestoreError(
         "SOURCE_HASH_MISMATCH",
