@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   GUIDED_CALL_SCRIPT_KINDS,
+  getConfiguredGuidedCallScript,
   getGuidedCallScript,
   renderGuidedText,
   validateGuidedCallScript,
@@ -39,6 +40,32 @@ describe("guided call scripts", () => {
   it("offers to email detailed pricing options instead of overexplaining on the phone", () => {
     const script = getGuidedCallScript("first_outreach");
     expect(script.nodes.pricing.say).toContain("I can email you more detailed info on the options we have and we can go from there.");
+  });
+
+  it("overrides only editable wording while preserving protected branch behavior", () => {
+    const original = getGuidedCallScript("first_outreach");
+    const configured = getConfiguredGuidedCallScript("first_outreach", [
+      {
+        scriptKind: "first_outreach",
+        nodeId: "opening",
+        sayText: "Hi {{contactName}}, custom opening.",
+        coachText: "Custom coaching.",
+      },
+    ]);
+
+    expect(configured.nodes.opening.say).toBe("Hi {{contactName}}, custom opening.");
+    expect(configured.nodes.opening.coach).toBe("Custom coaching.");
+    expect(configured.nodes.opening.responses).toEqual(original.nodes.opening.responses);
+    expect(configured.nodes.pricing.say).toBe(original.nodes.pricing.say);
+  });
+
+  it("ignores overrides for a different script kind or unknown node", () => {
+    const original = getGuidedCallScript("follow_up");
+    const configured = getConfiguredGuidedCallScript("follow_up", [
+      { scriptKind: "first_outreach", nodeId: "opening", sayText: "Wrong script", coachText: null },
+      { scriptKind: "follow_up", nodeId: "missing", sayText: "Wrong node", coachText: null },
+    ]);
+    expect(configured).toEqual(original);
   });
 
   it("renders only trusted placeholders supplied by the workspace", () => {
