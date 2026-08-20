@@ -36,6 +36,19 @@ function review(overrides: Partial<PaperNoteReviewPayload> = {}): PaperNoteRevie
   };
 }
 
+const structuredPhone = (key: string) => ({
+  key,
+  number: "208-555-0142",
+  extension: null,
+  type: "office" as const,
+  label: null,
+  instructions: null,
+  status: "active" as const,
+  primary: true,
+  crossedOut: false,
+  importAsStructuredValue: true,
+});
+
 describe("paper-note review validation", () => {
   it("accepts a reviewed new profile without converting the old reminder to a task", () => {
     const input = review();
@@ -46,100 +59,77 @@ describe("paper-note review validation", () => {
   });
 
   it("blocks a new profile without a name", () => {
-    const input = review({
-      event: { ...review().event, name: "" },
-    });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
-      fieldPath: "event.name",
-      severity: "blocking",
-    }));
+    const input = review({ event: { ...review().event, name: "" } });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "event.name", severity: "blocking" }));
   });
 
   it("requires confirmation when a structured event date still has an inferred page year", () => {
-    const input = review({
-      event: {
-        ...review().event,
-        eventDateText: "June 22",
-        startsOn: "2026-06-22",
-        pageYearConfirmed: false,
-      },
-    });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
-      fieldPath: "event.pageYearConfirmed",
-      severity: "blocking",
-    }));
+    const input = review({ event: { ...review().event, eventDateText: "June 22", startsOn: "2026-06-22", pageYearConfirmed: false } });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "event.pageYearConfirmed", severity: "blocking" }));
   });
 
   it("blocks a current follow-up without a new absolute date", () => {
-    const input = review({
-      currentFollowUp: { enabled: true, kind: "call", dueOn: null, contactKey: null },
-    });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
-      fieldPath: "currentFollowUp.dueOn",
-      severity: "blocking",
-    }));
+    const input = review({ currentFollowUp: { enabled: true, kind: "call", dueOn: null, contactKey: null } });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "currentFollowUp.dueOn", severity: "blocking" }));
   });
 
   it("blocks invalid structured phone numbers while allowing note-only crossed-out phones", () => {
     const invalid = review({
       organizationPhones: [{
-        key: "office",
-        number: "208-55?",
-        extension: "3115",
-        type: "office",
-        label: "fair office",
-        instructions: null,
-        status: "questionable",
-        primary: false,
-        crossedOut: false,
-        importAsStructuredValue: true,
+        key: "office", number: "208-55?", extension: "3115", type: "office", label: "fair office",
+        instructions: null, status: "questionable", primary: false, crossedOut: false, importAsStructuredValue: true,
       }],
     });
-    expect(validatePaperNoteReview(invalid)).toContainEqual(expect.objectContaining({
-      fieldPath: "organizationPhones.0.number",
+    expect(validatePaperNoteReview(invalid)).toContainEqual(expect.objectContaining({ fieldPath: "organizationPhones.0.number", severity: "blocking" }));
+
+    const noteOnly = review({ organizationPhones: [{ ...invalid.organizationPhones[0]!, crossedOut: true, importAsStructuredValue: false }] });
+    expect(validatePaperNoteReview(noteOnly).some((issue) => issue.fieldPath === "organizationPhones.0.number" && issue.severity === "blocking")).toBe(false);
+  });
+
+  it("blocks more than one primary organization phone", () => {
+    const input = review({
+      organizationPhones: [
+        structuredPhone("office-1"),
+        { ...structuredPhone("office-2"), number: "208-555-0143" },
+      ],
+    });
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+      fieldPath: "organizationPhones",
       severity: "blocking",
     }));
+  });
 
-    const noteOnly = review({
-      organizationPhones: [{
-        ...invalid.organizationPhones[0]!,
-        crossedOut: true,
-        importAsStructuredValue: false,
+  it("blocks more than one primary phone for a new contact", () => {
+    const input = review({
+      contacts: [{
+        key: "contact-0",
+        mode: "new_contact",
+        selectedContactId: null,
+        name: "Tina",
+        role: null,
+        email: null,
+        primary: true,
+        phones: [
+          structuredPhone("phone-1"),
+          { ...structuredPhone("phone-2"), number: "208-555-0143" },
+        ],
       }],
     });
-    expect(validatePaperNoteReview(noteOnly).some((issue) => issue.fieldPath === "organizationPhones.0.number" && issue.severity === "blocking")).toBe(false);
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
+      fieldPath: "contacts.0.phones",
+      severity: "blocking",
+    }));
   });
 
   it("requires explicit name email and phone decisions when linking an existing contact", () => {
     const input = review({
-      destination: {
-        mode: "existing_profile",
-        organizationId: "10000000-0000-4000-8000-000000000001",
-        organizationLocationId: null,
-      },
+      destination: { mode: "existing_profile", organizationId: "10000000-0000-4000-8000-000000000001", organizationLocationId: null },
       contacts: [{
-        key: "contact-0",
-        mode: "existing_contact",
-        selectedContactId: "50000000-0000-4000-8000-000000000001",
-        name: "Tina",
-        role: null,
-        email: "tina@example.test",
-        primary: true,
-        phones: [{
-          key: "phone-0",
-          number: "208-555-0142",
-          extension: "3115",
-          type: "office",
-          label: null,
-          instructions: null,
-          status: "active",
-          primary: true,
-          crossedOut: false,
-          importAsStructuredValue: true,
-        }],
+        key: "contact-0", mode: "existing_contact", selectedContactId: "50000000-0000-4000-8000-000000000001",
+        name: "Tina", role: null, email: "tina@example.test", primary: true,
+        phones: [{ ...structuredPhone("phone-0"), extension: "3115" }],
       }],
     });
-
     const issues = validatePaperNoteReview(input);
     expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.name", severity: "blocking" }));
     expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.email", severity: "blocking" }));
@@ -148,27 +138,9 @@ describe("paper-note review validation", () => {
 
   it("requires an explicit organization-phone decision for an existing profile", () => {
     const input = review({
-      destination: {
-        mode: "existing_profile",
-        organizationId: "10000000-0000-4000-8000-000000000001",
-        organizationLocationId: null,
-      },
-      organizationPhones: [{
-        key: "office",
-        number: "208-555-0100",
-        extension: null,
-        type: "office",
-        label: "main office",
-        instructions: null,
-        status: "active",
-        primary: false,
-        crossedOut: false,
-        importAsStructuredValue: true,
-      }],
+      destination: { mode: "existing_profile", organizationId: "10000000-0000-4000-8000-000000000001", organizationLocationId: null },
+      organizationPhones: [{ ...structuredPhone("office"), number: "208-555-0100", primary: false }],
     });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({
-      fieldPath: "organizationPhones.0",
-      severity: "blocking",
-    }));
+    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "organizationPhones.0", severity: "blocking" }));
   });
 });
