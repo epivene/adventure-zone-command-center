@@ -73,3 +73,28 @@ export async function deletePaperNoteBatch(batchId: string) {
 export function startPaperNoteExtraction(batchId: string) {
   return apiPost<{ ok: true }>(`/paper-notes/batches/${batchId}/extract`, {});
 }
+
+export function retryPaperNotePage(batchId: string, pageId: string) {
+  return apiPost<{ ok: true }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/retry`,
+    {},
+  );
+}
+
+export function addManualPaperNoteEntry(
+  batchId: string,
+  pageId: string,
+  transcription: string,
+) {
+  return apiPost<{ entryId: string }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/manual-entry`,
+    { transcription },
+  );
+}
+
+export function markPaperNotePageReviewedEmpty(batchId: string, pageId: string) {
+  return apiPost<{ ok: true }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/reviewed-empty`,
+    {},
+  );
+}
