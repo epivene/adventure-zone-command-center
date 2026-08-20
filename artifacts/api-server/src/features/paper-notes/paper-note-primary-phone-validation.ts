@@ -6,15 +6,17 @@ export function validatePaperNotePrimaryPhones(
 ): PaperNoteReviewIssue[] {
   const issues: PaperNoteReviewIssue[] = [];
 
-  const organizationPrimaryCount = review.organizationPhones.filter((phone) =>
-    phone.importAsStructuredValue && phone.primary,
-  ).length;
-  if (organizationPrimaryCount > 1) {
-    issues.push({
-      fieldPath: "organizationPhones",
-      severity: "blocking",
-      message: "Choose only one primary organization/main-office phone.",
-    });
+  if (review.destination?.mode === "new_profile") {
+    const organizationPrimaryCount = review.organizationPhones.filter((phone) =>
+      phone.importAsStructuredValue && phone.primary,
+    ).length;
+    if (organizationPrimaryCount > 1) {
+      issues.push({
+        fieldPath: "organizationPhones",
+        severity: "blocking",
+        message: "Choose only one primary organization/main-office phone.",
+      });
+    }
   }
 
   review.contacts.forEach((contact, contactIndex) => {
