@@ -30,20 +30,14 @@ function callHref({
 }
 
 export function ProfilePrimaryActions(props: Props) {
-  const { profileId, selectedContactId, bookingId, followUpId, mode, assistedCallingEnabled, callablePhone, onEdit } = props;
+  const { profileId, selectedContactId, bookingId, followUpId, mode, callablePhone, onEdit } = props;
   const shared = { profileId, selectedContactId, bookingId, followUpId, mode };
   const newCallHref = callHref({ ...shared, route: "/calls/new" });
   const logCallHref = callHref({ ...shared, route: "/calls/log" });
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm" aria-label="Profile primary actions">
-      {assistedCallingEnabled ? (
-        callablePhone ? <Link className="button-primary" href={newCallHref}>Call</Link> : <button className="button-primary" disabled type="button">Call</button>
-      ) : callablePhone ? (
-        <a className="button-primary" href={`tel:${callablePhone}`}>Call</a>
-      ) : (
-        <button className="button-primary" disabled type="button">Call</button>
-      )}
+      {callablePhone ? <Link className="button-primary" href={newCallHref}>Call</Link> : <button className="button-primary" disabled type="button">Call</button>}
       <Link className="button-secondary" href={logCallHref}>Log call</Link>
       <button className="button-secondary" type="button" onClick={onEdit}>Edit profile</button>
       <ProfileLastResortButton profileId={profileId} />
