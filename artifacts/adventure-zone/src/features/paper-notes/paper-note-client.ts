@@ -1,5 +1,15 @@
 import { apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
-import type { PaperNoteBatchListItem, PaperNoteBatchView } from "./paper-note-types";
+import type {
+  PaperNoteBatchListItem,
+  PaperNoteBatchPreflight,
+  PaperNoteBatchView,
+  PaperNoteImportSummary,
+} from "./paper-note-types";
+import type {
+  PaperNoteMatch,
+  PaperNoteReviewDraft,
+  PaperNoteReviewEntryDetails,
+} from "./paper-note-review-types";
 
 async function errorMessage(response: Response) {
   const payload = await response.json().catch(() => ({})) as { error?: string };
@@ -72,4 +82,123 @@ export async function deletePaperNoteBatch(batchId: string) {
 
 export function startPaperNoteExtraction(batchId: string) {
   return apiPost<{ ok: true }>(`/paper-notes/batches/${batchId}/extract`, {});
+}
+
+export function retryPaperNotePage(batchId: string, pageId: string) {
+  return apiPost<{ ok: true }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/retry`,
+    {},
+  );
+}
+
+export function addManualPaperNoteEntry(
+  batchId: string,
+  pageId: string,
+  transcription: string,
+) {
+  return apiPost<{ entryId: string }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/manual-entry`,
+    { transcription },
+  );
+}
+
+export function markPaperNotePageReviewedEmpty(batchId: string, pageId: string) {
+  return apiPost<{ ok: true }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/reviewed-empty`,
+    {},
+  );
+}
+
+export function getPaperNotePageSource(
+  batchId: string,
+  pageId: string,
+  kind: "original" | "analysis" = "original",
+) {
+  return apiGet<{ url: string; kind: "original" | "analysis" }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/source-url?kind=${kind}`,
+  );
+}
+
+export function getPaperNoteEntrySource(
+  entryId: string,
+  kind: "original" | "analysis" = "original",
+) {
+  return apiGet<{ url: string; kind: "original" | "analysis" }>(
+    `/paper-notes/entries/${entryId}/source-url?kind=${kind}`,
+  );
+}
+
+export async function getPaperNoteEntryReview(entryId: string) {
+  const result = await apiGet<{ entry: PaperNoteReviewEntryDetails }>(
+    `/paper-notes/entries/${entryId}/review`,
+  );
+  return result.entry;
+}
+
+export async function getPaperNoteEntryMatches(entryId: string) {
+  const result = await apiGet<{ matches: PaperNoteMatch[] }>(
+    `/paper-notes/entries/${entryId}/matches`,
+  );
+  return result.matches;
+}
+
+export async function savePaperNoteEntryReview(
+  entryId: string,
+  review: PaperNoteReviewDraft,
+  expectedVersion: number,
+) {
+  const result = await apiPatch<{ entry: PaperNoteReviewEntryDetails }>(
+    `/paper-notes/entries/${entryId}`,
+    { review, expectedVersion },
+  );
+  return result.entry;
+}
+
+async function paperNoteEntryStateAction(
+  entryId: string,
+  action: "approve" | "unapprove" | "skip",
+  expectedVersion: number,
+) {
+  const result = await apiPost<{ entry: PaperNoteReviewEntryDetails }>(
+    `/paper-notes/entries/${entryId}/${action}`,
+    { expectedVersion },
+  );
+  return result.entry;
+}
+
+export function approvePaperNoteEntry(entryId: string, expectedVersion: number) {
+  return paperNoteEntryStateAction(entryId, "approve", expectedVersion);
+}
+
+export function unapprovePaperNoteEntry(entryId: string, expectedVersion: number) {
+  return paperNoteEntryStateAction(entryId, "unapprove", expectedVersion);
+}
+
+export function skipPaperNoteEntry(entryId: string, expectedVersion: number) {
+  return paperNoteEntryStateAction(entryId, "skip", expectedVersion);
+}
+
+export async function preflightPaperNoteBatch(batchId: string) {
+  const response = await apiFetch(`/paper-notes/batches/${batchId}/preflight`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  const payload = await response.json().catch(() => ({})) as {
+    preflight?: PaperNoteBatchPreflight;
+    error?: string;
+  };
+  if (payload.preflight) return payload.preflight;
+  throw new Error(payload.error ?? `API ${response.status}`);
+}
+
+export async function importPaperNoteBatch(batchId: string, requestKey: string) {
+  const result = await apiPost<{ summary: PaperNoteImportSummary }>(
+    `/paper-notes/batches/${batchId}/import`,
+    { requestKey },
+  );
+  return result.summary;
+}
+
+export function archivePaperNoteBatch(batchId: string) {
+  return apiPost<{ ok: true }>(`/paper-notes/batches/${batchId}/archive`, {});
 }

@@ -25,6 +25,44 @@ export type PaperNotePageView = {
   updatedAt: string;
 };
 
+export type PaperNoteEntrySummary = {
+  id: string;
+  batchId: string;
+  pageId: string;
+  sourceOrder: number;
+  sourceRegion: { x: number; y: number; width: number; height: number } | null;
+  reviewVersion: number;
+  state: "needs_review" | "ready" | "approved" | "skipped" | "imported";
+  destinationMode: "existing_profile" | "existing_profile_new_location" | "new_profile" | "skip" | null;
+  selectedOrganizationId: string | null;
+  selectedOrganizationLocationId: string | null;
+  validationIssues: Array<{ fieldPath: string; message: string; severity: "warning" | "blocking" }>;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PaperNoteImportSummary = {
+  profilesCreated: number;
+  profilesUpdated: number;
+  locationsCreated: number;
+  contactsCreated: number;
+  contactsLinked: number;
+  phonesCreatedOrUpdated: number;
+  historicalNotesCreated: number;
+  followUpsCreated: number;
+  entriesSkipped: number;
+};
+
+export type PaperNoteBatchPreflight = {
+  ready: boolean;
+  batchId: string;
+  approvedCount: number;
+  skippedCount: number;
+  blocking: Array<{ entryId: string | null; code: string; message: string }>;
+  preview: PaperNoteImportSummary;
+};
+
 export type PaperNoteBatchListItem = {
   id: string;
   name: string | null;
@@ -43,8 +81,8 @@ export type PaperNoteBatchListItem = {
 
 export type PaperNoteBatchView = PaperNoteBatchListItem & {
   pages: PaperNotePageView[];
-  entries: unknown[];
-  importSummary: Record<string, number> | null;
+  entries: PaperNoteEntrySummary[];
+  importSummary: PaperNoteImportSummary | null;
   failureCode: string | null;
   failureMessage: string | null;
   extractionStartedAt: string | null;
