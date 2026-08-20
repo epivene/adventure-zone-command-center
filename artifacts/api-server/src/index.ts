@@ -25,6 +25,7 @@ import { ensureManagerAssistantSchema } from "./features/manager-assistant/manag
 import {
   createActExtractionRuntime,
   createActServerShutdown,
+  shouldStartActBackgroundWorkers,
   type ActExtractionRuntime,
 } from "./features/act-replacement/runtime";
 
@@ -116,6 +117,11 @@ let shutdownRequested = false;
 const server = app.listen(port, async () => {
   logger.info({ port }, "Server listening");
   if (!shutdownRequested) leadScoutLoop.start();
+
+  if (!shouldStartActBackgroundWorkers()) {
+    logger.info("ACT background extraction/recovery workers are disabled");
+    return;
+  }
 
   try {
     extractionRuntimePromise = createActExtractionRuntime();
