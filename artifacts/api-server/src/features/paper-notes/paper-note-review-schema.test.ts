@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { validatePaperNoteCurrentFollowUp } from "./paper-note-follow-up-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import {
   paperNoteReviewPayloadSchema,
@@ -72,6 +73,36 @@ describe("paper-note review validation", () => {
   it("blocks a current follow-up without a new absolute date", () => {
     const input = review({ currentFollowUp: { enabled: true, kind: "call", dueOn: null, contactKey: null } });
     expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "currentFollowUp.dueOn", severity: "blocking" }));
+  });
+
+  it("blocks a current follow-up that points to a history-only or missing contact", () => {
+    const baseContact = {
+      key: "contact-0",
+      mode: "note_only" as const,
+      selectedContactId: null,
+      name: "Tina",
+      role: null,
+      email: null,
+      primary: true,
+      phones: [],
+    };
+    const input = review({
+      contacts: [baseContact],
+      currentFollowUp: { enabled: true, kind: "call", dueOn: "2026-09-01", contactKey: "contact-0" },
+    });
+    expect(validatePaperNoteCurrentFollowUp(input)).toContainEqual(expect.objectContaining({
+      fieldPath: "currentFollowUp.contactKey",
+      severity: "blocking",
+    }));
+
+    const missing = review({
+      contacts: [{ ...baseContact, mode: "new_contact" as const }],
+      currentFollowUp: { enabled: true, kind: "call", dueOn: "2026-09-01", contactKey: "does-not-exist" },
+    });
+    expect(validatePaperNoteCurrentFollowUp(missing)).toContainEqual(expect.objectContaining({
+      fieldPath: "currentFollowUp.contactKey",
+      severity: "blocking",
+    }));
   });
 
   it("blocks invalid structured phone numbers while allowing note-only crossed-out phones", () => {

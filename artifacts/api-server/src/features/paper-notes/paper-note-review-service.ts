@@ -1,5 +1,6 @@
 import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
 import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
+import { validatePaperNoteCurrentFollowUp } from "./paper-note-follow-up-validation";
 import { validatePaperNotePrimaryContact } from "./paper-note-primary-contact-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
 import type { PaperNoteEntryState } from "./paper-note-types";
@@ -65,6 +66,7 @@ function validateDraft(review: PaperNoteReviewDraft): PaperNoteReviewIssue[] {
   return [
     ...validatePaperNoteReview(review as PaperNoteReviewPayload),
     ...validatePaperNoteEventDate(review.event),
+    ...validatePaperNoteCurrentFollowUp(review),
     ...validatePaperNotePrimaryContact(review),
     ...validatePaperNotePrimaryPhones(review),
   ];
