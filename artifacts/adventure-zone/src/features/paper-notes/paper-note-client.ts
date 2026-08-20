@@ -98,3 +98,22 @@ export function markPaperNotePageReviewedEmpty(batchId: string, pageId: string) 
     {},
   );
 }
+
+export function getPaperNotePageSource(
+  batchId: string,
+  pageId: string,
+  kind: "original" | "analysis" = "original",
+) {
+  return apiGet<{ url: string; kind: "original" | "analysis" }>(
+    `/paper-notes/batches/${batchId}/pages/${pageId}/source-url?kind=${kind}`,
+  );
+}
+
+export function getPaperNoteEntrySource(
+  entryId: string,
+  kind: "original" | "analysis" = "original",
+) {
+  return apiGet<{ url: string; kind: "original" | "analysis" }>(
+    `/paper-notes/entries/${entryId}/source-url?kind=${kind}`,
+  );
+}
