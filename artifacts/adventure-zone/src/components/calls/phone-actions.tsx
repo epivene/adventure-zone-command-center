@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PhoneCall } from "lucide-react";
 
 import type { ContactPhoneRecord } from "@/features/contact-phones/contact-phone-types";
 import {
@@ -66,8 +67,8 @@ export function PhoneActions({
       <div className="flex flex-wrap gap-2">
         {!suppressed && phone.type === "office" ? (
           <>
-            <button className="button-secondary" onClick={() => call("office_call")} type="button">
-              Call office
+            <button className="button-primary inline-flex min-h-11 items-center gap-2" onClick={() => call("office_call")} type="button">
+              <PhoneCall className="h-4 w-4" /> Call office
             </button>
             {phone.extension ? (
               <button
@@ -81,8 +82,8 @@ export function PhoneActions({
           </>
         ) : null}
         {!suppressed && phone.type !== "office" ? (
-          <button className="button-secondary" onClick={() => call("standard_call")} type="button">
-            Call
+          <button className="button-primary inline-flex min-h-11 items-center gap-2" onClick={() => call("standard_call")} type="button">
+            <PhoneCall className="h-4 w-4" /> Call
           </button>
         ) : null}
         {!suppressed && phone.type !== "office" && voicemailAvailable ? (
@@ -101,7 +102,7 @@ export function PhoneActions({
         ) : null}
       </div>
       {phone.type === "unknown" && !suppressed ? (
-        <p className="text-sm text-amber-800">May not work for office numbers.</p>
+        <p className="text-xs text-amber-800">May not work for office numbers.</p>
       ) : null}
       {status ? <p className="text-sm text-slate-600" role="status">{status}</p> : null}
     </div>
