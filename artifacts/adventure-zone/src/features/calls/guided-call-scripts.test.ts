@@ -12,6 +12,16 @@ describe("guided call scripts", () => {
     expect(validateGuidedCallScript(getGuidedCallScript(kind))).toEqual([]);
   });
 
+  it("keeps first outreach short before explaining the attraction mix", () => {
+    const script = getGuidedCallScript("first_outreach");
+    const opening = script.nodes[script.startNodeId];
+    expect(opening.say).toContain("traveling bounce-house carnival");
+    expect(opening.say).toContain("whether we might be a good fit");
+    expect(opening.say).not.toContain("giant slides");
+    expect(script.nodes.details.say).toContain("10–12 attractions");
+    expect(script.nodes.details.say).toContain("setup, teardown, and staffing");
+  });
+
   it("uses a relationship-aware rebooking opening", () => {
     const script = getGuidedCallScript("rebooking");
     const opening = script.nodes[script.startNodeId];
