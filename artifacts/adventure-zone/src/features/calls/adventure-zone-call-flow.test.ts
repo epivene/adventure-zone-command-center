@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const profileSheet = readFileSync("src/components/profiles/profile-detail-sheet.tsx", "utf8");
 const profileList = readFileSync("src/components/organizations/organization-list.tsx", "utf8");
+const fullProfile = readFileSync("src/components/profiles/simple-full-profile.tsx", "utf8");
 const workspacePage = readFileSync("src/pages/CallWorkspacePage.tsx", "utf8");
 const workspaceFlowCss = readFileSync("src/call-workspace-flow.css", "utf8");
 const guidedScripts = readFileSync("src/features/calls/guided-call-scripts.ts", "utf8");
@@ -13,6 +14,8 @@ describe("Adventure Zone call flow", () => {
     expect(profileSheet).not.toContain("href={phoneLink}");
     expect(profileList).toContain("/calls/new?organizationId=${encodeURIComponent(organization.id)}");
     expect(profileList).not.toContain("href={`tel:${organization.phone}`}");
+    expect(fullProfile).toContain("/calls/new?${callQuery.toString()}");
+    expect(fullProfile).not.toContain("href={phoneLink}");
   });
 
   it("puts the phone card first and keeps Assistant secondary", () => {
