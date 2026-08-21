@@ -92,6 +92,7 @@ export class PaperNoteIntakeService {
     filename: string;
     mimeType: string;
     sizeBytes: number;
+    paperYear: number;
     now: Date;
   }) {
     if (!["image/jpeg", "image/png", "image/webp"].includes(input.mimeType)) {
@@ -99,6 +100,9 @@ export class PaperNoteIntakeService {
     }
     if (!Number.isInteger(input.sizeBytes) || input.sizeBytes < 1 || input.sizeBytes > 12 * 1024 * 1024) {
       throw new PaperNoteIntakeError("IMAGE_TOO_LARGE", "Each paper-note photo must be 12 MB or smaller.");
+    }
+    if (!Number.isInteger(input.paperYear) || input.paperYear < 1900 || input.paperYear > 2100) {
+      throw new PaperNoteIntakeError("INVALID_IMAGE", "Choose the year these paper call sheets were used.");
     }
     try {
       return await this.repository.createUploadingPage({
