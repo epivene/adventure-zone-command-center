@@ -1,5 +1,6 @@
 import { pool as defaultPool } from "@workspace/db";
 import { runActReviewMigrations } from "@workspace/db/migrations";
+import { ensureAssistantCommandJobsSchema } from "./assistant-command-jobs-startup-migration";
 import { ensureProfileResearchSchema } from "./profile-research-startup-migration";
 import { ensureLeadScoutRelease2Schema } from "./lead-scout-release2-startup-migration";
 import { ensureLeadScoutRelease3Schema } from "./lead-scout-release3-startup-migration";
@@ -59,6 +60,7 @@ export async function runActReviewMigrationsAtStartup(options?: {
       const leadScoutRelease2Applied = await ensureLeadScoutRelease2Schema(client);
       const leadScoutRelease3Applied = await ensureLeadScoutRelease3Schema(client);
       const paperNotesApplied = await ensurePaperNotesSchema(client);
+      const assistantJobsApplied = await ensureAssistantCommandJobsSchema(client);
 
       const migrationClient: MigrationClient = {
         query: (sql) => client.query(sql),
@@ -75,6 +77,7 @@ export async function runActReviewMigrationsAtStartup(options?: {
         ...(leadScoutRelease2Applied ? ["064_lead_scout_candidate_key.sql"] : []),
         ...(leadScoutRelease3Applied ? ["065_lead_scout_enrichment.sql"] : []),
         ...(paperNotesApplied ? ["066_paper_notes_importer.sql"] : []),
+        ...(assistantJobsApplied ? ["067_assistant_command_jobs.sql"] : []),
         ...applied,
       ];
     } catch (error) {
