@@ -1,3 +1,4 @@
+// RED: this contract intentionally lands before the Office schema implementation.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
