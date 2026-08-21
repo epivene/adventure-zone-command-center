@@ -131,6 +131,48 @@ export class AssistantConversationRepository {
     }
   }
 
+  async appendPlainExchange(input: {
+    conversationId: string;
+    actorId: string;
+    question: string;
+    answerText: string;
+  }): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const owned = await client.query(
+        `SELECT id
+         FROM assistant_conversations
+         WHERE id = $1 AND actor_id = $2
+         FOR UPDATE`,
+        [input.conversationId, input.actorId],
+      );
+      if (!owned.rows[0]) throw new Error("ASSISTANT_CONVERSATION_NOT_FOUND");
+
+      await client.query(
+        `INSERT INTO assistant_messages (conversation_id, role, body)
+         VALUES ($1, 'user', $2)`,
+        [input.conversationId, input.question.trim()],
+      );
+      await client.query(
+        `INSERT INTO assistant_messages
+           (conversation_id, role, body, answer_mode, confidence)
+         VALUES ($1, 'assistant', $2, 'deterministic', 'high')`,
+        [input.conversationId, input.answerText],
+      );
+      await client.query(
+        `UPDATE assistant_conversations SET updated_at = now() WHERE id = $1`,
+        [input.conversationId],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   async getLatestConversation(input: {
     actorId: string;
     contextKind: AssistantContextKind;
