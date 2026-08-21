@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Check, CircleAlert, SkipForward } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Check, ChevronDown, CircleAlert, SkipForward } from "lucide-react";
 
 import { PaperNoteContactEditor } from "./paper-note-contact-editor";
 import { PaperNoteCurrentFollowUpEditor } from "./paper-note-current-follow-up-editor";
@@ -14,6 +14,46 @@ import type {
   PaperNoteReviewDraft,
   PaperNoteReviewEntryDetails,
 } from "@/features/paper-notes/paper-note-review-types";
+
+function sectionSlug(title: string) {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+export function PaperNoteReviewSection({
+  title,
+  summary,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  summary?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <details
+      className="group overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-50/60 shadow-sm"
+      data-testid={`paper-note-section-${sectionSlug(title)}`}
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary className="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 py-3 marker:hidden">
+        <div className="min-w-0 flex-1">
+          <p className="font-bold text-slate-900">{title}</p>
+          {summary ? <p className="mt-0.5 truncate text-xs font-medium text-slate-500">{summary}</p> : null}
+        </div>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </summary>
+      <div className="border-t border-slate-200/70 bg-white/80 p-4">{children}</div>
+    </details>
+  );
+}
+
+function compactText(value: string | null | undefined, fallback = "Not set") {
+  const trimmed = value?.trim();
+  return trimmed || fallback;
+}
 
 export function PaperNoteEntryCard({
   entry,
@@ -66,10 +106,7 @@ export function PaperNoteEntryCard({
     return () => window.clearTimeout(timer);
   }, [onSave, review]);
 
-  function updateEvent<K extends keyof PaperNoteReviewDraft["event"]>(
-    key: K,
-    value: PaperNoteReviewDraft["event"][K],
-  ) {
+  function updateEvent<K extends keyof PaperNoteReviewDraft["event"]>(key: K, value: PaperNoteReviewDraft["event"][K]) {
     setReview((current) => ({ ...current, event: { ...current.event, [key]: value } }));
   }
 
@@ -77,10 +114,7 @@ export function PaperNoteEntryCard({
     setReview((current) => ({ ...current, event: { ...current.event, ...patch } }));
   }
 
-  function updateActivity<K extends keyof PaperNoteReviewDraft["activity"]>(
-    key: K,
-    value: PaperNoteReviewDraft["activity"][K],
-  ) {
+  function updateActivity<K extends keyof PaperNoteReviewDraft["activity"]>(key: K, value: PaperNoteReviewDraft["activity"][K]) {
     setReview((current) => ({ ...current, activity: { ...current.activity, [key]: value } }));
   }
 
@@ -94,11 +128,7 @@ export function PaperNoteEntryCard({
     }));
   }
 
-  function updateContactPhone(
-    contactIndex: number,
-    phoneIndex: number,
-    patch: Partial<PaperNoteReviewDraft["contacts"][number]["phones"][number]>,
-  ) {
+  function updateContactPhone(contactIndex: number, phoneIndex: number, patch: Partial<PaperNoteReviewDraft["contacts"][number]["phones"][number]>) {
     setReview((current) => ({
       ...current,
       contacts: current.contacts.map((contact, index) => index === contactIndex
@@ -113,10 +143,7 @@ export function PaperNoteEntryCard({
     }));
   }
 
-  function updateOrganizationPhone(
-    phoneIndex: number,
-    patch: Partial<PaperNoteReviewDraft["organizationPhones"][number]>,
-  ) {
+  function updateOrganizationPhone(phoneIndex: number, patch: Partial<PaperNoteReviewDraft["organizationPhones"][number]>) {
     setReview((current) => ({
       ...current,
       organizationPhones: current.organizationPhones.map((phone, index) => {
@@ -151,13 +178,7 @@ export function PaperNoteEntryCard({
   function linkMatchingContacts(current: PaperNoteReviewDraft, match: PaperNoteMatch) {
     return current.contacts.map((contact) => {
       const saved = findUnambiguousSavedContact(contact, match.contacts);
-      if (saved) {
-        return {
-          ...contact,
-          mode: "existing_contact" as const,
-          selectedContactId: saved.id,
-        };
-      }
+      if (saved) return { ...contact, mode: "existing_contact" as const, selectedContactId: saved.id };
       return contact.mode === "existing_contact"
         ? { ...contact, mode: "new_contact" as const, selectedContactId: null }
         : contact;
@@ -175,11 +196,7 @@ export function PaperNoteEntryCard({
   function chooseExistingMatch(match: PaperNoteMatch) {
     setReview((current) => ({
       ...current,
-      destination: {
-        mode: "existing_profile",
-        organizationId: match.organizationId,
-        organizationLocationId: match.organizationLocationId,
-      },
+      destination: { mode: "existing_profile", organizationId: match.organizationId, organizationLocationId: match.organizationLocationId },
       contacts: linkMatchingContacts(current, match),
       conflicts: {},
     }));
@@ -216,25 +233,15 @@ export function PaperNoteEntryCard({
   }
 
   function updateNewProfileFamily(familyId: string | null) {
-    setReview((current) => {
-      if (current.destination?.mode !== "new_profile") return current;
-      return { ...current, destination: { ...current.destination, eventFamilyId: familyId } };
-    });
+    setReview((current) => current.destination?.mode === "new_profile"
+      ? { ...current, destination: { ...current.destination, eventFamilyId: familyId } }
+      : current);
   }
 
-  function updateNewLocation(
-    patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>,
-  ) {
-    setReview((current) => {
-      if (current.destination?.mode !== "existing_profile_new_location") return current;
-      return {
-        ...current,
-        destination: {
-          ...current.destination,
-          newLocation: { ...current.destination.newLocation, ...patch },
-        },
-      };
-    });
+  function updateNewLocation(patch: Partial<Extract<NonNullable<PaperNoteReviewDraft["destination"]>, { mode: "existing_profile_new_location" }>["newLocation"]>) {
+    setReview((current) => current.destination?.mode === "existing_profile_new_location"
+      ? { ...current, destination: { ...current.destination, newLocation: { ...current.destination.newLocation, ...patch } } }
+      : current);
   }
 
   async function stateAction(work: (expectedVersion: number) => Promise<PaperNoteReviewEntryDetails>) {
@@ -254,20 +261,32 @@ export function PaperNoteEntryCard({
   const allMatches = [
     ...matches,
     ...manualMatches.filter((manual) => !matches.some((suggested) =>
-      suggested.organizationId === manual.organizationId
-      && suggested.organizationLocationId === manual.organizationLocationId)),
+      suggested.organizationId === manual.organizationId && suggested.organizationLocationId === manual.organizationLocationId)),
   ];
-  const selectedOrganizationId = review.destination && "organizationId" in review.destination
-    ? review.destination.organizationId
-    : null;
-  const selectedMatch = selectedOrganizationId
-    ? allMatches.find((match) => match.organizationId === selectedOrganizationId) ?? null
-    : null;
-  const existingDestination = review.destination?.mode === "existing_profile"
-    || review.destination?.mode === "existing_profile_new_location";
+  const selectedOrganizationId = review.destination && "organizationId" in review.destination ? review.destination.organizationId : null;
+  const selectedMatch = selectedOrganizationId ? allMatches.find((match) => match.organizationId === selectedOrganizationId) ?? null : null;
+  const existingDestination = review.destination?.mode === "existing_profile" || review.destination?.mode === "existing_profile_new_location";
+  const contactPhoneCount = review.contacts.reduce((total, contact) => total + contact.phones.length, 0);
+  const contactSummary = review.contacts.length
+    ? `${review.contacts.length} contact${review.contacts.length === 1 ? "" : "s"}${contactPhoneCount ? ` · ${contactPhoneCount} phone${contactPhoneCount === 1 ? "" : "s"}` : ""}`
+    : "No people listed on paper";
+  const eventSummary = [review.event.city, review.event.region].filter(Boolean).join(", ") || compactText(review.event.venue, "Location not set");
+  const historySummary = [review.activity.method !== "unknown" ? review.activity.method : "", review.activity.occurredOn ?? "", review.activity.outcome].filter(Boolean).join(" · ") || "Historical note details";
+  const notesSummary = review.generalNotes.length ? `${review.generalNotes.length} note${review.generalNotes.length === 1 ? "" : "s"}` : "No extra notes";
+  const orgPhoneSummary = review.organizationPhones.length ? `${review.organizationPhones.length} organization phone${review.organizationPhones.length === 1 ? "" : "s"}` : "No organization phones";
+  const destinationSummary = review.destination?.mode === "new_profile"
+    ? "Create new profile"
+    : review.destination?.mode === "existing_profile"
+      ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}`
+      : review.destination?.mode === "existing_profile_new_location"
+        ? `New location under${selectedMatch ? ` ${selectedMatch.name}` : " existing profile"}`
+        : "Choose where this belongs";
+  const followUpSummary = review.currentFollowUp.enabled
+    ? `${review.currentFollowUp.kind} follow-up${review.currentFollowUp.dueOn ? ` · ${review.currentFollowUp.dueOn}` : ""}`
+    : "No current follow-up";
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <article className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">Paper entry</p>
@@ -279,76 +298,87 @@ export function PaperNoteEntryCard({
         <PaperNoteSourceViewer label={review.event.name || "Paper entry"} loadSource={loadSource} />
       </div>
 
-      <div className="mt-4 rounded-xl bg-slate-50 p-3">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Original transcription</p>
-        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">
-          {entry.extraction.transcription || "No transcription was available. Check the source paper."}
-        </p>
-      </div>
-      {entry.extraction.mayContinue ? (
-        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-950">
-          This entry may continue elsewhere on the paper. Check the full source before approving it.
-        </p>
-      ) : null}
+      <details className="mt-4 rounded-2xl bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+        <summary className="cursor-pointer font-semibold text-slate-700">Original transcription</summary>
+        <p className="mt-3 whitespace-pre-wrap break-words leading-6">{entry.extraction.transcription || "No transcription was available. Check the source paper."}</p>
+      </details>
+
+      {entry.extraction.mayContinue ? <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-950">This entry may continue elsewhere on the paper. Check the full source before approving it.</p> : null}
 
       {entry.validationIssues.length ? (
         <div className="mt-4 grid gap-2">
           {entry.validationIssues.map((issue, index) => (
-            <p className={issue.severity === "blocking" ? "rounded-lg bg-rose-50 p-2 text-sm text-rose-800" : "rounded-lg bg-amber-50 p-2 text-sm text-amber-900"} key={`${issue.fieldPath}:${index}`}>
+            <p className={issue.severity === "blocking" ? "rounded-xl bg-rose-50 p-2.5 text-sm text-rose-800" : "rounded-xl bg-amber-50 p-2.5 text-sm text-amber-900"} key={`${issue.fieldPath}:${index}`}>
               <CircleAlert className="mr-1 inline h-4 w-4" /> {issue.message}
             </p>
           ))}
         </div>
       ) : null}
 
-      <section className="mt-5 grid gap-3">
-        <h3 className="font-bold text-slate-900">Event</h3>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">Event / profile name<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.name} onChange={(event) => updateEvent("name", event.target.value)} /></label>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">City<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.city} onChange={(event) => updateEvent("city", event.target.value)} /></label>
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">State<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal uppercase" maxLength={2} value={review.event.region} onChange={(event) => updateEvent("region", event.target.value.toUpperCase())} /></label>
-        </div>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">Venue<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.venue} onChange={(event) => updateEvent("venue", event.target.value)} /></label>
-        <PaperNoteEventDateReview event={review.event} onChange={updateEventPatch} />
-      </section>
+      <div className="mt-5 grid gap-3">
+        <PaperNoteReviewSection title="Event details" summary={eventSummary} defaultOpen>
+          <div className="grid gap-3">
+            <label className="grid gap-1 text-sm font-semibold text-slate-700">Event / profile name<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.name} onChange={(event) => updateEvent("name", event.target.value)} /></label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">City<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.city} onChange={(event) => updateEvent("city", event.target.value)} /></label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">State<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal uppercase" maxLength={2} value={review.event.region} onChange={(event) => updateEvent("region", event.target.value.toUpperCase())} /></label>
+            </div>
+            <label className="grid gap-1 text-sm font-semibold text-slate-700">Venue<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.event.venue} onChange={(event) => updateEvent("venue", event.target.value)} /></label>
+            <PaperNoteEventDateReview event={review.event} onChange={updateEventPatch} />
+          </div>
+        </PaperNoteReviewSection>
 
-      <section className="mt-6 grid gap-3 border-t border-slate-200 pt-5">
-        <h3 className="font-bold text-slate-900">Historical activity</h3>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">Date<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" type="date" value={review.activity.occurredOn ?? ""} onChange={(event) => updateActivity("occurredOn", event.target.value || null)} /></label>
-          <label className="grid gap-1 text-sm font-semibold text-slate-700">Method<select className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={review.activity.method} onChange={(event) => updateActivity("method", event.target.value as PaperNoteReviewDraft["activity"]["method"])}><option value="call">Call</option><option value="email">Email</option><option value="mail">Mail</option><option value="text">Text</option><option value="unknown">Unknown</option></select></label>
-        </div>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">Outcome<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.activity.outcome} onChange={(event) => updateActivity("outcome", event.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">Historical note<textarea className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.activity.summary} onChange={(event) => updateActivity("summary", event.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-semibold text-slate-700">Old reminder from paper<input aria-label="Old reminder from paper" className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.oldReminder} onChange={(event) => setReview((current) => ({ ...current, oldReminder: event.target.value }))} /><span className="font-normal text-slate-500">Historical only. This does not create a current task.</span></label>
-        <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700"><input aria-label="Starred on original paper" type="checkbox" checked={review.starredOnPaper} onChange={(event) => setReview((current) => ({ ...current, starredOnPaper: event.target.checked }))} />Starred on original paper</label>
-      </section>
+        <PaperNoteReviewSection title="Historical activity" summary={historySummary}>
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">Date<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" type="date" value={review.activity.occurredOn ?? ""} onChange={(event) => updateActivity("occurredOn", event.target.value || null)} /></label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">Method<select className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal" value={review.activity.method} onChange={(event) => updateActivity("method", event.target.value as PaperNoteReviewDraft["activity"]["method"])}><option value="call">Call</option><option value="email">Email</option><option value="mail">Mail</option><option value="text">Text</option><option value="unknown">Unknown</option></select></label>
+            </div>
+            <label className="grid gap-1 text-sm font-semibold text-slate-700">Outcome<input className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.activity.outcome} onChange={(event) => updateActivity("outcome", event.target.value)} /></label>
+            <label className="grid gap-1 text-sm font-semibold text-slate-700">Historical note<textarea className="min-h-24 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.activity.summary} onChange={(event) => updateActivity("summary", event.target.value)} /></label>
+            <label className="grid gap-1 text-sm font-semibold text-slate-700">Old reminder from paper<input aria-label="Old reminder from paper" className="min-h-11 rounded-lg border border-slate-300 px-3 py-2 font-normal" value={review.oldReminder} onChange={(event) => setReview((current) => ({ ...current, oldReminder: event.target.value }))} /><span className="font-normal text-slate-500">Historical only. This does not create a current task.</span></label>
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold text-slate-700"><input aria-label="Starred on original paper" type="checkbox" checked={review.starredOnPaper} onChange={(event) => setReview((current) => ({ ...current, starredOnPaper: event.target.checked }))} />Starred on original paper</label>
+          </div>
+        </PaperNoteReviewSection>
 
-      <PaperNoteGeneralNotesEditor notes={review.generalNotes} onChange={updateGeneralNote} />
+        <PaperNoteReviewSection title="Notes from paper" summary={notesSummary}>
+          <PaperNoteGeneralNotesEditor notes={review.generalNotes} onChange={updateGeneralNote} />
+        </PaperNoteReviewSection>
 
-      {review.contacts.map((contact, contactIndex) => (
-        <PaperNoteContactEditor key={contact.key} contact={contact} contactIndex={contactIndex} savedContacts={selectedMatch?.contacts ?? []} conflicts={review.conflicts} onContactChange={(patch) => updateContact(contactIndex, patch)} onPhoneChange={(phoneIndex, patch) => updateContactPhone(contactIndex, phoneIndex, patch)} onConflictChange={updateConflict} />
-      ))}
+        <PaperNoteReviewSection title="Contacts" summary={contactSummary}>
+          <div className="grid gap-3">
+            {review.contacts.length ? review.contacts.map((contact, contactIndex) => (
+              <PaperNoteContactEditor key={contact.key} contact={contact} contactIndex={contactIndex} savedContacts={selectedMatch?.contacts ?? []} conflicts={review.conflicts} onContactChange={(patch) => updateContact(contactIndex, patch)} onPhoneChange={(phoneIndex, patch) => updateContactPhone(contactIndex, phoneIndex, patch)} onConflictChange={updateConflict} />
+            )) : <p className="text-sm text-slate-500">No individual contact was written on this entry.</p>}
+          </div>
+        </PaperNoteReviewSection>
 
-      <PaperNoteOrganizationPhonesEditor phones={review.organizationPhones} savedPhones={selectedMatch?.organizationPhones ?? []} conflicts={review.conflicts} requireDecision={Boolean(existingDestination)} onPhoneChange={updateOrganizationPhone} onConflictChange={updateConflict} />
+        <PaperNoteReviewSection title="Organization phones" summary={orgPhoneSummary}>
+          <PaperNoteOrganizationPhonesEditor phones={review.organizationPhones} savedPhones={selectedMatch?.organizationPhones ?? []} conflicts={review.conflicts} requireDecision={Boolean(existingDestination)} onPhoneChange={updateOrganizationPhone} onConflictChange={updateConflict} />
+        </PaperNoteReviewSection>
 
-      <PaperNoteDestinationPicker review={review} matches={allMatches} onChooseExisting={chooseExistingMatch} onChooseNewLocation={chooseNewLocation} onChooseNewProfile={chooseNewProfile} onNewLocationChange={updateNewLocation} onNewProfileFamilyChange={updateNewProfileFamily} onRememberMatch={rememberMatch} />
+        <PaperNoteReviewSection title="Where this entry belongs" summary={destinationSummary} defaultOpen>
+          <PaperNoteDestinationPicker review={review} matches={allMatches} onChooseExisting={chooseExistingMatch} onChooseNewLocation={chooseNewLocation} onChooseNewProfile={chooseNewProfile} onNewLocationChange={updateNewLocation} onNewProfileFamilyChange={updateNewProfileFamily} onRememberMatch={rememberMatch} />
+        </PaperNoteReviewSection>
 
-      <div className="mt-3"><button className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700" disabled={actionBusy} onClick={() => void stateAction(onSkip)} type="button"><SkipForward className="h-4 w-4" /> Skip this entry</button></div>
+        <PaperNoteReviewSection title="Current follow-up" summary={followUpSummary} defaultOpen={review.currentFollowUp.enabled}>
+          <PaperNoteCurrentFollowUpEditor
+            followUp={review.currentFollowUp}
+            contacts={review.contacts}
+            onChange={(patch) => setReview((current) => ({ ...current, currentFollowUp: { ...current.currentFollowUp, ...patch } }))}
+          />
+        </PaperNoteReviewSection>
+      </div>
 
-      {review.destination ? <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm font-semibold text-emerald-900">Destination: {review.destination.mode === "new_profile" ? "Create new profile" : review.destination.mode === "existing_profile" ? `Existing profile${selectedMatch ? ` · ${selectedMatch.name}` : ""}` : review.destination.mode === "existing_profile_new_location" ? `New location under${selectedMatch ? ` ${selectedMatch.name}` : " existing profile"}` : review.destination.mode.replaceAll("_", " ")}</p> : null}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50/70 p-3">
+        <button className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700" disabled={actionBusy} onClick={() => void stateAction(onSkip)} type="button"><SkipForward className="h-4 w-4" /> Skip this entry</button>
+        {review.destination ? <p className="text-sm font-semibold text-emerald-800">{destinationSummary}</p> : <p className="text-sm text-slate-500">Choose a destination before approval.</p>}
+      </div>
 
-      <PaperNoteCurrentFollowUpEditor
-        followUp={review.currentFollowUp}
-        contacts={review.contacts}
-        onChange={(patch) => setReview((current) => ({
-          ...current,
-          currentFollowUp: { ...current.currentFollowUp, ...patch },
-        }))}
-      />
-
-      <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
-        {entry.state === "approved" ? <button className="min-h-12 rounded-xl border border-slate-300 px-4 py-3 font-bold text-slate-800 disabled:opacity-50" disabled={actionBusy || saveState === "saving"} onClick={() => void stateAction(onUnapprove)} type="button">Unapprove</button> : <button className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-orange-600 px-4 py-3 font-bold text-white disabled:opacity-50" disabled={!canApprove || actionBusy} onClick={() => void stateAction(onApprove)} type="button"><Check className="h-4 w-4" /> Approve entry</button>}
+      <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
+        {entry.state === "approved"
+          ? <button className="min-h-12 rounded-xl border border-slate-300 px-4 py-3 font-bold text-slate-800 disabled:opacity-50" disabled={actionBusy || saveState === "saving"} onClick={() => void stateAction(onUnapprove)} type="button">Unapprove</button>
+          : <button className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-orange-600 px-4 py-3 font-bold text-white disabled:opacity-50" disabled={!canApprove || actionBusy} onClick={() => void stateAction(onApprove)} type="button"><Check className="h-4 w-4" /> Approve entry</button>}
       </div>
     </article>
   );
