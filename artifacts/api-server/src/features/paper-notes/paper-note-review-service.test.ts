@@ -32,6 +32,17 @@ function draft(): PaperNoteReviewDraft {
   };
 }
 
+function fullEntry(review: PaperNoteReviewDraft, reviewVersion = 3) {
+  return {
+    review,
+    validationIssues: [],
+    state: "ready" as const,
+    reviewVersion,
+    extraction: { transcription: "Original paper text" } as any,
+    approvedAt: null,
+  };
+}
+
 describe("PaperNoteReviewService", () => {
   it("normalizes a saved full state name when the review is opened", async () => {
     const saved = {
@@ -82,19 +93,64 @@ describe("PaperNoteReviewService", () => {
   });
 
   it("keeps an unresolved destination in needs_review", async () => {
+    const savedReview = draft();
     const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: input.expectedVersion + 1 }));
-    const service = new PaperNoteReviewService({ saveReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
-    const result = await service.updateEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 2, review: draft(), now: new Date("2026-08-20T18:00:00Z") });
+    const getForReview = vi.fn(async () => fullEntry(savedReview, 3));
+    const service = new PaperNoteReviewService({ saveReview, getForReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
+    const result = await service.updateEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 2, review: savedReview, now: new Date("2026-08-20T18:00:00Z") });
     expect(saveReview).toHaveBeenCalledWith(expect.objectContaining({ state: "needs_review", expectedVersion: 2, approvedAt: null }));
     expect(result.reviewVersion).toBe(3);
+  });
+
+  it("returns the full entry including extraction after saving a profile choice", async () => {
+    const ready = { ...draft(), destination: { mode: "new_profile", eventFamilyId: null } as const };
+    const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: 4 }));
+    const getForReview = vi.fn(async () => fullEntry(ready, 4));
+    const service = new PaperNoteReviewService({ saveReview, getForReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
+
+    const result = await service.updateEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 3, review: ready, now: new Date() });
+
+    expect(result.extraction.transcription).toBe("Original paper text");
+    expect(result.review.destination).toEqual(ready.destination);
+    expect(getForReview).toHaveBeenCalledWith("owner", "entry-1");
   });
 
   it("marks a fully decided valid entry ready but does not auto-approve it", async () => {
     const ready = { ...draft(), destination: { mode: "new_profile", eventFamilyId: null } as const };
     const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: 4 }));
-    const service = new PaperNoteReviewService({ saveReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
+    const getForReview = vi.fn(async () => fullEntry(ready, 4));
+    const service = new PaperNoteReviewService({ saveReview, getForReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
     await service.updateEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 3, review: ready, now: new Date() });
     expect(saveReview).toHaveBeenCalledWith(expect.objectContaining({ state: "ready", approvedAt: null }));
+  });
+
+  it("returns the full entry including extraction after approval", async () => {
+    const ready = { ...draft(), destination: { mode: "new_profile", eventFamilyId: null } as const };
+    const beforeApproval = fullEntry(ready, 5);
+    const afterApproval = { ...fullEntry(ready, 6), state: "approved" as const, approvedAt: "2026-08-20T18:00:00.000Z" };
+    const getForReview = vi.fn()
+      .mockResolvedValueOnce(beforeApproval)
+      .mockResolvedValueOnce(afterApproval);
+    const approve = vi.fn(async () => ({
+      id: "entry-1",
+      review: ready,
+      validationIssues: [],
+      state: "approved",
+      reviewVersion: 6,
+      approvedAt: "2026-08-20T18:00:00.000Z",
+    }));
+    const service = new PaperNoteReviewService({
+      saveReview: vi.fn(),
+      approve,
+      unapprove: vi.fn(),
+      skip: vi.fn(),
+      getForReview,
+    } as any);
+
+    const result = await service.approveEntry({ actorId: "owner", entryId: "entry-1", expectedVersion: 5, now: new Date("2026-08-20T18:00:00Z") });
+
+    expect(result.extraction.transcription).toBe("Original paper text");
+    expect(result.state).toBe("approved");
   });
 
   it("refuses approval while blocking issues remain", async () => {
