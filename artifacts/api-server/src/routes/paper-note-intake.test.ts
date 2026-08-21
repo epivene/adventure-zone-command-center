@@ -32,11 +32,23 @@ describe("paper note intake routes", () => {
     }));
   });
 
+  it("passes the selected paper year into page metadata", async () => {
+    const service = { createPage: vi.fn(async () => pageId) };
+    const response = await request(appWith(service))
+      .post(`/paper-notes/batches/${batchId}/pages`)
+      .send({ filename: "june-3.jpg", mimeType: "image/jpeg", sizeBytes: 100, paperYear: 2026 });
+    expect(response.status).toBe(201);
+    expect(service.createPage).toHaveBeenCalledWith(expect.objectContaining({
+      batchId,
+      paperYear: 2026,
+    }));
+  });
+
   it("rejects unsupported page metadata before calling the service", async () => {
     const service = { createPage: vi.fn() };
     const response = await request(appWith(service))
       .post(`/paper-notes/batches/${batchId}/pages`)
-      .send({ filename: "notes.pdf", mimeType: "application/pdf", sizeBytes: 100 });
+      .send({ filename: "notes.pdf", mimeType: "application/pdf", sizeBytes: 100, paperYear: 2026 });
     expect(response.status).toBe(400);
     expect(service.createPage).not.toHaveBeenCalled();
   });
