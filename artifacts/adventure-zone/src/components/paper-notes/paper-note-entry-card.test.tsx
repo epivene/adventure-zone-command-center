@@ -169,7 +169,7 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByRole("option", { name: /Use primary reviewed contact/i })).toBeInTheDocument();
   });
 
-  it("explains why an existing profile was suggested and lets the contact link to a saved person", () => {
+  it("automatically links a uniquely matching saved contact when the existing profile is chosen", () => {
     render(<PaperNoteEntryCard
       entry={entry as any}
       matches={[existingMatch] as any}
@@ -181,9 +181,8 @@ describe("PaperNoteEntryCard", () => {
     />);
     expect(screen.getByText("same phone number and extension")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Use Emmett Cherry Festival" }));
-    expect(screen.getByLabelText("Contact handling")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Contact handling"), { target: { value: "existing_contact" } });
-    expect(screen.getByLabelText("Existing contact")).toBeInTheDocument();
+    expect(screen.getByLabelText("Contact handling")).toHaveValue("existing_contact");
+    expect(screen.getByLabelText("Existing contact")).toHaveValue("50000000-0000-4000-8000-000000000001");
     expect(screen.getByRole("option", { name: /Tina Smith/ })).toBeInTheDocument();
   });
 
