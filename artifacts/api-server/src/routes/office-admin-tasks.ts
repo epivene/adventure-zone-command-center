@@ -1,7 +1,8 @@
+import { and, eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { officeTaskStatusValues, officeTaskTypeValues } from "@/db/schema";
+import { officeTaskStatusValues, officeTaskTypeValues, organizationContacts } from "@/db/schema";
 import { DrizzleOfficeTaskRepository } from "@/features/office/office-task-repository";
 
 const router: IRouter = Router();
@@ -36,6 +37,21 @@ function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+async function contactBelongsToProfile(organizationId: string | null | undefined, contactId: string | null | undefined) {
+  if (!contactId) return true;
+  if (!organizationId) return false;
+  const [relationship] = await db
+    .select({ id: organizationContacts.id })
+    .from(organizationContacts)
+    .where(and(
+      eq(organizationContacts.organizationId, organizationId),
+      eq(organizationContacts.contactId, contactId),
+      eq(organizationContacts.active, true),
+    ))
+    .limit(1);
+  return Boolean(relationship);
+}
+
 router.get("/office-admin/tasks", async (req, res) => {
   const accountId = typeof req.query.accountId === "string" && uuid.safeParse(req.query.accountId).success ? req.query.accountId : null;
   res.json({ tasks: await tasks.listForOwner(accountId) });
@@ -45,6 +61,10 @@ router.post("/office-admin/tasks", async (req, res): Promise<void> => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the task details." });
+    return;
+  }
+  if (!(await contactBelongsToProfile(parsed.data.organizationId, parsed.data.contactId))) {
+    res.status(400).json({ error: "The selected contact is not part of that profile." });
     return;
   }
   try {
