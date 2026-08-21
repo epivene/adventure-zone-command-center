@@ -61,12 +61,9 @@ describe("ACT archive recovery runtime", () => {
       "utf8",
     );
 
-    const archiveStart = source.indexOf("createActArchiveRuntime()");
-    const liveImportGate = source.indexOf("if (!shouldStartActBackgroundWorkers())");
-
-    expect(archiveStart).toBeGreaterThan(-1);
-    expect(liveImportGate).toBeGreaterThan(-1);
-    expect(archiveStart).toBeLessThan(liveImportGate);
+    expect(source).toContain("const liveActBackgroundWorkersEnabled = shouldStartActBackgroundWorkers()");
+    expect(source).toContain("getEnvironment: () => ({ configured: false })");
     expect(source).toContain("ACT live background extraction workers are disabled; archive recovery remains active");
+    expect(source).not.toContain("ACT background extraction/recovery workers are disabled");
   });
 });
