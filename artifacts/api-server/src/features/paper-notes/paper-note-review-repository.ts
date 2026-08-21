@@ -43,12 +43,48 @@ function asObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+export function hydratePaperNoteReview(
+  extractionPayload: PaperNoteExtraction,
+  reviewPayload: unknown,
+): PaperNoteReviewDraft {
+  const base = initializePaperNoteReview(extractionPayload);
+  const saved = asObject(reviewPayload);
+  if (!saved.event || !saved.activity || !("destination" in saved)) return base;
+
+  const savedEvent = asObject(saved.event);
+  const savedActivity = asObject(saved.activity);
+  const savedCurrentFollowUp = asObject(saved.currentFollowUp);
+
+  return {
+    ...base,
+    ...saved,
+    event: { ...base.event, ...savedEvent },
+    activity: { ...base.activity, ...savedActivity },
+    contacts: Array.isArray(saved.contacts)
+      ? saved.contacts as PaperNoteReviewDraft["contacts"]
+      : base.contacts,
+    organizationPhones: Array.isArray(saved.organizationPhones)
+      ? saved.organizationPhones as PaperNoteReviewDraft["organizationPhones"]
+      : base.organizationPhones,
+    generalNotes: Array.isArray(saved.generalNotes)
+      ? saved.generalNotes as PaperNoteReviewDraft["generalNotes"]
+      : base.generalNotes,
+    conflicts: saved.conflicts && typeof saved.conflicts === "object" && !Array.isArray(saved.conflicts)
+      ? saved.conflicts as PaperNoteReviewDraft["conflicts"]
+      : base.conflicts,
+    currentFollowUp: {
+      ...base.currentFollowUp,
+      ...savedCurrentFollowUp,
+    },
+    destination: saved.destination as PaperNoteReviewDraft["destination"],
+  } as PaperNoteReviewDraft;
+}
+
 function reviewFrom(row: Pick<ReviewRow, "extractionPayload" | "reviewPayload">): PaperNoteReviewDraft {
-  const saved = asObject(row.reviewPayload);
-  if (saved.event && saved.activity && "destination" in saved) {
-    return saved as unknown as PaperNoteReviewDraft;
-  }
-  return initializePaperNoteReview(row.extractionPayload as PaperNoteExtraction);
+  return hydratePaperNoteReview(
+    row.extractionPayload as PaperNoteExtraction,
+    row.reviewPayload,
+  );
 }
 
 function issuesFrom(value: unknown): PaperNoteReviewIssue[] {
