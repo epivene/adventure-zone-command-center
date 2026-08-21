@@ -3,7 +3,6 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import {
-  assertOrganizationsMergeable,
   DrizzleOrganizationRepository,
   reviewOrganizationFamily,
 } from "@/features/organizations/organization-repository";
@@ -17,6 +16,8 @@ import {
 import { setOrganizationLastResort } from "@/features/organizations/last-resort-service";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
+import { filterGroupsContainingResolvedProfiles } from "@/features/organizations/duplicate-review-resolution-filter";
+import { prepareSelectedProfileSubsetMerge } from "@/features/organizations/profile-subset-merge-guard";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
@@ -230,10 +231,32 @@ router.get("/organizations", async (req, res): Promise<void> => {
 router.get("/organizations/duplicates", async (req, res): Promise<void> => {
   try {
     const groups = await orgRepo().findDuplicates();
-    res.json({ groups });
+    const candidateIds = [...new Set(groups.flatMap((group) => group.organizations.map((profile) => profile.id)))];
+    if (!candidateIds.length) {
+      res.json({ groups: [] });
+      return;
+    }
+
+    const idList = sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql.raw(", "));
+    const resolvedResult = await db.execute<{ id: string }>(sql`
+      select o.id
+      from organizations o
+      where o.id in (${idList})
+        and (
+          o.consolidated_into_id is not null
+          or o.parent_organization_id is not null
+          or exists (
+            select 1
+            from event_family_members efm
+            where efm.organization_id = o.id
+          )
+        )
+    `);
+    const resolvedIds = new Set((resolvedResult.rows ?? []).map((row) => row.id));
+    res.json({ groups: filterGroupsContainingResolvedProfiles(groups, resolvedIds) });
   } catch (err) {
-    req.log.error({ err }, "Failed to find duplicate organizations");
-    res.status(500).json({ error: "Failed to find duplicate organizations" });
+    req.log.error({ err }, "Failed to find duplicate profiles");
+    res.status(500).json({ error: "Failed to find duplicate profiles" });
   }
 });
 
@@ -246,8 +269,8 @@ function organizationReviewError(req: Request, res: Response, err: unknown): voi
     res.status(409).json({ ok: false, error: err.message });
     return;
   }
-  req.log.error({ err }, "Failed to update organization review");
-  res.status(500).json({ ok: false, error: "Could not update organization review" });
+  req.log.error({ err }, "Failed to update profile relationship review");
+  res.status(500).json({ ok: false, error: "Could not update profile relationship review" });
 }
 
 router.post("/organizations/family-review", async (req, res): Promise<void> => {
@@ -277,8 +300,8 @@ router.post("/organizations/:id/add-profile", async (req, res): Promise<void> =>
       res.status(409).json({ ok: false, error: err.message });
       return;
     }
-    req.log.error({ err }, "Failed to add existing profile as organization location");
-    res.status(500).json({ ok: false, error: "Could not add profile to organization" });
+    req.log.error({ err }, "Failed to add existing profile as profile location");
+    res.status(500).json({ ok: false, error: "Could not add profile as a location" });
   }
 });
 
@@ -297,8 +320,8 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
     if (!organization) { res.status(404).json({ error: "Not found" }); return; }
     res.json({ organization, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage, orgLocations, orgLocationRollup });
   } catch (err) {
-    req.log.error({ err }, "Failed to get organization");
-    res.status(500).json({ error: "Failed to get organization" });
+    req.log.error({ err }, "Failed to get profile" );
+    res.status(500).json({ error: "Failed to get profile" });
   }
 });
 
@@ -308,14 +331,14 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
   const { primaryId, duplicateIds } = parsed.data;
   if (duplicateIds.includes(primaryId)) { res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" }); return; }
   try {
-    await db.transaction((transaction) => assertOrganizationsMergeable(transaction, [primaryId, ...duplicateIds]));
+    await db.transaction((transaction) => prepareSelectedProfileSubsetMerge(transaction, [primaryId, ...duplicateIds]));
     await prepareOrganizationMergeReferences(db, primaryId, duplicateIds);
     await orgRepo().mergeOrganizations(primaryId, duplicateIds);
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
-    req.log.error({ err }, "Failed to merge organizations");
-    res.status(500).json({ ok: false, error: "Failed to merge organizations" });
+    req.log.error({ err }, "Failed to merge profiles");
+    res.status(500).json({ ok: false, error: "Failed to merge profiles" });
   }
 });
 
@@ -347,7 +370,7 @@ router.post("/organizations/consolidation-preview", async (req, res): Promise<vo
   } catch (err) {
     if (err instanceof Error && err.message.startsWith("Canonical organization not found")) { res.status(404).json({ ok: false, error: err.message }); return; }
     req.log.error({ err }, "Failed to build consolidation preview");
-    res.status(500).json({ ok: false, error: "Could not build consolidation preview" });
+    res.status(500).json({ ok: false, error: "Could not build profile-location preview" });
   }
 });
 
@@ -373,8 +396,8 @@ router.post("/organizations/consolidation-apply", async (req, res): Promise<void
     res.json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
-    req.log.error({ err }, "Failed to apply consolidation");
-    res.status(500).json({ ok: false, error: "Could not apply consolidation" });
+    req.log.error({ err }, "Failed to apply profile-location consolidation");
+    res.status(500).json({ ok: false, error: "Could not combine profiles as locations" });
   }
 });
 

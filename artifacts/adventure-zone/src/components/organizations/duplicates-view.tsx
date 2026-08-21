@@ -53,7 +53,7 @@ function MergeDialog({ group, primaryId, onConfirm, onCancel, merging }: MergeDi
         <p className="mt-3 text-slate-700">
           Keep <span className="font-semibold">{primary?.name}</span> and delete{" "}
           {duplicateCount} duplicate{duplicateCount !== 1 ? "s" : ""}? All contacts
-          and bookings will be moved to the primary record.
+          and bookings will be moved to the primary profile.
         </p>
         <div className="mt-6 flex gap-3">
           <button className="button-primary flex-1" disabled={merging} onClick={onConfirm}>
@@ -165,7 +165,7 @@ function LocationList({
   return (
     <fieldset disabled={disabled}>
       <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Select the records this action should apply to. Pick a primary only when merging true duplicates.
+        Select the profiles this action should apply to. Pick a primary only when merging true duplicates.
       </legend>
       <ul className="grid gap-2">
         {group.organizations.map((organization) => {
@@ -234,9 +234,20 @@ function LocationList({
 function evidenceLabel(evidence: FamilyEvidence) {
   if (evidence.family === "website") return "Same website domain";
   if (evidence.family === "location") return "Different cities or regions";
-  if (evidence.family === "name") return "Organization names match after removing location suffixes";
+  if (evidence.family === "name") return "Profile names match after removing location suffixes";
   if (evidence.family === "address") return "Street addresses repeat across different locations";
-  return "ACT records connect these organizations";
+  return "ACT records connect these profiles";
+}
+
+function RelationshipChoiceGuide() {
+  return (
+    <div className="mb-3 grid gap-1 rounded-lg border border-slate-200 bg-white/80 p-3 text-xs text-slate-700 sm:grid-cols-2">
+      <p><strong>Merge duplicates:</strong> Same profile entered more than once.</p>
+      <p><strong>Profile Locations:</strong> One profile with multiple venues or addresses.</p>
+      <p><strong>Event Family:</strong> Related profiles that should keep separate history.</p>
+      <p><strong>Not related:</strong> The match is wrong; keep the profiles separate.</p>
+    </div>
+  );
 }
 
 function DuplicateGroupCard({
@@ -340,7 +351,7 @@ function DuplicateGroupCard({
         action: "not_related",
         candidateIds: [...sourceOrgIds].sort((left, right) => left.localeCompare(right, "en-US")),
       });
-      toast({ title: "Selected organizations marked as not related" });
+      toast({ title: "Selected profiles marked as not related" });
       onResolved(subsetApplied);
     } catch (error: any) {
       toast({ title: "Review failed", description: error?.message ?? "Unknown error", variant: "destructive" });
@@ -371,15 +382,15 @@ function DuplicateGroupCard({
         <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className={`text-sm font-bold ${locationCandidate ? "text-sky-900" : "text-amber-800"}`}>
-              Group {index + 1} -- {group.organizations.length} matching records
+              Group {index + 1} -- {group.organizations.length} matching profiles
             </p>
             <p className="mt-1 text-xs font-bold text-slate-700">{selectedCount} of {group.organizations.length} selected</p>
             {locationCandidate ? (
               <>
                 <p className="mt-1 text-sm text-sky-900">
                   {group.classification === "ambiguous_location_candidate"
-                    ? "Ambiguous match -- select only the records that actually belong together, then choose how they are related."
-                    : "Select the records that belong together, then choose whether they are locations or separate events in one Event Family."}
+                    ? "Possible relationship -- select only the profiles that actually belong together, then choose what they mean."
+                    : "Select the profiles that belong together, then choose Profile Locations or Event Family."}
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {(group.evidence ?? []).map((item) => (
@@ -394,7 +405,7 @@ function DuplicateGroupCard({
               className="button-secondary text-sm"
               disabled={disabled || pending || !selectionReady || !mergePrimaryReady}
               onClick={() => setShowMerge(true)}
-              title="These selected records are true duplicates: keep the chosen primary and combine the others into it"
+              title="Same profile entered more than once: keep the chosen primary and combine the selected copies"
             >
               Merge selected duplicates
             </button>
@@ -404,15 +415,15 @@ function DuplicateGroupCard({
                   className="button-primary text-sm"
                   disabled={disabled || pending || !selectionReady}
                   onClick={() => setShowConsolidate(true)}
-                  title="Same organization: keep each selected profile as a named location with its own history"
+                  title="One profile with multiple venues or addresses"
                 >
-                  Organization locations
+                  Combine as Profile Locations
                 </button>
                 <button
                   className="button-secondary text-sm"
                   disabled={disabled || pending || !selectionReady}
                   onClick={() => setShowEventFamily(true)}
-                  title="Separate selected event profiles: keep each profile separate and group them under one Event Family"
+                  title="Related profiles that should keep separate history"
                 >
                   Group as Event Family
                 </button>
@@ -421,8 +432,9 @@ function DuplicateGroupCard({
             ) : null}
           </div>
         </div>
-        {!selectionReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm font-semibold text-amber-800">Select at least two records for a relationship or merge action.</p> : null}
-        {selectionReady && !mergePrimaryReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm text-slate-600">To merge the selected records as true duplicates, choose which selected profile should be Primary.</p> : null}
+        {locationCandidate ? <RelationshipChoiceGuide /> : null}
+        {!selectionReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm font-semibold text-amber-800">Select at least two profiles for a relationship or merge action.</p> : null}
+        {selectionReady && !mergePrimaryReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm text-slate-600">To merge the selected profiles as true duplicates, choose which selected profile should be Primary.</p> : null}
         <LocationList
           disabled={disabled || pending}
           group={group}
@@ -561,8 +573,8 @@ export function DuplicatesView({ groups, onRefresh }: {
   if (!localGroups.length && !bulkMerging) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-        <p className="text-lg font-semibold text-slate-700">No duplicate profiles found</p>
-        <p className="mt-1 text-sm text-slate-500">All place profiles have unique names.</p>
+        <p className="text-lg font-semibold text-slate-700">No unresolved duplicate profiles found</p>
+        <p className="mt-1 text-sm text-slate-500">Merged profiles, Profile Locations, and Event Family members stay out of this cleanup list.</p>
       </div>
     );
   }
@@ -574,7 +586,7 @@ export function DuplicatesView({ groups, onRefresh }: {
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4">
           <div>
             <p className="font-semibold text-slate-900">Merge duplicate profiles automatically</p>
-            <p className="mt-0.5 text-sm text-slate-600">Location candidates are excluded until reviewed.</p>
+            <p className="mt-0.5 text-sm text-slate-600">Related-profile candidates are excluded until you review what they mean.</p>
           </div>
           {bulkMerging ? (
             <p aria-live="polite" className="font-bold text-orange-700">{reconciling ? "Checking server status…" : `Merging ${bulkProgress.completed} of ${bulkProgress.total}`}</p>
