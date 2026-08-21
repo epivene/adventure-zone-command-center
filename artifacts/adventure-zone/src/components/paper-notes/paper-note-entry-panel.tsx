@@ -80,7 +80,6 @@ export function PaperNoteEntryPanel({
         versionRef.current = saved.reviewVersion;
         latestSaved.current = saved;
         await queryClient.invalidateQueries({ queryKey: ["paper-notes", "entry-matches", entryId] });
-        await Promise.resolve(onChanged());
 
         if (sequence === saveSequence.current) {
           queryClient.setQueryData(["paper-notes", "entry-review", entryId], saved);
@@ -103,7 +102,7 @@ export function PaperNoteEntryPanel({
     const execution = priorTail.then(execute, execute);
     saveTail.current = execution.then(() => undefined, () => undefined);
     return result;
-  }, [entryId, onChanged, queryClient]);
+  }, [entryId, queryClient]);
 
   useEffect(() => {
     const entry = entryQuery.data;
@@ -119,16 +118,15 @@ export function PaperNoteEntryPanel({
     autoLinkAttemptedForEntry.current = entryId;
     const version = versionRef.current ?? entry.reviewVersion;
     void savePaperNoteEntryReview(entryId, linkedReview, version)
-      .then(async (saved) => {
+      .then((saved) => {
         versionRef.current = saved.reviewVersion;
         latestSaved.current = saved;
         queryClient.setQueryData(["paper-notes", "entry-review", entryId], saved);
-        await Promise.resolve(onChanged());
       })
       .catch(() => {
         autoLinkAttemptedForEntry.current = null;
       });
-  }, [entryId, entryQuery.data, matchesQuery.data, matchesQuery.isFetching, onChanged, queryClient]);
+  }, [entryId, entryQuery.data, matchesQuery.data, matchesQuery.isFetching, queryClient]);
 
   const approve = useCallback(
     (expectedVersion: number) => approvePaperNoteEntry(entryId, versionRef.current ?? expectedVersion).then(replaceEntry),
