@@ -34,6 +34,8 @@ import aiSuggestionsRouter from "./ai-suggestions";
 import paperNotesRouter from "./paper-notes";
 import followUpsRouter from "./follow-ups";
 import authRouter from "./auth";
+import officeAuthRouter from "./office-auth";
+import officeAdminAccountsRouter from "./office-admin-accounts";
 import managerAuthRouter from "./leg-manager-auth";
 import managerMapRouter from "./leg-manager-map";
 import managerRouter from "./leg-manager";
@@ -63,6 +65,7 @@ let leakedFixtureCleanup: Promise<void> | null = null;
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(officeAuthRouter);
 router.use(managerAuthRouter);
 router.use(managerMapRouter);
 router.use(managerRouter);
@@ -87,6 +90,7 @@ router.use(async (req, _res, next) => {
   }
   next();
 });
+router.use(officeAdminAccountsRouter);
 router.use(managerAdminRouter);
 router.use(managerFinanceAdminRouter);
 router.use(managerWorkerDeleteAdminRouter);
