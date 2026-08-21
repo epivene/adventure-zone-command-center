@@ -3,16 +3,23 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { AddExistingProfile } from "./add-existing-profile";
 import { PossibleLocationsSection } from "./possible-locations-section";
+import { RestoreProfileLocationsControl } from "./restore-profile-locations-control";
 
 export function PossibleLocationsDrawer({ orgId }: { orgId: string }) {
   const [open, setOpen] = useState(false);
   const [count, setCount] = useState<number | null>(null);
+  const [locationVersion, setLocationVersion] = useState(0);
 
   const refreshCount = useCallback(() => {
     apiGet<{ rollup: { locationCount: number } }>(`/organizations/${orgId}/locations/rollup`)
       .then((result) => setCount(result.rollup?.locationCount ?? 0))
       .catch(() => setCount(null));
   }, [orgId]);
+
+  const handleLocationsChanged = useCallback(() => {
+    refreshCount();
+    setLocationVersion((value) => value + 1);
+  }, [refreshCount]);
 
   useEffect(() => { refreshCount(); }, [refreshCount]);
 
@@ -44,8 +51,9 @@ export function PossibleLocationsDrawer({ orgId }: { orgId: string }) {
               <button className="button-secondary" onClick={() => setOpen(false)} type="button">Close</button>
             </div>
             <div className="grid gap-4">
-              <AddExistingProfile orgId={orgId} onAdded={refreshCount} />
-              <PossibleLocationsSection orgId={orgId} />
+              <RestoreProfileLocationsControl orgId={orgId} onRestored={handleLocationsChanged} />
+              <AddExistingProfile orgId={orgId} onAdded={handleLocationsChanged} />
+              <PossibleLocationsSection key={locationVersion} orgId={orgId} />
             </div>
           </aside>
         </div>

@@ -11,6 +11,11 @@ import { ScopedNoteRepository } from "@/features/notes/scoped-note-repository";
 import {
   DrizzleLocationRepository,
 } from "@/features/organization-locations/location-repository";
+import {
+  listRestorableProfileLocations,
+  restoreAllProfileLocations,
+} from "@/features/organizations/restore-profile-locations";
+import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 
 // Express mergeParams:true merges parent `:id` into child params at runtime
 // but the TypeScript definition doesn't carry that through. Cast via this type.
@@ -71,7 +76,6 @@ const patchLocationSchema = z
   })
   .refine(
     (data) => {
-      // If only one of lat/lng is present in the patch, reject.
       const hasLat = "lat" in data && data.lat != null;
       const hasLng = "lng" in data && data.lng != null;
       if (hasLat !== hasLng) return false;
@@ -119,6 +123,34 @@ router.get("/options/travel-legs", async (req: OrgLocationsRequest, res): Promis
   } catch (err) {
     req.log.error({ err }, "Failed to list location travel legs");
     res.status(500).json({ error: "Failed to list travel legs" });
+  }
+});
+
+//  Restore profiles that were previously converted into locations
+
+router.get("/restorable-profiles", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  try {
+    const profiles = await listRestorableProfileLocations(db, organizationId);
+    res.json({ profiles });
+  } catch (err) {
+    req.log.error({ err }, "Failed to list restorable profile locations");
+    res.status(500).json({ error: "Could not check which locations can be restored" });
+  }
+});
+
+router.post("/restore-profiles", async (req: OrgLocationsRequest, res): Promise<void> => {
+  const organizationId = extractId(req.params.id);
+  try {
+    const result = await restoreAllProfileLocations(db, organizationId, new Date());
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err instanceof OrganizationConflictError) {
+      res.status(409).json({ ok: false, error: err.message });
+      return;
+    }
+    req.log.error({ err }, "Failed to restore separate profiles from locations");
+    res.status(500).json({ ok: false, error: "Could not restore the separate profiles" });
   }
 });
 
