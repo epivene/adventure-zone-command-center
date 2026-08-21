@@ -1,6 +1,10 @@
+import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it, vi } from "vitest";
 
-import { PaperNoteMatchingService } from "./paper-note-matching-service";
+import {
+  PaperNoteMatchingService,
+  paperNoteTextArraySql,
+} from "./paper-note-matching-service";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 
 const review: PaperNoteReviewDraft = {
@@ -44,6 +48,22 @@ const review: PaperNoteReviewDraft = {
   conflicts: {},
   currentFollowUp: { enabled: false, kind: "call", dueOn: null, contactKey: null },
 };
+
+describe("paperNoteTextArraySql", () => {
+  const dialect = new PgDialect();
+
+  it("renders an actual empty Postgres text array instead of ()::text[]", () => {
+    const query = dialect.sqlToQuery(paperNoteTextArraySql([]));
+    expect(query.sql.toLowerCase()).toBe("array[]::text[]");
+    expect(query.params).toEqual([]);
+  });
+
+  it("renders values as a parameterized Postgres ARRAY expression", () => {
+    const query = dialect.sqlToQuery(paperNoteTextArraySql(["+14358906349"]));
+    expect(query.sql.toLowerCase()).toBe("array[$1]::text[]");
+    expect(query.params).toEqual(["+14358906349"]);
+  });
+});
 
 describe("PaperNoteMatchingService", () => {
   it("ranks exact phone/email evidence above name-only possibilities", async () => {
