@@ -154,7 +154,7 @@ export default function EventFamilyPage() {
           <article key={member.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <Link className="text-lg font-bold text-orange-700 hover:underline" href={`/event-profiles/${member.id}`}>{member.name}</Link>
+                <Link className="text-lg font-bold text-orange-700 hover:underline" href={`/profiles/${member.id}`}>{member.name}</Link>
                 <p className="mt-1 text-sm text-slate-600">{[member.city, member.region].filter(Boolean).join(", ") || "Location not set"}</p>
                 <p className="mt-2 text-xs font-medium text-slate-500">{member.contactCount} contacts · {member.bookingCount} bookings{member.nextFollowUpAt ? ` · next follow-up ${new Date(member.nextFollowUpAt).toLocaleDateString()}` : ""}</p>
               </div>
