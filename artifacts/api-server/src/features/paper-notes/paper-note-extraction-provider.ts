@@ -71,6 +71,7 @@ Return JSON only with this shape:
 Rules:
 - Page headings are context, not event entries. A heading like "Monday Call List" is not an event.
 - A calendar date written at the top of these papers is the last contact date for the events listed on that paper. Put that date in pageActivityDate when it can be read as a full calendar date. It is never an event date.
+- If the top only says a month and day such as "June 3" with no year, keep that month/day text in pageHeading exactly enough for the server to combine it with the selected paper year. Do not invent a year or discard the date.
 - A heading like "Monday Call List" with no actual calendar date supplies no pageActivityDate.
 - Coordinates are normalized 0..1 relative to the interpreted orientation. If a reliable region cannot be identified, return region:null.
 - Keep entries in visual reading order and number sourceOrder from 0.
@@ -120,6 +121,7 @@ Rules:
 - Allowed phone type values: "mobile", "office", "alternate", or "unknown". Return exactly one value.
 - never invent missing digits or letters. Use null or preserve uncertain text in transcription when a structured value cannot be read reliably.
 - The date at the top of the paper is the last contact date for every listed entry. Unless this entry contains an explicit different entry-specific contact date, copy pageActivityDate into activity.occurredOn and set dateSource to "page_heading". The page date is never an event date.
+- These paper sheets are primarily phone-call records. Unless the entry explicitly says a completed email, mailed item, or text already happened, default activity.method to call.
 - separate event dates from communication dates. A written event date like "June 22" belongs in eventDates and does not replace the last-contact date.
 - If an event day/month has no written year and you use the page year as a suggestion, derivedFromPageYear must be true so the user must confirm it.
 - Keep phone number and extension separate. Preserve office/mobile/alternate labels and calling instructions such as "ask for events department".
