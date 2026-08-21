@@ -6,6 +6,10 @@ on:
       - "artifacts/api-server/src/features/paper-notes/**"
       - "artifacts/api-server/src/routes/paper-note*.ts"
       - "artifacts/api-server/src/features/activities/**"
+      - "artifacts/api-server/src/features/act-recovery/act-note-profile-repair.pglite.test.ts"
+      - "artifacts/api-server/src/features/act-recovery/timeline-recovery.ts"
+      - "artifacts/api-server/src/features/act-recovery/recovery-repository.ts"
+      - "artifacts/api-server/src/features/act-replacement/runtime.ts"
       - "artifacts/adventure-zone/src/features/paper-notes/**"
       - "artifacts/adventure-zone/src/components/paper-notes/**"
       - "artifacts/adventure-zone/src/pages/PaperNote*.tsx"
@@ -33,6 +37,7 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server test --
           src/features/paper-notes
+          src/features/act-recovery/act-note-profile-repair.pglite.test.ts
           src/routes/paper-note-extraction.test.ts
           src/routes/paper-note-import.test.ts
           src/routes/paper-note-matching.test.ts
