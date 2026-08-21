@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Allow safe same-location subset duplicate merges inside broader related-profile groups and make the duplicate/family UI use Profile/Locations/Event Family language instead of organization jargon.
+**Goal:** Allow safe same-location subset duplicate merges inside broader related-profile groups, make the duplicate/family UI use Profile/Locations/Event Family language instead of organization jargon, and keep already-resolved relationships out of duplicate review.
 
-**Architecture:** Keep all database and API organization identifiers intact. Add a focused selected-subset merge-safety helper in the organization repository layer, use it during transactional revalidation, and update only user-facing copy/action labels in the duplicate review UI.
+**Architecture:** Keep all database and API organization identifiers intact. Add a focused selected-subset merge-safety helper in the organization repository layer, use it during transactional revalidation, filter duplicate discovery to unresolved live profiles only, and update user-facing copy/action labels in the duplicate review UI.
 
 **Tech Stack:** TypeScript, Drizzle/PostgreSQL, React, Vitest.
 
@@ -15,7 +15,8 @@
 - Do not rename database tables, API routes, repository classes, or TypeScript domain types solely for terminology.
 - Do not auto-merge based on similar names alone.
 - Never include an unselected broader-group member in a subset merge.
-- Retired/consolidated profiles remain blocked.
+- Retired/consolidated profiles remain blocked and hidden from unresolved duplicate review.
+- Profiles already intentionally resolved into Event Families or Profile Locations should not resurface as unresolved duplicate candidates.
 - Different complete city/state pairs remain a merge conflict.
 
 ---
@@ -24,7 +25,7 @@
 
 **Files:**
 - Modify: `artifacts/api-server/src/features/organizations/organization-repository.ts`
-- Test: existing/new focused organization merge-safety test beside repository tests.
+- Create/use: focused subset merge helper files beside repository tests.
 
 **Interfaces:**
 - Produces a pure helper that determines whether selected live records have conflicting complete locations.
@@ -37,7 +38,25 @@
 - [ ] Run focused tests.
 - [ ] Commit.
 
-### Task 2: Plain-language duplicate/family UI
+### Task 2: Resolved relationships leave duplicate review
+
+**Files:**
+- Modify: duplicate discovery/list code in `artifacts/api-server/src/features/organizations/organization-repository.ts` and/or `organization-family-discovery.ts` as appropriate.
+- Test: focused duplicate/discovery tests.
+
+**Interfaces:**
+- Duplicate review receives only unresolved live profiles.
+- Existing Event Family membership and consolidation/location resolution are treated as resolved relationships, not new duplicate work.
+
+- [ ] Write failing tests showing retired/merged profiles are excluded from duplicate review.
+- [ ] Write failing tests showing profiles already in Event Families do not form duplicate-review groups.
+- [ ] Write failing tests showing profiles already consolidated as Profile Locations do not form duplicate-review groups.
+- [ ] Preserve unresolved remainder groups only when at least two unresolved profiles remain.
+- [ ] Implement the smallest filtering change at the discovery/repository boundary.
+- [ ] Run focused tests.
+- [ ] Commit.
+
+### Task 3: Plain-language duplicate/family UI
 
 **Files:**
 - Modify: `artifacts/adventure-zone/src/components/organizations/duplicates-view.tsx`
@@ -54,12 +73,13 @@
 - [ ] Run focused tests.
 - [ ] Commit.
 
-### Task 3: Verification and PR
+### Task 4: Verification and PR
 
 **Files:**
 - No production changes unless verification reveals a defect.
 
 - [ ] Review diff to ensure no database/API identifier renames slipped in.
 - [ ] Confirm Fishtail subset example is covered and Idaho Falls remains excluded.
+- [ ] Confirm resolved Event Family/merged/Profile Location relationships disappear from duplicate review.
 - [ ] Run/inspect available CI; report infrastructure failures separately from code failures.
 - [ ] Open a draft PR with root cause, behavior, terminology model, and verification status.
