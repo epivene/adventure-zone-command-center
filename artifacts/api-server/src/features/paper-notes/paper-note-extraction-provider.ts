@@ -123,6 +123,7 @@ Rules:
 - If an event day/month has no written year and you use the page year as a suggestion, derivedFromPageYear must be true so the user must confirm it.
 - Keep phone number and extension separate. Preserve office/mobile/alternate labels and calling instructions such as "ask for events department".
 - old reminder text like "Call Monday" belongs only in oldReminder. Do not turn it into a current due date or task.
+- Future-action wording such as "Send email", "Call back Monday", "Mail packet", "Text Tina", or "Follow up" belongs in oldReminder. It is an instruction written on the paper, not proof that communication already happened. Do not set activity.method from a future instruction. Use activity.method only when the wording says the communication already happened, such as "emailed", "sent email", "called", "mailed", or "texted".
 - A visible star maps only to starredOnPaper=true. During import this may become the sentence "Starred on original paper." It is never a favorite, priority, status, or filter.
 - crossed-out text remains visible evidence: set crossedOut=true. Do not decide that it should replace, delete, or deactivate saved CRM data.
 - "bad number" and "mailbox full" are historical outcomes, not Do Not Call instructions.
