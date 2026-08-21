@@ -24,6 +24,17 @@ export type OrganizationFamilyActRelationship = {
   provenance: "act_relationship";
 };
 
+function normalizedReviewName(name: string): string | null {
+  const withoutLocationSuffix = name
+    .trim()
+    .replace(/\s+\([^()\r\n]+,\s*[a-z]{2}\)\s*$/i, "")
+    .replace(/\s+\([^()\r\n]+\)\s+[a-z]{2}\s*$/i, "")
+    .replace(/\s+-\s+[^,()\r\n]+,\s*[a-z]{2}\s*$/i, "")
+    .replace(/^the\s+/i, "")
+    .replace(/,\s*the$/i, "");
+  return normalizeMatchingText(withoutLocationSuffix);
+}
+
 export function discoverOrganizationFamilyCandidates(
   records: readonly OrganizationFamilyRecord[],
   actRelationships: readonly OrganizationFamilyActRelationship[] = [],
@@ -108,6 +119,46 @@ export function discoverOrganizationFamilyCandidates(
         evidence: classification.evidence,
       });
     }
+  }
+
+  const byReviewName = new Map<string, OrganizationFamilyRecord[]>();
+  for (const record of hydratedRecords) {
+    const reviewName = normalizedReviewName(record.name);
+    if (!reviewName) continue;
+    const bucket = byReviewName.get(reviewName) ?? [];
+    bucket.push(record);
+    byReviewName.set(reviewName, bucket);
+  }
+  for (const [reviewName, bucket] of byReviewName) {
+    if (bucket.length < 2) continue;
+    const rawNames = new Set(
+      bucket.map((record) => normalizeMatchingText(record.name)).filter(Boolean),
+    );
+    if (rawNames.size < 2) continue;
+    const candidateIds = bucket
+      .map((record) => record.id)
+      .sort((left, right) => left.localeCompare(right, "en-US"));
+    const candidateIdSet = new Set(candidateIds);
+    const alreadyCovered = candidates.some(
+      (candidate) =>
+        candidate.candidateIds.length === candidateIds.length &&
+        candidate.candidateIds.every((id) => candidateIdSet.has(id)),
+    );
+    if (alreadyCovered) continue;
+    candidates.push({
+      normalizedName: reviewName,
+      city: "",
+      region: "",
+      classification: "ambiguous_location_candidate",
+      groupKey: `organization-family:${candidateIds.join("|")}`,
+      candidateIds,
+      evidence: [
+        {
+          family: "name",
+          label: "strongly similar organization names",
+        },
+      ],
+    });
   }
 
   const byExactName = new Map<string, OrganizationFamilyRecord[]>();
@@ -217,4 +268,3 @@ export function partitionOrganizationReviewGroups(
     }));
   return [...duplicateGroups, ...visibleFamilies];
 }
-
