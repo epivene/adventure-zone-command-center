@@ -11,6 +11,10 @@ import type {
 
 type EventFamilyOption = { id: string; name: string; memberCount: number };
 
+function matchKey(match: PaperNoteMatch) {
+  return `${match.organizationId}:${match.organizationLocationId ?? "profile"}`;
+}
+
 export function PaperNoteDestinationPicker({
   review,
   matches,
@@ -54,11 +58,12 @@ export function PaperNoteDestinationPicker({
     return () => { cancelled = true; };
   }, [destination?.mode, familiesLoaded]);
 
-  const visibleMatches = useMemo(() => {
+  const manualOnlyMatches = useMemo(() => {
+    const suggestedKeys = new Set(matches.map(matchKey));
     const deduped = new Map<string, PaperNoteMatch>();
-    for (const match of [...matches, ...manualMatches]) {
-      const key = `${match.organizationId}:${match.organizationLocationId ?? "profile"}`;
-      if (!deduped.has(key)) deduped.set(key, match);
+    for (const match of manualMatches) {
+      const key = matchKey(match);
+      if (!suggestedKeys.has(key) && !deduped.has(key)) deduped.set(key, match);
     }
     return [...deduped.values()];
   }, [matches, manualMatches]);
@@ -87,12 +92,74 @@ export function PaperNoteDestinationPicker({
     onChooseNewLocation(match);
   }
 
+  function matchCard(match: PaperNoteMatch) {
+    return (
+      <div
+        className="rounded-xl border border-slate-200 p-3"
+        key={matchKey(match)}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-bold text-slate-900">{match.name}</p>
+            <p className="text-sm text-slate-500">
+              {[match.city, match.region].filter(Boolean).join(", ") || "Location not saved"}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {match.reasons.map((reason) => (
+                <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700" key={reason}>
+                  {reason}
+                </span>
+              ))}
+            </div>
+            {match.contacts.length ? (
+              <p className="mt-2 text-xs text-slate-500">
+                {match.contacts.length} saved contact{match.contacts.length === 1 ? "" : "s"} available to link
+              </p>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              aria-label={`Use ${match.name}`}
+              className="min-h-11 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-900"
+              onClick={() => chooseExisting(match)}
+              type="button"
+            >
+              Use this profile
+            </button>
+            <button
+              aria-label={`Create new location under ${match.name}`}
+              className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
+              onClick={() => chooseNewLocation(match)}
+              type="button"
+            >
+              New location here
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="mt-6 border-t border-slate-200 pt-5">
       <h3 className="font-bold text-slate-900">Where this entry belongs</h3>
-      <p className="mt-1 text-sm text-slate-600">Suggestions are evidence only. You choose the destination.</p>
+      <p className="mt-1 text-sm text-slate-600">The app suggests matches from the paper details. You still choose the destination.</p>
 
-      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+      {matches.length ? (
+        <div className="mt-3">
+          <h4 className="text-sm font-bold text-slate-900">Suggested matches</h4>
+          <p className="mt-1 text-xs text-slate-500">Based on matching event/profile name, city/state, contact, phone, email, or venue.</p>
+          <div className="mt-2 grid gap-2">
+            {matches.map(matchCard)}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+          No automatic match yet. Search existing profiles below before creating a new one.
+        </p>
+      )}
+
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
         <label className="grid gap-1 text-sm font-semibold text-slate-700">
           Search existing profiles
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -122,57 +189,18 @@ export function PaperNoteDestinationPicker({
         </label>
         {searchError ? <p className="mt-2 text-sm text-rose-800" role="alert">{searchError}</p> : null}
         {!searching && query.trim() && manualMatches.length === 0 && !searchError ? (
-          <p className="mt-2 text-xs text-slate-500">Search to look beyond the suggested matches.</p>
+          <p className="mt-2 text-xs text-slate-500">No search has run yet, or no additional profiles were found.</p>
         ) : null}
       </div>
 
-      <div className="mt-3 grid gap-2">
-        {visibleMatches.map((match) => (
-          <div
-            className="rounded-xl border border-slate-200 p-3"
-            key={`${match.organizationId}:${match.organizationLocationId ?? "profile"}`}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="font-bold text-slate-900">{match.name}</p>
-                <p className="text-sm text-slate-500">
-                  {[match.city, match.region].filter(Boolean).join(", ") || "Location not saved"}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {match.reasons.map((reason) => (
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700" key={reason}>
-                      {reason}
-                    </span>
-                  ))}
-                </div>
-                {match.contacts.length ? (
-                  <p className="mt-2 text-xs text-slate-500">
-                    {match.contacts.length} saved contact{match.contacts.length === 1 ? "" : "s"} available to link
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  aria-label={`Use ${match.name}`}
-                  className="min-h-11 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-900"
-                  onClick={() => chooseExisting(match)}
-                  type="button"
-                >
-                  Use this profile
-                </button>
-                <button
-                  aria-label={`Create new location under ${match.name}`}
-                  className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-800"
-                  onClick={() => chooseNewLocation(match)}
-                  type="button"
-                >
-                  New location here
-                </button>
-              </div>
-            </div>
+      {manualOnlyMatches.length ? (
+        <div className="mt-3">
+          <h4 className="text-sm font-bold text-slate-900">Search results</h4>
+          <div className="mt-2 grid gap-2">
+            {manualOnlyMatches.map(matchCard)}
           </div>
-        ))}
-      </div>
+        </div>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button

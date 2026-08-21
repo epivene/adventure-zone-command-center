@@ -132,6 +132,16 @@ export class PaperNoteMatchingService {
 
 type DrizzleDatabase = typeof database;
 
+export function paperNoteTextArraySql(values: string[]) {
+  if (!values.length) return sql`array[]::text[]`;
+  return sql`array[${sql.join(values.map((value) => sql`${value}`), sql`, `)}]::text[]`;
+}
+
+function paperNoteUuidArraySql(values: string[]) {
+  if (!values.length) return sql`array[]::uuid[]`;
+  return sql`array[${sql.join(values.map((value) => sql`${value}`), sql`, `)}]::uuid[]`;
+}
+
 function normalizedName(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -180,6 +190,11 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
 
     if (!eventName && !city && !region && !emails.length && !phoneNumbers.length) return [];
 
+    const phoneNumbersSql = paperNoteTextArraySql(phoneNumbers);
+    const extensionsSql = paperNoteTextArraySql(extensions);
+    const emailsSql = paperNoteTextArraySql(emails);
+    const contactNamesSql = paperNoteTextArraySql(contactNames);
+
     const result = await this.database.execute(sql`
       select distinct
         org.id as "organizationId",
@@ -202,72 +217,72 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
           org.region
         ) as region,
         (
-          (${phoneNumbers}::text[] <> '{}'::text[])
+          (${phoneNumbersSql} <> '{}'::text[])
           and (
-            coalesce(org.normalized_phone, '') = any(${phoneNumbers}::text[])
+            coalesce(org.normalized_phone, '') = any(${phoneNumbersSql})
             or exists (
               select 1 from organization_phones op
               where op.organization_id = org.id
-                and op.normalized_number = any(${phoneNumbers}::text[])
+                and op.normalized_number = any(${phoneNumbersSql})
             )
             or exists (
               select 1 from contacts c
               where c.organization_id = org.id
-                and coalesce(c.normalized_phone, '') = any(${phoneNumbers}::text[])
+                and coalesce(c.normalized_phone, '') = any(${phoneNumbersSql})
             )
             or exists (
               select 1 from contacts c
               join contact_phones cp on cp.contact_id = c.id
               where c.organization_id = org.id
-                and cp.normalized_number = any(${phoneNumbers}::text[])
+                and cp.normalized_number = any(${phoneNumbersSql})
             )
             or exists (
               select 1 from organization_contacts oc
               join contact_phones cp on cp.contact_id = oc.contact_id
               where oc.organization_id = org.id
                 and oc.active = true
-                and cp.normalized_number = any(${phoneNumbers}::text[])
+                and cp.normalized_number = any(${phoneNumbersSql})
             )
           )
         ) as "exactPhone",
         (
-          ${extensions}::text[] = '{}'::text[]
+          ${extensionsSql} = '{}'::text[]
           or exists (
             select 1 from organization_phones op
             where op.organization_id = org.id
-              and op.normalized_number = any(${phoneNumbers}::text[])
-              and coalesce(op.extension, '') = any(${extensions}::text[])
+              and op.normalized_number = any(${phoneNumbersSql})
+              and coalesce(op.extension, '') = any(${extensionsSql})
           )
           or exists (
             select 1 from contacts c
             join contact_phones cp on cp.contact_id = c.id
             where c.organization_id = org.id
-              and cp.normalized_number = any(${phoneNumbers}::text[])
-              and coalesce(cp.extension, '') = any(${extensions}::text[])
+              and cp.normalized_number = any(${phoneNumbersSql})
+              and coalesce(cp.extension, '') = any(${extensionsSql})
           )
           or exists (
             select 1 from organization_contacts oc
             join contact_phones cp on cp.contact_id = oc.contact_id
             where oc.organization_id = org.id
               and oc.active = true
-              and cp.normalized_number = any(${phoneNumbers}::text[])
-              and coalesce(cp.extension, '') = any(${extensions}::text[])
+              and cp.normalized_number = any(${phoneNumbersSql})
+              and coalesce(cp.extension, '') = any(${extensionsSql})
           )
         ) as "compatibleExtension",
         (
-          ${emails}::text[] <> '{}'::text[]
+          ${emailsSql} <> '{}'::text[]
           and (
             exists (
               select 1 from contacts c
               where c.organization_id = org.id
-                and lower(coalesce(c.email, '')) = any(${emails}::text[])
+                and lower(coalesce(c.email, '')) = any(${emailsSql})
             )
             or exists (
               select 1 from organization_contacts oc
               join contacts c on c.id = oc.contact_id
               where oc.organization_id = org.id
                 and oc.active = true
-                and lower(coalesce(c.email, '')) = any(${emails}::text[])
+                and lower(coalesce(c.email, '')) = any(${emailsSql})
             )
           )
         ) as "exactEmail",
@@ -288,18 +303,18 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
           )
         ) as "venueMatch",
         (
-          ${contactNames}::text[] <> '{}'::text[] and (
+          ${contactNamesSql} <> '{}'::text[] and (
             exists (
               select 1 from contacts c
               where c.organization_id = org.id
-                and lower(trim(concat_ws(' ', c.first_name, c.last_name))) = any(${contactNames}::text[])
+                and lower(trim(concat_ws(' ', c.first_name, c.last_name))) = any(${contactNamesSql})
             )
             or exists (
               select 1 from organization_contacts oc
               join contacts c on c.id = oc.contact_id
               where oc.organization_id = org.id
                 and oc.active = true
-                and lower(trim(concat_ws(' ', c.first_name, c.last_name))) = any(${contactNames}::text[])
+                and lower(trim(concat_ws(' ', c.first_name, c.last_name))) = any(${contactNamesSql})
             )
           )
         ) as "contactNameMatch"
@@ -310,15 +325,15 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
           or (${token} <> '' and lower(org.name) like ${`%${token}%`})
           or (${city} <> '' and lower(coalesce(org.city, '')) = lower(${city}))
           or (${region} <> '' and upper(coalesce(org.region, '')) = ${region})
-          or (${emails}::text[] <> '{}'::text[] and (
-            exists (select 1 from contacts c where c.organization_id = org.id and lower(coalesce(c.email, '')) = any(${emails}::text[]))
-            or exists (select 1 from organization_contacts oc join contacts c on c.id = oc.contact_id where oc.organization_id = org.id and oc.active = true and lower(coalesce(c.email, '')) = any(${emails}::text[]))
+          or (${emailsSql} <> '{}'::text[] and (
+            exists (select 1 from contacts c where c.organization_id = org.id and lower(coalesce(c.email, '')) = any(${emailsSql}))
+            or exists (select 1 from organization_contacts oc join contacts c on c.id = oc.contact_id where oc.organization_id = org.id and oc.active = true and lower(coalesce(c.email, '')) = any(${emailsSql}))
           ))
-          or (${phoneNumbers}::text[] <> '{}'::text[] and (
-            coalesce(org.normalized_phone, '') = any(${phoneNumbers}::text[])
-            or exists (select 1 from organization_phones op where op.organization_id = org.id and op.normalized_number = any(${phoneNumbers}::text[]))
-            or exists (select 1 from contacts c join contact_phones cp on cp.contact_id = c.id where c.organization_id = org.id and cp.normalized_number = any(${phoneNumbers}::text[]))
-            or exists (select 1 from organization_contacts oc join contact_phones cp on cp.contact_id = oc.contact_id where oc.organization_id = org.id and oc.active = true and cp.normalized_number = any(${phoneNumbers}::text[]))
+          or (${phoneNumbersSql} <> '{}'::text[] and (
+            coalesce(org.normalized_phone, '') = any(${phoneNumbersSql})
+            or exists (select 1 from organization_phones op where op.organization_id = org.id and op.normalized_number = any(${phoneNumbersSql}))
+            or exists (select 1 from contacts c join contact_phones cp on cp.contact_id = c.id where c.organization_id = org.id and cp.normalized_number = any(${phoneNumbersSql}))
+            or exists (select 1 from organization_contacts oc join contact_phones cp on cp.contact_id = oc.contact_id where oc.organization_id = org.id and oc.active = true and cp.normalized_number = any(${phoneNumbersSql}))
           ))
           or exists (
             select 1 from organization_locations loc
@@ -349,6 +364,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
   async findDetails(organizationIds: string[]): Promise<Map<string, PaperNoteMatchDetails>> {
     const output = new Map<string, PaperNoteMatchDetails>();
     if (!organizationIds.length) return output;
+    const organizationIdsSql = paperNoteUuidArraySql(organizationIds);
 
     const relationshipContactResult = await this.database.execute(sql`
       select
@@ -359,7 +375,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
         c.email
       from organization_contacts oc
       join contacts c on c.id = oc.contact_id
-      where oc.organization_id = any(${organizationIds}::uuid[])
+      where oc.organization_id = any(${organizationIdsSql})
         and oc.active = true
       order by oc.organization_id, oc.is_primary desc, c.last_name, c.first_name, c.id
     `);
@@ -371,7 +387,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
         c.job_title as role,
         c.email
       from contacts c
-      where c.organization_id = any(${organizationIds}::uuid[])
+      where c.organization_id = any(${organizationIdsSql})
       order by c.organization_id, c.last_name, c.first_name, c.id
     `);
 
@@ -386,6 +402,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
     const contactIds = [...new Set(contactRows.map((row) => String(row.id)))];
     const phonesByContact = new Map<string, PaperNoteMatchPhone[]>();
     if (contactIds.length) {
+      const contactIdsSql = paperNoteUuidArraySql(contactIds);
       const phoneResult = await this.database.execute(sql`
         select
           contact_id as "contactId",
@@ -398,7 +415,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
           status::text as status,
           "primary" as "primary"
         from contact_phones
-        where contact_id = any(${contactIds}::uuid[])
+        where contact_id = any(${contactIdsSql})
         order by contact_id, "primary" desc, created_at, id
       `);
       for (const row of (phoneResult as { rows?: Array<Record<string, unknown>> }).rows ?? []) {
@@ -444,7 +461,7 @@ export class PostgresPaperNoteMatchRepository implements PaperNoteMatchRepositor
         status::text as status,
         "primary" as "primary"
       from organization_phones
-      where organization_id = any(${organizationIds}::uuid[])
+      where organization_id = any(${organizationIdsSql})
       order by organization_id, "primary" desc, created_at, id
     `);
     for (const row of (organizationPhoneResult as { rows?: Array<Record<string, unknown>> }).rows ?? []) {

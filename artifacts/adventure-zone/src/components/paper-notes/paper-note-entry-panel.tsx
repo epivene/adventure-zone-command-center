@@ -82,8 +82,6 @@ export function PaperNoteEntryPanel({
           queryClient.setQueryData(["paper-notes", "entry-review", entryId], saved);
         }
 
-        // Do not let an earlier card save report completion while a newer queued
-        // save still exists; otherwise the card can briefly show Saved/Approve.
         queueMicrotask(async () => {
           try {
             while (sequence < saveSequence.current) {
@@ -135,14 +133,21 @@ export function PaperNoteEntryPanel({
   }
 
   return (
-    <PaperNoteEntryCard
-      entry={entryQuery.data}
-      matches={matchesQuery.data ?? []}
-      loadSource={() => getPaperNoteEntrySource(entryId)}
-      onSave={save}
-      onApprove={approve}
-      onUnapprove={unapprove}
-      onSkip={skip}
-    />
+    <div className="grid gap-3">
+      {matchesQuery.isError ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+          Saved-profile suggestions could not load. The paper entry is still available to review; retry or use manual profile search.
+        </div>
+      ) : null}
+      <PaperNoteEntryCard
+        entry={entryQuery.data}
+        matches={matchesQuery.data ?? []}
+        loadSource={() => getPaperNoteEntrySource(entryId)}
+        onSave={save}
+        onApprove={approve}
+        onUnapprove={unapprove}
+        onSkip={skip}
+      />
+    </div>
   );
 }

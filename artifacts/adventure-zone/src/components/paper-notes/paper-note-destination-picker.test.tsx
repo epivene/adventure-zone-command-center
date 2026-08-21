@@ -29,7 +29,44 @@ const review = {
   currentFollowUp: { enabled: false, kind: "call", dueOn: null, contactKey: null },
 };
 
+const suggestedMatch = {
+  organizationId: "10000000-0000-4000-8000-000000000001",
+  organizationLocationId: null,
+  name: "County Fair",
+  city: "Minot",
+  region: "ND",
+  strength: "strong" as const,
+  score: 140,
+  reasons: ["same phone number", "same city/state"],
+  contacts: [],
+  organizationPhones: [],
+};
+
 describe("PaperNoteDestinationPicker", () => {
+  it("shows automatic evidence matches separately from manual search results", async () => {
+    render(
+      <PaperNoteDestinationPicker
+        review={review}
+        matches={[suggestedMatch]}
+        onChooseExisting={vi.fn()}
+        onChooseNewLocation={vi.fn()}
+        onChooseNewProfile={vi.fn()}
+        onNewLocationChange={vi.fn()}
+        onNewProfileFamilyChange={vi.fn()}
+        onRememberMatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Suggested matches")).toBeInTheDocument();
+    expect(screen.getByText("County Fair")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search existing profiles"), { target: { value: "Hidden County" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+
+    expect(await screen.findByText("Search results")).toBeInTheDocument();
+    expect(await screen.findByText("Hidden County Fair")).toBeInTheDocument();
+  });
+
   it("finds a profile manually when it is not in the suggested matches", async () => {
     const onRememberMatch = vi.fn();
     const onChooseExisting = vi.fn();
