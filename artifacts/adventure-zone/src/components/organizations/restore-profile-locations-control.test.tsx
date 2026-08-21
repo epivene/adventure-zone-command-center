@@ -1,10 +1,9 @@
+// @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.fn();
-const apiPost = vi.fn();
-
-vi.mock("@/lib/auth-token", () => ({ apiGet, apiPost }));
+const mocks = vi.hoisted(() => ({ apiGet: vi.fn(), apiPost: vi.fn() }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet, apiPost: mocks.apiPost }));
 
 import { RestoreProfileLocationsControl } from "./restore-profile-locations-control";
 
@@ -30,14 +29,14 @@ const profiles = [
 afterEach(cleanup);
 
 beforeEach(() => {
-  apiGet.mockReset();
-  apiPost.mockReset();
+  mocks.apiGet.mockReset();
+  mocks.apiPost.mockReset();
 });
 
 describe("RestoreProfileLocationsControl", () => {
   it("shows the original profiles and requires confirmation before restoring", async () => {
-    apiGet.mockResolvedValue({ profiles });
-    apiPost.mockResolvedValue({
+    mocks.apiGet.mockResolvedValue({ profiles });
+    mocks.apiPost.mockResolvedValue({
       ok: true,
       restoredLocationCount: 2,
       restoredProfileIds: profiles.map((profile) => profile.sourceProfileId),
@@ -49,15 +48,15 @@ describe("RestoreProfileLocationsControl", () => {
     expect(await screen.findByText("2 merged profiles can be restored")).toBeVisible();
     expect(screen.getByText("Handmade in Colorado Expo (Estes Park) CO")).toBeVisible();
     expect(screen.getByText("Mile High Global Bazaar (Denver) CO")).toBeVisible();
-    expect(apiPost).not.toHaveBeenCalled();
+    expect(mocks.apiPost).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Restore separate profiles" }));
     expect(screen.getByText(/This will turn these 2 locations back into separate profiles/i)).toBeVisible();
-    expect(apiPost).not.toHaveBeenCalled();
+    expect(mocks.apiPost).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Yes, restore 2 profiles" }));
 
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.apiPost).toHaveBeenCalledWith(
       "/organizations/parent-1/locations/restore-profiles",
       {},
     ));
@@ -66,10 +65,10 @@ describe("RestoreProfileLocationsControl", () => {
   });
 
   it("renders nothing when the profile has no reversible merged locations", async () => {
-    apiGet.mockResolvedValue({ profiles: [] });
+    mocks.apiGet.mockResolvedValue({ profiles: [] });
     const { container } = render(<RestoreProfileLocationsControl orgId="parent-2" />);
 
-    await waitFor(() => expect(apiGet).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.apiGet).toHaveBeenCalled());
     expect(container).toBeEmptyDOMElement();
   });
 });
