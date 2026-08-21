@@ -7,9 +7,17 @@ const mocks = vi.hoisted(() => ({
   createForOwner: vi.fn(),
   updateForOwner: vi.fn(),
   reorderForOwner: vi.fn(),
+  dbSelect: vi.fn(),
+  dbFrom: vi.fn(),
+  dbWhere: vi.fn(),
+  dbLimit: vi.fn(),
 }));
 
-vi.mock("@workspace/db", () => ({ db: {} }));
+mocks.dbSelect.mockImplementation(() => ({ from: mocks.dbFrom }));
+mocks.dbFrom.mockImplementation(() => ({ where: mocks.dbWhere }));
+mocks.dbWhere.mockImplementation(() => ({ limit: mocks.dbLimit }));
+
+vi.mock("@workspace/db", () => ({ db: { select: mocks.dbSelect } }));
 vi.mock("@/features/office/office-task-repository", () => ({
   DrizzleOfficeTaskRepository: class {
     listForOwner = mocks.listForOwner;
@@ -30,9 +38,15 @@ function app() {
 
 const accountId = "10000000-0000-4000-8000-000000000001";
 const taskId = "20000000-0000-4000-8000-000000000001";
+const organizationId = "30000000-0000-4000-8000-000000000001";
+const contactId = "40000000-0000-4000-8000-000000000001";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.dbSelect.mockImplementation(() => ({ from: mocks.dbFrom }));
+  mocks.dbFrom.mockImplementation(() => ({ where: mocks.dbWhere }));
+  mocks.dbWhere.mockImplementation(() => ({ limit: mocks.dbLimit }));
+  mocks.dbLimit.mockResolvedValue([{ id: "relationship-1" }]);
   mocks.listForOwner.mockResolvedValue([]);
   mocks.createForOwner.mockResolvedValue({ id: taskId });
   mocks.updateForOwner.mockResolvedValue({ id: taskId });
@@ -52,6 +66,34 @@ describe("owner office task routes", () => {
     });
     expect(response.status).toBe(201);
     expect(mocks.createForOwner).toHaveBeenCalledWith(expect.objectContaining({ officeAccountId: accountId }));
+  });
+
+  it("accepts a contact that belongs to the selected profile", async () => {
+    const response = await request(app()).post("/office-admin/tasks").send({
+      officeAccountId: accountId,
+      taskType: "contact_verification",
+      title: "Verify Jane",
+      organizationId,
+      contactId,
+      dueAt: null,
+    });
+    expect(response.status).toBe(201);
+    expect(mocks.createForOwner).toHaveBeenCalledWith(expect.objectContaining({ organizationId, contactId }));
+  });
+
+  it("rejects a contact that is not part of the selected profile", async () => {
+    mocks.dbLimit.mockResolvedValueOnce([]);
+    const response = await request(app()).post("/office-admin/tasks").send({
+      officeAccountId: accountId,
+      taskType: "contact_verification",
+      title: "Verify Jane",
+      organizationId,
+      contactId,
+      dueAt: null,
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/not part of/i);
+    expect(mocks.createForOwner).not.toHaveBeenCalled();
   });
 
   it("passes an explicit ordered task list to the atomic reorder operation", async () => {
