@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
@@ -39,15 +39,18 @@ function DetailList({ items }: { items: { label: string; value: ReactNode }[] })
   );
 }
 
-export default function ContactDetailPage() {
-  const { contactId } = useParams<{ contactId: string }>();
+export default function ContactDetailPage({ contactId }: { contactId: string }) {
   const { openAssistant } = useAssistantContext();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!contactId) return;
+    if (!contactId) {
+      setError("Contact not found");
+      setLoading(false);
+      return;
+    }
     apiGet<any>(`/contacts/${contactId}`)
       .then((d) => {
         const coerced = {
@@ -75,9 +78,7 @@ export default function ContactDetailPage() {
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
-      {contactId ? (
-        <AssistantContextRegistration kind="contact" label={fullName} recordId={contactId} />
-      ) : null}
+      <AssistantContextRegistration kind="contact" label={fullName} recordId={contactId} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -139,13 +140,13 @@ export default function ContactDetailPage() {
 
       <ActivityTimeline
         activities={timeline ?? []}
-        parent={{ contactId: contactId! }}
+        parent={{ contactId }}
         createActivity={createActivityAction}
         deleteActivity={deleteActivityAction}
         editActivity={editActivityAction}
         loadRevisions={listActivityRevisionsAction}
         initialNextPage={data.timelineNextPage ?? null}
-        loadPage={(page) => loadTimelinePageAction({ contactId: contactId! }, page)}
+        loadPage={(page) => loadTimelinePageAction({ contactId }, page)}
       />
     </div>
   );
