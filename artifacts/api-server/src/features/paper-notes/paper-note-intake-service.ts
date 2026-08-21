@@ -1,9 +1,14 @@
 import { PaperNoteImageError, preparePaperNoteImage } from "./paper-note-image";
-import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
+import {
+  paperNoteAnalysisObjectKey,
+  paperNoteOriginalObjectKey,
+  type PaperNoteObjectStorage,
+} from "./paper-note-object-storage";
 import {
   PaperNoteIntakeRepository,
   PaperNoteRepositoryError,
 } from "./paper-note-intake-repository";
+import type { PaperNoteBatchStatus } from "./paper-note-types";
 
 export type PaperNoteIntakeErrorCode =
   | "BATCH_NOT_FOUND"
@@ -36,10 +41,13 @@ type Repository = Pick<
   | "reorderDraftPages"
   | "setDraftPageRotation"
   | "deletePageRow"
-  | "listDraftPageObjects"
   | "deleteDraftBatchRow"
   | "queueBatch"
 >;
+
+export function isPaperNoteBatchDeletable(status: PaperNoteBatchStatus) {
+  return status === "draft" || status === "review" || status === "failed";
+}
 
 function translate(error: unknown): never {
   if (error instanceof PaperNoteIntakeError) throw error;
@@ -218,15 +226,32 @@ export class PaperNoteIntakeService {
   }
 
   async deleteBatch(input: { createdBy: string; batchId: string }) {
-    let objects;
+    let batch;
     try {
-      objects = await this.repository.listDraftPageObjects(input.createdBy, input.batchId);
+      batch = await this.repository.getBatch(input.createdBy, input.batchId);
     } catch (error) {
       translate(error);
     }
+    if (!batch) throw new PaperNoteIntakeError("BATCH_NOT_FOUND", "Paper note batch was not found.");
+    if (!isPaperNoteBatchDeletable(batch.status)) {
+      throw new PaperNoteIntakeError(
+        "BATCH_NOT_EDITABLE",
+        "Only draft, failed, or in-review paper-note batches can be deleted. Imported batches are protected.",
+      );
+    }
+
     try {
-      for (const object of objects) {
-        await this.storage.deletePageObjects(object);
+      for (const page of batch.pages) {
+        const originalObjectKey = paperNoteOriginalObjectKey(input.batchId, page.id);
+        const analysisObjectKey = paperNoteAnalysisObjectKey(input.batchId, page.id);
+        const [hasOriginal, hasAnalysis] = await Promise.all([
+          this.storage.exists(originalObjectKey),
+          this.storage.exists(analysisObjectKey),
+        ]);
+        await this.storage.deletePageObjects({
+          originalObjectKey: hasOriginal ? originalObjectKey : null,
+          analysisObjectKey: hasAnalysis ? analysisObjectKey : null,
+        });
       }
     } catch {
       throw new PaperNoteIntakeError("STORAGE_UNAVAILABLE", "Could not remove every stored paper-note photo.");
