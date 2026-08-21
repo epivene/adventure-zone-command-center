@@ -106,7 +106,7 @@ export function buildPaperNoteCandidateQuery(input: CandidateQueryInput): SQL {
   const whereMatches = searchClauses.length ? sql.join(searchClauses, sql` or `) : sql`false`;
 
   return sql`
-    select distinct
+    select
       org.id as "organizationId",
       (
         select loc.id from organization_locations loc

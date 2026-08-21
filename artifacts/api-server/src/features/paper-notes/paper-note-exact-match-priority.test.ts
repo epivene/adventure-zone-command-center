@@ -29,4 +29,25 @@ describe("paper note candidate priority", () => {
     expect(where).toContain("upper(coalesce(org.region, '')) =");
     expect(sql).toMatch(/order by\s+case when lower\(regexp_replace\(trim\(org\.name\)/);
   });
+
+  it("does not combine SELECT DISTINCT with a non-selected exact-name ORDER BY expression", () => {
+    const query = buildPaperNoteCandidateQuery({
+      eventName: "Northwest MT Fair Rodeo",
+      eventNameNormalized: "northwest mt fair rodeo",
+      city: "Kalispell",
+      region: "MT",
+      venue: "",
+      token: "northwest",
+      phoneNumbers: ["+14067585810"],
+      extensions: [],
+      emails: [],
+      contactNames: [],
+    });
+
+    const compiled = dialect.sqlToQuery(query);
+    const sql = compiled.sql.toLowerCase();
+
+    expect(sql).not.toMatch(/select\s+distinct/);
+    expect(sql).toMatch(/order by\s+case when/);
+  });
 });
