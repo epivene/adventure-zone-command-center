@@ -104,6 +104,7 @@ export const officeMailActivity = pgTable("office_mail_activity", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
+  uniqueIndex("office_mail_activity_task_unique").on(table.taskId).where(sql`${table.taskId} is not null`),
   index("office_mail_activity_profile_mailed_idx").on(table.organizationId, table.mailedAt),
   index("office_mail_activity_account_created_idx").on(table.officeAccountId, table.createdAt),
 ]);
