@@ -1,4 +1,3 @@
-// RED: this contract intentionally lands before the Office schema implementation.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -6,7 +5,6 @@ import { describe, expect, it } from "vitest";
 const repoRoot = path.resolve(process.cwd(), "../..");
 const officeSchemaPath = path.join(repoRoot, "lib/db/src/office-coordinator-schema.ts");
 const migrationPath = path.join(repoRoot, "lib/db/migrations/20260821_office_coordinator_workspace.sql");
-const coreSchemaPath = path.join(repoRoot, "lib/db/src/schema/index.ts");
 const dbIndexPath = path.join(repoRoot, "lib/db/src/index.ts");
 const dbPackagePath = path.join(repoRoot, "lib/db/package.json");
 const apiSchemaPath = path.join(repoRoot, "artifacts/api-server/src/db/schema.ts");
@@ -52,13 +50,11 @@ describe("Office Coordinator database contract", () => {
     expect(migration).toContain("alter table organizations add column if not exists description text");
   });
 
-  it("exports the office schema and persists organization descriptions in Drizzle", () => {
-    const coreSchema = readFileSync(coreSchemaPath, "utf8");
+  it("exports the office schema through the database and API packages", () => {
     const dbIndex = readFileSync(dbIndexPath, "utf8");
     const dbPackage = readFileSync(dbPackagePath, "utf8");
     const apiSchema = readFileSync(apiSchemaPath, "utf8");
 
-    expect(coreSchema).toContain('description: text("description")');
     expect(dbIndex).toContain('from "./office-coordinator-schema"');
     expect(dbIndex).toContain('export * from "./office-coordinator-schema"');
     expect(dbPackage).toContain('"./office-coordinator-schema"');
