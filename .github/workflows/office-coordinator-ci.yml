@@ -44,6 +44,7 @@ jobs:
           src/routes/office-tasks.test.ts
           src/routes/office-admin-tasks.test.ts
           src/routes/office-profiles.test.ts
+          src/routes/office-event-families.test.ts
           src/routes/office-mail.test.ts
           src/routes/office-email-drafts.test.ts
           src/routes/office-admin-email-drafts.test.ts
@@ -75,6 +76,7 @@ jobs:
       - name: Office permission and wording guards
         run: |
           grep -q 'router.use(officeEmailDraftsRouter)' artifacts/api-server/src/routes/index.ts
+          grep -q 'router.use(officeEventFamiliesRouter)' artifacts/api-server/src/routes/index.ts
           grep -q 'router.use(officeAdminEmailDraftsRouter)' artifacts/api-server/src/routes/index.ts
           ! grep -q '/office/email-drafts/:draftId/send' artifacts/api-server/src/routes/office-email-drafts.ts
           grep -q '/office-admin/email-drafts/:draftId/send' artifacts/api-server/src/routes/office-admin-email-drafts.ts
