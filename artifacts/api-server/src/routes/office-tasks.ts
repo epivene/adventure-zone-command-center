@@ -3,11 +3,15 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { createRequireOfficeMiddleware } from "@/features/office/office-middleware";
+import { DrizzleOfficeEmailRepository } from "@/features/office/office-email-repository";
+import { DrizzleOfficeMessageRepository } from "@/features/office/office-message-repository";
 import { DrizzleOfficeTaskRepository } from "@/features/office/office-task-repository";
 
 const router: IRouter = Router();
 const requireOffice = createRequireOfficeMiddleware(new DrizzleOfficeAccountRepository(db));
 const tasks = new DrizzleOfficeTaskRepository(db);
+const drafts = new DrizzleOfficeEmailRepository(db);
+const messages = new DrizzleOfficeMessageRepository(db);
 const taskIdSchema = z.string().uuid();
 const patchSchema = z.object({
   status: z.enum(["todo", "in_progress", "waiting", "done"]).optional(),
@@ -21,7 +25,13 @@ router.get("/office/tasks", requireOffice, async (req, res) => {
 });
 
 router.get("/office/today", requireOffice, async (req, res) => {
-  res.json(await tasks.todayForOffice(req.officeAccount!.accountId));
+  const accountId = req.officeAccount!.accountId;
+  const [taskSummary, needsChanges, unreadMessages] = await Promise.all([
+    tasks.todayForOffice(accountId),
+    drafts.listNeedsChanges(accountId),
+    messages.unreadCount(accountId, "office"),
+  ]);
+  res.json({ ...taskSummary, needsChanges, unreadMessages });
 });
 
 router.patch("/office/tasks/:taskId", requireOffice, async (req, res): Promise<void> => {
