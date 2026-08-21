@@ -98,7 +98,9 @@ export class OfficeProfileEditor {
 
       const { description, ...normalFields } = input;
       const set: Record<string, unknown> = { ...normalFields, updatedAt: new Date() };
-      if (Object.hasOwn(input, "phone")) set.normalizedPhone = normalizeNorthAmericanPhone(input.phone ?? null);
+      if (Object.hasOwn(input, "phone")) {
+        set.normalizedPhone = input.phone ? normalizeNorthAmericanPhone(input.phone) : null;
+      }
       await transaction.update(organizations).set(set).where(eq(organizations.id, profileId));
       if (Object.hasOwn(input, "description")) {
         await transaction.execute(sql`update organizations set description = ${description ?? null}, updated_at = now() where id = ${profileId}::uuid`);
