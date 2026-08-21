@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("./paper-note-page-year-store", () => ({
+  getPaperNotePageYear: vi.fn(async () => 2026),
+}));
+
 import {
   applyPaperNoteCallSheetDefaults,
   PaperNoteExtractionWorker,
@@ -50,7 +54,6 @@ function setup() {
       analysisObjectKey: null,
       declaredMimeType: "image/png",
       rotationDegrees: 90,
-      paperYear: 2026,
       attemptCount: 1,
       leaseToken: "lease-a",
       leaseExpiresAt: new Date("2026-08-20T20:05:00Z"),
