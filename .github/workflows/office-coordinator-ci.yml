@@ -1,0 +1,43 @@
+name: Office Coordinator CI
+on:
+  push:
+    branches: [spec/office-coordinator-workspace]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adventure_zone_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+      SESSION_SECRET: office-ci-session-secret
+      OWNER_PASSWORD: office-ci-owner-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Office backend tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/office src/routes/office src/lib/password-credential.test.ts
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build
