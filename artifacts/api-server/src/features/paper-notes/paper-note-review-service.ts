@@ -124,7 +124,8 @@ export class PaperNoteReviewService {
     const review = normalizeReview(input.review);
     const issues = validateDraft(review);
     const state = issues.some((issue) => issue.severity === "blocking") ? "needs_review" : "ready";
-    return this.store.saveReview({ ...input, review, state, validationIssues: issues, approvedAt: null });
+    await this.store.saveReview({ ...input, review, state, validationIssues: issues, approvedAt: null });
+    return this.getEntry(input.actorId, input.entryId);
   }
 
   async approveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
@@ -135,14 +136,17 @@ export class PaperNoteReviewService {
     if (current.state !== "ready" || issues.some((issue) => issue.severity === "blocking")) {
       throw new PaperNoteReviewServiceError("ENTRY_NOT_READY", "Review the highlighted paper-note fields before approving this entry.");
     }
-    return this.store.approve(input);
+    await this.store.approve(input);
+    return this.getEntry(input.actorId, input.entryId);
   }
 
-  unapproveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
-    return this.store.unapprove(input);
+  async unapproveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
+    await this.store.unapprove(input);
+    return this.getEntry(input.actorId, input.entryId);
   }
 
-  skipEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
-    return this.store.skip(input);
+  async skipEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
+    await this.store.skip(input);
+    return this.getEntry(input.actorId, input.entryId);
   }
 }
