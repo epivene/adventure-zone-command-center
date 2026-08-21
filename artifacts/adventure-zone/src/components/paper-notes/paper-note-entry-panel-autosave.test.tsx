@@ -47,13 +47,14 @@ vi.mock("@/features/paper-notes/paper-note-client", () => ({
 import { PaperNoteEntryPanel } from "./paper-note-entry-panel";
 
 describe("PaperNoteEntryPanel autosave serialization", () => {
-  it("queues a second review save until the first version finishes", async () => {
+  it("queues a second review save until the first version finishes without refreshing the whole batch", async () => {
     capturedProps = null;
     savePaperNoteEntryReview.mockClear();
+    const onChanged = vi.fn();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <PaperNoteEntryPanel entryId="entry-1" onChanged={vi.fn()} />
+        <PaperNoteEntryPanel entryId="entry-1" onChanged={onChanged} />
       </QueryClientProvider>,
     );
     await waitFor(() => expect(capturedProps).not.toBeNull());
@@ -81,5 +82,6 @@ describe("PaperNoteEntryPanel autosave serialization", () => {
     expect(savePaperNoteEntryReview).toHaveBeenCalledTimes(2);
     expect(savePaperNoteEntryReview.mock.calls[1]?.[1].event.city).toBe("Fictional City");
     expect(savePaperNoteEntryReview.mock.calls[1]?.[2]).toBe(3);
+    expect(onChanged).not.toHaveBeenCalled();
   });
 });
