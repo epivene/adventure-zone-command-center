@@ -77,7 +77,7 @@ export function RestoreProfileLocationsControl({
           {restored.map((profile) => (
             <Link
               className="font-semibold text-emerald-800 underline"
-              href={`/event-profiles/${profile.sourceProfileId}`}
+              href={`/profiles/${profile.sourceProfileId}`}
               key={profile.sourceProfileId}
             >
               {profile.sourceProfileName}
