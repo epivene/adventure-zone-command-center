@@ -23,6 +23,20 @@ services:
       # The owner password used to sign in to the app.
       - key: OWNER_PASSWORD
         sync: false
+      # Owner-authorized outbound email. These stay server-only; Office users
+      # never receive SMTP credentials and never have a send endpoint.
+      - key: OFFICE_MAIL_SMTP_HOST
+        sync: false
+      - key: OFFICE_MAIL_SMTP_PORT
+        sync: false
+      - key: OFFICE_MAIL_SMTP_SECURE
+        sync: false
+      - key: OFFICE_MAIL_SMTP_USER
+        sync: false
+      - key: OFFICE_MAIL_SMTP_PASSWORD
+        sync: false
+      - key: OFFICE_MAIL_FROM
+        sync: false
       # Private Google Cloud Storage bucket used for manager receipt images.
       - key: LEG_MANAGER_RECEIPT_BUCKET
         sync: false

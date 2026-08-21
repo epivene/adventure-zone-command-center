@@ -1,14 +1,7 @@
-import {
-  createHmac,
-  randomBytes,
-  scrypt as scryptCallback,
-  timingSafeEqual,
-} from "node:crypto";
-import { promisify } from "node:util";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { hashPasswordCredential, verifyPasswordCredential } from "@/lib/password-credential";
 
-const scrypt = promisify(scryptCallback);
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
-const KEY_LENGTH = 64;
 
 export type LegManagerTokenClaims = {
   legId: string;
@@ -33,9 +26,7 @@ function sign(payload: string, secret: string): string {
 export async function hashLegManagerPassword(
   password: string,
 ): Promise<{ hash: string; salt: string }> {
-  const salt = randomBytes(24).toString("base64url");
-  const derived = (await scrypt(password, salt, KEY_LENGTH)) as Buffer;
-  return { hash: derived.toString("base64url"), salt };
+  return hashPasswordCredential(password);
 }
 
 export async function verifyLegManagerPassword(
@@ -43,17 +34,7 @@ export async function verifyLegManagerPassword(
   hash: string,
   salt: string,
 ): Promise<boolean> {
-  try {
-    const derived = (await scrypt(password, salt, KEY_LENGTH)) as Buffer;
-    const expected = Buffer.from(hash, "base64url");
-    if (derived.length !== expected.length) {
-      timingSafeEqual(derived, derived);
-      return false;
-    }
-    return timingSafeEqual(derived, expected);
-  } catch {
-    return false;
-  }
+  return verifyPasswordCredential(password, hash, salt);
 }
 
 export function issueLegManagerToken(input: {

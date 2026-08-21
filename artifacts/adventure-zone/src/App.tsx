@@ -61,6 +61,19 @@ import ActRecoveryPage from "@/pages/ActRecoveryPage";
 import QuickAddPage from "@/pages/QuickAddPage";
 import NotFound from "@/pages/not-found";
 
+import OfficeSignInPage from "@/pages/OfficeSignInPage";
+import OfficeTodayPage from "@/pages/OfficeTodayPage";
+import OfficeTasksPage from "@/pages/OfficeTasksPage";
+import OfficeProfilesPage from "@/pages/OfficeProfilesPage";
+import OfficeProfilePage from "@/pages/OfficeProfilePage";
+import OfficeMailPage from "@/pages/OfficeMailPage";
+import OfficeEmailDraftsPage from "@/pages/OfficeEmailDraftsPage";
+import OfficeMessagesPage from "@/pages/OfficeMessagesPage";
+import OfficeCoordinatorAdminPage from "@/pages/OfficeCoordinatorAdminPage";
+import { OfficeAuthProvider, useOfficeAuth } from "@/lib/office-auth-context";
+import { OFFICE_PROTECTED_PATH } from "@/lib/office-route-pattern";
+import { OfficeShell } from "@/components/office/office-shell";
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, staleTime: 30_000 },
@@ -97,40 +110,17 @@ function SignInPage() {
     setError(null);
     const result = await signIn(password);
     setSubmitting(false);
-    if (result.ok) {
-      setLocation("/today");
-    } else {
-      setError(result.error);
-    }
+    if (result.ok) setLocation("/today");
+    else setError(result.error);
   }
 
   return (
     <AuthScreen>
-      <form
-        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-        onSubmit={handleSubmit}
-      >
-        <label className="block text-sm font-semibold text-slate-700" htmlFor="owner-password">
-          Password
-        </label>
-        <input
-          autoFocus
-          autoComplete="current-password"
-          className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200"
-          id="owner-password"
-          onChange={(event) => setPassword(event.target.value)}
-          placeholder="Enter your password"
-          type="password"
-          value={password}
-        />
+      <form className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm" onSubmit={handleSubmit}>
+        <label className="block text-sm font-semibold text-slate-700" htmlFor="owner-password">Password</label>
+        <input autoFocus autoComplete="current-password" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200" id="owner-password" onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" type="password" value={password} />
         {error ? <p className="mt-3 text-sm font-medium text-red-600" role="alert">{error}</p> : null}
-        <button
-          className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-60"
-          disabled={submitting || password.length === 0}
-          type="submit"
-        >
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
+        <button className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-60" disabled={submitting || password.length === 0} type="submit">{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
     </AuthScreen>
   );
@@ -140,11 +130,10 @@ function Landing() {
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
       <h1 className="text-3xl font-bold tracking-tight">Adventure Zone Command Center</h1>
-      <p className="mt-2 max-w-md text-center text-slate-600">
-        Bookings, contacts, routes, and calls for your adventure business — all in one place.
-      </p>
+      <p className="mt-2 max-w-md text-center text-slate-600">Bookings, contacts, routes, and calls for your adventure business — all in one place.</p>
       <div className="mt-8 grid w-full max-w-sm gap-3">
         <Link className="button-primary px-6 py-3 text-center" href="/sign-in">Admin / Command Center</Link>
+        <Link className="button-secondary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
         <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Manager Portal</Link>
       </div>
     </div>
@@ -169,12 +158,7 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function SettingsStub() {
-  return (
-    <div className="mx-auto max-w-7xl">
-      <h1 className="mt-8 text-2xl font-bold">Settings</h1>
-      <p className="mt-2 text-slate-600">This settings page is available in the full backend setup.</p>
-    </div>
-  );
+  return <div className="mx-auto max-w-7xl"><h1 className="mt-8 text-2xl font-bold">Settings</h1><p className="mt-2 text-slate-600">This settings page is available in the full backend setup.</p></div>;
 }
 
 function ManagerProtectedApp() {
@@ -198,6 +182,25 @@ function ManagerProtectedApp() {
         <Route path="/manager"><ManagerHomePage /></Route>
       </Switch>
     </ManagerShell>
+  );
+}
+
+function OfficeProtectedApp() {
+  const { office, loading } = useOfficeAuth();
+  if (loading) return <div className="p-6">Loading Booking Workspace…</div>;
+  if (!office) return <Redirect to="/office/sign-in" />;
+  return (
+    <OfficeShell>
+      <Switch>
+        <Route path="/office/profiles/:profileId">{(params)=><OfficeProfilePage profileId={params.profileId}/>}</Route>
+        <Route path="/office/profiles" component={OfficeProfilesPage} />
+        <Route path="/office/mail" component={OfficeMailPage} />
+        <Route path="/office/emails" component={OfficeEmailDraftsPage} />
+        <Route path="/office/tasks" component={OfficeTasksPage} />
+        <Route path="/office/messages" component={OfficeMessagesPage} />
+        <Route path="/office" component={OfficeTodayPage} />
+      </Switch>
+    </OfficeShell>
   );
 }
 
@@ -240,6 +243,7 @@ function AdminProtectedApp() {
           <Route path="/settings" component={SettingsStub} />
           <Route path="/act-migration" component={ActMigrationPage} />
           <Route path="/quick-add" component={QuickAddPage} />
+          <Route path="/office-coordinator" component={OfficeCoordinatorAdminPage} />
           <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
           <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
           <Route path="/manager-crew" component={ManagerCrewAdminPage} />
@@ -258,18 +262,13 @@ function AppRoutes() {
     <Switch>
       <Route path="/" component={HomeRoute} />
       <Route path="/sign-in" component={SignInPage} />
-      <Route path="/manager/sign-in">
-        <ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider>
-      </Route>
-      <Route path={MANAGER_PROTECTED_PATH}>
-        <ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider>
-      </Route>
-      <Route path="/manager">
-        <ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider>
-      </Route>
-      <Route>
-        <Protected><AdminProtectedApp /></Protected>
-      </Route>
+      <Route path="/office/sign-in"><OfficeAuthProvider><OfficeSignInPage /></OfficeAuthProvider></Route>
+      <Route path={OFFICE_PROTECTED_PATH}><OfficeAuthProvider><OfficeProtectedApp /></OfficeAuthProvider></Route>
+      <Route path="/office"><OfficeAuthProvider><OfficeProtectedApp /></OfficeAuthProvider></Route>
+      <Route path="/manager/sign-in"><ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider></Route>
+      <Route path={MANAGER_PROTECTED_PATH}><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+      <Route path="/manager"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+      <Route><Protected><AdminProtectedApp /></Protected></Route>
     </Switch>
   );
 }

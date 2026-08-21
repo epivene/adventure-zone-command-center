@@ -1,0 +1,86 @@
+name: Office Coordinator CI
+on:
+  push:
+    branches: [spec/office-coordinator-workspace]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adventure_zone_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+      SESSION_SECRET: office-ci-session-secret
+      OWNER_PASSWORD: office-ci-owner-password
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Office backend tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/office
+          src/routes/office-auth.test.ts
+          src/routes/office-admin-accounts.test.ts
+          src/routes/office-tasks.test.ts
+          src/routes/office-admin-tasks.test.ts
+          src/routes/office-profiles.test.ts
+          src/routes/office-event-families.test.ts
+          src/routes/office-mail.test.ts
+          src/routes/office-email-drafts.test.ts
+          src/routes/office-admin-email-drafts.test.ts
+          src/routes/office-messages.test.ts
+          src/routes/office-admin-messages.test.ts
+          src/routes/office-security-regression.test.ts
+          src/lib/password-credential.test.ts
+      - name: Existing manager auth regression
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/leg-manager-auth.test.ts
+      - name: Office frontend tests
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/pages/OfficeSignInPage.test.tsx
+          src/App.office-routing.test.tsx
+          src/pages/OfficeWorkspace.test.tsx
+          src/pages/OfficeCommunications.test.tsx
+          src/pages/OfficeCoordinatorAdminPage.test.tsx
+          src/App.manager-routing.test.tsx
+          src/pages/TodayPage.test.tsx
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: Database build
+        run: pnpm --filter @workspace/db build
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Frontend build
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Office permission and wording guards
+        run: |
+          grep -q 'router.use(officeEmailDraftsRouter)' artifacts/api-server/src/routes/index.ts
+          grep -q 'router.use(officeEventFamiliesRouter)' artifacts/api-server/src/routes/index.ts
+          grep -q 'router.use(officeAdminEmailDraftsRouter)' artifacts/api-server/src/routes/index.ts
+          grep -q 'router.use(officeAdminHistoryRouter)' artifacts/api-server/src/routes/index.ts
+          ! grep -q '/office/email-drafts/:draftId/send' artifacts/api-server/src/routes/office-email-drafts.ts
+          grep -q '/office-admin/email-drafts/:draftId/send' artifacts/api-server/src/routes/office-admin-email-drafts.ts
+          ! grep -R -E 'Support Portal|Limited Manager|Restricted Access|Supervised|Awaiting Desiree|Checked by Admin|Sales Priority' artifacts/adventure-zone/src/pages/Office*.tsx artifacts/adventure-zone/src/components/office/*.tsx
+          ! grep -R 'VITE_.*OFFICE_MAIL' artifacts render.yaml

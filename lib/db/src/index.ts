@@ -3,6 +3,7 @@ import pg from "pg";
 import * as coreSchema from "./schema";
 import * as eventFamilySchema from "./event-family-schema";
 import * as paperNoteSchema from "./paper-note-schema";
+import * as officeCoordinatorSchema from "./office-coordinator-schema";
 
 const { Pool } = pg;
 
@@ -28,9 +29,15 @@ export const pool = new Pool({
   connectionTimeoutMillis: 5_000,
   statement_timeout: 15 * 60_000,
 });
-const schema = { ...coreSchema, ...eventFamilySchema, ...paperNoteSchema };
+const schema = {
+  ...coreSchema,
+  ...eventFamilySchema,
+  ...paperNoteSchema,
+  ...officeCoordinatorSchema,
+};
 export const db = drizzle(pool, { schema });
 
 export * from "./schema";
 export * from "./event-family-schema";
 export * from "./paper-note-schema";
+export * from "./office-coordinator-schema";
