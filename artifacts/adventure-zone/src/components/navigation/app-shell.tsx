@@ -7,6 +7,7 @@ import { MessageBubbleLink } from "./message-bubble-link";
 import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
+import { OfficeCoordinatorAttention, type OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
 import { apiGet } from "@/lib/auth-token";
 
 const primaryNavigation = [
@@ -18,6 +19,7 @@ const primaryNavigation = [
 export function AppShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
   const hideAssistantLauncher = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
   useEffect(() => {
@@ -35,6 +37,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => { active = false; window.clearInterval(id); };
   }, [location]);
 
+  useEffect(() => {
+    let active = true;
+    if (location !== "/today") { setOfficeAttention(null); return; }
+    apiGet<{ officeCoordinatorAttention?: OfficeCoordinatorAttentionData }>("/today")
+      .then((data) => { if (active) setOfficeAttention(data.officeCoordinatorAttention ?? null); })
+      .catch(() => { if (active) setOfficeAttention(null); });
+    return () => { active = false; };
+  }, [location]);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <AssistantNavigationContextSync />
@@ -49,12 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               const active = location === item.href || location.startsWith(`${item.href}/`);
               const Icon = item.icon;
               return (
-                <Link
-                  aria-current={active ? "page" : undefined}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-orange-50 text-orange-700" : "text-slate-700 hover:bg-slate-100"}`}
-                  href={item.href}
-                  key={item.href}
-                >
+                <Link aria-current={active ? "page" : undefined} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition ${active ? "bg-orange-50 text-orange-700" : "text-slate-700 hover:bg-slate-100"}`} href={item.href} key={item.href}>
                   <Icon className="h-4 w-4" />
                   {item.label}
                 </Link>
@@ -74,6 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <main className="min-h-screen px-4 py-5 pb-28 md:px-8 md:py-7 md:pb-8">
+        {location === "/today" ? <div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div> : null}
         {children}
       </main>
 
