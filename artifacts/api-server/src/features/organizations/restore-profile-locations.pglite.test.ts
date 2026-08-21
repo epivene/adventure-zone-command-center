@@ -3,7 +3,10 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
-import { restoreAllProfileLocations } from "./restore-profile-locations";
+import {
+  listRestorableProfileLocations,
+  restoreAllProfileLocations,
+} from "./restore-profile-locations";
 
 const canonicalId = "10000000-0000-4000-8000-000000000001";
 const sourceA = "10000000-0000-4000-8000-000000000002";
@@ -34,6 +37,8 @@ async function createDatabase() {
       id uuid primary key,
       organization_id uuid not null,
       label text not null,
+      city text,
+      region text,
       consolidation_source_org_id uuid,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
@@ -116,10 +121,10 @@ async function seed(client: PGlite) {
       ('${sourceA}', 'Handmade in Colorado Expo (Estes Park) CO', '${canonicalId}', now()),
       ('${sourceB}', 'Mile High Global Bazaar (Denver) CO', '${canonicalId}', now());
 
-    insert into organization_locations (id, organization_id, label, consolidation_source_org_id) values
-      ('${locationA}', '${canonicalId}', 'Estes Park, CO', '${sourceA}'),
-      ('${locationB}', '${canonicalId}', 'Denver, CO', '${sourceB}'),
-      ('${manualLocation}', '${canonicalId}', 'Manual location', null);
+    insert into organization_locations (id, organization_id, label, city, region, consolidation_source_org_id) values
+      ('${locationA}', '${canonicalId}', 'Estes Park, CO', 'Estes Park', 'CO', '${sourceA}'),
+      ('${locationB}', '${canonicalId}', 'Denver, CO', 'Denver', 'CO', '${sourceB}'),
+      ('${manualLocation}', '${canonicalId}', 'Manual location', 'Boulder', 'CO', null);
 
     insert into contacts (id, organization_id, organization_location_id, first_name, last_name) values
       ('${contactA}', '${canonicalId}', '${locationA}', 'A', 'Contact'),
@@ -144,9 +149,34 @@ async function seed(client: PGlite) {
   `);
 }
 
-describe("restoreAllProfileLocations", () => {
+describe("profile location restoration", () => {
   const clients: PGlite[] = [];
   afterEach(async () => Promise.all(clients.splice(0).map((client) => client.close())));
+
+  it("lists only locations that came from retired source profiles", async () => {
+    const { client, db } = await createDatabase();
+    clients.push(client);
+    await seed(client);
+
+    await expect(listRestorableProfileLocations(db as never, canonicalId)).resolves.toEqual([
+      {
+        locationId: locationB,
+        sourceProfileId: sourceB,
+        sourceProfileName: "Mile High Global Bazaar (Denver) CO",
+        label: "Denver, CO",
+        city: "Denver",
+        region: "CO",
+      },
+      {
+        locationId: locationA,
+        sourceProfileId: sourceA,
+        sourceProfileName: "Handmade in Colorado Expo (Estes Park) CO",
+        label: "Estes Park, CO",
+        city: "Estes Park",
+        region: "CO",
+      },
+    ]);
+  });
 
   it("reactivates every retired source profile and moves its location-owned CRM data back", async () => {
     const { client, db } = await createDatabase();
