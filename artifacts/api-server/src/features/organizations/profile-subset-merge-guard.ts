@@ -58,3 +58,30 @@ export async function assertSelectedProfileSubsetMergeable(
     );
   }
 }
+
+/**
+ * Validate only the profiles the user selected. Broader location/family proposals
+ * that intersect that subset are removed so the repository's legacy broad-group
+ * guard does not block a safe same-location duplicate merge. If an unresolved
+ * relationship still exists after the merge, duplicate discovery will create a
+ * fresh proposal for the surviving profiles.
+ */
+export async function prepareSelectedProfileSubsetMerge(
+  transaction: OrganizationMergeTransaction,
+  ids: string[],
+): Promise<void> {
+  const selectedIds = [...new Set(ids)].sort((left, right) =>
+    left.localeCompare(right, "en-US"),
+  );
+  await assertSelectedProfileSubsetMergeable(transaction, selectedIds);
+
+  const textIds = sql.join(
+    selectedIds.map((id) => sql`${id}`),
+    sql.raw(", "),
+  );
+  await transaction.execute(sql`
+    delete from organization_family_reviews
+    where status = 'proposed'
+      and candidate_ids ?| array[${textIds}]::text[]
+  `);
+}
