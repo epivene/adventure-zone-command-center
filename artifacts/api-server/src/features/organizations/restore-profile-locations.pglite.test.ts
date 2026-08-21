@@ -18,6 +18,7 @@ const bookingB = "40000000-0000-4000-8000-000000000002";
 const activityA = "50000000-0000-4000-8000-000000000001";
 const followUpA = "60000000-0000-4000-8000-000000000001";
 const callA = "70000000-0000-4000-8000-000000000001";
+const scopedNoteA = "80000000-0000-4000-8000-000000000001";
 
 async function createDatabase() {
   const client = new PGlite();
@@ -67,11 +68,14 @@ async function createDatabase() {
       updated_at timestamptz not null default now()
     );
     create table activities (
-      id uuid primary key,
+      id uuid primary key default gen_random_uuid(),
       organization_id uuid,
       organization_location_id uuid,
       kind text not null,
       body text not null,
+      occurred_at timestamptz,
+      timeline_sort_at timestamptz not null default now(),
+      created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
     create table follow_ups (
@@ -91,6 +95,15 @@ async function createDatabase() {
       id uuid primary key default gen_random_uuid(),
       family_id uuid not null,
       organization_id uuid not null
+    );
+    create table scoped_notes (
+      id uuid primary key,
+      organization_location_id uuid,
+      event_family_id uuid,
+      body text not null,
+      source text not null default 'local',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
     );
   `);
   return { client, db: drizzle(client, { schema }) };
@@ -121,11 +134,13 @@ async function seed(client: PGlite) {
       ('${bookingB}', '${canonicalId}', '${locationB}', 'Global Bazaar', 'Denver', 'CO');
 
     insert into activities (id, organization_id, organization_location_id, kind, body)
-      values ('${activityA}', '${canonicalId}', '${locationA}', 'note', 'location note');
+      values ('${activityA}', '${canonicalId}', '${locationA}', 'note', 'existing activity');
     insert into follow_ups (id, organization_id, organization_location_id, kind, due_at)
       values ('${followUpA}', '${canonicalId}', '${locationA}', 'call', now());
     insert into call_sessions (id, organization_id, organization_location_id)
       values ('${callA}', '${canonicalId}', '${locationA}');
+    insert into scoped_notes (id, organization_location_id, body, created_at, updated_at)
+      values ('${scopedNoteA}', '${locationA}', 'location-only note', '2026-08-20T10:00:00Z', '2026-08-20T10:00:00Z');
   `);
 }
 
@@ -172,6 +187,12 @@ describe("restoreAllProfileLocations", () => {
       { organization_id: sourceA, contact_id: contactA, is_primary: true },
       { organization_id: sourceB, contact_id: contactB, is_primary: true },
     ]);
+
+    const restoredNote = await client.query<{ organization_id: string; body: string }>(
+      `select organization_id, body from activities where body = 'location-only note'`,
+    );
+    expect(restoredNote.rows).toEqual([{ organization_id: sourceA, body: "location-only note" }]);
+    expect((await client.query(`select count(*)::int as count from scoped_notes`)).rows).toEqual([{ count: 0 }]);
 
     const remainingLocations = await client.query<{ id: string }>(`select id from organization_locations order by id`);
     expect(remainingLocations.rows).toEqual([{ id: manualLocation }]);
