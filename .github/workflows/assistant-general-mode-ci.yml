@@ -5,6 +5,9 @@ on:
     paths:
       - "artifacts/api-server/src/features/assistant/**"
       - "artifacts/api-server/src/routes/assistant.ts"
+      - "artifacts/api-server/src/routes/assistant-command-jobs.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/index.ts"
       - "artifacts/api-server/src/db/**assistant-command**"
       - "lib/db/migrations/067_assistant_command_jobs.sql"
       - "artifacts/adventure-zone/src/features/assistant/**"
@@ -37,6 +40,12 @@ jobs:
           artifacts/api-server/src/features/assistant/assistant-job-repository.test.ts
           artifacts/api-server/src/features/assistant/website-audit-record-repository.test.ts
           artifacts/api-server/src/features/assistant/website-audit-http.test.ts
+          artifacts/api-server/src/features/assistant/website-audit-matcher.test.ts
+          artifacts/api-server/src/features/assistant/website-audit-replacement-provider.test.ts
+          artifacts/api-server/src/features/assistant/website-audit-service.test.ts
+          artifacts/api-server/src/features/assistant/assistant-job-worker.test.ts
+          artifacts/api-server/src/features/assistant/assistant-job-worker-loop.test.ts
+          artifacts/api-server/src/features/assistant/assistant-change-approval-service.test.ts
           artifacts/adventure-zone/src/features/assistant/assistant-context.test.tsx
           artifacts/adventure-zone/src/components/assistant/profile-search-results.test.tsx
           artifacts/adventure-zone/src/components/assistant/assistant-drawer.test.tsx
