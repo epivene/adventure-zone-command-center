@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   OrganizationListPage,
   OrganizationListRecord,
@@ -86,7 +86,7 @@ function EventFamilyDialog({
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-orange-700">Event family</p>
         <h2 className="mt-1 text-lg font-bold">Group these as an Event Family</h2>
         <p className="mt-2 text-sm text-slate-600">
-          Each profile stays separate with its own city, contacts, bookings, notes, and history. They will simply appear together under one Event Family.
+          Only the selected profiles will be grouped. Each profile stays separate with its own city, contacts, bookings, notes, and history.
         </p>
         <label className="mt-4 grid gap-1 text-sm font-semibold">
           Family name
@@ -147,43 +147,82 @@ function BulkMergeDialog({
   );
 }
 
-function LocationList({ group, primaryId, onPrimaryChange, disabled }: {
+function LocationList({
+  group,
+  primaryId,
+  selectedIds,
+  onPrimaryChange,
+  onSelectionChange,
+  disabled,
+}: {
   group: DuplicateGroup;
   primaryId: string;
+  selectedIds: Set<string>;
   onPrimaryChange: (id: string) => void;
+  onSelectionChange: (id: string, selected: boolean) => void;
   disabled: boolean;
 }) {
   return (
     <fieldset disabled={disabled}>
       <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        Choose a primary only if these are true duplicates
+        Select the records this action should apply to. Pick a primary only when merging true duplicates.
       </legend>
       <ul className="grid gap-2">
         {group.organizations.map((organization) => {
-          const selected = organization.id === primaryId;
+          const included = selectedIds.has(organization.id);
+          const primary = organization.id === primaryId;
           return (
             <li key={organization.id}>
-              <label className={`flex items-start gap-3 rounded-lg border bg-white p-3 ${selected ? "border-orange-300 shadow-sm" : "border-slate-200"}`}>
-                <input
-                  checked={selected}
-                  className="mt-0.5 accent-orange-600"
-                  name={`primary-${identity(group)}`}
-                  onChange={() => onPrimaryChange(organization.id)}
-                  type="radio"
-                  value={organization.id}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-slate-900">{organization.name}</p>
-                  <p className="mt-0.5 text-sm text-slate-600">
-                    {[organization.city, organization.region].filter(Boolean).join(", ") || "Location not recorded"}
-                  </p>
-                  <p className="mt-0.5 text-sm text-slate-600">
-                    {organization.contactCount} contact{organization.contactCount !== 1 ? "s" : ""} ·{" "}
-                    {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
-                  </p>
+              <div className={`rounded-lg border bg-white p-3 ${primary ? "border-orange-300 shadow-sm" : included ? "border-sky-200" : "border-slate-200 opacity-65"}`}>
+                <div className="flex items-start gap-3">
+                  <input
+                    aria-label={`Include ${organization.name} in this action`}
+                    checked={included}
+                    className="mt-1 accent-orange-600"
+                    onChange={(event) => onSelectionChange(organization.id, event.currentTarget.checked)}
+                    type="checkbox"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <a
+                      aria-label={`Open ${organization.name} profile`}
+                      className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-2 hover:text-orange-700"
+                      href={`/profiles/${organization.id}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      {organization.name}
+                    </a>
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {[organization.city, organization.region].filter(Boolean).join(", ") || "Location not recorded"}
+                    </p>
+                    <p className="mt-0.5 text-sm text-slate-600">
+                      {organization.contactCount} contact{organization.contactCount !== 1 ? "s" : ""} ·{" "}
+                      {organization.bookingCount} booking{organization.bookingCount !== 1 ? "s" : ""}
+                    </p>
+                    <a
+                      className="mt-2 inline-block text-xs font-bold text-sky-800 hover:text-sky-950"
+                      href={`/profiles/${organization.id}`}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      View full profile ↗
+                    </a>
+                  </div>
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs font-semibold text-slate-600">
+                    <input
+                      aria-label={`Make ${organization.name} primary`}
+                      checked={primary}
+                      disabled={!included}
+                      name={`primary-${identity(group)}`}
+                      onChange={() => onPrimaryChange(organization.id)}
+                      type="radio"
+                      value={organization.id}
+                    />
+                    Primary
+                  </label>
                 </div>
-                {selected ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">Primary</span> : null}
-              </label>
+                {primary ? <span className="mt-2 inline-block rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-700">Primary</span> : null}
+              </div>
             </li>
           );
         })}
@@ -212,7 +251,7 @@ function DuplicateGroupCard({
   index: number;
   primaryId: string;
   onPrimaryChange: (id: string) => void;
-  onResolved: () => void;
+  onResolved: (subsetApplied: boolean) => void;
   disabled: boolean;
 }) {
   const locationCandidate = isLocationCandidate(group);
@@ -220,19 +259,55 @@ function DuplicateGroupCard({
   const [showConsolidate, setShowConsolidate] = useState(false);
   const [showEventFamily, setShowEventFamily] = useState(false);
   const [pending, setPending] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(group.organizations.map((item) => item.id)),
+  );
   const { toast } = useToast();
 
-  const sourceOrgIds = group.candidateIds ?? group.organizations.map((item) => item.id);
-  const sourceOrgNames = group.organizations.map((item) => item.name);
+  const organizationIdSignature = group.organizations.map((item) => item.id).join("|");
+  useEffect(() => {
+    setSelectedIds(new Set(group.organizations.map((item) => item.id)));
+  }, [organizationIdSignature]);
+
+  const selectedOrganizations = useMemo(
+    () => group.organizations.filter((item) => selectedIds.has(item.id)),
+    [group.organizations, selectedIds],
+  );
+  const selectedGroup = useMemo<DuplicateGroup>(() => ({
+    ...group,
+    candidateIds: selectedOrganizations.map((item) => item.id),
+    organizations: selectedOrganizations,
+  }), [group, selectedOrganizations]);
+  const sourceOrgIds = selectedOrganizations.map((item) => item.id);
+  const sourceOrgNames = selectedOrganizations.map((item) => item.name);
+  const selectedCount = selectedOrganizations.length;
+  const selectionReady = selectedCount >= 2;
+  const subsetApplied = selectedCount < group.organizations.length;
+  const mergePrimaryReady = Boolean(primaryId && selectedIds.has(primaryId));
+
+  function changeSelection(id: string, selected: boolean) {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (selected) next.add(id);
+      else next.delete(id);
+      if (!selected && primaryId === id) {
+        const replacement = group.organizations.find((item) => next.has(item.id));
+        onPrimaryChange(replacement?.id ?? "");
+      } else if (selected && !primaryId && group.classification === "duplicate") {
+        onPrimaryChange(id);
+      }
+      return next;
+    });
+  }
 
   async function merge() {
-    if (!primaryId) return;
+    if (!mergePrimaryReady || !selectionReady) return;
     setPending(true);
-    const duplicateIds = group.organizations.filter((item) => item.id !== primaryId).map((item) => item.id);
+    const duplicateIds = selectedOrganizations.filter((item) => item.id !== primaryId).map((item) => item.id);
     try {
       await apiPost("/organizations/merge", { primaryId, duplicateIds });
       toast({ title: `Merged ${duplicateIds.length} duplicate${duplicateIds.length !== 1 ? "s" : ""}` });
-      onResolved();
+      onResolved(subsetApplied);
     } catch (error: any) {
       toast({ title: "Merge failed", description: error?.message ?? "Unknown error", variant: "destructive" });
       setPending(false);
@@ -241,6 +316,7 @@ function DuplicateGroupCard({
   }
 
   async function createEventFamily(name: string) {
+    if (!selectionReady) return;
     setPending(true);
     try {
       await apiPost("/event-families", {
@@ -249,7 +325,7 @@ function DuplicateGroupCard({
       });
       toast({ title: `Created Event Family: ${name}` });
       setShowEventFamily(false);
-      onResolved();
+      onResolved(subsetApplied);
     } catch (error: any) {
       toast({ title: "Could not create Event Family", description: error?.message ?? "Unknown error", variant: "destructive" });
       setPending(false);
@@ -257,15 +333,15 @@ function DuplicateGroupCard({
   }
 
   async function notRelated() {
+    if (!selectionReady) return;
     setPending(true);
     try {
       await apiPost("/organizations/family-review", {
         action: "not_related",
-        candidateIds: [...(group.candidateIds ?? group.organizations.map((item) => item.id))]
-          .sort((left, right) => left.localeCompare(right, "en-US")),
+        candidateIds: [...sourceOrgIds].sort((left, right) => left.localeCompare(right, "en-US")),
       });
-      toast({ title: "Organizations marked as not related" });
-      onResolved();
+      toast({ title: "Selected organizations marked as not related" });
+      onResolved(subsetApplied);
     } catch (error: any) {
       toast({ title: "Review failed", description: error?.message ?? "Unknown error", variant: "destructive" });
       setPending(false);
@@ -274,10 +350,10 @@ function DuplicateGroupCard({
 
   return (
     <>
-      {showMerge ? <MergeDialog group={group} merging={pending} onCancel={() => setShowMerge(false)} onConfirm={merge} primaryId={primaryId} /> : null}
+      {showMerge ? <MergeDialog group={selectedGroup} merging={pending} onCancel={() => setShowMerge(false)} onConfirm={merge} primaryId={primaryId} /> : null}
       {showEventFamily ? (
         <EventFamilyDialog
-          group={group}
+          group={selectedGroup}
           onCancel={() => setShowEventFamily(false)}
           onConfirm={createEventFamily}
           pending={pending}
@@ -286,7 +362,7 @@ function DuplicateGroupCard({
       {showConsolidate ? (
         <ConsolidationDialog
           onCancel={() => setShowConsolidate(false)}
-          onComplete={onResolved}
+          onComplete={() => onResolved(subsetApplied)}
           sourceOrgIds={sourceOrgIds}
           sourceOrgNames={sourceOrgNames}
         />
@@ -297,12 +373,13 @@ function DuplicateGroupCard({
             <p className={`text-sm font-bold ${locationCandidate ? "text-sky-900" : "text-amber-800"}`}>
               Group {index + 1} -- {group.organizations.length} matching records
             </p>
+            <p className="mt-1 text-xs font-bold text-slate-700">{selectedCount} of {group.organizations.length} selected</p>
             {locationCandidate ? (
               <>
                 <p className="mt-1 text-sm text-sky-900">
                   {group.classification === "ambiguous_location_candidate"
-                    ? "Ambiguous match -- choose whether these are one organization's locations or separate events in an Event Family."
-                    : "These may be locations of the same organization or separate events in one Event Family."}
+                    ? "Ambiguous match -- select only the records that actually belong together, then choose how they are related."
+                    : "Select the records that belong together, then choose whether they are locations or separate events in one Event Family."}
                 </p>
                 <ul className="mt-2 flex flex-wrap gap-2">
                   {(group.evidence ?? []).map((item) => (
@@ -314,34 +391,42 @@ function DuplicateGroupCard({
           </div>
           <div className="flex flex-wrap gap-2">
             {!locationCandidate ? (
-              <button className="button-secondary text-sm" disabled={disabled || pending || !primaryId} onClick={() => setShowMerge(true)}>
-                Merge duplicates
+              <button className="button-secondary text-sm" disabled={disabled || pending || !selectionReady || !mergePrimaryReady} onClick={() => setShowMerge(true)}>
+                Merge selected duplicates
               </button>
             ) : null}
             {locationCandidate ? (
               <>
                 <button
                   className="button-primary text-sm"
-                  disabled={disabled || pending}
+                  disabled={disabled || pending || !selectionReady}
                   onClick={() => setShowConsolidate(true)}
-                  title="Same organization: keep each profile as a named location with its own history"
+                  title="Same organization: keep each selected profile as a named location with its own history"
                 >
                   Organization locations
                 </button>
                 <button
                   className="button-secondary text-sm"
-                  disabled={disabled || pending}
+                  disabled={disabled || pending || !selectionReady}
                   onClick={() => setShowEventFamily(true)}
-                  title="Separate event profiles: keep each profile separate and group them under one Event Family"
+                  title="Separate selected event profiles: keep each profile separate and group them under one Event Family"
                 >
                   Group as Event Family
                 </button>
-                <button className="button-secondary text-sm" disabled={disabled || pending} onClick={notRelated}>Not related</button>
+                <button className="button-secondary text-sm" disabled={disabled || pending || !selectionReady} onClick={notRelated}>Not related</button>
               </>
             ) : null}
           </div>
         </div>
-        <LocationList disabled={disabled || pending} group={group} onPrimaryChange={onPrimaryChange} primaryId={primaryId} />
+        {!selectionReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm font-semibold text-amber-800">Select at least two records for a relationship or merge action.</p> : null}
+        <LocationList
+          disabled={disabled || pending}
+          group={group}
+          onPrimaryChange={onPrimaryChange}
+          onSelectionChange={changeSelection}
+          primaryId={primaryId}
+          selectedIds={selectedIds}
+        />
       </div>
     </>
   );
@@ -394,9 +479,15 @@ export function DuplicatesView({ groups, onRefresh }: {
     }
   }, [groups]);
 
-  function resolved(group: DuplicateGroup) {
-    setLocalGroups((current) => current.filter((item) => identity(item) !== identity(group)));
-    void onRefresh();
+  async function resolved(group: DuplicateGroup, subsetApplied: boolean) {
+    if (!subsetApplied) {
+      setLocalGroups((current) => current.filter((item) => identity(item) !== identity(group)));
+    }
+    const refreshed = await onRefresh();
+    if (refreshed) {
+      setLocalGroups(refreshed);
+      setPrimaryIds((current) => reconcilePrimaryIds(current, refreshed));
+    }
   }
 
   async function reconcileAfterFailure() {
@@ -516,7 +607,7 @@ export function DuplicatesView({ groups, onRefresh }: {
           index={index}
           key={identity(group)}
           onPrimaryChange={(primaryId) => setPrimaryIds((current) => ({ ...current, [identity(group)]: primaryId }))}
-          onResolved={() => resolved(group)}
+          onResolved={(subsetApplied) => { void resolved(group, subsetApplied); }}
           primaryId={primaryIds[identity(group)] ?? ""}
         />
       ))}
