@@ -167,7 +167,13 @@ export class ActTimelineRecovery {
     for (const parent of parents) {
       associationsAdded += await this.ensureAssociation(activityId, parent);
     }
-    const changed = created || provenanceRepaired || contentRepaired || associationsAdded > 0;
+    const ownershipRepair = await this.reconcileOwnership(activityId, parents);
+    const changed = created
+      || provenanceRepaired
+      || contentRepaired
+      || associationsAdded > 0
+      || ownershipRepair.directParentsCleared > 0
+      || ownershipRepair.staleAssociationsRemoved > 0;
     return {
       state: changed ? "recovered" : "already_present",
       targetSummary: {
@@ -179,6 +185,8 @@ export class ActTimelineRecovery {
         contentRepaired,
         deduplicatedByContent,
         associationsAdded,
+        directParentsCleared: ownershipRepair.directParentsCleared,
+        staleAssociationsRemoved: ownershipRepair.staleAssociationsRemoved,
         parentCount: parents.length,
         manuallyAssigned: Boolean(manualParent),
       },
@@ -331,6 +339,38 @@ export class ActTimelineRecovery {
       if (directCode === "42P01" || causeCode === "42P01") return null;
       throw error;
     }
+  }
+
+  private async reconcileOwnership(
+    activityId: string,
+    parents: Parent[],
+  ): Promise<{ directParentsCleared: number; staleAssociationsRemoved: number }> {
+    const cleared = await this.query(sql`
+      update activities
+      set organization_id = null, contact_id = null, booking_id = null, updated_at = now()
+      where id = ${activityId}
+        and (organization_id is not null or contact_id is not null or booking_id is not null)
+      returning id
+    `);
+    const canonicalConditions = parents.map((parent) => {
+      if (parent.entityType === "organization") {
+        return sql`coalesce(organization_id = ${parent.entityId}, false)`;
+      }
+      if (parent.entityType === "contact") {
+        return sql`coalesce(contact_id = ${parent.entityId}, false)`;
+      }
+      return sql`coalesce(booking_id = ${parent.entityId}, false)`;
+    });
+    const removed = await this.query(sql`
+      delete from activity_associations
+      where activity_id = ${activityId}
+        and not (${sql.join(canonicalConditions, sql` or `)})
+      returning id
+    `);
+    return {
+      directParentsCleared: cleared.length,
+      staleAssociationsRemoved: removed.length,
+    };
   }
 
   private async ensureAssociation(activityId: string, parent: Parent): Promise<number> {

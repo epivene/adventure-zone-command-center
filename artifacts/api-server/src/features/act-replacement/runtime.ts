@@ -217,10 +217,17 @@ async function createProductionArchiveRuntime(): Promise<ActExtractionRuntime> {
     createAiClient,
     clock,
   });
+  const recoveryRepository = new DrizzleActArchiveRecoveryRepository(db);
+  await recoveryRepository.createRunsForAllSources({
+    requestKey: "act-note-profile-repair-v1",
+    requestedBy: "system",
+    now: clock.now(),
+    streamTypes: ["note", "history", "activity"],
+  });
   const resolver = new ActRecoverySourceLinkResolver(db);
   const archiveRecoveryLoop = createActArchiveRecoveryLoop({
     worker: new ActArchiveRecoveryWorker({
-      repository: new DrizzleActArchiveRecoveryRepository(db),
+      repository: recoveryRepository,
       entityRecovery: new ActEntityRecovery(db, resolver),
       relationshipRecovery: new ActRelationshipRecovery(db, resolver),
       timelineRecovery: new ActTimelineRecovery(db, resolver),

@@ -94,6 +94,21 @@ function priorityCase() {
   return sql`case source.stream_type ${sql.join(clauses, sql` `)} else 999 end`;
 }
 
+function normalizeStreamTypes(streamTypes: readonly string[] | undefined): string[] | null {
+  if (streamTypes === undefined) return null;
+  const normalized = [...new Set(streamTypes.map((value) => value.trim()).filter(Boolean))];
+  if (!normalized.length || normalized.some((value) => recoveryPriority[value] === undefined)) {
+    throw invalid("act_recovery_stream_types_invalid");
+  }
+  return normalized.sort();
+}
+
+function streamTypeCondition(streamTypes: string[] | null) {
+  return streamTypes
+    ? sql`and source.stream_type in (${sql.join(streamTypes.map((streamType) => sql`${streamType}`), sql`, `)})`
+    : sql``;
+}
+
 export class DrizzleActArchiveRecoveryRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
@@ -106,10 +121,12 @@ export class DrizzleActArchiveRecoveryRepository {
     requestKey: string;
     requestedBy: string;
     now: Date;
+    streamTypes?: readonly string[];
   }): Promise<RecoveryRunStatus> {
     if (!input.sourceDatabaseKey.trim() || !input.requestKey.trim() || !input.requestedBy.trim()) {
       throw invalid("act_recovery_input_invalid");
     }
+    const streamTypes = normalizeStreamTypes(input.streamTypes);
     return this.database.transaction(async (transaction) => {
       const executor = transaction as unknown as Executor;
       await executor.execute(sql`
@@ -137,6 +154,7 @@ export class DrizzleActArchiveRecoveryRepository {
         from act_source_records source
         where source.source_database_key = ${input.sourceDatabaseKey}
           and source.latest_version_id is not null
+          ${streamTypeCondition(streamTypes)}
         order by ${priorityCase()}, source.id
         on conflict (run_id, source_record_id) do nothing
       `);
@@ -149,6 +167,38 @@ export class DrizzleActArchiveRecoveryRepository {
       `);
       return this.statusWith(runId, executor);
     });
+  }
+
+  async createRunsForAllSources(input: {
+    requestKey: string;
+    requestedBy: string;
+    now: Date;
+    streamTypes?: readonly string[];
+  }): Promise<RecoveryRunStatus[]> {
+    if (!input.requestKey.trim() || !input.requestedBy.trim()) {
+      throw invalid("act_recovery_input_invalid");
+    }
+    const streamTypes = normalizeStreamTypes(input.streamTypes);
+    const sourceRows = await this.query(sql`
+      select distinct source.source_database_key as "sourceDatabaseKey"
+      from act_source_records source
+      where source.latest_version_id is not null
+        ${streamTypeCondition(streamTypes)}
+      order by source.source_database_key
+    `);
+    const result: RecoveryRunStatus[] = [];
+    for (const row of sourceRows) {
+      const sourceDatabaseKey = text(row.sourceDatabaseKey).trim();
+      if (!sourceDatabaseKey) continue;
+      result.push(await this.createOrGetRun({
+        sourceDatabaseKey,
+        requestKey: input.requestKey,
+        requestedBy: input.requestedBy,
+        now: input.now,
+        ...(streamTypes ? { streamTypes } : {}),
+      }));
+    }
+    return result;
   }
 
   async claimNext(input: { workerId: string; now: Date }): Promise<RecoveryCandidate | null> {
