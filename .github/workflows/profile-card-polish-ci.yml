@@ -14,57 +14,27 @@ on:
   workflow_dispatch:
 
 jobs:
-  restore-backend-test:
+  profile-card-polish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
-        with: { version: 10 }
+        with:
+          version: 10
       - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
+        with:
+          node-version: 22
+          cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run artifacts/api-server/src/features/organizations/restore-profile-locations.pglite.test.ts
-
-  restore-ui-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run artifacts/adventure-zone/src/components/organizations/restore-profile-locations-control.test.tsx artifacts/adventure-zone/src/components/organizations/possible-locations-drawer.test.tsx
-
-  profile-regression-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec vitest run artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx artifacts/adventure-zone/src/pages/EventProfilePage.derived-facts.test.ts
-
-  workspace-typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run typecheck
-
-  workspace-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with: { version: 10 }
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm run build
+      - name: Profile UI and restoration tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/features/organizations/restore-profile-locations.pglite.test.ts
+          artifacts/adventure-zone/src/components/organizations/restore-profile-locations-control.test.tsx
+          artifacts/adventure-zone/src/components/organizations/possible-locations-drawer.test.tsx
+          artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx
+          artifacts/adventure-zone/src/pages/EventProfilePage.derived-facts.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
