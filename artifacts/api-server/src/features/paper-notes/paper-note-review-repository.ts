@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
+import { recoverPaperNoteFutureActionReminder } from "./paper-note-future-action-reminder";
 import { initializePaperNoteReview, type PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import type { PaperNoteReviewIssue } from "./paper-note-review-schema";
 import type {
@@ -43,19 +44,65 @@ function asObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function nonBlank(value: unknown) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function applyRecoveredFutureActionReminder(
+  extractionPayload: PaperNoteExtraction,
+  review: PaperNoteReviewDraft,
+  savedActivity: Record<string, unknown>,
+): PaperNoteReviewDraft {
+  if (extractionPayload.oldReminder?.trim() || review.oldReminder.trim()) return review;
+
+  const recovered = recoverPaperNoteFutureActionReminder(extractionPayload.transcription);
+  if (!recovered) return review;
+
+  const extractionHasHistoricalEvidence = Boolean(
+    extractionPayload.activity.occurredOn
+    || extractionPayload.activity.outcome?.trim()
+    || extractionPayload.activity.summary?.trim(),
+  );
+  const savedHasHistoricalEvidence = Boolean(
+    nonBlank(savedActivity.occurredOn)
+    || nonBlank(savedActivity.outcome)
+    || nonBlank(savedActivity.summary),
+  );
+  const savedMethod = typeof savedActivity.method === "string"
+    ? savedActivity.method
+    : review.activity.method;
+  const shouldDemoteMethod = Boolean(
+    recovered.method
+    && recovered.method === extractionPayload.activity.method
+    && savedMethod === extractionPayload.activity.method
+    && !extractionHasHistoricalEvidence
+    && !savedHasHistoricalEvidence,
+  );
+
+  return {
+    ...review,
+    oldReminder: recovered.text,
+    activity: shouldDemoteMethod
+      ? { ...review.activity, method: "unknown" }
+      : review.activity,
+  };
+}
+
 export function hydratePaperNoteReview(
   extractionPayload: PaperNoteExtraction,
   reviewPayload: unknown,
 ): PaperNoteReviewDraft {
   const base = initializePaperNoteReview(extractionPayload);
   const saved = asObject(reviewPayload);
-  if (!saved.event || !saved.activity || !("destination" in saved)) return base;
+  if (!saved.event || !saved.activity || !("destination" in saved)) {
+    return applyRecoveredFutureActionReminder(extractionPayload, base, {});
+  }
 
   const savedEvent = asObject(saved.event);
   const savedActivity = asObject(saved.activity);
   const savedCurrentFollowUp = asObject(saved.currentFollowUp);
 
-  return {
+  const hydrated = {
     ...base,
     ...saved,
     event: { ...base.event, ...savedEvent },
@@ -78,6 +125,8 @@ export function hydratePaperNoteReview(
     },
     destination: saved.destination as PaperNoteReviewDraft["destination"],
   } as PaperNoteReviewDraft;
+
+  return applyRecoveredFutureActionReminder(extractionPayload, hydrated, savedActivity);
 }
 
 function reviewFrom(row: Pick<ReviewRow, "extractionPayload" | "reviewPayload">): PaperNoteReviewDraft {
