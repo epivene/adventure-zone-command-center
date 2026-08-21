@@ -54,4 +54,16 @@ describe("ACT archive recovery runtime", () => {
     expect(source).toContain("archiveRecoveryLoop.start()");
     expect(source).toContain("archiveRecoveryLoop.close()");
   });
+
+  it("starts archive recovery even when live ACT background importing is disabled", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../../index.ts", import.meta.url)),
+      "utf8",
+    );
+
+    expect(source).toContain("const liveActBackgroundWorkersEnabled = shouldStartActBackgroundWorkers()");
+    expect(source).toContain("getEnvironment: () => ({ configured: false })");
+    expect(source).toContain("ACT live background extraction workers are disabled; archive recovery remains active");
+    expect(source).not.toContain("ACT background extraction/recovery workers are disabled");
+  });
 });
