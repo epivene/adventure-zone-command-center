@@ -42,7 +42,18 @@ router.patch("/office/tasks/:taskId", requireOffice, async (req, res): Promise<v
     res.status(400).json({ error: parsed.success ? "Invalid task ID." : parsed.error.issues[0]?.message ?? "Review the task changes." });
     return;
   }
-  const task = await tasks.updateForOffice(taskId, req.officeAccount!.accountId, parsed.data);
+
+  const accountId = req.officeAccount!.accountId;
+  if (parsed.data.status === "done") {
+    const activeTasks = await tasks.listForOffice(accountId, "active");
+    const current = activeTasks.find((item) => item.id === taskId);
+    if (current?.type === "mail_brochure") {
+      res.status(409).json({ error: "Record the brochure as mailed to complete this task." });
+      return;
+    }
+  }
+
+  const task = await tasks.updateForOffice(taskId, accountId, parsed.data);
   if (!task) {
     res.status(404).json({ error: "Task not found." });
     return;
