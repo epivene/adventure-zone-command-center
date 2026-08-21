@@ -199,16 +199,23 @@ async function startBackgroundWorkers() {
   leadScoutLoop.start();
   paperNoteLoop.start();
 
-  if (!shouldStartActBackgroundWorkers()) {
-    logger.info("ACT background extraction/recovery workers are disabled");
-    return;
-  }
+  const liveActBackgroundWorkersEnabled = shouldStartActBackgroundWorkers();
 
   try {
-    extractionRuntimePromise = createActExtractionRuntime();
+    extractionRuntimePromise = liveActBackgroundWorkersEnabled
+      ? createActExtractionRuntime()
+      : createActExtractionRuntime({
+          getEnvironment: () => ({ configured: false }),
+        });
     const runtime = await extractionRuntimePromise;
     extractionRuntime = runtime;
     if (!shutdownRequested) runtime.start();
+
+    if (!liveActBackgroundWorkersEnabled) {
+      logger.info(
+        "ACT live background extraction workers are disabled; archive recovery remains active",
+      );
+    }
   } catch (err) {
     logger.error(
       {
@@ -217,7 +224,7 @@ async function startBackgroundWorkers() {
             ? String((err as { code?: unknown }).code)
             : "unknown",
       },
-      "Act extraction worker could not be started",
+      "Act archive recovery/background runtime could not be started",
     );
   }
 }
