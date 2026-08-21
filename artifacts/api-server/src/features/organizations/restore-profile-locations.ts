@@ -5,10 +5,16 @@ import { OrganizationConflictError } from "./organization-conflict";
 
 type Database = typeof applicationDatabase;
 
-type CandidateRow = {
+export type RestorableProfileLocation = {
   locationId: string;
   sourceProfileId: string;
   sourceProfileName: string;
+  label: string;
+  city: string | null;
+  region: string | null;
+};
+
+type CandidateRow = RestorableProfileLocation & {
   consolidatedIntoId: string | null;
 };
 
@@ -33,6 +39,42 @@ function resultRows<T>(result: unknown): T[] {
   return Array.isArray(rows) ? rows as T[] : [];
 }
 
+async function candidateRows(
+  database: Pick<Database, "execute">,
+  canonicalOrgId: string,
+  forUpdate = false,
+): Promise<CandidateRow[]> {
+  const lock = forUpdate ? sql`for update of loc, source` : sql``;
+  return resultRows<CandidateRow>(await database.execute(sql`
+    select
+      loc.id as "locationId",
+      source.id as "sourceProfileId",
+      source.name as "sourceProfileName",
+      source.consolidated_into_id as "consolidatedIntoId",
+      loc.label,
+      loc.city,
+      loc.region
+    from organization_locations loc
+    inner join organizations source
+      on source.id = loc.consolidation_source_org_id
+    where loc.organization_id = ${canonicalOrgId}::uuid
+      and loc.consolidation_source_org_id is not null
+    order by source.name, loc.id
+    ${lock}
+  `));
+}
+
+/** Return only location records that can be reversed back into their source profiles. */
+export async function listRestorableProfileLocations(
+  database: Database,
+  canonicalOrgId: string,
+): Promise<RestorableProfileLocation[]> {
+  const rows = await candidateRows(database, canonicalOrgId);
+  return rows
+    .filter((row) => row.consolidatedIntoId === canonicalOrgId)
+    .map(({ consolidatedIntoId: _ignored, ...row }) => row);
+}
+
 /**
  * Reverse the specific consolidation performed by addProfileAsLocation/applyConsolidation.
  * Only locations carrying consolidation_source_org_id are touched. Manually-created
@@ -44,20 +86,7 @@ export async function restoreAllProfileLocations(
   now: Date,
 ): Promise<{ restoredLocationCount: number; restoredProfileIds: string[] }> {
   return database.transaction(async (tx) => {
-    const candidates = resultRows<CandidateRow>(await tx.execute(sql`
-      select
-        loc.id as "locationId",
-        source.id as "sourceProfileId",
-        source.name as "sourceProfileName",
-        source.consolidated_into_id as "consolidatedIntoId"
-      from organization_locations loc
-      inner join organizations source
-        on source.id = loc.consolidation_source_org_id
-      where loc.organization_id = ${canonicalOrgId}::uuid
-        and loc.consolidation_source_org_id is not null
-      order by loc.id
-      for update of loc, source
-    `));
+    const candidates = await candidateRows(tx as unknown as Database, canonicalOrgId, true);
 
     if (!candidates.length) {
       return { restoredLocationCount: 0, restoredProfileIds: [] };
@@ -70,8 +99,6 @@ export async function restoreAllProfileLocations(
       );
     }
 
-    // Lock the canonical record after the source/location rows, preventing it from
-    // disappearing while this reversal moves ownership back to the source profiles.
     const canonical = resultRows<{ id: string }>(await tx.execute(sql`
       select id from organizations where id = ${canonicalOrgId}::uuid for update
     `));
@@ -134,8 +161,6 @@ export async function restoreAllProfileLocations(
         `);
       }
 
-      // Give each restored profile a sensible primary contact if it has any
-      // active contacts and no primary survived from older data.
       await tx.execute(sql`
         update organization_contacts
         set is_primary = true,
