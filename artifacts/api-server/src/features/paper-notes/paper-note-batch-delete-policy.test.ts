@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isPaperNoteBatchDeletable } from "./paper-note-intake-repository";
+import { isPaperNoteBatchDeletable } from "./paper-note-intake-service";
 
 describe("paper note batch delete policy", () => {
   it("allows batches that have not been imported, including review batches", () => {
