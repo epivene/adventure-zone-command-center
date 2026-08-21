@@ -20,6 +20,11 @@ import {
   LeadScoutWorkerLoop,
   systemLeadScoutWorkerLoopScheduler,
 } from "./features/assistant/lead-scout-worker-loop";
+import { AssistantJobWorker } from "./features/assistant/assistant-job-worker";
+import {
+  AssistantJobWorkerLoop,
+  systemAssistantJobWorkerLoopScheduler,
+} from "./features/assistant/assistant-job-worker-loop";
 import { ensureCrewWorkerLegMembershipSchema } from "./features/leg-manager/crew-worker-membership-schema";
 import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
@@ -50,6 +55,13 @@ const leadScoutLoop = new LeadScoutWorkerLoop({
   workerId: `lead-scout-${randomUUID()}`,
   clock: { now: () => new Date() },
   scheduler: systemLeadScoutWorkerLoopScheduler,
+});
+
+const assistantJobLoop = new AssistantJobWorkerLoop({
+  worker: new AssistantJobWorker(),
+  workerId: `assistant-job-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemAssistantJobWorkerLoopScheduler,
 });
 
 const paperNoteStorage = createPaperNoteObjectStorage();
@@ -96,12 +108,13 @@ const shutdown = createActServerShutdown({
     await Promise.all([
       runtime?.close(),
       leadScoutLoop.close(),
+      assistantJobLoop.close(),
       paperNoteLoop.close(),
     ]);
   },
   closeServer() {
     return new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+      server.close((error) => (error ? reject(error) : resolve());
     });
   },
   async closePool() {
@@ -197,6 +210,7 @@ async function runPostListenMaintenance() {
 async function startBackgroundWorkers() {
   if (shutdownRequested) return;
   leadScoutLoop.start();
+  assistantJobLoop.start();
   paperNoteLoop.start();
 
   if (!shouldStartActBackgroundWorkers()) {
