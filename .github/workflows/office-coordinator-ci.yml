@@ -49,6 +49,7 @@ jobs:
           src/routes/office-email-drafts.test.ts
           src/routes/office-admin-email-drafts.test.ts
           src/routes/office-messages.test.ts
+          src/routes/office-admin-messages.test.ts
           src/routes/office-security-regression.test.ts
           src/lib/password-credential.test.ts
       - name: Existing manager auth regression
@@ -78,6 +79,7 @@ jobs:
           grep -q 'router.use(officeEmailDraftsRouter)' artifacts/api-server/src/routes/index.ts
           grep -q 'router.use(officeEventFamiliesRouter)' artifacts/api-server/src/routes/index.ts
           grep -q 'router.use(officeAdminEmailDraftsRouter)' artifacts/api-server/src/routes/index.ts
+          grep -q 'router.use(officeAdminHistoryRouter)' artifacts/api-server/src/routes/index.ts
           ! grep -q '/office/email-drafts/:draftId/send' artifacts/api-server/src/routes/office-email-drafts.ts
           grep -q '/office-admin/email-drafts/:draftId/send' artifacts/api-server/src/routes/office-admin-email-drafts.ts
           ! grep -R -E 'Support Portal|Limited Manager|Restricted Access|Supervised|Awaiting Desiree|Checked by Admin|Sales Priority' artifacts/adventure-zone/src/pages/Office*.tsx artifacts/adventure-zone/src/components/office/*.tsx
