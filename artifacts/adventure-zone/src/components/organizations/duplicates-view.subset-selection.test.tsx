@@ -48,9 +48,11 @@ describe("DuplicatesView subset review", () => {
   it("opens each candidate profile in a new tab for inspection", () => {
     render(<DuplicatesView groups={[group]} onRefresh={vi.fn(async () => [group])} />);
 
-    const link = screen.getByRole("link", { name: "Open Family Fun Day (Fishtail) MT profile" });
-    expect(link).toHaveAttribute("href", "/profiles/org-2");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    const links = screen.getAllByRole("link", { name: "Open Family Fun Day (Fishtail) MT profile" });
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/profiles/org-2");
+    expect(links[0]).toHaveAttribute("target", "_blank");
+    expect(links[0]).toHaveAttribute("rel", expect.stringContaining("noopener"));
+    expect(links[1]).toHaveAttribute("href", "/profiles/org-3");
   });
 });
