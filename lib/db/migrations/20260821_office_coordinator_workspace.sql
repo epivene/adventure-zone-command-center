@@ -58,6 +58,8 @@ create table if not exists office_mail_activity (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create unique index if not exists office_mail_activity_task_unique
+  on office_mail_activity (task_id) where task_id is not null;
 create index if not exists office_mail_activity_profile_mailed_idx
   on office_mail_activity (organization_id, mailed_at desc);
 create index if not exists office_mail_activity_account_created_idx
