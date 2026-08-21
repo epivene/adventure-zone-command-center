@@ -3,8 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/features/paper-notes/paper-note-client", () => ({
   createPaperNoteBatch: vi.fn(),
-  createPaperNotePage: vi.fn(),
   uploadPaperNotePageImage: vi.fn(),
+}));
+vi.mock("@/features/paper-notes/paper-note-page-create-client", () => ({
+  createPaperNotePageForYear: vi.fn(),
 }));
 vi.mock("@/features/paper-notes/paper-note-upload-queue", () => ({
   uploadPaperNoteFiles: vi.fn(),
@@ -13,6 +15,14 @@ vi.mock("@/features/paper-notes/paper-note-upload-queue", () => ({
 import { PaperNoteUploadPanel } from "./paper-note-upload-panel";
 
 describe("PaperNoteUploadPanel mobile sources", () => {
+  it("shows a paper year defaulted to the current year", () => {
+    render(<PaperNoteUploadPanel onUploaded={vi.fn()} />);
+    const year = screen.getByLabelText("Paper year") as HTMLInputElement;
+    expect(year.type).toBe("number");
+    expect(year.value).toBe(String(new Date().getFullYear()));
+    expect(screen.getByText(/June 3/i)).toBeTruthy();
+  });
+
   it("keeps gallery selection separate from camera capture", () => {
     render(<PaperNoteUploadPanel onUploaded={vi.fn()} />);
 
