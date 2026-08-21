@@ -1,10 +1,18 @@
 import { z } from "zod";
-import { contactPhoneInputSchema } from "@/features/contacts/contact-input";
 
 const nullableText = (max = 4000) => z.union([z.string().max(max), z.null()]).transform((value) => value?.trim() || null);
 const nullableEmail = z.union([z.string(), z.null()])
   .transform((value) => value?.trim().toLowerCase() || null)
   .refine((value) => value === null || z.email().safeParse(value).success, "Enter a valid email address.");
+
+const officeContactPhoneInputSchema = z.object({
+  id: z.string().uuid().nullable(),
+  number: z.string().trim().min(1),
+  type: z.enum(["mobile", "office", "alternate", "unknown"]),
+  extension: z.union([z.string(), z.null()]).transform((value) => value?.trim() || null).pipe(z.string().max(20).nullable()),
+  label: z.union([z.string(), z.null()]).transform((value) => value?.trim() || null).pipe(z.string().max(60).nullable()),
+  primary: z.boolean(),
+}).strict();
 
 export const officeProfileInputSchema = z.object({
   name: z.string().trim().min(1).max(240).optional(),
@@ -29,7 +37,7 @@ export const officeContactInputSchema = z.object({
   city: nullableText(120),
   region: nullableText(120),
   postalCode: nullableText(20),
-  phones: z.array(contactPhoneInputSchema).max(10),
+  phones: z.array(officeContactPhoneInputSchema).max(10),
 }).strict().superRefine(({ phones }, context) => {
   if (phones.length && phones.filter((phone) => phone.primary).length !== 1) {
     context.addIssue({ code: "custom", path: ["phones"], message: "Choose one primary phone number." });
