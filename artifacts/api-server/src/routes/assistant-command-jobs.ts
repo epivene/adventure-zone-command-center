@@ -1,13 +1,18 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 
+import { AssistantChangeApprovalService } from "@/features/assistant/assistant-change-approval-service";
 import { routeAssistantCommand } from "@/features/assistant/assistant-command-router";
 import { WebsiteAuditService } from "@/features/assistant/website-audit-service";
 
 const router: IRouter = Router();
 const service = new WebsiteAuditService();
+const approval = new AssistantChangeApprovalService();
 const generalAskSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const jobIdSchema = z.uuid();
+const applyProposalsSchema = z.object({
+  proposalIds: z.array(z.uuid()).min(1).max(250),
+}).strict();
 
 function actorId(req: unknown): string {
   return String((req as { userId?: unknown }).userId ?? "");
@@ -82,6 +87,26 @@ router.post("/assistant/jobs/:jobId/continue", async (req, res): Promise<void> =
     if (message === "ASSISTANT_JOB_NOT_CONTINUABLE") { res.status(409).json({ error: "That assistant job cannot be continued now." }); return; }
     req.log.error({ err }, "Could not continue assistant job");
     res.status(500).json({ error: "Could not continue the assistant job." });
+  }
+});
+
+router.post("/assistant/jobs/:jobId/apply-proposals", async (req, res): Promise<void> => {
+  const jobId = jobIdSchema.safeParse(req.params.jobId);
+  const body = applyProposalsSchema.safeParse(req.body);
+  if (!jobId.success || !body.success) {
+    res.status(400).json({ error: body.success ? "Invalid assistant job." : body.error.issues[0]?.message ?? "Review the proposed fixes." });
+    return;
+  }
+  try {
+    const result = await approval.applyHighConfidenceWebsiteBatch({
+      actorId: actorId(req),
+      jobId: jobId.data,
+      proposalIds: body.data.proposalIds,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    req.log.warn({ err }, "Assistant website fixes were not applied");
+    res.status(409).json({ error: err instanceof Error ? err.message : "Could not apply the proposed website fixes." });
   }
 });
 
