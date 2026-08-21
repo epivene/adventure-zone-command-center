@@ -9,6 +9,12 @@ function dependencies() {
       normalizedCommand: {}, status: "running", stage: "checking_websites", workerId: "worker-1",
       leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
     }),
+    getJob: vi.fn().mockResolvedValue({
+      id: "job-1", capability: "website_verification", originalInstruction: "Check websites",
+      normalizedCommand: {}, status: "running", stage: "checking_websites",
+      progress: { total: 0, processed: 0, verified: 0, broken: 0, mismatches: 0, review: 0, proposedFixes: 0, cursorAfterId: null },
+      findings: [], proposals: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), completedAt: null, failureMessage: null,
+    }),
     isCancellationRequested: vi.fn().mockResolvedValue(false),
     updateProgress: vi.fn().mockResolvedValue(undefined),
     upsertFinding: vi.fn().mockResolvedValue(undefined),
