@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
 import { OrganizationConflictError } from "./organization-conflict";
+import { lockOrganizationMutationDomain } from "./organization-family-lock";
 
 type Database = typeof applicationDatabase;
 
@@ -64,7 +65,6 @@ async function candidateRows(
   `));
 }
 
-/** Return only location records that can be reversed back into their source profiles. */
 export async function listRestorableProfileLocations(
   database: Database,
   canonicalOrgId: string,
@@ -86,6 +86,10 @@ export async function restoreAllProfileLocations(
   now: Date,
 ): Promise<{ restoredLocationCount: number; restoredProfileIds: string[] }> {
   return database.transaction(async (tx) => {
+    // Use the same mutation domain as consolidation/add-profile flows so a
+    // restore cannot race another relationship change and split ownership.
+    await lockOrganizationMutationDomain(tx);
+
     const candidates = await candidateRows(tx as unknown as Database, canonicalOrgId, true);
 
     if (!candidates.length) {
