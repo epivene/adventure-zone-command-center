@@ -5,6 +5,8 @@ on:
     paths:
       - "artifacts/api-server/src/features/assistant/**"
       - "artifacts/api-server/src/routes/assistant.ts"
+      - "artifacts/api-server/src/db/**assistant-command**"
+      - "lib/db/migrations/067_assistant_command_jobs.sql"
       - "artifacts/adventure-zone/src/features/assistant/**"
       - "artifacts/adventure-zone/src/components/assistant/**"
       - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
@@ -31,6 +33,10 @@ jobs:
           artifacts/api-server/src/features/assistant/profile-search-input.test.ts
           artifacts/api-server/src/features/assistant/profile-search-repository.test.ts
           artifacts/api-server/src/features/assistant/general-assistant.test.ts
+          artifacts/api-server/src/features/assistant/assistant-command-router.test.ts
+          artifacts/api-server/src/features/assistant/assistant-job-repository.test.ts
+          artifacts/api-server/src/features/assistant/website-audit-record-repository.test.ts
+          artifacts/api-server/src/features/assistant/website-audit-http.test.ts
           artifacts/adventure-zone/src/features/assistant/assistant-context.test.tsx
           artifacts/adventure-zone/src/components/assistant/profile-search-results.test.tsx
           artifacts/adventure-zone/src/components/assistant/assistant-drawer.test.tsx
