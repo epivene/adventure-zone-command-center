@@ -56,11 +56,44 @@ export function reviewDisplay(input: {
   return { subject: subject || null, body };
 }
 
+export type ExplicitLinkedTarget = {
+  entityType: "organization" | "contact" | "booking";
+  name: string;
+};
+
+export function explicitLinkedTarget(input: {
+  streamType: string;
+  rawSnapshot: Record<string, unknown>;
+}): ExplicitLinkedTarget | null {
+  if (input.streamType !== "note" && input.streamType !== "history" && input.streamType !== "activity") return null;
+  const display = reviewDisplay(input);
+  const values = [display.subject ?? "", display.body]
+    .map((value) => value.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  for (const value of values) {
+    const match = value.match(/^linked to\s+(company|contact|opportunity)\s+(.+?)\s*$/i);
+    if (!match) continue;
+    const name = match[2]?.trim();
+    if (!name) continue;
+    return {
+      entityType: match[1]!.toLowerCase() === "company"
+        ? "organization"
+        : match[1]!.toLowerCase() === "contact"
+          ? "contact"
+          : "booking",
+      name,
+    };
+  }
+  return null;
+}
+
 export function shouldDropLinkedToReview(input: {
   streamType: string;
   rawSnapshot: Record<string, unknown>;
 }) {
   if (input.streamType !== "note" && input.streamType !== "history" && input.streamType !== "activity") return false;
+  if (explicitLinkedTarget(input)) return false;
   const display = reviewDisplay(input);
   const values = [display.subject ?? "", display.body]
     .map((value) => value.replace(/\s+/g, " ").trim())
@@ -68,7 +101,6 @@ export function shouldDropLinkedToReview(input: {
 
   return values.some((value) =>
     /^\(\s*linked to\s*\)(?:\s|$)/i.test(value)
-    || /^linked to\s+(?:company|contact|opportunity)\b/i.test(value)
     || /^\(\s*linked to\s*\)$/i.test(value),
   );
 }
