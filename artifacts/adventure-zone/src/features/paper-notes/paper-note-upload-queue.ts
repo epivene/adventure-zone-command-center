@@ -1,7 +1,5 @@
-import {
-  createPaperNotePage,
-  uploadPaperNotePageImage,
-} from "./paper-note-client";
+import { uploadPaperNotePageImage } from "./paper-note-client";
+import { createPaperNotePageForYear } from "./paper-note-page-create-client";
 import type {
   PaperNoteUploadProgress,
   PaperNoteUploadResult,
@@ -11,6 +9,7 @@ const acceptedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export async function uploadPaperNoteFiles(input: {
   batchId: string;
+  paperYear: number;
   files: File[];
   onProgress(update: PaperNoteUploadProgress): void;
   signal?: AbortSignal;
@@ -44,11 +43,12 @@ export async function uploadPaperNoteFiles(input: {
     let pageId: string | null = null;
     try {
       input.onProgress({ ...base, state: "creating_page", pageId: null, error: null });
-      const created = await createPaperNotePage({
+      const created = await createPaperNotePageForYear({
         batchId: input.batchId,
         filename: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
+        paperYear: input.paperYear,
       });
       pageId = created.pageId;
       input.onProgress({ ...base, state: "uploading", pageId, error: null });
