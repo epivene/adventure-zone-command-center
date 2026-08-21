@@ -21,6 +21,8 @@ vi.mock("@/features/office/office-task-repository", () => ({
     todayForOffice = mocks.todayForOffice;
   },
 }));
+vi.mock("@/features/office/office-email-repository", () => ({ DrizzleOfficeEmailRepository: class { listNeedsChanges = vi.fn().mockResolvedValue([]); } }));
+vi.mock("@/features/office/office-message-repository", () => ({ DrizzleOfficeMessageRepository: class { unreadCount = vi.fn().mockResolvedValue(0); } }));
 vi.mock("@/features/office/office-auth", () => ({ verifyOfficeToken: mocks.verifyOfficeToken }));
 
 import router from "./office-tasks";
@@ -52,6 +54,17 @@ describe("office task routes", () => {
       .send({ status: "in_progress", coordinatorNote: "Called the office", needsHelp: false });
     expect(response.status).toBe(200);
     expect(mocks.updateForOffice).toHaveBeenCalledWith(taskId, accountId, expect.objectContaining({ status: "in_progress" }));
+  });
+
+  it("requires brochure tasks to complete through the mailed workflow", async () => {
+    mocks.listForOffice.mockResolvedValue([{ id: taskId, type: "mail_brochure", status: "in_progress" }]);
+    const response = await request(app())
+      .patch(`/office/tasks/${taskId}`)
+      .set("Authorization", "Bearer office-token")
+      .send({ status: "done" });
+    expect(response.status).toBe(409);
+    expect(response.body.error).toMatch(/mailed/i);
+    expect(mocks.updateForOffice).not.toHaveBeenCalled();
   });
 
   it.each(["ownerSortOrder", "officeAccountId", "organizationId", "taskType"])("rejects crafted %s changes", async (field) => {
