@@ -3,6 +3,7 @@ import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
 import { validatePaperNoteCurrentFollowUp } from "./paper-note-follow-up-validation";
 import { validatePaperNotePrimaryContact } from "./paper-note-primary-contact-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
+import { normalizePaperNoteRegion } from "./paper-note-region-normalization";
 import type { PaperNoteEntryState } from "./paper-note-types";
 import type { PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import {
@@ -55,6 +56,18 @@ export class PaperNoteReviewServiceError extends Error {
   }
 }
 
+function normalizeReviewRegion(review: PaperNoteReviewDraft): PaperNoteReviewDraft {
+  const normalized = normalizePaperNoteRegion(review.event.region) ?? "";
+  if (normalized === review.event.region) return review;
+  return {
+    ...review,
+    event: {
+      ...review.event,
+      region: normalized,
+    },
+  };
+}
+
 function validateDraft(review: PaperNoteReviewDraft): PaperNoteReviewIssue[] {
   if (!review.destination) {
     return [{
@@ -78,7 +91,11 @@ export class PaperNoteReviewService {
   async getEntry(actorId: string, entryId: string) {
     const current = await this.store.getForReview(actorId, entryId);
     if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
-    return { id: entryId, ...current };
+    return {
+      id: entryId,
+      ...current,
+      review: normalizeReviewRegion(current.review),
+    };
   }
 
   async updateEntry(input: {
@@ -88,15 +105,17 @@ export class PaperNoteReviewService {
     review: PaperNoteReviewDraft;
     now: Date;
   }) {
-    const issues = validateDraft(input.review);
+    const review = normalizeReviewRegion(input.review);
+    const issues = validateDraft(review);
     const state = issues.some((issue) => issue.severity === "blocking") ? "needs_review" : "ready";
-    return this.store.saveReview({ ...input, state, validationIssues: issues, approvedAt: null });
+    return this.store.saveReview({ ...input, review, state, validationIssues: issues, approvedAt: null });
   }
 
   async approveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     const current = await this.store.getForReview(input.actorId, input.entryId);
     if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
-    const issues = validateDraft(current.review);
+    const review = normalizeReviewRegion(current.review);
+    const issues = validateDraft(review);
     if (current.state !== "ready" || issues.some((issue) => issue.severity === "blocking")) {
       throw new PaperNoteReviewServiceError("ENTRY_NOT_READY", "Review the highlighted paper-note fields before approving this entry.");
     }
