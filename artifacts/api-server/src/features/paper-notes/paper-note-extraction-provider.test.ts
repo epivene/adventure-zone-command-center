@@ -75,6 +75,10 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).not.toContain('"type":"mobile|office|alternate|unknown"');
     expect(call?.prompt).toContain("Allowed dateSource values");
     expect(call?.prompt).toContain("Allowed phone type values");
+    expect(call?.prompt).toContain('Future-action wording such as "Send email"');
+    expect(call?.prompt).toContain("belongs in oldReminder");
+    expect(call?.prompt).toContain("Do not set activity.method from a future instruction");
+    expect(call?.prompt).toContain("already happened");
   });
 
   it("accepts harmless wrapper text around one complete JSON object", async () => {
