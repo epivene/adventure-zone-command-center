@@ -390,11 +390,14 @@ function DuplicateGroupCard({
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            {!locationCandidate ? (
-              <button className="button-secondary text-sm" disabled={disabled || pending || !selectionReady || !mergePrimaryReady} onClick={() => setShowMerge(true)}>
-                Merge selected duplicates
-              </button>
-            ) : null}
+            <button
+              className="button-secondary text-sm"
+              disabled={disabled || pending || !selectionReady || !mergePrimaryReady}
+              onClick={() => setShowMerge(true)}
+              title="These selected records are true duplicates: keep the chosen primary and combine the others into it"
+            >
+              Merge selected duplicates
+            </button>
             {locationCandidate ? (
               <>
                 <button
@@ -419,6 +422,7 @@ function DuplicateGroupCard({
           </div>
         </div>
         {!selectionReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm font-semibold text-amber-800">Select at least two records for a relationship or merge action.</p> : null}
+        {selectionReady && !mergePrimaryReady ? <p className="mb-3 rounded-lg bg-white p-2 text-sm text-slate-600">To merge the selected records as true duplicates, choose which selected profile should be Primary.</p> : null}
         <LocationList
           disabled={disabled || pending}
           group={group}
