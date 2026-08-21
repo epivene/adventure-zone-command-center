@@ -3,6 +3,8 @@ export type RecoveredPaperNoteFutureAction = {
   method: "call" | "email" | "mail" | "text" | null;
 };
 
+export const POTENTIAL_BOOKING_NEXT_YEAR_NOTE = "Potential booking — reach out next year.";
+
 function cleanClause(value: string) {
   return value
     .trim()
@@ -46,4 +48,27 @@ export function recoverPaperNoteFutureActionReminder(
   }
 
   return null;
+}
+
+export function paperNoteSuggestsPotentialBooking(input: {
+  transcription?: string | null;
+  oldReminder?: string | null;
+  outcome?: string | null;
+  summary?: string | null;
+  generalNotes?: string[];
+}) {
+  if (input.generalNotes?.some((note) => note.trim() === POTENTIAL_BOOKING_NEXT_YEAR_NOTE)) return true;
+
+  const reminder = input.oldReminder?.trim();
+  if (reminder && actionMethod(reminder) !== undefined) return true;
+  if (recoverPaperNoteFutureActionReminder(input.transcription)) return true;
+
+  const text = [input.transcription, input.oldReminder, input.outcome, input.summary]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  if (!text) return false;
+  if (/\bnot interested\b|\bdo not contact\b|\bdo not call\b/.test(text)) return false;
+
+  return /\b(?:interested|possible booking|possible event|maybe next year|try again(?: next year)?|contact next year|call next year|reach out next year|send (?:more )?(?:info|information|details|proposal|contract))\b/.test(text);
 }

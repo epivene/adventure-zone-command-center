@@ -70,7 +70,8 @@ Return JSON only with this shape:
 
 Rules:
 - Page headings are context, not event entries. A heading like "Monday Call List" is not an event.
-- Only set pageActivityDate when a full calendar date is actually written or unambiguously present. "Monday Call List" supplies no date.
+- A calendar date written at the top of these papers is the last contact date for the events listed on that paper. Put that date in pageActivityDate when it can be read as a full calendar date. It is never an event date.
+- A heading like "Monday Call List" with no actual calendar date supplies no pageActivityDate.
 - Coordinates are normalized 0..1 relative to the interpreted orientation. If a reliable region cannot be identified, return region:null.
 - Keep entries in visual reading order and number sourceOrder from 0.
 - Keep roughTranscription concise; it is only page context, not a second full transcription.
@@ -96,7 +97,7 @@ function entryPrompt(
 ${orientationInstruction(rotationDegrees)}
 
 Page heading: ${pageContext.pageHeading ?? "unknown"}
-Page communication date: ${pageContext.pageActivityDate ?? "unknown"}
+Page last contact date: ${pageContext.pageActivityDate ?? "unknown"}
 ${target}
 Return JSON only with this shape:
 {
@@ -118,12 +119,13 @@ Rules:
 - Allowed method values: "call", "email", "mail", "text", or "unknown". Return exactly one value.
 - Allowed phone type values: "mobile", "office", "alternate", or "unknown". Return exactly one value.
 - never invent missing digits or letters. Use null or preserve uncertain text in transcription when a structured value cannot be read reliably.
-- separate event dates from communication dates. A written event date like "June 22" is not the date of an April call.
-- A page date may populate activity.occurredOn only when the entry has no more-specific communication date; then dateSource must be "page_heading".
+- The date at the top of the paper is the last contact date for every listed entry. Unless this entry contains an explicit different entry-specific contact date, copy pageActivityDate into activity.occurredOn and set dateSource to "page_heading". The page date is never an event date.
+- separate event dates from communication dates. A written event date like "June 22" belongs in eventDates and does not replace the last-contact date.
 - If an event day/month has no written year and you use the page year as a suggestion, derivedFromPageYear must be true so the user must confirm it.
 - Keep phone number and extension separate. Preserve office/mobile/alternate labels and calling instructions such as "ask for events department".
 - old reminder text like "Call Monday" belongs only in oldReminder. Do not turn it into a current due date or task.
 - Future-action wording such as "Send email", "Call back Monday", "Mail packet", "Text Tina", or "Follow up" belongs in oldReminder. It is an instruction written on the paper, not proof that communication already happened. Do not set activity.method from a future instruction. Use activity.method only when the wording says the communication already happened, such as "emailed", "sent email", "called", "mailed", or "texted".
+- If the paper suggests a possible future booking, including wording such as "Send email", "interested", "possible", "maybe next year", "try again", "send information", or similar future outreach, include exactly "Potential booking — reach out next year." in generalNotes. This is a note, not a scheduled task.
 - A visible star maps only to starredOnPaper=true. During import this may become the sentence "Starred on original paper." It is never a favorite, priority, status, or filter.
 - crossed-out text remains visible evidence: set crossedOut=true. Do not decide that it should replace, delete, or deactivate saved CRM data.
 - "bad number" and "mailbox full" are historical outcomes, not Do Not Call instructions.

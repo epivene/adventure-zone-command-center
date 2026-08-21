@@ -1,4 +1,5 @@
 import { logger } from "@/lib/logger";
+import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
 import { PaperNoteImageError, preparePaperNoteImage } from "./paper-note-image";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
 import {
@@ -24,6 +25,23 @@ type WorkerDependencies = {
   storage: Storage;
   provider: PaperNoteExtractionProvider;
 };
+
+export function applyPaperNotePageLastContactDate(
+  extraction: PaperNoteExtraction,
+  pageActivityDate: string | null,
+): PaperNoteExtraction {
+  if (!pageActivityDate) return extraction;
+  if (extraction.activity.dateSource === "entry" && extraction.activity.occurredOn) return extraction;
+  return {
+    ...extraction,
+    activity: {
+      ...extraction.activity,
+      rawDateText: extraction.activity.rawDateText ?? pageActivityDate,
+      occurredOn: pageActivityDate,
+      dateSource: "page_heading",
+    },
+  };
+}
 
 function failure(error: unknown) {
   if (error instanceof PaperNoteProviderError) {
@@ -106,16 +124,19 @@ export class PaperNoteExtractionWorker {
 
       const entries = [];
       for (const entryHint of segmentation.entries) {
-        const extracted = await this.dependencies.provider.extractEntry({
-          bytes: originalBytes,
-          mimeType: prepared.detectedMimeType,
-          pageContext: {
-            pageHeading: segmentation.pageHeading,
-            pageActivityDate: segmentation.pageActivityDate,
-          },
-          entryHint,
-          rotationDegrees: claimed.rotationDegrees,
-        });
+        const extracted = applyPaperNotePageLastContactDate(
+          await this.dependencies.provider.extractEntry({
+            bytes: originalBytes,
+            mimeType: prepared.detectedMimeType,
+            pageContext: {
+              pageHeading: segmentation.pageHeading,
+              pageActivityDate: segmentation.pageActivityDate,
+            },
+            entryHint,
+            rotationDegrees: claimed.rotationDegrees,
+          }),
+          segmentation.pageActivityDate,
+        );
         entries.push({
           ...extracted,
           sourceRegion: entryHint.region,

@@ -1,14 +1,20 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 
 import { PaperNoteBatchCard } from "@/components/paper-notes/paper-note-batch-card";
 import { PaperNoteHealthBanner } from "@/components/paper-notes/paper-note-health-banner";
 import { PaperNoteUploadPanel } from "@/components/paper-notes/paper-note-upload-panel";
-import { listPaperNoteBatches } from "@/features/paper-notes/paper-note-client";
+import {
+  deletePaperNoteBatch,
+  listPaperNoteBatches,
+} from "@/features/paper-notes/paper-note-client";
 import { getPaperNoteHealth } from "@/features/paper-notes/paper-note-health-client";
 
 export default function PaperNotesInboxPage() {
   const [, navigate] = useLocation();
+  const [deletingBatchId, setDeletingBatchId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const batches = useQuery({
     queryKey: ["paper-notes", "batches"],
     queryFn: listPaperNoteBatches,
@@ -23,6 +29,20 @@ export default function PaperNotesInboxPage() {
   });
   const active = (batches.data ?? []).filter((batch) => batch.status !== "imported" && batch.status !== "archived");
   const completed = (batches.data ?? []).filter((batch) => batch.status === "imported" || batch.status === "archived");
+
+  async function removeBatch(batchId: string) {
+    if (deletingBatchId) return;
+    setDeletingBatchId(batchId);
+    setDeleteError("");
+    try {
+      await deletePaperNoteBatch(batchId);
+      await batches.refetch();
+    } catch (caught) {
+      setDeleteError(caught instanceof Error ? caught.message : "Could not delete this paper-note batch.");
+    } finally {
+      setDeletingBatchId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-5xl pb-12">
@@ -48,6 +68,7 @@ export default function PaperNotesInboxPage() {
           <h2 className="text-xl font-bold text-slate-900">In review</h2>
           {batches.isFetching ? <span className="text-xs font-semibold text-slate-500">Updating…</span> : null}
         </div>
+        {deleteError ? <p className="mt-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-800" role="alert">{deleteError}</p> : null}
         {batches.isError ? (
           <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-4">
             <p className="text-sm text-rose-800">Could not load paper-note imports.</p>
@@ -55,7 +76,14 @@ export default function PaperNotesInboxPage() {
           </div>
         ) : active.length ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            {active.map((batch) => <PaperNoteBatchCard batch={batch} key={batch.id} />)}
+            {active.map((batch) => (
+              <PaperNoteBatchCard
+                batch={batch}
+                deleting={deletingBatchId === batch.id}
+                key={batch.id}
+                onDelete={removeBatch}
+              />
+            ))}
           </div>
         ) : !batches.isLoading ? (
           <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">No paper-note batches are waiting for review.</p>
