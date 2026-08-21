@@ -24,9 +24,6 @@ export function ProfileMemberPicker({
   function membershipLabel(candidate: Candidate) {
     if (candidate.eventFamilyId === familyId) return "Already in this family";
     if (candidate.eventFamilyId) return "Already in another event family";
-    if (candidate.parentContext?.kind === "organization_group") {
-      return `Location of ${candidate.parentContext.name}`;
-    }
     return null;
   }
 
