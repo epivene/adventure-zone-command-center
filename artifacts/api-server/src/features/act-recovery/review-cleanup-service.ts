@@ -1,13 +1,15 @@
 import { sql } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
-import { shouldDropLinkedToReview } from "./review-cleanup";
+import { explicitLinkedTarget, shouldDropLinkedToReview, type ExplicitLinkedTarget } from "./review-cleanup";
 
 type DrizzleDatabase = typeof applicationDatabase;
 type Row = Record<string, unknown>;
+type Executor = Pick<DrizzleDatabase, "execute">;
 
 export type ActRecoveryCleanupRetrySummary = {
   reviewed: number;
+  autoAssignedLinkedTo: number;
   droppedLinkedTo: number;
   retried: number;
 };
@@ -28,6 +30,57 @@ function object(value: unknown): Record<string, unknown> {
     : {};
 }
 
+async function uniqueActLinkedTarget(
+  executor: Executor,
+  clue: ExplicitLinkedTarget,
+): Promise<string | null> {
+  const result = clue.entityType === "organization"
+    ? rows(await executor.execute(sql`
+        select organization.id
+        from organizations organization
+        where lower(btrim(organization.name)) = lower(btrim(${clue.name}))
+          and (
+            organization.act_record_id is not null
+            or exists (
+              select 1 from act_external_links link
+              where link.entity_type = 'organization' and link.entity_id = organization.id
+            )
+          )
+        order by organization.id
+        limit 2
+      `))
+    : clue.entityType === "contact"
+      ? rows(await executor.execute(sql`
+          select contact.id
+          from contacts contact
+          where lower(btrim(concat_ws(' ', contact.first_name, contact.last_name))) = lower(btrim(${clue.name}))
+            and (
+              contact.act_record_id is not null
+              or exists (
+                select 1 from act_external_links link
+                where link.entity_type = 'contact' and link.entity_id = contact.id
+              )
+            )
+          order by contact.id
+          limit 2
+        `))
+      : rows(await executor.execute(sql`
+          select booking.id
+          from bookings booking
+          where lower(btrim(booking.name)) = lower(btrim(${clue.name}))
+            and (
+              booking.act_record_id is not null
+              or exists (
+                select 1 from act_external_links link
+                where link.entity_type = 'booking' and link.entity_id = booking.id
+              )
+            )
+          order by booking.id
+          limit 2
+        `));
+  return result.length === 1 ? text(result[0]?.id) : null;
+}
+
 export class ActRecoveryReviewCleanupService {
   constructor(private readonly database: DrizzleDatabase) {}
 
@@ -41,7 +94,7 @@ export class ActRecoveryReviewCleanupService {
         for update
       `));
       const runId = text(runRows[0]?.id);
-      if (!runId) return { reviewed: 0, droppedLinkedTo: 0, retried: 0 };
+      if (!runId) return { reviewed: 0, autoAssignedLinkedTo: 0, droppedLinkedTo: 0, retried: 0 };
 
       const reviewRows = rows(await transaction.execute(sql`
         select item.id as "itemId", item.source_record_id as "sourceRecordId",
@@ -54,6 +107,7 @@ export class ActRecoveryReviewCleanupService {
         for update of item
       `));
 
+      let autoAssignedLinkedTo = 0;
       let droppedLinkedTo = 0;
       let retried = 0;
 
@@ -63,6 +117,31 @@ export class ActRecoveryReviewCleanupService {
         const sourceVersionId = text(row.sourceVersionId);
         const streamType = text(row.streamType);
         const rawSnapshot = object(row.rawSnapshot);
+        const linkedTarget = explicitLinkedTarget({ streamType, rawSnapshot });
+
+        if (linkedTarget) {
+          const targetEntityId = await uniqueActLinkedTarget(transaction as unknown as Executor, linkedTarget);
+          if (targetEntityId) {
+            await transaction.execute(sql`
+              insert into act_archive_recovery_decisions
+                (run_id, source_record_id, source_version_id, decision,
+                 target_entity_type, target_entity_id, decided_by)
+              values (${runId}, ${sourceRecordId}, ${sourceVersionId}, 'assign_parent',
+                ${linkedTarget.entityType}, ${targetEntityId}, ${decidedBy})
+            `);
+            await transaction.execute(sql`
+              update act_archive_recovery_items
+              set state = 'pending',
+                target_summary = ${JSON.stringify({ reason: "explicit_linked_to_autoresolve", linkedName: linkedTarget.name })}::jsonb,
+                last_error_code = null, retry_after = null, completed_at = null,
+                lease_owner = null, lease_token = null, lease_expires_at = null, updated_at = now()
+              where id = ${itemId}
+            `);
+            autoAssignedLinkedTo += 1;
+            retried += 1;
+            continue;
+          }
+        }
 
         if (shouldDropLinkedToReview({ streamType, rawSnapshot })) {
           await transaction.execute(sql`
@@ -102,6 +181,7 @@ export class ActRecoveryReviewCleanupService {
 
       return {
         reviewed: reviewRows.length,
+        autoAssignedLinkedTo,
         droppedLinkedTo,
         retried,
       };
