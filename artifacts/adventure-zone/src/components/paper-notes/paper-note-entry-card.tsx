@@ -8,6 +8,7 @@ import { PaperNoteEventDateReview } from "./paper-note-event-date-review";
 import { PaperNoteGeneralNotesEditor } from "./paper-note-general-notes-editor";
 import { PaperNoteOrganizationPhonesEditor } from "./paper-note-organization-phones-editor";
 import { PaperNoteSourceViewer } from "./paper-note-source-viewer";
+import { findUnambiguousSavedContact } from "@/features/paper-notes/paper-note-contact-autolink";
 import type {
   PaperNoteMatch,
   PaperNoteReviewDraft,
@@ -147,6 +148,22 @@ export function PaperNoteEntryCard({
       : contact);
   }
 
+  function linkMatchingContacts(current: PaperNoteReviewDraft, match: PaperNoteMatch) {
+    return current.contacts.map((contact) => {
+      const saved = findUnambiguousSavedContact(contact, match.contacts);
+      if (saved) {
+        return {
+          ...contact,
+          mode: "existing_contact" as const,
+          selectedContactId: saved.id,
+        };
+      }
+      return contact.mode === "existing_contact"
+        ? { ...contact, mode: "new_contact" as const, selectedContactId: null }
+        : contact;
+    });
+  }
+
   function rememberMatch(match: PaperNoteMatch) {
     setManualMatches((current) => current.some((candidate) =>
       candidate.organizationId === match.organizationId
@@ -163,7 +180,7 @@ export function PaperNoteEntryCard({
         organizationId: match.organizationId,
         organizationLocationId: match.organizationLocationId,
       },
-      contacts: resetExistingContactChoices(current),
+      contacts: linkMatchingContacts(current, match),
       conflicts: {},
     }));
   }
@@ -184,7 +201,7 @@ export function PaperNoteEntryCard({
           postalCode: null,
         },
       },
-      contacts: resetExistingContactChoices(current),
+      contacts: linkMatchingContacts(current, match),
       conflicts: {},
     }));
   }
