@@ -13,10 +13,8 @@ import {
   PaperNoteManualProfileSearchService,
   PostgresPaperNoteManualProfileSearchRepository,
 } from "@/features/paper-notes/paper-note-manual-profile-search";
-import {
-  PaperNoteMatchingService,
-  PostgresPaperNoteMatchRepository,
-} from "@/features/paper-notes/paper-note-matching-service";
+import { PaperNoteMatchingService } from "@/features/paper-notes/paper-note-matching-service";
+import { SafePostgresPaperNoteMatchRepository } from "@/features/paper-notes/paper-note-safe-matching-repository";
 import { createPaperNoteObjectStorage } from "@/features/paper-notes/paper-note-object-storage";
 import { PaperNotePhoneService } from "@/features/paper-notes/paper-note-phone-service";
 import {
@@ -69,7 +67,7 @@ const healthService = new PaperNoteHealthService(
 );
 const reviewService = new PaperNoteReviewService(new PaperNoteReviewRepository(db));
 const matchingService = new PaperNoteMatchingService(
-  new PostgresPaperNoteMatchRepository(db),
+  new SafePostgresPaperNoteMatchRepository(db),
 );
 const manualProfileSearchService = new PaperNoteManualProfileSearchService(
   new PostgresPaperNoteManualProfileSearchRepository(db),
