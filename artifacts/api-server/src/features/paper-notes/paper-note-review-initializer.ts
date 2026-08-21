@@ -1,4 +1,8 @@
 import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
+import {
+  paperNoteSuggestsPotentialBooking,
+  POTENTIAL_BOOKING_NEXT_YEAR_NOTE,
+} from "./paper-note-future-action-reminder";
 import type {
   PaperNoteDestinationChoice,
   PaperNoteReviewedContact,
@@ -66,6 +70,17 @@ export function initializePaperNoteReview(
   const contacts = extraction.contacts
     .filter(hasMeaningfulContactValue)
     .map(reviewedContact);
+  const generalNotes = [...extraction.generalNotes];
+  if (paperNoteSuggestsPotentialBooking({
+    transcription: extraction.transcription,
+    oldReminder: extraction.oldReminder,
+    outcome: extraction.activity.outcome,
+    summary: extraction.activity.summary,
+    generalNotes,
+  }) && !generalNotes.some((note) => note.trim() === POTENTIAL_BOOKING_NEXT_YEAR_NOTE)) {
+    generalNotes.push(POTENTIAL_BOOKING_NEXT_YEAR_NOTE);
+  }
+
   return {
     event: {
       name: extraction.event.name ?? "",
@@ -88,7 +103,7 @@ export function initializePaperNoteReview(
       reviewedPhone(phone, `organization-phone-${index}`)),
     oldReminder: extraction.oldReminder ?? "",
     starredOnPaper: extraction.starredOnPaper,
-    generalNotes: [...extraction.generalNotes],
+    generalNotes,
     destination: null,
     conflicts: {},
     currentFollowUp: {
