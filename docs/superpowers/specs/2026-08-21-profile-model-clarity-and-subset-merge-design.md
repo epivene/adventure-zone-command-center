@@ -1,7 +1,7 @@
 # Profile Model Clarity and Subset Merge Design
 
 ## Goal
-Make the profile/family workflow understandable in user-facing language and allow true duplicate profiles to merge even when they are part of a larger related-event/location candidate group.
+Make the profile/family workflow understandable in user-facing language, allow true duplicate profiles to merge even when they are part of a larger related-event/location candidate group, and keep already-resolved relationships out of duplicate review.
 
 ## User-facing model
 The UI should expose only these concepts:
@@ -24,6 +24,17 @@ Example:
 Selecting only the two Fishtail records and choosing Merge should be allowed when the selected records are compatible as duplicates. Idaho Falls remains untouched and may later be grouped with the surviving Fishtail Profile in an Event Family.
 
 A merge remains blocked when the selected records themselves carry evidence that they are distinct locations/related records rather than duplicates.
+
+## Resolved relationships leave duplicate review
+The duplicate screen is an unresolved-cleanup queue. Records should not keep resurfacing after the user has intentionally resolved their relationship.
+
+Exclude from duplicate review:
+- profiles already retired/merged into another Profile;
+- profiles already grouped in an Event Family;
+- profiles already consolidated as Locations inside another Profile;
+- explicitly reviewed relationship groups that were resolved as not related.
+
+If every member of a discovered candidate group is already resolved, the group disappears. If only some members are resolved, the duplicate review may show only the unresolved live remainder when at least two unresolved profiles remain.
 
 ## Merge safety
 The merge guard will re-evaluate the selected subset using current locked data. A current broader family proposal is not, by itself, a merge conflict.
