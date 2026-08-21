@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import { apiGet } from "@/lib/auth-token";
 import type { OrganizationListPage } from "@/features/organizations/organization-repository";
+import { eventFamilyCandidateStatus } from "./profile-member-eligibility";
 
 type Candidate = OrganizationListPage["records"][number];
 
@@ -21,10 +22,8 @@ export function ProfileMemberPicker({
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
-  function membershipLabel(candidate: Candidate) {
-    if (candidate.eventFamilyId === familyId) return "Already in this family";
-    if (candidate.eventFamilyId) return "Already in another event family";
-    return null;
+  function status(candidate: Candidate) {
+    return eventFamilyCandidateStatus(candidate, familyId);
   }
 
   async function search() {
@@ -61,7 +60,7 @@ export function ProfileMemberPicker({
   }
 
   function toggleCandidate(candidate: Candidate) {
-    if (membershipLabel(candidate)) return;
+    if (status(candidate).blocked) return;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(candidate.id)) next.delete(candidate.id);
@@ -117,11 +116,11 @@ export function ProfileMemberPicker({
           {results.length ? (
             <ul className="grid gap-2">
               {results.map((candidate) => {
-                const label = membershipLabel(candidate);
+                const candidateStatus = status(candidate);
                 const selected = selectedIds.has(candidate.id);
                 return (
                   <li key={candidate.id}>
-                    <label className={label
+                    <label className={candidateStatus.blocked
                       ? "flex cursor-not-allowed items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 opacity-60"
                       : selected
                         ? "flex cursor-pointer items-start gap-3 rounded-lg border border-orange-300 bg-orange-50 px-3 py-3"
@@ -130,7 +129,7 @@ export function ProfileMemberPicker({
                       <input
                         checked={selected}
                         className="mt-1 size-5 shrink-0"
-                        disabled={disabled || Boolean(label)}
+                        disabled={disabled || candidateStatus.blocked}
                         onChange={() => toggleCandidate(candidate)}
                         type="checkbox"
                       />
@@ -139,7 +138,7 @@ export function ProfileMemberPicker({
                         <span className="text-sm text-slate-600">
                           {[candidate.city, candidate.region].filter(Boolean).join(", ") || "Location not set"}
                         </span>
-                        {label ? <span className="text-xs font-semibold text-amber-700">{label}</span> : null}
+                        {candidateStatus.label ? <span className="text-xs font-semibold text-amber-700">{candidateStatus.label}</span> : null}
                       </span>
                     </label>
                   </li>
