@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./paper-note-page-create-client", () => ({
+  createPaperNotePageForYear: vi.fn(),
+}));
 vi.mock("./paper-note-client", () => ({
-  createPaperNotePage: vi.fn(),
   uploadPaperNotePageImage: vi.fn(),
 }));
 
-import { createPaperNotePage, uploadPaperNotePageImage } from "./paper-note-client";
+import { uploadPaperNotePageImage } from "./paper-note-client";
+import { createPaperNotePageForYear } from "./paper-note-page-create-client";
 import { uploadPaperNoteFiles } from "./paper-note-upload-queue";
 
-const createPage = vi.mocked(createPaperNotePage);
+const createPage = vi.mocked(createPaperNotePageForYear);
 const uploadImage = vi.mocked(uploadPaperNotePageImage);
 
 function file(name: string, type = "image/png") {

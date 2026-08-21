@@ -3,9 +3,9 @@ import { Camera, ChevronDown, ChevronUp, FileImage, RotateCcw, Trash2 } from "lu
 
 import {
   createPaperNoteBatch,
-  createPaperNotePage,
   uploadPaperNotePageImage,
 } from "@/features/paper-notes/paper-note-client";
+import { createPaperNotePageForYear } from "@/features/paper-notes/paper-note-page-create-client";
 import { uploadPaperNoteFiles } from "@/features/paper-notes/paper-note-upload-queue";
 import type { PaperNoteUploadResult } from "@/features/paper-notes/paper-note-types";
 
@@ -17,6 +17,7 @@ const acceptedInput = "image/jpeg,image/png,image/webp";
 
 export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: string): void }) {
   const [name, setName] = useState("");
+  const [paperYear, setPaperYear] = useState(() => new Date().getFullYear());
   const [files, setFiles] = useState<LocalFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -27,6 +28,7 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
 
   const allUploaded = results.length === files.length && results.length > 0 && results.every((result) => result.ok);
   const totalBytes = useMemo(() => files.reduce((sum, item) => sum + item.file.size, 0), [files]);
+  const validPaperYear = Number.isInteger(paperYear) && paperYear >= 1900 && paperYear <= 2100;
 
   function addFiles(list: FileList | null) {
     if (!list || busy || batchId) return;
@@ -52,7 +54,7 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
   }
 
   async function uploadAll() {
-    if (!files.length || busy) return;
+    if (!files.length || busy || !validPaperYear) return;
     setBusy(true);
     setMessage("");
     try {
@@ -60,6 +62,7 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
       if (!batchId) setBatchId(created.batchId);
       const uploadResults = await uploadPaperNoteFiles({
         batchId: created.batchId,
+        paperYear,
         files: files.map((item) => item.file),
         onProgress(update) {
           if (update.state === "creating_page") setProgressText(`Preparing ${update.index + 1} of ${update.total}…`);
@@ -85,18 +88,19 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
   }
 
   async function retryFailure(failure: FailedUpload) {
-    if (!batchId || busy) return;
+    if (!batchId || busy || !validPaperYear) return;
     const local = files[failure.index];
     if (!local) return;
     setBusy(true);
     try {
       let pageId = failure.pageId;
       if (!pageId) {
-        const created = await createPaperNotePage({
+        const created = await createPaperNotePageForYear({
           batchId,
           filename: local.file.name,
           mimeType: local.file.type,
           sizeBytes: local.file.size,
+          paperYear,
         });
         pageId = created.pageId;
       }
@@ -126,17 +130,36 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
         </div>
       </div>
 
-      <label className="mt-4 grid gap-1 text-sm font-semibold text-slate-700">
-        Batch name <span className="font-normal text-slate-500">(optional)</span>
-        <input
-          className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
-          disabled={busy || Boolean(batchId)}
-          maxLength={160}
-          onChange={(event) => setName(event.target.value)}
-          placeholder="Old Monday call lists"
-          value={name}
-        />
-      </label>
+      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_10rem]">
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          Batch name <span className="font-normal text-slate-500">(optional)</span>
+          <input
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+            disabled={busy || Boolean(batchId)}
+            maxLength={160}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Old Monday call lists"
+            value={name}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold text-slate-700">
+          Paper year
+          <input
+            aria-label="Paper year"
+            className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+            disabled={busy || Boolean(batchId)}
+            max={2100}
+            min={1900}
+            onChange={(event) => setPaperYear(Number(event.target.value))}
+            type="number"
+            value={paperYear}
+          />
+        </label>
+      </div>
+      <p className="mt-2 text-xs text-slate-600">
+        Used when a page only says a month and day. For example, June 3 on a 2026 batch becomes June 3, 2026 as the last-contact date.
+      </p>
+      {!validPaperYear ? <p className="mt-2 text-sm font-semibold text-rose-700">Choose a paper year between 1900 and 2100.</p> : null}
 
       {!batchId ? (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -205,7 +228,7 @@ export function PaperNoteUploadPanel({ onUploaded }: { onUploaded(batchId: strin
       {!allUploaded && !batchId ? (
         <button
           className="mt-4 min-h-12 w-full rounded-xl bg-orange-600 px-4 py-3 font-bold text-white hover:bg-orange-700 disabled:opacity-50"
-          disabled={!files.length || busy}
+          disabled={!files.length || busy || !validPaperYear}
           onClick={() => void uploadAll()}
           type="button"
         >

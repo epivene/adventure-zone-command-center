@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./paper-note-page-year-store", () => ({
   getPaperNotePageYear: vi.fn(async () => 2026),
+  setPaperNotePageYear: vi.fn(async () => undefined),
 }));
 
 import {

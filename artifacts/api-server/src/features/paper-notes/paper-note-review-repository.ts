@@ -53,37 +53,36 @@ function applyRecoveredFutureActionReminder(
   review: PaperNoteReviewDraft,
   savedActivity: Record<string, unknown>,
 ): PaperNoteReviewDraft {
-  if (extractionPayload.oldReminder?.trim() || review.oldReminder.trim()) return review;
-
-  const recovered = recoverPaperNoteFutureActionReminder(extractionPayload.transcription);
+  const existingReminder = extractionPayload.oldReminder?.trim() || review.oldReminder.trim();
+  const recovered = recoverPaperNoteFutureActionReminder(
+    existingReminder || extractionPayload.transcription,
+  );
   if (!recovered) return review;
 
-  const extractionHasHistoricalEvidence = Boolean(
-    extractionPayload.activity.occurredOn
-    || extractionPayload.activity.outcome?.trim()
+  const extractionHasAlternateMethodEvidence = Boolean(
+    extractionPayload.activity.outcome?.trim()
     || extractionPayload.activity.summary?.trim(),
   );
-  const savedHasHistoricalEvidence = Boolean(
-    nonBlank(savedActivity.occurredOn)
-    || nonBlank(savedActivity.outcome)
+  const savedHasAlternateMethodEvidence = Boolean(
+    nonBlank(savedActivity.outcome)
     || nonBlank(savedActivity.summary),
   );
   const savedMethod = typeof savedActivity.method === "string"
     ? savedActivity.method
     : review.activity.method;
-  const shouldDemoteMethod = Boolean(
+  const shouldUseCallMethod = Boolean(
     recovered.method
     && recovered.method === extractionPayload.activity.method
     && savedMethod === extractionPayload.activity.method
-    && !extractionHasHistoricalEvidence
-    && !savedHasHistoricalEvidence,
+    && !extractionHasAlternateMethodEvidence
+    && !savedHasAlternateMethodEvidence,
   );
 
   return {
     ...review,
-    oldReminder: recovered.text,
-    activity: shouldDemoteMethod
-      ? { ...review.activity, method: "unknown" }
+    oldReminder: review.oldReminder.trim() || extractionPayload.oldReminder?.trim() || recovered.text,
+    activity: shouldUseCallMethod
+      ? { ...review.activity, method: "call" }
       : review.activity,
   };
 }

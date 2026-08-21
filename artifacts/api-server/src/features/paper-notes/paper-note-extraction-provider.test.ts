@@ -51,6 +51,8 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("old reminder");
     expect(call?.prompt).toContain("star");
     expect(call?.prompt).toContain("crossed-out");
+    expect(call?.prompt).toContain("June 3");
+    expect(call?.prompt).toContain("keep that month/day text in pageHeading");
   });
 
   it("uses valid enum examples and keeps communication dates separate from event dates", async () => {
@@ -79,6 +81,8 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     expect(call?.prompt).toContain("belongs in oldReminder");
     expect(call?.prompt).toContain("Do not set activity.method from a future instruction");
     expect(call?.prompt).toContain("already happened");
+    expect(call?.prompt).toContain("These paper sheets are primarily phone-call records");
+    expect(call?.prompt).toContain("default activity.method to call");
   });
 
   it("accepts harmless wrapper text around one complete JSON object", async () => {

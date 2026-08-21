@@ -8,6 +8,7 @@ import {
   PaperNoteIntakeRepository,
   PaperNoteRepositoryError,
 } from "./paper-note-intake-repository";
+import { setPaperNotePageYear } from "./paper-note-page-year-store";
 import type { PaperNoteBatchStatus } from "./paper-note-types";
 
 export type PaperNoteIntakeErrorCode =
@@ -105,10 +106,16 @@ export class PaperNoteIntakeService {
       throw new PaperNoteIntakeError("INVALID_IMAGE", "Choose the year these paper call sheets were used.");
     }
     try {
-      return await this.repository.createUploadingPage({
-        ...input,
+      const pageId = await this.repository.createUploadingPage({
+        createdBy: input.createdBy,
+        batchId: input.batchId,
         filename: input.filename.trim() || "paper-note-image",
+        mimeType: input.mimeType,
+        sizeBytes: input.sizeBytes,
+        now: input.now,
       });
+      await setPaperNotePageYear(pageId, input.paperYear);
+      return pageId;
     } catch (error) {
       translate(error);
     }
