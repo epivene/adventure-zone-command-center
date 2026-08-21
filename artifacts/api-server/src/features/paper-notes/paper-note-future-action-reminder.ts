@@ -13,10 +13,12 @@ function cleanClause(value: string) {
 
 function actionMethod(value: string): RecoveredPaperNoteFutureAction["method"] | undefined {
   const lower = value.toLowerCase();
-  if (/^(?:send\s+(?:an?\s+)?e-?mail\b|email\b)/.test(lower)) return "email";
-  if (/^(?:send\s+(?:a\s+)?text\b|text\b)/.test(lower)) return "text";
-  if (/^(?:call\s+back\b|call\b(?!\s+of\b)|phone\b)/.test(lower)) return "call";
-  if (/^mail\b/.test(lower)) return "mail";
+  if (/^send\s+(?:an?\s+)?e-?mail\b/.test(lower)) return "email";
+  if (/^email(?:$|\s+(?!address\b))/.test(lower)) return "email";
+  if (/^send\s+(?:a\s+)?text\b/.test(lower)) return "text";
+  if (/^text(?:$|\s+(?!number\b))/.test(lower)) return "text";
+  if (/^(?:call\s+back\b|call\b(?!\s+of\b))/.test(lower)) return "call";
+  if (/^mail(?:$|\s+(?!address\b))/.test(lower)) return "mail";
   if (/^(?:follow\s*up\b|check\s+back\b|reach\s+out\b)/.test(lower)) return null;
   if (/^send\s+(?:the\s+)?(?:packet|brochure|flyer|letter|contract|proposal|info(?:rmation)?|materials?)\b/.test(lower)) return null;
   return undefined;
