@@ -68,11 +68,18 @@ export function buildPaperNoteCandidateQuery(input: CandidateQueryInput): SQL {
     or exists (select 1 from organization_contacts oc join contacts c on c.id = oc.contact_id where oc.organization_id = org.id and oc.active = true and lower(trim(concat_ws(' ', c.first_name, c.last_name))) = any(${contactNameSql}))
   ) as "contactNameMatch"` : sql`false as "contactNameMatch"`;
 
+  const exactNameExpression = sql`lower(regexp_replace(trim(org.name), '[^a-zA-Z0-9]+', ' ', 'g')) = ${input.eventNameNormalized}`;
   const searchClauses: SQL[] = [];
-  if (input.eventNameNormalized) searchClauses.push(sql`lower(regexp_replace(trim(org.name), '[^a-zA-Z0-9]+', ' ', 'g')) = ${input.eventNameNormalized}`);
+  if (input.eventNameNormalized) searchClauses.push(exactNameExpression);
   if (input.token) searchClauses.push(sql`lower(org.name) like ${`%${input.token}%`}`);
-  if (input.city) searchClauses.push(sql`lower(coalesce(org.city, '')) = lower(${input.city})`);
-  if (input.region) searchClauses.push(sql`upper(coalesce(org.region, '')) = ${input.region}`);
+  if (input.city && input.region) {
+    searchClauses.push(sql`(
+      lower(coalesce(org.city, '')) = lower(${input.city})
+      and upper(coalesce(org.region, '')) = ${input.region}
+    )`);
+  } else if (input.city) {
+    searchClauses.push(sql`lower(coalesce(org.city, '')) = lower(${input.city})`);
+  }
   if (emailSql) searchClauses.push(sql`(
     exists (select 1 from contacts c where c.organization_id = org.id and lower(coalesce(c.email, '')) = any(${emailSql}))
     or exists (select 1 from organization_contacts oc join contacts c on c.id = oc.contact_id where oc.organization_id = org.id and oc.active = true and lower(coalesce(c.email, '')) = any(${emailSql}))
@@ -86,8 +93,14 @@ export function buildPaperNoteCandidateQuery(input: CandidateQueryInput): SQL {
   if (input.city || input.venue) searchClauses.push(sql`exists (
     select 1 from organization_locations loc
     where loc.organization_id = org.id
-      and (${input.city ? sql`lower(coalesce(loc.city, '')) = lower(${input.city})` : sql`false`}
-        or ${input.venue ? sql`lower(trim(coalesce(loc.venue_name, ''))) = lower(trim(${input.venue}))` : sql`false`})
+      and (
+        ${input.city && input.region
+          ? sql`(lower(coalesce(loc.city, '')) = lower(${input.city}) and upper(coalesce(loc.region, '')) = ${input.region})`
+          : input.city
+            ? sql`lower(coalesce(loc.city, '')) = lower(${input.city})`
+            : sql`false`}
+        or ${input.venue ? sql`lower(trim(coalesce(loc.venue_name, ''))) = lower(trim(${input.venue}))` : sql`false`}
+      )
   )`);
 
   const whereMatches = searchClauses.length ? sql.join(searchClauses, sql` or `) : sql`false`;
@@ -108,7 +121,7 @@ export function buildPaperNoteCandidateQuery(input: CandidateQueryInput): SQL {
       ${exactPhone},
       ${compatibleExtension},
       ${exactEmail},
-      (${input.eventNameNormalized} <> '' and lower(regexp_replace(trim(org.name), '[^a-zA-Z0-9]+', ' ', 'g')) = ${input.eventNameNormalized}) as "exactName",
+      (${input.eventNameNormalized} <> '' and ${exactNameExpression}) as "exactName",
       (
         (${input.city} = '' or lower(coalesce(org.city, '')) = lower(${input.city}) or exists (select 1 from organization_locations loc where loc.organization_id = org.id and lower(coalesce(loc.city, '')) = lower(${input.city})))
         and (${input.region} = '' or upper(coalesce(org.region, '')) = ${input.region} or exists (select 1 from organization_locations loc where loc.organization_id = org.id and upper(coalesce(loc.region, '')) = ${input.region}))
@@ -118,7 +131,9 @@ export function buildPaperNoteCandidateQuery(input: CandidateQueryInput): SQL {
     from organizations org
     where org.consolidated_into_id is null
       and (${whereMatches})
-    order by org.name asc
+    order by
+      case when ${input.eventNameNormalized} <> '' and ${exactNameExpression} then 0 else 1 end,
+      org.name asc
     limit 40
   `;
 }
