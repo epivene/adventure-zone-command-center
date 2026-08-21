@@ -8,6 +8,7 @@ import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
 import { OfficeCoordinatorAttention, type OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
+import { OfficeUpdateHistory } from "@/components/office-admin/office-update-history";
 import { apiGet } from "@/lib/auth-token";
 
 const primaryNavigation = [
@@ -82,6 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-h-screen px-4 py-5 pb-28 md:px-8 md:py-7 md:pb-8">
         {location === "/today" ? <div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div> : null}
         {children}
+        {location.startsWith("/office-coordinator") ? <OfficeUpdateHistory /> : null}
       </main>
 
       {!hideAssistantLauncher ? <AssistantLauncher /> : null}
