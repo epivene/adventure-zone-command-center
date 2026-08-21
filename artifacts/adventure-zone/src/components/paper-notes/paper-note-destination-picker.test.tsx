@@ -73,6 +73,32 @@ describe("PaperNoteDestinationPicker", () => {
     expect(screen.getByText("Suggested matches")).toBeInTheDocument();
   });
 
+  it("still shows the matched profile after reload when only the saved location id differs", () => {
+    render(
+      <PaperNoteDestinationPicker
+        review={{
+          ...review,
+          destination: {
+            mode: "existing_profile",
+            organizationId: suggestedMatch.organizationId,
+            organizationLocationId: "20000000-0000-4000-8000-000000000001",
+          },
+        } as any}
+        matches={[suggestedMatch]}
+        onChooseExisting={vi.fn()}
+        onChooseNewLocation={vi.fn()}
+        onChooseNewProfile={vi.fn()}
+        onNewLocationChange={vi.fn()}
+        onNewProfileFamilyChange={vi.fn()}
+        onRememberMatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("County Fair")).toBeInTheDocument();
+    expect(screen.getByText(/same phone number/i)).toBeInTheDocument();
+    expect(screen.queryByText("Existing CRM profile")).not.toBeInTheDocument();
+  });
+
   it("shows automatic evidence matches separately from manual search results", async () => {
     render(
       <PaperNoteDestinationPicker
