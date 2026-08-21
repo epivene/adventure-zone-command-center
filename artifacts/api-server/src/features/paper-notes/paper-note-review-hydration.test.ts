@@ -63,7 +63,7 @@ describe("hydratePaperNoteReview", () => {
     );
 
     expect(review.oldReminder).toBe("Send email");
-    expect(review.activity.method).toBe("unknown");
+    expect(review.activity.method).toBe("call");
   });
 
   it("does not turn wording for a completed email into a future reminder", () => {
