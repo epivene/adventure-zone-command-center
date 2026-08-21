@@ -11,6 +11,7 @@ import {
   skipPaperNoteEntry,
   unapprovePaperNoteEntry,
 } from "@/features/paper-notes/paper-note-client";
+import { applyAutomaticPaperNoteProfileMatch } from "@/features/paper-notes/paper-note-profile-autolink";
 import type {
   PaperNoteReviewDraft,
   PaperNoteReviewEntryDetails,
@@ -28,6 +29,7 @@ export function PaperNoteEntryPanel({
   const saveSequence = useRef(0);
   const versionRef = useRef<number | null>(null);
   const latestSaved = useRef<PaperNoteReviewEntryDetails | null>(null);
+  const autoLinkAttemptedForEntry = useRef<string | null>(null);
 
   const entryQuery = useQuery({
     queryKey: ["paper-notes", "entry-review", entryId],
@@ -43,6 +45,7 @@ export function PaperNoteEntryPanel({
     latestSaved.current = entryQuery.data ?? null;
     saveTail.current = Promise.resolve();
     saveSequence.current = 0;
+    autoLinkAttemptedForEntry.current = null;
   }, [entryId]);
 
   useEffect(() => {
@@ -102,6 +105,23 @@ export function PaperNoteEntryPanel({
     saveTail.current = execution.then(() => undefined, () => undefined);
     return result;
   }, [entryId, onChanged, queryClient]);
+
+  useEffect(() => {
+    const entry = entryQuery.data;
+    const matches = matchesQuery.data;
+    if (!entry || !matches || matchesQuery.isFetching) return;
+    if (entry.state !== "needs_review" && entry.state !== "ready") return;
+    if (entry.review.destination) return;
+    if (autoLinkAttemptedForEntry.current === entryId) return;
+
+    const linkedReview = applyAutomaticPaperNoteProfileMatch(entry.review, matches);
+    if (!linkedReview) return;
+
+    autoLinkAttemptedForEntry.current = entryId;
+    void save(linkedReview, entry.reviewVersion).catch(() => {
+      autoLinkAttemptedForEntry.current = null;
+    });
+  }, [entryId, entryQuery.data, matchesQuery.data, matchesQuery.isFetching, save]);
 
   const approve = useCallback(
     (expectedVersion: number) => approvePaperNoteEntry(
