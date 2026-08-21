@@ -3,22 +3,22 @@ import type {
   PaperNoteSavedContact,
 } from "./paper-note-review-types";
 
-function normalizedPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
+function normalizedPhone(value: unknown) {
+  const digits = String(value ?? "").replace(/\D/g, "");
   return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
 }
 
-function normalizedName(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+function normalizedName(value: unknown) {
+  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function scoreSavedContact(paper: PaperNoteReviewedContact, saved: PaperNoteSavedContact) {
   let score = 0;
-  const paperPhones = paper.phones
-    .map((phone) => normalizedPhone(phone.number))
+  const paperPhones = (paper.phones ?? [])
+    .map((phone) => normalizedPhone(phone?.number))
     .filter(Boolean);
-  const savedPhones = saved.phones
-    .map((phone) => normalizedPhone(phone.number))
+  const savedPhones = (saved.phones ?? [])
+    .map((phone) => normalizedPhone(phone?.number))
     .filter(Boolean);
 
   if (paperPhones.some((phone) => savedPhones.includes(phone))) score += 100;
@@ -38,10 +38,10 @@ export function findUnambiguousSavedContact(
   paper: PaperNoteReviewedContact,
   savedContacts: PaperNoteSavedContact[],
 ): PaperNoteSavedContact | null {
-  const ranked = savedContacts
+  const ranked = (savedContacts ?? [])
     .map((saved) => ({ saved, score: scoreSavedContact(paper, saved) }))
     .filter((candidate) => candidate.score >= 60)
-    .sort((left, right) => right.score - left.score || left.saved.name.localeCompare(right.saved.name));
+    .sort((left, right) => right.score - left.score || normalizedName(left.saved.name).localeCompare(normalizedName(right.saved.name)));
 
   const best = ranked[0];
   if (!best) return null;
