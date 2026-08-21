@@ -21,10 +21,10 @@ describe("uploadPaperNoteFiles", () => {
     uploadImage.mockReset();
   });
 
-  it("uploads pages sequentially and reports each saved page", async () => {
+  it("uploads pages sequentially, carrying the selected paper year", async () => {
     const calls: string[] = [];
-    createPage.mockImplementation(async ({ filename }) => {
-      calls.push(`create:${filename}`);
+    createPage.mockImplementation(async ({ filename, paperYear }) => {
+      calls.push(`create:${filename}:${paperYear}`);
       return { pageId: filename === "one.png" ? "10000000-0000-4000-8000-000000000001" : "20000000-0000-4000-8000-000000000001" };
     });
     uploadImage.mockImplementation(async ({ file: current }) => {
@@ -35,14 +35,15 @@ describe("uploadPaperNoteFiles", () => {
 
     const result = await uploadPaperNoteFiles({
       batchId: "30000000-0000-4000-8000-000000000001",
+      paperYear: 2026,
       files: [file("one.png"), file("two.png")],
       onProgress(update) { progress.push(`${update.filename}:${update.state}`); },
     });
 
     expect(calls).toEqual([
-      "create:one.png",
+      "create:one.png:2026",
       "upload:one.png",
-      "create:two.png",
+      "create:two.png:2026",
       "upload:two.png",
     ]);
     expect(result.every((item) => item.ok)).toBe(true);
@@ -53,6 +54,7 @@ describe("uploadPaperNoteFiles", () => {
   it("rejects unsupported files without any API calls", async () => {
     const result = await uploadPaperNoteFiles({
       batchId: "30000000-0000-4000-8000-000000000001",
+      paperYear: 2026,
       files: [file("notes.pdf", "application/pdf")],
       onProgress() {},
     });
@@ -65,6 +67,7 @@ describe("uploadPaperNoteFiles", () => {
     const files = Array.from({ length: 26 }, (_, index) => file(`${index}.png`));
     await expect(uploadPaperNoteFiles({
       batchId: "30000000-0000-4000-8000-000000000001",
+      paperYear: 2026,
       files,
       onProgress() {},
     })).rejects.toThrow("25");

@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PaperNoteExtractionWorker } from "./paper-note-extraction-worker";
+vi.mock("./paper-note-page-year-store", () => ({
+  getPaperNotePageYear: vi.fn(async () => 2026),
+}));
+
+import {
+  applyPaperNoteCallSheetDefaults,
+  PaperNoteExtractionWorker,
+  resolvePaperNotePageLastContactDate,
+} from "./paper-note-extraction-worker";
 import { PaperNoteProviderError } from "./paper-note-extraction-provider";
 import type { PaperNoteExtraction, PaperNotePageSegmentation } from "./paper-note-extraction-schema";
 
@@ -70,6 +78,36 @@ function setup() {
   };
   return { calls, repository, storage, provider };
 }
+
+describe("paper call-sheet defaults", () => {
+  it("resolves a month-day page heading with the selected paper year", () => {
+    expect(resolvePaperNotePageLastContactDate(null, "June 3 -", 2026)).toBe("2026-06-03");
+  });
+
+  it("keeps a full parsed page date when one is already available", () => {
+    expect(resolvePaperNotePageLastContactDate("2026-06-03", "June 3", 2026)).toBe("2026-06-03");
+  });
+
+  it("defaults a call-sheet entry to call when no completed alternate method is stated", () => {
+    const value = extraction("4th of July - Enoch UT - Deborah Lay - 435-890-6349");
+    value.activity.method = "unknown";
+    expect(applyPaperNoteCallSheetDefaults(value).activity.method).toBe("call");
+  });
+
+  it("treats Send email as a future instruction while the historical contact stays a call", () => {
+    const value = extraction("4th of July - Island Park ID - Send email");
+    value.activity.method = "email";
+    value.oldReminder = "Send email";
+    expect(applyPaperNoteCallSheetDefaults(value).activity.method).toBe("call");
+  });
+
+  it("keeps a completed email as email", () => {
+    const value = extraction("4th of July - Emailed Lakeside Lodge - no response");
+    value.activity.method = "email";
+    value.activity.outcome = "No response";
+    expect(applyPaperNoteCallSheetDefaults(value).activity.method).toBe("email");
+  });
+});
 
 describe("PaperNoteExtractionWorker", () => {
   it("processes one page in stages and targets each segmented entry", async () => {

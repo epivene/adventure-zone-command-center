@@ -12,6 +12,7 @@ const pageSchema = z.object({
   filename: z.string().trim().min(1).max(240),
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
   sizeBytes: z.number().int().min(1).max(12 * 1024 * 1024),
+  paperYear: z.number().int().min(1900).max(2100),
 }).strict();
 const pageMutationSchema = z.object({
   orderedPageIds: z.array(uuid).max(25).optional(),
