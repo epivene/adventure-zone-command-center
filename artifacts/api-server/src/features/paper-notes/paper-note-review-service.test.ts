@@ -53,6 +53,34 @@ describe("PaperNoteReviewService", () => {
     expect(result.review.event.region).toBe("UT");
   });
 
+  it("removes an already-saved empty contact instead of making it mandatory", async () => {
+    const saved = {
+      ...draft(),
+      contacts: [{
+        key: "contact-0",
+        mode: "new_contact" as const,
+        selectedContactId: null,
+        name: "",
+        role: null,
+        email: null,
+        primary: true,
+        phones: [],
+      }],
+    };
+    const service = new PaperNoteReviewService({
+      getForReview: vi.fn(async () => ({
+        review: saved,
+        validationIssues: [],
+        state: "needs_review",
+        reviewVersion: 2,
+        extraction: {} as any,
+        approvedAt: null,
+      })),
+    } as any);
+    const result = await service.getEntry("owner", "entry-1");
+    expect(result.review.contacts).toEqual([]);
+  });
+
   it("keeps an unresolved destination in needs_review", async () => {
     const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: input.expectedVersion + 1 }));
     const service = new PaperNoteReviewService({ saveReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
