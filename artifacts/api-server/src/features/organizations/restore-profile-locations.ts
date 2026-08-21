@@ -59,7 +59,7 @@ async function candidateRows(
       on source.id = loc.consolidation_source_org_id
     where loc.organization_id = ${canonicalOrgId}::uuid
       and loc.consolidation_source_org_id is not null
-    order by source.name, loc.id
+    order by source.name desc, loc.id
     ${lock}
   `));
 }
@@ -126,9 +126,6 @@ export async function restoreAllProfileLocations(
         for update of c
       `));
 
-      // Insert the source-side place/person memberships before changing contacts.
-      // The production schema requires the contact's organization_id to have a
-      // corresponding organization_contacts row, so this order is deliberate.
       for (const membership of memberships) {
         await tx.execute(sql`
           insert into organization_contacts
@@ -213,8 +210,6 @@ export async function restoreAllProfileLocations(
           and organization_id = ${canonicalOrgId}::uuid
       `);
 
-      // Location-scoped notes have no organization owner column. Preserve them by
-      // converting each one into an ordinary profile note on the restored source.
       const notes = resultRows<ScopedNoteRow>(await tx.execute(sql`
         select id, body, created_at as "createdAt", updated_at as "updatedAt"
         from scoped_notes
