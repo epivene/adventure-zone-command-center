@@ -28,18 +28,32 @@ function reviewedPhone(
   };
 }
 
+function hasMeaningfulContactValue(contact: PaperNoteExtraction["contacts"][number]) {
+  return Boolean(
+    contact.name?.trim()
+    || contact.role?.trim()
+    || contact.email?.trim()
+    || contact.phones.some((phone) =>
+      phone.number?.trim()
+      || phone.extension?.trim()
+      || phone.label?.trim()
+      || phone.instructions?.trim()),
+  );
+}
+
 function reviewedContact(
   contact: PaperNoteExtraction["contacts"][number],
   index: number,
 ): PaperNoteReviewedContact {
+  const hasPersonIdentity = Boolean(contact.name?.trim() || contact.email?.trim() || contact.role?.trim());
   return {
     key: `contact-${index}`,
-    mode: "new_contact",
+    mode: hasPersonIdentity ? "new_contact" : "note_only",
     selectedContactId: null,
     name: contact.name ?? "",
     role: contact.role,
     email: contact.email,
-    primary: index === 0,
+    primary: hasPersonIdentity && index === 0,
     phones: contact.phones.map((phone, phoneIndex) =>
       reviewedPhone(phone, `contact-${index}-phone-${phoneIndex}`)),
   };
@@ -49,6 +63,9 @@ export function initializePaperNoteReview(
   extraction: PaperNoteExtraction,
 ): PaperNoteReviewDraft {
   const eventDate = extraction.eventDates[0] ?? null;
+  const contacts = extraction.contacts
+    .filter(hasMeaningfulContactValue)
+    .map(reviewedContact);
   return {
     event: {
       name: extraction.event.name ?? "",
@@ -66,7 +83,7 @@ export function initializePaperNoteReview(
       outcome: extraction.activity.outcome ?? "",
       summary: extraction.activity.summary ?? "",
     },
-    contacts: extraction.contacts.map(reviewedContact),
+    contacts,
     organizationPhones: extraction.organizationPhones.map((phone, index) =>
       reviewedPhone(phone, `organization-phone-${index}`)),
     oldReminder: extraction.oldReminder ?? "",

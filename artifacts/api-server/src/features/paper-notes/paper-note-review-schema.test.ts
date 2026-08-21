@@ -60,14 +60,47 @@ describe("paper-note review validation", () => {
     expect(input.oldReminder).toBe("Call Monday");
   });
 
-  it("blocks a new profile without a name", () => {
-    const input = review({ event: { ...review().event, name: "" } });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "event.name", severity: "blocking" }));
+  it("allows a completely sparse new profile with no contact", () => {
+    const input = review({
+      event: {
+        name: "",
+        city: "",
+        region: "",
+        venue: "",
+        eventDateText: "",
+        startsOn: null,
+        endsOn: null,
+        pageYearConfirmed: false,
+      },
+      activity: { occurredOn: null, method: "unknown", outcome: "", summary: "" },
+      contacts: [],
+      organizationPhones: [],
+      oldReminder: "",
+      starredOnPaper: false,
+      generalNotes: [],
+    });
+    expect(validatePaperNoteReview(input).filter((issue) => issue.severity === "blocking")).toEqual([]);
   });
 
-  it("requires confirmation when a structured event date still has an inferred page year", () => {
+  it("allows an extracted contact to be kept history-only without creating a contact", () => {
+    const input = review({
+      contacts: [{
+        key: "contact-0",
+        mode: "note_only",
+        selectedContactId: null,
+        name: "",
+        role: null,
+        email: null,
+        primary: false,
+        phones: [],
+      }],
+    });
+    expect(validatePaperNoteReview(input).filter((issue) => issue.severity === "blocking")).toEqual([]);
+  });
+
+  it("keeps inferred event years reviewable but not mandatory", () => {
     const input = review({ event: { ...review().event, eventDateText: "June 22", startsOn: "2026-06-22", pageYearConfirmed: false } });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "event.pageYearConfirmed", severity: "blocking" }));
+    expect(validatePaperNoteReview(input).some((issue) => issue.fieldPath === "event.pageYearConfirmed" && issue.severity === "blocking")).toBe(false);
   });
 
   it("blocks a current follow-up without a new absolute date", () => {
@@ -153,26 +186,17 @@ describe("paper-note review validation", () => {
     }));
   });
 
-  it("requires explicit name email and phone decisions when linking an existing contact", () => {
+  it("does not require paper-vs-saved contact conflict decisions just to keep the profile linked", () => {
     const input = review({
       destination: { mode: "existing_profile", organizationId: "10000000-0000-4000-8000-000000000001", organizationLocationId: null },
       contacts: [{
         key: "contact-0", mode: "existing_contact", selectedContactId: "50000000-0000-4000-8000-000000000001",
         name: "Tina", role: null, email: "tina@example.test", primary: true,
-        phones: [{ ...structuredPhone("phone-0"), extension: "3115" }],
+        phones: [{ ...structuredPhone("phone-0"), extension: "3115", importAsStructuredValue: false }],
       }],
     });
     const issues = validatePaperNoteReview(input);
-    expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.name", severity: "blocking" }));
-    expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.email", severity: "blocking" }));
-    expect(issues).toContainEqual(expect.objectContaining({ fieldPath: "contacts.0.phones.0", severity: "blocking" }));
-  });
-
-  it("requires an explicit organization-phone decision for an existing profile", () => {
-    const input = review({
-      destination: { mode: "existing_profile", organizationId: "10000000-0000-4000-8000-000000000001", organizationLocationId: null },
-      organizationPhones: [{ ...structuredPhone("office"), number: "208-555-0100", primary: false }],
-    });
-    expect(validatePaperNoteReview(input)).toContainEqual(expect.objectContaining({ fieldPath: "organizationPhones.0", severity: "blocking" }));
+    expect(issues.some((issue) => issue.fieldPath === "contacts.0.name" && issue.severity === "blocking")).toBe(false);
+    expect(issues.some((issue) => issue.fieldPath === "contacts.0.email" && issue.severity === "blocking")).toBe(false);
   });
 });

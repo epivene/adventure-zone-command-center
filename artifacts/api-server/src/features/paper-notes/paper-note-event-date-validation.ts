@@ -8,7 +8,7 @@ export function validatePaperNoteEventDate(event: {
   if (!(event.startsOn || event.endsOn) || event.pageYearConfirmed) return [];
   return [{
     fieldPath: "event.pageYearConfirmed",
-    message: "Confirm the event year against the original paper before approving this entry.",
-    severity: "blocking",
+    message: "The event year came from page context. Confirm it if you want to rely on the structured date; otherwise the paper text can remain historical context only.",
+    severity: "warning",
   }];
 }

@@ -56,15 +56,35 @@ export class PaperNoteReviewServiceError extends Error {
   }
 }
 
-function normalizeReviewRegion(review: PaperNoteReviewDraft): PaperNoteReviewDraft {
-  const normalized = normalizePaperNoteRegion(review.event.region) ?? "";
-  if (normalized === review.event.region) return review;
+function contactHasAnyPaperValue(contact: PaperNoteReviewDraft["contacts"][number]) {
+  return Boolean(
+    contact.name.trim()
+    || contact.role?.trim()
+    || contact.email?.trim()
+    || contact.phones.some((phone) =>
+      phone.number.trim()
+      || phone.extension?.trim()
+      || phone.label?.trim()
+      || phone.instructions?.trim()),
+  );
+}
+
+function contactHasPersonIdentity(contact: PaperNoteReviewDraft["contacts"][number]) {
+  return Boolean(contact.name.trim() || contact.email?.trim() || contact.role?.trim());
+}
+
+function normalizeReview(review: PaperNoteReviewDraft): PaperNoteReviewDraft {
+  const normalizedRegion = normalizePaperNoteRegion(review.event.region) ?? "";
+  const contacts = review.contacts
+    .filter(contactHasAnyPaperValue)
+    .map((contact) => {
+      if (contact.mode !== "new_contact" || contactHasPersonIdentity(contact)) return contact;
+      return { ...contact, mode: "note_only" as const, selectedContactId: null, primary: false };
+    });
   return {
     ...review,
-    event: {
-      ...review.event,
-      region: normalized,
-    },
+    event: { ...review.event, region: normalizedRegion },
+    contacts,
   };
 }
 
@@ -72,7 +92,7 @@ function validateDraft(review: PaperNoteReviewDraft): PaperNoteReviewIssue[] {
   if (!review.destination) {
     return [{
       fieldPath: "destination",
-      message: "Choose where this paper entry belongs before approving it.",
+      message: "Choose an existing profile, create a new profile, or skip this paper entry.",
       severity: "blocking",
     }];
   }
@@ -91,11 +111,7 @@ export class PaperNoteReviewService {
   async getEntry(actorId: string, entryId: string) {
     const current = await this.store.getForReview(actorId, entryId);
     if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
-    return {
-      id: entryId,
-      ...current,
-      review: normalizeReviewRegion(current.review),
-    };
+    return { id: entryId, ...current, review: normalizeReview(current.review) };
   }
 
   async updateEntry(input: {
@@ -105,7 +121,7 @@ export class PaperNoteReviewService {
     review: PaperNoteReviewDraft;
     now: Date;
   }) {
-    const review = normalizeReviewRegion(input.review);
+    const review = normalizeReview(input.review);
     const issues = validateDraft(review);
     const state = issues.some((issue) => issue.severity === "blocking") ? "needs_review" : "ready";
     return this.store.saveReview({ ...input, review, state, validationIssues: issues, approvedAt: null });
@@ -114,7 +130,7 @@ export class PaperNoteReviewService {
   async approveEntry(input: { actorId: string; entryId: string; expectedVersion: number; now: Date }) {
     const current = await this.store.getForReview(input.actorId, input.entryId);
     if (!current) throw new PaperNoteReviewServiceError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
-    const review = normalizeReviewRegion(current.review);
+    const review = normalizeReview(current.review);
     const issues = validateDraft(review);
     if (current.state !== "ready" || issues.some((issue) => issue.severity === "blocking")) {
       throw new PaperNoteReviewServiceError("ENTRY_NOT_READY", "Review the highlighted paper-note fields before approving this entry.");

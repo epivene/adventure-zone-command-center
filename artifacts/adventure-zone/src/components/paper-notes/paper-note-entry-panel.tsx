@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { PaperNoteEntryCard } from "./paper-note-entry-card";
+import { PaperNoteEntryErrorBoundary } from "./paper-note-entry-error-boundary";
 import {
   approvePaperNoteEntry,
   getPaperNoteEntryMatches,
@@ -87,9 +88,7 @@ export function PaperNoteEntryPanel({
 
         queueMicrotask(async () => {
           try {
-            while (sequence < saveSequence.current) {
-              await saveTail.current;
-            }
+            while (sequence < saveSequence.current) await saveTail.current;
             resolveResult(latestSaved.current ?? saved);
           } catch (error) {
             rejectResult(error);
@@ -118,30 +117,29 @@ export function PaperNoteEntryPanel({
     if (!linkedReview) return;
 
     autoLinkAttemptedForEntry.current = entryId;
-    void save(linkedReview, entry.reviewVersion).catch(() => {
-      autoLinkAttemptedForEntry.current = null;
-    });
-  }, [entryId, entryQuery.data, matchesQuery.data, matchesQuery.isFetching, save]);
+    const version = versionRef.current ?? entry.reviewVersion;
+    void savePaperNoteEntryReview(entryId, linkedReview, version)
+      .then(async (saved) => {
+        versionRef.current = saved.reviewVersion;
+        latestSaved.current = saved;
+        queryClient.setQueryData(["paper-notes", "entry-review", entryId], saved);
+        await Promise.resolve(onChanged());
+      })
+      .catch(() => {
+        autoLinkAttemptedForEntry.current = null;
+      });
+  }, [entryId, entryQuery.data, matchesQuery.data, matchesQuery.isFetching, onChanged, queryClient]);
 
   const approve = useCallback(
-    (expectedVersion: number) => approvePaperNoteEntry(
-      entryId,
-      versionRef.current ?? expectedVersion,
-    ).then(replaceEntry),
+    (expectedVersion: number) => approvePaperNoteEntry(entryId, versionRef.current ?? expectedVersion).then(replaceEntry),
     [entryId, replaceEntry],
   );
   const unapprove = useCallback(
-    (expectedVersion: number) => unapprovePaperNoteEntry(
-      entryId,
-      versionRef.current ?? expectedVersion,
-    ).then(replaceEntry),
+    (expectedVersion: number) => unapprovePaperNoteEntry(entryId, versionRef.current ?? expectedVersion).then(replaceEntry),
     [entryId, replaceEntry],
   );
   const skip = useCallback(
-    (expectedVersion: number) => skipPaperNoteEntry(
-      entryId,
-      versionRef.current ?? expectedVersion,
-    ).then(replaceEntry),
+    (expectedVersion: number) => skipPaperNoteEntry(entryId, versionRef.current ?? expectedVersion).then(replaceEntry),
     [entryId, replaceEntry],
   );
 
@@ -153,21 +151,23 @@ export function PaperNoteEntryPanel({
   }
 
   return (
-    <div className="grid gap-3">
-      {matchesQuery.isError ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">
-          Saved-profile suggestions could not load. The paper entry is still available to review; retry or use manual profile search.
-        </div>
-      ) : null}
-      <PaperNoteEntryCard
-        entry={entryQuery.data}
-        matches={matchesQuery.data ?? []}
-        loadSource={() => getPaperNoteEntrySource(entryId)}
-        onSave={save}
-        onApprove={approve}
-        onUnapprove={unapprove}
-        onSkip={skip}
-      />
-    </div>
+    <PaperNoteEntryErrorBoundary entryId={entryId}>
+      <div className="grid gap-3">
+        {matchesQuery.isError ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+            Saved-profile suggestions could not load. The paper entry is still available to review; retry or use manual profile search.
+          </div>
+        ) : null}
+        <PaperNoteEntryCard
+          entry={entryQuery.data}
+          matches={matchesQuery.data ?? []}
+          loadSource={() => getPaperNoteEntrySource(entryId)}
+          onSave={save}
+          onApprove={approve}
+          onUnapprove={unapprove}
+          onSkip={skip}
+        />
+      </div>
+    </PaperNoteEntryErrorBoundary>
   );
 }

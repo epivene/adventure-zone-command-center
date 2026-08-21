@@ -51,4 +51,12 @@ describe("initializePaperNoteReview", () => {
     expect(review.destination).toBeNull();
     expect(review.currentFollowUp.enabled).toBe(false);
   });
+
+  it("does not create a required review contact from an empty AI contact object", () => {
+    const review = initializePaperNoteReview({
+      ...extraction,
+      contacts: [{ name: null, role: null, email: null, phones: [] }],
+    });
+    expect(review.contacts).toEqual([]);
+  });
 });
