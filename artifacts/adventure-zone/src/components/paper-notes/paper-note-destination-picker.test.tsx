@@ -43,6 +43,36 @@ const suggestedMatch = {
 };
 
 describe("PaperNoteDestinationPicker", () => {
+  it("shows a matched-existing-profile confirmation and reveals alternatives only after Change", () => {
+    render(
+      <PaperNoteDestinationPicker
+        review={{
+          ...review,
+          destination: {
+            mode: "existing_profile",
+            organizationId: suggestedMatch.organizationId,
+            organizationLocationId: null,
+          },
+        } as any}
+        matches={[suggestedMatch]}
+        onChooseExisting={vi.fn()}
+        onChooseNewLocation={vi.fn()}
+        onChooseNewProfile={vi.fn()}
+        onNewLocationChange={vi.fn()}
+        onNewProfileFamilyChange={vi.fn()}
+        onRememberMatch={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Matched to existing profile/i)).toBeInTheDocument();
+    expect(screen.getByText("County Fair")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Search existing profiles")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Change matched profile/i }));
+    expect(screen.getByLabelText("Search existing profiles")).toBeInTheDocument();
+    expect(screen.getByText("Suggested matches")).toBeInTheDocument();
+  });
+
   it("shows automatic evidence matches separately from manual search results", async () => {
     render(
       <PaperNoteDestinationPicker
