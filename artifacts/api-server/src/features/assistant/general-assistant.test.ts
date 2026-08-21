@@ -87,6 +87,12 @@ describe("answerGeneralAssistant", () => {
     expect(calls[0]).toMatchObject({ overdueFollowUp: true });
   });
 
+  it("accepts natural shorthand for who needs follow up", async () => {
+    const calls: ProfileSearchRequest[] = [];
+    await answerGeneralAssistant({ question: "Who need follow up", profileSearch: fakeRepo(calls) });
+    expect(calls[0]).toMatchObject({ query: "follow-up", overdueFollowUp: true, limit: 8 });
+  });
+
   it("routes package-history discovery", async () => {
     const calls: ProfileSearchRequest[] = [];
     await answerGeneralAssistant({ question: "Who usually books Pirate's Rebellion?", profileSearch: fakeRepo(calls) });
