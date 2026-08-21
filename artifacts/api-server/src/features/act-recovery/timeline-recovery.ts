@@ -353,9 +353,13 @@ export class ActTimelineRecovery {
       returning id
     `);
     const canonicalConditions = parents.map((parent) => {
-      if (parent.entityType === "organization") return sql`organization_id = ${parent.entityId}`;
-      if (parent.entityType === "contact") return sql`contact_id = ${parent.entityId}`;
-      return sql`booking_id = ${parent.entityId}`;
+      if (parent.entityType === "organization") {
+        return sql`coalesce(organization_id = ${parent.entityId}, false)`;
+      }
+      if (parent.entityType === "contact") {
+        return sql`coalesce(contact_id = ${parent.entityId}, false)`;
+      }
+      return sql`coalesce(booking_id = ${parent.entityId}, false)`;
     });
     const removed = await this.query(sql`
       delete from activity_associations
