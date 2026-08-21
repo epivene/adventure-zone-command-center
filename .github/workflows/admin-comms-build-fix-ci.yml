@@ -1,14 +1,40 @@
-name: Admin Comms Build Fix CI
+name: Admin Comms + Office CI
 
 on:
   pull_request:
     paths:
       - "artifacts/adventure-zone/src/pages/ManagerCommunicationsAdminPage.tsx"
+      - "artifacts/api-server/src/features/office/**"
+      - "artifacts/api-server/src/routes/office*"
+      - "artifacts/api-server/src/lib/password-credential*"
+      - "lib/db/src/office-coordinator-schema.ts"
+      - "lib/db/migrations/20260821_office_coordinator_workspace.sql"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/package.json"
+      - "artifacts/api-server/src/db/schema.ts"
       - ".github/workflows/admin-comms-build-fix-ci.yml"
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adventure_zone_test
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+      SESSION_SECRET: office-ci-session-secret
+      OWNER_PASSWORD: office-ci-owner-password
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -19,5 +45,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx
-      - run: pnpm --filter @workspace/adventure-zone run build
+      - name: Office Coordinator backend tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/office src/routes/office src/lib/password-credential.test.ts
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Manager communications regression
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/ManagerCommunicationsAdminPage.test.tsx
+      - name: Frontend build regression
+        run: pnpm --filter @workspace/adventure-zone run build
