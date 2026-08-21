@@ -33,6 +33,26 @@ function draft(): PaperNoteReviewDraft {
 }
 
 describe("PaperNoteReviewService", () => {
+  it("normalizes a saved full state name when the review is opened", async () => {
+    const saved = {
+      ...draft(),
+      event: { ...draft().event, city: "Enoch", region: "UTAH" },
+    };
+    const service = new PaperNoteReviewService({
+      getForReview: vi.fn(async () => ({
+        review: saved,
+        validationIssues: [],
+        state: "needs_review",
+        reviewVersion: 2,
+        extraction: {} as any,
+        approvedAt: null,
+      })),
+    } as any);
+
+    const result = await service.getEntry("owner", "entry-1");
+    expect(result.review.event.region).toBe("UT");
+  });
+
   it("keeps an unresolved destination in needs_review", async () => {
     const saveReview = vi.fn(async (input: any) => ({ ...input, id: "entry-1", reviewVersion: input.expectedVersion + 1 }));
     const service = new PaperNoteReviewService({ saveReview, approve: vi.fn(), unapprove: vi.fn(), skip: vi.fn() } as any);
