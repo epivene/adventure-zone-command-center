@@ -9,7 +9,12 @@ function client(ready: boolean) {
     client: {
       async query(sql: string) {
         queries.push(sql);
-        if (sql.includes("paper_note_batches") && sql.includes("paper_note_pages") && sql.includes("AS ready")) {
+        const normalizedSql = sql.toLowerCase();
+        if (
+          normalizedSql.includes("paper_note_batches") &&
+          normalizedSql.includes("paper_note_pages") &&
+          normalizedSql.includes("as ready")
+        ) {
           return { rows: [{ ready }] };
         }
         return { rows: [] };
