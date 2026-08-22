@@ -8,6 +8,11 @@ import {
   organizationContacts,
   organizations,
 } from "@/db/schema";
+import {
+  canUseCommercialOffer,
+  type CommercialOfferUseContext,
+} from "@/features/commercial-offers/commercial-offer-policy";
+import { CommercialOfferRepository } from "@/features/commercial-offers/commercial-offer-repository";
 import { DrizzlePackageIntelligenceSettingsRepository } from "@/features/packages/package-intelligence-settings";
 import { CommunicationTemplateRepository } from "./communication-template-repository";
 import {
@@ -43,6 +48,8 @@ export async function renderCommunicationTemplate(
     organizationId: string;
     contactId: string;
     packageTemplateId?: string | null;
+    commercialOfferId?: string | null;
+    commercialOfferContext?: CommercialOfferUseContext | null;
     sender: { name: string; phone: string | null; email: string | null };
     extraValues?: TemplateRenderValues;
   },
@@ -113,6 +120,24 @@ export async function renderCommunicationTemplate(
           candidate.id === input.packageTemplateId && candidate.active,
       ) ?? null;
     if (!packageRow) throw new Error("PACKAGE_NOT_FOUND");
+  }
+
+  if (input.commercialOfferId) {
+    if (!input.commercialOfferContext) {
+      throw new Error("COMMERCIAL_OFFER_CONTEXT_REQUIRED");
+    }
+    const offer = await new CommercialOfferRepository(database as any).getById(
+      input.commercialOfferId,
+    );
+    if (!offer) throw new Error("COMMERCIAL_OFFER_NOT_FOUND");
+    const use = canUseCommercialOffer(offer, {
+      ...input.commercialOfferContext,
+      packageCode:
+        packageRow?.code ?? input.commercialOfferContext.packageCode ?? null,
+    });
+    if (!use.allowed) {
+      throw new Error(`COMMERCIAL_OFFER_NOT_ALLOWED:${use.reason ?? "Unknown reason"}`);
+    }
   }
 
   const contactName = [contact.firstName, contact.lastName]
