@@ -93,6 +93,11 @@ const migrationFiles = [
           'year_built', 'make', 'model', 'serial_number', 'inspection_identity_notes'
         )`,
   },
+  {
+    name: "20260822_resource_source_candidates.sql",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.resource_source_candidates') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
