@@ -26,8 +26,8 @@ describe("appearance navigation", () => {
     expect(themeCss).not.toContain("filter: hue-rotate");
   });
 
-  it("shows the carnival tent mark beside Adventure Zone", () => {
-    expect(switcher).toContain("Tent");
-    expect(switcher).toContain('className="h-5 w-5 shrink-0 text-orange-600"');
+  it("shows the existing bounce-house site mark beside Adventure Zone", () => {
+    expect(switcher).toContain('src="/favicon.svg"');
+    expect(switcher).not.toContain("Tent");
   });
 });

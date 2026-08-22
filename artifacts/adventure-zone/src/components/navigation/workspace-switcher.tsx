@@ -1,4 +1,4 @@
-import { ChevronDown, LayoutGrid, Megaphone, MapPinned, Settings2, Tent } from "lucide-react";
+import { ChevronDown, LayoutGrid, Megaphone, MapPinned, Settings2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 import {
@@ -31,13 +31,13 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
       <DropdownMenuTrigger asChild>
         <button
           aria-label={`Current workspace: ${workspaceLabel[workspace]}`}
-          className="mr-2 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-left hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+          className="mr-2 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
           type="button"
         >
-          <Tent aria-hidden="true" className="h-5 w-5 shrink-0 text-orange-600" />
+          <img alt="" aria-hidden="true" className="h-5 w-5 shrink-0" src="/favicon.svg" />
           <span className="truncate font-bold tracking-tight">Adventure Zone</span>
-          <span aria-hidden="true" className="text-slate-300">·</span>
-          <span className="truncate text-sm font-semibold text-slate-500">{workspaceLabel[workspace]}</span>
+          <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
+          <span className="truncate text-sm font-semibold text-slate-500 dark:text-slate-400">{workspaceLabel[workspace]}</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
         </button>
       </DropdownMenuTrigger>
