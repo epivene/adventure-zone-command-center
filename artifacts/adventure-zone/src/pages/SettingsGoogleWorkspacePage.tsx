@@ -17,11 +17,43 @@ type Props = {
   confirmDisconnect?(): boolean;
 };
 
+type GoogleWorkspaceOAuthReturn = {
+  error: string | null;
+  notice: string | null;
+};
+
 const defaultOpenAuthorizationUrl = (url: string) => window.location.assign(url);
 const defaultConfirmDisconnect = () =>
   window.confirm(
     "Disconnect the company Google account? Existing saved scope remains available, but no Google access will be possible until it is connected again.",
   );
+
+export function readGoogleWorkspaceOAuthReturn(
+  search: string,
+): GoogleWorkspaceOAuthReturn {
+  const params = new URLSearchParams(search);
+  if (params.get("connected") === "1") {
+    return {
+      error: null,
+      notice: "Google account connected in read-only mode.",
+    };
+  }
+
+  const providerError = params.get("googleError");
+  if (providerError === "GOOGLE_WORKSPACE_OAUTH_ACCESS_DENIED") {
+    return {
+      error: "Google connection was cancelled. Nothing was connected or changed.",
+      notice: null,
+    };
+  }
+  if (providerError === "GOOGLE_WORKSPACE_OAUTH_PROVIDER_REJECTED") {
+    return {
+      error: "Google did not complete the connection. Nothing was connected or changed.",
+      notice: null,
+    };
+  }
+  return { error: null, notice: null };
+}
 
 function ErrorNotice({ message }: { message: string }) {
   return (
@@ -84,6 +116,11 @@ export function SettingsGoogleWorkspacePage({
   openAuthorizationUrl = defaultOpenAuthorizationUrl,
   confirmDisconnect = defaultConfirmDisconnect,
 }: Props = {}) {
+  const [oauthReturn] = useState(() =>
+    readGoogleWorkspaceOAuthReturn(
+      typeof window === "undefined" ? "" : window.location.search,
+    ),
+  );
   const [settings, setSettings] = useState<GoogleWorkspaceSettingsView | null>(null);
   const [preview, setPreview] = useState<GoogleScopePreviewView | null>(null);
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
@@ -92,8 +129,8 @@ export function SettingsGoogleWorkspacePage({
   const [busy, setBusy] = useState<
     "connect" | "preview" | "save" | "disconnect" | null
   >(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(oauthReturn.error);
+  const [notice, setNotice] = useState<string | null>(oauthReturn.notice);
 
   useEffect(() => {
     let active = true;
