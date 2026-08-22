@@ -35,7 +35,7 @@ describe("workspace-aware Admin shell", () => {
   });
 
   it("keeps the Booking overflow menu short and nonduplicative", () => {
-    const bookingStart = menuSource.indexOf("const bookingGroups");
+    const bookingStart = menuSource.indexOf("const bookingItems");
     const operationsStart = menuSource.indexOf("const operationsGroups");
     const bookingMenu = menuSource.slice(bookingStart, operationsStart);
 
