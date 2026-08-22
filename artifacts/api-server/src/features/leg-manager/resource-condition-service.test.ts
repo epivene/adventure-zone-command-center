@@ -6,9 +6,13 @@ describe("resource condition effects", () => {
     expect(resourceStatusEffectForChecklistResult("needs_work_safe", "available")).toBe("available");
   });
 
-  it("takes an unsafe resource out of service", () => {
+  it("takes an unsafe active resource out of service", () => {
     expect(resourceStatusEffectForChecklistResult("unsafe", "available")).toBe("unavailable");
     expect(resourceStatusEffectForChecklistResult("unsafe", "maintenance")).toBe("unavailable");
+  });
+
+  it("never resurrects an archived resource through an unsafe result", () => {
+    expect(resourceStatusEffectForChecklistResult("unsafe", "archived")).toBe("archived");
   });
 
   it("does not change resource status for site-wide results with no resource", () => {
