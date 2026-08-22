@@ -64,7 +64,13 @@ function safeErrorCode(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function safeRedirect(appOrigin: string, returnPath: string): string {
+function safeReturnUrl(
+  appOrigin: string,
+  returnPath: string,
+  result:
+    | { connected: true }
+    | { error: "GOOGLE_WORKSPACE_OAUTH_ACCESS_DENIED" | "GOOGLE_WORKSPACE_OAUTH_PROVIDER_REJECTED" },
+): string {
   const fallbackPath = "/settings/google-workspace";
   const value = returnPath.trim();
   const localPath =
@@ -72,18 +78,24 @@ function safeRedirect(appOrigin: string, returnPath: string): string {
       ? value
       : fallbackPath;
 
+  let url: URL;
   try {
-    const url = new URL(localPath, `${appOrigin}/`);
+    url = new URL(localPath, `${appOrigin}/`);
     if (url.origin !== appOrigin) {
       throw new Error("cross-origin OAuth return path");
     }
-    url.searchParams.set("connected", "1");
-    return url.toString();
   } catch {
-    const fallback = new URL(fallbackPath, `${appOrigin}/`);
-    fallback.searchParams.set("connected", "1");
-    return fallback.toString();
+    url = new URL(fallbackPath, `${appOrigin}/`);
   }
+
+  if ("connected" in result) {
+    url.searchParams.delete("googleError");
+    url.searchParams.set("connected", "1");
+  } else {
+    url.searchParams.delete("connected");
+    url.searchParams.set("googleError", result.error);
+  }
+  return url.toString();
 }
 
 function canonicalScope(scope: string): string {
@@ -131,8 +143,9 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
     "/google-workspace/oauth/callback",
     async (req, res): Promise<void> => {
       const code = queryValue(req.query.code);
+      const providerError = queryValue(req.query.error);
       const state = queryValue(req.query.state);
-      if (!code || !state) {
+      if (!state || (!code && !providerError)) {
         res.status(400).json({ error: "GOOGLE_WORKSPACE_OAUTH_CALLBACK_INVALID" });
         return;
       }
@@ -162,6 +175,27 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           return;
         }
 
+        if (providerError) {
+          const safeProviderError =
+            providerError === "access_denied"
+              ? "GOOGLE_WORKSPACE_OAUTH_ACCESS_DENIED"
+              : "GOOGLE_WORKSPACE_OAUTH_PROVIDER_REJECTED";
+          res.redirect(
+            303,
+            safeReturnUrl(
+              environmentResult.value.appOrigin,
+              consumed.returnPath,
+              { error: safeProviderError },
+            ),
+          );
+          return;
+        }
+
+        if (!code) {
+          res.status(400).json({ error: "GOOGLE_WORKSPACE_OAUTH_CALLBACK_INVALID" });
+          return;
+        }
+
         const client = dependencies.createClient({
           environment: environmentResult.value,
         });
@@ -181,9 +215,10 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
         });
         res.redirect(
           303,
-          safeRedirect(
+          safeReturnUrl(
             environmentResult.value.appOrigin,
             consumed.returnPath,
+            { connected: true },
           ),
         );
       } catch (error) {
