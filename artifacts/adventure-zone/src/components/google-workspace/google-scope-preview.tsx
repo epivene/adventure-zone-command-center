@@ -42,9 +42,11 @@ function SelectionCard({
 function MissingSources({ title, items }: { title: string; items: string[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-      <p className="text-sm font-semibold text-amber-900">{title}</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800">
+    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/40">
+      <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+        {title}
+      </p>
+      <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-800 dark:text-amber-300">
         {items.map((item) => (
           <li key={item}>{item}</li>
         ))}
