@@ -196,7 +196,7 @@ function ManagerProtectedApp() {
 function OfficeProtectedApp() {
   const { office, loading } = useOfficeAuth();
   if (loading) return <div className="p-6">Loading Booking Workspace…</div>;
-  if (!office) return <Redirect to="/manager/sign-in" />;
+  if (!office) return <Redirect to="/office/sign-in" />;
   return (
     <OfficeShell>
       <Switch>
