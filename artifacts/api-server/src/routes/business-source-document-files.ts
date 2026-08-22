@@ -96,6 +96,25 @@ router.put(
   },
 );
 
+router.post("/business-sources/:documentId/file/open", async (req, res): Promise<void> => {
+  const documentId = param(req.params.documentId);
+  if (!documentIdSchema.safeParse(documentId).success) {
+    res.status(400).json({ error: "Invalid business source document ID." });
+    return;
+  }
+  try {
+    const signedUrl = await getSourceDocumentSignedReadUrl(store, storage, documentId);
+    if (!signedUrl) {
+      res.status(404).json({ error: "No file has been uploaded for this source document." });
+      return;
+    }
+    res.json({ url: signedUrl });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to create source document signed link");
+    res.status(503).json({ error: "Could not open the source document file." });
+  }
+});
+
 router.get("/business-sources/:documentId/file", async (req, res): Promise<void> => {
   const documentId = param(req.params.documentId);
   if (!documentIdSchema.safeParse(documentId).success) {
