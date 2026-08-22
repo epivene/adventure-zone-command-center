@@ -4,6 +4,7 @@ export type OfficeEmailDraftView = {
   id: string;
   organizationId: string;
   contactId: string;
+  communicationTemplateId: string | null;
   recipientEmail: string;
   subject: string;
   body: string;
