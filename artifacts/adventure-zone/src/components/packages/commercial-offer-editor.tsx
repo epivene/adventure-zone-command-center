@@ -8,6 +8,13 @@ type Offer = {
   deadlineMode:"none"|"manual"|"days_after_trigger"|"fixed_date";deadlineDays:number|null;fixedDeadline:string|null;customerSummary:string|null;internalConditions:string;sourceConflictNote:string|null;
 };
 
+type EditableOffer = Omit<Offer,"id"|"state">;
+
+function editableOfferPayload(offer:Offer):EditableOffer{
+  const {id:_id,state:_state,...editable}=offer;
+  return editable;
+}
+
 function percent(value:number|null){return value==null?"":String(value/100)}
 function dollars(value:number|null){return value==null?"":String(value/100)}
 
@@ -15,7 +22,7 @@ function OfferCard({initial,onReload}:{initial:Offer;onReload:()=>Promise<void>}
   const [offer,setOffer]=useState(initial);const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");const [error,setError]=useState("");
   useEffect(()=>setOffer(initial),[initial]);
   function set<K extends keyof Offer>(key:K,value:Offer[K]){setOffer((current)=>({...current,[key]:value}));setMessage("");}
-  async function save(){setBusy(true);setError("");try{await apiPatch(`/commercial-offers/${offer.id}`,offer);setMessage("Offer saved.");await onReload();}catch(e){setError(e instanceof Error?e.message:"Could not save offer.");}finally{setBusy(false)}}
+  async function save(){setBusy(true);setError("");try{await apiPatch(`/commercial-offers/${offer.id}`,editableOfferPayload(offer));setMessage("Offer saved.");await onReload();}catch(e){setError(e instanceof Error?e.message:"Could not save offer.");}finally{setBusy(false)}}
   async function action(kind:"activate"|"archive"){setBusy(true);setError("");try{await apiPost(`/commercial-offers/${offer.id}/${kind}`,{});setMessage(kind==="activate"?"Offer activated.":"Offer archived.");await onReload();}catch(e){setError(e instanceof Error?e.message:`Could not ${kind} offer.`);}finally{setBusy(false)}}
   return <article className="grid gap-3 rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{offer.code}</p><input className="mt-1 font-bold" value={offer.name} onChange={(e)=>set("name",e.target.value)}/></div><div className="flex gap-2"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{offer.state}</span>{offer.audience==="owner_only"?<span className="rounded-full bg-violet-100 px-2 py-1 text-xs font-bold text-violet-800">Owner only</span>:null}</div></div>
