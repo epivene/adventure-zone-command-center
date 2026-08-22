@@ -1,10 +1,10 @@
-import { sql } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 
 import { db } from "@workspace/db";
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { createRequireOfficeMiddleware } from "@/features/office/office-middleware";
+import { DrizzlePackageIntelligenceSettingsRepository } from "@/features/packages/package-intelligence-settings";
 import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
 import { renderCommunicationTemplate } from "@/features/communication-templates/communication-template-service";
@@ -31,23 +31,16 @@ function routeParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
-function rowsOf<T>(value: unknown): T[] {
-  if (value && typeof value === "object" && "rows" in value) {
-    return ((value as { rows?: T[] }).rows ?? []);
-  }
-  return Array.isArray(value) ? (value as T[]) : [];
-}
-
 type PackageChoice = { id: string; code: string; name: string };
 
 async function activePackages(): Promise<PackageChoice[]> {
-  const result = await db.execute(sql`
-    select id, code, name
-    from package_templates
-    where active = true
-    order by name
-  `);
-  return rowsOf<PackageChoice>(result);
+  const records = await new DrizzlePackageIntelligenceSettingsRepository(
+    db,
+  ).listPackageTemplates();
+  return records
+    .filter((record) => record.active)
+    .map(({ id, code, name }) => ({ id, code, name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 router.get("/office/communication-templates", requireOffice, async (req, res): Promise<void> => {
