@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./migrations": "./src/migrations.ts",
+    "./business-drive-migrations": "./src/business-drive-migrations.ts",
     "./schema": "./src/schema/index.ts",
     "./event-family-schema": "./src/event-family-schema.ts",
     "./booking-assistant-schema": "./src/booking-assistant-schema.ts",
