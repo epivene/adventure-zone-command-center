@@ -26,7 +26,15 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
           const mutation = mutations.find((candidate) => candidate.id === row.receiptId);
           const inferredKind: ManagerBlobKind | undefined = row.kind ?? (mutation?.path === "/manager/incident-attachments" ? "incident" : mutation?.path === "/manager/receipts" ? "receipt" : undefined);
           if (!inferredKind) throw new Error("Image type is unknown");
-          const path = inferredKind === "incident" ? `/manager/incident-attachments/${row.receiptId}/image` : `/manager/receipts/${row.receiptId}/image`;
+          let path: string;
+          if (inferredKind === "incident") {
+            path = `/manager/incident-attachments/${row.receiptId}/image`;
+          } else if (inferredKind === "checklist_attachment") {
+            if (!row.bookingId) throw new Error("Checklist image is missing booking context");
+            path = `/manager/events/${row.bookingId}/checklist-attachments/${row.receiptId}/image`;
+          } else {
+            path = `/manager/receipts/${row.receiptId}/image`;
+          }
           await managerApi(path, { method: "PUT", headers: { "Content-Type": row.blob.type || "image/jpeg" }, body: row.blob });
         },
         undefined,
@@ -36,6 +44,13 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
           if (!mutation || mutation.state !== "synced") return false;
           if (row.kind === "receipt") return mutation.path === "/manager/receipts";
           if (row.kind === "incident") return mutation.path === "/manager/incident-attachments";
+          if (row.kind === "checklist_attachment") {
+            return Boolean(
+              row.bookingId &&
+              mutation.path.startsWith(`/manager/events/${row.bookingId}/checklist-results/`) &&
+              mutation.path.endsWith("/attachments"),
+            );
+          }
           return mutation.path === "/manager/receipts" || mutation.path === "/manager/incident-attachments";
         },
       );
