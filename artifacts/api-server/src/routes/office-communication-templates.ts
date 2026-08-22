@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 
@@ -30,13 +31,35 @@ function routeParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+function rowsOf<T>(value: unknown): T[] {
+  if (value && typeof value === "object" && "rows" in value) {
+    return ((value as { rows?: T[] }).rows ?? []);
+  }
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
+type PackageChoice = { id: string; code: string; name: string };
+
+async function activePackages(): Promise<PackageChoice[]> {
+  const result = await db.execute(sql`
+    select id, code, name
+    from package_templates
+    where active = true
+    order by name
+  `);
+  return rowsOf<PackageChoice>(result);
+}
+
 router.get("/office/communication-templates", requireOffice, async (req, res): Promise<void> => {
   try {
     await ensureCommunicationTemplateSeed(db);
-    const records = await new CommunicationTemplateRepository(db).list({
-      state: "active",
-      accessScope: "office",
-    });
+    const [records, packages] = await Promise.all([
+      new CommunicationTemplateRepository(db).list({
+        state: "active",
+        accessScope: "office",
+      }),
+      activePackages(),
+    ]);
     res.json({
       templates: records.map((template) => ({
         id: template.id,
@@ -46,6 +69,7 @@ router.get("/office/communication-templates", requireOffice, async (req, res): P
         subjectTemplate: template.subjectTemplate,
         requiredPlaceholders: template.requiredPlaceholders,
       })),
+      packages,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to list Office communication templates");
@@ -74,11 +98,17 @@ router.post("/office/communication-templates/:templateId/render", requireOffice,
       Object.entries(parsed.data.values ?? {}).filter(([key]) => allowedExtraKeys.has(key)),
     ) as Partial<Record<TemplatePlaceholder, string | null>>;
 
+    let packageTemplateId = parsed.data.packageTemplateId ?? null;
+    if (!packageTemplateId && template.code === "mini_zone_option") {
+      const mini = (await activePackages()).find((pkg) => pkg.code === "mini_zone");
+      packageTemplateId = mini?.id ?? null;
+    }
+
     const rendered = await renderCommunicationTemplate(db, {
       templateId,
       organizationId: parsed.data.organizationId,
       contactId: parsed.data.contactId,
-      packageTemplateId: parsed.data.packageTemplateId ?? null,
+      packageTemplateId,
       sender: {
         name: req.officeAccount!.displayName,
         phone: null,
