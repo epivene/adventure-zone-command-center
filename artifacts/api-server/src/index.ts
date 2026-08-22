@@ -17,6 +17,8 @@ import { ensurePackageIntelligenceSchema } from "./features/packages/package-int
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
 import { ensureCallScriptSettingsSchema } from "./features/calls/call-script-settings";
 import { ensureBusinessSourceSeed } from "./features/business-sources/business-source-seed";
+import { ensureCommercialOfferSeed } from "./features/commercial-offers/commercial-offer-seed";
+import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
 import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
 import {
   LeadScoutWorkerLoop,
@@ -199,6 +201,26 @@ async function runPostListenMaintenance() {
     logger.error(
       { err },
       "Reviewed business source seed deferred; owner source settings can retry it later",
+    );
+  }
+  try {
+    await runStartupStep("proposed commercial offer seed", () =>
+      ensureCommercialOfferSeed(db),
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Commercial offer review seed deferred; owner offer settings can retry it later",
+    );
+  }
+  try {
+    await runStartupStep("event checklist template seed", () =>
+      ensureEventChecklistTemplates(db),
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Event checklist template seed deferred; lifecycle routes can retry it later",
     );
   }
   logger.info(
