@@ -1,21 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const entryCard = readFileSync("src/components/paper-notes/paper-note-entry-card.tsx", "utf8");
-const entryPanel = readFileSync("src/components/paper-notes/paper-note-entry-panel.tsx", "utf8");
-const batchReview = readFileSync("src/pages/PaperNoteBatchReviewPage.tsx", "utf8");
+const themeCss = readFileSync("src/appearance-themes.css", "utf8");
 
 describe("paper notes dark theme", () => {
-  it("uses theme tokens for the shared review accordions and entry card", () => {
-    expect(entryCard).toContain("border-border bg-card");
-    expect(entryCard).toContain("text-card-foreground");
-    expect(entryCard).toContain("text-muted-foreground");
-    expect(entryCard).not.toContain("bg-slate-50/60");
-    expect(entryCard).not.toContain("bg-white/80");
+  it("overrides the shared paper-note accordions and review card in dark mode", () => {
+    expect(themeCss).toContain('html.dark [data-testid^="paper-note-section-"]');
+    expect(themeCss).toContain('html.dark article:has([data-testid^="paper-note-section-"])');
+    expect(themeCss).toContain('background-color: hsl(var(--card)) !important;');
+    expect(themeCss).toContain('color: hsl(var(--card-foreground)) !important;');
   });
 
-  it("uses theme-aware loading and batch surfaces", () => {
-    expect(entryPanel).toContain("border-border bg-card");
-    expect(batchReview).toContain("border-border bg-card");
+  it("keeps paper-note secondary copy readable in dark mode", () => {
+    expect(themeCss).toContain('html.dark article:has([data-testid^="paper-note-section-"]) .text-slate-500');
+    expect(themeCss).toContain('color: hsl(var(--muted-foreground)) !important;');
   });
 });
