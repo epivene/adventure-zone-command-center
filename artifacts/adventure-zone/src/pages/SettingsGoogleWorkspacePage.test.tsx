@@ -147,6 +147,38 @@ describe("SettingsGoogleWorkspacePage", () => {
     expect(await screen.findByText("Business scope saved.")).toBeInTheDocument();
   });
 
+  it("blocks saving while an expected business source is missing", async () => {
+    client.previewGoogleWorkspaceScope.mockResolvedValue({
+      ...preview,
+      missingLabelRoots: ["Associations"],
+    });
+    render(<SettingsGoogleWorkspacePage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Preview business scope" }),
+    );
+
+    expect(await screen.findByText("Associations")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Resolve every missing or ambiguous business source/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save business scope" }),
+    ).toBeDisabled();
+    expect(client.saveGoogleWorkspaceScope).not.toHaveBeenCalled();
+  });
+
+  it("uses a dark-mode-aware error surface", async () => {
+    client.getGoogleWorkspaceSettings.mockRejectedValue(
+      new Error("GOOGLE_WORKSPACE_SETTINGS_LOAD_FAILED"),
+    );
+    render(<SettingsGoogleWorkspacePage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.className).toContain("dark:bg-rose-950/40");
+    expect(alert.className).toContain("dark:border-rose-900");
+  });
+
   it("requires confirmation before disconnecting", async () => {
     const confirmDisconnect = vi.fn(() => false);
     render(
