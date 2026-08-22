@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ChevronDown, Menu, Plus } from "lucide-react";
+import { ChevronDown, Ellipsis, Plus } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,19 +15,17 @@ import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspac
 type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean };
 type MenuGroup = { label: string; items: MenuItem[] };
 
+const bookingItems: MenuItem[] = [
+  { href: "/bookings", label: "Bookings" },
+  { href: "/calls/workspace", label: "Calls" },
+  { href: "/office-coordinator", label: "Office Coordinator" },
+  { href: "/research-sources", label: "Research Sources" },
+  { href: "/contacts", label: "All contacts" },
+  { href: "/needs-answer", label: "Needs Answer" },
+];
+
 const bookingGroups: MenuGroup[] = [
-  {
-    label: "Booking",
-    items: [
-      { href: "/bookings", label: "Bookings" },
-      { href: "/calls/workspace", label: "Calls" },
-      { href: "/office-coordinator", label: "Office Coordinator" },
-      { href: "/research-sources", label: "Research Sources" },
-      { href: "/quick-add", label: "Quick add" },
-      { href: "/contacts", label: "All contacts" },
-      { href: "/marketing", label: "Marketing", rememberBookingBeforeOpen: true },
-    ],
-  },
+  { label: "Booking", items: bookingItems },
 ];
 
 const operationsGroups: MenuGroup[] = [
@@ -81,7 +79,7 @@ export function AddMenu() {
       <DropdownMenuTrigger asChild>
         <button aria-label="Add" className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600" type="button">
           <Plus className="h-4 w-4" />
-          <span className="hidden sm:inline">Add</span>
+          <span className="hidden xl:inline">Add</span>
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-52">
@@ -90,6 +88,21 @@ export function AddMenu() {
         <DropdownMenuItem asChild><Link href="/quick-add">Quick add</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function MenuLink({ item, workspace, location }: { item: MenuItem; workspace: AdminWorkspace; location: string }) {
+  return (
+    <DropdownMenuItem asChild>
+      <Link
+        href={item.href}
+        onClick={() => {
+          if (item.rememberBookingBeforeOpen && workspace === "booking") saveBookingReturnPath(location);
+        }}
+      >
+        {item.label}
+      </Link>
+    </DropdownMenuItem>
   );
 }
 
@@ -103,16 +116,21 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button aria-label="Menu" className={mobile ? "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100" : "inline-flex items-center gap-1 rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"} type="button">
-          <Menu className="h-5 w-5" />
-          <span>Menu</span>
+        <button aria-label="More" className={mobile ? "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100" : "inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"} type="button">
+          <Ellipsis className="h-5 w-5" />
+          <span className={mobile ? "" : "hidden xl:inline"}>More</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" side={mobile ? "top" : "bottom"} className={mobile ? "max-h-[72dvh] w-[min(92vw,24rem)] overflow-y-auto p-2" : "max-h-[76vh] w-80 overflow-y-auto p-2"}>
-        <DropdownMenuItem asChild><Link href="/command">Command Panel</Link></DropdownMenuItem>
-        {groups.length ? <DropdownMenuSeparator /> : null}
+      <DropdownMenuContent align="end" side={mobile ? "top" : "bottom"} className={mobile ? "max-h-[72dvh] w-[min(92vw,22rem)] overflow-y-auto p-2" : "max-h-[76vh] w-72 overflow-y-auto p-2"}>
+        {workspace === "booking" ? (
+          <div className="grid gap-0.5 py-1">
+            {bookingItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
+          </div>
+        ) : null}
+        {workspace === "booking" && groups.length > 1 ? <DropdownMenuSeparator /> : null}
         {groups.map((group, index) => {
-          const expanded = openGroups[group.label] ?? index === 0;
+          if (workspace === "booking" && group.label === "Booking") return null;
+          const expanded = openGroups[group.label] ?? (index === 0 && workspace !== "booking");
           return (
             <div key={group.label} className="py-1">
               <button aria-expanded={expanded} className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-bold text-slate-800 hover:bg-slate-50" onClick={(event) => { event.preventDefault(); setOpenGroups((current) => ({ ...current, [group.label]: !expanded })); }} type="button">
@@ -121,11 +139,7 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
               </button>
               {expanded ? (
                 <div className="grid gap-0.5 pb-1 pl-2">
-                  {group.items.map((item) => (
-                    <DropdownMenuItem asChild key={`${group.label}:${item.href}:${item.label}`}>
-                      <Link href={item.href} onClick={() => { if (item.rememberBookingBeforeOpen && workspace === "booking") saveBookingReturnPath(location); }}>{item.label}</Link>
-                    </DropdownMenuItem>
-                  ))}
+                  {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${group.label}:${item.href}:${item.label}`} />)}
                 </div>
               ) : null}
               {index < groups.length - 1 ? <DropdownMenuSeparator /> : null}
