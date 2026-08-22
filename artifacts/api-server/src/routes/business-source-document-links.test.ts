@@ -27,6 +27,13 @@ describe("business source document links and historical terms", () => {
     expect(source).not.toContain("storageKey");
   });
 
+  it("requires approved terms to stay bound to a valid document link", () => {
+    expect(source).toContain("Approved historical terms require a source document link");
+    expect(source).toContain("Approved historical terms are attached to this link");
+    expect(source).toContain("businessSourceHistoricalTerms.documentLinkId");
+    expect(source).toContain('businessSourceHistoricalTerms.reviewState, "approved"');
+  });
+
   it("mounts only after owner authentication", () => {
     const ownerGate = index.indexOf("router.use(requireOwnerMiddleware)");
     const mount = index.indexOf("router.use(businessSourceDocumentLinksRouter)");
