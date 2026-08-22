@@ -51,18 +51,6 @@ type ConnectionRow = {
   updated_at: Date | string;
 };
 
-function configuredEnvironment(): GoogleWorkspaceEnvironment | null {
-  const result = getGoogleWorkspaceEnvironment();
-  return result.configured ? result.value : null;
-}
-
-function requireEnvironment(
-  environment: GoogleWorkspaceEnvironment | null,
-): GoogleWorkspaceEnvironment {
-  if (!environment) throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
-  return environment;
-}
-
 function dateIso(value: Date | string | null): string | null {
   if (value === null) return null;
   const date = value instanceof Date ? value : new Date(value);
@@ -107,7 +95,7 @@ function toView(row: ConnectionRow): GoogleConnectionView {
 
 export class PostgresGoogleConnectionRepository {
   private readonly pool: GoogleConnectionSqlPool;
-  private readonly environment: GoogleWorkspaceEnvironment | null;
+  private readonly providedEnvironment: GoogleWorkspaceEnvironment | undefined;
   private readonly createClient: CreateClient;
 
   constructor(options?: {
@@ -117,7 +105,7 @@ export class PostgresGoogleConnectionRepository {
   }) {
     this.pool =
       options?.pool ?? (defaultPool as unknown as GoogleConnectionSqlPool);
-    this.environment = options?.environment ?? configuredEnvironment();
+    this.providedEnvironment = options?.environment;
     this.createClient = options?.createClient ?? createGoogleWorkspaceReadClient;
   }
 
@@ -128,7 +116,7 @@ export class PostgresGoogleConnectionRepository {
     scopes: string[];
     now: Date;
   }): Promise<GoogleConnectionView> {
-    const environment = requireEnvironment(this.environment);
+    const environment = this.requireEnvironment();
     const email = input.accountEmail.trim().toLowerCase();
     const refreshToken = input.refreshToken.trim();
     if (!email || !refreshToken || !Number.isFinite(input.now.getTime())) {
@@ -195,7 +183,7 @@ export class PostgresGoogleConnectionRepository {
   async createReadClient(): Promise<GoogleWorkspaceReadClient | null> {
     const row = await this.currentRow();
     if (!row) return null;
-    const environment = requireEnvironment(this.environment);
+    const environment = this.requireEnvironment();
     const refreshToken = decryptGoogleSecret(
       row.encrypted_refresh_token,
       environment.tokenEncryptionKey,
@@ -226,6 +214,15 @@ export class PostgresGoogleConnectionRepository {
         WHERE status <> 'disconnected'`,
       [now],
     );
+  }
+
+  private requireEnvironment(): GoogleWorkspaceEnvironment {
+    if (this.providedEnvironment) return this.providedEnvironment;
+    const result = getGoogleWorkspaceEnvironment();
+    if (!result.configured) {
+      throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
+    }
+    return result.value;
   }
 
   private async currentRow(): Promise<ConnectionRow | null> {
