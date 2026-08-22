@@ -32,6 +32,8 @@ import { OfflineBanner } from "@/components/connectivity/offline-banner";
 import { Toaster } from "@/components/ui/toaster";
 import { AssistantContextProvider } from "@/features/assistant/assistant-context";
 
+import AdminCommandPanelPage from "@/pages/AdminCommandPanelPage";
+import MarketingHomePage from "@/pages/MarketingHomePage";
 import TodayPage from "@/pages/TodayPage";
 import BookingsPage from "@/pages/BookingsPage";
 import BookingDetailPage from "@/pages/BookingDetailPage";
@@ -57,7 +59,6 @@ import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
 import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
 import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
-import SettingsGoogleWorkspacePage from "@/pages/SettingsGoogleWorkspacePage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
 import QuickAddPage from "@/pages/QuickAddPage";
@@ -103,7 +104,7 @@ function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  if (isSignedIn) return <Redirect to="/today" />;
+  if (isSignedIn) return <Redirect to="/command" />;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -112,7 +113,7 @@ function SignInPage() {
     setError(null);
     const result = await signIn(password);
     setSubmitting(false);
-    if (result.ok) setLocation("/today");
+    if (result.ok) setLocation("/command");
     else setError(result.error);
   }
 
@@ -151,7 +152,7 @@ function LoadingScreen() {
 function HomeRoute() {
   const { isSignedIn } = useAuth();
   if (isSignedIn === null) return <LoadingScreen />;
-  return isSignedIn ? <Redirect to="/today" /> : <Landing />;
+  return isSignedIn ? <Redirect to="/command" /> : <Landing />;
 }
 
 function Protected({ children }: { children: React.ReactNode }) {
@@ -162,7 +163,14 @@ function Protected({ children }: { children: React.ReactNode }) {
 }
 
 function SettingsStub() {
-  return <div className="mx-auto max-w-7xl"><h1 className="mt-8 text-2xl font-bold">Settings</h1><p className="mt-2 text-slate-600">This settings page is available in the full backend setup.</p></div>;
+  const tools = [
+    ["Paper notes", "/settings/paper-notes", "Review imported paper booking notes."],
+    ["ACT import", "/settings/act-migration", "Migration and source import tools."],
+    ["ACT recovery", "/settings/act-recovery", "Recover and repair archived ACT records."],
+    ["Call scripts", "/settings/call-scripts", "Manage guided calling copy and branches."],
+    ["Packages & resources", "/settings/packages-resources", "Maintain shared package and resource defaults."],
+  ] as const;
+  return <div className="mx-auto grid max-w-5xl gap-5"><header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Administrator maintenance</p><h1 className="mt-1 text-3xl font-bold">Admin Tools</h1><p className="mt-2 text-slate-600">Imports, recovery, shared setup, and system-level tools stay here instead of cluttering Booking, Marketing, or Operations.</p></header><div className="grid gap-3 sm:grid-cols-2">{tools.map(([label, href, description]) => <Link className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-orange-300" href={href} key={href}><h2 className="font-bold">{label}</h2><p className="mt-1 text-sm text-slate-600">{description}</p></Link>)}</div><section className="rounded-xl border border-dashed border-slate-300 bg-white p-4"><h2 className="font-bold">Google Workspace</h2><p className="mt-1 text-sm text-slate-600">The approved Gmail/Calendar connection, sync, backfill, and review controls plug into Admin Tools as that implementation lands. Booking and Marketing consume the same shared synced data.</p></section></div>;
 }
 
 function ManagerProtectedApp() {
@@ -213,6 +221,8 @@ function AdminProtectedApp() {
     <AssistantContextProvider>
       <AppShell>
         <Switch>
+          <Route path="/command" component={AdminCommandPanelPage} />
+          <Route path="/marketing" component={MarketingHomePage} />
           <Route path="/today" component={TodayPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
@@ -242,7 +252,6 @@ function AdminProtectedApp() {
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
-          <Route path="/settings/google-workspace" component={SettingsGoogleWorkspacePage} />
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />
           <Route path="/settings" component={SettingsStub} />
