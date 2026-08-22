@@ -112,7 +112,7 @@ describe("buildGoogleScopePreview", () => {
 });
 
 describe("GoogleScopeService", () => {
-  it("persists only IDs that were present in the exact preview", async () => {
+  it("persists the complete exact approved preview", async () => {
     const replace = vi.fn(async () => undefined);
     const persistence: GoogleScopePersistence = {
       get: vi.fn(async () => ({ labels: [], calendars: [] })),
@@ -135,10 +135,11 @@ describe("GoogleScopeService", () => {
       },
       persistence,
     });
+    const preview = buildGoogleScopePreview(labels, calendars);
 
     await service.save({
-      labelIds: ["shows", "shows-2026", "receipts"],
-      calendarIds: ["az", "zone.pirate.warrior@gmail.com"],
+      labelIds: preview.labels.map((label) => label.id),
+      calendarIds: preview.calendars.map((calendar) => calendar.id),
       actorKind: "owner",
       actorId: "owner",
       now: new Date("2026-08-22T18:30:00.000Z"),
@@ -146,28 +147,8 @@ describe("GoogleScopeService", () => {
 
     expect(replace).toHaveBeenCalledWith({
       connectionId: "connection-id",
-      labels: expect.arrayContaining([
-        {
-          id: "shows",
-          name: "Shows",
-          rootId: "shows",
-          rootName: "Shows",
-        },
-        {
-          id: "shows-2026",
-          name: "Shows/2026",
-          rootId: "shows",
-          rootName: "Shows",
-        },
-      ]),
-      calendars: expect.arrayContaining([
-        { id: "az", summary: "Adventure Zone Calendar", primary: false },
-        {
-          id: "zone.pirate.warrior@gmail.com",
-          summary: "A differently named fourth calendar",
-          primary: true,
-        },
-      ]),
+      labels: preview.labels,
+      calendars: preview.calendars,
       actorKind: "owner",
       actorId: "owner",
       now: new Date("2026-08-22T18:30:00.000Z"),
