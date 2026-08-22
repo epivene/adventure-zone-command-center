@@ -76,6 +76,7 @@ export async function ensureOfficeCoordinatorSchema(client: Client): Promise<boo
         office_account_id uuid NOT NULL REFERENCES office_accounts(id) ON DELETE RESTRICT,
         organization_id uuid NOT NULL REFERENCES organizations(id) ON DELETE RESTRICT,
         contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE RESTRICT,
+        communication_template_id uuid,
         recipient_email text NOT NULL,
         subject text NOT NULL,
         body text NOT NULL,
@@ -89,10 +90,15 @@ export async function ensureOfficeCoordinatorSchema(client: Client): Promise<boo
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
+      ALTER TABLE office_email_drafts
+        ADD COLUMN IF NOT EXISTS communication_template_id uuid;
       CREATE INDEX IF NOT EXISTS office_email_drafts_state_submitted_idx
         ON office_email_drafts (state, submitted_at DESC);
       CREATE INDEX IF NOT EXISTS office_email_drafts_account_updated_idx
         ON office_email_drafts (office_account_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS office_email_drafts_template_idx
+        ON office_email_drafts (communication_template_id)
+        WHERE communication_template_id IS NOT NULL;
 
       CREATE TABLE IF NOT EXISTS office_messages (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

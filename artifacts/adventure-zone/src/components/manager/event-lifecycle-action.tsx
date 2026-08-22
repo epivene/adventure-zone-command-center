@@ -3,11 +3,17 @@ import { Link, useLocation } from "wouter";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { captureOptionalEventLocation } from "@/features/manager/event-location";
 
+type ChecklistState = "not_started" | "in_progress" | "completed" | "unable_to_complete";
 type Lifecycle = {
   bookingId: string;
   checkedInAt: string | null;
   checkedOutAt: string | null;
   wrapUpStatus: "not_started" | "incomplete" | "finished";
+  preEventChecklistState?: ChecklistState;
+  postEventChecklistState?: ChecklistState;
+  readyToOperate?: boolean;
+  hasSiteWideUnsafeIssue?: boolean;
+  hasChecklistFollowUpNeedsAttention?: boolean;
 };
 
 function time(value: string | null) {
@@ -41,21 +47,64 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
     return () => { active = false; };
   }, [bookingId, managerApi]);
 
-  async function action(kind: "check-in" | "check-out") {
+  async function checkIn() {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
       const location = await captureOptionalEventLocation();
-      const result = await managerApi<{ lifecycle: Lifecycle }>(`/manager/events/${bookingId}/${kind}`, {
+      const result = await managerApi<{ lifecycle: Lifecycle; nextAction?: string }>(`/manager/events/${bookingId}/check-in`, {
         method: "POST",
-        body: JSON.stringify({ ...location, timeZone: deviceTimeZone() }),
+        body: JSON.stringify({
+          ...location,
+          timeZone: deviceTimeZone(),
+          clientMutationId: crypto.randomUUID(),
+        }),
       });
       setLifecycle(result.lifecycle);
       onChanged?.(result.lifecycle);
-      if (kind === "check-out") navigate(`/manager/events/${bookingId}/wrap-up`);
+      navigate(`/manager/events/${bookingId}/checklist/pre-event`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : `Could not ${kind === "check-in" ? "check in" : "check out"}`);
+      setError(cause instanceof Error ? cause.message : "Could not check in");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startCheckout() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await managerApi<{ lifecycle: Lifecycle }>(`/manager/events/${bookingId}/checkout/start`, {
+        method: "POST",
+        body: JSON.stringify({ clientMutationId: crypto.randomUUID() }),
+      });
+      setLifecycle(result.lifecycle);
+      onChanged?.(result.lifecycle);
+      navigate(`/manager/events/${bookingId}/checklist/post-event`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start checkout");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function completeCheckout() {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const location = await captureOptionalEventLocation();
+      const result = await managerApi<{ lifecycle: Lifecycle }>(`/manager/events/${bookingId}/check-out`, {
+        method: "POST",
+        body: JSON.stringify({ ...location, timeZone: deviceTimeZone(), clientMutationId: crypto.randomUUID() }),
+      });
+      setLifecycle(result.lifecycle);
+      onChanged?.(result.lifecycle);
+      navigate(`/manager/events/${bookingId}/wrap-up`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not complete checkout");
     } finally {
       setBusy(false);
     }
@@ -64,7 +113,22 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
   if (loading) return compact ? null : <p className="text-sm text-slate-500">Loading event status…</p>;
   if (lifecycle?.wrapUpStatus === "finished") return <p className="text-sm font-semibold text-emerald-700">Event wrap-up finished</p>;
   if (lifecycle?.checkedOutAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-amber-700">Checked out {time(lifecycle.checkedOutAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/wrap-up`}>Finish event wrap-up</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
-  if (lifecycle?.checkedInAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-emerald-700">Checked in {time(lifecycle.checkedInAt)}</p><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void action("check-out")}>{busy ? "Checking out…" : "Check out"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+
+  if (lifecycle?.checkedInAt) {
+    const preState = lifecycle.preEventChecklistState ?? "not_started";
+    const postState = lifecycle.postEventChecklistState ?? "not_started";
+    if (preState !== "completed") {
+      return <div className="grid gap-2"><p className="text-sm font-semibold text-emerald-700">Checked in {time(lifecycle.checkedInAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/checklist/pre-event`}>Finish pre-event checklist</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+    }
+    if (postState === "in_progress") {
+      return <div className="grid gap-2">{lifecycle.readyToOperate ? <p className="text-sm font-semibold text-emerald-700">Pre-event checklist complete · Ready to operate</p> : <p className="text-sm font-semibold text-rose-700">Pre-event checklist complete · Ready to operate is blocked by a safety condition</p>}<Link className="button-primary w-fit" href={`/manager/events/${bookingId}/checklist/post-event`}>Finish post-event checklist</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+    }
+    if (postState === "completed" || postState === "unable_to_complete") {
+      return <div className="grid gap-2"><p className="text-sm font-semibold text-amber-700">Post-event checklist {postState === "completed" ? "complete" : "exception recorded"}</p><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void completeCheckout()}>{busy ? "Completing checkout…" : "Complete checkout"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+    }
+    return <div className="grid gap-2">{lifecycle.readyToOperate ? <p className="text-sm font-semibold text-emerald-700">Ready to operate</p> : <p className="text-sm font-semibold text-rose-700">Ready to operate is blocked by a safety condition. Keep the affected attraction out of service and follow owner/admin direction.</p>}<button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void startCheckout()}>{busy ? "Starting checkout…" : "Start checkout"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+  }
+
   if (!allowCheckIn) return null;
-  return <div className="grid gap-1"><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void action("check-in")}>{busy ? "Checking in…" : "Check in"}</button>{!compact ? <p className="text-xs text-slate-500">Location is optional. Check-in still works if location permission is off.</p> : null}{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+  return <div className="grid gap-1"><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void checkIn()}>{busy ? "Checking in…" : "Check in"}</button>{!compact ? <p className="text-xs text-slate-500">Location is optional. Check-in still works if location permission is off. After arrival is saved, the pre-event safety checklist opens.</p> : null}{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
 }

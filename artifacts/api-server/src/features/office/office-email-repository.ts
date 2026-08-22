@@ -1,6 +1,13 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
-import { auditEntries, contacts, officeEmailDrafts, organizationContacts, type OfficeEmailState } from "@/db/schema";
+import {
+  auditEntries,
+  communicationTemplates,
+  contacts,
+  officeEmailDrafts,
+  organizationContacts,
+  type OfficeEmailState,
+} from "@/db/schema";
 import { OfficeEmailError, canOfficeEditDraft, canOfficeSubmitDraft } from "./office-email-service";
 import type { OfficeEmailDraftView } from "./office-email-types";
 
@@ -12,6 +19,7 @@ function view(row: typeof officeEmailDrafts.$inferSelect): OfficeEmailDraftView 
     id: row.id,
     organizationId: row.organizationId,
     contactId: row.contactId,
+    communicationTemplateId: row.communicationTemplateId,
     recipientEmail: row.recipientEmail,
     subject: row.subject,
     body: row.body,
@@ -23,6 +31,8 @@ function view(row: typeof officeEmailDrafts.$inferSelect): OfficeEmailDraftView 
     updatedAt: row.updatedAt.toISOString(),
   };
 }
+
+const unresolvedTemplateToken = /\{\{[a-zA-Z][a-zA-Z0-9]*\}\}/;
 
 export class DrizzleOfficeEmailRepository {
   constructor(private readonly database: DrizzleDatabase) {}
@@ -44,6 +54,20 @@ export class DrizzleOfficeEmailRepository {
     return email;
   }
 
+  async validateTemplate(transaction: any, templateId: string | null) {
+    if (!templateId) return;
+    const [row] = await transaction
+      .select({ id: communicationTemplates.id })
+      .from(communicationTemplates)
+      .where(and(
+        eq(communicationTemplates.id, templateId),
+        eq(communicationTemplates.state, "active"),
+        eq(communicationTemplates.accessScope, "office"),
+      ))
+      .limit(1);
+    if (!row) throw new OfficeEmailError("INVALID_TEMPLATE");
+  }
+
   async listForOffice(accountId: string) {
     const rows = await this.database.select().from(officeEmailDrafts)
       .where(eq(officeEmailDrafts.officeAccountId, accountId))
@@ -62,16 +86,19 @@ export class DrizzleOfficeEmailRepository {
     accountId: string;
     organizationId: string;
     contactId: string;
+    communicationTemplateId: string | null;
     subject: string;
     body: string;
     coordinatorNote: string | null;
   }) {
     return this.database.transaction(async (transaction) => {
       const recipientEmail = await this.validateRecipient(transaction, input.organizationId, input.contactId);
+      await this.validateTemplate(transaction, input.communicationTemplateId);
       const [row] = await transaction.insert(officeEmailDrafts).values({
         officeAccountId: input.accountId,
         organizationId: input.organizationId,
         contactId: input.contactId,
+        communicationTemplateId: input.communicationTemplateId,
         recipientEmail,
         subject: input.subject.trim(),
         body: input.body.trim(),
@@ -107,6 +134,9 @@ export class DrizzleOfficeEmailRepository {
         .limit(1).for("update");
       if (!before) throw new OfficeEmailError("NOT_FOUND");
       if (!canOfficeSubmitDraft(before.state)) throw new OfficeEmailError("INVALID_STATE");
+      if (unresolvedTemplateToken.test(`${before.subject}\n${before.body}`)) {
+        throw new OfficeEmailError("UNRESOLVED_TEMPLATE_FIELD");
+      }
       const recipientEmail = await this.validateRecipient(transaction, before.organizationId, before.contactId);
       const now = new Date();
       const [row] = await transaction.update(officeEmailDrafts).set({
@@ -123,7 +153,7 @@ export class DrizzleOfficeEmailRepository {
         entityId: row.id,
         action: "office_email_submitted",
         before: { state: before.state },
-        after: { state: "submitted", officeAccountId: accountId, officeDisplayName: actorName, recipientEmail },
+        after: { state: "submitted", officeAccountId: accountId, officeDisplayName: actorName, recipientEmail, communicationTemplateId: before.communicationTemplateId },
       });
       return view(row);
     });

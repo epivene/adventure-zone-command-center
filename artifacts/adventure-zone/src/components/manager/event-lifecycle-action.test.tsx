@@ -4,13 +4,33 @@ import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const baseLifecycle = {
+  bookingId: "booking-1",
+  checkedInAt: null,
+  checkedOutAt: null,
+  wrapUpStatus: "not_started",
+  preEventChecklistState: "not_started",
+  postEventChecklistState: "not_started",
+  readyToOperate: false,
+  hasSiteWideUnsafeIssue: false,
+  hasChecklistFollowUpNeedsAttention: false,
+};
+
 const mocks = vi.hoisted(() => ({
   lifecycle: null as any,
   api: vi.fn(async (path: string, init?: RequestInit) => {
     if (path.endsWith("/lifecycle")) return { lifecycle: mocks.lifecycle };
     if (path.endsWith("/check-in") && init?.method === "POST") {
-      mocks.lifecycle = { bookingId: "booking-1", checkedInAt: "2026-08-17T22:00:00.000Z", checkedOutAt: null, wrapUpStatus: "not_started" };
-      return { lifecycle: mocks.lifecycle };
+      mocks.lifecycle = {
+        ...baseLifecycle,
+        checkedInAt: "2026-08-17T22:00:00.000Z",
+        preEventChecklistState: "in_progress",
+      };
+      return { lifecycle: mocks.lifecycle, nextAction: "pre_event_checklist" };
+    }
+    if (path.endsWith("/checkout/start") && init?.method === "POST") {
+      mocks.lifecycle = { ...mocks.lifecycle, postEventChecklistState: "in_progress" };
+      return { lifecycle: mocks.lifecycle, nextAction: "post_event_checklist" };
     }
     if (path.endsWith("/check-out") && init?.method === "POST") {
       mocks.lifecycle = { ...mocks.lifecycle, checkedOutAt: "2026-08-17T23:00:00.000Z", wrapUpStatus: "incomplete" };
@@ -30,25 +50,50 @@ import { EventLifecycleAction } from "./event-lifecycle-action";
 beforeEach(() => { mocks.lifecycle = null; mocks.api.mockClear(); });
 
 describe("EventLifecycleAction", () => {
-  it("checks in even when optional location is unavailable", async () => {
+  it("saves check in and opens the pre-event checklist even without location", async () => {
     vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
       locale: "en-US", calendar: "gregory", numberingSystem: "latn", timeZone: "America/Denver", hourCycle: "h12", hour12: true,
     });
-    const { hook } = memoryLocation({ path: "/manager", static: false });
+    const { hook, history } = memoryLocation({ path: "/manager", static: false });
     render(<Router hook={hook}><EventLifecycleAction bookingId="booking-1" /></Router>);
     fireEvent.click(await screen.findByRole("button", { name: "Check in" }));
-    expect(await screen.findByRole("button", { name: "Check out" })).toBeInTheDocument();
+    await waitFor(() => expect(history[history.length - 1]).toBe("/manager/events/booking-1/checklist/pre-event"));
     const call = mocks.api.mock.calls.find(([path]) => path === "/manager/events/booking-1/check-in");
-    expect(call?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
     expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({ locationStatus: "denied", timeZone: "America/Denver" });
+    expect(JSON.parse(String(call?.[1]?.body)).clientMutationId).toBeTruthy();
   });
 
-  it("checks out and immediately opens the event wrap-up", async () => {
-    mocks.lifecycle = { bookingId: "booking-1", checkedInAt: "2026-08-17T22:00:00.000Z", checkedOutAt: null, wrapUpStatus: "not_started" };
-    const { hook, history } = memoryLocation({ path: "/manager/route", static: false });
+  it("offers the unfinished pre-event checklist after arrival", async () => {
+    mocks.lifecycle = { ...baseLifecycle, checkedInAt: "2026-08-17T22:00:00.000Z", preEventChecklistState: "in_progress" };
+    const { hook } = memoryLocation({ path: "/manager", static: false });
     render(<Router hook={hook}><EventLifecycleAction bookingId="booking-1" /></Router>);
-    fireEvent.click(await screen.findByRole("button", { name: "Check out" }));
+    expect(await screen.findByRole("link", { name: "Finish pre-event checklist" })).toHaveAttribute("href", "/manager/events/booking-1/checklist/pre-event");
+  });
+
+  it("starts checkout by opening the post-event checklist without recording departure", async () => {
+    mocks.lifecycle = { ...baseLifecycle, checkedInAt: "2026-08-17T22:00:00.000Z", preEventChecklistState: "completed", readyToOperate: true };
+    const { hook, history } = memoryLocation({ path: "/manager", static: false });
+    render(<Router hook={hook}><EventLifecycleAction bookingId="booking-1" /></Router>);
+    fireEvent.click(await screen.findByRole("button", { name: "Start checkout" }));
+    await waitFor(() => expect(history[history.length - 1]).toBe("/manager/events/booking-1/checklist/post-event"));
+    expect(mocks.api).toHaveBeenCalledWith("/manager/events/booking-1/checkout/start", expect.objectContaining({ method: "POST" }));
+    expect(mocks.api).not.toHaveBeenCalledWith("/manager/events/booking-1/check-out", expect.anything());
+  });
+
+  it("offers the post-event checklist while it is in progress", async () => {
+    mocks.lifecycle = { ...baseLifecycle, checkedInAt: "2026-08-17T22:00:00.000Z", preEventChecklistState: "completed", postEventChecklistState: "in_progress", readyToOperate: true };
+    const { hook } = memoryLocation({ path: "/manager", static: false });
+    render(<Router hook={hook}><EventLifecycleAction bookingId="booking-1" /></Router>);
+    expect(await screen.findByRole("link", { name: "Finish post-event checklist" })).toHaveAttribute("href", "/manager/events/booking-1/checklist/post-event");
+  });
+
+  it("records final departure only after post-event checklist and opens wrap-up", async () => {
+    mocks.lifecycle = { ...baseLifecycle, checkedInAt: "2026-08-17T22:00:00.000Z", preEventChecklistState: "completed", postEventChecklistState: "completed", readyToOperate: true };
+    const { hook, history } = memoryLocation({ path: "/manager", static: false });
+    render(<Router hook={hook}><EventLifecycleAction bookingId="booking-1" /></Router>);
+    fireEvent.click(await screen.findByRole("button", { name: "Complete checkout" }));
     await waitFor(() => expect(history[history.length - 1]).toBe("/manager/events/booking-1/wrap-up"));
+    expect(mocks.api).toHaveBeenCalledWith("/manager/events/booking-1/check-out", expect.objectContaining({ method: "POST" }));
   });
 
   it("does not offer a new check in when the event is not eligible", async () => {

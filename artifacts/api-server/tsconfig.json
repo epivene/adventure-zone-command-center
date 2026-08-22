@@ -8,6 +8,7 @@
     "lib": ["esnext", "dom"],
     "target": "es2022",
     "types": ["node"],
+    "resolveJsonModule": true,
     "paths": {
       "@/*": ["./src/*"],
       "zod": ["./node_modules/zod/v4/index.d.ts"]

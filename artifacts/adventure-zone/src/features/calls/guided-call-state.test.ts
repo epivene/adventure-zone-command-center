@@ -15,13 +15,15 @@ describe("guided call state", () => {
     expect(next.staged.collect).toContain("attendance");
   });
 
-  it("stages a future-season follow-up instead of permanently declining an already-booked event", () => {
+  it("stages a future-season follow-up through the dedicated already-booked response", () => {
     const script = getGuidedCallScript("first_outreach");
     const opening = createGuidedCallState(script);
-    const close = chooseGuidedResponse(script, opening, "already_booked");
-    const future = chooseGuidedResponse(script, close, "this_year_only");
+    const alreadyBooked = chooseGuidedResponse(script, opening, "already_booked");
+    const future = chooseGuidedResponse(script, alreadyBooked, "check_next_season");
 
+    expect(alreadyBooked.nodeId).toBe("already_booked_response");
     expect(future.staged.disposition).toBe("follow_up_needed");
     expect(future.staged.followUpPreset).toBe("next_season");
+    expect(future.staged.nextAction).toBe("call");
   });
 });
