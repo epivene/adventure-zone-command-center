@@ -63,14 +63,15 @@ export default function OfficeProfilesPage() {
     </header>
     {error ? <p className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p> : null}
     {data ? <>
-      {data.families.length ? <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-orange-700">Event Families</p><h2 className="mt-1 text-xl font-bold">Grouped events</h2></div><p className="text-sm text-slate-500">Open a family to see its locations.</p></div>
+      {data.families.length ? <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer font-bold">Event Families <span className="ml-1 text-sm font-normal text-slate-500">({data.families.length})</span></summary>
+        <p className="mt-1 text-sm text-slate-600">Open a family to see its related event profiles and locations.</p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           {data.families.map((family) => <Link key={family.id} href={`/office/profiles?familyId=${family.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`} className="rounded-xl border border-slate-200 p-4 transition hover:border-orange-300 hover:bg-orange-50/50">
             <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-lg font-bold text-slate-950">{family.name}</h3>{family.description ? <p className="mt-1 line-clamp-2 text-sm text-slate-600">{family.description}</p> : <p className="mt-1 text-sm text-slate-500">Event family profile</p>}</div><span className="min-w-max rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">{family.memberCount} location{family.memberCount===1?"":"s"}</span></div>
           </Link>)}
         </div>
-      </section> : null}
+      </details> : null}
 
       <div className="flex items-center justify-between gap-3"><p className="text-sm text-slate-600">Showing {data.records.length} of {data.total} profiles</p><p className="text-xs font-semibold text-slate-400">12 per page</p></div>
       {data.records.length ? <div className="grid gap-2">
