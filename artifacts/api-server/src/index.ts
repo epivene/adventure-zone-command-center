@@ -8,6 +8,7 @@ import { db } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { ensurePaperNotesSchemaBeforeListen } from "./db/paper-notes-required-startup";
 import { ensureOfficeCoordinatorSchemaBeforeListen } from "./db/office-coordinator-required-startup";
+import { ensureGoogleWorkspaceSchemaBeforeListen } from "./db/google-workspace-required-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
@@ -90,6 +91,10 @@ await runStartupStep(
 await runStartupStep(
   "required office coordinator schema",
   ensureOfficeCoordinatorSchemaBeforeListen,
+);
+await runStartupStep(
+  "required Google Workspace schema",
+  ensureGoogleWorkspaceSchemaBeforeListen,
 );
 
 const server = app.listen(port, () => {
