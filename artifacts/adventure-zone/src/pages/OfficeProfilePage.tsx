@@ -5,6 +5,7 @@ import { officeGet, officePost } from "@/lib/office-auth-context";
 import { OfficeProfileEditor } from "@/components/office/office-profile-editor";
 import { OfficeContactEditor, type OfficeContactDetail, type OfficeContactPhone } from "@/components/office/office-contact-editor";
 import { OfficeLocationEditor, type OfficeLocationDetail } from "@/components/office/office-location-editor";
+import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
 
 type Booking={id:string;name:string;city:string;region:string;startsAt:string|null;endsAt:string|null;status:string};
 type Note={id:string;kind:string;body:string;occurredAt:string};
@@ -45,6 +46,8 @@ export default function OfficeProfilePage({profileId}:{profileId:string}){
     {editProfile?<OfficeProfileEditor profile={profile} onCancel={()=>setEditProfile(false)} onSaved={async()=>{setEditProfile(false);await load();}}/>:null}
 
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Event profile</p><h2 className="mt-1 text-lg font-bold">About</h2></div><p className="text-sm text-slate-500">{address([profile.address1,profile.address2,profile.city,profile.region,profile.postalCode])||"Mailing address not set"}</p></div>{profile.description?<p className="mt-3 whitespace-pre-wrap text-slate-700">{profile.description}</p>:<p className="mt-3 text-sm text-slate-500">No event description yet.</p>}</section>
+
+    <AttendanceHistoryPanel mode="office" profileId={profileId} />
 
     <section className="grid gap-3 sm:grid-cols-3">
       <StatCard value={profile.contacts.length} label={`Contact${profile.contacts.length===1?"":"s"}`} active={openSection==="contacts"} onClick={()=>toggle("contacts")}/>
