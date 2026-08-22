@@ -195,9 +195,11 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           errorCode === "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING" ||
           errorCode === "GOOGLE_WORKSPACE_UNEXPECTED_SCOPE_GRANTED"
             ? 403
-            : errorCode === "GOOGLE_WORKSPACE_OAUTH_STATE_INVALID"
-              ? 400
-              : 502;
+            : errorCode === "GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT"
+              ? 409
+              : errorCode === "GOOGLE_WORKSPACE_OAUTH_STATE_INVALID"
+                ? 400
+                : 502;
         res.status(status).json({ error: errorCode });
       }
     },
