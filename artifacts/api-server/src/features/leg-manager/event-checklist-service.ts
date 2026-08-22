@@ -1,5 +1,6 @@
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
+import { runBusinessDriveMigrations } from "@workspace/db/business-drive-migrations";
 import type {
   ChecklistFollowUpSyncState,
   ChecklistPhase,
@@ -98,6 +99,8 @@ export class EventChecklistService {
       throw new Error("CHECKLIST_OUTSIDE_LEG");
     }
 
+    // Keep manager recovery independent from owner/settings startup paths.
+    await runBusinessDriveMigrations();
     await ensureEventChecklistTemplates(this.database as any);
     let run = await this.repository.getRun(
       input.bookingId,
