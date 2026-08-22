@@ -59,6 +59,7 @@ import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
 import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
 import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
+import SettingsGoogleWorkspacePage from "@/pages/SettingsGoogleWorkspacePage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
 import QuickAddPage from "@/pages/QuickAddPage";
@@ -252,6 +253,7 @@ function AdminProtectedApp() {
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
+          <Route path="/settings/google-workspace" component={SettingsGoogleWorkspacePage} />
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />
           <Route path="/settings" component={SettingsStub} />

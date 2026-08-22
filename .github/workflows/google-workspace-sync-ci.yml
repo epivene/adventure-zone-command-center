@@ -1,0 +1,84 @@
+name: Google Workspace Sync CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/google-workspace-sync-ci.yml"
+      - "artifacts/api-server/src/features/google-workspace/**"
+      - "artifacts/api-server/src/routes/google-workspace-*.ts"
+      - "artifacts/api-server/src/db/google-workspace-*.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/google-workspace/**"
+      - "artifacts/adventure-zone/src/components/google-workspace/**"
+      - "artifacts/adventure-zone/src/pages/SettingsGoogleWorkspacePage*"
+      - "artifacts/adventure-zone/src/App.tsx"
+      - "artifacts/adventure-zone/src/App.google-workspace-navigation.test.ts"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
+      - "lib/db/src/google-workspace-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/package.json"
+      - "lib/db/migrations/*google_workspace*"
+      - "docs/operations/google-workspace-readonly-setup.md"
+  push:
+    branches:
+      - feature/google-workspace-connection-scope
+    paths:
+      - ".github/workflows/google-workspace-sync-ci.yml"
+      - "artifacts/api-server/src/features/google-workspace/**"
+      - "artifacts/api-server/src/routes/google-workspace-*.ts"
+      - "artifacts/api-server/src/db/google-workspace-*.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/google-workspace/**"
+      - "artifacts/adventure-zone/src/components/google-workspace/**"
+      - "artifacts/adventure-zone/src/pages/SettingsGoogleWorkspacePage*"
+      - "artifacts/adventure-zone/src/App.tsx"
+      - "artifacts/adventure-zone/src/App.google-workspace-navigation.test.ts"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
+      - "lib/db/src/google-workspace-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/package.json"
+      - "lib/db/migrations/*google_workspace*"
+      - "docs/operations/google-workspace-readonly-setup.md"
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: API feature and route tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/google-workspace \
+            src/routes/google-workspace-oauth-callback.test.ts \
+            src/routes/google-workspace-settings.test.ts \
+            src/db/google-workspace-required-startup.test.ts
+      - name: Frontend setup and navigation tests
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run \
+            src/features/google-workspace \
+            src/components/google-workspace \
+            src/pages/SettingsGoogleWorkspacePage.test.tsx \
+            src/App.google-workspace-navigation.test.ts
+      - run: pnpm --filter @workspace/api-server typecheck
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/api-server build
+      - run: pnpm --filter @workspace/adventure-zone build
