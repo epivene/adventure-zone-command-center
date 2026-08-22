@@ -57,6 +57,8 @@ import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
 import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
 import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
+import SettingsBusinessSourcesPage from "@/pages/SettingsBusinessSourcesPage";
+import SettingsCommunicationTemplatesPage from "@/pages/SettingsCommunicationTemplatesPage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
 import QuickAddPage from "@/pages/QuickAddPage";
@@ -239,6 +241,8 @@ function AdminProtectedApp() {
           <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
+          <Route path="/settings/business-sources" component={SettingsBusinessSourcesPage} />
+          <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
           <Route path="/settings/act-migration" component={ActMigrationPage} />
