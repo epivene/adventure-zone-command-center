@@ -2,8 +2,8 @@ import { pool as defaultPool } from "@workspace/db";
 
 import { ensureOfficeCoordinatorSchema } from "./office-coordinator-startup-migration";
 
-const advisoryLockSql =
-  "SELECT pg_advisory_lock(hashtext('adventure-zone:office-coordinator-schema'))";
+const advisoryTryLockSql =
+  "SELECT pg_try_advisory_lock(hashtext('adventure-zone:office-coordinator-schema')) AS locked";
 const advisoryUnlockSql =
   "SELECT pg_advisory_unlock(hashtext('adventure-zone:office-coordinator-schema'))";
 
@@ -28,8 +28,11 @@ export async function ensureOfficeCoordinatorSchemaBeforeListen(options?: {
   let locked = false;
 
   try {
-    await client.query(advisoryLockSql);
-    locked = true;
+    const result = await client.query(advisoryTryLockSql);
+    locked = result.rows[0]?.locked === true;
+    if (!locked) {
+      throw new Error("OFFICE_COORDINATOR_SCHEMA_LOCK_BUSY");
+    }
     return await ensureSchema(client);
   } finally {
     if (locked) {
