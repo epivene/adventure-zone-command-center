@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { apiFetch, apiGet } from "@/lib/auth-token";
+import { apiGet, apiPost } from "@/lib/auth-token";
 import { officeGet } from "@/lib/office-auth-context";
 
 type ProfileSourceDocument = {
@@ -48,15 +48,9 @@ export function ProfileSourceDocuments({
     setBusyId(document.id);
     setError("");
     try {
-      const response = await apiFetch(`/business-sources/${document.id}/file`);
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({})) as { error?: string };
-        throw new Error(payload.error ?? "Could not open the document.");
-      }
-      if (!response.redirected || !response.url) {
-        throw new Error("The protected document did not return a signed file link.");
-      }
-      window.open(response.url, "_blank", "noopener,noreferrer");
+      const result = await apiPost<{ url: string }>(`/business-sources/${document.id}/file/open`, {});
+      if (!result.url) throw new Error("The protected document did not return a signed file link.");
+      window.open(result.url, "_blank", "noopener,noreferrer");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not open the document.");
     } finally {
