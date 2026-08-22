@@ -122,6 +122,12 @@ export class PostgresGoogleConnectionRepository {
     if (!email || !refreshToken || !Number.isFinite(input.now.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_CONNECTION_INPUT_INVALID");
     }
+
+    const current = await this.currentRow();
+    if (current && current.account_email.toLowerCase() !== email) {
+      throw new Error("GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT");
+    }
+
     const grantedScopes = [...new Set(input.scopes.map((scope) => scope.trim()))]
       .filter(Boolean);
     const encryptedRefreshToken = encryptGoogleSecret(
@@ -130,38 +136,50 @@ export class PostgresGoogleConnectionRepository {
     );
 
     const result = await this.pool.query(
-      `WITH disconnected AS (
-         UPDATE google_workspace_connections
-            SET status = 'disconnected',
-                disconnected_at = $5,
-                updated_at = $5
-          WHERE account_email <> $1
-            AND status <> 'disconnected'
+      `WITH upserted AS (
+         INSERT INTO google_workspace_connections (
+           account_email,
+           encrypted_refresh_token,
+           granted_scopes,
+           google_subject,
+           connected_at,
+           last_verified_at,
+           status,
+           disconnected_at,
+           last_error_code,
+           created_at,
+           updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $5, 'connected', NULL, NULL, $5, $5)
+         ON CONFLICT (account_email) DO UPDATE SET
+           encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
+           granted_scopes = EXCLUDED.granted_scopes,
+           google_subject = EXCLUDED.google_subject,
+           connected_at = EXCLUDED.connected_at,
+           last_verified_at = EXCLUDED.last_verified_at,
+           status = 'connected',
+           disconnected_at = NULL,
+           last_error_code = NULL,
+           updated_at = EXCLUDED.updated_at
+         RETURNING *
+       ), audited AS (
+         INSERT INTO google_workspace_audit_events (
+           actor_kind,
+           action,
+           target_type,
+           target_id,
+           metadata,
+           created_at
+         )
+         SELECT
+           'system',
+           'connection_connected',
+           'connection',
+           id::text,
+           jsonb_build_object('accountEmail', account_email),
+           $5
+         FROM upserted
        )
-       INSERT INTO google_workspace_connections (
-         account_email,
-         encrypted_refresh_token,
-         granted_scopes,
-         google_subject,
-         connected_at,
-         last_verified_at,
-         status,
-         disconnected_at,
-         last_error_code,
-         created_at,
-         updated_at
-       ) VALUES ($1, $2, $3, $4, $5, $5, 'connected', NULL, NULL, $5, $5)
-       ON CONFLICT (account_email) DO UPDATE SET
-         encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
-         granted_scopes = EXCLUDED.granted_scopes,
-         google_subject = EXCLUDED.google_subject,
-         connected_at = EXCLUDED.connected_at,
-         last_verified_at = EXCLUDED.last_verified_at,
-         status = 'connected',
-         disconnected_at = NULL,
-         last_error_code = NULL,
-         updated_at = EXCLUDED.updated_at
-       RETURNING *`,
+       SELECT * FROM upserted`,
       [
         email,
         encryptedRefreshToken,
@@ -183,6 +201,9 @@ export class PostgresGoogleConnectionRepository {
   async createReadClient(): Promise<GoogleWorkspaceReadClient | null> {
     const row = await this.currentRow();
     if (!row) return null;
+    if (row.status === "reauthorization_required") {
+      throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
     const environment = this.requireEnvironment();
     const refreshToken = decryptGoogleSecret(
       row.encrypted_refresh_token,
@@ -193,11 +214,28 @@ export class PostgresGoogleConnectionRepository {
 
   async markReauthorizationRequired(errorCode: string): Promise<void> {
     await this.pool.query(
-      `UPDATE google_workspace_connections
-          SET status = 'reauthorization_required',
-              last_error_code = $1,
-              updated_at = now()
-        WHERE status <> 'disconnected'`,
+      `WITH changed AS (
+         UPDATE google_workspace_connections
+            SET status = 'reauthorization_required',
+                last_error_code = $1,
+                updated_at = now()
+          WHERE status <> 'disconnected'
+          RETURNING id
+       )
+       INSERT INTO google_workspace_audit_events (
+         actor_kind,
+         action,
+         target_type,
+         target_id,
+         metadata
+       )
+       SELECT
+         'system',
+         'connection_reauthorization_required',
+         'connection',
+         id::text,
+         jsonb_build_object('errorCode', $1::text)
+       FROM changed`,
       [errorCode.trim() || "invalid_grant"],
     );
   }
@@ -207,11 +245,30 @@ export class PostgresGoogleConnectionRepository {
       throw new Error("GOOGLE_WORKSPACE_CONNECTION_DATE_INVALID");
     }
     await this.pool.query(
-      `UPDATE google_workspace_connections
-          SET status = 'disconnected',
-              disconnected_at = $1,
-              updated_at = $1
-        WHERE status <> 'disconnected'`,
+      `WITH changed AS (
+         UPDATE google_workspace_connections
+            SET status = 'disconnected',
+                disconnected_at = $1,
+                updated_at = $1
+          WHERE status <> 'disconnected'
+          RETURNING id
+       )
+       INSERT INTO google_workspace_audit_events (
+         actor_kind,
+         action,
+         target_type,
+         target_id,
+         metadata,
+         created_at
+       )
+       SELECT
+         'system',
+         'connection_disconnected',
+         'connection',
+         id::text,
+         '{}'::jsonb,
+         $1
+       FROM changed`,
       [now],
     );
   }
