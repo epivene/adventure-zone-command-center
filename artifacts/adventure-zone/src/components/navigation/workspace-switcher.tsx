@@ -31,13 +31,12 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
       <DropdownMenuTrigger asChild>
         <button
           aria-label={`Current workspace: ${workspaceLabel[workspace]}`}
-          className="mr-2 inline-flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+          className="mr-2 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-left hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
           type="button"
         >
-          <span className="min-w-0">
-            <span className="block truncate font-bold tracking-tight">Adventure Zone</span>
-            <span className="block truncate text-xs font-semibold text-slate-500">{workspaceLabel[workspace]}</span>
-          </span>
+          <span className="truncate font-bold tracking-tight">Adventure Zone</span>
+          <span aria-hidden="true" className="text-slate-300">·</span>
+          <span className="truncate text-sm font-semibold text-slate-500">{workspaceLabel[workspace]}</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
         </button>
       </DropdownMenuTrigger>
