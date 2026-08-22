@@ -4,9 +4,9 @@
 
 **Goal:** Attach the Ravalli County Fair contract and Hawthorne Armed Forces Day vendor application to the correct event/profile history as protected historical source documents, preserving reviewed event-specific facts without changing universal package defaults or creating obsolete tasks.
 
-**Architecture:** Extend the Phase 1 `business_source_documents` model with explicit entity links and protected binary-object metadata. Reuse the existing Google Cloud object-storage infrastructure used by Leg Manager receipt images instead of introducing another storage provider. Owner-only upload/link/review routes manage the actual files and historical terms; profile views render document metadata according to access scope, while signed-contract binaries and signatures remain owner-only by default.
+**Architecture:** Extend the Phase 1 `business_source_documents` model with explicit entity links and protected binary-object metadata. Reuse the existing private Google Cloud object-storage infrastructure instead of introducing another storage provider. Owner-only upload/link/review routes manage the actual files and historical terms; authorized file opens use short-lived signed URLs generated only after owner authorization. Profile views render document metadata according to access scope, while signed-contract binaries and signatures remain owner-only by default.
 
-**Tech Stack:** TypeScript, Express, React/Vite, PostgreSQL/Drizzle, Zod, Vitest/Testing Library, existing owner auth, existing profile/event-family/location model, existing Google Cloud object storage infrastructure.
+**Tech Stack:** TypeScript, Express, React/Vite, PostgreSQL/Drizzle, Zod, Vitest/Testing Library, existing owner auth, existing profile/event-family/location model, existing `GoogleCloudPrivateObjectStorage` infrastructure.
 
 **Spec:** `docs/superpowers/specs/2026-08-22-business-drive-source-integration-design.md`
 
@@ -19,7 +19,7 @@
 - Contract signatures and private legal/business identifiers remain owner-only.
 - Office Coordinator may see only document metadata or files explicitly marked office-safe; release 1 seeds these two source documents as owner-only.
 - Leg Managers do not receive these sales/legal documents through this feature.
-- File access must be authorized on the server. A storage key or object URL must never become a permanent public URL.
+- File access must be authorized on the server. A storage key or permanent object URL must never be returned to the frontend.
 - Event-specific reviewed facts remain snapshots with provenance. Later package-setting changes do not rewrite historical contract/application terms.
 
 ---
@@ -74,7 +74,7 @@ business_source_document_links
   organization_location_id uuid NULL FK organization_locations set null
   booking_id uuid NULL FK bookings set null
   package_template_id uuid NULL FK package_templates set null
-  link_kind text NOT NULL
+  link_kind text NOT NULL CHECK profile|location|booking|package_reference
   link_note text NULL
   created_by text NOT NULL
   created_at timestamptz NOT NULL
@@ -84,22 +84,41 @@ business_source_document_links
     (booking_id IS NOT NULL)::int +
     (package_template_id IS NOT NULL)::int = 1
   )
-  UNIQUE(source_document_id, link_kind, organization_id, organization_location_id, booking_id, package_template_id)
 
 business_source_historical_terms
   id uuid PK
   source_document_id uuid NOT NULL FK business_source_documents cascade
-  document_link_id uuid NULL FK business_source_document_links cascade
+  document_link_id uuid NULL FK business_source_document_links set null
   term_key text NOT NULL
   label text NOT NULL
   value_text text NOT NULL
-  value_type text NOT NULL
+  value_type text NOT NULL CHECK text|money_cents|date|date_range|integer|boolean
   source_locator text NOT NULL
   review_state text NOT NULL CHECK proposed|approved|rejected
   reviewed_by text NULL
   reviewed_at timestamptz NULL
   created_at / updated_at timestamptz NOT NULL
   UNIQUE(source_document_id, term_key, source_locator)
+```
+
+Ordinary multi-column uniqueness is not sufficient for nullable link targets. Create one partial unique index per target type:
+
+```sql
+CREATE UNIQUE INDEX business_source_document_links_profile_unique
+ON business_source_document_links (source_document_id, organization_id)
+WHERE organization_id IS NOT NULL;
+
+CREATE UNIQUE INDEX business_source_document_links_location_unique
+ON business_source_document_links (source_document_id, organization_location_id)
+WHERE organization_location_id IS NOT NULL;
+
+CREATE UNIQUE INDEX business_source_document_links_booking_unique
+ON business_source_document_links (source_document_id, booking_id)
+WHERE booking_id IS NOT NULL;
+
+CREATE UNIQUE INDEX business_source_document_links_package_unique
+ON business_source_document_links (source_document_id, package_template_id)
+WHERE package_template_id IS NOT NULL;
 ```
 
 - [ ] **Step 1: Write the failing schema contract test**
@@ -129,7 +148,7 @@ pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/fea
 
 - [ ] **Step 3: Implement migration and matching Drizzle schema**
 
-Index `(organization_id, created_at)`, `(organization_location_id, created_at)`, `(booking_id, created_at)`, and `(source_document_id, review_state)`.
+In addition to the partial unique indexes, add read indexes on `(organization_id, created_at)`, `(organization_location_id, created_at)`, `(booking_id, created_at)`, and `(source_document_id, review_state)`.
 
 - [ ] **Step 4: Export schema and run typecheck**
 
@@ -146,28 +165,21 @@ git commit -m "feat: add linked event source documents"
 
 ---
 
-### Task 2: Add protected source-document object storage using the existing Google Cloud provider
+### Task 2: Add protected source-document object storage using the existing private storage provider
 
 **Files:**
 - Create: `artifacts/api-server/src/features/business-sources/source-document-storage.ts`
-- Modify: `artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts` only if a small generic base abstraction is needed
 - Create: `artifacts/api-server/src/features/business-sources/source-document-file-service.ts`
+- Reuse: `artifacts/api-server/src/lib/private-object-storage.ts`
 - Test: `artifacts/api-server/src/features/business-sources/source-document-file-service.test.ts`
 
 **Interfaces:**
 
 ```ts
 export interface SourceDocumentObjectStorage {
-  put(input: {
-    key: string;
-    mimeType: string;
-    bytes: Uint8Array;
-  }): Promise<void>;
-  get(input: { key: string }): Promise<{
-    mimeType: string;
-    bytes: Uint8Array;
-  } | null>;
-  delete(input: { key: string }): Promise<void>;
+  put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
+  getSignedReadUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  delete(key: string): Promise<void>;
 }
 
 export class GoogleCloudSourceDocumentObjectStorage
@@ -181,6 +193,8 @@ export async function uploadSourceDocumentFile(input: {
   actorId: string;
 }): Promise<SourceDocumentFileRecord>;
 ```
+
+Implement `GoogleCloudSourceDocumentObjectStorage` as a small wrapper around the existing `GoogleCloudPrivateObjectStorage`, using the same environment/bucket resolution rather than creating new storage credentials.
 
 Storage key format:
 
@@ -198,11 +212,11 @@ Allowed release-1 MIME types:
 ]
 ```
 
-Maximum source-document upload size: `30 * 1024 * 1024` bytes.
+Maximum source-document upload size: `30 * 1024 * 1024` bytes. Signed read URLs expire after 300 seconds by default.
 
 - [ ] **Step 1: Write service tests with an in-memory storage fake**
 
-Prove SHA-256 metadata is stable, repeated upload of identical bytes is idempotent, replacement updates metadata only after new object storage succeeds, and unsupported MIME/oversize inputs reject before storage.
+Prove SHA-256 metadata is stable, repeated upload of identical bytes is idempotent, unsupported MIME/oversize inputs reject before storage, and a failed replacement upload leaves the old DB row/object authoritative.
 
 - [ ] **Step 2: Run and verify RED**
 
@@ -210,11 +224,11 @@ Prove SHA-256 metadata is stable, repeated upload of identical bytes is idempote
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/business-sources/source-document-file-service.test.ts
 ```
 
-- [ ] **Step 3: Implement storage by reusing current Google Cloud credentials/configuration**
+- [ ] **Step 3: Implement safe replacement sequencing**
 
-Do not add new environment variable names or a second bucket/provider path unless the existing object-storage class cannot support a different key prefix. If a generic base is extracted, keep receipt behavior byte-for-byte compatible.
+For a replacement: upload the new hashed object first; transactionally replace the file metadata row second; after DB success, best-effort delete the old object if the storage key changed. Never delete the old object before the new upload and DB update both succeed.
 
-- [ ] **Step 4: Run receipt storage regression tests plus source-document tests**
+- [ ] **Step 4: Run private-storage/receipt regressions plus source-document tests**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/business-sources/source-document-file-service.test.ts artifacts/api-server/src/features/leg-manager/receipt-service.test.ts
@@ -223,13 +237,13 @@ pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/fea
 - [ ] **Step 5: Commit**
 
 ```bash
-git add artifacts/api-server/src/features/business-sources/source-document-storage.ts artifacts/api-server/src/features/business-sources/source-document-file-service.ts artifacts/api-server/src/features/business-sources/source-document-file-service.test.ts artifacts/api-server/src/features/leg-manager/leg-manager-object-storage.ts
+git add artifacts/api-server/src/features/business-sources/source-document-storage.ts artifacts/api-server/src/features/business-sources/source-document-file-service.ts artifacts/api-server/src/features/business-sources/source-document-file-service.test.ts
 git commit -m "feat: store protected business source documents"
 ```
 
 ---
 
-### Task 3: Add owner-only upload, download, link, and historical-term APIs
+### Task 3: Add owner-only upload, open, link, and historical-term APIs
 
 **Files:**
 - Create: `artifacts/api-server/src/routes/business-source-document-files.ts`
@@ -241,11 +255,11 @@ git commit -m "feat: store protected business source documents"
 **Owner routes:**
 
 ```text
-PUT  /business-sources/:documentId/file
-GET  /business-sources/:documentId/file
+PUT    /business-sources/:documentId/file
+GET    /business-sources/:documentId/file
 DELETE /business-sources/:documentId/file
-GET  /business-sources/:documentId/links
-POST /business-sources/:documentId/links {
+GET    /business-sources/:documentId/links
+POST   /business-sources/:documentId/links {
   linkKind,
   organizationId?,
   organizationLocationId?,
@@ -254,20 +268,20 @@ POST /business-sources/:documentId/links {
   linkNote?
 }
 DELETE /business-sources/:documentId/links/:linkId
-GET  /business-sources/:documentId/historical-terms
-POST /business-sources/:documentId/historical-terms
-PATCH /business-sources/:documentId/historical-terms/:termId
+GET    /business-sources/:documentId/historical-terms
+POST   /business-sources/:documentId/historical-terms
+PATCH  /business-sources/:documentId/historical-terms/:termId
 ```
 
-Binary upload body uses `express.raw` with the 30 MB limit. Download returns authorized bytes with `Content-Type` and `Content-Disposition: inline; filename="..."`.
+Binary upload uses `express.raw` with the 30 MB limit. Authorized `GET /file` generates a 300-second signed read URL and returns a `302` redirect to that URL. The API response never exposes the persistent storage key.
 
 - [ ] **Step 1: Write authorization and file tests**
 
-Owner can upload/download. Office token and Leg Manager token cannot access these owner-only source binaries. Missing storage object returns 404 without exposing the storage key.
+Owner can upload/open/delete. Office token and Leg Manager token cannot access these owner-only source binaries. Missing storage metadata returns 404. `GET /file` returns a short-lived signed redirect only after owner auth.
 
 - [ ] **Step 2: Write strict link tests**
 
-Exactly one target ID is required. The target must exist. `linkKind` must match the provided target type. A profile document cannot be linked to a consolidated/retired profile when an active canonical profile is known.
+Exactly one target ID is required. The target must exist. `linkKind` must match the provided target type. A profile document cannot be linked to a consolidated/retired profile when an active canonical profile is known. Repeating the same link is idempotent or returns the existing link rather than duplicating it.
 
 - [ ] **Step 3: Run and verify RED**
 
@@ -277,7 +291,7 @@ pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/rou
 
 - [ ] **Step 4: Implement both routers after `requireOwnerMiddleware`**
 
-Use the existing Phase 1 source-document repository and never return raw object-storage keys to clients.
+Use the existing Phase 1 source-document repository and explicit owner authorization on every file/link/term route.
 
 - [ ] **Step 5: Test/typecheck and commit**
 
@@ -313,6 +327,7 @@ const RAVALLI_TERMS = [
   ["setup.arrival_date", "Permission to arrive", "2025-08-25", "date", "Contract p.1"],
   ["setup.departure_through", "Permission to remain through", "2025-08-31", "date", "Contract p.1"],
   ["site.camping", "Camping with attractions", "true", "boolean", "Contract p.1"],
+  ["site.power", "Power arrangement", "One 220-volt 50-amp outlet or five 110-volt outlets within 150 feet; contract also permits hardwire/spider boxes or a 20 kW generator", "text", "Contract p.1"],
   ["site.water", "Water access", "One faucet within 150 feet for water rides and cleaning", "text", "Contract p.1"],
   ["site.restrooms", "Restroom access", "24-hour restroom access from arrival through departure", "text", "Contract p.1"],
   ["site.exclusivity", "Attraction exclusivity", "The Adventure Zone exclusive on all rides and games", "text", "Contract p.1"],
@@ -393,7 +408,7 @@ Full Profile -> Documents / Source documents
 
 - [ ] **Step 1: Write UI tests**
 
-The source page accepts PDF/DOCX/XLSX and displays file state. Profile component shows linked Ravalli/Hawthorne metadata only when the API returns an authorized link. No storage key is rendered.
+The source page accepts PDF/DOCX/XLSX and displays file state. Profile component shows linked Ravalli/Hawthorne metadata only when the API returns an authorized link. No storage key or signed URL is stored/rendered after the open action completes.
 
 - [ ] **Step 2: Add upload/link controls to Business Sources settings**
 
@@ -540,14 +555,14 @@ pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone
 pnpm run typecheck
 ```
 
-- [ ] **Step 4: Verify no source binary/public object URL leaked into the repository**
+- [ ] **Step 4: Verify no source binary/permanent object URL leaked into the repository**
 
 ```bash
 git ls-files | rg -i "pirates rebellion contract|vendor app 2026" && exit 1 || true
 rg -n "storage.googleapis.com|business-source-documents/" artifacts/adventure-zone/src || true
 ```
 
-Any frontend match containing a permanent bucket/object URL must be removed; downloads must go through authorized API access.
+Any frontend match containing a permanent bucket/object URL or storage key must be removed; file opens must go through the owner-authorized API that issues a short-lived redirect.
 
 - [ ] **Step 5: Commit verification fixes if required**
 
