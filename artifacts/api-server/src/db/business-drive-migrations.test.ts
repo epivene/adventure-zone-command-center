@@ -14,6 +14,7 @@ describe("business drive migration runner", () => {
       "20260822_commercial_offer_rules.sql",
       "20260822_event_checklists.sql",
       "20260822_resource_checklist_tags.sql",
+      "20260822_resource_asset_identity.sql",
     ]);
   });
 
