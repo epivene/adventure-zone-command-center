@@ -98,8 +98,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             </nav>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
+            <MessageBubbleLink
+              className="rounded-lg shadow-none"
+              href="/manager-communications"
+              label="Messages"
+              unreadCount={unreadMessages}
+            />
             <AssistantLauncher placement="toolbar" />
-            {workspace === "operations" ? <MessageBubbleLink href="/manager-communications" label="Messages" unreadCount={unreadMessages} /> : null}
             {workspace === "booking" ? <AddMenu /> : null}
             <AppMenu workspace={workspace} />
           </div>
