@@ -23,7 +23,7 @@ export type PlanningRouteLine = {
 type RenderEvent = MapEvent & { planningEmphasis?: "primary" | "dimmed" };
 
 function escapeHtml(value: string) {
-  return value.replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]!);
+  return value.replace(/[&<>'\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '\"': "&quot;" })[char]!);
 }
 
 function eventIcon(event: RenderEvent, focused: boolean) {
@@ -33,10 +33,10 @@ function eventIcon(event: RenderEvent, focused: boolean) {
     .join(" ");
   return L.divIcon({
     className: "az-route-marker-wrap",
-    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)}"><span class="az-route-pin__dot"></span></span>`,
-    iconSize: [34, 42],
-    iconAnchor: [17, 40],
-    popupAnchor: [0, -34],
+    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};width:22px;height:22px"><span class="az-route-pin__dot"></span></span>`,
+    iconSize: [26, 32],
+    iconAnchor: [13, 30],
+    popupAnchor: [0, -28],
   });
 }
 

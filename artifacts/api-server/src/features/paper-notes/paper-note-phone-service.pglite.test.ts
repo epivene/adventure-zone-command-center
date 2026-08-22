@@ -45,6 +45,9 @@ async function harness() {
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
+    create unique index contact_phones_contact_normalized_number_unique
+      on contact_phones(contact_id, normalized_number)
+      where normalized_number is not null;
     create table organization_phones (
       id uuid primary key default gen_random_uuid(),
       organization_id uuid not null references organizations(id),
@@ -100,6 +103,42 @@ describe("PaperNotePhoneService", () => {
       instructions: "Ask for events",
       source: "paper_note",
       source_paper_note_entry_id: entryId,
+    }]);
+  });
+
+  it("treats an already-saved normalized contact phone as already present", async () => {
+    const { client, db, service } = await harness();
+    clients.push(client);
+    const inserted = await client.query(
+      `insert into contact_phones(contact_id, number, normalized_number, type, label, status, primary, source)
+       values($1, '435-890-6349', '+14358906349', 'office', 'saved label', 'active', false, 'local')
+       returning id`,
+      [contactId],
+    );
+    const savedId = String(inserted.rows[0]?.id);
+
+    const result = await service.apply(db as never, {
+      owner: { kind: "contact", contactId },
+      decision: "add_alternate",
+      paper: {
+        number: "(435) 890-6349",
+        extension: null,
+        type: "mobile",
+        label: "paper label",
+        instructions: "paper instructions",
+        status: "active",
+      },
+      existingPhoneId: null,
+      sourcePaperNoteEntryId: entryId,
+    }, new Date("2026-08-22T19:47:46Z"));
+
+    expect(result).toEqual({ phoneId: savedId, action: "already_present" });
+    expect((await client.query(`select id, type, label, source, source_paper_note_entry_id from contact_phones where contact_id = $1`, [contactId])).rows).toEqual([{
+      id: savedId,
+      type: "office",
+      label: "saved label",
+      source: "local",
+      source_paper_note_entry_id: null,
     }]);
   });
 

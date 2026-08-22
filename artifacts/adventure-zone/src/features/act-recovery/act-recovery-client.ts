@@ -70,6 +70,10 @@ export function startRecovery(): Promise<ActRecoveryStatus> {
   });
 }
 
+export function startOwnershipRepair(): Promise<ActRecoveryStatus> {
+  return apiPost<ActRecoveryStatus>("/act-recovery/ownership-repair", {});
+}
+
 export function getRecoveryReview(page = 1): Promise<ActRecoveryReviewPage> {
   return apiGet<ActRecoveryReviewPage>(`/act-recovery/review?page=${page}&pageSize=50`);
 }

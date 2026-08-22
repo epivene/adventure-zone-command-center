@@ -1,0 +1,195 @@
+/* Adventure Zone appearance palettes. The class is applied to <html> and stored per browser/device. */
+:root {
+  color-scheme: light;
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --input: 214 24% 84%;
+  --ring: 24 95% 53%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --card-border: 214 32% 91%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 47% 11%;
+  --popover-border: 214 32% 91%;
+  --primary: 24 95% 53%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 24 100% 96%;
+  --accent-foreground: 24 95% 35%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 214 32% 91%;
+  --sidebar-primary: 24 95% 53%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 210 40% 96%;
+  --sidebar-accent-foreground: 222 47% 11%;
+  --sidebar-ring: 24 95% 53%;
+}
+
+html.warm-light {
+  color-scheme: light;
+  --background: 39 45% 95%;
+  --foreground: 28 24% 16%;
+  --border: 35 24% 83%;
+  --input: 35 20% 76%;
+  --card: 42 50% 98%;
+  --card-foreground: 28 24% 16%;
+  --card-border: 35 24% 83%;
+  --popover: 42 50% 98%;
+  --popover-foreground: 28 24% 16%;
+  --popover-border: 35 24% 83%;
+  --secondary: 37 34% 91%;
+  --secondary-foreground: 28 24% 16%;
+  --muted: 37 34% 91%;
+  --muted-foreground: 30 13% 42%;
+  --accent: 31 74% 91%;
+  --accent-foreground: 24 86% 35%;
+  --sidebar: 42 50% 98%;
+  --sidebar-foreground: 28 24% 16%;
+  --sidebar-border: 35 24% 83%;
+  --sidebar-accent: 37 34% 91%;
+  --sidebar-accent-foreground: 28 24% 16%;
+}
+
+html.dark {
+  color-scheme: dark;
+  --background: 220 20% 6%;
+  --foreground: 210 20% 94%;
+  --border: 216 17% 18%;
+  --input: 216 16% 27%;
+  --ring: 24 95% 57%;
+  --card: 220 17% 10%;
+  --card-foreground: 210 20% 94%;
+  --card-border: 216 17% 18%;
+  --popover: 220 17% 11%;
+  --popover-foreground: 210 20% 94%;
+  --popover-border: 216 17% 22%;
+  --primary: 24 95% 57%;
+  --primary-foreground: 220 20% 7%;
+  --secondary: 217 16% 15%;
+  --secondary-foreground: 210 20% 94%;
+  --muted: 217 16% 15%;
+  --muted-foreground: 215 15% 65%;
+  --accent: 24 42% 17%;
+  --accent-foreground: 25 95% 72%;
+  --destructive: 0 63% 46%;
+  --destructive-foreground: 0 0% 100%;
+  --sidebar: 220 18% 9%;
+  --sidebar-foreground: 210 20% 94%;
+  --sidebar-border: 216 17% 18%;
+  --sidebar-primary: 24 95% 57%;
+  --sidebar-primary-foreground: 220 20% 7%;
+  --sidebar-accent: 217 16% 15%;
+  --sidebar-accent-foreground: 210 20% 94%;
+  --sidebar-ring: 24 95% 57%;
+}
+
+html.warm-light body,
+html.warm-light .bg-slate-50 { background-color: #f6f0e5 !important; }
+html.warm-light .bg-white,
+html.warm-light .bg-white\/95 { background-color: #fffaf0 !important; }
+html.warm-light .bg-slate-100 { background-color: #eee5d6 !important; }
+html.warm-light .border-slate-100 { border-color: #eee5d6 !important; }
+html.warm-light .border-slate-200 { border-color: #e1d5c3 !important; }
+html.warm-light .border-slate-300 { border-color: #d2c2aa !important; }
+html.warm-light .text-slate-950,
+html.warm-light .text-slate-900,
+html.warm-light .text-slate-800 { color: #30271f !important; }
+html.warm-light .text-slate-700 { color: #51463a !important; }
+html.warm-light .text-slate-600 { color: #6b5e50 !important; }
+html.warm-light .text-slate-500 { color: #807363 !important; }
+html.warm-light input,
+html.warm-light textarea,
+html.warm-light select { background-color: #fffdf7; color: #30271f; border-color: #d2c2aa; }
+
+html.dark body,
+html.dark .bg-slate-50 { background-color: #0b0e13 !important; }
+html.dark .bg-white,
+html.dark .bg-white\/95,
+html.dark .bg-white\/80 { background-color: #12161d !important; }
+html.dark .bg-slate-50\/60,
+html.dark .bg-slate-50\/70 { background-color: #171c24 !important; }
+html.dark .bg-slate-100 { background-color: #1a2029 !important; }
+html.dark .border-slate-100 { border-color: #1d2530 !important; }
+html.dark .border-slate-200,
+html.dark .border-slate-200\/70,
+html.dark .border-slate-200\/80 { border-color: #27303c !important; }
+html.dark .border-slate-300 { border-color: #384353 !important; }
+html.dark .border-dashed { border-color: #384353 !important; }
+html.dark .text-slate-950,
+html.dark .text-slate-900,
+html.dark .text-slate-800 { color: #f4f6f8 !important; }
+html.dark .text-slate-700 { color: #d7dce3 !important; }
+html.dark .text-slate-600 { color: #b1bac7 !important; }
+html.dark .text-slate-500 { color: #909baa !important; }
+html.dark .text-slate-400 { color: #7c8796 !important; }
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-100:hover { background-color: #1a2029 !important; }
+html.dark input,
+html.dark textarea,
+html.dark select { background-color: #0f141b; color: #f4f6f8; border-color: #384353; }
+html.dark input::placeholder,
+html.dark textarea::placeholder { color: #7f8a99; }
+html.dark .shadow-sm,
+html.dark .shadow,
+html.dark .shadow-md,
+html.dark .shadow-lg { box-shadow: 0 1px 3px rgba(0,0,0,.45) !important; }
+
+/* Paper Notes uses translucent Tailwind surfaces that need explicit dark treatment. */
+html.dark article:has([data-testid^="paper-note-section-"]) {
+  background-color: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--card-foreground)) !important;
+}
+html.dark article:has([data-testid^="paper-note-section-"]) > details {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+}
+html.dark article:has([data-testid^="paper-note-section-"]) > details summary {
+  color: hsl(var(--card-foreground)) !important;
+}
+html.dark [data-testid^="paper-note-section-"] {
+  background-color: hsl(var(--muted)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--card-foreground)) !important;
+}
+html.dark [data-testid^="paper-note-section-"] > summary {
+  background-color: hsl(var(--muted)) !important;
+  color: hsl(var(--card-foreground)) !important;
+}
+html.dark [data-testid^="paper-note-section-"] > div {
+  background-color: hsl(var(--card)) !important;
+  border-color: hsl(var(--border)) !important;
+  color: hsl(var(--card-foreground)) !important;
+}
+html.dark article:has([data-testid^="paper-note-section-"]) .text-slate-500,
+html.dark article:has([data-testid^="paper-note-section-"]) .text-slate-600 {
+  color: hsl(var(--muted-foreground)) !important;
+}
+
+/* Keep status surfaces meaningful without glaring pastel blocks in dark mode. */
+html.dark .bg-orange-50 { background-color: rgba(249,115,22,.12) !important; }
+html.dark .bg-orange-100 { background-color: rgba(249,115,22,.18) !important; }
+html.dark .bg-blue-50,
+html.dark .bg-blue-100 { background-color: rgba(59,130,246,.14) !important; }
+html.dark .bg-green-50,
+html.dark .bg-green-100 { background-color: rgba(34,197,94,.14) !important; }
+html.dark .bg-amber-50,
+html.dark .bg-amber-100 { background-color: rgba(245,158,11,.14) !important; }
+html.dark .bg-rose-50,
+html.dark .bg-rose-100 { background-color: rgba(244,63,94,.14) !important; }
+html.dark .bg-red-50,
+html.dark .bg-red-100 { background-color: rgba(239,68,68,.14) !important; }
+
+/* Smooth theme switches without animating layout. */
+body,
+.bg-white,
+.bg-slate-50,
+.bg-slate-100,
+[class*="border-slate-"] { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease; }

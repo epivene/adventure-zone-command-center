@@ -42,6 +42,13 @@ export async function ensurePaperNotesSchema(
       and to_regclass(current_schema() || '.paper_note_pages') is not null
       and to_regclass(current_schema() || '.paper_note_entries') is not null
       and to_regclass(current_schema() || '.organization_phones') is not null
+      and (
+        select count(*) = 3
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'contact_phones'
+          and column_name in ('instructions', 'status', 'source_paper_note_entry_id')
+      )
       and exists (
         select 1
         from information_schema.columns

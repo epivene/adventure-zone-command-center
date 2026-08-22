@@ -1,6 +1,6 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createPaperNoteImportRouter } from "./paper-note-import";
 
@@ -19,6 +19,8 @@ function appWith(input: any) {
 }
 
 describe("paper-note import routes", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("returns the server preflight summary before any import", async () => {
     const preflight = vi.fn(async () => ({
       ready: true,
@@ -57,6 +59,37 @@ describe("paper-note import routes", () => {
     expect(response.status).toBe(200);
     expect(importBatch).toHaveBeenCalledWith({ actorId: "owner", batchId, requestKey, now: expect.any(Date) });
     expect(response.body.summary.profilesCreated).toBe(1);
+  });
+
+  it("logs nested postgres details before forwarding an unexpected import failure", async () => {
+    const postgresError = Object.assign(new Error("duplicate key value violates unique constraint"), {
+      code: "23505",
+      constraint: "contact_phones_contact_normalized_number_unique",
+      detail: "Key (contact_id, normalized_number) already exists.",
+      table: "contact_phones",
+      column: null,
+    });
+    const drizzleError = Object.assign(new Error("Failed query"), { cause: postgresError });
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const importBatch = vi.fn(async () => { throw drizzleError; });
+
+    const response = await request(appWith({ preflight: vi.fn(), importBatch, archiveBatch: vi.fn() }))
+      .post(`/paper-notes/batches/${batchId}/import`)
+      .send({ requestKey });
+
+    expect(response.status).toBe(500);
+    expect(errorLog).toHaveBeenCalledWith(
+      "Paper Notes import database error",
+      expect.objectContaining({
+        batchId,
+        code: "23505",
+        constraint: "contact_phones_contact_normalized_number_unique",
+        detail: "Key (contact_id, normalized_number) already exists.",
+        table: "contact_phones",
+        column: null,
+        causeMessage: "duplicate key value violates unique constraint",
+      }),
+    );
   });
 
   it("archives only through the explicit archive action", async () => {

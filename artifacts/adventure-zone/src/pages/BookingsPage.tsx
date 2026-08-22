@@ -47,7 +47,7 @@ export default function BookingsPage() {
             Keep every opportunity visible, with its next action and travel context.
           </p>
         </div>
-        <Link className="button-primary text-center" href="/bookings/new">
+        <Link className="button-primary text-center" href="/quick-add">
           Add Event / Lead
         </Link>
       </header>
