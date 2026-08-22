@@ -15,6 +15,7 @@
     "./commercial-offer-schema": "./src/commercial-offer-schema.ts",
     "./event-checklist-schema": "./src/event-checklist-schema.ts",
     "./resource-source-candidate-schema": "./src/resource-source-candidate-schema.ts",
+    "./event-attendance-history-schema": "./src/event-attendance-history-schema.ts",
     "./office-coordinator-schema": "./src/office-coordinator-schema.ts"
   },
   "scripts": {
