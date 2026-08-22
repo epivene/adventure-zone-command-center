@@ -15,6 +15,7 @@
    - Refreshes reviewed 2026 package defaults.
    - Adds polished communication templates and selective call-script branches.
    - Integrates Active templates into the Office Coordinator draft workflow without send permission.
+   - **Normative copy companion:** `docs/superpowers/plans/2026-08-22-communication-template-seed-corpus.md`. Use its exact seed records, placeholder list, access scopes, and wording for the communication-template portion of this phase; it supersedes any abbreviated template examples in the parent plan.
 
 2. `docs/superpowers/plans/2026-08-22-commercial-offer-rules.md`
    - Turns Amy's discounts/payment arrangements into Proposed owner-review rules rather than live promises.
@@ -69,6 +70,7 @@ Confirm:
 - Adventure Zone $9,000, Pirate's Rebellion $7,500, Warrior's Playground $7,500, Mini Zone $5,000 are editable reviewed starting defaults.
 - Mini Zone 44-vs-50 barrel conflict remains visible to owner and is not silently quoted.
 - Office can render/edit/submit an Active template but cannot send.
+- Exact seed copy matches `2026-08-22-communication-template-seed-corpus.md`; there are no raw Amy/Dave hard-coded signatures or unreviewed convention/payment promises.
 - Current preferred call wording remains unless a reviewed branch explicitly extends it.
 
 ### Gate 2 — Commercial offers
