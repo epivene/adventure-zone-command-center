@@ -5,9 +5,7 @@ import {
   encryptGoogleSecret,
   type EncryptedGoogleSecretV1,
 } from "./encrypted-google-secret";
-import {
-  createGoogleWorkspaceReadClient,
-} from "./google-api-client";
+import { createGoogleWorkspaceReadClient } from "./google-api-client";
 import type { GoogleWorkspaceReadClient } from "./google-api-types";
 import {
   getGoogleWorkspaceEnvironment,
@@ -53,12 +51,16 @@ type ConnectionRow = {
   updated_at: Date | string;
 };
 
-function requiredEnvironment(): GoogleWorkspaceEnvironment {
+function configuredEnvironment(): GoogleWorkspaceEnvironment | null {
   const result = getGoogleWorkspaceEnvironment();
-  if (!result.configured) {
-    throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
-  }
-  return result.value;
+  return result.configured ? result.value : null;
+}
+
+function requireEnvironment(
+  environment: GoogleWorkspaceEnvironment | null,
+): GoogleWorkspaceEnvironment {
+  if (!environment) throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
+  return environment;
 }
 
 function dateIso(value: Date | string | null): string | null {
@@ -105,7 +107,7 @@ function toView(row: ConnectionRow): GoogleConnectionView {
 
 export class PostgresGoogleConnectionRepository {
   private readonly pool: GoogleConnectionSqlPool;
-  private readonly environment: GoogleWorkspaceEnvironment;
+  private readonly environment: GoogleWorkspaceEnvironment | null;
   private readonly createClient: CreateClient;
 
   constructor(options?: {
@@ -115,7 +117,7 @@ export class PostgresGoogleConnectionRepository {
   }) {
     this.pool =
       options?.pool ?? (defaultPool as unknown as GoogleConnectionSqlPool);
-    this.environment = options?.environment ?? requiredEnvironment();
+    this.environment = options?.environment ?? configuredEnvironment();
     this.createClient = options?.createClient ?? createGoogleWorkspaceReadClient;
   }
 
@@ -126,6 +128,7 @@ export class PostgresGoogleConnectionRepository {
     scopes: string[];
     now: Date;
   }): Promise<GoogleConnectionView> {
+    const environment = requireEnvironment(this.environment);
     const email = input.accountEmail.trim().toLowerCase();
     const refreshToken = input.refreshToken.trim();
     if (!email || !refreshToken || !Number.isFinite(input.now.getTime())) {
@@ -135,7 +138,7 @@ export class PostgresGoogleConnectionRepository {
       .filter(Boolean);
     const encryptedRefreshToken = encryptGoogleSecret(
       refreshToken,
-      this.environment.tokenEncryptionKey,
+      environment.tokenEncryptionKey,
     );
 
     const result = await this.pool.query(
@@ -192,14 +195,12 @@ export class PostgresGoogleConnectionRepository {
   async createReadClient(): Promise<GoogleWorkspaceReadClient | null> {
     const row = await this.currentRow();
     if (!row) return null;
+    const environment = requireEnvironment(this.environment);
     const refreshToken = decryptGoogleSecret(
       row.encrypted_refresh_token,
-      this.environment.tokenEncryptionKey,
+      environment.tokenEncryptionKey,
     );
-    return this.createClient({
-      environment: this.environment,
-      refreshToken,
-    });
+    return this.createClient({ environment, refreshToken });
   }
 
   async markReauthorizationRequired(errorCode: string): Promise<void> {
