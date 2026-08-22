@@ -73,10 +73,10 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
     return () => { active = false; window.clearInterval(id); };
   }, [managerApi, location]);
 
-  return <div className="min-h-dvh bg-slate-50 pb-24">
-    <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+  return <div className="min-h-dvh bg-background text-foreground pb-24">
+    <header className="sticky top-0 z-10 border-b border-border bg-card/95 px-4 py-3 text-card-foreground backdrop-blur">
       <div className="mx-auto flex max-w-3xl items-center gap-3">
-        {backTarget ? <Link href={backTarget} className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-2 text-sm font-semibold" aria-label="Back"><ArrowLeft className="h-4 w-4"/><span className="hidden sm:inline">Back</span></Link> : null}
+        {backTarget ? <Link href={backTarget} className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-2 text-sm font-semibold" aria-label="Back"><ArrowLeft className="h-4 w-4"/><span className="hidden sm:inline">Back</span></Link> : null}
         <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Leg Manager</p><p className="truncate font-semibold">{manager?.legName}</p></div>
         <MessageBubbleLink className="ml-auto" href="/manager/messages" label="Messages" unreadCount={unreadMessages} />
       </div>
