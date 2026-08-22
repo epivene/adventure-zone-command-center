@@ -23,6 +23,7 @@ import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
 import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Shield } from "lucide-react";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
@@ -128,13 +129,15 @@ function SignInPage() {
 
 function Landing() {
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
+      <Link aria-label="Administrator Access" className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300" href="/sign-in" title="Administrator Access">
+        <Shield aria-hidden="true" className="h-5 w-5" />
+      </Link>
       <h1 className="text-3xl font-bold tracking-tight">Adventure Zone Command Center</h1>
       <p className="mt-2 max-w-md text-center text-slate-600">Bookings, contacts, routes, and calls for your adventure business — all in one place.</p>
       <div className="mt-8 grid w-full max-w-sm gap-3">
-        <Link className="button-primary px-6 py-3 text-center" href="/sign-in">Admin / Command Center</Link>
-        <Link className="button-secondary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
-        <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Manager Portal</Link>
+        <Link className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
+        <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Leg Managers</Link>
       </div>
     </div>
   );
