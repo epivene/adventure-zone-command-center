@@ -1,272 +1,215 @@
-/* Adventure Zone public landing screen redesign.
-   Scoped to the workspace chooser so the three actual sign-in pages stay unchanged. */
+/* Public workspace chooser. The artwork (logo, Welcome Back copy, photo and pink splashes)
+   is the approved background image. This file only overlays the three real login actions. */
 
 #root > div:has(a[href="/office/sign-in"]) {
   position: relative;
+  box-sizing: border-box;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow-x: hidden;
   display: flex !important;
   flex-direction: column !important;
-  justify-content: flex-start !important;
   align-items: center !important;
-  padding: clamp(2rem, 6vh, 4.5rem) 1.25rem 2rem !important;
+  justify-content: flex-start !important;
+  padding: 0 18px 28px !important;
   color: #fff;
-  isolation: isolate;
-  background:
-    linear-gradient(180deg, rgba(2,3,5,.12) 0%, rgba(2,3,5,.14) 25%, rgba(38,8,3,.54) 63%, rgba(8,8,10,.94) 100%),
-    radial-gradient(ellipse at 17% 22%, rgba(255,184,13,.94) 0 14%, rgba(198,104,0,.92) 30%, transparent 31%),
-    radial-gradient(ellipse at 89% 26%, rgba(255,174,8,.92) 0 15%, rgba(159,75,0,.92) 34%, transparent 35%),
-    linear-gradient(84deg, transparent 0 39%, rgba(4,6,9,.96) 40% 53%, transparent 54%),
-    linear-gradient(13deg, #09131e 0 15%, #1b75a9 16% 20%, #18191d 21% 25%, #8e230c 26% 56%, #f2a800 57% 72%, #17191c 73% 100%);
+  background-color: #110704 !important;
+  background-image: url("/login-bg.webp") !important;
+  background-repeat: no-repeat !important;
+  background-position: center top !important;
+  background-size: cover !important;
 }
 
-#root > div:has(a[href="/office/sign-in"])::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    repeating-linear-gradient(92deg, transparent 0 42px, rgba(255,255,255,.035) 43px 44px, transparent 45px 84px),
-    repeating-linear-gradient(2deg, transparent 0 42px, rgba(255,255,255,.035) 43px 44px, transparent 45px 84px),
-    radial-gradient(circle at 7% 8%, rgba(255,21,118,.82), transparent 20%),
-    radial-gradient(circle at 96% 91%, rgba(255,21,118,.76), transparent 23%);
-  opacity: .95;
-}
-
-#root > div:has(a[href="/office/sign-in"])::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    linear-gradient(155deg, rgba(255,32,126,.55) 0 2%, transparent 2% 6%, rgba(255,32,126,.28) 6% 7%, transparent 7% 86%, rgba(255,32,126,.38) 86% 88%, transparent 88%),
-    repeating-linear-gradient(165deg, transparent 0 20px, rgba(255,31,125,.13) 21px 23px, transparent 24px 43px);
-  mix-blend-mode: screen;
-}
-
-#root > div:has(a[href="/office/sign-in"]) > h1 {
-  position: relative;
-  width: min(88vw, 470px);
-  margin: 0 auto;
-  padding: .25rem .5rem 2.45rem;
-  color: #ffc21a !important;
-  font-size: 0 !important;
-  line-height: .84;
-  text-align: center;
-  text-transform: uppercase;
-  transform: rotate(-2deg);
-  filter: drop-shadow(7px 8px 0 #060606);
-}
-
-#root > div:has(a[href="/office/sign-in"]) > h1::before {
-  content: "THE\A ADVENTURE\A ZONE";
-  white-space: pre-line;
-  display: block;
-  font-family: Impact, "Arial Black", sans-serif;
-  font-size: clamp(2.45rem, 9vw, 4.65rem);
-  font-style: italic;
-  font-weight: 900;
-  letter-spacing: -.045em;
-  line-height: .79;
-  -webkit-text-stroke: 2px #050505;
-  text-shadow: 3px 3px 0 #050505;
-}
-
-#root > div:has(a[href="/office/sign-in"]) > h1::after {
-  content: "COMMAND CENTER";
-  position: absolute;
-  left: 50%;
-  bottom: .15rem;
-  transform: translateX(-50%) rotate(2deg);
-  display: inline-block;
-  min-width: max-content;
-  padding: .42rem 1.15rem .38rem;
-  border: 2px solid #ef2a79;
-  border-radius: 999px;
-  background: rgba(7,8,10,.96);
-  color: #fff;
-  font-family: Inter, system-ui, sans-serif;
-  font-size: clamp(.78rem, 3vw, 1.04rem);
-  font-style: normal;
-  font-weight: 900;
-  letter-spacing: .045em;
-  line-height: 1;
-  -webkit-text-stroke: 0;
-  text-shadow: none;
-}
-
+/* The approved background already contains the logo, Welcome Back and subtitle. */
+#root > div:has(a[href="/office/sign-in"]) > h1,
 #root > div:has(a[href="/office/sign-in"]) > p {
-  width: min(92vw, 520px);
-  margin: clamp(2.8rem, 8vh, 5.6rem) auto 0 !important;
-  color: rgba(255,255,255,.88) !important;
-  font-size: clamp(.98rem, 3.2vw, 1.2rem) !important;
-  line-height: 1.45;
-  text-align: center;
-  text-shadow: 0 2px 12px rgba(0,0,0,.8);
-}
-
-#root > div:has(a[href="/office/sign-in"]) > p::before {
-  content: "Welcome Back!";
-  display: block;
-  margin-bottom: .65rem;
-  color: #fff;
-  font-size: clamp(2rem, 7vw, 3.15rem);
-  font-weight: 900;
-  line-height: 1;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 #root > div:has(a[href="/office/sign-in"]) > div {
   display: flex !important;
   flex-direction: column !important;
-  width: min(92vw, 520px) !important;
-  max-width: 520px !important;
-  gap: 1rem !important;
-  margin-top: clamp(2rem, 5vh, 3rem) !important;
+  width: min(72vw, 650px) !important;
+  max-width: 650px !important;
+  gap: clamp(13px, 1.55vh, 20px) !important;
+  margin-top: clamp(520px, 52.5vh, 735px) !important;
+}
+
+#root > div:has(a[href="/office/sign-in"]) a {
+  text-decoration: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"],
 #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"] {
   position: relative;
-  min-height: 94px !important;
-  justify-content: flex-start !important;
-  padding: 1.2rem 3.2rem 1.2rem 6.5rem !important;
-  border: 3px solid !important;
-  border-radius: 22px !important;
-  background: linear-gradient(145deg, rgba(20,22,25,.97), rgba(8,9,11,.99)) !important;
+  box-sizing: border-box;
+  display: grid !important;
+  grid-template-columns: clamp(58px, 7vw, 82px) minmax(0, 1fr) 26px;
+  align-items: center !important;
+  column-gap: clamp(14px, 2vw, 23px);
+  min-height: clamp(98px, 11vh, 130px) !important;
+  padding: clamp(14px, 2vh, 22px) clamp(18px, 2vw, 28px) !important;
+  border: 2.5px solid !important;
+  border-radius: clamp(19px, 2vw, 27px) !important;
+  background: linear-gradient(145deg, rgba(20, 22, 25, .985), rgba(7, 8, 10, .99)) !important;
   color: #fff !important;
+  box-shadow: 0 13px 28px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .05) !important;
   font-size: 0 !important;
   text-align: left !important;
-  box-shadow: 0 14px 28px rgba(0,0,0,.36), inset 0 1px 0 rgba(255,255,255,.04);
-  transition: transform .18s ease, box-shadow .18s ease;
+  transition: transform .16s ease, box-shadow .16s ease;
 }
+
+#root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"] { order: 1; border-color: #f22479 !important; }
+#root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"] { order: 2; border-color: #ffb90b !important; }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]:hover,
 #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]:hover {
   transform: translateY(-2px);
-  box-shadow: 0 17px 34px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.05);
+  box-shadow: 0 17px 34px rgba(0, 0, 0, .48), inset 0 1px 0 rgba(255, 255, 255, .06) !important;
 }
 
-#root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"] {
-  order: 1;
-  border-color: #ef2a79 !important;
-}
-
-#root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"] {
-  order: 2;
-  border-color: #ffb900 !important;
+#root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]:focus-visible,
+#root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]:focus-visible,
+#root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"]:focus-visible {
+  outline: 3px solid #fff !important;
+  outline-offset: 4px !important;
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]::before,
 #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]::before {
-  position: absolute;
-  left: 1.35rem;
-  top: 50%;
-  transform: translateY(-50%);
-  display: grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
+  content: "";
+  display: block;
+  width: clamp(58px, 7vw, 82px);
+  aspect-ratio: 1;
   border-radius: 999px;
-  color: #fff;
-  font-size: 2rem;
-  font-weight: 900;
-  line-height: 1;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 52%;
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]::before {
-  content: "☷";
-  background: linear-gradient(145deg, #ef2a79, #d51566);
+  background-color: #ed2878;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='12' y='10' width='24' height='30' rx='2'/%3E%3Cpath d='M19 10V7h10v3M18 19h2M18 25h2M18 31h2M24 19h7M24 25h7M24 31h7'/%3E%3C/svg%3E");
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]::before {
-  content: "⌖";
-  background: linear-gradient(145deg, #ffc31d, #eca500);
+  background-color: #ffb713;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='white' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M24 42S35 31 35 20a11 11 0 1 0-22 0c0 11 11 22 11 22Z'/%3E%3Ccircle cx='24' cy='20' r='4'/%3E%3Cpath d='M16 39H9l-4 5h38l-4-5h-7'/%3E%3C/svg%3E");
+}
+
+#root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]::after,
+#root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]::after {
+  grid-column: 2 / 4;
+  white-space: pre-line;
+  color: #fff;
+  font-size: clamp(14px, 1.75vw, 23px);
+  font-weight: 800;
+  line-height: 1.48;
+  letter-spacing: -.01em;
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]::after {
-  content: "Office Coordinator\A Mailing, outreach & follow-up                     ›";
-  white-space: pre-line;
-  color: #fff;
-  font-size: clamp(1rem, 3.7vw, 1.36rem);
-  font-weight: 800;
-  line-height: 1.5;
+  content: "Office Coordinator                                     ›\A Mailing, outreach & follow-up";
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]::after {
-  content: "Leg Managers\A Routes, bookings & events                              ›";
-  white-space: pre-line;
-  color: #fff;
-  font-size: clamp(1rem, 3.7vw, 1.36rem);
-  font-weight: 800;
-  line-height: 1.5;
+  content: "Leg Managers                                             ›\A Routes, bookings & events";
 }
 
+/* Hidden-in-plain-sight administrator entrance below the two primary roles. */
 #root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"] {
   order: 3;
   position: relative;
-  min-height: 82px !important;
-  justify-content: flex-start !important;
-  margin-top: 1rem;
-  padding: 1rem 1rem 1rem 5.2rem !important;
+  box-sizing: border-box;
+  display: block !important;
+  min-height: clamp(100px, 12vh, 132px) !important;
+  margin-top: clamp(5px, .8vh, 12px) !important;
+  padding: clamp(28px, 3vh, 38px) 10px 8px clamp(78px, 9vw, 105px) !important;
   border: 0 !important;
-  border-top: 1px solid rgba(255,255,255,.44) !important;
+  border-top: 1px solid rgba(255, 255, 255, .5) !important;
   border-radius: 0 !important;
   background: transparent !important;
   color: #fff !important;
-  font-size: 0 !important;
   box-shadow: none !important;
+  font-size: 0 !important;
   text-align: left !important;
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"]::before {
   content: "★";
   position: absolute;
-  left: 1.3rem;
-  top: 1rem;
+  left: clamp(8px, 1.2vw, 18px);
+  top: clamp(23px, 2.7vh, 34px);
   display: grid;
   place-items: center;
-  width: 54px;
-  height: 54px;
-  border: 1px solid rgba(255,255,255,.15);
+  width: clamp(58px, 7vw, 78px);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, .16);
   border-radius: 999px;
-  background: rgba(20,22,25,.91);
-  color: #ef2a79;
-  font-size: 1.25rem;
-  box-shadow: 0 9px 22px rgba(0,0,0,.32);
+  background: rgba(20, 22, 25, .94);
+  color: #ef2878;
+  font-size: clamp(20px, 2.4vw, 30px);
+  text-shadow: 0 0 0 #fff;
+  box-shadow: 0 9px 22px rgba(0, 0, 0, .35);
 }
 
 #root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"]::after {
-  content: "Administrator Access\A System settings & advanced tools";
+  content: "Administrator Access\A System settings & advanced tools\A Access via shield icon in the corner.";
   white-space: pre-line;
   color: #fff;
-  font-size: clamp(.86rem, 3vw, 1.08rem);
+  font-size: clamp(12px, 1.4vw, 19px);
   font-weight: 800;
   line-height: 1.55;
 }
 
-@media (max-width: 430px) {
+@media (max-width: 600px) {
   #root > div:has(a[href="/office/sign-in"]) {
-    padding-top: 1.5rem !important;
+    background-size: cover !important;
   }
 
-  #root > div:has(a[href="/office/sign-in"]) > p {
-    margin-top: 2.35rem !important;
+  #root > div:has(a[href="/office/sign-in"]) > div {
+    width: min(86vw, 520px) !important;
+    margin-top: 53.5vh !important;
+    gap: 12px !important;
   }
 
   #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"],
   #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"] {
-    min-height: 84px !important;
-    padding-left: 5.55rem !important;
-    padding-right: 1.7rem !important;
+    grid-template-columns: 58px minmax(0, 1fr);
+    min-height: 92px !important;
+    padding: 13px 16px !important;
+    border-radius: 20px !important;
   }
 
   #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]::before,
   #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]::before {
-    left: 1rem;
-    width: 56px;
-    height: 56px;
-    font-size: 1.7rem;
+    width: 58px;
+  }
+
+  #root > div:has(a[href="/office/sign-in"]) a[href="/office/sign-in"]::after,
+  #root > div:has(a[href="/office/sign-in"]) a[href="/manager/sign-in"]::after {
+    grid-column: 2;
+    font-size: 14px;
+  }
+
+  #root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"] {
+    min-height: 100px !important;
+    padding-left: 77px !important;
+  }
+
+  #root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"]::before {
+    width: 55px;
+  }
+
+  #root > div:has(a[href="/office/sign-in"]) a[href="/sign-in"]::after {
+    font-size: 12px;
   }
 }
