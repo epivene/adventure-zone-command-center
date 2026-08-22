@@ -1,4 +1,4 @@
-import { ChevronDown, LayoutGrid, Megaphone, MapPinned, Settings2 } from "lucide-react";
+import { ChevronDown, LayoutGrid, Megaphone, MapPinned, Settings2, Tent } from "lucide-react";
 import { Link, useLocation } from "wouter";
 
 import {
@@ -34,6 +34,7 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
           className="mr-2 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-left hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
           type="button"
         >
+          <Tent aria-hidden="true" className="h-5 w-5 shrink-0 text-orange-600" />
           <span className="truncate font-bold tracking-tight">Adventure Zone</span>
           <span aria-hidden="true" className="text-slate-300">·</span>
           <span className="truncate text-sm font-semibold text-slate-500">{workspaceLabel[workspace]}</span>

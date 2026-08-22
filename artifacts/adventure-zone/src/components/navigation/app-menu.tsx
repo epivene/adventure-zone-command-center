@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { ChevronDown, Ellipsis, Plus } from "lucide-react";
+import { Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun, Sunset } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth-context";
+import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 
 type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean };
@@ -66,6 +67,12 @@ const adminToolsGroup: MenuGroup = {
   ],
 };
 
+const appearanceOptions = [
+  { value: "light" as const, label: "Light", icon: Sun },
+  { value: "warm-light" as const, label: "Warm Light", icon: Sunset },
+  { value: "dark" as const, label: "Dark", icon: Moon },
+];
+
 function groupsForWorkspace(workspace: AdminWorkspace): MenuGroup[] {
   if (workspace === "booking") return bookingGroups;
   if (workspace === "operations") return operationsGroups;
@@ -106,12 +113,42 @@ function MenuLink({ item, workspace, location }: { item: MenuItem; workspace: Ad
   );
 }
 
+function AppearanceChoices({ appearance, onChange }: { appearance: Appearance; onChange: (value: Appearance) => void }) {
+  return (
+    <div className="py-1">
+      <div className="flex items-center gap-2 px-2 py-2 text-sm font-bold text-slate-800">
+        <Palette className="h-4 w-4" />
+        Appearance
+      </div>
+      <div className="grid gap-0.5 pl-2">
+        {appearanceOptions.map((option) => {
+          const Icon = option.icon;
+          const selected = appearance === option.value;
+          return (
+            <DropdownMenuItem key={option.value} onSelect={() => onChange(option.value)}>
+              <Icon className="mr-2 h-4 w-4" />
+              <span className="flex-1">{option.label}</span>
+              {selected ? <Check aria-label="Selected" className="h-4 w-4 text-orange-600" /> : null}
+            </DropdownMenuItem>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspace; mobile?: boolean }) {
   const { signOut } = useAuth();
   const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
   const workspaceGroups = groupsForWorkspace(workspace);
   const groups = workspace === "command" ? [] : [...workspaceGroups, adminToolsGroup];
+
+  function chooseAppearance(value: Appearance) {
+    saveAppearance(value);
+    setAppearance(value);
+  }
 
   return (
     <DropdownMenu>
@@ -146,6 +183,8 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
             </div>
           );
         })}
+        <DropdownMenuSeparator />
+        <AppearanceChoices appearance={appearance} onChange={chooseAppearance} />
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs uppercase tracking-wide text-slate-500">Account</DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => signOut()}>Sign out</DropdownMenuItem>
