@@ -18,10 +18,13 @@ export type PackageIntelligenceSettingsRecord = {
   baseAttractionCount: number;
   minimumAttractionCount: number;
   maximumAttractionCount: number;
+  baseDurationMinDays: number | null;
+  baseDurationMaxDays: number | null;
   customerDescription: string | null;
   bookingTalkingPoints: string | null;
   operationalRequirements: string | null;
   setupNotes: string | null;
+  knowledgeReviewNote: string | null;
   active: boolean;
 };
 
@@ -39,10 +42,13 @@ type IntelligenceRow = {
   base_price_cents: number | null;
   minimum_attraction_count: number | null;
   maximum_attraction_count: number | null;
+  base_duration_min_days: number | null;
+  base_duration_max_days: number | null;
   customer_description: string | null;
   booking_talking_points: string | null;
   operational_requirements: string | null;
   setup_notes: string | null;
+  knowledge_review_note: string | null;
 };
 
 function rowsOf<T>(result: unknown): T[] {
@@ -59,7 +65,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
     this.baseRepository = new DrizzlePackageSettingsRepository(database);
   }
 
-  private async ensureBasePriceSchema(): Promise<void> {
+  private async ensureIntelligenceColumns(): Promise<void> {
     await this.database.execute(sql.raw(`
       DO $$
       DECLARE
@@ -86,6 +92,11 @@ export class DrizzlePackageIntelligenceSettingsRepository {
         END IF;
       END $$;
 
+      ALTER TABLE package_templates
+        ADD COLUMN IF NOT EXISTS base_duration_min_days integer,
+        ADD COLUMN IF NOT EXISTS base_duration_max_days integer,
+        ADD COLUMN IF NOT EXISTS knowledge_review_note text;
+
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -96,12 +107,26 @@ export class DrizzlePackageIntelligenceSettingsRepository {
             ADD CONSTRAINT package_templates_base_price_cents_nonnegative
               CHECK (base_price_cents IS NULL OR base_price_cents >= 0);
         END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'package_templates_base_duration_valid'
+        ) THEN
+          ALTER TABLE package_templates
+            ADD CONSTRAINT package_templates_base_duration_valid
+              CHECK (
+                (base_duration_min_days IS NULL AND base_duration_max_days IS NULL)
+                OR (
+                  base_duration_min_days > 0
+                  AND base_duration_max_days >= base_duration_min_days
+                )
+              );
+        END IF;
       END $$;
     `));
   }
 
   async listPackageTemplates(): Promise<PackageIntelligenceSettingsRecord[]> {
-    await this.ensureBasePriceSchema();
+    await this.ensureIntelligenceColumns();
     await ensureDefaultPackageTemplates(this.database);
     const [base, intelligenceResult] = await Promise.all([
       this.baseRepository.listPackageTemplates(),
@@ -111,10 +136,13 @@ export class DrizzlePackageIntelligenceSettingsRepository {
           base_price_cents,
           minimum_attraction_count,
           maximum_attraction_count,
+          base_duration_min_days,
+          base_duration_max_days,
           customer_description,
           booking_talking_points,
           operational_requirements,
-          setup_notes
+          setup_notes,
+          knowledge_review_note
         from package_templates
       `),
     ]);
@@ -131,10 +159,13 @@ export class DrizzlePackageIntelligenceSettingsRepository {
           extra?.minimum_attraction_count ?? record.baseAttractionCount,
         maximumAttractionCount:
           extra?.maximum_attraction_count ?? record.baseAttractionCount,
+        baseDurationMinDays: extra?.base_duration_min_days ?? null,
+        baseDurationMaxDays: extra?.base_duration_max_days ?? null,
         customerDescription: extra?.customer_description ?? null,
         bookingTalkingPoints: extra?.booking_talking_points ?? null,
         operationalRequirements: extra?.operational_requirements ?? null,
         setupNotes: extra?.setup_notes ?? null,
+        knowledgeReviewNote: extra?.knowledge_review_note ?? null,
       };
     });
   }
@@ -150,7 +181,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       );
     }
 
-    await this.ensureBasePriceSchema();
+    await this.ensureIntelligenceColumns();
     const data = parsed.data;
     const base = await this.baseRepository.updatePackageTemplate(data, actorId);
     await this.database.execute(sql`
@@ -159,10 +190,13 @@ export class DrizzlePackageIntelligenceSettingsRepository {
         base_price_cents = ${data.basePriceCents},
         minimum_attraction_count = ${data.minimumAttractionCount},
         maximum_attraction_count = ${data.maximumAttractionCount},
+        base_duration_min_days = ${data.baseDurationMinDays},
+        base_duration_max_days = ${data.baseDurationMaxDays},
         customer_description = ${data.customerDescription},
         booking_talking_points = ${data.bookingTalkingPoints},
         operational_requirements = ${data.operationalRequirements},
         setup_notes = ${data.setupNotes},
+        knowledge_review_note = ${data.knowledgeReviewNote},
         updated_at = now()
       where id = ${data.id}::uuid
     `);
@@ -172,10 +206,13 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       basePriceCents: data.basePriceCents,
       minimumAttractionCount: data.minimumAttractionCount,
       maximumAttractionCount: data.maximumAttractionCount,
+      baseDurationMinDays: data.baseDurationMinDays,
+      baseDurationMaxDays: data.baseDurationMaxDays,
       customerDescription: data.customerDescription,
       bookingTalkingPoints: data.bookingTalkingPoints,
       operationalRequirements: data.operationalRequirements,
       setupNotes: data.setupNotes,
+      knowledgeReviewNote: data.knowledgeReviewNote,
     };
   }
 }
