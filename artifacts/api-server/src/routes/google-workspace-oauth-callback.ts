@@ -38,6 +38,9 @@ export type GoogleWorkspaceOAuthCallbackDependencies = {
   now(): Date;
 };
 
+const userInfoEmailScope =
+  "https://www.googleapis.com/auth/userinfo.email";
+
 function queryValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -83,9 +86,30 @@ function safeRedirect(appOrigin: string, returnPath: string): string {
   }
 }
 
-function requiredScopesPresent(scopes: string[]): boolean {
-  const granted = new Set(scopes);
-  return GOOGLE_WORKSPACE_READ_SCOPES.every((scope) => granted.has(scope));
+function canonicalScope(scope: string): string {
+  return scope === userInfoEmailScope ? "email" : scope;
+}
+
+function validateReadOnlyScopes(scopes: string[]):
+  | { ok: true; scopes: string[] }
+  | { ok: false; error: string } {
+  const granted = [
+    ...new Set(
+      scopes
+        .map((scope) => canonicalScope(scope.trim()))
+        .filter(Boolean),
+    ),
+  ];
+  const approved = new Set<string>(GOOGLE_WORKSPACE_READ_SCOPES);
+  const grantedSet = new Set(granted);
+
+  if (GOOGLE_WORKSPACE_READ_SCOPES.some((scope) => !grantedSet.has(scope))) {
+    return { ok: false, error: "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING" };
+  }
+  if (granted.some((scope) => !approved.has(scope))) {
+    return { ok: false, error: "GOOGLE_WORKSPACE_UNEXPECTED_SCOPE_GRANTED" };
+  }
+  return { ok: true, scopes: granted };
 }
 
 function defaultDependencies(): GoogleWorkspaceOAuthCallbackDependencies {
@@ -142,10 +166,9 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           environment: environmentResult.value,
         });
         const authorization = await client.exchangeCode(code);
-        if (!requiredScopesPresent(authorization.scopes)) {
-          res.status(403).json({
-            error: "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING",
-          });
+        const validatedScopes = validateReadOnlyScopes(authorization.scopes);
+        if (!validatedScopes.ok) {
+          res.status(403).json({ error: validatedScopes.error });
           return;
         }
         const identity = await client.accountIdentity();
@@ -153,7 +176,7 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           accountEmail: identity.email,
           googleSubject: identity.subject,
           refreshToken: authorization.refreshToken,
-          scopes: authorization.scopes,
+          scopes: validatedScopes.scopes,
           now,
         });
         res.redirect(
@@ -169,7 +192,8 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           "GOOGLE_WORKSPACE_OAUTH_CALLBACK_FAILED",
         );
         const status =
-          errorCode === "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING"
+          errorCode === "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING" ||
+          errorCode === "GOOGLE_WORKSPACE_UNEXPECTED_SCOPE_GRANTED"
             ? 403
             : errorCode === "GOOGLE_WORKSPACE_OAUTH_STATE_INVALID"
               ? 400
