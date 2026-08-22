@@ -25,6 +25,17 @@ export const packageCountCategoryValues = [
 ] as const;
 export type PackageCountCategory = (typeof packageCountCategoryValues)[number];
 
+export const resourceChecklistTagValues = [
+  "inflatable",
+  "blower_powered",
+  "wet_attraction",
+  "multi_section",
+  "action_pursuit",
+  "carnival_game",
+  "trailer_shared",
+] as const;
+export type ResourceChecklistTag = (typeof resourceChecklistTagValues)[number];
+
 export const configureBookingResourcesInputSchema = z
   .object({
     bookingId: canonicalUuid,
@@ -56,6 +67,7 @@ export const resourceInputSchema = z
     countsAsAttraction: z.boolean(),
     packageCountCategory: z.enum(packageCountCategoryValues).default("main_attraction"),
     packageTemplateIds: z.array(canonicalUuid),
+    checklistTags: z.array(z.enum(resourceChecklistTagValues)).optional(),
     normalTravelLegId: canonicalUuid.nullable(),
     movable: z.boolean(),
     setupMinutes: z.number().int().nonnegative(),
@@ -72,6 +84,13 @@ export const resourceInputSchema = z
         path: ["packageTemplateIds"],
       });
     }
+    if (input.checklistTags && new Set(input.checklistTags).size !== input.checklistTags.length) {
+      context.addIssue({
+        code: "custom",
+        message: "Choose each checklist tag only once.",
+        path: ["checklistTags"],
+      });
+    }
   });
 
 export type ConfigureBookingResourcesInput = z.output<
@@ -80,6 +99,6 @@ export type ConfigureBookingResourcesInput = z.output<
 export type AcknowledgeResourceConflictInput = z.output<
   typeof acknowledgeResourceConflictInputSchema
 >;
-/** Input keeps the new category optional so legacy callers remain source-compatible; parsing supplies main_attraction. */
+/** Input keeps new optional fields source-compatible with legacy callers. */
 export type ResourceInput = z.input<typeof resourceInputSchema>;
 export type ParsedResourceInput = z.output<typeof resourceInputSchema>;
