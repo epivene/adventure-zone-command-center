@@ -24,6 +24,40 @@ export function normalizeAttendanceText(value: string) {
     .replace(/\s+/g, " ");
 }
 
+function words(value: string) {
+  return new Set(normalizeAttendanceText(value).split(" ").filter(Boolean));
+}
+
+function nameSimilarity(a: string, b: string) {
+  const left = words(a);
+  const right = words(b);
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const word of left) if (right.has(word)) intersection += 1;
+  return intersection / Math.max(left.size, right.size);
+}
+
+export function findPlausibleAttendanceCandidates(
+  eventName: string,
+  candidates: AttendanceMatchCandidate[],
+) {
+  const normalized = normalizeAttendanceText(eventName);
+  const active = candidates.filter((candidate) => candidate.consolidatedIntoId === null);
+  const exact = active.filter(
+    (candidate) => normalizeAttendanceText(candidate.organizationName) === normalized,
+  );
+  if (exact.length > 0) return exact;
+
+  return active.filter((candidate) => {
+    const candidateName = normalizeAttendanceText(candidate.organizationName);
+    return (
+      candidateName.includes(normalized) ||
+      normalized.includes(candidateName) ||
+      nameSimilarity(eventName, candidate.organizationName) >= 0.6
+    );
+  });
+}
+
 function normalizedCandidateLocation(candidate: AttendanceMatchCandidate) {
   return normalizeAttendanceText(
     [candidate.city, candidate.region].filter(Boolean).join(" "),
