@@ -169,12 +169,16 @@ router.post("/imports/attendance-history/:rowId/reject", async (req, res): Promi
     return;
   }
   await ensureAttendanceImportSeed(db);
-  const row = await repository.reject(rowId, parsed.data.reason);
-  if (!row) {
+  const result = await repository.reject(rowId, parsed.data.reason);
+  if (!result.ok) {
+    if (result.code === "ALREADY_APPROVED") {
+      res.status(409).json({ error: "Approved attendance history cannot be rejected without an explicit correction workflow." });
+      return;
+    }
     res.status(404).json({ error: "Attendance source row not found." });
     return;
   }
-  res.json({ row });
+  res.json({ row: result.row });
 });
 
 router.post("/imports/attendance-history/:rowId/rematch", async (req, res): Promise<void> => {
