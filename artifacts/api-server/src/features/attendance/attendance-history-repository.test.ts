@@ -15,4 +15,11 @@ describe("attendance history projection", () => {
     expect(source).not.toContain("attendanceImportRows");
     expect(source).not.toContain("attendanceImportYearStatuses");
   });
+
+  it("uses the profile DTO names for preserved source text", () => {
+    expect(source).toContain("sourceEventName: eventAttendanceHistory.originalEventName");
+    expect(source).toContain("sourceLocation: eventAttendanceHistory.originalLocation");
+    expect(source).not.toContain("originalEventName: eventAttendanceHistory.originalEventName");
+    expect(source).not.toContain("originalLocation: eventAttendanceHistory.originalLocation");
+  });
 });
