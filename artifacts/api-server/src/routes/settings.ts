@@ -14,8 +14,13 @@ import {
   DrizzleCallScriptSettingsRepository,
   callScriptOverrideInputSchema,
 } from "@/features/calls/call-script-settings";
+import businessSourcesRouter from "./business-sources";
+import communicationTemplatesRouter from "./communication-templates";
 
 const router: IRouter = Router();
+
+router.use(businessSourcesRouter);
+router.use(communicationTemplatesRouter);
 
 router.get("/settings/packages-resources", async (req, res): Promise<void> => {
   try {
