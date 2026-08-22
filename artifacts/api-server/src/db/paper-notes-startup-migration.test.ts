@@ -28,7 +28,19 @@ describe("ensurePaperNotesSchema", () => {
     expect(h.queries).toHaveLength(1);
   });
 
-  it("applies migration 066 when the live database is missing Paper Notes tables", async () => {
+  it("requires the structured contact-phone columns before declaring the schema ready", async () => {
+    const h = client(true);
+    const loadSql = vi.fn(async () => "select 1;");
+
+    await ensurePaperNotesSchema(h.client, { loadSql });
+
+    expect(h.queries[0]).toContain("table_name = 'contact_phones'");
+    expect(h.queries[0]).toContain("column_name = 'instructions'");
+    expect(h.queries[0]).toContain("column_name = 'status'");
+    expect(h.queries[0]).toContain("column_name = 'source_paper_note_entry_id'");
+  });
+
+  it("applies migration 066 when the live database is missing Paper Notes tables or required phone columns", async () => {
     const h = client(false);
     const sql = "create table if not exists paper_note_batches(id uuid);";
     const loadSql = vi.fn(async () => sql);
