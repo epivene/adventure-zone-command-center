@@ -24,7 +24,11 @@ type Resource = {
   serialNumber?: string | null;
 };
 
-export function ResourceSourceCandidateReview() {
+export function ResourceSourceCandidateReview({
+  onCreateResource,
+}: {
+  onCreateResource?: () => void;
+}) {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
   const [selected, setSelected] = useState<Record<string, string>>({});
@@ -154,7 +158,7 @@ export function ResourceSourceCandidateReview() {
 
               {candidate.matchState === "pending" && !candidate.matchedResourceId ? (
                 <p className="text-sm text-slate-600">
-                  No real resource yet? <a className="link font-semibold" href="#create-resource-form">Create a normal resource</a> with the full operational form, then come back here and Link it.
+                  No real resource yet? <button className="link font-semibold" onClick={onCreateResource} type="button">Create a normal resource</button> with the full operational form, then come back here and Link it.
                 </p>
               ) : null}
             </article>
