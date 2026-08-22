@@ -25,9 +25,16 @@ const defaultConfirmDisconnect = () =>
 
 function ErrorNotice({ message }: { message: string }) {
   return (
-    <div className="rounded-xl border border-rose-200 bg-rose-50 p-4" role="alert">
-      <p className="font-semibold text-rose-800">Google Workspace needs attention</p>
-      <p className="mt-1 break-words text-sm text-rose-700">{message}</p>
+    <div
+      className="rounded-xl border border-rose-200 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950/40"
+      role="alert"
+    >
+      <p className="font-semibold text-rose-800 dark:text-rose-200">
+        Google Workspace needs attention
+      </p>
+      <p className="mt-1 break-words text-sm text-rose-700 dark:text-rose-300">
+        {message}
+      </p>
     </div>
   );
 }
@@ -50,7 +57,7 @@ function SavedScope({ settings }: { settings: GoogleWorkspaceSettingsView }) {
         <ul className="mt-2 space-y-1 text-sm text-slate-800">
           {settings.labels.map((label) => (
             <li className="flex items-center gap-2" key={label.id}>
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span>{label.name}</span>
             </li>
           ))}
@@ -63,7 +70,7 @@ function SavedScope({ settings }: { settings: GoogleWorkspaceSettingsView }) {
         <ul className="mt-2 space-y-1 text-sm text-slate-800">
           {settings.calendars.map((calendar) => (
             <li className="flex items-center gap-2" key={calendar.id}>
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span>{calendar.summary}</span>
             </li>
           ))}
@@ -108,6 +115,12 @@ export function SettingsGoogleWorkspacePage({
     };
   }, []);
 
+  const previewHasMissingSources = Boolean(
+    preview &&
+      (preview.missingLabelRoots.length > 0 ||
+        preview.missingCalendars.length > 0),
+  );
+
   async function connect() {
     setBusy("connect");
     setError(null);
@@ -138,6 +151,12 @@ export function SettingsGoogleWorkspacePage({
   }
 
   async function saveScope() {
+    if (previewHasMissingSources) {
+      setError(
+        "Resolve every missing or ambiguous business source before saving.",
+      );
+      return;
+    }
     if (selectedLabelIds.length === 0 || selectedCalendarIds.length === 0) {
       setError("Select at least one business Gmail label and one Google Calendar.");
       return;
@@ -209,7 +228,7 @@ export function SettingsGoogleWorkspacePage({
   return (
     <div className="mx-auto grid max-w-5xl gap-6 pb-10">
       <header>
-        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300">
           Settings
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Google Workspace</h1>
@@ -219,11 +238,11 @@ export function SettingsGoogleWorkspacePage({
         </p>
       </header>
 
-      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-900">
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
         <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
           <p className="font-semibold">Read-only by design</p>
-          <p className="mt-1 text-sm text-blue-800">
+          <p className="mt-1 text-sm text-blue-800 dark:text-blue-300">
             This release cannot send email, move messages, change Gmail labels, or edit Google Calendar events.
           </p>
         </div>
@@ -232,7 +251,10 @@ export function SettingsGoogleWorkspacePage({
       {loading ? <p className="text-slate-500">Loading Google Workspace settings…</p> : null}
       {error ? <ErrorNotice message={error} /> : null}
       {notice ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800" role="status">
+        <div
+          className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
+          role="status"
+        >
           {notice}
         </div>
       ) : null}
@@ -243,11 +265,11 @@ export function SettingsGoogleWorkspacePage({
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <Cloud className="h-5 w-5 text-orange-600" />
+                  <Cloud className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                   <h2 className="text-xl font-bold">Company Google account</h2>
                 </div>
                 {!settings.configured ? (
-                  <p className="mt-3 max-w-2xl text-sm text-amber-800">
+                  <p className="mt-3 max-w-2xl text-sm text-amber-800 dark:text-amber-300">
                     Google Workspace is not configured on the server. Finish the secure server setup before connecting the company account.
                   </p>
                 ) : settings.connection ? (
@@ -282,7 +304,7 @@ export function SettingsGoogleWorkspacePage({
                   </button>
                   {settings.connection ? (
                     <button
-                      className="inline-flex items-center gap-2 rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                      className="inline-flex items-center gap-2 rounded-lg border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950/40"
                       disabled={busy !== null}
                       onClick={() => void disconnect()}
                       type="button"
@@ -324,10 +346,15 @@ export function SettingsGoogleWorkspacePage({
                     selectedCalendarIds={selectedCalendarIds}
                     selectedLabelIds={selectedLabelIds}
                   />
+                  {previewHasMissingSources ? (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                      Resolve every missing or ambiguous business source before saving.
+                    </p>
+                  ) : null}
                   <div className="flex justify-end border-t border-slate-200 pt-4">
                     <button
                       className="button-primary px-5 py-2.5"
-                      disabled={busy !== null}
+                      disabled={busy !== null || previewHasMissingSources}
                       onClick={() => void saveScope()}
                       type="button"
                     >
