@@ -1,8 +1,8 @@
 # Business Drive Integration Master Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Execute the four detailed plans below in this order; do not run them in parallel because they intentionally touch shared DB schema, resource settings, profiles, and settings navigation.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans. Execute the five detailed plans below in this order; do not run them in parallel because they intentionally touch shared DB schema, resource settings, profiles, settings navigation, and communication rendering.
 
-**Goal:** Safely integrate the approved Adventure Zone business-drive source set into Command Center as polished sales/office guidance, accurate package knowledge, Leg Manager pre/post-event checklists, reviewed inventory/history data, and protected historical event documents.
+**Goal:** Safely integrate the approved Adventure Zone business-drive source set into Command Center as polished sales/office guidance, accurate package knowledge, owner-controlled commercial offers, Leg Manager pre/post-event checklists, reviewed inventory/history data, and protected historical event documents.
 
 **Approved spec:** `docs/superpowers/specs/2026-08-22-business-drive-source-integration-design.md`
 
@@ -16,18 +16,23 @@
    - Adds polished communication templates and selective call-script branches.
    - Integrates Active templates into the Office Coordinator draft workflow without send permission.
 
-2. `docs/superpowers/plans/2026-08-22-leg-event-pre-post-checklists.md`
+2. `docs/superpowers/plans/2026-08-22-commercial-offer-rules.md`
+   - Turns Amy's discounts/payment arrangements into Proposed owner-review rules rather than live promises.
+   - Makes activation, eligibility, stacking, deadlines, amounts, customer explanations, and package scope owner-controlled.
+   - Keeps Office/call/template behavior fail-closed unless a commercial offer is explicitly approved for use.
+
+3. `docs/superpowers/plans/2026-08-22-leg-event-pre-post-checklists.md`
    - Extends the existing Leg Manager lifecycle with pre-event and post-event checklists.
    - Adds resource applicability tags, unsafe-resource status handling, photos, offline persistence, and owner overrides.
    - Keeps check-in arrival durable before checklist work and final checkout behind the post-event checklist/exception.
 
-3. `docs/superpowers/plans/2026-08-22-inventory-and-attended-history.md`
+4. `docs/superpowers/plans/2026-08-22-inventory-and-attended-history.md`
    - Adds year/make/model/serial identity to resources and stages the nine known inflatables for conservative matching.
    - Converts the attended-calendar workbook to a committed normalized fixture using artifact_tool.
    - Requires owner review before uncertain attendance rows attach to profiles/locations.
    - Keeps blacklist history owner-sensitive and separate from Do Not Call.
 
-4. `docs/superpowers/plans/2026-08-22-event-source-documents.md`
+5. `docs/superpowers/plans/2026-08-22-event-source-documents.md`
    - Adds protected binary storage and profile/booking/location links for historical source files.
    - Stores Ravalli/Hawthorne terms as event-specific historical facts only.
    - Adds owner-only upload/open/review UI and a post-deploy upload/link runbook.
@@ -41,6 +46,7 @@
 - Never expose EIN, sales-tax identifiers, private reference contacts, signatures, discretionary discount rules, source conflicts, or owner-only legal documents through Office or Leg Manager APIs.
 - Never activate raw Amy wording. Active scripts/templates must contain edited copy with correct grammar, spelling, punctuation, capitalization, package names, and supported claims.
 - Never replace the current preferred call opener/details wording merely because similar older wording exists in the source document.
+- Never activate a source-derived commercial offer automatically.
 - Never promise no-upfront-cost/payment arrangements until eligibility is confirmed.
 - Never let an event-specific contract overwrite package defaults.
 - Never auto-create a profile from an attendance row or auto-merge repeated event occurrences on fuzzy similarity alone.
@@ -51,7 +57,7 @@
 
 ### Gate 1 — Copy/knowledge foundation
 
-Before starting the checklist phase:
+Before starting commercial-offer rules:
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/business-sources artifacts/api-server/src/features/communication-templates artifacts/api-server/src/features/packages
@@ -65,7 +71,24 @@ Confirm:
 - Office can render/edit/submit an Active template but cannot send.
 - Current preferred call wording remains unless a reviewed branch explicitly extends it.
 
-### Gate 2 — Event checklist lifecycle
+### Gate 2 — Commercial offers
+
+Before checklist work:
+
+```bash
+pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/commercial-offers artifacts/api-server/src/routes/commercial-offers.test.ts artifacts/api-server/src/routes/office-communication-templates.test.ts
+pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/components/packages/commercial-offer-editor.test.tsx artifacts/adventure-zone/src/features/calls/guided-call-scripts.test.ts
+pnpm run typecheck
+```
+
+Confirm:
+- Every Amy-derived commercial offer seeds as Proposed.
+- Convention 7-day vs 15-day timing stays unresolved until owner edits/confirms it.
+- No source-derived revenue-share percentage is invented.
+- Office receives no proposed/discretionary commercial-rule data.
+- Calls/templates still use qualifying language rather than promising an offer.
+
+### Gate 3 — Event checklist lifecycle
 
 Before inventory/history work:
 
@@ -82,7 +105,7 @@ Confirmed -> Check in -> arrival saved -> pre-event checklist -> Ready to operat
 -> Start checkout -> post-event checklist -> final checkout -> existing event wrap-up
 ```
 
-### Gate 3 — Inventory/history
+### Gate 4 — Inventory/history
 
 Before event-source document work:
 
@@ -101,7 +124,7 @@ Confirm the normalized attendance fixture still contains exactly:
 8 cancelled_last_minute
 ```
 
-### Gate 4 — Protected historical documents
+### Gate 5 — Protected historical documents
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/business-sources/event-source-document-schema.test.ts artifacts/api-server/src/features/business-sources/source-document-file-service.test.ts artifacts/api-server/src/features/business-sources/event-document-term-seed.test.ts artifacts/api-server/src/routes/business-source-document-files.test.ts artifacts/api-server/src/routes/business-source-document-links.test.ts artifacts/api-server/src/routes/event-profiles.source-documents.test.ts artifacts/api-server/src/routes/office-profiles.source-documents.test.ts
@@ -117,18 +140,19 @@ Confirm:
 
 ## Final integrated verification
 
-After all four plans are complete:
+After all five plans are complete:
 
 ```bash
 pnpm run typecheck
 pnpm --filter @workspace/api-server exec vitest run
 pnpm --filter @workspace/adventure-zone exec vitest run
+pnpm run build
 ```
 
-Then run the repository's existing build command from `package.json` and verify the built app manually in these flows:
+Then verify the built app manually in these flows:
 
 ```text
-Owner: package/template/source settings -> profile history/documents -> checklist oversight
+Owner: package/template/source settings -> offers/discounts -> profile history/documents -> checklist oversight
 Office Coordinator: profile -> choose template -> edit -> Submit Email -> no Send action
 Leg Manager: check in -> pre checklist -> operate -> post checklist -> checkout -> wrap-up
 Owner Imports/Data: attendance review -> approve match -> profile attendance history
