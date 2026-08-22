@@ -49,7 +49,12 @@ export function ChecklistPhotoCapture({
     const mutation = mutations.find((row) => row.id === id);
     if (mutation?.state === "needs_attention") {
       setState("needs_attention");
-      setMessage("Photo upload needs attention. The checklist answer is still saved.");
+      setMessage("Photo metadata needs attention. The checklist answer is still saved.");
+      return;
+    }
+    if (mutation?.state !== "synced") {
+      setState("saved_offline");
+      setMessage("Photo saved on device and will upload after its checklist attachment record syncs.");
       return;
     }
 
