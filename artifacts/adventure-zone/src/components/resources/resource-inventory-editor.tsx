@@ -39,6 +39,11 @@ const emptyResource: ResourceInput = {
   packageCountCategory: "main_attraction",
   packageTemplateIds: [],
   checklistTags: [],
+  yearBuilt: null,
+  make: null,
+  model: null,
+  serialNumber: null,
+  inspectionIdentityNotes: null,
   normalTravelLegId: null,
   movable: false,
   setupMinutes: 0,
@@ -64,6 +69,11 @@ function ResourceForm({
     ...initialValue,
     packageCountCategory: initialValue.packageCountCategory ?? "main_attraction",
     checklistTags: initialValue.checklistTags ?? [],
+    yearBuilt: initialValue.yearBuilt ?? null,
+    make: initialValue.make ?? null,
+    model: initialValue.model ?? null,
+    serialNumber: initialValue.serialNumber ?? null,
+    inspectionIdentityNotes: initialValue.inspectionIdentityNotes ?? null,
   });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -169,6 +179,47 @@ function ResourceForm({
           />
         </label>
       </div>
+
+      <fieldset className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <legend className="px-1 text-sm font-bold">Asset identity</legend>
+        <p className="text-xs text-slate-600">
+          Manufacturer/inspection identity only. This does not change package counts, travel, timing, or availability.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="grid gap-1 text-sm font-semibold">
+            Year built
+            <input
+              aria-label="Year built"
+              min={1900}
+              max={2100}
+              onChange={(event) => update("yearBuilt", event.currentTarget.value ? Number(event.currentTarget.value) : null)}
+              type="number"
+              value={value.yearBuilt ?? ""}
+            />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Make
+            <input aria-label="Make" onChange={(event) => update("make", event.currentTarget.value || null)} value={value.make ?? ""} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Model
+            <input aria-label="Model" onChange={(event) => update("model", event.currentTarget.value || null)} value={value.model ?? ""} />
+          </label>
+          <label className="grid gap-1 text-sm font-semibold">
+            Serial number
+            <input aria-label="Serial number" onChange={(event) => update("serialNumber", event.currentTarget.value || null)} value={value.serialNumber ?? ""} />
+          </label>
+        </div>
+        <label className="grid gap-1 text-sm font-semibold">
+          Identity / inspection notes
+          <textarea
+            aria-label="Identity / inspection notes"
+            className="min-h-20"
+            onChange={(event) => update("inspectionIdentityNotes", event.currentTarget.value || null)}
+            value={value.inspectionIdentityNotes ?? ""}
+          />
+        </label>
+      </fieldset>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <label className="grid gap-1 text-sm font-semibold">
@@ -380,7 +431,7 @@ export function ResourceInventoryEditor({
           Resource inventory
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Add operational equipment or update its package tags, inspection tags, package-count meaning, travel needs, timing, and availability. Archive retired resources to preserve booking history.
+          Add operational equipment or update its identity, package tags, inspection tags, package-count meaning, travel needs, timing, and availability. Archive retired resources to preserve booking history.
         </p>
       </div>
 
