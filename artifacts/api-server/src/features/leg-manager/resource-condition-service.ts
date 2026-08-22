@@ -63,3 +63,19 @@ export async function applyChecklistConditionEffect(
     }
   });
 }
+
+/**
+ * Resolves the issue created by this checklist result after the manager changes
+ * the answer to a safe/non-follow-up result. We intentionally do not restore a
+ * resource to Available here: another issue may still exist, and returning
+ * equipment to service remains an explicit operational decision.
+ */
+export async function resolveChecklistConditionEffect(
+  database: Database,
+  checklistResultId: string,
+): Promise<void> {
+  await database
+    .update(resourceConditionIssues)
+    .set({ state: "resolved", resolvedAt: new Date() })
+    .where(eq(resourceConditionIssues.checklistResultId, checklistResultId));
+}
