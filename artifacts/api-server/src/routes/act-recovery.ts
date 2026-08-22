@@ -17,6 +17,7 @@ export interface ActRecoveryRouteService {
     requestedBy: string;
     sourceDatabaseKey?: string;
   }): Promise<ActRecoveryStatus>;
+  startOwnershipRepair(input: { requestedBy: string }): Promise<ActRecoveryStatus>;
   status(input?: { runId?: string; sourceDatabaseKey?: string }): Promise<ActRecoveryStatus>;
   reviewPage(input: { page: number; pageSize: number }): Promise<ActRecoveryReviewPage>;
   cleanupAndRetry(input: { decidedBy: string }): Promise<ActRecoveryCleanupRetrySummary>;
@@ -81,19 +82,21 @@ async function productionService(): Promise<ActRecoveryRouteService> {
     { DrizzleActArchiveRecoveryRepository },
     { ActRecoveryReviewService },
     { ActRecoveryReviewCleanupService },
+    { ActOwnershipRepairService },
   ] = await Promise.all([
     import("@/db/client"),
     import("@/features/act-recovery/recovery-repository"),
     import("@/features/act-recovery/review-service"),
     import("@/features/act-recovery/review-cleanup-service"),
+    import("@/features/act-recovery/ownership-repair-service"),
   ]);
-  const review = new ActRecoveryReviewService(
-    db,
-    new DrizzleActArchiveRecoveryRepository(db),
-  );
+  const recoveryRepository = new DrizzleActArchiveRecoveryRepository(db);
+  const review = new ActRecoveryReviewService(db, recoveryRepository);
   const cleanup = new ActRecoveryReviewCleanupService(db);
+  const ownershipRepair = new ActOwnershipRepairService(db, recoveryRepository, review);
   return {
     startRun: (input) => review.startRun(input),
+    startOwnershipRepair: (input) => ownershipRepair.start(input),
     status: (input) => review.status(input),
     reviewPage: (input) => review.reviewPage(input),
     cleanupAndRetry: (input) => cleanup.cleanupAndRetry(input.decidedBy),
@@ -125,6 +128,15 @@ export function createActRecoveryRouter(input: {
         ...(sourceDatabaseKey ? { sourceDatabaseKey } : {}),
       }));
       await withService((service) => service.cleanupAndRetry({ decidedBy: "owner" }));
+      res.json(await withService((service) => service.status({ runId: started.runId })));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+
+  router.post("/act-recovery/ownership-repair", async (_req, res) => {
+    try {
+      const started = await withService((service) => service.startOwnershipRepair({ requestedBy: "owner" }));
       res.json(await withService((service) => service.status({ runId: started.runId })));
     } catch (error) {
       sendError(res, error);
