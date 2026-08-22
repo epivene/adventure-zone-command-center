@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ChevronDown, Menu, MessageCircle } from "lucide-react";
+import { Check, ChevronDown, Menu, MessageCircle, Moon, Palette, Sun, Sunset } from "lucide-react";
 import { useState } from "react";
 import {
   DropdownMenu,
@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 
 const groups = [
   { label: "Money & Travel", items: [
@@ -24,8 +25,21 @@ const groups = [
   ] },
 ];
 
+const appearanceOptions = [
+  { value: "light" as const, label: "Light", icon: Sun },
+  { value: "warm-light" as const, label: "Warm Light", icon: Sunset },
+  { value: "dark" as const, label: "Dark", icon: Moon },
+];
+
 export function ManagerMenu({ unreadMessages = 0, onSignOut }: { unreadMessages?: number; onSignOut(): void }) {
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
+
+  function chooseAppearance(value: Appearance) {
+    saveAppearance(value);
+    setAppearance(value);
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -45,6 +59,24 @@ export function ManagerMenu({ unreadMessages = 0, onSignOut }: { unreadMessages?
             {index < groups.length - 1 ? <DropdownMenuSeparator /> : null}
           </div>;
         })}
+        <DropdownMenuSeparator />
+        <div className="py-1">
+          <div className="flex items-center gap-2 px-2 py-2 text-sm font-bold text-slate-800">
+            <Palette className="h-4 w-4" /> Appearance
+          </div>
+          <div className="grid gap-0.5 pl-2">
+            {appearanceOptions.map((option) => {
+              const Icon = option.icon;
+              return (
+                <DropdownMenuItem key={option.value} onSelect={() => chooseAppearance(option.value)}>
+                  <Icon className="mr-2 h-4 w-4" />
+                  <span className="flex-1">{option.label}</span>
+                  {appearance === option.value ? <Check aria-label="Selected" className="h-4 w-4 text-orange-600" /> : null}
+                </DropdownMenuItem>
+              );
+            })}
+          </div>
+        </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={onSignOut}>Sign out</DropdownMenuItem>
       </DropdownMenuContent>
