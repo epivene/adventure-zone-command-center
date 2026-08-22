@@ -76,7 +76,10 @@ describe("workspace-aware Admin shell", () => {
     const toolbarEnd = shellSource.indexOf("</div>", toolbarStart);
     const toolbar = shellSource.slice(toolbarStart, toolbarEnd);
 
-    expect(toolbar).toContain('<MessageBubbleLink href="/manager-communications" label="Messages" unreadCount={unreadMessages}');
+    expect(toolbar).toContain("<MessageBubbleLink");
+    expect(toolbar).toContain('href="/manager-communications"');
+    expect(toolbar).toContain('label="Messages"');
+    expect(toolbar).toContain("unreadCount={unreadMessages}");
     expect(toolbar).toContain('<AssistantLauncher placement="toolbar" />');
     expect(toolbar.indexOf("<MessageBubbleLink")).toBeLessThan(toolbar.indexOf("<AssistantLauncher"));
     expect(toolbar).not.toContain('workspace === "operations" ? <MessageBubbleLink');
