@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   apiGet: vi.fn(),
-  apiFetch: vi.fn(),
+  apiPost: vi.fn(),
   officeGet: vi.fn(),
 }));
-vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet, apiFetch: mocks.apiFetch }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet, apiPost: mocks.apiPost }));
 vi.mock("@/lib/office-auth-context", () => ({ officeGet: mocks.officeGet }));
 
 import { ProfileSourceDocuments } from "./profile-source-documents";
@@ -26,7 +26,7 @@ const ravalli = {
 
 beforeEach(() => {
   mocks.apiGet.mockReset();
-  mocks.apiFetch.mockReset();
+  mocks.apiPost.mockReset();
   mocks.officeGet.mockReset();
   vi.spyOn(window, "open").mockImplementation(() => null);
 });
@@ -53,10 +53,11 @@ describe("ProfileSourceDocuments", () => {
 
   it("does not store a signed URL after the owner open action", async () => {
     mocks.apiGet.mockResolvedValue({ sourceDocuments: [ravalli] });
-    mocks.apiFetch.mockResolvedValue({ ok: true, redirected: true, url: "https://signed.example/file" });
+    mocks.apiPost.mockResolvedValue({ url: "https://signed.example/file" });
     render(<ProfileSourceDocuments mode="owner" profileId="33333333-3333-4333-8333-333333333333" />);
     fireEvent.click(await screen.findByRole("button", { name: "Open document" }));
-    await waitFor(() => expect(window.open).toHaveBeenCalledWith("https://signed.example/file", "_blank", "noopener,noreferrer"));
+    await waitFor(() => expect(mocks.apiPost).toHaveBeenCalledWith("/business-sources/doc-1/file/open", {}));
+    expect(window.open).toHaveBeenCalledWith("https://signed.example/file", "_blank", "noopener,noreferrer");
     expect(screen.queryByText("https://signed.example/file")).not.toBeInTheDocument();
   });
 });
