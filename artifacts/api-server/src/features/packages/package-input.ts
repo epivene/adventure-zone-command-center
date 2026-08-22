@@ -7,6 +7,9 @@ import {
 const nullableTrimmedString = z
   .union([z.string(), z.null()])
   .transform((value) => value?.trim() || null);
+const optionalNullableTrimmedString = z
+  .union([z.string(), z.null(), z.undefined()])
+  .transform((value) => value?.trim() || null);
 
 const canonicalUuid = z.uuid().transform((value) => value.toLowerCase());
 
@@ -106,18 +109,22 @@ export const packageTemplateInputSchema = z
       .int("Minimum duration must be a whole number of days.")
       .positive("Minimum duration must be at least one day.")
       .max(31, "Minimum duration is too large.")
-      .nullable(),
+      .nullable()
+      .optional()
+      .default(null),
     baseDurationMaxDays: z
       .number()
       .int("Maximum duration must be a whole number of days.")
       .positive("Maximum duration must be at least one day.")
       .max(31, "Maximum duration is too large.")
-      .nullable(),
+      .nullable()
+      .optional()
+      .default(null),
     customerDescription: nullableTrimmedString,
     bookingTalkingPoints: nullableTrimmedString,
     operationalRequirements: nullableTrimmedString,
     setupNotes: nullableTrimmedString,
-    knowledgeReviewNote: nullableTrimmedString,
+    knowledgeReviewNote: optionalNullableTrimmedString,
     active: z.boolean(),
   })
   .strict()
