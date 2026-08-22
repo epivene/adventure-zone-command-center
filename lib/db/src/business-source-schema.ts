@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   check,
   index,
   integer,
@@ -9,6 +10,13 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import {
+  bookings,
+  organizationLocations,
+  organizations,
+  packageTemplates,
+} from "./schema";
 
 export const businessSourceAccessValues = [
   "owner",
@@ -57,6 +65,34 @@ export const communicationTemplateChannelValues = [
 export type CommunicationTemplateChannel =
   (typeof communicationTemplateChannelValues)[number];
 
+export const sourceDocumentLinkKindValues = [
+  "profile",
+  "location",
+  "booking",
+  "package_reference",
+] as const;
+export type SourceDocumentLinkKind =
+  (typeof sourceDocumentLinkKindValues)[number];
+
+export const historicalTermValueTypeValues = [
+  "text",
+  "money_cents",
+  "date",
+  "date_range",
+  "integer",
+  "boolean",
+] as const;
+export type HistoricalTermValueType =
+  (typeof historicalTermValueTypeValues)[number];
+
+export const historicalTermReviewStateValues = [
+  "proposed",
+  "approved",
+  "rejected",
+] as const;
+export type HistoricalTermReviewState =
+  (typeof historicalTermReviewStateValues)[number];
+
 export const businessSourceDocuments = pgTable(
   "business_source_documents",
   {
@@ -99,6 +135,151 @@ export const businessSourceDocuments = pgTable(
     check(
       "business_source_documents_review_valid",
       sql`${table.reviewState} in ('unreviewed','reviewed','superseded','archived')`,
+    ),
+  ],
+);
+
+export const businessSourceDocumentFiles = pgTable(
+  "business_source_document_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceDocumentId: uuid("source_document_id")
+      .notNull()
+      .references(() => businessSourceDocuments.id, { onDelete: "cascade" }),
+    storageKey: text("storage_key").notNull(),
+    mimeType: text("mime_type").notNull(),
+    originalSizeBytes: bigint("original_size_bytes", { mode: "number" }).notNull(),
+    sha256Hex: text("sha256_hex").notNull(),
+    uploadedBy: text("uploaded_by").notNull(),
+    uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("business_source_document_files_document_unique").on(
+      table.sourceDocumentId,
+    ),
+    uniqueIndex("business_source_document_files_storage_key_unique").on(
+      table.storageKey,
+    ),
+    check(
+      "business_source_document_files_size_nonnegative",
+      sql`${table.originalSizeBytes} >= 0`,
+    ),
+    check(
+      "business_source_document_files_sha256_hex_valid",
+      sql`${table.sha256Hex} ~ '^[0-9a-f]{64}$'`,
+    ),
+  ],
+);
+
+export const businessSourceDocumentLinks = pgTable(
+  "business_source_document_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceDocumentId: uuid("source_document_id")
+      .notNull()
+      .references(() => businessSourceDocuments.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
+    organizationLocationId: uuid("organization_location_id").references(
+      () => organizationLocations.id,
+      { onDelete: "set null" },
+    ),
+    bookingId: uuid("booking_id").references(() => bookings.id, {
+      onDelete: "set null",
+    }),
+    packageTemplateId: uuid("package_template_id").references(
+      () => packageTemplates.id,
+      { onDelete: "set null" },
+    ),
+    linkKind: text("link_kind").$type<SourceDocumentLinkKind>().notNull(),
+    linkNote: text("link_note"),
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("business_source_document_links_profile_unique")
+      .on(table.sourceDocumentId, table.organizationId)
+      .where(sql`${table.organizationId} is not null`),
+    uniqueIndex("business_source_document_links_location_unique")
+      .on(table.sourceDocumentId, table.organizationLocationId)
+      .where(sql`${table.organizationLocationId} is not null`),
+    uniqueIndex("business_source_document_links_booking_unique")
+      .on(table.sourceDocumentId, table.bookingId)
+      .where(sql`${table.bookingId} is not null`),
+    uniqueIndex("business_source_document_links_package_unique")
+      .on(table.sourceDocumentId, table.packageTemplateId)
+      .where(sql`${table.packageTemplateId} is not null`),
+    index("business_source_document_links_organization_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+    ),
+    index("business_source_document_links_location_created_idx").on(
+      table.organizationLocationId,
+      table.createdAt,
+    ),
+    index("business_source_document_links_booking_created_idx").on(
+      table.bookingId,
+      table.createdAt,
+    ),
+    check(
+      "business_source_document_links_kind_valid",
+      sql`${table.linkKind} in ('profile','location','booking','package_reference')`,
+    ),
+    check(
+      "business_source_document_links_exactly_one_target",
+      sql`(
+        (${table.organizationId} is not null)::int +
+        (${table.organizationLocationId} is not null)::int +
+        (${table.bookingId} is not null)::int +
+        (${table.packageTemplateId} is not null)::int
+      ) = 1`,
+    ),
+  ],
+);
+
+export const businessSourceHistoricalTerms = pgTable(
+  "business_source_historical_terms",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sourceDocumentId: uuid("source_document_id")
+      .notNull()
+      .references(() => businessSourceDocuments.id, { onDelete: "cascade" }),
+    documentLinkId: uuid("document_link_id").references(
+      () => businessSourceDocumentLinks.id,
+      { onDelete: "set null" },
+    ),
+    termKey: text("term_key").notNull(),
+    label: text("label").notNull(),
+    valueText: text("value_text").notNull(),
+    valueType: text("value_type").$type<HistoricalTermValueType>().notNull(),
+    sourceLocator: text("source_locator").notNull(),
+    reviewState: text("review_state")
+      .$type<HistoricalTermReviewState>()
+      .default("proposed")
+      .notNull(),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("business_source_historical_terms_identity_unique").on(
+      table.sourceDocumentId,
+      table.termKey,
+      table.sourceLocator,
+    ),
+    index("business_source_historical_terms_document_review_idx").on(
+      table.sourceDocumentId,
+      table.reviewState,
+    ),
+    check(
+      "business_source_historical_terms_value_type_valid",
+      sql`${table.valueType} in ('text','money_cents','date','date_range','integer','boolean')`,
+    ),
+    check(
+      "business_source_historical_terms_review_valid",
+      sql`${table.reviewState} in ('proposed','approved','rejected')`,
     ),
   ],
 );
