@@ -6,6 +6,15 @@ import type { CommercialOfferInput } from "./commercial-offer-input";
 type Database = typeof database;
 export type CommercialOfferRecord = typeof commercialOfferRules.$inferSelect;
 
+type CommercialOfferSeedInput = Omit<
+  CommercialOfferInput,
+  "state" | "appliesToPackageCodes"
+> & {
+  state: "proposed";
+  appliesToPackageCodes: readonly string[];
+  sourceDocumentId: string | null;
+};
+
 export class CommercialOfferRepository {
   constructor(private readonly database: Database) {}
 
@@ -40,18 +49,14 @@ export class CommercialOfferRepository {
     );
   }
 
-  async seedMissing(
-    values: Array<
-      Omit<CommercialOfferInput, "state"> & {
-        state: "proposed";
-        sourceDocumentId: string | null;
-      }
-    >,
-  ): Promise<void> {
+  async seedMissing(values: readonly CommercialOfferSeedInput[]): Promise<void> {
     for (const value of values) {
       await this.database
         .insert(commercialOfferRules)
-        .values(value)
+        .values({
+          ...value,
+          appliesToPackageCodes: [...value.appliesToPackageCodes],
+        })
         .onConflictDoNothing({ target: commercialOfferRules.code });
     }
   }
