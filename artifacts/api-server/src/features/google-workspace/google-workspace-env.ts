@@ -18,6 +18,9 @@ const requiredKeys = [
   "GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY",
 ] as const;
 
+const googleWorkspaceCallbackPath =
+  "/api/google-workspace/oauth/callback";
+
 type GoogleWorkspaceEnvironmentKey = (typeof requiredKeys)[number];
 type EnvironmentInput = Record<string, string | undefined>;
 
@@ -45,7 +48,7 @@ function isTestLocalhost(url: URL, nodeEnvironment: string): boolean {
   return (
     nodeEnvironment === "test" &&
     url.protocol === "http:" &&
-    ["localhost", "127.0.0.1", "::1"].includes(url.hostname)
+    ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
   );
 }
 
@@ -59,6 +62,15 @@ function validateRedirectUri(value: string, nodeEnvironment: string): string {
 
   if (redirectUri.protocol !== "https:" && !isTestLocalhost(redirectUri, nodeEnvironment)) {
     throw new Error("GOOGLE_WORKSPACE_REDIRECT_URI_MUST_USE_HTTPS");
+  }
+  if (
+    redirectUri.username ||
+    redirectUri.password ||
+    redirectUri.pathname !== googleWorkspaceCallbackPath ||
+    redirectUri.search ||
+    redirectUri.hash
+  ) {
+    throw new Error("GOOGLE_WORKSPACE_REDIRECT_URI_INVALID");
   }
 
   return redirectUri.toString();
