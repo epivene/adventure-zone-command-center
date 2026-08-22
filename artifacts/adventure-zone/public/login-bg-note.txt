@@ -1,1 +1,0 @@
-The landing page background is embedded in login-screen.css to preserve the approved reference image exactly.
