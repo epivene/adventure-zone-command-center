@@ -50,7 +50,7 @@ function searchRequest(question: string): ProfileSearchRequest | null {
   const raw = question.trim();
   const lower = raw.toLowerCase();
 
-  if (/overdue follow[- ]?ups|who needs (a )?(call|follow[- ]?up)|who.*overdue/.test(lower)) {
+  if (/overdue follow[- ]?ups|who need(?:s)? (?:a )?(?:call|follow[- ]?up)|who.*overdue/.test(lower)) {
     return { query: "follow-up", overdueFollowUp: true, limit: 8 };
   }
 
