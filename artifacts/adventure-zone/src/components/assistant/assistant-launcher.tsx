@@ -22,7 +22,7 @@ export function AssistantLauncher({
       title={isToolbar ? "Booking Assistant" : undefined}
       type="button"
     >
-      <Bot className={isToolbar ? "h-4.5 w-4.5" : "h-5 w-5"} />
+      <Bot className="h-5 w-5" />
       {!isToolbar ? <span className="hidden sm:inline">Assistant</span> : null}
       {!isToolbar && activeContext?.label ? (
         <span className="hidden max-w-40 truncate rounded-full bg-white/15 px-2 py-0.5 text-xs font-semibold sm:inline">
