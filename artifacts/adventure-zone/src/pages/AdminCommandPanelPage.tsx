@@ -56,10 +56,10 @@ export default function AdminCommandPanelPage() {
         })}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-slate-100/70 p-4 sm:flex sm:items-center sm:justify-between sm:gap-4">
+      <section className="rounded-2xl border border-border bg-card p-4 text-card-foreground shadow-sm sm:flex sm:items-center sm:justify-between sm:gap-4">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-600"><Settings2 className="h-5 w-5" /></span>
-          <div><h2 className="font-bold">Admin Tools</h2><p className="mt-1 text-sm text-slate-600">Imports, ACT recovery, Google Workspace setup, call scripts, package/resource setup, and occasional system maintenance.</p></div>
+          <span className="mt-0.5 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Settings2 className="h-5 w-5" /></span>
+          <div><h2 className="font-bold">Admin Tools</h2><p className="mt-1 text-sm text-muted-foreground">Imports, ACT recovery, Google Workspace setup, call scripts, package/resource setup, and occasional system maintenance.</p></div>
         </div>
         <Link className="button-secondary mt-4 inline-flex shrink-0 items-center gap-2 sm:mt-0" href="/settings"><CalendarRange className="h-4 w-4" />Open Admin Tools</Link>
       </section>
