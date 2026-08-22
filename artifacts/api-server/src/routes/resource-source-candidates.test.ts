@@ -13,4 +13,9 @@ describe("resource source candidate owner routes", () => {
     expect(source).toContain("reason");
     expect(source).not.toContain("create-resource");
   });
+
+  it("does not allow source identity to be linked to archived equipment", () => {
+    expect(source).toContain('resource.status === "archived"');
+    expect(source).toContain("Archived resources cannot receive imported asset identity");
+  });
 });
