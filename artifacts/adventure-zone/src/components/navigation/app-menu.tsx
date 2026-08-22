@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ChevronDown, Menu, Plus } from "lucide-react";
 import {
   DropdownMenu,
@@ -10,13 +10,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth-context";
+import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 
-type MenuItem = { href: string; label: string };
+type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean };
 type MenuGroup = { label: string; items: MenuItem[] };
 
-const adminMenuGroups: MenuGroup[] = [
+const bookingGroups: MenuGroup[] = [
   {
-    label: "Bookings & Follow-ups",
+    label: "Booking",
     items: [
       { href: "/bookings", label: "Bookings" },
       { href: "/calls/workspace", label: "Calls" },
@@ -24,8 +25,12 @@ const adminMenuGroups: MenuGroup[] = [
       { href: "/research-sources", label: "Research Sources" },
       { href: "/quick-add", label: "Quick add" },
       { href: "/contacts", label: "All contacts" },
+      { href: "/marketing", label: "Marketing", rememberBookingBeforeOpen: true },
     ],
   },
+];
+
+const operationsGroups: MenuGroup[] = [
   {
     label: "Legs & Operations",
     items: [
@@ -37,23 +42,38 @@ const adminMenuGroups: MenuGroup[] = [
       { href: "/manager-issues", label: "Route issues" },
     ],
   },
+];
+
+const marketingGroups: MenuGroup[] = [
   {
-    label: "Imports & Data",
+    label: "Marketing",
     items: [
-      { href: "/settings/paper-notes", label: "Paper notes" },
-      { href: "/settings/act-migration", label: "Act! import" },
-      { href: "/settings/act-recovery", label: "ACT recovery" },
-    ],
-  },
-  {
-    label: "Settings",
-    items: [
-      { href: "/settings/call-scripts", label: "Call scripts" },
-      { href: "/settings/packages-resources", label: "Packages & resources" },
-      { href: "/settings", label: "Settings" },
+      { href: "/marketing", label: "Marketing home" },
+      { href: "/profiles", label: "Profiles & audiences" },
+      { href: "/office-coordinator", label: "Office Coordinator" },
+      { href: "/research-sources", label: "Opportunity research" },
     ],
   },
 ];
+
+const adminToolsGroup: MenuGroup = {
+  label: "Admin Tools",
+  items: [
+    { href: "/settings/paper-notes", label: "Paper notes" },
+    { href: "/settings/act-migration", label: "Act! import" },
+    { href: "/settings/act-recovery", label: "ACT recovery" },
+    { href: "/settings/call-scripts", label: "Call scripts" },
+    { href: "/settings/packages-resources", label: "Packages & resources" },
+    { href: "/settings", label: "Settings" },
+  ],
+};
+
+function groupsForWorkspace(workspace: AdminWorkspace): MenuGroup[] {
+  if (workspace === "booking") return bookingGroups;
+  if (workspace === "operations") return operationsGroups;
+  if (workspace === "marketing") return marketingGroups;
+  return [];
+}
 
 export function AddMenu() {
   return (
@@ -73,9 +93,12 @@ export function AddMenu() {
   );
 }
 
-export function AppMenu({ mobile = false }: { mobile?: boolean }) {
+export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspace; mobile?: boolean }) {
   const { signOut } = useAuth();
+  const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const workspaceGroups = groupsForWorkspace(workspace);
+  const groups = workspace === "command" ? [] : [...workspaceGroups, adminToolsGroup];
 
   return (
     <DropdownMenu>
@@ -86,7 +109,9 @@ export function AppMenu({ mobile = false }: { mobile?: boolean }) {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" side={mobile ? "top" : "bottom"} className={mobile ? "max-h-[72dvh] w-[min(92vw,24rem)] overflow-y-auto p-2" : "max-h-[76vh] w-80 overflow-y-auto p-2"}>
-        {adminMenuGroups.map((group, index) => {
+        <DropdownMenuItem asChild><Link href="/command">Command Panel</Link></DropdownMenuItem>
+        {groups.length ? <DropdownMenuSeparator /> : null}
+        {groups.map((group, index) => {
           const expanded = openGroups[group.label] ?? index === 0;
           return (
             <div key={group.label} className="py-1">
@@ -98,12 +123,12 @@ export function AppMenu({ mobile = false }: { mobile?: boolean }) {
                 <div className="grid gap-0.5 pb-1 pl-2">
                   {group.items.map((item) => (
                     <DropdownMenuItem asChild key={`${group.label}:${item.href}:${item.label}`}>
-                      <Link href={item.href}>{item.label}</Link>
+                      <Link href={item.href} onClick={() => { if (item.rememberBookingBeforeOpen && workspace === "booking") saveBookingReturnPath(location); }}>{item.label}</Link>
                     </DropdownMenuItem>
                   ))}
                 </div>
               ) : null}
-              {index < adminMenuGroups.length - 1 ? <DropdownMenuSeparator /> : null}
+              {index < groups.length - 1 ? <DropdownMenuSeparator /> : null}
             </div>
           );
         })}
