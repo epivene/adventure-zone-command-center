@@ -203,6 +203,18 @@ router.delete("/business-sources/:documentId/links/:linkId", async (req, res): P
     res.status(400).json({ error: "Invalid source document link." });
     return;
   }
+  const [approvedTerm] = await db
+    .select({ id: businessSourceHistoricalTerms.id })
+    .from(businessSourceHistoricalTerms)
+    .where(and(
+      eq(businessSourceHistoricalTerms.documentLinkId, linkId),
+      eq(businessSourceHistoricalTerms.reviewState, "approved"),
+    ))
+    .limit(1);
+  if (approvedTerm) {
+    res.status(409).json({ error: "Approved historical terms are attached to this link. Review or reassign those terms before unlinking the document." });
+    return;
+  }
   const [deleted] = await db
     .delete(businessSourceDocumentLinks)
     .where(and(eq(businessSourceDocumentLinks.id, linkId), eq(businessSourceDocumentLinks.sourceDocumentId, documentId)))
@@ -286,10 +298,35 @@ router.patch("/business-sources/:documentId/historical-terms/:termId", async (re
     res.status(400).json({ error: parsed.success ? "Invalid historical term ID." : parsed.error.issues[0]?.message ?? "Review the historical term changes." });
     return;
   }
-  if (parsed.data.documentLinkId && !(await linkBelongsToDocument(documentId, parsed.data.documentLinkId))) {
+
+  const [current] = await db
+    .select({
+      id: businessSourceHistoricalTerms.id,
+      documentLinkId: businessSourceHistoricalTerms.documentLinkId,
+    })
+    .from(businessSourceHistoricalTerms)
+    .where(and(
+      eq(businessSourceHistoricalTerms.id, termId),
+      eq(businessSourceHistoricalTerms.sourceDocumentId, documentId),
+    ))
+    .limit(1);
+  if (!current) {
+    res.status(404).json({ error: "Historical term not found." });
+    return;
+  }
+
+  const nextDocumentLinkId = parsed.data.documentLinkId !== undefined
+    ? parsed.data.documentLinkId
+    : current.documentLinkId;
+  if (nextDocumentLinkId && !(await linkBelongsToDocument(documentId, nextDocumentLinkId))) {
     res.status(400).json({ error: "The selected document link does not belong to this source document." });
     return;
   }
+  if (parsed.data.reviewState === "approved" && !nextDocumentLinkId) {
+    res.status(400).json({ error: "Approved historical terms require a source document link." });
+    return;
+  }
+
   const actorId = String((req as any).userId ?? "owner");
   const reviewState = parsed.data.reviewState;
   const [updated] = await db
