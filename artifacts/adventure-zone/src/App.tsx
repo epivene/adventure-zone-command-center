@@ -14,6 +14,7 @@ import ManagerCrewPage from "@/pages/ManagerCrewPage";
 import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
 import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
 import ManagerEventWrapUpPage from "@/pages/ManagerEventWrapUpPage";
+import ManagerEventChecklistPage from "@/pages/ManagerEventChecklistPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerMessagesPage from "@/pages/ManagerMessagesPage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
@@ -175,6 +176,7 @@ function ManagerProtectedApp() {
       <Switch>
         <Route path="/manager/incidents/new"><ManagerIncidentPage /></Route>
         <Route path="/manager/incidents"><ManagerIncidentsPage /></Route>
+        <Route path="/manager/events/:bookingId/checklist/:phase">{(params)=><ManagerEventChecklistPage bookingId={params.bookingId} phaseSlug={params.phase}/>}</Route>
         <Route path="/manager/events/:bookingId/wrap-up">{(params)=><ManagerEventWrapUpPage bookingId={params.bookingId}/>}</Route>
         <Route path="/manager/reviews"><ManagerEventReviewPage /></Route>
         <Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>
