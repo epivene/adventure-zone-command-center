@@ -101,10 +101,23 @@ export const packageTemplateInputSchema = z
       .number()
       .int("Normal maximum must be a whole number.")
       .positive("Normal maximum must be at least one."),
+    baseDurationMinDays: z
+      .number()
+      .int("Minimum duration must be a whole number of days.")
+      .positive("Minimum duration must be at least one day.")
+      .max(31, "Minimum duration is too large.")
+      .nullable(),
+    baseDurationMaxDays: z
+      .number()
+      .int("Maximum duration must be a whole number of days.")
+      .positive("Maximum duration must be at least one day.")
+      .max(31, "Maximum duration is too large.")
+      .nullable(),
     customerDescription: nullableTrimmedString,
     bookingTalkingPoints: nullableTrimmedString,
     operationalRequirements: nullableTrimmedString,
     setupNotes: nullableTrimmedString,
+    knowledgeReviewNote: nullableTrimmedString,
     active: z.boolean(),
   })
   .strict()
@@ -114,6 +127,17 @@ export const packageTemplateInputSchema = z
         code: "custom",
         path: ["maximumAttractionCount"],
         message: "Maximum must be at least the minimum.",
+      });
+    }
+    if (
+      input.baseDurationMinDays !== null &&
+      input.baseDurationMaxDays !== null &&
+      input.baseDurationMaxDays < input.baseDurationMinDays
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["baseDurationMaxDays"],
+        message: "Maximum duration must be at least the minimum duration.",
       });
     }
   });
