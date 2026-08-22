@@ -54,6 +54,7 @@ import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
+import AttendanceHistoryImportPage from "@/pages/AttendanceHistoryImportPage";
 import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
 import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
 import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
@@ -195,7 +196,7 @@ function ManagerProtectedApp() {
 function OfficeProtectedApp() {
   const { office, loading } = useOfficeAuth();
   if (loading) return <div className="p-6">Loading Booking Workspace…</div>;
-  if (!office) return <Redirect to="/office/sign-in" />;
+  if (!office) return <Redirect to="/manager/sign-in" />;
   return (
     <OfficeShell>
       <Switch>
@@ -232,6 +233,7 @@ function AdminProtectedApp() {
           <Route path="/calendar" component={CalendarPage} />
           <Route path="/routes" component={RoutesPage} />
           <Route path="/research-sources" component={ResearchSourcesPage} />
+          <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
           <Route path="/calls/new" component={CallWorkspacePage} />
           <Route path="/calls/log" component={MobileCallLogPage} />
