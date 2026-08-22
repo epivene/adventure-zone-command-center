@@ -11,6 +11,7 @@ const environment: GoogleWorkspaceEnvironment = {
   clientId: "client-id.apps.googleusercontent.com",
   clientSecret: "client-secret",
   redirectUri: "https://api.example.com/api/google-workspace/oauth/callback",
+  appOrigin: "https://app.example.com",
   tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 2)),
 };
 
@@ -98,7 +99,7 @@ describe("Google Workspace OAuth callback", () => {
     expect(exchangeCode).not.toHaveBeenCalled();
   });
 
-  it("exchanges a valid code, verifies identity and scopes, then redirects safely", async () => {
+  it("exchanges a valid code, verifies identity and scopes, then returns to the frontend", async () => {
     const { app, consume, exchangeCode, accountIdentity, upsertConnected } =
       testApp();
 
@@ -120,7 +121,20 @@ describe("Google Workspace OAuth callback", () => {
       now: new Date("2026-08-22T18:05:00.000Z"),
     });
     expect(response.headers.location).toBe(
-      "/settings/google-workspace?connected=1",
+      "https://app.example.com/settings/google-workspace?connected=1",
+    );
+  });
+
+  it("never redirects an OAuth callback outside the configured frontend origin", async () => {
+    const consume = vi.fn(async () => ({ returnPath: "//evil.example/steal" }));
+    const { app } = testApp({ consume });
+
+    const response = await request(app)
+      .get("/google-workspace/oauth/callback?code=auth-code&state=oauth-state")
+      .expect(303);
+
+    expect(response.headers.location).toBe(
+      "https://app.example.com/settings/google-workspace?connected=1",
     );
   });
 
@@ -130,6 +144,23 @@ describe("Google Workspace OAuth callback", () => {
       scopes: GOOGLE_WORKSPACE_READ_SCOPES.filter(
         (scope) => scope !== "https://www.googleapis.com/auth/drive.readonly",
       ),
+    }));
+    const { app, upsertConnected } = testApp({ exchangeCode });
+
+    const response = await request(app)
+      .get("/google-workspace/oauth/callback?code=code&state=state")
+      .expect(403);
+
+    expect(response.body.error).toBe(
+      "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING",
+    );
+    expect(upsertConnected).not.toHaveBeenCalled();
+  });
+
+  it("refuses a connection when Google omits the granted scope list", async () => {
+    const exchangeCode = vi.fn(async () => ({
+      refreshToken: "1//refresh-token",
+      scopes: [],
     }));
     const { app, upsertConnected } = testApp({ exchangeCode });
 
