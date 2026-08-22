@@ -221,12 +221,18 @@ export class GoogleScopeService {
     ) {
       throw new Error("GOOGLE_WORKSPACE_SCOPE_SELECTION_INVALID");
     }
+    if (
+      selectedLabelIds.size !== allowedLabelIds.size ||
+      selectedCalendarIds.size !== allowedCalendarIds.size ||
+      [...allowedLabelIds].some((id) => !selectedLabelIds.has(id)) ||
+      [...allowedCalendarIds].some((id) => !selectedCalendarIds.has(id))
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_SCOPE_INCOMPLETE");
+    }
 
     const saved = {
-      labels: preview.labels.filter((label) => selectedLabelIds.has(label.id)),
-      calendars: preview.calendars.filter((calendar) =>
-        selectedCalendarIds.has(calendar.id),
-      ),
+      labels: preview.labels,
+      calendars: preview.calendars,
     };
     await this.persistence.replace({
       connectionId: connection.id,
