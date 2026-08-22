@@ -116,6 +116,14 @@ export default function OrganizationsPage() {
     query.includeRetired || query.showMembers,
   );
 
+  const familySection = !showDuplicates && families.length > 0 ? (
+    <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <summary className="cursor-pointer font-bold">Event Families <span className="ml-1 text-sm font-normal text-slate-500">({families.length})</span></summary>
+      <p className="mt-1 text-sm text-slate-600">Open a family to manage its related event profiles.</p>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{families.map((family: any) => <EventFamilyCard key={family.id} family={family} />)}</div>
+    </details>
+  ) : null;
+
   return (
     <div className="mx-auto grid max-w-7xl gap-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
@@ -127,14 +135,6 @@ export default function OrganizationsPage() {
         {!showDuplicates ? <button className="button-primary" onClick={() => setEventFamilyOpen(true)} type="button">+ Event Family</button> : null}
       </header>
 
-      {!showDuplicates && families.length > 0 ? (
-        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer font-bold">Event Families <span className="ml-1 text-sm font-normal text-slate-500">({families.length})</span></summary>
-          <p className="mt-1 text-sm text-slate-600">Open a family to manage its related event profiles.</p>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">{families.map((family: any) => <EventFamilyCard key={family.id} family={family} />)}</div>
-        </details>
-      ) : null}
-
       {showDuplicates ? (
         <div className="grid gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -145,7 +145,7 @@ export default function OrganizationsPage() {
         </div>
       ) : (
         <div onClickCapture={handleProfileLink}>
-          {loading ? <p className="text-slate-500">Loading places…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} /> : null}
+          {loading ? <p className="text-slate-500">Loading places…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
 
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
