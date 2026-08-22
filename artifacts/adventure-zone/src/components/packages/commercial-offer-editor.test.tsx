@@ -12,6 +12,6 @@ describe("commercial offer editor", () => {
 
   it("requires an explicit confirmation gesture before clearing a source conflict", () => {
     expect(source).toContain("I confirmed the current terms");
-    expect(source).toContain("sourceConflictNote: null");
+    expect(source).toContain('set("sourceConflictNote",null)');
   });
 });
