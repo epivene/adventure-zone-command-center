@@ -2,7 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ensurePaperNotesSchema } from "./paper-notes-startup-migration";
 
-function client(ready: boolean) {
+function client(
+  baseReady: boolean,
+  missingContactPhoneColumns: string[] = [],
+) {
   const queries: string[] = [];
   return {
     queries,
@@ -15,7 +18,10 @@ function client(ready: boolean) {
           normalizedSql.includes("paper_note_pages") &&
           normalizedSql.includes("as ready")
         ) {
-          return { rows: [{ ready }] };
+          const checkedMissingColumn = missingContactPhoneColumns.some((column) =>
+            normalizedSql.includes(`column_name = '${column}'`),
+          );
+          return { rows: [{ ready: baseReady && !checkedMissingColumn }] };
         }
         return { rows: [] };
       },
@@ -33,17 +39,22 @@ describe("ensurePaperNotesSchema", () => {
     expect(h.queries).toHaveLength(1);
   });
 
-  it("treats the Paper Notes schema as incomplete when structured contact phone columns are missing", async () => {
-    const h = client(true);
-    const loadSql = vi.fn(async () => "create table should_not_run(id int);");
+  it.each([
+    "instructions",
+    "status",
+    "source_paper_note_entry_id",
+  ])(
+    "reruns migration 066 when contact_phones.%s is missing",
+    async (missingColumn) => {
+      const h = client(true, [missingColumn]);
+      const sql = "alter table contact_phones add column repaired text;";
+      const loadSql = vi.fn(async () => sql);
 
-    await ensurePaperNotesSchema(h.client, { loadSql });
-
-    expect(h.queries[0]).toContain("table_name = 'contact_phones'");
-    expect(h.queries[0]).toContain("column_name = 'instructions'");
-    expect(h.queries[0]).toContain("column_name = 'status'");
-    expect(h.queries[0]).toContain("column_name = 'source_paper_note_entry_id'");
-  });
+      await expect(ensurePaperNotesSchema(h.client, { loadSql })).resolves.toBe(true);
+      expect(loadSql).toHaveBeenCalledTimes(1);
+      expect(h.queries).toContain(sql);
+    },
+  );
 
   it("applies migration 066 when the live database is missing Paper Notes tables", async () => {
     const h = client(false);
