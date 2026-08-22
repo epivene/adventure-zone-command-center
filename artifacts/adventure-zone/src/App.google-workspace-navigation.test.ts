@@ -20,11 +20,16 @@ describe("Google Workspace owner navigation", () => {
     expect(genericSettingsAt).toBeGreaterThan(googleAt);
   });
 
-  it("shows Google Workspace only in the owner Imports & Data menu", () => {
+  it("shows Google Workspace only in owner navigation", () => {
+    const app = source("src/App.tsx");
     const ownerMenu = source("src/components/navigation/app-menu.tsx");
     const officeShell = source("src/components/office/office-shell.tsx");
     const managerShell = source("src/components/manager/manager-shell.tsx");
 
+    expect(app).toContain(
+      '["Google Workspace", "/settings/google-workspace", "Connect the read-only company Gmail, Drive, and Calendar scope."]',
+    );
+    expect(app).not.toContain("as that implementation lands");
     expect(ownerMenu).toContain(
       '{ href: "/settings/google-workspace", label: "Google Workspace" }',
     );
