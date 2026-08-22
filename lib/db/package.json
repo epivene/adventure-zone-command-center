@@ -10,7 +10,8 @@
     "./event-family-schema": "./src/event-family-schema.ts",
     "./booking-assistant-schema": "./src/booking-assistant-schema.ts",
     "./paper-note-schema": "./src/paper-note-schema.ts",
-    "./office-coordinator-schema": "./src/office-coordinator-schema.ts"
+    "./office-coordinator-schema": "./src/office-coordinator-schema.ts",
+    "./google-workspace-schema": "./src/google-workspace-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
