@@ -129,9 +129,7 @@ export class PostgresGoogleConnectionRepository {
     if (
       current &&
       (current.account_email.trim().toLowerCase() !== email ||
-        (currentSubject !== null &&
-          googleSubject !== null &&
-          currentSubject !== googleSubject))
+        (currentSubject !== null && currentSubject !== googleSubject))
     ) {
       throw new Error("GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT");
     }
