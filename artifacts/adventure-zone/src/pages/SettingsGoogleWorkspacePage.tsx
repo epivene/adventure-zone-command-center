@@ -120,6 +120,17 @@ export function SettingsGoogleWorkspacePage({
       (preview.missingLabelRoots.length > 0 ||
         preview.missingCalendars.length > 0),
   );
+  const previewHasIncompleteSelection = Boolean(
+    preview &&
+      (selectedLabelIds.length !== preview.labels.length ||
+        selectedCalendarIds.length !== preview.calendars.length ||
+        preview.labels.some((label) => !selectedLabelIds.includes(label.id)) ||
+        preview.calendars.some(
+          (calendar) => !selectedCalendarIds.includes(calendar.id),
+        )),
+  );
+  const previewCannotSave =
+    previewHasMissingSources || previewHasIncompleteSelection;
 
   async function connect() {
     setBusy("connect");
@@ -154,6 +165,12 @@ export function SettingsGoogleWorkspacePage({
     if (previewHasMissingSources) {
       setError(
         "Resolve every missing or ambiguous business source before saving.",
+      );
+      return;
+    }
+    if (previewHasIncompleteSelection) {
+      setError(
+        "All approved business labels and calendars must stay selected. Personal sources are already excluded.",
       );
       return;
     }
@@ -351,10 +368,15 @@ export function SettingsGoogleWorkspacePage({
                       Resolve every missing or ambiguous business source before saving.
                     </p>
                   ) : null}
+                  {previewHasIncompleteSelection ? (
+                    <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                      All approved business labels and calendars must stay selected. Personal sources are already excluded.
+                    </p>
+                  ) : null}
                   <div className="flex justify-end border-t border-slate-200 pt-4">
                     <button
                       className="button-primary px-5 py-2.5"
-                      disabled={busy !== null || previewHasMissingSources}
+                      disabled={busy !== null || previewCannotSave}
                       onClick={() => void saveScope()}
                       type="button"
                     >
