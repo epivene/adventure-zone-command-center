@@ -11,9 +11,19 @@ describe("public login landing", () => {
     expect(existsSync("public/adventure-zone-login-background.webp")).toBe(false);
   });
 
-  it("keeps the three live workspace routes", () => {
-    expect(app).toContain('href="/sign-in">Admin / Command Center');
-    expect(app).toContain('href="/office/sign-in">Office Coordinator');
-    expect(app).toContain('href="/manager/sign-in">Manager Portal');
+  it("makes Office Coordinator the primary landing action", () => {
+    expect(app).toContain('className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator');
+  });
+
+  it("renames the manager entrance to Leg Managers", () => {
+    expect(app).toContain('href="/manager/sign-in">Leg Managers');
+    expect(app).not.toContain('href="/manager/sign-in">Manager Portal');
+  });
+
+  it("moves administrator access out of the main button stack", () => {
+    expect(app).toContain('aria-label="Administrator Access"');
+    expect(app).toContain('title="Administrator Access"');
+    expect(app).toContain('href="/sign-in"');
+    expect(app).not.toContain('href="/sign-in">Admin / Command Center');
   });
 });
