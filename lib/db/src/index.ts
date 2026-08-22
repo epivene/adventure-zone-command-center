@@ -4,6 +4,7 @@ import * as coreSchema from "./schema";
 import * as eventFamilySchema from "./event-family-schema";
 import * as paperNoteSchema from "./paper-note-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
+import * as googleWorkspaceSchema from "./google-workspace-schema";
 
 const { Pool } = pg;
 
@@ -34,6 +35,7 @@ const schema = {
   ...eventFamilySchema,
   ...paperNoteSchema,
   ...officeCoordinatorSchema,
+  ...googleWorkspaceSchema,
 };
 export const db = drizzle(pool, { schema });
 
@@ -41,3 +43,4 @@ export * from "./schema";
 export * from "./event-family-schema";
 export * from "./paper-note-schema";
 export * from "./office-coordinator-schema";
+export * from "./google-workspace-schema";
