@@ -106,6 +106,14 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.event_attendance_history') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "20260822_event_source_documents.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.business_source_document_files') IS NOT NULL
+      AND to_regclass(current_schema() || '.business_source_document_links') IS NOT NULL
+      AND to_regclass(current_schema() || '.business_source_historical_terms') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
