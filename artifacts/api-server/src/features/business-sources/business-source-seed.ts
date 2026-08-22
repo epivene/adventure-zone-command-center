@@ -1,4 +1,5 @@
 import type { db as database } from "@/db/client";
+import { runBusinessDriveMigrations } from "@workspace/db/business-drive-migrations";
 
 import {
   BusinessSourceRepository,
@@ -124,6 +125,7 @@ export const BUSINESS_SOURCE_CONFLICT_SEEDS = [
 type Database = typeof database;
 
 export async function ensureBusinessSourceSeed(database: Database): Promise<void> {
+  await runBusinessDriveMigrations();
   const repository = new BusinessSourceRepository(database);
   await repository.seedSourceDocuments(BUSINESS_SOURCE_SEEDS);
   await repository.seedConflictFacts(BUSINESS_SOURCE_CONFLICT_SEEDS);
