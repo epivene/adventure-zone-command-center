@@ -59,6 +59,10 @@ router.post("/settings/resource-source-candidates/:candidateId/link", async (req
     res.status(404).json({ error: "Resource not found." });
     return;
   }
+  if (resource.status === "archived") {
+    res.status(409).json({ error: "Archived resources cannot receive imported asset identity." });
+    return;
+  }
 
   const sourceIdentity = {
     yearBuilt: candidate.yearBuilt,
