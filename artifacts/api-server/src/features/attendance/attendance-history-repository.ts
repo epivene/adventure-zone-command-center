@@ -11,8 +11,8 @@ export type AttendanceHistoryProjection = {
   year: number;
   month: string;
   status: "attended" | "blacklisted" | "cancelled_last_minute";
-  originalEventName: string;
-  originalLocation: string;
+  sourceEventName: string;
+  sourceLocation: string;
 };
 
 export class AttendanceHistoryRepository {
@@ -30,8 +30,8 @@ export class AttendanceHistoryRepository {
         year: eventAttendanceHistory.year,
         month: eventAttendanceHistory.month,
         status: eventAttendanceHistory.status,
-        originalEventName: eventAttendanceHistory.originalEventName,
-        originalLocation: eventAttendanceHistory.originalLocation,
+        sourceEventName: eventAttendanceHistory.originalEventName,
+        sourceLocation: eventAttendanceHistory.originalLocation,
       })
       .from(eventAttendanceHistory)
       .where(
