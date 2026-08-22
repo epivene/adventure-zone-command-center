@@ -134,7 +134,7 @@ function Landing() {
         <Shield aria-hidden="true" className="h-5 w-5" />
       </Link>
       <h1 className="text-3xl font-bold tracking-tight">Adventure Zone Command Center</h1>
-      <p className="mt-2 max-w-md text-center text-slate-600">Bookings, contacts, routes, and calls for your adventure business — all in one place.</p>
+      <p className="mt-2 max-w-md text-center text-slate-600">Bookings, contacts, routes, and calls all in one place!</p>
       <div className="mt-8 grid w-full max-w-sm gap-3">
         <Link className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
         <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Leg Managers</Link>
