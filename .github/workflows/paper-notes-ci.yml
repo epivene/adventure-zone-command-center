@@ -5,6 +5,7 @@ on:
     paths:
       - "artifacts/api-server/src/features/paper-notes/**"
       - "artifacts/api-server/src/routes/paper-note*.ts"
+      - "artifacts/api-server/src/db/paper-notes-*.ts"
       - "artifacts/api-server/src/features/activities/**"
       - "artifacts/api-server/src/features/act-recovery/act-note-profile-repair.pglite.test.ts"
       - "artifacts/api-server/src/features/act-recovery/timeline-recovery.ts"
@@ -36,6 +37,7 @@ jobs:
       - name: Paper Notes API tests
         run: >-
           pnpm --filter @workspace/api-server test --
+          src/db/paper-notes-startup-migration.test.ts
           src/features/paper-notes
           src/features/act-recovery/act-note-profile-repair.pglite.test.ts
           src/routes/paper-note-extraction.test.ts
