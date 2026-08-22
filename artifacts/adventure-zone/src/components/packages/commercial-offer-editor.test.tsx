@@ -14,4 +14,10 @@ describe("commercial offer editor", () => {
     expect(source).toContain("I confirmed the current terms");
     expect(source).toContain('set("sourceConflictNote",null)');
   });
+
+  it("sends only editable rule fields when saving", () => {
+    expect(source).toContain("editableOfferPayload");
+    expect(source).toContain("apiPatch(`/commercial-offers/${offer.id}`,editableOfferPayload(offer))");
+    expect(source).not.toContain("apiPatch(`/commercial-offers/${offer.id}`,offer)");
+  });
 });
