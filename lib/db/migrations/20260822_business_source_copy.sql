@@ -87,8 +87,23 @@ CREATE INDEX IF NOT EXISTS communication_templates_state_access_category_idx
   ON communication_templates(state, access_scope, category);
 
 ALTER TABLE office_email_drafts
-  ADD COLUMN IF NOT EXISTS communication_template_id uuid
-  REFERENCES communication_templates(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS communication_template_id uuid;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'office_email_drafts_communication_template_fk'
+  ) THEN
+    ALTER TABLE office_email_drafts
+      ADD CONSTRAINT office_email_drafts_communication_template_fk
+      FOREIGN KEY (communication_template_id)
+      REFERENCES communication_templates(id)
+      ON DELETE SET NULL;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS office_email_drafts_template_idx
   ON office_email_drafts(communication_template_id)
   WHERE communication_template_id IS NOT NULL;
