@@ -11,6 +11,11 @@ describe("public login landing", () => {
     expect(existsSync("public/adventure-zone-login-background.webp")).toBe(false);
   });
 
+  it("uses the updated landing subtitle", () => {
+    expect(app).toContain("Bookings, contacts, routes, and calls all in one place!");
+    expect(app).not.toContain("Bookings, contacts, routes, and calls for your adventure business — all in one place.");
+  });
+
   it("makes Office Coordinator the primary landing action", () => {
     expect(app).toContain('className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator');
   });
