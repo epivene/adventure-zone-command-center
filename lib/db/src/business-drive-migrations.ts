@@ -35,7 +35,9 @@ const migrationFiles = [
       )
       AND EXISTS (
         SELECT 1 FROM pg_constraint
-        WHERE conname = 'office_email_drafts_communication_template_fk'
+        WHERE conrelid = to_regclass(current_schema() || '.office_email_drafts')
+          AND conname = 'office_email_drafts_communication_template_fk'
+          AND contype = 'f'
       ) AS ready`,
   },
   {
@@ -52,9 +54,9 @@ const migrationFiles = [
       )
       AND NOT EXISTS (
         SELECT 1 FROM package_templates
-        WHERE (code = 'adventure_zone' AND base_price_cents = 800000)
-           OR (code IN ('pirates_rebellion','pirate_rebellion') AND base_price_cents = 700000)
-           OR (code IN ('weekend_warriors','warriors_playground') AND base_price_cents IS NULL)
+        WHERE (code = 'adventure_zone' AND to_jsonb(package_templates)->>'base_price_cents' = '800000')
+           OR (code IN ('pirates_rebellion','pirate_rebellion') AND to_jsonb(package_templates)->>'base_price_cents' = '700000')
+           OR (code IN ('weekend_warriors','warriors_playground') AND to_jsonb(package_templates)->>'base_price_cents' IS NULL)
       ) AS ready`,
   },
   {
