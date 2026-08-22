@@ -61,14 +61,26 @@ function safeErrorCode(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function safeRedirect(returnPath: string): string {
+function safeRedirect(appOrigin: string, returnPath: string): string {
+  const fallbackPath = "/settings/google-workspace";
   const value = returnPath.trim();
-  if (!value.startsWith("/") || value.startsWith("//")) {
-    return "/settings/google-workspace?connected=1";
+  const localPath =
+    value.startsWith("/") && !value.startsWith("//")
+      ? value
+      : fallbackPath;
+
+  try {
+    const url = new URL(localPath, `${appOrigin}/`);
+    if (url.origin !== appOrigin) {
+      throw new Error("cross-origin OAuth return path");
+    }
+    url.searchParams.set("connected", "1");
+    return url.toString();
+  } catch {
+    const fallback = new URL(fallbackPath, `${appOrigin}/`);
+    fallback.searchParams.set("connected", "1");
+    return fallback.toString();
   }
-  const url = new URL(value, "https://command-center.invalid");
-  url.searchParams.set("connected", "1");
-  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 function requiredScopesPresent(scopes: string[]): boolean {
@@ -144,19 +156,25 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           scopes: authorization.scopes,
           now,
         });
-        res.redirect(303, safeRedirect(consumed.returnPath));
+        res.redirect(
+          303,
+          safeRedirect(
+            environmentResult.value.appOrigin,
+            consumed.returnPath,
+          ),
+        );
       } catch (error) {
-        const code = safeErrorCode(
+        const errorCode = safeErrorCode(
           error,
           "GOOGLE_WORKSPACE_OAUTH_CALLBACK_FAILED",
         );
         const status =
-          code === "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING"
+          errorCode === "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING"
             ? 403
-            : code === "GOOGLE_WORKSPACE_OAUTH_STATE_INVALID"
+            : errorCode === "GOOGLE_WORKSPACE_OAUTH_STATE_INVALID"
               ? 400
               : 502;
-        res.status(status).json({ error: code });
+        res.status(status).json({ error: errorCode });
       }
     },
   );
