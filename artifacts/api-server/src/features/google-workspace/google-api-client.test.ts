@@ -24,7 +24,7 @@ function response(body: unknown, status = 200) {
 }
 
 describe("GoogleWorkspaceReadClient", () => {
-  it("builds an offline authorization URL with only approved read scopes", () => {
+  it("builds an offline authorization URL isolated to approved read scopes", () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
       fetcher: async () => new Response(),
@@ -37,7 +37,7 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("prompt")).toBe("consent");
-    expect(url.searchParams.get("include_granted_scopes")).toBe("true");
+    expect(url.searchParams.get("include_granted_scopes")).toBe("false");
     expect(url.searchParams.get("state")).toBe("oauth-state");
     expect(url.searchParams.get("scope")?.split(" ")).toEqual(
       GOOGLE_WORKSPACE_READ_SCOPES,
