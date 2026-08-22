@@ -13,6 +13,7 @@ import {
   setAuthToken,
 } from "./auth-token";
 import { clearAssistantCacheForActor } from "@/features/assistant/assistant-offline-cache";
+import { clearBookingReturnPath } from "@/lib/admin-workspace";
 
 type AuthState = {
   /** null while the stored token is being validated on first load. */
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     void clearAssistantCacheForActor().catch(() => undefined);
+    clearBookingReturnPath();
     setAuthToken(null);
   }, []);
 
