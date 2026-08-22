@@ -101,6 +101,22 @@ export class PaperNotePhoneService {
         : this.updateOrganizationPhone(transaction, mutation, normalized, extension, now);
     }
 
+    if (
+      mutation.owner.kind === "contact" &&
+      (mutation.decision === "add_alternate" || mutation.decision === "add_questionable")
+    ) {
+      const existing = await rows<{ id: string }>(transaction.execute(sql`
+        select id
+        from contact_phones
+        where contact_id = ${mutation.owner.contactId}::uuid
+          and normalized_number = ${normalized}
+        limit 1
+      `));
+      if (existing[0]) {
+        return { phoneId: existing[0].id, action: "already_present" };
+      }
+    }
+
     const shouldReplacePrimary = mutation.decision === "replace_primary";
     const shouldInactivateOld = mutation.decision === "inactivate_saved_add_paper";
     if (shouldInactivateOld) {
