@@ -5,16 +5,14 @@ const ownerSource = readFileSync("src/pages/EventProfilePage.tsx", "utf8");
 const officeSource = readFileSync("src/pages/OfficeProfilePage.tsx", "utf8");
 
 describe("profile attendance history wiring", () => {
-  it("uses the owner attendance endpoint on the owner profile", () => {
-    expect(ownerSource).toContain("AttendanceHistoryCard");
-    expect(ownerSource).toContain("/attendance-history");
-    expect(ownerSource).toContain("apiGet<{ history: ProfileAttendanceHistoryItem[] }>");
+  it("uses the owner-scoped attendance panel on the owner profile", () => {
+    expect(ownerSource).toContain("AttendanceHistoryPanel");
+    expect(ownerSource).toContain('<AttendanceHistoryPanel mode="owner" profileId={profileId} />');
   });
 
-  it("uses only the Office-filtered attendance endpoint in Office Coordinator", () => {
-    expect(officeSource).toContain("AttendanceHistoryCard");
-    expect(officeSource).toContain("officeGet<{history:ProfileAttendanceHistoryItem[]}>");
-    expect(officeSource).toContain("`/office/profiles/${profileId}/attendance-history`");
-    expect(officeSource).not.toContain("apiGet<{ history: ProfileAttendanceHistoryItem[] }>");
+  it("uses the Office-scoped attendance panel in Office Coordinator", () => {
+    expect(officeSource).toContain("AttendanceHistoryPanel");
+    expect(officeSource).toContain('<AttendanceHistoryPanel mode="office" profileId={profileId} />');
+    expect(officeSource).not.toContain('mode="owner"');
   });
 });
