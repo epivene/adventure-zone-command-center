@@ -21,6 +21,7 @@ on:
       - "lib/db/package.json"
       - "lib/db/migrations/*google_workspace*"
       - "docs/operations/google-workspace-readonly-setup.md"
+      - "render.yaml"
   push:
     branches:
       - feature/google-workspace-connection-scope
@@ -43,6 +44,7 @@ on:
       - "lib/db/package.json"
       - "lib/db/migrations/*google_workspace*"
       - "docs/operations/google-workspace-readonly-setup.md"
+      - "render.yaml"
 
 permissions:
   contents: read
