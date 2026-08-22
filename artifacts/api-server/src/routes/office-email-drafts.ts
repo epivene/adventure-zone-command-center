@@ -5,6 +5,7 @@ import { DrizzleOfficeAccountRepository } from "@/features/office/office-account
 import { createRequireOfficeMiddleware } from "@/features/office/office-middleware";
 import { DrizzleOfficeEmailRepository } from "@/features/office/office-email-repository";
 import { OfficeEmailError } from "@/features/office/office-email-service";
+import officeCommunicationTemplatesRouter from "./office-communication-templates";
 
 const router: IRouter = Router();
 const requireOffice = createRequireOfficeMiddleware(new DrizzleOfficeAccountRepository(db));
@@ -12,9 +13,12 @@ const drafts = new DrizzleOfficeEmailRepository(db);
 const uuid = z.string().uuid();
 const nullableNote = z.union([z.string().max(4000), z.null()]).transform((value) => value?.trim() || null);
 
+router.use(officeCommunicationTemplatesRouter);
+
 const createSchema = z.object({
   organizationId: uuid,
   contactId: uuid,
+  communicationTemplateId: uuid.nullable().optional(),
   subject: z.string().trim().min(1).max(500),
   body: z.string().trim().min(1).max(50000),
   coordinatorNote: nullableNote.optional(),
@@ -34,6 +38,8 @@ function emailError(res: any, error: unknown) {
     CONTACT_NOT_LINKED: "That recipient is not part of this profile.",
     EMAIL_REQUIRED: "That contact does not have an email address.",
     SEND_LOCKED: "This email is already being processed.",
+    INVALID_TEMPLATE: "That email template is not available in the Booking Workspace.",
+    UNRESOLVED_TEMPLATE_FIELD: "Finish the missing template details before submitting this email.",
   } as const;
   res.status(error.code === "NOT_FOUND" ? 404 : error.code === "SEND_LOCKED" ? 409 : 400).json({ error: messages[error.code] });
   return true;
@@ -47,7 +53,12 @@ router.post("/office/email-drafts", requireOffice, async (req, res): Promise<voi
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the email draft." }); return; }
   try {
-    const draft = await drafts.createForOffice({ accountId: req.officeAccount!.accountId, ...parsed.data, coordinatorNote: parsed.data.coordinatorNote ?? null });
+    const draft = await drafts.createForOffice({
+      accountId: req.officeAccount!.accountId,
+      ...parsed.data,
+      communicationTemplateId: parsed.data.communicationTemplateId ?? null,
+      coordinatorNote: parsed.data.coordinatorNote ?? null,
+    });
     res.status(201).json({ draft });
   } catch (error) {
     if (emailError(res, error)) return;
