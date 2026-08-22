@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const shellSource = readFileSync("src/components/navigation/app-shell.tsx", "utf8");
+const launcherSource = readFileSync("src/components/assistant/assistant-launcher.tsx", "utf8");
 const mobileSource = readFileSync("src/components/navigation/mobile-bottom-nav.tsx", "utf8");
 const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8");
 const switcherSource = readFileSync("src/components/navigation/workspace-switcher.tsx", "utf8");
@@ -70,10 +71,18 @@ describe("workspace-aware Admin shell", () => {
     expect(mobileSource).toContain('label: "Booking", icon: ArrowLeft');
   });
 
-  it("hides the floating assistant launcher while a full profile is open", () => {
-    expect(shellSource).toContain("hideAssistantLauncher");
+  it("restores the assistant as a compact desktop top-toolbar button", () => {
+    expect(shellSource).toContain('<AssistantLauncher placement="toolbar" />');
+    expect(launcherSource).toContain('placement?: "toolbar" | "floating"');
+    expect(launcherSource).toContain('placement === "toolbar"');
+    expect(launcherSource).toContain('aria-label="Open Booking Assistant"');
+  });
+
+  it("keeps the floating assistant only on mobile and hides it on full profiles", () => {
+    expect(shellSource).toContain("hideFloatingAssistantLauncher");
     expect(shellSource).toContain('location.startsWith("/profiles/")');
     expect(shellSource).toContain('location.startsWith("/event-profiles/")');
-    expect(shellSource).toContain("!hideAssistantLauncher ? <AssistantLauncher /> : null");
+    expect(shellSource).toContain('<AssistantLauncher placement="floating" />');
+    expect(launcherSource).toContain("md:hidden");
   });
 });
