@@ -7,6 +7,7 @@ import { ProfileDetailsCard } from "@/components/profiles/profile-details-card";
 import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
+import { ProfileSourceDocuments } from "@/components/profiles/profile-source-documents";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { PaperNoteHistorySources } from "@/components/paper-notes/paper-note-history-sources";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
@@ -207,6 +208,7 @@ export default function EventProfilePage() {
       {!profileEditing ? <ProfileDetailsCard profile={data} /> : null}
 
       {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
+      {!profileEditing && profileId ? <ProfileSourceDocuments mode="owner" profileId={profileId} /> : null}
 
       {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
