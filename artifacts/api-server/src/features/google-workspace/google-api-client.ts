@@ -147,7 +147,7 @@ export function createGoogleWorkspaceReadClient(input: {
       url.searchParams.set("scope", GOOGLE_WORKSPACE_READ_SCOPES.join(" "));
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");
-      url.searchParams.set("include_granted_scopes", "true");
+      url.searchParams.set("include_granted_scopes", "false");
       url.searchParams.set("state", state);
       return url.toString();
     },
