@@ -40,23 +40,24 @@
 
 **Interfaces:**
 
-```ts
-resourceInputSchema.extend({
-  yearBuilt: z.number().int().min(1900).max(2100).nullable(),
-  make: z.string().trim().max(120).nullable(),
-  model: z.string().trim().max(120).nullable(),
-  serialNumber: z.string().trim().max(120).nullable(),
-  inspectionIdentityNotes: z.string().trim().max(2000).nullable(),
-});
+Add these fields to the existing resource input and inventory-record types:
 
-export type ResourceInventoryRecord = {
-  // existing fields...
-  yearBuilt: number | null;
-  make: string | null;
-  model: string | null;
-  serialNumber: string | null;
-  inspectionIdentityNotes: string | null;
-};
+```ts
+yearBuilt: number | null;
+make: string | null;
+model: string | null;
+serialNumber: string | null;
+inspectionIdentityNotes: string | null;
+```
+
+Validation:
+
+```ts
+yearBuilt: z.number().int().min(1900).max(2100).nullable(),
+make: z.string().trim().max(120).nullable(),
+model: z.string().trim().max(120).nullable(),
+serialNumber: z.string().trim().max(120).nullable(),
+inspectionIdentityNotes: z.string().trim().max(2000).nullable(),
 ```
 
 - [ ] **Step 1: Write failing input/repository tests**
@@ -495,10 +496,12 @@ git commit -m "feat: review attended calendar matches"
 
 **Files:**
 - Modify: `artifacts/api-server/src/routes/event-profiles.ts`
+- Modify: `artifacts/api-server/src/routes/office-profiles.ts`
 - Modify: `artifacts/adventure-zone/src/features/event-profiles/event-profile-repository.ts`
-- Modify: the current full profile component/page that renders Notes/History
+- Modify: `artifacts/adventure-zone/src/components/profiles/profile-detail-sheet.tsx`
+- Create test: `artifacts/adventure-zone/src/components/profiles/profile-detail-sheet.attendance-history.test.tsx`
 - Test: `artifacts/api-server/src/routes/event-profiles.attendance-history.test.ts`
-- Test: existing profile rendering test nearest the full profile component
+- Test: `artifacts/api-server/src/routes/office-profiles.attendance-history.test.ts`
 
 **Profile DTO:**
 
@@ -516,7 +519,7 @@ attendanceHistory: Array<{
 
 - [ ] **Step 1: Write API projection tests**
 
-Ensure only approved history appears. Owner sees blacklisted status; Office-safe profile projection should show attended/cancelled history only unless owner later explicitly authorizes blacklist visibility.
+Ensure only approved history appears. Owner sees blacklisted status. The Office profile projection includes attended/cancelled history but omits blacklisted rows unless a later explicit permission change authorizes that sensitive state.
 
 - [ ] **Step 2: Add a compact `Attendance history` profile section**
 
@@ -525,9 +528,10 @@ Show year + status + source month/location. Keep this separate from verbose audi
 - [ ] **Step 3: Test and commit**
 
 ```bash
-pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/routes/event-profiles.attendance-history.test.ts
+pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/routes/event-profiles.attendance-history.test.ts artifacts/api-server/src/routes/office-profiles.attendance-history.test.ts
+pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/components/profiles/profile-detail-sheet.attendance-history.test.tsx
 pnpm run typecheck
-git add artifacts/api-server/src/routes/event-profiles.ts artifacts/adventure-zone/src/features/event-profiles/event-profile-repository.ts <profile-ui-files> artifacts/api-server/src/routes/event-profiles.attendance-history.test.ts <profile-ui-tests>
+git add artifacts/api-server/src/routes/event-profiles.ts artifacts/api-server/src/routes/office-profiles.ts artifacts/adventure-zone/src/features/event-profiles/event-profile-repository.ts artifacts/adventure-zone/src/components/profiles/profile-detail-sheet.tsx artifacts/adventure-zone/src/components/profiles/profile-detail-sheet.attendance-history.test.tsx artifacts/api-server/src/routes/event-profiles.attendance-history.test.ts artifacts/api-server/src/routes/office-profiles.attendance-history.test.ts
 git commit -m "feat: show structured attendance history"
 ```
 
@@ -536,9 +540,9 @@ git commit -m "feat: show structured attendance history"
 ### Task 9: Full Phase 3 regression and source-count verification
 
 **Files:**
-- Modify only files required by failures found here.
+- Modify only tracked files required by failures found here.
 
-- [ ] **Step 1: Run resource/import suites**
+- [ ] **Step 1: Run resource/import/profile suites**
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run \
@@ -549,13 +553,15 @@ pnpm --filter @workspace/api-server exec vitest run \
   artifacts/api-server/src/features/attendance/attendance-import-seed.test.ts \
   artifacts/api-server/src/features/attendance/attendance-matcher.test.ts \
   artifacts/api-server/src/routes/resource-source-candidates.test.ts \
-  artifacts/api-server/src/routes/attendance-history-import.test.ts
+  artifacts/api-server/src/routes/attendance-history-import.test.ts \
+  artifacts/api-server/src/routes/event-profiles.attendance-history.test.ts \
+  artifacts/api-server/src/routes/office-profiles.attendance-history.test.ts
 ```
 
 - [ ] **Step 2: Run relevant UI suites**
 
 ```bash
-pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/components/resources/resource-source-candidate-review.test.tsx artifacts/adventure-zone/src/pages/AttendanceHistoryImportPage.test.tsx
+pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/components/resources/resource-source-candidate-review.test.tsx artifacts/adventure-zone/src/pages/AttendanceHistoryImportPage.test.tsx artifacts/adventure-zone/src/components/profiles/profile-detail-sheet.attendance-history.test.tsx
 ```
 
 - [ ] **Step 3: Assert the committed workbook fixture still has exact source counts**
@@ -575,8 +581,6 @@ pnpm run typecheck
 - [ ] **Step 5: Commit regression fixes if any**
 
 ```bash
-git status --short
-# If fixes were needed:
-git add <changed-files>
-git commit -m "test: verify inventory and attendance import"
+git add -u
+git diff --cached --quiet || git commit -m "test: verify inventory and attendance import"
 ```
