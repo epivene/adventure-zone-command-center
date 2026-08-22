@@ -8,7 +8,10 @@ import type {
 import { ensureEventChecklistTemplates } from "./event-checklist-seed";
 import { EventChecklistRepository } from "./event-checklist-repository";
 import type { EventChecklistView } from "./event-checklist-types";
-import { applyChecklistConditionEffect } from "./resource-condition-service";
+import {
+  applyChecklistConditionEffect,
+  resolveChecklistConditionEffect,
+} from "./resource-condition-service";
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -58,6 +61,12 @@ export function canCompleteChecklist(
     };
   }
   return { allowed: true, reason: null };
+}
+
+function resultNeedsConditionEffect(
+  result: ChecklistResult | null,
+): result is "needs_work_safe" | "unsafe" {
+  return result === "needs_work_safe" || result === "unsafe";
 }
 
 export class EventChecklistService {
@@ -150,6 +159,36 @@ export class EventChecklistService {
     return view;
   }
 
+  private async synchronizeConditionEffect(input: {
+    resultId: string;
+    bookingId: string;
+    resourceId: string | null;
+    result: ChecklistResult;
+    note: string | null;
+    summary: string;
+  }): Promise<void> {
+    try {
+      if (resultNeedsConditionEffect(input.result)) {
+        await applyChecklistConditionEffect(this.database, {
+          checklistResultId: input.resultId,
+          bookingId: input.bookingId,
+          resourceId: input.resourceId,
+          result: input.result,
+          summary: input.summary,
+          note: input.note!.trim(),
+        });
+      } else {
+        await resolveChecklistConditionEffect(this.database, input.resultId);
+      }
+      await this.repository.setFollowUpSyncState(input.resultId, "synced");
+    } catch {
+      await this.repository.setFollowUpSyncState(
+        input.resultId,
+        "needs_attention",
+      );
+    }
+  }
+
   async saveResult(input: {
     resultId: string;
     legId: string;
@@ -159,7 +198,27 @@ export class EventChecklistService {
   }): Promise<EventChecklistView> {
     const existing = await this.repository.resultForLeg(input.resultId, input.legId);
     if (!existing) throw new Error("CHECKLIST_RESULT_NOT_FOUND");
+    if (existing.run.state !== "in_progress") {
+      throw new Error("CHECKLIST_RUN_CLOSED");
+    }
+
+    const summary = `${existing.result.resourceNameSnapshot ?? "Event site"}: ${existing.result.itemLabelSnapshot}`;
+
     if (existing.result.clientMutationId === input.clientMutationId) {
+      if (
+        existing.result.followUpSyncState === "pending" ||
+        existing.result.followUpSyncState === "needs_attention"
+      ) {
+        if (!existing.result.result) throw new Error("CHECKLIST_RESULT_NOT_FOUND");
+        await this.synchronizeConditionEffect({
+          resultId: input.resultId,
+          bookingId: existing.run.bookingId,
+          resourceId: existing.result.resourceId,
+          result: existing.result.result,
+          note: existing.result.note,
+          summary,
+        });
+      }
       const retryView = await this.repository.view(existing.run.id);
       if (!retryView) throw new Error("CHECKLIST_RUN_NOT_FOUND");
       return retryView;
@@ -172,33 +231,27 @@ export class EventChecklistService {
     );
     if (validation) throw new Error(`CHECKLIST_INVALID_ANSWER:${validation}`);
 
-    const needsFollowUp =
-      input.result === "needs_work_safe" || input.result === "unsafe";
+    const newNeedsFollowUp = resultNeedsConditionEffect(input.result);
+    const priorHadCondition = resultNeedsConditionEffect(existing.result.result);
+    const conditionSyncRequired = newNeedsFollowUp || priorHadCondition;
+
     await this.repository.updateResult({
       resultId: input.resultId,
       result: input.result,
       note: input.note,
-      followUpSyncState: needsFollowUp ? "pending" : "not_required",
+      followUpSyncState: conditionSyncRequired ? "pending" : "not_required",
       clientMutationId: input.clientMutationId,
     });
 
-    if (needsFollowUp) {
-      try {
-        await applyChecklistConditionEffect(this.database, {
-          checklistResultId: input.resultId,
-          bookingId: existing.run.bookingId,
-          resourceId: existing.result.resourceId,
-          result: input.result,
-          summary: `${existing.result.resourceNameSnapshot ?? "Event site"}: ${existing.result.itemLabelSnapshot}`,
-          note: input.note!.trim(),
-        });
-        await this.repository.setFollowUpSyncState(input.resultId, "synced");
-      } catch {
-        await this.repository.setFollowUpSyncState(
-          input.resultId,
-          "needs_attention",
-        );
-      }
+    if (conditionSyncRequired) {
+      await this.synchronizeConditionEffect({
+        resultId: input.resultId,
+        bookingId: existing.run.bookingId,
+        resourceId: existing.result.resourceId,
+        result: input.result,
+        note: input.note,
+        summary,
+      });
     }
 
     const view = await this.repository.view(existing.run.id);
@@ -214,6 +267,7 @@ export class EventChecklistService {
     const view = await this.get(bookingId, legId, phase);
     if (!view) throw new Error("CHECKLIST_NOT_STARTED");
     if (view.state === "completed") return view;
+    if (view.state !== "in_progress") throw new Error("CHECKLIST_RUN_CLOSED");
     const completion = canCompleteChecklist(view.items);
     if (!completion.allowed) {
       throw new Error(`CHECKLIST_NOT_COMPLETE:${completion.reason}`);
@@ -233,6 +287,7 @@ export class EventChecklistService {
     if (!reason.trim()) throw new Error("CHECKLIST_UNABLE_REASON_REQUIRED");
     const view = await this.get(bookingId, legId, phase);
     if (!view) throw new Error("CHECKLIST_NOT_STARTED");
+    if (view.state !== "in_progress") return view;
     await this.repository.markUnable(view.id, reason);
     const updated = await this.repository.view(view.id);
     if (!updated) throw new Error("CHECKLIST_RUN_NOT_FOUND");
