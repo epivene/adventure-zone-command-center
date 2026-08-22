@@ -119,12 +119,20 @@ export class PostgresGoogleConnectionRepository {
     const environment = this.requireEnvironment();
     const email = input.accountEmail.trim().toLowerCase();
     const refreshToken = input.refreshToken.trim();
+    const googleSubject = input.googleSubject?.trim() || null;
     if (!email || !refreshToken || !Number.isFinite(input.now.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_CONNECTION_INPUT_INVALID");
     }
 
     const current = await this.currentRow();
-    if (current && current.account_email.toLowerCase() !== email) {
+    const currentSubject = current?.google_subject?.trim() || null;
+    if (
+      current &&
+      (current.account_email.trim().toLowerCase() !== email ||
+        (currentSubject !== null &&
+          googleSubject !== null &&
+          currentSubject !== googleSubject))
+    ) {
       throw new Error("GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT");
     }
 
@@ -184,7 +192,7 @@ export class PostgresGoogleConnectionRepository {
         email,
         encryptedRefreshToken,
         grantedScopes,
-        input.googleSubject?.trim() || null,
+        googleSubject,
         input.now,
       ],
     );
