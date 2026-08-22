@@ -42,6 +42,31 @@ describe("guided call scripts", () => {
     expect(script.nodes.pricing.say).toContain("I can email you more detailed info on the options we have and we can go from there.");
   });
 
+  it("adds polished Amy-derived objection branches without replacing the preferred opener", () => {
+    const script = getGuidedCallScript("first_outreach");
+    expect(script.nodes.opening.say).toContain("whether we might be a good fit");
+    expect(script.nodes.already_booked_response.say).toContain("Would it be useful for me to check back for next season?");
+    expect(script.nodes.space_constraint.say).toContain("smaller Mini Zone");
+    expect(script.nodes.budget_constraint.say).toContain("I don't want to promise an option before I check the event details");
+    expect(script.nodes.event_not_happening.say).toContain("return next year");
+    expect(script.nodes.policy_restriction.say).toContain("insurance and safety information");
+    expect(script.nodes.past_customer_feedback.say).toContain("what went wrong");
+  });
+
+  it("maps new objections to deliberate outcomes instead of dead ends", () => {
+    const script = getGuidedCallScript("first_outreach");
+    expect(script.nodes.already_booked_response.responses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "check_next_season", suggestion: expect.objectContaining({ followUpPreset: "next_season" }) }),
+      expect.objectContaining({ id: "do_not_contact", suggestion: expect.objectContaining({ disposition: "do_not_call" }) }),
+    ]));
+    expect(script.nodes.budget_constraint.responses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "research_options", suggestion: expect.objectContaining({ nextAction: "research" }) }),
+    ]));
+    expect(script.nodes.past_customer_feedback.responses).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "record_feedback", suggestion: expect.objectContaining({ nextAction: "owner_follow_up" }) }),
+    ]));
+  });
+
   it("overrides only editable wording while preserving protected branch behavior", () => {
     const original = getGuidedCallScript("first_outreach");
     const configured = getConfiguredGuidedCallScript("first_outreach", [

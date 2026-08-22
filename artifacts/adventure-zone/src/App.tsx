@@ -14,6 +14,7 @@ import ManagerCrewPage from "@/pages/ManagerCrewPage";
 import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
 import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
 import ManagerEventWrapUpPage from "@/pages/ManagerEventWrapUpPage";
+import ManagerEventChecklistPage from "@/pages/ManagerEventChecklistPage";
 import ManagerHomePage from "@/pages/ManagerHomePage";
 import ManagerMessagesPage from "@/pages/ManagerMessagesPage";
 import ManagerSignInPage from "@/pages/ManagerSignInPage";
@@ -55,8 +56,11 @@ import EventProfilePage from "@/pages/EventProfilePage";
 import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
+import AttendanceHistoryImportPage from "@/pages/AttendanceHistoryImportPage";
 import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
 import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
+import SettingsBusinessSourcesPage from "@/pages/SettingsBusinessSourcesPage";
+import SettingsCommunicationTemplatesPage from "@/pages/SettingsCommunicationTemplatesPage";
 import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
 import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
 import SettingsGoogleWorkspacePage from "@/pages/SettingsGoogleWorkspacePage";
@@ -165,6 +169,9 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 function SettingsStub() {
   const tools = [
+    ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
+    ["Attendance history", "/imports/attendance-history", "Review historical attendance records before attaching them to profiles."],
+    ["Email templates", "/settings/communication-templates", "Maintain reviewed communication templates and placeholder wording."],
     ["Paper notes", "/settings/paper-notes", "Review imported paper booking notes."],
     ["ACT import", "/settings/act-migration", "Migration and source import tools."],
     ["ACT recovery", "/settings/act-recovery", "Recover and repair archived ACT records."],
@@ -183,6 +190,7 @@ function ManagerProtectedApp() {
       <Switch>
         <Route path="/manager/incidents/new"><ManagerIncidentPage /></Route>
         <Route path="/manager/incidents"><ManagerIncidentsPage /></Route>
+        <Route path="/manager/events/:bookingId/checklist/:phase">{(params)=><ManagerEventChecklistPage bookingId={params.bookingId} phaseSlug={params.phase}/>}</Route>
         <Route path="/manager/events/:bookingId/wrap-up">{(params)=><ManagerEventWrapUpPage bookingId={params.bookingId}/>}</Route>
         <Route path="/manager/reviews"><ManagerEventReviewPage /></Route>
         <Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>
@@ -240,6 +248,7 @@ function AdminProtectedApp() {
           <Route path="/calendar" component={CalendarPage} />
           <Route path="/routes" component={RoutesPage} />
           <Route path="/research-sources" component={ResearchSourcesPage} />
+          <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
           <Route path="/calls/new" component={CallWorkspacePage} />
           <Route path="/calls/log" component={MobileCallLogPage} />
@@ -251,6 +260,8 @@ function AdminProtectedApp() {
           <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
+          <Route path="/settings/business-sources" component={SettingsBusinessSourcesPage} />
+          <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
           <Route path="/settings/google-workspace" component={SettingsGoogleWorkspacePage} />

@@ -102,6 +102,16 @@ const commonWrongPerson: GuidedCallResponse = {
   suggestion: { collect: ["decision_maker"], noteFragment: "Need the correct decision-maker." },
 };
 
+function objectionResponses() {
+  return [
+    { id: "already_booked", label: "Already booked someone", nextNodeId: "already_booked_response" },
+    { id: "space_issue", label: "Not enough space", nextNodeId: "space_constraint" },
+    { id: "budget_issue", label: "Budget is the problem", nextNodeId: "budget_constraint" },
+    { id: "event_not_happening", label: "Event isn't happening", nextNodeId: "event_not_happening" },
+    { id: "policy_restriction", label: "Venue/city/insurance restriction", nextNodeId: "policy_restriction" },
+  ] satisfies GuidedCallResponse[];
+}
+
 function commonNodes(): Record<string, GuidedCallNode> {
   return {
     details: {
@@ -160,6 +170,61 @@ function commonNodes(): Record<string, GuidedCallNode> {
         { id: "unknown_decision_maker", label: "They don't know", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "research" } },
       ],
     },
+    already_booked_response: {
+      id: "already_booked_response",
+      say: "Absolutely — I understand. If your plans change, we'd be glad to be considered. Would it be useful for me to check back for next season?",
+      coach: "Keep this low-pressure. The goal is to learn whether this is only a current-season no or a permanent contact preference.",
+      responses: [
+        { id: "check_next_season", label: "Check back next season", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "future_season", followUpPreset: "next_season", noteFragment: "Already booked this season; check back next season." } },
+        { id: "decline_this_season", label: "No follow-up this season", nextNodeId: null, terminal: true, suggestion: { disposition: "declined", noteFragment: "Already booked another provider for this season." } },
+        { id: "do_not_contact", label: "Do not contact again", nextNodeId: null, terminal: true, suggestion: { disposition: "do_not_call", noteFragment: "Contact requested no further outreach." } },
+      ],
+    },
+    space_constraint: {
+      id: "space_constraint",
+      say: "I understand. A full setup does need a fair amount of room. Would a smaller Mini Zone be worth looking at, or is space simply too tight this year?",
+      coach: "Do not guess a footprint. Offer the smaller-package conversation, then confirm actual site dimensions before promising fit.",
+      responses: [
+        { id: "mini_zone_follow_up", label: "Look at Mini Zone", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "send_mini_zone_info", noteFragment: "Space concern; follow up with Mini Zone information." } },
+        { id: "space_too_tight", label: "Space is too tight", nextNodeId: null, terminal: true, suggestion: { disposition: "declined", noteFragment: "Event does not have enough space this season." } },
+      ],
+    },
+    budget_constraint: {
+      id: "budget_constraint",
+      say: "I understand. We do have a smaller Mini Zone, and some events may qualify for a ticket-sales arrangement. I don't want to promise an option before I check the event details — would you like me to see what might fit?",
+      coach: "Keep all payment-arrangement language conditional. Do not quote a discount or revenue share unless an approved rule applies.",
+      responses: [
+        { id: "research_options", label: "Check possible options", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "research", noteFragment: "Budget concern; research approved package/payment options." } },
+        { id: "mini_zone_follow_up", label: "Send Mini Zone info", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "send_mini_zone_info", noteFragment: "Budget concern; follow up with Mini Zone information." } },
+        { id: "budget_decline", label: "Still not workable", nextNodeId: null, terminal: true, suggestion: { disposition: "declined", noteFragment: "Budget does not work this season." } },
+      ],
+    },
+    event_not_happening: {
+      id: "event_not_happening",
+      say: "Thanks for letting me know. Do you expect the event to return next year, or should I mark it as discontinued for now?",
+      responses: [
+        { id: "return_next_year", label: "Expected next year", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "future_season", followUpPreset: "next_season", noteFragment: "Event is not happening this year; expected to return next season." } },
+        { id: "discontinued", label: "Discontinued", nextNodeId: null, terminal: true, suggestion: { disposition: "declined", noteFragment: "Event is discontinued for now." } },
+      ],
+    },
+    policy_restriction: {
+      id: "policy_restriction",
+      say: "Understood. Is that a firm venue or city restriction, or would it help if I sent our insurance and safety information for them to review?",
+      coach: "Do not argue with a restriction. Offer documentation only when the organizer says review may help.",
+      responses: [
+        { id: "send_insurance_safety", label: "Send insurance/safety info", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "send_insurance_safety_info", noteFragment: "Organizer requested insurance/safety information for policy review." } },
+        { id: "firm_restriction", label: "Firm restriction", nextNodeId: null, terminal: true, suggestion: { disposition: "declined", noteFragment: "Venue/city/insurance policy prevents inflatables this season." } },
+      ],
+    },
+    past_customer_feedback: {
+      id: "past_customer_feedback",
+      say: "I'm sorry we didn't meet expectations. If you're willing, what should we know about what went wrong so I can document it properly and make sure the feedback reaches the right person?",
+      coach: "Do not become defensive or try to solve the complaint on the spot. Capture their words accurately and route recovery to the owner.",
+      responses: [
+        { id: "record_feedback", label: "Record feedback", nextNodeId: null, terminal: true, suggestion: { disposition: "follow_up_needed", nextAction: "owner_follow_up", noteFragment: "Past customer reported a problem; record feedback and send to owner for follow-up." } },
+        { id: "do_not_contact", label: "Do not contact again", nextNodeId: null, terminal: true, suggestion: { disposition: "do_not_call", noteFragment: "Past customer requested no further outreach after feedback." } },
+      ],
+    },
     close_declined: {
       id: "close_declined",
       say: "Thanks for being straight with me. Before I let you get back to your day, is this just not a fit for this event or season, or would you rather The Adventure Zone not reach out again?",
@@ -186,19 +251,27 @@ const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
     id: "opening",
     say: "Hi {{contactName}}, I’m calling with The Adventure Zone. We’re a traveling bounce-house carnival, and I’m calling about {{eventName}}. I just wanted to see what you’re planning this year and whether we might be a good fit.",
     coach: "Keep the opener short. Who you are, what The Adventure Zone is, and why you are calling — then let them talk before explaining attractions.",
-    responses: [commonInterested, commonPricing, { id: "already_booked", label: "Already booked someone", nextNodeId: "close_declined" }, commonCallback, commonNotInterested, commonWrongPerson],
+    responses: [commonInterested, commonPricing, ...objectionResponses(), commonCallback, commonNotInterested, commonWrongPerson],
   }),
   rebooking: script("rebooking", "Past customer / rebooking", {
     id: "opening",
     say: "Hi {{contactName}}, I’m calling from The Adventure Zone. We’ve been part of {{eventName}} before, and I wanted to see what you’re planning this season — whether you want a familiar setup or something fresh for the crowd.",
     coach: "Treat this like a relationship, not a cold call. Reference saved history naturally, but never invent what happened before.",
-    responses: [commonInterested, commonPricing, { id: "already_booked", label: "Already booked this year", nextNodeId: "close_declined" }, commonCallback, commonNotInterested, commonWrongPerson],
+    responses: [
+      commonInterested,
+      commonPricing,
+      ...objectionResponses(),
+      { id: "past_problem", label: "Had a problem last time", nextNodeId: "past_customer_feedback" },
+      commonCallback,
+      commonNotInterested,
+      commonWrongPerson,
+    ],
   }),
   follow_up: script("follow_up", "Follow-up", {
     id: "opening",
     say: "Hi {{contactName}}, I’m calling from The Adventure Zone to check back on {{eventName}}. I wanted to pick up where we left off and see what would help you feel comfortable choosing the right attraction mix for the event.",
     coach: "Lead with the saved reason for the follow-up and the last conversation. Do not make them start over.",
-    responses: [commonInterested, commonPricing, { id: "needs_time", label: "Still deciding", nextNodeId: "callback_time", suggestion: { disposition: "follow_up_needed" } }, commonCallback, commonNotInterested, commonWrongPerson],
+    responses: [commonInterested, commonPricing, ...objectionResponses(), { id: "needs_time", label: "Still deciding", nextNodeId: "callback_time", suggestion: { disposition: "follow_up_needed" } }, commonCallback, commonNotInterested, commonWrongPerson],
   }),
   proposal_contract: script("proposal_contract", "Proposal / contract follow-up", {
     id: "opening",
@@ -208,6 +281,7 @@ const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
       { id: "ready", label: "Ready to move forward", nextNodeId: "next_step", suggestion: { disposition: "interested", noteFragment: "Ready to move forward with proposal/contract." } },
       { id: "question", label: "Has a question", nextNodeId: "pricing" },
       { id: "not_received", label: "Didn't receive it", nextNodeId: "next_step", suggestion: { disposition: "follow_up_needed", nextAction: "resend_proposal", noteFragment: "Proposal/contract needs to be resent." } },
+      { id: "budget_issue", label: "Budget is the problem", nextNodeId: "budget_constraint" },
       commonCallback,
       commonNotInterested,
     ],
@@ -226,7 +300,7 @@ const scripts: Record<GuidedCallScriptKind, GuidedCallScript> = {
     id: "opening",
     say: "Thanks for calling The Adventure Zone! We bring a full inflatable-carnival experience to events, and I’d be happy to help. Tell me a little about the crowd and the kind of fun you want people to remember.",
     coach: "Sound excited without rushing them. Start with their event and audience, then narrow the attractions and package.",
-    responses: [commonInterested, commonPricing, { id: "just_question", label: "Just has a question", nextNodeId: "pricing" }, commonCallback],
+    responses: [commonInterested, commonPricing, { id: "space_issue", label: "Has a space concern", nextNodeId: "space_constraint" }, { id: "budget_issue", label: "Has a budget concern", nextNodeId: "budget_constraint" }, { id: "just_question", label: "Just has a question", nextNodeId: "pricing" }, commonCallback],
   }),
 };
 

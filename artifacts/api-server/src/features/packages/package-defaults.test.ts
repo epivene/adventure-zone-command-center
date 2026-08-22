@@ -1,17 +1,60 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_PACKAGE_TEMPLATE_SEED_SQL } from "./package-defaults";
+import { REVIEWED_PACKAGE_DEFAULTS } from "./package-defaults";
+import { packageTemplateInputSchema } from "./package-input";
 
-describe("default package template seed", () => {
-  it("creates only genuinely missing package templates with starter prices", () => {
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("'adventure_zone'");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("'weekend_warriors'");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("'warriors_playground'");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("'pirates_rebellion'");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("'pirate_rebellion'");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("800000");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toContain("700000");
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toMatch(/NOT EXISTS[\s\S]*weekend_warriors[\s\S]*warriors_playground/i);
-    expect(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL).toMatch(/NOT EXISTS[\s\S]*pirates_rebellion[\s\S]*pirate_rebellion/i);
+describe("reviewed package defaults", () => {
+  it("uses the reviewed 2026 starting prices and durations", () => {
+    expect(REVIEWED_PACKAGE_DEFAULTS.adventure_zone).toMatchObject({
+      basePriceCents: 900000,
+      minimumAttractionCount: 10,
+      maximumAttractionCount: 12,
+      baseDurationMinDays: 1,
+      baseDurationMaxDays: 4,
+    });
+    expect(REVIEWED_PACKAGE_DEFAULTS.pirates_rebellion).toMatchObject({
+      basePriceCents: 750000,
+      baseAttractionCount: 3,
+      baseDurationMinDays: 1,
+      baseDurationMaxDays: 4,
+    });
+    expect(REVIEWED_PACKAGE_DEFAULTS.weekend_warriors).toMatchObject({
+      basePriceCents: 750000,
+      baseAttractionCount: 5,
+      baseDurationMinDays: 1,
+      baseDurationMaxDays: 4,
+    });
+    expect(REVIEWED_PACKAGE_DEFAULTS.mini_zone).toMatchObject({
+      basePriceCents: 500000,
+      baseAttractionCount: 5,
+      baseDurationMinDays: 1,
+      baseDurationMaxDays: 4,
+    });
+  });
+
+  it("keeps the Mini Zone barrel disagreement out of approved operational requirements", () => {
+    const mini = REVIEWED_PACKAGE_DEFAULTS.mini_zone;
+    expect(mini.operationalRequirements).not.toMatch(/44 barrels|50 barrels/i);
+    expect(mini.knowledgeReviewNote).toMatch(/44 vs 50/i);
+  });
+
+  it("accepts editable duration and review-note fields in package settings input", () => {
+    const parsed = packageTemplateInputSchema.safeParse({
+      id: "00000000-0000-4000-8000-000000000001",
+      name: "Mini Zone",
+      basePriceCents: 500000,
+      baseAttractionCount: 5,
+      minimumAttractionCount: 5,
+      maximumAttractionCount: 5,
+      baseDurationMinDays: 1,
+      baseDurationMaxDays: 4,
+      customerDescription: "Smaller event setup.",
+      bookingTalkingPoints: "Use when space or budget is tighter.",
+      operationalRequirements: "Confirm power and footprint.",
+      setupNotes: "Normal setup window.",
+      knowledgeReviewNote: "Water-barrel source conflict: 44 vs 50; confirm before quoting.",
+      active: true,
+    });
+    expect(parsed.success).toBe(true);
   });
 });

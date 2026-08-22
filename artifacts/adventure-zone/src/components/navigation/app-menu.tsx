@@ -58,6 +58,9 @@ const marketingGroups: MenuGroup[] = [
 const adminToolsGroup: MenuGroup = {
   label: "Admin Tools",
   items: [
+    { href: "/settings/business-sources", label: "Business sources" },
+    { href: "/imports/attendance-history", label: "Attendance history" },
+    { href: "/settings/communication-templates", label: "Email templates" },
     { href: "/settings/paper-notes", label: "Paper notes" },
     { href: "/settings/act-migration", label: "Act! import" },
     { href: "/settings/act-recovery", label: "ACT recovery" },

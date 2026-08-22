@@ -4,6 +4,7 @@ import type { db as database } from "@/db/client";
 import {
   resourceInputSchema,
   type PackageCountCategory,
+  type ResourceChecklistTag,
   type ResourceInput,
 } from "./resource-input";
 import {
@@ -13,10 +14,25 @@ import {
 
 export type ResourceIntelligenceInventoryRecord = ResourceInventoryRecord & {
   packageCountCategory: PackageCountCategory;
+  checklistTags: ResourceChecklistTag[];
+  yearBuilt: number | null;
+  make: string | null;
+  model: string | null;
+  serialNumber: string | null;
+  inspectionIdentityNotes: string | null;
 };
 
 type DrizzleDatabase = typeof database;
-type CountRow = { id: string; package_count_category: PackageCountCategory };
+type IntelligenceRow = {
+  id: string;
+  package_count_category: PackageCountCategory;
+  checklist_tags: ResourceChecklistTag[] | null;
+  year_built: number | null;
+  make: string | null;
+  model: string | null;
+  serial_number: string | null;
+  inspection_identity_notes: string | null;
+};
 
 function rowsOf<T>(result: unknown): T[] {
   if (result && typeof result === "object" && "rows" in result) {
@@ -33,20 +49,37 @@ export class DrizzleResourceIntelligenceSettingsRepository {
   }
 
   async listResources(): Promise<ResourceIntelligenceInventoryRecord[]> {
-    const [base, categoryResult] = await Promise.all([
+    const [base, intelligenceResult] = await Promise.all([
       this.baseRepository.listResources(),
       this.database.execute(sql`
-        select id, package_count_category
+        select
+          id,
+          package_count_category,
+          checklist_tags,
+          year_built,
+          make,
+          model,
+          serial_number,
+          inspection_identity_notes
         from resources
       `),
     ]);
-    const categoryById = new Map(
-      rowsOf<CountRow>(categoryResult).map((row) => [row.id, row.package_count_category]),
+    const intelligenceById = new Map(
+      rowsOf<IntelligenceRow>(intelligenceResult).map((row) => [row.id, row]),
     );
-    return base.map((resource) => ({
-      ...resource,
-      packageCountCategory: categoryById.get(resource.id) ?? "main_attraction",
-    }));
+    return base.map((resource) => {
+      const identity = intelligenceById.get(resource.id);
+      return {
+        ...resource,
+        packageCountCategory: identity?.package_count_category ?? "main_attraction",
+        checklistTags: identity?.checklist_tags ?? [],
+        yearBuilt: identity?.year_built ?? null,
+        make: identity?.make ?? null,
+        model: identity?.model ?? null,
+        serialNumber: identity?.serial_number ?? null,
+        inspectionIdentityNotes: identity?.inspection_identity_notes ?? null,
+      };
+    });
   }
 
   async upsertResource(
@@ -55,11 +88,45 @@ export class DrizzleResourceIntelligenceSettingsRepository {
   ): Promise<ResourceIntelligenceInventoryRecord> {
     const parsed = resourceInputSchema.parse(input);
     const base = await this.baseRepository.upsertResource(parsed, actorId);
+
     await this.database.execute(sql`
       update resources
-      set package_count_category = ${parsed.packageCountCategory}, updated_at = now()
+      set
+        package_count_category = ${parsed.packageCountCategory},
+        checklist_tags = coalesce(${parsed.checklistTags ?? null}::text[], checklist_tags),
+        year_built = ${parsed.yearBuilt},
+        make = ${parsed.make},
+        model = ${parsed.model},
+        serial_number = ${parsed.serialNumber},
+        inspection_identity_notes = ${parsed.inspectionIdentityNotes},
+        updated_at = now()
       where id = ${base.id}::uuid
     `);
-    return { ...base, packageCountCategory: parsed.packageCountCategory };
+
+    const current = rowsOf<IntelligenceRow>(
+      await this.database.execute(sql`
+        select
+          id,
+          package_count_category,
+          checklist_tags,
+          year_built,
+          make,
+          model,
+          serial_number,
+          inspection_identity_notes
+        from resources
+        where id = ${base.id}::uuid
+      `),
+    )[0];
+    return {
+      ...base,
+      packageCountCategory: current?.package_count_category ?? parsed.packageCountCategory,
+      checklistTags: current?.checklist_tags ?? [],
+      yearBuilt: current?.year_built ?? null,
+      make: current?.make ?? null,
+      model: current?.model ?? null,
+      serialNumber: current?.serial_number ?? null,
+      inspectionIdentityNotes: current?.inspection_identity_notes ?? null,
+    };
   }
 }

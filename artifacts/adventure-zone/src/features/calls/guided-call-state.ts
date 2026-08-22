@@ -17,6 +17,21 @@ export type GuidedCallState = {
   };
 };
 
+export function normalizeGuidedNextAction(value: string | null | undefined) {
+  if (!value) return null;
+  const aliases: Record<string, string> = {
+    send_info: "send_information",
+    send_mini_zone_info: "send_information",
+    send_insurance_safety_info: "send_information",
+    send_proposal: "prepare_quote",
+    resend_proposal: "prepare_quote",
+    research: "send_information",
+    future_season: "call",
+    owner_follow_up: "call",
+  };
+  return aliases[value] ?? value;
+}
+
 export function createGuidedCallState(script: GuidedCallScript): GuidedCallState {
   return {
     scriptKind: script.kind,
@@ -53,7 +68,8 @@ export function chooseGuidedResponse(
     path: response.terminal ? state.path : [...state.path, nextNodeId],
     staged: {
       disposition: suggestion?.disposition ?? state.staged.disposition,
-      nextAction: suggestion?.nextAction ?? state.staged.nextAction,
+      nextAction:
+        normalizeGuidedNextAction(suggestion?.nextAction) ?? state.staged.nextAction,
       followUpPreset: suggestion?.followUpPreset ?? state.staged.followUpPreset,
       noteFragments: mergeUnique(
         state.staged.noteFragments,
