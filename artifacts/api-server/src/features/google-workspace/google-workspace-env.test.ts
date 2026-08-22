@@ -79,6 +79,21 @@ describe("getGoogleWorkspaceEnvironment", () => {
     ).toThrow("GOOGLE_WORKSPACE_APP_ORIGIN_MUST_USE_HTTPS");
   });
 
+  it("requires the exact API callback path without credentials, query, or hash", () => {
+    for (const redirectUri of [
+      "https://api.example.com/oauth/callback",
+      "https://user:password@api.example.com/api/google-workspace/oauth/callback",
+      "https://api.example.com/api/google-workspace/oauth/callback?source=google",
+      "https://api.example.com/api/google-workspace/oauth/callback#fragment",
+    ]) {
+      expect(() =>
+        getGoogleWorkspaceEnvironment(
+          completeEnvironment({ GOOGLE_WORKSPACE_REDIRECT_URI: redirectUri }),
+        ),
+      ).toThrow("GOOGLE_WORKSPACE_REDIRECT_URI_INVALID");
+    }
+  });
+
   it("requires the app return value to be an origin without a path, query, or hash", () => {
     for (const appOrigin of [
       "https://app.example.com/settings",
