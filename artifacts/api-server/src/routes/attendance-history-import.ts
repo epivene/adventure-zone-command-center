@@ -148,6 +148,12 @@ router.post("/imports/attendance-history/:rowId/approve", async (req, res): Prom
     actorId: String((req as any).userId ?? "owner"),
   });
   if (!result.ok) {
+    if (result.code === "ALREADY_APPROVED_DIFFERENT_TARGET") {
+      res.status(409).json({
+        error: "Attendance history is already approved to a different profile or location.",
+      });
+      return;
+    }
     res.status(404).json({ error: "Attendance source row not found." });
     return;
   }
