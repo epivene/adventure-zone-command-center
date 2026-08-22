@@ -1,16 +1,13 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const app = readFileSync("src/App.tsx", "utf8");
+const bookings = readFileSync("src/pages/BookingsPage.tsx", "utf8");
 const marketing = readFileSync("src/pages/MarketingHomePage.tsx", "utf8");
 
 describe("dark theme surfaces and booking creation routing", () => {
-  it("routes /bookings/new to the creation page before the booking id route", () => {
-    expect(app).toContain('import BookingNewPage from "@/pages/BookingNewPage";');
-    const newRoute = app.indexOf('<Route path="/bookings/new" component={BookingNewPage} />');
-    const detailRoute = app.indexOf('<Route path="/bookings/:id">');
-    expect(newRoute).toBeGreaterThan(-1);
-    expect(detailRoute).toBeGreaterThan(newRoute);
+  it("sends Add Event / Lead into the working Quick Add flow", () => {
+    expect(bookings).toContain('href="/quick-add"');
+    expect(bookings).not.toContain('href="/bookings/new"');
   });
 
   it("uses theme-aware Marketing setup surfaces", () => {
