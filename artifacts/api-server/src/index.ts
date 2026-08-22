@@ -16,6 +16,7 @@ import { ensureActivityDeleteSchema } from "./features/activities/activity-delet
 import { ensurePackageIntelligenceSchema } from "./features/packages/package-intelligence-schema";
 import { ensureBookingAssistantSchema } from "./features/assistant/assistant-schema";
 import { ensureCallScriptSettingsSchema } from "./features/calls/call-script-settings";
+import { ensureBusinessSourceSeed } from "./features/business-sources/business-source-seed";
 import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
 import {
   LeadScoutWorkerLoop,
@@ -190,6 +191,16 @@ async function runPostListenMaintenance() {
       "system:booking-assistant-seed",
     ),
   );
+  try {
+    await runStartupStep("reviewed business source seed", () =>
+      ensureBusinessSourceSeed(db),
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Reviewed business source seed deferred; owner source settings can retry it later",
+    );
+  }
   logger.info(
     {
       appliedMigrations,
