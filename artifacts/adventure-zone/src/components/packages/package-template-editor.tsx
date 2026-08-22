@@ -17,10 +17,13 @@ export type PackageTemplateSettingsRecord = {
   baseAttractionCount: number;
   minimumAttractionCount?: number;
   maximumAttractionCount?: number;
+  baseDurationMinDays?: number | null;
+  baseDurationMaxDays?: number | null;
   customerDescription?: string | null;
   bookingTalkingPoints?: string | null;
   operationalRequirements?: string | null;
   setupNotes?: string | null;
+  knowledgeReviewNote?: string | null;
   active: boolean;
 };
 
@@ -48,10 +51,13 @@ function PackageTemplateForm({
       template.minimumAttractionCount ?? template.baseAttractionCount,
     maximumAttractionCount:
       template.maximumAttractionCount ?? template.baseAttractionCount,
+    baseDurationMinDays: template.baseDurationMinDays ?? null,
+    baseDurationMaxDays: template.baseDurationMaxDays ?? null,
     customerDescription: template.customerDescription ?? null,
     bookingTalkingPoints: template.bookingTalkingPoints ?? null,
     operationalRequirements: template.operationalRequirements ?? null,
     setupNotes: template.setupNotes ?? null,
+    knowledgeReviewNote: template.knowledgeReviewNote ?? null,
     active: template.active,
   });
   const [error, setError] = useState("");
@@ -178,10 +184,46 @@ function PackageTemplateForm({
             value={value.maximumAttractionCount}
           />
         </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Minimum duration (days)
+          <input
+            aria-label={`${template.name} minimum duration days`}
+            min={1}
+            max={31}
+            onChange={(event) =>
+              update(
+                "baseDurationMinDays",
+                event.currentTarget.value === ""
+                  ? null
+                  : Number(event.currentTarget.value),
+              )
+            }
+            type="number"
+            value={value.baseDurationMinDays ?? ""}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Maximum duration (days)
+          <input
+            aria-label={`${template.name} maximum duration days`}
+            min={1}
+            max={31}
+            onChange={(event) =>
+              update(
+                "baseDurationMaxDays",
+                event.currentTarget.value === ""
+                  ? null
+                  : Number(event.currentTarget.value),
+              )
+            }
+            type="number"
+            value={value.baseDurationMaxDays ?? ""}
+          />
+        </label>
       </div>
 
       <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
-        Prices and package sizes are starting points, not locked quotes. Bookings can still be customized for each event.
+        Prices, package sizes, and durations are starting points, not locked quotes. Bookings can still be customized for each event.
       </p>
 
       <div className="grid gap-3 lg:grid-cols-2">
@@ -222,6 +264,20 @@ function PackageTemplateForm({
           />
         </label>
       </div>
+
+      <label className="grid gap-1 text-sm font-semibold">
+        Owner review note
+        <textarea
+          aria-label={`${template.name} owner review note`}
+          onChange={(event) => update("knowledgeReviewNote", event.currentTarget.value)}
+          placeholder="Internal source conflict or fact that still needs confirmation"
+          rows={2}
+          value={value.knowledgeReviewNote ?? ""}
+        />
+        <span className="text-xs font-normal text-slate-500">
+          Internal only. Do not copy unresolved source conflicts into customer-facing wording.
+        </span>
+      </label>
 
       <label className="flex min-h-11 items-center gap-2 text-sm font-semibold">
         <input
@@ -278,7 +334,7 @@ export function PackageTemplateEditor({
           Package templates
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Set editable starting prices, normal package sizes, and booking/setup knowledge in one place. Equipment remains editable for each event.
+          Set editable starting prices, normal package sizes, durations, and booking/setup knowledge in one place. Equipment remains editable for each event.
         </p>
       </div>
       <div className="grid gap-4">
