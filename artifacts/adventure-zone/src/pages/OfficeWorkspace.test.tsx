@@ -35,8 +35,11 @@ describe("Office Coordinator daily workspace",()=>{
     expect(profiles).toContain("12 per page");
     expect(profiles).toContain("rounded-full");
   });
-  it("keeps grouped event families visible and exposes Event Profiles as the family section",()=>{
+  it("matches the main console with a collapsed Event Families dropdown",()=>{
+    expect(profiles).toContain("<details");
+    expect(profiles).toContain("<summary");
     expect(profiles).toContain("Event Families");
+    expect(profiles).toContain("data.families.length");
     expect(profiles).toContain("familyId=");
     expect(family).toContain("Event Profiles");
     expect(family).toContain("Brochures");
