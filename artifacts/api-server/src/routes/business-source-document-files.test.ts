@@ -14,6 +14,11 @@ describe("business source document file routes", () => {
     expect(source).toContain("res.redirect(302, signedUrl)");
   });
 
+  it("offers an owner-authorized browser open endpoint without returning the persistent key", () => {
+    expect(source).toContain('/business-sources/:documentId/file/open');
+    expect(source).toContain("res.json({ url: signedUrl })");
+  });
+
   it("never returns a persistent storage key to the frontend", () => {
     expect(source).toContain("safeFileMetadata");
     expect(source).not.toContain("res.json({ file })");
