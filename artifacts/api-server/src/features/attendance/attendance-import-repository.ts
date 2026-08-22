@@ -209,6 +209,19 @@ export class AttendanceImportRepository {
         .for("update");
       if (!row) return { ok: false as const, code: "NOT_FOUND" as const };
 
+      if (
+        row.matchState === "approved" &&
+        (
+          row.matchedOrganizationId !== input.organizationId ||
+          (row.matchedLocationId ?? null) !== (input.organizationLocationId ?? null)
+        )
+      ) {
+        return {
+          ok: false as const,
+          code: "ALREADY_APPROVED_DIFFERENT_TARGET" as const,
+        };
+      }
+
       const statuses = await transaction
         .select()
         .from(attendanceImportYearStatuses)
