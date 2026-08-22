@@ -5,8 +5,8 @@ const css = readFileSync("public/login-screen.css", "utf8");
 
 describe("public login landing", () => {
   it("uses the supplied Adventure Zone artwork as the real full-screen background", () => {
-    expect(existsSync("public/adventure-zone-login-background.jpg")).toBe(true);
-    expect(css).toContain('url("/adventure-zone-login-background.jpg")');
+    expect(existsSync("public/adventure-zone-login-background.webp")).toBe(true);
+    expect(css).toContain('url("/adventure-zone-login-background.webp")');
     expect(css).toContain("background-size: cover");
     expect(css).toContain("background-position: center top");
   });
