@@ -1,0 +1,48 @@
+name: Business Drive Phase 1 Debug
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Capture targeted diagnostics
+        shell: bash
+        run: |
+          set +e
+          : > phase1-debug.log
+          echo '=== business source tests ===' >> phase1-debug.log
+          pnpm --filter @workspace/api-server exec vitest run src/features/business-sources src/features/communication-templates >> phase1-debug.log 2>&1
+          echo "exit=$?" >> phase1-debug.log
+          echo '=== package tests ===' >> phase1-debug.log
+          pnpm --filter @workspace/api-server exec vitest run src/features/packages/package-defaults.test.ts >> phase1-debug.log 2>&1
+          echo "exit=$?" >> phase1-debug.log
+          echo '=== frontend package test ===' >> phase1-debug.log
+          pnpm --filter @workspace/adventure-zone exec vitest run src/components/packages/package-template-editor.test.tsx >> phase1-debug.log 2>&1
+          echo "exit=$?" >> phase1-debug.log
+          echo '=== api typecheck ===' >> phase1-debug.log
+          pnpm --filter @workspace/api-server typecheck >> phase1-debug.log 2>&1
+          echo "exit=$?" >> phase1-debug.log
+          echo '=== frontend typecheck ===' >> phase1-debug.log
+          pnpm --filter @workspace/adventure-zone typecheck >> phase1-debug.log 2>&1
+          echo "exit=$?" >> phase1-debug.log
+          echo '=== db build ===' >> phase1-debug.log
+          pnpm --filter @workspace/db build >> phase1-debug.log 2>&1
+          echo "exit=$?" >> phase1-debug.log
+          exit 0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase1-debug-log
+          path: phase1-debug.log
+          if-no-files-found: error
