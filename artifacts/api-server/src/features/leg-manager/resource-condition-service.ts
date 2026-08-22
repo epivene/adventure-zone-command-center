@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import {
@@ -16,6 +16,7 @@ export function resourceStatusEffectForChecklistResult(
   currentStatus: ResourceStatus | null,
 ): ResourceStatus | null {
   if (currentStatus === null) return null;
+  if (currentStatus === "archived") return "archived";
   if (result === "unsafe") return "unavailable";
   return currentStatus;
 }
@@ -59,7 +60,12 @@ export async function applyChecklistConditionEffect(
       await transaction
         .update(resources)
         .set({ status: "unavailable", updatedAt: new Date() })
-        .where(eq(resources.id, input.resourceId));
+        .where(
+          and(
+            eq(resources.id, input.resourceId),
+            ne(resources.status, "archived"),
+          ),
+        );
     }
   });
 }
