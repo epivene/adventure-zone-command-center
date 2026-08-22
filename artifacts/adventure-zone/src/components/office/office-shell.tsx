@@ -6,8 +6,8 @@ import { officeGet, useOfficeAuth } from "@/lib/office-auth-context";
 const items = [
   ["/office", "Today", House],
   ["/office/profiles", "Profiles", ContactRound],
-  ["/office/mail", "Mail", Mail],
-  ["/office/emails", "Email Drafts", Send],
+  ["/office/mail", "Brochures", Mail],
+  ["/office/emails", "Emails", Send],
   ["/office/tasks", "Tasks", ClipboardList],
   ["/office/messages", "Messages", MessageCircle],
 ] as const;

@@ -17,9 +17,9 @@ export function OfficeTaskCard({task,onChanged}:{task:OfficeTask;onChanged:()=>v
       {task.status!=="done"&&!mailTask?<button className="button-secondary" onClick={()=>void patch({status:"done",needsHelp:false})} type="button">Done</button>:null}
       {task.status==="waiting"&&!mailTask?<button className="button-secondary" onClick={()=>void patch({status:"in_progress"})} type="button">Resume</button>:null}
       <button className="button-secondary" onClick={()=>void patch({needsHelp:!task.needsHelp})} type="button">{task.needsHelp?"Help resolved":"Needs Help"}</button>
-      {mailTask?<Link className="button-primary" href={`/office/mail?taskId=${task.id}`}>Open Mail</Link>:null}
+      {mailTask?<Link className="button-primary" href={`/office/mail?taskId=${task.id}`}>Open Brochure</Link>:null}
       {task.type==="draft_email"?<Link className="button-secondary" href={`/office/emails${task.profile?`?profileId=${task.profile.id}`:""}`}>Draft Email</Link>:null}
     </div>
-    {mailTask&&task.status!=="done"?<p className="mt-2 text-xs text-slate-500">This task completes automatically when the brochure is marked mailed.</p>:null}
+    {mailTask&&task.status!=="done"?<p className="mt-2 text-xs text-slate-500">This task completes automatically when the brochure is recorded as mailed.</p>:null}
   </article>;
 }

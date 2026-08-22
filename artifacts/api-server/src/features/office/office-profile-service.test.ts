@@ -48,15 +48,17 @@ const profile = {
 };
 
 describe("Office profile projection", () => {
-  it("keeps factual working context while omitting owner-only strategy and provenance", () => {
+  it("keeps factual working context and profile identity while omitting owner-only strategy and provenance", () => {
     const view = projectOfficeProfile(profile as any, {
       description: "Annual county fair",
+      profileImageDataUrl: "data:image/jpeg;base64,abc123",
       locations: [],
       mailActivity: [],
     });
 
     expect(view.name).toBe("County Fair");
     expect(view.description).toBe("Annual county fair");
+    expect(view.profileImageDataUrl).toBe("data:image/jpeg;base64,abc123");
     expect(view.contacts[0]).toMatchObject({ name: "Alex Smith", role: "Director" });
     expect(view.bookings[0]).toMatchObject({ name: "2027 County Fair", status: "possible" });
     expect(JSON.stringify(view)).not.toMatch(/probability|lastResort|lastResortReason|travelLeg|sourceProvenance|actRecordId|managerReviews|private sales strategy|secret group/);

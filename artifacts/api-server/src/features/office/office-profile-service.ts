@@ -69,6 +69,7 @@ export type OfficeProfileView = {
   id: string;
   name: string;
   description: string | null;
+  profileImageDataUrl: string | null;
   phone: string | null;
   address1: string | null;
   address2: string | null;
@@ -116,6 +117,7 @@ export function projectOfficeProfile(
   profile: any,
   supplemental: {
     description: string | null;
+    profileImageDataUrl?: string | null;
     locations: OfficeLocationView[];
     mailActivity: OfficeMailActivityView[];
     contactDetails?: Map<string, ContactSupplement>;
@@ -125,6 +127,7 @@ export function projectOfficeProfile(
     id: profile.id,
     name: profile.place.name,
     description: supplemental.description,
+    profileImageDataUrl: supplemental.profileImageDataUrl ?? null,
     phone: profile.place.phone ?? null,
     address1: profile.place.address1 ?? null,
     address2: profile.place.address2 ?? null,
@@ -193,10 +196,25 @@ export class OfficeProfileService {
       showMembers: false,
       includeRetired: false,
       page: input.page,
-      pageSize: 50,
+      pageSize: 12,
     };
     const page = await new DrizzleOrganizationRepository(this.database).listOrganizations(query);
     const grouped = await attachEventFamiliesToOrganizationPage(this.database, query, page);
+    const ids = grouped.organizations.records.map((record) => record.id);
+    const photoById = new Map<string, string | null>();
+    if (ids.length) {
+      const idList = sql.join(ids.map((id) => sql`${id}::uuid`), sql.raw(", "));
+      try {
+        const result = await this.database.execute<{ id: string; profileImageDataUrl: string | null }>(sql`
+          select id, profile_image_data_url as "profileImageDataUrl"
+          from organizations
+          where id in (${idList})
+        `);
+        for (const row of result.rows) photoById.set(row.id, row.profileImageDataUrl ?? null);
+      } catch {
+        // Older databases may not have profile photos yet; keep the profile list usable.
+      }
+    }
     return {
       records: grouped.organizations.records.map((record) => ({
         id: record.id,
@@ -204,6 +222,7 @@ export class OfficeProfileService {
         city: record.city,
         region: record.region,
         primaryContactName: record.primaryContactName,
+        profileImageDataUrl: photoById.get(record.id) ?? null,
         contactCount: record.contactCount,
         bookingCount: record.bookingCount,
         locationCount: record.locationCount,
@@ -226,13 +245,19 @@ export class OfficeProfileService {
     if (!profile) return null;
 
     let description: string | null = null;
+    let profileImageDataUrl: string | null = null;
     try {
-      const result = await this.database.execute<{ description: string | null }>(sql`
-        select description from organizations where id = ${profileId}::uuid limit 1
+      const result = await this.database.execute<{ description: string | null; profileImageDataUrl: string | null }>(sql`
+        select description, profile_image_data_url as "profileImageDataUrl"
+        from organizations
+        where id = ${profileId}::uuid
+        limit 1
       `);
       description = result.rows[0]?.description ?? null;
+      profileImageDataUrl = result.rows[0]?.profileImageDataUrl ?? null;
     } catch {
       description = null;
+      profileImageDataUrl = null;
     }
 
     const contactRepository = new DrizzleContactRepository(this.database);
@@ -298,6 +323,6 @@ export class OfficeProfileService {
       note: row.note,
     }));
 
-    return projectOfficeProfile(profile, { description, locations, mailActivity, contactDetails });
+    return projectOfficeProfile(profile, { description, profileImageDataUrl, locations, mailActivity, contactDetails });
   }
 }
