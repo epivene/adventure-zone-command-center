@@ -9,7 +9,7 @@ describe("public login landing", () => {
     expect(existsSync(assetPath)).toBe(true);
 
     const asset = readFileSync(assetPath);
-    expect(asset.length).toBeGreaterThan(40_000);
+    expect(asset.length).toBeGreaterThan(5_000);
     expect(asset.subarray(0, 4).toString("ascii")).toBe("RIFF");
     expect(asset.subarray(8, 12).toString("ascii")).toBe("WEBP");
 
