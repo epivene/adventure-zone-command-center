@@ -62,7 +62,7 @@ describe("Google Workspace approved scope completeness", () => {
         actorId: "owner",
         now: new Date("2026-08-22T19:00:00.000Z"),
       }),
-    ).rejects.toThrow("GOOGLE_WORKSPACE_SCOPE_SELECTION_INCOMPLETE");
+    ).rejects.toThrow("GOOGLE_WORKSPACE_SCOPE_INCOMPLETE");
     expect(replace).not.toHaveBeenCalled();
   });
 });
