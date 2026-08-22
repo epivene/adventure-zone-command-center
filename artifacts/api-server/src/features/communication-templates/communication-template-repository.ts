@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, type SQL } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/db/schema";
@@ -46,7 +46,7 @@ export class CommunicationTemplateRepository {
     state?: CommunicationTemplateState;
     accessScope?: CommunicationTemplateAccess;
   }): Promise<CommunicationTemplateRecord[]> {
-    const filters = [];
+    const filters: SQL[] = [];
     if (options?.state) filters.push(eq(communicationTemplates.state, options.state));
     if (options?.accessScope) {
       filters.push(eq(communicationTemplates.accessScope, options.accessScope));
