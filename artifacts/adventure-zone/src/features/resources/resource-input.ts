@@ -17,6 +17,8 @@ const trimmedLabel = z
   .trim()
   .min(1, "This field is required.")
   .max(100, "This field is too long.");
+const optionalIdentityText = (max: number) =>
+  z.string().trim().max(max).nullable().default(null);
 
 export const packageCountCategoryValues = [
   "main_attraction",
@@ -68,6 +70,11 @@ export const resourceInputSchema = z
     packageCountCategory: z.enum(packageCountCategoryValues).default("main_attraction"),
     packageTemplateIds: z.array(canonicalUuid),
     checklistTags: z.array(z.enum(resourceChecklistTagValues)).optional(),
+    yearBuilt: z.number().int().min(1900).max(2100).nullable().default(null),
+    make: optionalIdentityText(120),
+    model: optionalIdentityText(120),
+    serialNumber: optionalIdentityText(120),
+    inspectionIdentityNotes: optionalIdentityText(2000),
     normalTravelLegId: canonicalUuid.nullable(),
     movable: z.boolean(),
     setupMinutes: z.number().int().nonnegative(),
@@ -99,6 +106,6 @@ export type ConfigureBookingResourcesInput = z.output<
 export type AcknowledgeResourceConflictInput = z.output<
   typeof acknowledgeResourceConflictInputSchema
 >;
-/** Input keeps new optional fields source-compatible with legacy callers. */
+/** Input keeps new optional/defaulted fields source-compatible with legacy callers. */
 export type ResourceInput = z.input<typeof resourceInputSchema>;
 export type ParsedResourceInput = z.output<typeof resourceInputSchema>;
