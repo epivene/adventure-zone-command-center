@@ -1,0 +1,81 @@
+name: Google Workspace Phase 1 TDD
+
+on:
+  push:
+    branches:
+      - feature/google-workspace-connection-scope
+    paths:
+      - ".github/workflows/google-workspace-phase1-tdd.yml"
+      - "artifacts/api-server/package.json"
+      - "artifacts/api-server/src/features/google-workspace/**"
+      - "artifacts/api-server/src/routes/google-workspace-*.ts"
+      - "artifacts/api-server/src/db/google-workspace-*.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/google-workspace/**"
+      - "artifacts/adventure-zone/src/components/google-workspace/**"
+      - "artifacts/adventure-zone/src/pages/SettingsGoogleWorkspacePage*"
+      - "artifacts/adventure-zone/src/App.tsx"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
+      - "lib/db/src/google-workspace-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/migrations/*google_workspace*"
+      - "pnpm-lock.yaml"
+  pull_request:
+    paths:
+      - ".github/workflows/google-workspace-phase1-tdd.yml"
+      - "artifacts/api-server/package.json"
+      - "artifacts/api-server/src/features/google-workspace/**"
+      - "artifacts/api-server/src/routes/google-workspace-*.ts"
+      - "artifacts/api-server/src/db/google-workspace-*.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/google-workspace/**"
+      - "artifacts/adventure-zone/src/components/google-workspace/**"
+      - "artifacts/adventure-zone/src/pages/SettingsGoogleWorkspacePage*"
+      - "artifacts/adventure-zone/src/App.tsx"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
+      - "lib/db/src/google-workspace-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/migrations/*google_workspace*"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Google Workspace API tests
+        run: |
+          shopt -s nullglob globstar
+          files=(artifacts/api-server/src/features/google-workspace/**/*.test.ts artifacts/api-server/src/routes/google-workspace-*.test.ts artifacts/api-server/src/db/google-workspace-*.test.ts)
+          if ((${#files[@]})); then
+            pnpm --filter @workspace/api-server exec vitest run "${files[@]}"
+          else
+            echo "No Google Workspace API tests yet"
+          fi
+      - name: Google Workspace frontend tests
+        run: |
+          shopt -s nullglob globstar
+          files=(artifacts/adventure-zone/src/features/google-workspace/**/*.test.ts artifacts/adventure-zone/src/components/google-workspace/**/*.test.tsx artifacts/adventure-zone/src/pages/SettingsGoogleWorkspacePage.test.tsx)
+          if ((${#files[@]})); then
+            pnpm --filter @workspace/adventure-zone exec vitest run "${files[@]}"
+          else
+            echo "No Google Workspace frontend tests yet"
+          fi
+      - run: pnpm --filter @workspace/api-server typecheck
+      - run: pnpm --filter @workspace/adventure-zone typecheck
