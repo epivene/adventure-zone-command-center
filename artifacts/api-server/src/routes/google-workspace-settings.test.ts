@@ -207,6 +207,24 @@ describe("Google Workspace owner settings routes", () => {
       .expect(400);
   });
 
+  it("reports missing expected business sources as a conflict", async () => {
+    const harness = dependencies();
+    harness.save.mockRejectedValue(
+      new Error("GOOGLE_WORKSPACE_SCOPE_INCOMPLETE"),
+    );
+    const { app, token } = ownerApp(harness.deps);
+
+    const response = await request(app)
+      .put("/google-workspace/scope")
+      .set("authorization", `Bearer ${token}`)
+      .send({ labelIds: ["shows"], calendarIds: ["az"] })
+      .expect(409);
+
+    expect(response.body).toEqual({
+      error: "GOOGLE_WORKSPACE_SCOPE_INCOMPLETE",
+    });
+  });
+
   it("disconnects only after an explicit owner request", async () => {
     const harness = dependencies();
     const { app, token } = ownerApp(harness.deps);
