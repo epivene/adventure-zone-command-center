@@ -4,10 +4,11 @@ import { z } from "zod";
 
 import { db } from "@workspace/db";
 import {
+  businessSourceDocumentFiles,
   businessSourceDocuments,
   businessSourceFactReviews,
 } from "@/db/schema";
-import { ensureBusinessSourceSeed } from "@/features/business-sources/business-source-seed";
+import { ensureEventDocumentTermSeed } from "@/features/business-sources/event-document-term-seed";
 
 const router: IRouter = Router();
 
@@ -19,27 +20,45 @@ export const businessSourceFactReviewInputSchema = z
   .strict();
 
 async function ensureSeed() {
-  await ensureBusinessSourceSeed(db);
+  await ensureEventDocumentTermSeed(db);
 }
 
 router.get("/business-sources", async (req, res): Promise<void> => {
   try {
     await ensureSeed();
-    const rows = await db.select().from(businessSourceDocuments);
+    const rows = await db
+      .select({
+        source: businessSourceDocuments,
+        file: {
+          id: businessSourceDocumentFiles.id,
+          mimeType: businessSourceDocumentFiles.mimeType,
+          originalSizeBytes: businessSourceDocumentFiles.originalSizeBytes,
+          sha256Hex: businessSourceDocumentFiles.sha256Hex,
+          uploadedBy: businessSourceDocumentFiles.uploadedBy,
+          uploadedAt: businessSourceDocumentFiles.uploadedAt,
+        },
+      })
+      .from(businessSourceDocuments)
+      .leftJoin(
+        businessSourceDocumentFiles,
+        eq(businessSourceDocumentFiles.sourceDocumentId, businessSourceDocuments.id),
+      );
     res.json({
-      sources: rows.map((row) => ({
-        id: row.id,
-        originalFilename: row.originalFilename,
-        displayTitle: row.displayTitle,
-        sourceCategory: row.sourceCategory,
-        effectiveYear: row.effectiveYear,
-        accessScope: row.accessScope,
-        reviewState: row.reviewState,
-        hasStorageReference: Boolean(row.storageReference),
-        notes: row.notes,
-        reviewedBy: row.reviewedBy,
-        reviewedAt: row.reviewedAt,
-        updatedAt: row.updatedAt,
+      sources: rows.map(({ source, file }) => ({
+        id: source.id,
+        originalFilename: source.originalFilename,
+        displayTitle: source.displayTitle,
+        sourceCategory: source.sourceCategory,
+        effectiveYear: source.effectiveYear,
+        accessScope: source.accessScope,
+        reviewState: source.reviewState,
+        hasStorageReference: Boolean(source.storageReference),
+        hasFile: Boolean(file?.id),
+        file: file?.id ? file : null,
+        notes: source.notes,
+        reviewedBy: source.reviewedBy,
+        reviewedAt: source.reviewedAt,
+        updatedAt: source.updatedAt,
       })),
     });
   } catch (err) {
