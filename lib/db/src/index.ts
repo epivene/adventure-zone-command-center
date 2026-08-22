@@ -9,6 +9,7 @@ import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
+import * as googleWorkspaceSchema from "./google-workspace-schema";
 
 const { Pool } = pg;
 
@@ -44,6 +45,7 @@ const schema = {
   ...resourceSourceCandidateSchema,
   ...eventAttendanceHistorySchema,
   ...officeCoordinatorSchema,
+  ...googleWorkspaceSchema,
 };
 export const db = drizzle(pool, { schema });
 
@@ -56,3 +58,4 @@ export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
 export * from "./office-coordinator-schema";
+export * from "./google-workspace-schema";
