@@ -106,9 +106,13 @@ export function buildGoogleScopePreview(
 
   const approvedCalendars: GoogleScopeCalendar[] = [];
   const missingCalendars: string[] = [];
+  const emailCalendarId = normalized(APPROVED_CALENDAR_EMAIL_ID);
+
   for (const expectedSummary of APPROVED_CALENDAR_NAMES) {
     const matches = calendars.filter(
-      (candidate) => normalized(candidate.summary) === normalized(expectedSummary),
+      (candidate) =>
+        normalized(candidate.id) !== emailCalendarId &&
+        normalized(candidate.summary) === normalized(expectedSummary),
     );
     if (matches.length !== 1) {
       missingCalendars.push(expectedSummary);
@@ -118,7 +122,7 @@ export function buildGoogleScopePreview(
   }
 
   const emailCalendars = calendars.filter(
-    (calendar) => normalized(calendar.id) === normalized(APPROVED_CALENDAR_EMAIL_ID),
+    (calendar) => normalized(calendar.id) === emailCalendarId,
   );
   if (emailCalendars.length === 1) {
     approvedCalendars.push(emailCalendars[0]);
