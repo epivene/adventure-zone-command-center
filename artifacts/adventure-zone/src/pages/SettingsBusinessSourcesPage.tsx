@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { SourceDocumentFileCard, type SourceFileMetadata } from "@/components/business-sources/source-document-file-card";
+import { SourceDocumentLinkEditor } from "@/components/business-sources/source-document-link-editor";
 import { apiFetch } from "@/lib/auth-token";
 
 type Source = {
@@ -10,6 +12,8 @@ type Source = {
   effectiveYear: number | null;
   accessScope: string;
   reviewState: string;
+  hasFile: boolean;
+  file: SourceFileMetadata | null;
   notes: string | null;
 };
 type Conflict = {
@@ -59,7 +63,7 @@ export default function SettingsBusinessSourcesPage() {
   return <div className="mx-auto grid max-w-7xl gap-6 py-6">
     <header><h1 className="text-3xl font-bold">Business sources</h1><p className="mt-1 text-slate-600">Original company files are evidence. Reviewed app facts and polished customer wording stay separate from raw source material.</p></header>
     {error ? <p role="alert" className="rounded-xl bg-rose-50 p-3 font-semibold text-rose-700">{error}</p> : null}
-    <section className="grid gap-3"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">Source library</h2><span className="text-sm text-slate-500">{sources.length} files</span></div>{sources.map((source) => <article className="rounded-xl border bg-white p-4" key={source.id}><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{source.displayTitle}</h3><p className="text-sm text-slate-500">{source.originalFilename}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{source.reviewState}</span></div><p className="mt-2 text-sm text-slate-700">{source.notes}</p><p className="mt-2 text-xs text-slate-500">{source.sourceCategory}{source.effectiveYear ? ` · ${source.effectiveYear}` : ""} · {source.accessScope}</p></article>)}</section>
+    <section className="grid gap-3"><div className="flex items-center justify-between"><h2 className="text-xl font-bold">Source library</h2><span className="text-sm text-slate-500">{sources.length} files</span></div>{sources.map((source) => <article className="grid gap-3 rounded-xl border bg-white p-4" key={source.id}><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{source.displayTitle}</h3><p className="text-sm text-slate-500">{source.originalFilename}</p></div><div className="flex gap-2"><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{source.reviewState}</span>{source.hasFile?<span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800">file stored</span>:null}</div></div><p className="text-sm text-slate-700">{source.notes}</p><p className="text-xs text-slate-500">{source.sourceCategory}{source.effectiveYear ? ` · ${source.effectiveYear}` : ""} · {source.accessScope}</p><details className="rounded-xl border border-slate-200 p-3"><summary className="cursor-pointer font-semibold">File, links &amp; historical terms</summary><div className="mt-3 grid gap-3"><SourceDocumentFileCard documentId={source.id} file={source.file} onChanged={load}/><SourceDocumentLinkEditor documentId={source.id}/></div></details></article>)}</section>
     <section className="grid gap-3"><div><h2 className="text-xl font-bold">Needs confirmation</h2><p className="text-sm text-slate-600">Conflicting source values stay here until you decide which one becomes operational truth.</p></div>{conflicts.length ? conflicts.map((conflict) => <article className="rounded-xl border border-amber-200 bg-amber-50 p-4" key={conflict.id}><p className="text-xs font-bold uppercase tracking-wide text-amber-800">{conflict.conflictGroup ?? conflict.factKey}</p><h3 className="mt-1 font-bold">{conflict.proposedValue}</h3><p className="mt-1 text-sm text-amber-950">Source: {conflict.sourceTitle} · {conflict.sourceLocator}</p><div className="mt-3 flex flex-wrap gap-2"><button className="button-primary" disabled={busyId === conflict.id} type="button" onClick={() => void decide(conflict, "approved")}>Use this value</button><button className="button-secondary" disabled={busyId === conflict.id} type="button" onClick={() => void decide(conflict, "rejected")}>Reject this value</button></div></article>) : <div className="rounded-xl border bg-white p-5 text-slate-600">No unresolved source conflicts.</div>}</section>
   </div>;
 }
