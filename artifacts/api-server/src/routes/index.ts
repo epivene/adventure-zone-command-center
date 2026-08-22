@@ -35,6 +35,8 @@ import aiSuggestionsRouter from "./ai-suggestions";
 import paperNotesRouter from "./paper-notes";
 import followUpsRouter from "./follow-ups";
 import authRouter from "./auth";
+import googleWorkspaceOAuthCallbackRouter from "./google-workspace-oauth-callback";
+import googleWorkspaceSettingsRouter from "./google-workspace-settings";
 import officeAuthRouter from "./office-auth";
 import officeTasksRouter from "./office-tasks";
 import officeProfilesRouter from "./office-profiles";
@@ -77,6 +79,7 @@ let leakedFixtureCleanup: Promise<void> | null = null;
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(googleWorkspaceOAuthCallbackRouter);
 router.use(officeAuthRouter);
 router.use(officeTasksRouter);
 router.use(officeProfilesRouter);
@@ -98,6 +101,7 @@ router.use(managerMeetupsRouter);
 router.use(managerAssistantRouter);
 
 router.use(requireOwnerMiddleware);
+router.use(googleWorkspaceSettingsRouter);
 router.use(async (req, _res, next) => {
   leakedFixtureCleanup ??= cleanupLeakedConsolidationTestFixtures(db);
   try {
