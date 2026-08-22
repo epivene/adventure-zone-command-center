@@ -86,7 +86,7 @@ router.post("/commercial-offers/:offerId/activate", async (req, res): Promise<vo
   }
   const errors = validateOfferActivation(existing);
   if (errors.length) {
-    res.status(409).json({ error: "This offer is not ready to activate.", errors });
+    res.status(409).json({ error: errors.join(" "), errors });
     return;
   }
   const actorId = String((req as any).userId ?? "owner");
