@@ -71,10 +71,19 @@ describe("workspace-aware Admin shell", () => {
     expect(mobileSource).toContain('label: "Booking", icon: ArrowLeft');
   });
 
-  it("restores the assistant as a compact desktop top-toolbar button", () => {
-    expect(shellSource).toContain('<AssistantLauncher placement="toolbar" />');
+  it("keeps Messages and Assistant as compact always-available desktop toolbar icons", () => {
+    const toolbarStart = shellSource.indexOf('<div className="ml-auto flex items-center gap-1.5">');
+    const toolbarEnd = shellSource.indexOf("</div>", toolbarStart);
+    const toolbar = shellSource.slice(toolbarStart, toolbarEnd);
+
+    expect(toolbar).toContain("<MessageBubbleLink");
+    expect(toolbar).toContain('href="/manager-communications"');
+    expect(toolbar).toContain('label="Messages"');
+    expect(toolbar).toContain("unreadCount={unreadMessages}");
+    expect(toolbar).toContain('<AssistantLauncher placement="toolbar" />');
+    expect(toolbar.indexOf("<MessageBubbleLink")).toBeLessThan(toolbar.indexOf("<AssistantLauncher"));
+    expect(toolbar).not.toContain('workspace === "operations" ? <MessageBubbleLink');
     expect(launcherSource).toContain('placement?: "toolbar" | "floating"');
-    expect(launcherSource).toContain('placement === "toolbar"');
     expect(launcherSource).toContain('aria-label="Open Booking Assistant"');
   });
 
