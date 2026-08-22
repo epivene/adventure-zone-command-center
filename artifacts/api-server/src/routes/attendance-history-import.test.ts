@@ -25,6 +25,12 @@ describe("attendance history import owner routes", () => {
     expect(source).toContain("Attendance history is already approved to a different profile or location");
   });
 
+  it("does not let reject remove the review state of already-approved history", () => {
+    expect(repository).toContain('code: "ALREADY_APPROVED"');
+    expect(source).toContain('result.code === "ALREADY_APPROVED"');
+    expect(source).toContain("Approved attendance history cannot be rejected");
+  });
+
   it("never mutates Do Not Call from blacklisted attendance history", () => {
     expect(source).not.toContain("doNotCallAt");
     expect(source).not.toContain("contactPhones");
