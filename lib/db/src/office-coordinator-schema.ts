@@ -11,6 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+import { communicationTemplates } from "./business-source-schema";
 import { contacts, organizations } from "./schema";
 
 export const officeRoleValues = ["office_coordinator"] as const;
@@ -114,6 +115,7 @@ export const officeEmailDrafts = pgTable("office_email_drafts", {
   officeAccountId: uuid("office_account_id").notNull().references(() => officeAccounts.id, { onDelete: "restrict" }),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+  communicationTemplateId: uuid("communication_template_id").references(() => communicationTemplates.id, { onDelete: "set null" }),
   recipientEmail: text("recipient_email").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
@@ -130,6 +132,7 @@ export const officeEmailDrafts = pgTable("office_email_drafts", {
   check("office_email_drafts_state_valid", sql`${table.state} in ('draft','submitted','needs_changes','sending','sent')`),
   index("office_email_drafts_state_submitted_idx").on(table.state, table.submittedAt),
   index("office_email_drafts_account_updated_idx").on(table.officeAccountId, table.updatedAt),
+  index("office_email_drafts_template_idx").on(table.communicationTemplateId),
 ]);
 
 export const officeMessages = pgTable("office_messages", {
