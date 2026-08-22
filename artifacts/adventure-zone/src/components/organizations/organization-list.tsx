@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import type { ReactNode } from "react";
 
 import { profileTypeOptions } from "@/features/organizations/last-resort-input";
 import type { OrganizationListQuery, OrganizationListPage } from "@/features/organizations/organization-repository";
@@ -56,7 +57,7 @@ function RatingSummary({ average, count }: { average?: number | null; count?: nu
   );
 }
 
-export function OrganizationList({ organizations, query, travelLegs }: { organizations: OrganizationListPage; query: OrganizationListQuery; travelLegs: { id: string; name: string; color: string }[] }) {
+export function OrganizationList({ organizations, query, travelLegs, afterSearch }: { organizations: OrganizationListPage; query: OrganizationListQuery; travelLegs: { id: string; name: string; color: string }[]; afterSearch?: ReactNode }) {
   const profileTypeLabel = profileTypeOptions.find((option) => option.value === query.placeType)?.label;
   const legLabel = travelLegs.find((leg) => leg.id === query.travelLegId)?.name;
   const activeFilters: ActiveFilter[] = [
@@ -128,6 +129,8 @@ export function OrganizationList({ organizations, query, travelLegs }: { organiz
           </div>
         ) : null}
       </form>
+
+      {afterSearch}
 
       <p aria-live="polite" className="text-sm text-slate-600">Showing {organizations.records.length} of {organizations.total} profiles</p>
 
