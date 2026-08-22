@@ -4,14 +4,28 @@ import { describe, expect, it } from "vitest";
 const shellSource = readFileSync("src/components/navigation/app-shell.tsx", "utf8");
 const mobileSource = readFileSync("src/components/navigation/mobile-bottom-nav.tsx", "utf8");
 const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8");
+const switcherSource = readFileSync("src/components/navigation/workspace-switcher.tsx", "utf8");
 
 describe("workspace-aware Admin shell", () => {
-  it("keeps Booking focused on Today Profiles Schedule plus a Marketing shortcut", () => {
-    expect(shellSource).toContain('{ href: "/today", label: "Today"');
-    expect(shellSource).toContain('{ href: "/profiles", label: "Profiles"');
-    expect(shellSource).toContain('{ href: "/schedule", label: "Schedule"');
-    expect(shellSource).toContain('{ href: "/marketing", label: "Marketing"');
-    expect(shellSource).toContain("saveBookingReturnPath(location)");
+  it("keeps the Booking top bar focused on Today Profiles and Schedule", () => {
+    const bookingStart = shellSource.indexOf('if (workspace === "booking")');
+    const operationsStart = shellSource.indexOf('if (workspace === "operations")');
+    const bookingPrimary = shellSource.slice(bookingStart, operationsStart);
+
+    expect(bookingPrimary).toContain('{ href: "/today", label: "Today"');
+    expect(bookingPrimary).toContain('{ href: "/profiles", label: "Profiles"');
+    expect(bookingPrimary).toContain('{ href: "/schedule", label: "Schedule"');
+    expect(bookingPrimary).not.toContain('label: "Marketing"');
+  });
+
+  it("uses the workspace identity as the single workspace switcher", () => {
+    expect(shellSource).toContain("<WorkspaceSwitcher");
+    expect(switcherSource).toContain("Adventure Zone");
+    expect(switcherSource).toContain("Booking");
+    expect(switcherSource).toContain("Marketing");
+    expect(switcherSource).toContain("Legs & Operations");
+    expect(switcherSource).toContain("Command Panel");
+    expect(switcherSource).toContain("Admin Tools");
   });
 
   it("gives Operations its own primary navigation", () => {
@@ -20,30 +34,34 @@ describe("workspace-aware Admin shell", () => {
     expect(shellSource).toContain('{ href: "/manager-crew", label: "Crew"');
   });
 
-  it("keeps Command Panel permanently reachable", () => {
-    expect(shellSource).toContain('href="/command"');
-    expect(shellSource).toContain("Command Panel");
-    expect(mobileSource).toContain('{ href: "/command", label: "Panel"');
-    expect(menuSource).toContain('<Link href="/command">Command Panel</Link>');
+  it("keeps the Booking overflow menu short and nonduplicative", () => {
+    const bookingStart = menuSource.indexOf("const bookingItems");
+    const operationsStart = menuSource.indexOf("const operationsGroups");
+    const bookingMenu = menuSource.slice(bookingStart, operationsStart);
+
+    expect(bookingMenu).toContain('{ href: "/bookings", label: "Bookings" }');
+    expect(bookingMenu).toContain('{ href: "/calls/workspace", label: "Calls" }');
+    expect(bookingMenu).toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
+    expect(bookingMenu).toContain('{ href: "/research-sources", label: "Research Sources" }');
+    expect(bookingMenu).toContain('{ href: "/contacts", label: "All contacts" }');
+    expect(bookingMenu).not.toContain('label: "Marketing"');
+    expect(bookingMenu).not.toContain('label: "Quick add"');
   });
 
-  it("separates Booking and Operations menu contents", () => {
-    expect(menuSource).toContain("const bookingGroups");
-    expect(menuSource).toContain("const operationsGroups");
-    expect(menuSource).toContain('{ href: "/calls/workspace", label: "Calls" }');
-    expect(menuSource).toContain('{ href: "/manager-finance", label: "Finances" }');
-    expect(menuSource).toContain('if (workspace === "booking") return bookingGroups');
-    expect(menuSource).toContain('if (workspace === "operations") return operationsGroups');
-  });
-
-  it("keeps Admin Tools compact but reachable from every working workspace", () => {
+  it("keeps Admin Tools available without expanding it by default", () => {
     expect(menuSource).toContain('label: "Admin Tools"');
+    expect(menuSource).toContain('const expanded = openGroups[group.label] ?? (index === 0 && workspace !== "booking")');
     for (const href of [
       "/settings/paper-notes",
       "/settings/act-migration",
       "/settings/act-recovery",
       "/settings/packages-resources",
     ]) expect(menuSource).toContain(`href: "${href}"`);
+  });
+
+  it("keeps mobile workspace access available", () => {
+    expect(mobileSource).toContain('{ href: "/command", label: "Panel"');
+    expect(mobileSource).toContain("<AppMenu mobile");
   });
 
   it("restores a saved Booking destination from Marketing", () => {
