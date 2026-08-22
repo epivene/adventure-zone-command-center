@@ -40,6 +40,7 @@ const adminMenuGroups: MenuGroup[] = [
   {
     label: "Imports & Data",
     items: [
+      { href: "/settings/business-sources", label: "Business sources" },
       { href: "/settings/paper-notes", label: "Paper notes" },
       { href: "/settings/act-migration", label: "Act! import" },
       { href: "/settings/act-recovery", label: "ACT recovery" },
@@ -48,6 +49,7 @@ const adminMenuGroups: MenuGroup[] = [
   {
     label: "Settings",
     items: [
+      { href: "/settings/communication-templates", label: "Email templates" },
       { href: "/settings/call-scripts", label: "Call scripts" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
       { href: "/settings", label: "Settings" },
