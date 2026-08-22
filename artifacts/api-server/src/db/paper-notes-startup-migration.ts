@@ -48,6 +48,27 @@ export async function ensurePaperNotesSchema(
         where table_schema = current_schema()
           and table_name = 'activities'
           and column_name = 'paper_note_entry_id'
+      )
+      and exists (
+        select 1
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'contact_phones'
+          and column_name = 'instructions'
+      )
+      and exists (
+        select 1
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'contact_phones'
+          and column_name = 'status'
+      )
+      and exists (
+        select 1
+        from information_schema.columns
+        where table_schema = current_schema()
+          and table_name = 'contact_phones'
+          and column_name = 'source_paper_note_entry_id'
       ) as ready
   `);
   if (marker.rows[0]?.["ready"] === true) return false;
