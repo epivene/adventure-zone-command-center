@@ -168,17 +168,30 @@ export class AttendanceImportRepository {
           .where(eq(attendanceImportRows.matchState, state))
           .orderBy(asc(attendanceImportRows.sourceRowNumber))
       : await this.listImportRows();
-    const statuses = await this.listYearStatuses(importRows.map((row) => row.id));
+    const [statuses, candidates] = await Promise.all([
+      this.listYearStatuses(importRows.map((row) => row.id)),
+      this.listActiveProfileLocationCandidates(),
+    ]);
     const byRow = new Map<string, typeof statuses>();
     for (const status of statuses) {
       const list = byRow.get(status.importRowId) ?? [];
       list.push(status);
       byRow.set(status.importRowId, list);
     }
-    return importRows.map((row) => ({
-      ...row,
-      statuses: byRow.get(row.id) ?? [],
-    }));
+    return importRows.map((row) => {
+      const matchedTarget = row.matchedOrganizationId
+        ? candidates.find(
+            (candidate) =>
+              candidate.organizationId === row.matchedOrganizationId &&
+              (row.matchedLocationId === null || candidate.locationId === row.matchedLocationId),
+          ) ?? null
+        : null;
+      return {
+        ...row,
+        statuses: byRow.get(row.id) ?? [],
+        matchedTarget,
+      };
+    });
   }
 
   async approve(input: {
