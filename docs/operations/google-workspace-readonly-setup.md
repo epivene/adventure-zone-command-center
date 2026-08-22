@@ -36,17 +36,26 @@ Add the public API callback as an authorized redirect URI on the Web application
 https://<COMMAND_CENTER_API_HOST>/api/google-workspace/oauth/callback
 ```
 
-The value must match the deployed environment value exactly, including scheme, host, path, and trailing-slash behavior. Production must use HTTPS on a domain the business owns or is authorized to use.
+The value must match the deployed `GOOGLE_WORKSPACE_REDIRECT_URI` exactly, including scheme, host, path, and trailing-slash behavior. Production must use HTTPS on a domain the business owns or is authorized to use.
+
+The API and static Command Center are separate Render services. After Google returns to the API callback, the API redirects the browser to the configured static frontend origin. Do not register the static frontend URL as the Google callback.
 
 ## 4. Configure Render secrets
 
-Set all four values on the API service:
+Set all five values on the **API service**:
 
 ```text
 GOOGLE_WORKSPACE_CLIENT_ID=<web OAuth client ID>
 GOOGLE_WORKSPACE_CLIENT_SECRET=<web OAuth client secret>
 GOOGLE_WORKSPACE_REDIRECT_URI=https://<COMMAND_CENTER_API_HOST>/api/google-workspace/oauth/callback
+GOOGLE_WORKSPACE_APP_ORIGIN=https://<COMMAND_CENTER_WEB_HOST>
 GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY=<base64 32-byte key>
+```
+
+`GOOGLE_WORKSPACE_APP_ORIGIN` must contain only the static frontend origin: scheme, host, and optional port. Do not include a path, query string, fragment, or trailing slash. Example:
+
+```text
+https://adventure-zone-web.onrender.com
 ```
 
 Generate the encryption key once and store it durably:
@@ -60,18 +69,19 @@ Requirements:
 - The decoded encryption key must be exactly 32 bytes.
 - Never put the client secret, refresh token, or encryption key in GitHub, browser code, screenshots, support messages, or logs.
 - Do not rotate the encryption key casually. Existing encrypted refresh credentials require the same key to be decrypted.
-- All four variables must be either present together or absent together. Partial configuration is rejected.
+- All five variables must be either present together or absent together. Partial configuration is rejected without exposing secret values.
+- Production redirect and app origins must use HTTPS.
 
 ## 5. Deploy and connect as the administrator
 
 1. Deploy the API and frontend from the approved Phase 1 release.
 2. Sign in as the Command Center administrator.
-3. Open **Menu → Imports & Data → Google Workspace**.
+3. Open **Admin Tools → Google Workspace**.
 4. Confirm the page says the connection is read-only.
 5. Select **Connect Google account**.
 6. Sign in to the company Google account and review the requested scopes.
-7. Grant the requested access only when the displayed app and redirect domain are correct.
-8. Return to the Command Center and confirm the expected company email is displayed.
+7. Grant the requested access only when the displayed app and API callback domain are correct.
+8. Confirm Google returns you to the static Command Center—not the API service—and that the expected company email is displayed.
 
 The application requests:
 
@@ -83,7 +93,7 @@ https://www.googleapis.com/auth/calendar.readonly
 https://www.googleapis.com/auth/drive.readonly
 ```
 
-These scopes permit reading the required business data. They do not permit the Command Center to send mail, change Gmail labels, archive messages, or edit Calendar events. Google may require additional OAuth verification or security review before broader production use of sensitive or restricted scopes.
+These scopes permit reading the required business data. They do not permit the Command Center to send mail, change Gmail labels, archive messages, or edit Calendar events. The connection is rejected unless Google explicitly reports every required read-only scope. Google may require additional OAuth verification or security review before broader production use of sensitive or restricted scopes.
 
 ## 6. Preview the business-only scope
 
@@ -108,9 +118,9 @@ Warriors Playground Calendar
 zone.pirate.warrior@gmail.com
 ```
 
-The fourth source is selected by its Calendar ID even when its display name is different.
+The fourth source is selected by its Calendar ID even when its display name is different. A named Calendar must have one unambiguous exact match; the app will not silently choose the first of two same-named calendars.
 
-Do not save the scope while the page reports a missing expected business root or Calendar. First confirm whether it was renamed, removed, or connected under the wrong Google account.
+The app will not save scope while an expected business root or Calendar is missing or ambiguous. First confirm whether it was renamed, removed, duplicated, or connected under the wrong Google account.
 
 ## 7. Save the exact IDs
 
@@ -134,6 +144,7 @@ Before approving the release, confirm:
 - Leg-manager accounts have no Google connection settings.
 - A missing, Office, or leg-manager bearer token receives an unauthorized response from owner Google settings endpoints.
 - Disconnecting the account does not delete saved CRM data or Google data.
+- Revoked Google credentials change the connection to **Reconnect required** without deleting the saved scope.
 
 ## 9. Troubleshooting
 
@@ -141,9 +152,17 @@ Before approving the release, confirm:
 
 Compare the Google OAuth client's authorized redirect URI with `GOOGLE_WORKSPACE_REDIRECT_URI` character for character. Confirm the request is reaching the API host, not the frontend host.
 
+### Google returns to the API host or a 404 page
+
+Verify `GOOGLE_WORKSPACE_APP_ORIGIN` is the static Command Center origin, such as `https://adventure-zone-web.onrender.com`. It must not be the API host and must not contain `/settings`, a query string, a fragment, or a trailing slash. Redeploy the API after correcting it, then start a new connection attempt.
+
 ### `GOOGLE_WORKSPACE_CONFIGURATION_INCOMPLETE`
 
-One or more of the four required Render values is missing or blank. Configure all four together.
+One or more of the five required Render values is missing or blank. Configure all five together.
+
+### `GOOGLE_WORKSPACE_APP_ORIGIN_INVALID`
+
+Set only an origin: `https://host.example.com` or `https://host.example.com:port`. Remove paths, query parameters, fragments, and credentials.
 
 ### `GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY_INVALID`
 
@@ -151,7 +170,7 @@ Generate a new base64 value from exactly 32 random bytes. Do not replace a worki
 
 ### `GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING`
 
-The account did not grant every requested read-only scope. Start the connection flow again through the administrator page and review the consent choices.
+The account did not explicitly grant every requested read-only scope. Start the connection flow again through the administrator page and review the consent choices.
 
 ### `GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED`
 
@@ -159,4 +178,4 @@ Google rejected or revoked the stored refresh credential. Use **Reconnect Google
 
 ### Expected label or Calendar is missing
 
-Verify the connected account, then inspect the source in Gmail or Google Calendar. The Command Center intentionally does not fuzzy-match a similarly named personal label or Calendar.
+Verify the connected account, then inspect the source in Gmail or Google Calendar. The Command Center intentionally does not fuzzy-match a similarly named personal label or Calendar. For a named Calendar, also check for two calendars with the same display name.
