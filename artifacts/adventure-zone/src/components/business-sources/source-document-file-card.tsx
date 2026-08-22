@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { apiFetch, apiPost } from "@/lib/auth-token";
+import { apiFetch, apiGet } from "@/lib/auth-token";
 
 export type SourceFileMetadata = {
   id: string;
@@ -75,9 +75,9 @@ export function SourceDocumentFileCard({
     setBusy(true);
     setError("");
     try {
-      const result = await apiPost<{ url: string }>(`/business-sources/${documentId}/file/open`, {});
-      if (!result.url) throw new Error("The protected document did not return a signed file link.");
-      window.open(result.url, "_blank", "noopener,noreferrer");
+      const { url } = await apiGet<{ url: string }>(`/business-sources/${documentId}/file/open`);
+      if (!url) throw new Error("The protected document did not return a signed file link.");
+      window.open(url, "_blank", "noopener,noreferrer");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not open the source document.");
     } finally {
