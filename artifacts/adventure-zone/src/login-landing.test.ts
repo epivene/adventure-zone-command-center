@@ -4,8 +4,15 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync("public/login-screen.css", "utf8");
 
 describe("public login landing", () => {
-  it("uses the supplied Adventure Zone artwork as the real full-screen background", () => {
-    expect(existsSync("public/adventure-zone-login-background.webp")).toBe(true);
+  it("uses a real supplied Adventure Zone WebP as the full-screen background", () => {
+    const assetPath = "public/adventure-zone-login-background.webp";
+    expect(existsSync(assetPath)).toBe(true);
+
+    const asset = readFileSync(assetPath);
+    expect(asset.length).toBeGreaterThan(5_000);
+    expect(asset.subarray(0, 4).toString("ascii")).toBe("RIFF");
+    expect(asset.subarray(8, 12).toString("ascii")).toBe("WEBP");
+
     expect(css).toContain('url("/adventure-zone-login-background.webp")');
     expect(css).toContain("background-size: cover");
     expect(css).toContain("background-position: center top");
