@@ -35,25 +35,36 @@ const activeRow = {
   updated_at: new Date("2026-08-22T18:00:00.000Z"),
 };
 
+function repository() {
+  const pool: GoogleConnectionSqlPool = {
+    async query(text) {
+      if (text.includes("FROM google_workspace_connections")) {
+        return { rows: [activeRow] };
+      }
+      throw new Error(`Unexpected write: ${text}`);
+    },
+  };
+  return new PostgresGoogleConnectionRepository({ pool, environment });
+}
+
 describe("Google Workspace account subject safety", () => {
   it("requires disconnect when the email matches but Google's stable subject changed", async () => {
-    const pool: GoogleConnectionSqlPool = {
-      async query(text) {
-        if (text.includes("FROM google_workspace_connections")) {
-          return { rows: [activeRow] };
-        }
-        throw new Error(`Unexpected write: ${text}`);
-      },
-    };
-    const repository = new PostgresGoogleConnectionRepository({
-      pool,
-      environment,
-    });
-
     await expect(
-      repository.upsertConnected({
+      repository().upsertConnected({
         accountEmail: "company@example.com",
         googleSubject: "replacement-google-subject",
+        refreshToken: "replacement-refresh-token",
+        scopes: [],
+        now: new Date("2026-08-22T19:00:00.000Z"),
+      }),
+    ).rejects.toThrow("GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT");
+  });
+
+  it("does not erase a previously pinned Google subject when identity is missing", async () => {
+    await expect(
+      repository().upsertConnected({
+        accountEmail: "company@example.com",
+        googleSubject: null,
         refreshToken: "replacement-refresh-token",
         scopes: [],
         now: new Date("2026-08-22T19:00:00.000Z"),
