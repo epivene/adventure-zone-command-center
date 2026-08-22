@@ -1,0 +1,17 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const source = readFileSync("src/components/packages/commercial-offer-editor.tsx", "utf8");
+
+describe("commercial offer editor", () => {
+  it("shows review state, owner-only scope, conflicts, and explicit activation", () => {
+    for (const text of ["Offers & Discounts", "Owner only", "Source conflict", "Activate", "Archive"]){
+      expect(source).toContain(text);
+    }
+  });
+
+  it("requires an explicit confirmation gesture before clearing a source conflict", () => {
+    expect(source).toContain("I confirmed the current terms");
+    expect(source).toContain("sourceConflictNote: null");
+  });
+});
