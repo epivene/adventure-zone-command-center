@@ -4,8 +4,10 @@ import { useState, type FormEvent } from "react";
 
 import type { PackageTemplateSettingsRecord } from "@/features/packages/package-repository";
 import {
+  resourceChecklistTagValues,
   resourceInputSchema,
   type PackageCountCategory,
+  type ResourceChecklistTag,
   type ResourceInput,
 } from "@/features/resources/resource-input";
 import type { ResourceInventoryRecord } from "@/features/resources/resource-repository";
@@ -18,6 +20,16 @@ export type ResourceTravelLegOption = {
   archivedAt: Date | null;
 };
 
+const checklistTagLabels: Record<ResourceChecklistTag, string> = {
+  inflatable: "Inflatable",
+  blower_powered: "Blower powered",
+  wet_attraction: "Wet attraction",
+  multi_section: "Multi-section",
+  action_pursuit: "Action pursuit",
+  carnival_game: "Carnival game",
+  trailer_shared: "Shared trailer",
+};
+
 const emptyResource: ResourceInput = {
   id: null,
   code: "",
@@ -26,6 +38,7 @@ const emptyResource: ResourceInput = {
   countsAsAttraction: false,
   packageCountCategory: "main_attraction",
   packageTemplateIds: [],
+  checklistTags: [],
   normalTravelLegId: null,
   movable: false,
   setupMinutes: 0,
@@ -50,6 +63,7 @@ function ResourceForm({
   const [value, setValue] = useState<ResourceInput>({
     ...initialValue,
     packageCountCategory: initialValue.packageCountCategory ?? "main_attraction",
+    checklistTags: initialValue.checklistTags ?? [],
   });
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -77,6 +91,14 @@ function ResourceForm({
       checked
         ? [...value.packageTemplateIds, packageTemplateId]
         : value.packageTemplateIds.filter((id) => id !== packageTemplateId),
+    );
+  }
+
+  function toggleChecklistTag(tag: ResourceChecklistTag, checked: boolean) {
+    const current = value.checklistTags ?? [];
+    update(
+      "checklistTags",
+      checked ? [...current, tag] : current.filter((item) => item !== tag),
     );
   }
 
@@ -166,7 +188,7 @@ function ResourceForm({
             <option value="special_shared">Special / shared equipment</option>
           </select>
           <span className="text-xs font-normal text-slate-500">
-            Only main attractions count toward a package's normal attraction range.
+            Only main attractions count toward a package&apos;s normal attraction range.
           </span>
         </label>
       </div>
@@ -198,6 +220,26 @@ function ResourceForm({
               </label>
             );
           })}
+        </div>
+      </fieldset>
+
+      <fieldset className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <legend className="px-1 text-sm font-bold">Inspection tags</legend>
+        <p className="text-xs text-slate-600">
+          These tags control which safety checklist items appear for this resource. Choose only what actually applies to the equipment.
+        </p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {resourceChecklistTagValues.map((tag) => (
+            <label className="flex min-h-11 items-center gap-2 text-sm font-semibold" key={tag}>
+              <input
+                aria-label={checklistTagLabels[tag]}
+                checked={(value.checklistTags ?? []).includes(tag)}
+                onChange={(event) => toggleChecklistTag(tag, event.currentTarget.checked)}
+                type="checkbox"
+              />
+              {checklistTagLabels[tag]}
+            </label>
+          ))}
         </div>
       </fieldset>
 
@@ -338,7 +380,7 @@ export function ResourceInventoryEditor({
           Resource inventory
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          Add operational equipment or update its package tags, package-count meaning, travel needs, timing, and availability. Archive retired resources to preserve booking history.
+          Add operational equipment or update its package tags, inspection tags, package-count meaning, travel needs, timing, and availability. Archive retired resources to preserve booking history.
         </p>
       </div>
 
