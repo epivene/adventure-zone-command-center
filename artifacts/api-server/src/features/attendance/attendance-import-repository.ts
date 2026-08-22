@@ -264,15 +264,28 @@ export class AttendanceImportRepository {
   }
 
   async reject(importRowId: string, reason: string) {
-    const [row] = await this.database
-      .update(attendanceImportRows)
-      .set({
-        matchState: "rejected",
-        matchReason: reason.trim(),
-        updatedAt: new Date(),
-      })
-      .where(eq(attendanceImportRows.id, importRowId))
-      .returning();
-    return row ?? null;
+    return this.database.transaction(async (transaction) => {
+      const [row] = await transaction
+        .select()
+        .from(attendanceImportRows)
+        .where(eq(attendanceImportRows.id, importRowId))
+        .limit(1)
+        .for("update");
+      if (!row) return { ok: false as const, code: "NOT_FOUND" as const };
+      if (row.matchState === "approved") {
+        return { ok: false as const, code: "ALREADY_APPROVED" as const };
+      }
+
+      const [updated] = await transaction
+        .update(attendanceImportRows)
+        .set({
+          matchState: "rejected",
+          matchReason: reason.trim(),
+          updatedAt: new Date(),
+        })
+        .where(eq(attendanceImportRows.id, importRowId))
+        .returning();
+      return { ok: true as const, row: updated! };
+    });
   }
 }
