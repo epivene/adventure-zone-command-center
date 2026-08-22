@@ -7,6 +7,7 @@ import {
   getRecoveryStatus,
   retryRecoveryItem,
   searchRecoveryProfiles,
+  startOwnershipRepair,
   startRecovery,
   type ActRecoveryReviewItem,
   type ActRecoveryStatus,
@@ -61,14 +62,24 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-const statusCards: Array<[string, keyof ActRecoveryStatus]> = [
-  ["Archived candidates", "candidateCount"],
-  ["Already present", "alreadyPresent"],
-  ["Recovered", "recovered"],
-  ["Needs review", "needsReview"],
-  ["Dropped unusable", "droppedUnusable"],
-  ["Retryable failures", "retryableFailed"],
-];
+const timelineStreams = new Set(["note", "history", "activity"]);
+
+function isOwnershipRepairStatus(status: ActRecoveryStatus | null) {
+  if (!status || status.candidateCount === 0) return false;
+  const streams = Object.keys(status.byStreamType);
+  return streams.length > 0 && streams.every((stream) => timelineStreams.has(stream));
+}
+
+function statusCards(ownershipRepair: boolean): Array<[string, keyof ActRecoveryStatus]> {
+  return [
+    [ownershipRepair ? "ACT notes checked" : "Archived candidates", "candidateCount"],
+    [ownershipRepair ? "Already correct" : "Already present", "alreadyPresent"],
+    [ownershipRepair ? "Moved / repaired" : "Recovered", "recovered"],
+    ["Needs review", "needsReview"],
+    ["Dropped unusable", "droppedUnusable"],
+    ["Retryable failures", "retryableFailed"],
+  ];
+}
 
 export default function ActRecoveryPage() {
   const [status, setStatus] = useState<ActRecoveryStatus | null>(null);
@@ -112,6 +123,8 @@ export default function ActRecoveryPage() {
     if (!status?.candidateCount) return 0;
     return Math.min(100, Math.round((status.checkedCount / status.candidateCount) * 100));
   }, [status]);
+  const ownershipRepairMode = isOwnershipRepairStatus(status);
+  const cards = statusCards(ownershipRepairMode);
 
   async function beginRecovery() {
     setBusy("start");
@@ -122,6 +135,21 @@ export default function ActRecoveryPage() {
       setReviewItems(review.items);
     } catch (caught) {
       setError(errorMessage(caught, "Could not start ACT Recovery."));
+    } finally {
+      setBusy(null);
+      setLoading(false);
+    }
+  }
+
+  async function beginOwnershipRepair() {
+    setBusy("repair");
+    setError(null);
+    try {
+      setStatus(await startOwnershipRepair());
+      const review = await getRecoveryReview(1);
+      setReviewItems(review.items);
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not start ACT note ownership repair."));
     } finally {
       setBusy(null);
       setLoading(false);
@@ -201,17 +229,30 @@ export default function ActRecoveryPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-950">ACT Recovery</h1>
             <p className="mt-2 max-w-3xl text-slate-600">
-              Recover useful records already preserved in the ACT archive. Exact ACT relationships are used automatically; uncertain ownership stays here for review instead of disappearing.
+              {ownershipRepairMode
+                ? "Recheck ACT notes, history, and activities against their preserved ACT relationships and move misplaced records to the correct profiles."
+                : "Recover useful records already preserved in the ACT archive. Exact ACT relationships are used automatically; uncertain ownership stays here for review instead of disappearing."}
             </p>
           </div>
-          <button
-            className="button-primary min-h-11 shrink-0"
-            disabled={busy !== null}
-            onClick={() => void beginRecovery()}
-            type="button"
-          >
-            {busy === "start" ? "Starting…" : status ? "Resume Recovery" : "Start Recovery"}
-          </button>
+          {status?.complete ? (
+            <button
+              className="button-primary min-h-11 shrink-0"
+              disabled={busy !== null}
+              onClick={() => void beginOwnershipRepair()}
+              type="button"
+            >
+              {busy === "repair" ? "Starting repair…" : ownershipRepairMode ? "Run Ownership Repair Again" : "Repair ACT Note Ownership"}
+            </button>
+          ) : (
+            <button
+              className="button-primary min-h-11 shrink-0"
+              disabled={busy !== null}
+              onClick={() => void beginRecovery()}
+              type="button"
+            >
+              {busy === "start" ? "Starting…" : status ? "Resume Recovery" : "Start Recovery"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -227,9 +268,9 @@ export default function ActRecoveryPage() {
         <section className="grid gap-4" aria-labelledby="recovery-status-heading">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <h2 className="text-xl font-bold" id="recovery-status-heading">Recovery status</h2>
+              <h2 className="text-xl font-bold" id="recovery-status-heading">{ownershipRepairMode ? "Ownership repair status" : "Recovery status"}</h2>
               <p className="mt-1 text-sm text-slate-600">
-                {formatNumber(status.checkedCount)} of {formatNumber(status.candidateCount)} archived candidates classified.
+                {formatNumber(status.checkedCount)} of {formatNumber(status.candidateCount)} {ownershipRepairMode ? "ACT timeline records checked" : "archived candidates classified"}.
               </p>
             </div>
             <span className={`rounded-full px-3 py-1 text-sm font-semibold ${status.complete ? "bg-green-100 text-green-800" : status.state === "failed" ? "bg-rose-100 text-rose-800" : "bg-blue-100 text-blue-800"}`}>
@@ -240,7 +281,7 @@ export default function ActRecoveryPage() {
             <div className="h-full bg-orange-600" style={{ width: `${progress}%` }} />
           </div>
           <dl className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-            {statusCards.map(([label, key]) => (
+            {cards.map(([label, key]) => (
               <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={label}>
                 <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
                 <dd className="mt-2 text-2xl font-bold text-slate-950">{formatNumber(Number(status[key]))}</dd>
@@ -253,7 +294,7 @@ export default function ActRecoveryPage() {
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[44rem] text-left text-sm">
                   <thead className="text-xs uppercase text-slate-500">
-                    <tr><th className="py-2">Type</th><th>Archived</th><th>Present</th><th>Recovered</th><th>Review</th><th>Dropped</th></tr>
+                    <tr><th className="py-2">Type</th><th>Archived</th><th>{ownershipRepairMode ? "Already correct" : "Present"}</th><th>{ownershipRepairMode ? "Moved / repaired" : "Recovered"}</th><th>Review</th><th>Dropped</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {Object.entries(status.byStreamType).map(([streamType, counts]) => (
