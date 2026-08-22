@@ -45,10 +45,26 @@ type GoogleScopeConnectionAccess = {
     status: "connected" | "reauthorization_required" | "disconnected";
   } | null>;
   createReadClient(): Promise<GoogleWorkspaceReadClient | null>;
+  markReauthorizationRequired(errorCode: string): Promise<void>;
 };
 
 function normalized(value: string): string {
   return value.trim().toLocaleLowerCase("en-US");
+}
+
+function googleErrorCode(error: unknown): string | null {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+  if (error instanceof Error && error.message.startsWith("GOOGLE_WORKSPACE_")) {
+    return error.message;
+  }
+  return null;
 }
 
 export function buildGoogleScopePreview(
@@ -91,21 +107,21 @@ export function buildGoogleScopePreview(
   const approvedCalendars: GoogleScopeCalendar[] = [];
   const missingCalendars: string[] = [];
   for (const expectedSummary of APPROVED_CALENDAR_NAMES) {
-    const calendar = calendars.find(
+    const matches = calendars.filter(
       (candidate) => normalized(candidate.summary) === normalized(expectedSummary),
     );
-    if (!calendar) {
+    if (matches.length !== 1) {
       missingCalendars.push(expectedSummary);
       continue;
     }
-    approvedCalendars.push(calendar);
+    approvedCalendars.push(matches[0]);
   }
 
-  const emailCalendar = calendars.find(
+  const emailCalendars = calendars.filter(
     (calendar) => normalized(calendar.id) === normalized(APPROVED_CALENDAR_EMAIL_ID),
   );
-  if (emailCalendar) {
-    approvedCalendars.push(emailCalendar);
+  if (emailCalendars.length === 1) {
+    approvedCalendars.push(emailCalendars[0]);
   } else {
     missingCalendars.push(APPROVED_CALENDAR_EMAIL_ID);
   }
@@ -147,11 +163,19 @@ export class GoogleScopeService {
       throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
     }
 
-    const [labels, calendars] = await Promise.all([
-      client.listLabels(),
-      client.listCalendars(),
-    ]);
-    return buildGoogleScopePreview(labels, calendars);
+    try {
+      const [labels, calendars] = await Promise.all([
+        client.listLabels(),
+        client.listCalendars(),
+      ]);
+      return buildGoogleScopePreview(labels, calendars);
+    } catch (error) {
+      const code = googleErrorCode(error);
+      if (code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+        await this.connection.markReauthorizationRequired(code).catch(() => undefined);
+      }
+      throw error;
+    }
   }
 
   async getSaved(): Promise<GoogleSavedScope> {
@@ -173,6 +197,13 @@ export class GoogleScopeService {
     const connection = await this.connection.getCurrent();
     if (!connection) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
     const preview = await this.preview();
+    if (
+      preview.missingLabelRoots.length > 0 ||
+      preview.missingCalendars.length > 0
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_SCOPE_INCOMPLETE");
+    }
+
     const selectedLabelIds = new Set(input.labelIds);
     const selectedCalendarIds = new Set(input.calendarIds);
     const allowedLabelIds = new Set(preview.labels.map((label) => label.id));
