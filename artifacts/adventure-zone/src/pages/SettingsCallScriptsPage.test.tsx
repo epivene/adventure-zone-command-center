@@ -23,6 +23,15 @@ describe("Call Scripts settings page", () => {
     expect(page).toContain("Package interest");
   });
 
+  it("shows the new objection wording as editable script steps", () => {
+    expect(page).toContain("Already booked / future season");
+    expect(page).toContain("Space constraint");
+    expect(page).toContain("Budget constraint");
+    expect(page).toContain("Event not happening");
+    expect(page).toContain("Policy restriction");
+    expect(page).toContain("Past-customer feedback");
+  });
+
   it("treats an intentionally blank customized coaching tip as blank", () => {
     expect(page).toContain('override ? (override.coachText ?? "") : (node.coach ?? "")');
   });
