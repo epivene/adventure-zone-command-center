@@ -47,7 +47,9 @@
 ```ts
 export const communicationTemplateStateValues = ["draft", "reviewed", "active", "archived"] as const;
 export const communicationTemplateAccessValues = ["owner", "office"] as const;
+```
 
+```text
 business_source_documents
   id uuid PK
   original_filename text NOT NULL UNIQUE
@@ -64,7 +66,7 @@ business_source_documents
 
 business_source_fact_reviews
   id uuid PK
-  source_document_id uuid NOT NULL FK
+  source_document_id uuid NOT NULL FK business_source_documents cascade
   fact_key text NOT NULL
   entity_kind text NOT NULL
   entity_key text NULL
@@ -89,7 +91,7 @@ communication_templates
   required_placeholders text[] NOT NULL DEFAULT '{}'
   access_scope text NOT NULL CHECK owner|office
   state text NOT NULL CHECK draft|reviewed|active|archived
-  source_document_id uuid NULL FK
+  source_document_id uuid NULL FK business_source_documents set null
   source_note text NULL
   reviewed_by text NULL
   reviewed_at timestamptz NULL
@@ -104,11 +106,11 @@ import {
   businessSourceDocuments,
   businessSourceFactReviews,
   communicationTemplates,
+  officeEmailDrafts,
 } from "@workspace/db";
-import { officeEmailDrafts } from "@workspace/db";
 
 describe("business source schema", () => {
-  it("exports source, fact-review, and template tables", () => {
+  it("exports source, fact-review, template, and draft-provenance fields", () => {
     expect(businessSourceDocuments.originalFilename).toBeDefined();
     expect(businessSourceFactReviews.sourceLocator).toBeDefined();
     expect(communicationTemplates.requiredPlaceholders).toBeDefined();
@@ -127,7 +129,7 @@ Expected: FAIL because the business-source exports and draft FK do not exist.
 
 - [ ] **Step 3: Implement the migration and matching Drizzle schema**
 
-Use FK `ON DELETE SET NULL` from `communication_templates.source_document_id` and `office_email_drafts.communication_template_id`, and `ON DELETE CASCADE` from fact reviews to their source document. Add indexes on `(review_state, conflict_group)`, `(entity_kind, entity_key)`, `(state, access_scope, category)`, and source document category/review state.
+Use `ON DELETE SET NULL` from `communication_templates.source_document_id` and `office_email_drafts.communication_template_id`, and `ON DELETE CASCADE` from fact reviews to their source document. Add indexes on `(review_state, conflict_group)`, `(entity_kind, entity_key)`, `(state, access_scope, category)`, and source document category/review state.
 
 - [ ] **Step 4: Export the schema and update Office draft typing**
 
@@ -180,7 +182,7 @@ const SOURCE_SEEDS: BusinessSourceSeed[] = [
 ];
 ```
 
-Seed these conflict fact reviews with `review_state='conflict'`:
+All initial conflict fact rows are attached to the Sticky Notes source document. Seed these as `review_state='conflict'`:
 
 ```ts
 [
@@ -224,6 +226,9 @@ git commit -m "feat: seed reviewed business source metadata"
 ### Task 3: Correct package defaults and add Mini Zone without hiding source conflicts
 
 **Files:**
+- Create: `lib/db/migrations/20260822_package_knowledge.sql`
+- Modify: `lib/db/src/schema/index.ts`
+- Modify: `artifacts/api-server/src/db/schema.ts`
 - Modify: `artifacts/api-server/src/features/packages/package-defaults.ts`
 - Modify: `artifacts/api-server/src/features/packages/package-intelligence-settings.ts`
 - Modify: `artifacts/api-server/src/features/packages/package-input.ts`
@@ -233,7 +238,7 @@ git commit -m "feat: seed reviewed business source metadata"
 
 **Interfaces:**
 
-Extend package settings records with:
+Add these fields to package settings records and the package input schema:
 
 ```ts
 baseDurationMinDays: number | null;
@@ -241,16 +246,26 @@ baseDurationMaxDays: number | null;
 knowledgeReviewNote: string | null;
 ```
 
-**Reviewed starting defaults:**
+Add matching nullable DB columns:
 
-```ts
-Adventure Zone:       $9,000; count target 10-12; duration 1-4 days
-Pirate's Rebellion:   $7,500; count target 3;     duration 1-4 days
-Warrior's Playground: $7,500; count target 5;     duration 1-4 days
-Mini Zone:             $5,000; count target 5;     duration 1-4 days
+```text
+base_duration_min_days integer
+base_duration_max_days integer
+knowledge_review_note text
+CHECK (base_duration_min_days IS NULL OR base_duration_min_days >= 1)
+CHECK (base_duration_max_days IS NULL OR base_duration_max_days >= base_duration_min_days)
 ```
 
-Use reviewed requirements from the source only where the source is internally consistent. For Mini Zone ballast, leave the water-barrel count out of the approved operational text and add `knowledgeReviewNote = "Water-barrel source conflict: 44 vs 50; confirm before quoting."`.
+**Reviewed starting defaults:**
+
+```text
+Adventure Zone       $9,000  target 10-12  normal duration 1-4 days
+Pirate's Rebellion   $7,500  target 3      normal duration 1-4 days
+Warrior's Playground $7,500  target 5      normal duration 1-4 days
+Mini Zone             $5,000  target 5      normal duration 1-4 days
+```
+
+Use reviewed requirements from the source only where the source is internally consistent. For Mini Zone ballast, leave the water-barrel count out of the approved operational text and set `knowledgeReviewNote = "Water-barrel source conflict: 44 vs 50; confirm before quoting."`.
 
 - [ ] **Step 1: Write failing defaults tests**
 
@@ -260,9 +275,10 @@ expect(byCode.get("pirates_rebellion")?.basePriceCents).toBe(750000);
 expect(byCode.get("weekend_warriors")?.basePriceCents).toBe(750000);
 expect(byCode.get("mini_zone")?.basePriceCents).toBe(500000);
 expect(byCode.get("mini_zone")?.baseAttractionCount).toBe(5);
+expect(byCode.get("mini_zone")?.knowledgeReviewNote).toContain("44 vs 50");
 ```
 
-Also assert all four templates have duration `1..4` and Mini Zone does not silently choose `44` or `50` barrels in its approved requirements.
+Also assert all four templates have duration `1..4` and Mini Zone does not silently choose `44` or `50` barrels in its approved operational requirements.
 
 - [ ] **Step 2: Run and verify RED**
 
@@ -270,13 +286,15 @@ Also assert all four templates have duration `1..4` and Mini Zone does not silen
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/packages/package-defaults.test.ts
 ```
 
-- [ ] **Step 3: Add duration/review-note columns and update defaults**
+- [ ] **Step 3: Add migration/schema/input fields and update defaults carefully**
 
-Use the package settings/migration path rather than runtime-only hidden defaults. Keep values editable and preserve existing user-edited package rows; update seed values only for rows that still equal the old known seed values (`800000`, `700000`, or null for Warrior) so owner edits are not overwritten.
+Keep values editable and preserve existing owner-edited package rows. Upgrade legacy seed values only when the row still has the old known seed value: Adventure Zone `800000`, Pirate's Rebellion `700000`, Warrior's Playground `NULL`. Never overwrite an owner-entered value merely because it differs from the new source. Seed Mini Zone only when its stable code does not exist.
 
-- [ ] **Step 4: Add Mini Zone to the owner package editor**
+Remove the old fallback writes in `ensureBasePriceSchema()` that would reintroduce $8,000/$7,000 on a fresh database after this migration.
 
-Show duration and `knowledgeReviewNote` underneath operational requirements. The review note is owner-facing guidance, not customer copy.
+- [ ] **Step 4: Add duration and source-review note to the owner package editor**
+
+The review note is owner-facing guidance and must never render in customer copy.
 
 - [ ] **Step 5: Run tests/typecheck and commit**
 
@@ -284,7 +302,7 @@ Show duration and `knowledgeReviewNote` underneath operational requirements. The
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/features/packages/package-defaults.test.ts
 pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/components/packages/package-template-editor.test.tsx
 pnpm run typecheck
-git add artifacts/api-server/src/features/packages/package-defaults.ts artifacts/api-server/src/features/packages/package-intelligence-settings.ts artifacts/api-server/src/features/packages/package-input.ts artifacts/adventure-zone/src/components/packages/package-template-editor.tsx artifacts/api-server/src/features/packages/package-defaults.test.ts artifacts/adventure-zone/src/components/packages/package-template-editor.test.tsx
+git add lib/db/migrations/20260822_package_knowledge.sql lib/db/src/schema/index.ts artifacts/api-server/src/db/schema.ts artifacts/api-server/src/features/packages/package-defaults.ts artifacts/api-server/src/features/packages/package-intelligence-settings.ts artifacts/api-server/src/features/packages/package-input.ts artifacts/adventure-zone/src/components/packages/package-template-editor.tsx artifacts/api-server/src/features/packages/package-defaults.test.ts artifacts/adventure-zone/src/components/packages/package-template-editor.test.tsx
 git commit -m "feat: refresh 2026 package knowledge"
 ```
 
@@ -325,7 +343,9 @@ export async function renderCommunicationTemplate(input: {
 }): Promise<RenderedCommunicationTemplate>;
 ```
 
-**Seed Active office-safe templates with this polished intent/copy:**
+Seed templates with `channel='email'`, `state='active'`, and `access_scope='office'` unless explicitly marked owner-only. Derive each template's `allowed_placeholders` from its validated tokens and store its explicit `required_placeholders`.
+
+**Polished office-safe seed copy:**
 
 ```ts
 const TEMPLATE_SEEDS = [
@@ -423,7 +443,7 @@ const TEMPLATE_SEEDS = [
 ];
 ```
 
-Seed the convention templates (`pre_convention`, `met_at_convention`, `missed_convention`) as short variants built around the same approved package renderer; do not embed convention percentages or deadlines in static template text. Seed `ride_inspector_request` and `internal_coi_request` as `access_scope='owner'` because they are operational/internal rather than normal Office outreach.
+Also seed short, polished `pre_convention`, `met_at_convention`, and `missed_convention` variants that use the approved package renderer; do not embed convention percentages or deadlines in static template text. Seed `ride_inspector_request` and `internal_coi_request` as `access_scope='owner'` because they are operational/internal rather than normal Office outreach.
 
 - [ ] **Step 1: Write renderer validation tests**
 
@@ -466,6 +486,7 @@ git commit -m "feat: add reviewed communication templates"
 - Modify: `artifacts/adventure-zone/src/components/navigation/app-menu.tsx`
 - Test: `artifacts/api-server/src/routes/business-sources.test.ts`
 - Test: `artifacts/api-server/src/routes/communication-templates.test.ts`
+- Test: `artifacts/adventure-zone/src/pages/SettingsBusinessSourcesPage.test.tsx`
 - Test: `artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.test.tsx`
 
 **Owner routes:**
@@ -504,9 +525,9 @@ Mount both routers after owner auth in `routes/index.ts`.
 
 ```bash
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/routes/business-sources.test.ts artifacts/api-server/src/routes/communication-templates.test.ts
-pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.test.tsx
+pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/pages/SettingsBusinessSourcesPage.test.tsx artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.test.tsx
 pnpm run typecheck
-git add artifacts/api-server/src/routes/business-sources* artifacts/api-server/src/routes/communication-templates* artifacts/api-server/src/routes/index.ts artifacts/adventure-zone/src/pages/SettingsBusinessSourcesPage.tsx artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage* artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/components/navigation/app-menu.tsx
+git add artifacts/api-server/src/routes/business-sources.ts artifacts/api-server/src/routes/communication-templates.ts artifacts/api-server/src/routes/index.ts artifacts/adventure-zone/src/pages/SettingsBusinessSourcesPage.tsx artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.tsx artifacts/adventure-zone/src/App.tsx artifacts/adventure-zone/src/components/navigation/app-menu.tsx artifacts/api-server/src/routes/business-sources.test.ts artifacts/api-server/src/routes/communication-templates.test.ts artifacts/adventure-zone/src/pages/SettingsBusinessSourcesPage.test.tsx artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.test.tsx
 git commit -m "feat: add business source and template settings"
 ```
 
@@ -527,7 +548,7 @@ git commit -m "feat: add business source and template settings"
 **Office routes:**
 
 ```text
-GET  /office/communication-templates?category=...
+GET  /office/communication-templates?category=:category
 POST /office/communication-templates/:templateId/render {
   organizationId,
   contactId,
@@ -559,7 +580,7 @@ For a new email, show `Start from template` above subject. Rendering fills subje
 pnpm --filter @workspace/api-server exec vitest run artifacts/api-server/src/routes/office-communication-templates.test.ts artifacts/api-server/src/routes/office-email-drafts.test.ts
 pnpm --filter @workspace/adventure-zone exec vitest run artifacts/adventure-zone/src/pages/OfficeWorkspace.test.tsx
 pnpm run typecheck
-git add artifacts/api-server/src/routes/office-communication-templates* artifacts/api-server/src/routes/office-email-drafts.ts artifacts/api-server/src/routes/index.ts artifacts/adventure-zone/src/components/office/office-email-editor.tsx artifacts/adventure-zone/src/pages/OfficeEmailDraftsPage.tsx artifacts/adventure-zone/src/pages/OfficeWorkspace.test.tsx
+git add artifacts/api-server/src/routes/office-communication-templates.ts artifacts/api-server/src/routes/office-email-drafts.ts artifacts/api-server/src/routes/index.ts artifacts/adventure-zone/src/components/office/office-email-editor.tsx artifacts/adventure-zone/src/pages/OfficeEmailDraftsPage.tsx artifacts/adventure-zone/src/pages/OfficeWorkspace.test.tsx
 git commit -m "feat: add office email template drafting"
 ```
 
@@ -570,7 +591,7 @@ git commit -m "feat: add office email template drafting"
 **Files:**
 - Modify: `artifacts/adventure-zone/src/features/calls/guided-call-scripts.ts`
 - Modify: `artifacts/adventure-zone/src/features/calls/guided-call-scripts.test.ts`
-- Modify: `artifacts/adventure-zone/src/components/calls/guided-call-script-card.tsx` only if needed for the additional response labels
+- Modify: `artifacts/adventure-zone/src/components/calls/guided-call-script-card.tsx` only if the additional response labels require a presentation change
 
 **Interfaces:**
 
@@ -596,20 +617,20 @@ policy_restriction.say = "Understood. Is that a firm venue or city restriction, 
 past_customer_feedback.say = "I'm sorry we didn't meet expectations. If you're willing, what should we know about what went wrong so I can document it properly and make sure the feedback reaches the right person?";
 ```
 
-Structured outcomes:
+Structured outcomes use existing dispositions wherever possible and put any more-specific workflow meaning in `nextAction`/notes:
 
 ```text
-Already booked -> next season / decline this season / do not contact
-Space constraint -> Mini Zone follow-up / decline this season
-Budget constraint -> research payment/package options / Mini Zone follow-up / decline
-Event not happening -> next season / discontinued
-Policy restriction -> send insurance-safety info / firm restriction this season
-Past customer feedback -> feedback/recovery note + owner follow-up / do not contact
+Already booked -> follow_up_needed + next_season / declined this season / do_not_call
+Space constraint -> follow_up_needed + mini_zone / declined
+Budget constraint -> follow_up_needed + research_options / follow_up_needed + mini_zone / declined
+Event not happening -> follow_up_needed + next_season / declined + event_discontinued note
+Policy restriction -> follow_up_needed + send_insurance_safety / declined for this season
+Past customer feedback -> follow_up_needed + owner_feedback_review / do_not_call
 ```
 
 - [ ] **Step 1: Write graph tests before editing copy**
 
-Assert every new response points to a real node, every terminal branch carries the correct disposition/nextAction, and all six scripts still pass `validateGuidedCallScript`.
+Assert every new response points to a real node, every terminal branch carries a valid existing disposition and expected `nextAction`, and all six scripts still pass `validateGuidedCallScript`.
 
 - [ ] **Step 2: Run and verify RED**
 
@@ -639,7 +660,7 @@ git commit -m "feat: expand guided call objection handling"
 ### Task 8: Full Phase 1 regression and source-safety verification
 
 **Files:**
-- Modify only files required by failures found in this task.
+- Modify only tracked files required by failures found in this task.
 
 - [ ] **Step 1: Run focused source/template/package/call/Office suites**
 
@@ -653,6 +674,8 @@ pnpm --filter @workspace/api-server exec vitest run \
 pnpm --filter @workspace/adventure-zone exec vitest run \
   artifacts/adventure-zone/src/features/calls/guided-call-scripts.test.ts \
   artifacts/adventure-zone/src/pages/SettingsCallScriptsPage.test.tsx \
+  artifacts/adventure-zone/src/pages/SettingsBusinessSourcesPage.test.tsx \
+  artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.test.tsx \
   artifacts/adventure-zone/src/pages/OfficeWorkspace.test.tsx
 ```
 
@@ -678,11 +701,9 @@ rg -n "no up-front|no upfront|free to the public|percentage of.*ticket" artifact
 
 Every match must include qualifying/confirmation language or be removed.
 
-- [ ] **Step 5: Commit any regression fixes**
+- [ ] **Step 5: Commit regression fixes if any**
 
 ```bash
-git status --short
-# If fixes were needed:
-git add <changed-files>
-git commit -m "test: harden business copy integration"
+git add -u
+git diff --cached --quiet || git commit -m "test: harden business copy integration"
 ```
