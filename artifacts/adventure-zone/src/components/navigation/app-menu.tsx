@@ -63,6 +63,7 @@ const adminToolsGroup: MenuGroup = {
     { href: "/settings/act-recovery", label: "ACT recovery" },
     { href: "/settings/call-scripts", label: "Call scripts" },
     { href: "/settings/packages-resources", label: "Packages & resources" },
+    { href: "/settings/google-workspace", label: "Google Workspace" },
     { href: "/settings", label: "Settings" },
   ],
 };
