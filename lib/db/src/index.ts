@@ -7,6 +7,7 @@ import * as businessSourceSchema from "./business-source-schema";
 import * as commercialOfferSchema from "./commercial-offer-schema";
 import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
+import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
 
 const { Pool } = pg;
@@ -41,6 +42,7 @@ const schema = {
   ...commercialOfferSchema,
   ...eventChecklistSchema,
   ...resourceSourceCandidateSchema,
+  ...eventAttendanceHistorySchema,
   ...officeCoordinatorSchema,
 };
 export const db = drizzle(pool, { schema });
@@ -52,4 +54,5 @@ export * from "./business-source-schema";
 export * from "./commercial-offer-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
+export * from "./event-attendance-history-schema";
 export * from "./office-coordinator-schema";
