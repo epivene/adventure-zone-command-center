@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
-  const hideAssistantLauncher = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
+  const hideFloatingAssistantLauncher = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
   useEffect(() => {
     let active = true;
@@ -98,6 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </nav>
           ) : null}
           <div className="ml-auto flex items-center gap-1.5">
+            <AssistantLauncher placement="toolbar" />
             {workspace === "operations" ? <MessageBubbleLink href="/manager-communications" label="Messages" unreadCount={unreadMessages} /> : null}
             {workspace === "booking" ? <AddMenu /> : null}
             <AppMenu workspace={workspace} />
@@ -117,7 +118,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {location.startsWith("/office-coordinator") ? <OfficeUpdateHistory /> : null}
       </main>
 
-      {!hideAssistantLauncher ? <AssistantLauncher /> : null}
+      {!hideFloatingAssistantLauncher ? <AssistantLauncher placement="floating" /> : null}
       <AssistantDrawer />
       <MobileBottomNav workspace={workspace} />
     </div>
