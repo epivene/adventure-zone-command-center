@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { GoogleWorkspaceReadClient } from "./google-api-types";
 import {
@@ -64,7 +64,38 @@ const fakeClient: GoogleWorkspaceReadClient = {
   listCalendars: async () => [],
 };
 
+const googleEnvironmentKeys = [
+  "GOOGLE_WORKSPACE_CLIENT_ID",
+  "GOOGLE_WORKSPACE_CLIENT_SECRET",
+  "GOOGLE_WORKSPACE_REDIRECT_URI",
+  "GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY",
+] as const;
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("PostgresGoogleConnectionRepository", () => {
+  it("can be constructed and queried when Google Workspace is not configured", async () => {
+    for (const key of googleEnvironmentKeys) vi.stubEnv(key, "");
+    const harness = repositoryHarness();
+
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+    });
+
+    await expect(repository.getCurrent()).resolves.toBeNull();
+    await expect(
+      repository.upsertConnected({
+        accountEmail: "zone@example.com",
+        googleSubject: null,
+        refreshToken: "refresh-token",
+        scopes: [],
+        now: new Date("2026-08-22T18:00:00.000Z"),
+      }),
+    ).rejects.toThrow("GOOGLE_WORKSPACE_NOT_CONFIGURED");
+  });
+
   it("encrypts refresh credentials and never returns them in the settings view", async () => {
     const harness = repositoryHarness();
     const repository = new PostgresGoogleConnectionRepository({
