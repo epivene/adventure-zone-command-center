@@ -10,6 +10,7 @@ const environment: GoogleWorkspaceEnvironment = {
   clientId: "client-id.apps.googleusercontent.com",
   clientSecret: "client-secret",
   redirectUri: "https://api.example.com/api/google-workspace/oauth/callback",
+  appOrigin: "https://app.example.com",
   tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 3)),
 };
 
@@ -70,6 +71,24 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(body.get("grant_type")).toBe("authorization_code");
     expect(body.get("code")).toBe("authorization-code");
     expect(body.get("client_secret")).toBe(environment.clientSecret);
+  });
+
+  it("does not invent granted scopes when Google omits the scope field", async () => {
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "existing-refresh-token",
+      fetcher: async () =>
+        response({
+          access_token: "access-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+    });
+
+    await expect(client.exchangeCode("authorization-code")).resolves.toEqual({
+      refreshToken: "existing-refresh-token",
+      scopes: [],
+    });
   });
 
   it("normalizes account identity, Gmail labels, and paginated calendars", async () => {
