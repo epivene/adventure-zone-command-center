@@ -13,6 +13,7 @@ import { ensureAttendanceImportSeed } from "@/features/attendance/attendance-imp
 import {
   chooseAttendanceMatch,
   findPlausibleAttendanceCandidates,
+  normalizeAttendanceText,
 } from "@/features/attendance/attendance-matcher";
 
 const router: IRouter = Router();
@@ -67,6 +68,34 @@ router.get("/imports/attendance-history", async (req, res): Promise<void> => {
     req.log.error({ err }, "Failed to load attendance-history import review");
     res.status(500).json({ error: "Could not load attendance history review." });
   }
+});
+
+router.get("/imports/attendance-history/profile-options", async (req, res): Promise<void> => {
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (!query) {
+    res.json({ options: [] });
+    return;
+  }
+  await ensureAttendanceImportSeed(db);
+  const normalizedQuery = normalizeAttendanceText(query);
+  const terms = normalizedQuery.split(" ").filter(Boolean);
+  const candidates = await repository.listActiveProfileLocationCandidates();
+  const options = candidates
+    .filter((candidate) => {
+      const haystack = normalizeAttendanceText(
+        [candidate.organizationName, candidate.city, candidate.region].filter(Boolean).join(" "),
+      );
+      return terms.every((term) => haystack.includes(term));
+    })
+    .slice(0, 30)
+    .map((candidate) => ({
+      organizationId: candidate.organizationId,
+      organizationName: candidate.organizationName,
+      organizationLocationId: candidate.locationId,
+      city: candidate.city,
+      region: candidate.region,
+    }));
+  res.json({ options });
 });
 
 router.post("/imports/attendance-history/:rowId/approve", async (req, res): Promise<void> => {
