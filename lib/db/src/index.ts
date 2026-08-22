@@ -6,6 +6,7 @@ import * as paperNoteSchema from "./paper-note-schema";
 import * as businessSourceSchema from "./business-source-schema";
 import * as commercialOfferSchema from "./commercial-offer-schema";
 import * as eventChecklistSchema from "./event-checklist-schema";
+import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
 
 const { Pool } = pg;
@@ -39,6 +40,7 @@ const schema = {
   ...businessSourceSchema,
   ...commercialOfferSchema,
   ...eventChecklistSchema,
+  ...resourceSourceCandidateSchema,
   ...officeCoordinatorSchema,
 };
 export const db = drizzle(pool, { schema });
@@ -49,4 +51,5 @@ export * from "./paper-note-schema";
 export * from "./business-source-schema";
 export * from "./commercial-offer-schema";
 export * from "./event-checklist-schema";
+export * from "./resource-source-candidate-schema";
 export * from "./office-coordinator-schema";
