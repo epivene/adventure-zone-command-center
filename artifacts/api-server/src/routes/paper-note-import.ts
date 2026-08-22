@@ -9,8 +9,40 @@ const idSchema = z.string().uuid();
 const importSchema = z.object({ requestKey: z.string().uuid() });
 type OwnerRequest = Request & { userId?: string };
 
+type DatabaseErrorLike = Error & {
+  code?: unknown;
+  constraint?: unknown;
+  detail?: unknown;
+  table?: unknown;
+  column?: unknown;
+  schema?: unknown;
+  routine?: unknown;
+  cause?: unknown;
+};
+
 function actorId(request: OwnerRequest) {
   return request.userId ?? "";
+}
+
+function textField(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function databaseErrorDetails(error: unknown) {
+  const outer = error instanceof Error ? error as DatabaseErrorLike : null;
+  const cause = outer?.cause instanceof Error ? outer.cause as DatabaseErrorLike : null;
+  const databaseError = cause ?? outer;
+  return {
+    outerMessage: outer?.message ?? null,
+    causeMessage: cause?.message ?? null,
+    code: textField(databaseError?.code),
+    constraint: textField(databaseError?.constraint),
+    detail: textField(databaseError?.detail),
+    table: textField(databaseError?.table),
+    column: textField(databaseError?.column),
+    schema: textField(databaseError?.schema),
+    routine: textField(databaseError?.routine),
+  };
 }
 
 function mapError(error: unknown, response: Response) {
@@ -67,7 +99,13 @@ export function createPaperNoteImportRouter(input: {
       });
       res.json({ summary });
     } catch (error) {
-      if (!mapError(error, res)) next(error);
+      if (!mapError(error, res)) {
+        console.error("Paper Notes import database error", {
+          batchId: batchId.data,
+          ...databaseErrorDetails(error),
+        });
+        next(error);
+      }
     }
   });
 

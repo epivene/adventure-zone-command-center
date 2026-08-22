@@ -199,7 +199,7 @@ export class PaperNotePhoneService {
         updated_at = ${now}
       where id = ${mutation.existingPhoneId}::uuid
         and contact_id = ${mutation.owner.contactId}::uuid
-      returning id, primary
+      returning id, "primary"
     `));
     const row = result[0];
     if (!row) throw new PaperNotePhoneMutationError("PHONE_NOT_FOUND", "Saved contact phone was not found.");
@@ -234,7 +234,7 @@ export class PaperNotePhoneService {
       where id = ${mutation.existingPhoneId}::uuid
         and organization_id = ${mutation.owner.organizationId}::uuid
         and organization_location_id is not distinct from ${mutation.owner.organizationLocationId}::uuid
-      returning id, primary
+      returning id, "primary"
     `));
     const row = result[0];
     if (!row) throw new PaperNotePhoneMutationError("PHONE_NOT_FOUND", "Saved organization phone was not found.");
@@ -252,7 +252,7 @@ export class PaperNotePhoneService {
     if (mutation.owner.kind === "contact") {
       const result = await rows<{ id: string }>(tx.execute(sql`
         update contact_phones
-        set status = 'inactive', primary = false, updated_at = ${now}
+        set status = 'inactive', "primary" = false, updated_at = ${now}
         where id = ${mutation.existingPhoneId}::uuid
           and contact_id = ${mutation.owner.contactId}::uuid
         returning id
@@ -262,7 +262,7 @@ export class PaperNotePhoneService {
     }
     const result = await rows<{ id: string }>(tx.execute(sql`
       update organization_phones
-      set status = 'inactive', primary = false, updated_at = ${now}
+      set status = 'inactive', "primary" = false, updated_at = ${now}
       where id = ${mutation.existingPhoneId}::uuid
         and organization_id = ${mutation.owner.organizationId}::uuid
         and organization_location_id is not distinct from ${mutation.owner.organizationLocationId}::uuid
@@ -275,18 +275,18 @@ export class PaperNotePhoneService {
     if (mutation.owner.kind === "contact") {
       await tx.execute(sql`
         update contact_phones
-        set primary = false
+        set "primary" = false
         where contact_id = ${mutation.owner.contactId}::uuid
-          and primary = true
+          and "primary" = true
       `);
       return;
     }
     await tx.execute(sql`
       update organization_phones
-      set primary = false
+      set "primary" = false
       where organization_id = ${mutation.owner.organizationId}::uuid
         and organization_location_id is not distinct from ${mutation.owner.organizationLocationId}::uuid
-        and primary = true
+        and "primary" = true
     `);
   }
 
@@ -303,7 +303,7 @@ export class PaperNotePhoneService {
     const result = await rows<{ id: string }>(tx.execute(sql`
       insert into contact_phones (
         contact_id, number, normalized_number, type, extension, label, instructions,
-        status, primary, source, source_paper_note_entry_id, created_at, updated_at
+        status, "primary", source, source_paper_note_entry_id, created_at, updated_at
       ) values (
         ${mutation.owner.contactId}::uuid,
         ${mutation.paper.number.trim()},
@@ -339,7 +339,7 @@ export class PaperNotePhoneService {
       insert into organization_phones (
         organization_id, organization_location_id, number, normalized_number,
         type, extension, normalized_extension, label, instructions, status,
-        primary, source, source_paper_note_entry_id, created_at, updated_at
+        "primary", source, source_paper_note_entry_id, created_at, updated_at
       ) values (
         ${mutation.owner.organizationId}::uuid,
         ${mutation.owner.organizationLocationId}::uuid,
