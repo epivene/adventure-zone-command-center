@@ -2,7 +2,13 @@ import { and, asc, eq, gte, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/db/schema";
-import { bookings, contacts, organizations } from "@/db/schema";
+import {
+  bookings,
+  contacts,
+  organizationContacts,
+  organizations,
+} from "@/db/schema";
+import { DrizzlePackageIntelligenceSettingsRepository } from "@/features/packages/package-intelligence-settings";
 import { CommunicationTemplateRepository } from "./communication-template-repository";
 import {
   formatPackageDuration,
@@ -15,21 +21,6 @@ import type {
 } from "./communication-template-types";
 
 type Database = NodePgDatabase<typeof schema>;
-
-type PackageRow = {
-  id: string;
-  name: string;
-  base_price_cents: number | null;
-  base_duration_min_days: number | null;
-  base_duration_max_days: number | null;
-};
-
-function rowsOf<T>(result: unknown): T[] {
-  if (result && typeof result === "object" && "rows" in result) {
-    return ((result as { rows?: T[] }).rows ?? []);
-  }
-  return Array.isArray(result) ? (result as T[]) : [];
-}
 
 function dateLabel(start: Date | null, end: Date | null): string | null {
   if (!start) return null;
@@ -83,13 +74,14 @@ export async function renderCommunicationTemplate(
       id: contacts.id,
       firstName: contacts.firstName,
       lastName: contacts.lastName,
-      organizationId: contacts.organizationId,
     })
-    .from(contacts)
+    .from(organizationContacts)
+    .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
     .where(
       and(
-        eq(contacts.id, input.contactId),
-        eq(contacts.organizationId, input.organizationId),
+        eq(organizationContacts.organizationId, input.organizationId),
+        eq(organizationContacts.contactId, input.contactId),
+        eq(organizationContacts.active, true),
       ),
     )
     .limit(1);
@@ -108,15 +100,18 @@ export async function renderCommunicationTemplate(
     .orderBy(asc(bookings.startsAt))
     .limit(1);
 
-  let packageRow: PackageRow | null = null;
+  let packageRow: Awaited<
+    ReturnType<DrizzlePackageIntelligenceSettingsRepository["listPackageTemplates"]>
+  >[number] | null = null;
   if (input.packageTemplateId) {
-    const result = await database.execute(sql`
-      select id, name, base_price_cents, base_duration_min_days, base_duration_max_days
-      from package_templates
-      where id = ${input.packageTemplateId}::uuid and active = true
-      limit 1
-    `);
-    packageRow = rowsOf<PackageRow>(result)[0] ?? null;
+    const packageTemplates = await new DrizzlePackageIntelligenceSettingsRepository(
+      database as any,
+    ).listPackageTemplates();
+    packageRow =
+      packageTemplates.find(
+        (candidate) =>
+          candidate.id === input.packageTemplateId && candidate.active,
+      ) ?? null;
     if (!packageRow) throw new Error("PACKAGE_NOT_FOUND");
   }
 
@@ -135,11 +130,11 @@ export async function renderCommunicationTemplate(
     senderPhone: input.sender.phone,
     senderEmail: input.sender.email,
     packageName: packageRow?.name ?? null,
-    packagePrice: packageRow ? formatPackagePrice(packageRow.base_price_cents) : null,
+    packagePrice: packageRow ? formatPackagePrice(packageRow.basePriceCents) : null,
     packageDuration: packageRow
       ? formatPackageDuration(
-          packageRow.base_duration_min_days,
-          packageRow.base_duration_max_days,
+          packageRow.baseDurationMinDays,
+          packageRow.baseDurationMaxDays,
         )
       : null,
     ...input.extraValues,
