@@ -16,11 +16,13 @@ import {
 } from "@/features/calls/call-script-settings";
 import businessSourcesRouter from "./business-sources";
 import communicationTemplatesRouter from "./communication-templates";
+import commercialOffersRouter from "./commercial-offers";
 
 const router: IRouter = Router();
 
 router.use(businessSourcesRouter);
 router.use(communicationTemplatesRouter);
+router.use(commercialOffersRouter);
 
 router.get("/settings/packages-resources", async (req, res): Promise<void> => {
   try {
