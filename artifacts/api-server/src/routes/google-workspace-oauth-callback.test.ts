@@ -174,6 +174,26 @@ describe("Google Workspace OAuth callback", () => {
     expect(upsertConnected).not.toHaveBeenCalled();
   });
 
+  it("refuses a grant that includes any Google write scope", async () => {
+    const exchangeCode = vi.fn(async () => ({
+      refreshToken: "1//refresh-token",
+      scopes: [
+        ...GOOGLE_WORKSPACE_READ_SCOPES,
+        "https://www.googleapis.com/auth/gmail.modify",
+      ],
+    }));
+    const { app, upsertConnected } = testApp({ exchangeCode });
+
+    const response = await request(app)
+      .get("/google-workspace/oauth/callback?code=code&state=state")
+      .expect(403);
+
+    expect(response.body.error).toBe(
+      "GOOGLE_WORKSPACE_UNEXPECTED_SCOPE_GRANTED",
+    );
+    expect(upsertConnected).not.toHaveBeenCalled();
+  });
+
   it("returns only a safe error code when Google rejects the exchange", async () => {
     const exchangeCode = vi.fn(async () => {
       throw Object.assign(new Error("client-secret should never be returned"), {
