@@ -20,6 +20,14 @@ describe("simple frontend refinement contracts", () => {
     expect(organizationList).toContain("Active filters");
   });
 
+  it("keeps admin search controls above the Event Families dropdown", () => {
+    const searchIndex = organizationList.indexOf("Search profiles, contacts, cities, phone, email");
+    const insertionIndex = organizationList.indexOf("{afterSearch}");
+    expect(searchIndex).toBeGreaterThanOrEqual(0);
+    expect(insertionIndex).toBeGreaterThan(searchIndex);
+    expect(profilesPage).toContain("afterSearch={familySection}");
+  });
+
   it("collapses event families and groups family/duplicate utilities at the bottom", () => {
     expect(profilesPage).toContain("<details");
     expect(profilesPage).toContain("Event Families");
