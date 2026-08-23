@@ -67,6 +67,22 @@
   order: 6;
 }
 
+/* The Today page has less usable width than the browser viewport. Keep its embedded
+   call queue stacked on normal laptops so the live workspace never gets squeezed. */
+@media (min-width: 1024px) and (max-width: 1535px) {
+  [data-testid="call-queue-layout"] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [data-testid="selected-call-workspace"] {
+    order: 1 !important;
+  }
+
+  [data-testid="call-queue-panel"] {
+    order: 2 !important;
+  }
+}
+
 @media (max-width: 639px) {
   [data-testid="call-workspace"][data-mode="full"] section[aria-labelledby="phone-actions-title"] {
     position: relative;
