@@ -165,6 +165,9 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
   const workspaceGroups = groupsForWorkspace(workspace);
   const groups = workspace === "command" ? [] : [...workspaceGroups, ...adminToolsGroups];
+  const bookingMenuItems = mobile
+    ? bookingItems
+    : bookingItems.filter((item) => item.label === "Office Coordinator" || item.label === "Needs Answer");
 
   function chooseAppearance(value: Appearance) {
     saveAppearance(value);
@@ -182,7 +185,7 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
       <DropdownMenuContent align="end" side={mobile ? "top" : "bottom"} className={mobile ? "max-h-[72dvh] w-[min(92vw,22rem)] overflow-y-auto p-2" : "max-h-[76vh] w-72 overflow-y-auto p-2"}>
         {workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
-            {bookingItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
+            {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
           </div>
         ) : null}
         {workspace === "booking" && groups.length > 1 ? <DropdownMenuSeparator /> : null}
