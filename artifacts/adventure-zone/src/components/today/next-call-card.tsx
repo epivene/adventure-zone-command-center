@@ -20,7 +20,7 @@ export function callWorkspaceHref(followUp: FollowUpSummary) {
   if (followUp.contactId) parameters.set("contactId", followUp.contactId);
   if (followUp.bookingId) parameters.set("bookingId", followUp.bookingId);
   parameters.set("followUpId", followUp.id);
-  return `/calls/new?${parameters.toString()}`;
+  return `/calls/workspace?${parameters.toString()}`;
 }
 
 type EventProfileLinkContext = {
@@ -34,7 +34,6 @@ type EventProfileLinkContext = {
 
 export function eventProfileHref(context: EventProfileLinkContext) {
   if (!context.organizationId) return null;
-
   const parameters = new URLSearchParams();
   if (context.contactId) parameters.set("contactId", context.contactId);
   if (context.bookingId) parameters.set("bookingId", context.bookingId);
@@ -42,7 +41,7 @@ export function eventProfileHref(context: EventProfileLinkContext) {
   if (context.action) parameters.set("action", context.action);
   if (context.mode) parameters.set("mode", context.mode);
   const query = parameters.toString();
-  return `/event-profiles/${context.organizationId}${query ? `?${query}` : ""}`;
+  return `/profiles/${context.organizationId}${query ? `?${query}` : ""}`;
 }
 
 export function followUpHref(followUp: FollowUpSummary) {
@@ -57,12 +56,10 @@ export function followUpHref(followUp: FollowUpSummary) {
   if (followUp.kind === "call") return callWorkspaceHref(followUp);
   if (followUp.bookingId) return `/bookings/${followUp.bookingId}`;
   if (followUp.contactId) return `/contacts/${followUp.contactId}`;
-  return `/organizations/${followUp.organizationId}`;
+  return followUp.organizationId ? `/profiles/${followUp.organizationId}` : "/profiles";
 }
 
-type CopilotFollowUp = FollowUpSummary & {
-  copilot?: BookingCopilotReason | null;
-};
+type CopilotFollowUp = FollowUpSummary & { copilot?: BookingCopilotReason | null };
 
 export function NextCallCard({ followUp }: { followUp: CopilotFollowUp | null }) {
   const profileHref = followUp
@@ -79,21 +76,12 @@ export function NextCallCard({ followUp }: { followUp: CopilotFollowUp | null })
     <section className="rounded-2xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-bold text-slate-950">Up Next</h2>
-        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-orange-800 shadow-sm">
-          Next action
-        </span>
+        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-orange-800 shadow-sm">Next action</span>
       </div>
       {followUp ? (
         <div className="mt-4">
-          <Link
-            className="text-xl font-bold text-slate-950 hover:text-orange-800"
-            href={profileHref ?? callWorkspaceHref(followUp)}
-          >
-            {followUp.bookingName}
-          </Link>
-          <p className="mt-1 text-sm text-slate-700">
-            Call due {formatDate(followUp.dueAt)}
-          </p>
+          <Link className="text-xl font-bold text-slate-950 hover:text-orange-800" href={profileHref ?? callWorkspaceHref(followUp)}>{followUp.bookingName}</Link>
+          <p className="mt-1 text-sm text-slate-700">Call due {formatDate(followUp.dueAt)}</p>
           <CopilotReason copilot={followUp.copilot} />
           <BookingOperations operations={followUp.operations} />
           <div className="mt-4 flex flex-wrap gap-2">
@@ -101,11 +89,7 @@ export function NextCallCard({ followUp }: { followUp: CopilotFollowUp | null })
             <Link className="button-secondary" href="/calls/workspace">Call workspace</Link>
           </div>
         </div>
-      ) : (
-        <p className="mt-3 text-sm text-slate-700">
-          No open calls need attention right now.
-        </p>
-      )}
+      ) : <p className="mt-3 text-sm text-slate-700">No open calls need attention right now.</p>}
     </section>
   );
 }
