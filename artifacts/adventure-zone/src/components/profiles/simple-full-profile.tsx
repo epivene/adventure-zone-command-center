@@ -18,6 +18,7 @@ import type { ActivityTimelineItem } from "@/features/activities/activity-types"
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
+import { getPaperNoteActivitySource } from "@/features/paper-notes/paper-note-client";
 
 type OpenSection = "contacts" | "events" | "notes" | null;
 
@@ -151,6 +152,12 @@ export function SimpleFullProfile({
     };
   }
 
+  async function openOriginalPaperNote(activityId: string) {
+    const source = await getPaperNoteActivitySource(activityId);
+    if (!source.url) throw new Error("The original paper note image is not available.");
+    window.open(source.url, "_blank", "noopener,noreferrer");
+  }
+
   async function handleSaved() {
     await onProfileSaved?.();
     setEditing(false);
@@ -235,6 +242,8 @@ export function SimpleFullProfile({
     hasLinkedCallSession: false,
     importedFromAct: Boolean(note.importedFromAct),
     actSourceType: note.actSourceType === "note" || note.actSourceType === "history" || note.actSourceType === "activity" ? note.actSourceType : null,
+    historicalDateUnknown: Boolean(note.historicalDateUnknown),
+    paperNoteSource: note.paperNoteSource ?? null,
   }));
   const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
   const normalizedSearch = noteSearch.trim().toLowerCase();
@@ -394,6 +403,7 @@ export function SimpleFullProfile({
                 deleteActivity={deleteActivityAction}
                 loadRevisions={listActivityRevisionsAction}
                 loadPage={normalizedSearch ? undefined : loadSimpleNotesPage}
+                openPaperNoteSource={openOriginalPaperNote}
                 collapseLongBodies
               />
             )}

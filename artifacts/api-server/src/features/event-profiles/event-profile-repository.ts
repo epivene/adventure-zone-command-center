@@ -76,6 +76,8 @@ export type EventProfileActivityRecord = {
   updatedAt: Date;
   importedFromAct: boolean;
   actSourceType: string | null;
+  historicalDateUnknown?: boolean;
+  paperNoteSource?: { activityId: string } | null;
 };
 
 export type EventProfileFollowUpRecord = {
@@ -219,6 +221,7 @@ function splitProfileActivities(records: EventProfileActivityRecord[]) {
     notes: activities.filter((activity) =>
       !activity.importedFromAct
       || activity.actSourceType === "note"
+      || activity.actSourceType === "paper_note"
       || activity.actSourceType == null,
     ),
     history: activities.filter((activity) =>
@@ -392,6 +395,8 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         kind: activities.kind,
         body: activities.body,
         occurredAt: activities.timelineSortAt,
+        sourceOccurredAt: activities.occurredAt,
+        dateIsImportFallback: activities.dateIsImportFallback,
         createdAt: activities.createdAt,
         updatedAt: activities.updatedAt,
         importedFromAct: isNotNull(activities.sourceRecordId),
@@ -428,6 +433,24 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         .where(and(eq(auditEntries.entityType, "organization"), eq(auditEntries.entityId, profileId), eq(auditEntries.action, "act_migration_applied")))
         .orderBy(desc(auditEntries.createdAt)),
     ]);
+    const decoratedProfileActivities: EventProfileActivityRecord[] = profileActivities.map((activity) => ({
+      id: activity.id,
+      contactId: activity.contactId,
+      bookingId: activity.bookingId,
+      kind: activity.kind,
+      body: activity.body,
+      occurredAt: activity.occurredAt,
+      createdAt: activity.createdAt,
+      updatedAt: activity.updatedAt,
+      importedFromAct: activity.importedFromAct,
+      actSourceType: activity.actSourceType,
+      historicalDateUnknown: activity.actSourceType === "paper_note"
+        && activity.sourceOccurredAt === null
+        && activity.dateIsImportFallback,
+      paperNoteSource: activity.actSourceType === "paper_note"
+        ? { activityId: activity.id }
+        : null,
+    }));
     const groups = [...new Map(groupMemberships.map((group) => [group.id, group])).values()];
     const entityIds = [
       place.id,
@@ -459,7 +482,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       place,
       contacts: profileContacts,
       bookings: profileBookings,
-      activities: profileActivities,
+      activities: decoratedProfileActivities,
       followUps: profileFollowUps,
       groups,
       externalLinks: externalLinks as EventProfileSourceReference[],
