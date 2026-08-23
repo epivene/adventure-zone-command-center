@@ -37,6 +37,11 @@ export type GoogleScopePreview = {
   calendars: GoogleScopeCalendar[];
   missingLabelRoots: string[];
   missingCalendars: string[];
+  excludedLabels: Array<{
+    id: string;
+    name: string;
+    type: GoogleLabelSummary["type"];
+  }>;
   excludedLabelCount: number;
   excludedCalendarCount: number;
 };
@@ -125,6 +130,10 @@ export function buildGoogleScopePreview(
   const deduplicatedLabels = approvedLabels.filter(
     (label, index, all) => all.findIndex((item) => item.id === label.id) === index,
   );
+  const approvedLabelIds = new Set(deduplicatedLabels.map((label) => label.id));
+  const excludedLabels = labels
+    .filter((label) => !approvedLabelIds.has(label.id))
+    .map((label) => ({ id: label.id, name: label.name, type: label.type }));
 
   const approvedCalendars: GoogleScopeCalendar[] = [];
   const missingCalendars: string[] = [];
@@ -162,7 +171,8 @@ export function buildGoogleScopePreview(
     calendars: deduplicatedCalendars,
     missingLabelRoots,
     missingCalendars,
-    excludedLabelCount: Math.max(0, labels.length - deduplicatedLabels.length),
+    excludedLabels,
+    excludedLabelCount: excludedLabels.length,
     excludedCalendarCount: Math.max(
       0,
       calendars.length - deduplicatedCalendars.length,
@@ -236,11 +246,6 @@ export class GoogleScopeService {
     const allowedCalendarIds = new Set(
       preview.calendars.map((calendar) => calendar.id),
     );
-    const requiredLabelIds = new Set(
-      preview.labels
-        .filter((label) => label.id === label.rootId)
-        .map((label) => label.id),
-    );
 
     if (
       [...selectedLabelIds].some((id) => !allowedLabelIds.has(id)) ||
@@ -248,6 +253,12 @@ export class GoogleScopeService {
     ) {
       throw new Error("GOOGLE_WORKSPACE_SCOPE_SELECTION_INVALID");
     }
+
+    const requiredLabelIds = new Set(
+      preview.labels
+        .filter((label) => label.id === label.rootId)
+        .map((label) => label.id),
+    );
     if (
       [...requiredLabelIds].some((id) => !selectedLabelIds.has(id)) ||
       selectedCalendarIds.size !== allowedCalendarIds.size ||
@@ -258,9 +269,7 @@ export class GoogleScopeService {
 
     const saved = {
       labels: preview.labels.filter((label) => selectedLabelIds.has(label.id)),
-      calendars: preview.calendars.filter((calendar) =>
-        selectedCalendarIds.has(calendar.id),
-      ),
+      calendars: preview.calendars,
     };
     await this.persistence.replace({
       connectionId: connection.id,
