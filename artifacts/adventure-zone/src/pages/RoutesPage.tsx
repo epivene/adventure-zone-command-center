@@ -12,7 +12,7 @@ import { ManagerRouteReviewQueue } from "@/components/routes/manager-route-revie
 import { updateTravelLegAction, reorderTravelLegsAction, addTravelLegAction, archiveTravelLegAction, restoreTravelLegAction } from "@/actions/routes";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
 
-export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean };
+export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean };
 
 type TripFocusDetail = {
   trip: { id: string; name: string; startLabel: string; startLatitude: number | null; startLongitude: number | null; endLabel: string; endLatitude: number | null; endLongitude: number | null };
@@ -30,7 +30,7 @@ function focusedTripMapData(detail: TripFocusDetail): FocusedTripMapData {
   return { id: detail.trip.id, name: detail.trip.name, points };
 }
 
-export function RoutesContent({ season, legId, status, embedded = false }: RouteScheduleFilters) {
+export function RoutesContent({ season, legId, status, embedded = false, managementOnly = false }: RouteScheduleFilters) {
   const [data, setData] = useState<any>(null);
   const [handoffs, setHandoffs] = useState<EquipmentHandoffView[]>([]);
   const [focusedTrip, setFocusedTrip] = useState<FocusedTripMapData | null>(null);
@@ -93,22 +93,39 @@ export function RoutesContent({ season, legId, status, embedded = false }: Route
     </section>
   );
 
-  return <div className="grid gap-5">
-    {!embedded ? <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header> : null}
-    {mapSection}
+  const planningSection = (
     <details className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" open={!embedded}>
       <summary className="cursor-pointer font-bold">Trips & route planning</summary>
       <div className="mt-4 grid gap-5"><TripsSection travelLegs={data.travelLegs} onFocusTrip={(tripId) => { void handleFocusTrip(tripId); }} /><EquipmentHandoffs travelLegs={data.travelLegs} resources={data.legResources} onChange={setHandoffs} /></div>
     </details>
-    <details className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <summary className="cursor-pointer font-bold">Leg management & manager access</summary>
-      <div className="mt-4 grid gap-5">
+  );
+
+  const managementSection = (
+    <section className="grid gap-5" aria-labelledby="leg-management-title">
+      <div>
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Legs & Operations</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight" id="leg-management-title">Leg management</h1>
+        <p className="mt-2 max-w-2xl text-slate-600">Manage travel legs, ordering, resources, manager access, and route-review decisions.</p>
+      </div>
+      <div className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <TravelLegManagerCards key={data.travelLegs.map((leg: any) => `${leg.id}:${leg.archivedAt ? "a" : ""}`).sort().join(",")} legs={data.travelLegs} legResources={data.legResources} managerAccess={data.managerAccess} onSaveLeg={handleSaveLeg} onSaveOrder={handleSaveOrder} onSetManagerPassword={handleSetManagerPassword} onSignOutManagerDevices={handleSignOutManagerDevices} onAdd={handleAdd} onArchive={handleArchive} onRestore={handleRestore} />
         <ManagerRouteReviewQueue onApproved={loadData} />
         <div className="grid gap-2 sm:grid-cols-3"><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-finance">Leg finances →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-crew">Seasonal crew →</a><a className="rounded-xl border bg-white p-4 font-semibold" href="/manager-aftermath">Reviews & incidents →</a></div>
       </div>
-    </details>
+    </section>
+  );
+
+  return <div className="grid gap-5">
+    {managementOnly ? managementSection : null}
+    {!managementOnly && !embedded ? <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Travel overview</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Routes</h1><p className="mt-2 max-w-2xl text-slate-600">Plan active and potential routes, historical seasons, and equipment movement across travel legs.</p></header> : null}
+    {!managementOnly ? mapSection : null}
+    {!managementOnly ? planningSection : null}
+    {!embedded && !managementOnly ? managementSection : null}
   </div>;
+}
+
+export function LegManagementPage() {
+  return <div className="mx-auto max-w-7xl"><RoutesContent managementOnly /></div>;
 }
 
 export default function RoutesPage() {
