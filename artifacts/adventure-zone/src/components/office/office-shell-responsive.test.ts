@@ -13,4 +13,8 @@ describe("Office Coordinator responsive shell", () => {
     expect(source).toContain('xl:hidden');
     expect(source).not.toContain('md:hidden');
   });
+
+  it("keeps Sign out compact in the header", () => {
+    expect(source).toContain('button-secondary hidden shrink-0 px-2.5 py-1.5 text-xs sm:inline-flex');
+  });
 });

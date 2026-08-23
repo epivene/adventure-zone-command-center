@@ -126,6 +126,7 @@ export type EventProfile = {
   selectedContactId: string | null;
   bookings: EventProfileBookingRecord[];
   notes: EventProfileActivityRecord[];
+  history: EventProfileActivityRecord[];
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
@@ -212,6 +213,21 @@ function dedupeImportedActActivities(records: EventProfileActivityRecord[]) {
     });
 }
 
+function splitProfileActivities(records: EventProfileActivityRecord[]) {
+  const activities = dedupeImportedActActivities(records);
+  return {
+    notes: activities.filter((activity) =>
+      !activity.importedFromAct
+      || activity.actSourceType === "note"
+      || activity.actSourceType == null,
+    ),
+    history: activities.filter((activity) =>
+      activity.importedFromAct
+      && (activity.actSourceType === "history" || activity.actSourceType === "activity"),
+    ),
+  };
+}
+
 export function buildEventProfile(
   records: EventProfileRecordSet,
   requestedContactId?: string,
@@ -235,6 +251,7 @@ export function buildEventProfile(
   const selectedContactId = contacts.some(({ id }) => id === requestedContactId)
     ? requestedContactId!
     : contacts[0]?.id ?? null;
+  const timeline = splitProfileActivities(records.activities);
 
   return {
     id: records.place.id,
@@ -246,7 +263,8 @@ export function buildEventProfile(
       || left.name.localeCompare(right.name)
       || left.id.localeCompare(right.id),
     ),
-    notes: dedupeImportedActActivities(records.activities),
+    notes: timeline.notes,
+    history: timeline.history,
     followUps: records.followUps.toSorted((left, right) =>
       Number(left.completedAt !== null) - Number(right.completedAt !== null)
       || Number(left.dueAt) - Number(right.dueAt)
@@ -331,9 +349,9 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         ? inArray(activities.contactId, contactIds)
         : sql`false`,
     );
-    // Imported Act! history is linked through activity_associations rather than
-    // the direct FK columns, so include entries associated with this place or
-    // any of its profile contacts.
+    // Imported Act! timeline records are linked through activity_associations
+    // rather than direct FK columns, so include entries associated with this
+    // place or any of its profile contacts/bookings.
     const associationCondition = exists(
       this.database
         .select({ id: activityAssociations.id })
