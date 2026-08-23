@@ -1,17 +1,19 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync("src/components/today/call-queue-workspace.tsx", "utf8");
+const css = readFileSync("src/call-workspace-flow.css", "utf8");
 
 describe("Today call queue laptop layout", () => {
-  it("keeps the embedded call workspace stacked at normal laptop widths", () => {
-    expect(source).toContain("2xl:grid-cols-[minmax(17rem,.72fr)_minmax(0,1.28fr)]");
-    expect(source).toContain("2xl:items-start");
-    expect(source).not.toContain("lg:grid-cols-[minmax(17rem,.72fr)_minmax(0,1.28fr)]");
+  it("stacks the embedded queue and workspace at laptop widths", () => {
+    expect(css).toContain("@media (min-width: 1024px) and (max-width: 1535px)");
+    expect(css).toContain('[data-testid="call-queue-layout"]');
+    expect(css).toContain("grid-template-columns: minmax(0, 1fr) !important");
   });
 
-  it("only swaps queue/workspace ordering on very wide screens", () => {
-    expect(source).toContain("2xl:order-1");
-    expect(source).toContain("2xl:order-2");
+  it("keeps the selected workspace above the queue while stacked", () => {
+    expect(css).toContain('[data-testid="selected-call-workspace"]');
+    expect(css).toContain('[data-testid="call-queue-panel"]');
+    expect(css).toContain("order: 1 !important");
+    expect(css).toContain("order: 2 !important");
   });
 });
