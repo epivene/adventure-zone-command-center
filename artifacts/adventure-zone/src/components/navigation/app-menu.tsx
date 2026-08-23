@@ -33,7 +33,7 @@ const operationsGroups: MenuGroup[] = [
   {
     label: "Legs & Operations",
     items: [
-      { href: "/routes", label: "Leg management" },
+      { href: "/operations/legs", label: "Leg management" },
       { href: "/manager-communications", label: "Communications" },
       { href: "/manager-finance", label: "Finances" },
       { href: "/manager-crew", label: "Crew" },
