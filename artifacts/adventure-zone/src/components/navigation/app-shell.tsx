@@ -19,13 +19,16 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
   if (workspace === "booking") {
     return [
       { href: "/today", label: "Today", icon: House },
+      { href: "/bookings", label: "Bookings", icon: UsersRound },
       { href: "/profiles", label: "Profiles", icon: ContactRound },
+      { href: "/calls/workspace", label: "Calls", icon: MessageSquare },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },
+      { href: "/research-sources", label: "Research", icon: Megaphone },
     ];
   }
   if (workspace === "operations") {
     return [
-      { href: "/routes", label: "Legs & Routes", icon: MapPinned },
+      { href: "/operations/legs", label: "Leg management", icon: MapPinned },
       { href: "/manager-communications", label: "Communications", icon: MessageSquare },
       { href: "/manager-crew", label: "Crew", icon: UsersRound },
     ];
