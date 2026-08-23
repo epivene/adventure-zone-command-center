@@ -18,10 +18,10 @@ type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
   { href: "/bookings", label: "Bookings" },
+  { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/office-coordinator", label: "Office Coordinator" },
   { href: "/research-sources", label: "Research Sources" },
-  { href: "/contacts", label: "All contacts" },
   { href: "/needs-answer", label: "Needs Answer" },
 ];
 
