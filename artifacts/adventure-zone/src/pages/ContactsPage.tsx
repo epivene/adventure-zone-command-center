@@ -36,17 +36,10 @@ export default function ContactsPage() {
     <div className="mx-auto grid max-w-7xl gap-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">
-            Relationships
-          </p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">Contacts</h1>
-          <p className="mt-2 max-w-2xl text-slate-600">
-            Find contacts, see the places and bookings they belong to.
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Contacts</h1>
+          <p className="mt-2 max-w-2xl text-slate-600">Contacts and their events.</p>
         </div>
-        <Link className="button-primary text-center" href="/contacts/new">
-          Add contact
-        </Link>
+        <Link className="button-primary text-center" href="/contacts/new">Add contact</Link>
       </header>
 
       {loading ? (
