@@ -53,10 +53,7 @@ export default function SchedulePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-4">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Schedule</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">Calendar & Route</h1>
-        </div>
+        <h1 className="text-3xl font-bold tracking-tight">Schedule</h1>
         <ScheduleViewToggle view={view} onChange={changeView} />
       </header>
 
