@@ -223,7 +223,7 @@ describe("legacy ACT note profile repair", () => {
 
     const run = await repository.createOrGetRun({
       sourceDatabaseKey: databaseKey,
-      requestKey: "act-note-profile-repair-v1",
+      requestKey: "act-note-profile-repair-v2",
       requestedBy: "system",
       now: new Date("2026-08-21T16:00:00Z"),
       streamTypes: ["note", "history", "activity"],
@@ -241,7 +241,7 @@ describe("legacy ACT note profile repair", () => {
       "utf8",
     );
 
-    expect(source).toContain("act-note-profile-repair-v1");
+    expect(source).toContain("act-note-profile-repair-v2");
     expect(source).toContain('streamTypes: ["note", "history", "activity"]');
   });
 });
