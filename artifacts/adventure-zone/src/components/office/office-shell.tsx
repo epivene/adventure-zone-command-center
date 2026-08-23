@@ -29,12 +29,12 @@ export function OfficeShell({ children }: { children: ReactNode }) {
   return <div className="min-h-screen bg-slate-50 text-slate-950">
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
-        <div className="flex items-center gap-3"><Link href="/office" className="min-w-max font-bold">Adventure Zone <span className="ml-1 text-sm font-semibold text-orange-700">Office Coordinator</span></Link><div className="ml-auto hidden md:block"><Nav unread={unread}/></div><button className="button-secondary hidden sm:inline-flex" type="button" onClick={signOut}>Sign out</button></div>
-        <form className="mt-3 flex gap-2 md:mt-2" onSubmit={submit}><input aria-label="Search profiles" className="min-w-0 flex-1" placeholder="Search profiles, contacts, cities…" value={search} onChange={(e)=>setSearch(e.target.value)}/><button className="button-secondary" type="submit">Search</button></form>
-        {office?<p className="mt-1 text-xs text-slate-500">Booking Workspace · {office.displayName}</p>:null}
+        <div className="flex items-center gap-3"><Link href="/office" className="min-w-0 flex-1 truncate font-bold">Adventure Zone <span className="ml-1 text-sm font-semibold text-orange-700">Office Coordinator</span></Link><div className="ml-auto hidden xl:block"><Nav unread={unread}/></div><button className="button-secondary hidden shrink-0 sm:inline-flex" type="button" onClick={signOut}>Sign out</button></div>
+        <form className="mt-3 flex gap-2 md:mt-2" onSubmit={submit}><input aria-label="Search profiles" className="min-w-0 flex-1" placeholder="Search profiles, contacts, cities…" value={search} onChange={(e)=>setSearch(e.target.value)}/><button className="button-secondary shrink-0" type="submit">Search</button></form>
+        {office?<p className="mt-1 truncate text-xs text-slate-500">Booking Workspace · {office.displayName}</p>:null}
       </div>
     </header>
-    <main className="mx-auto max-w-7xl px-4 py-5 pb-24 md:px-8 md:py-7 md:pb-8">{children}</main>
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 md:hidden"><Nav mobile unread={unread}/></div>
+    <main className="mx-auto max-w-7xl px-4 py-5 pb-24 md:px-8 md:py-7 xl:pb-8">{children}</main>
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 xl:hidden"><Nav mobile unread={unread}/></div>
   </div>;
 }
