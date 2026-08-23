@@ -219,7 +219,7 @@ async function createProductionArchiveRuntime(): Promise<ActExtractionRuntime> {
   });
   const recoveryRepository = new DrizzleActArchiveRecoveryRepository(db);
   await recoveryRepository.createRunsForAllSources({
-    requestKey: "act-note-profile-repair-v1",
+    requestKey: "act-note-profile-repair-v2",
     requestedBy: "system",
     now: clock.now(),
     streamTypes: ["note", "history", "activity"],
