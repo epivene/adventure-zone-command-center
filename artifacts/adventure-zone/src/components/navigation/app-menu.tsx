@@ -113,7 +113,7 @@ export function AddMenu() {
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem asChild><Link href="/event-profiles/new">New event</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/contacts/new">New contact</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/quick-add">Quick add</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/calls/workspace?mode=add">New caller</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
