@@ -7,6 +7,7 @@ import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 
 function listHref(query: OrganizationListQuery) {
   const params = new URLSearchParams();
+  if (query.directoryView && query.directoryView !== "all") params.set("view", query.directoryView);
   if (query.search) params.set("q", query.search);
   if (query.lastResort === "only") params.set("lastResort", "only");
   if (query.travelLegId) params.set("leg", query.travelLegId);
@@ -32,9 +33,7 @@ function detailHref(organizationId: string, query: OrganizationListQuery) {
 type ActiveFilter = { label: string; href: string };
 
 function ProfileAvatar({ name, image }: { name: string; image?: string | null }) {
-  if (image) {
-    return <img alt={`${name} profile`} className="h-full w-full object-cover" src={image} />;
-  }
+  if (image) return <img alt={`${name} profile`} className="h-full w-full object-cover" src={image} />;
   return (
     <div aria-label={`${name} profile placeholder`} className="flex h-full w-full items-center justify-center text-orange-700" role="img">
       <svg aria-hidden="true" className="h-11 w-11" fill="none" viewBox="0 0 64 64">
@@ -72,10 +71,12 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
     query.hasLocations ? { label: "Has locations", href: listHref({ ...query, hasLocations: false, page: 1 }) } : null,
     query.showMembers ? { label: "Showing family members", href: listHref({ ...query, showMembers: false, page: 1 }) } : null,
   ].filter((value): value is ActiveFilter => Boolean(value));
+  const directoryReset = listHref({ ...query, search: "", lastResort: "all", travelLegId: null, placeType: null, region: null, hasPhone: false, hasEmail: false, hasFollowUp: false, hasBooking: false, hasLocations: false, showMembers: false, page: 1 });
 
   return (
     <div className="grid gap-4">
       <form action="/profiles" className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm" method="get">
+        {query.directoryView && query.directoryView !== "all" ? <input name="view" type="hidden" value={query.directoryView} /> : null}
         <div className="flex flex-col gap-2 sm:flex-row">
           <label className="min-w-0 flex-1">
             <span className="sr-only">Search profiles and contacts</span>
@@ -83,7 +84,7 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
           </label>
           <div className="flex gap-2">
             <button className="button-primary flex-1 sm:flex-none" type="submit">Search</button>
-            <Link className="button-secondary flex-1 text-center sm:flex-none" href="/profiles">Clear</Link>
+            <Link className="button-secondary flex-1 text-center sm:flex-none" href={directoryReset}>Clear</Link>
           </div>
         </div>
 
@@ -142,54 +143,25 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
             return (
               <li className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-orange-200 hover:shadow-md" data-testid="profile-summary-card" key={organization.id}>
                 <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[5rem_minmax(0,1fr)_9rem]">
-                  <Link className="block size-20 overflow-hidden rounded-full bg-orange-50" data-testid="profile-avatar-link" href={detailHref(organization.id, query)}>
-                    <ProfileAvatar image={organization.profileImageDataUrl} name={organization.name} />
-                  </Link>
-
+                  <Link className="block size-20 overflow-hidden rounded-full bg-orange-50" data-testid="profile-avatar-link" href={detailHref(organization.id, query)}><ProfileAvatar image={organization.profileImageDataUrl} name={organization.name} /></Link>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Link className="break-words text-xl font-bold tracking-tight text-slate-950 hover:text-orange-700" href={detailHref(organization.id, query)}>{organization.name}</Link>
                       {organization.lastResort ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-800">Last Resort</span> : null}
                     </div>
-
-                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">
-                      {location ? <span className="inline-flex items-center gap-1"><span aria-hidden>⌖</span>{location}</span> : null}
-                    </div>
-
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">{location ? <span className="inline-flex items-center gap-1"><span aria-hidden>⌖</span>{location}</span> : null}</div>
                     {organization.parentContext ? <p className="mt-1 text-xs font-semibold text-orange-700">{organization.parentContext.kind === "event_family" ? "Part of" : "Location of"} {organization.parentContext.name}</p> : null}
-
-                    {(organization.phone || organization.email) ? (
-                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700">
-                        {organization.phone ? (
-                          <Link
-                            aria-label={`Open call workspace for ${organization.phone}`}
-                            className="font-medium hover:text-orange-700"
-                            href={`/calls/new?organizationId=${encodeURIComponent(organization.id)}`}
-                          >
-                            {organization.phone}
-                          </Link>
-                        ) : null}
-                        {organization.email ? <a className="break-all font-medium hover:text-orange-700" href={`mailto:${organization.email}`}>{organization.email}</a> : null}
-                      </div>
-                    ) : null}
-
+                    {(organization.phone || organization.email) ? <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700">{organization.phone ? <Link aria-label={`Open call workspace for ${organization.phone}`} className="font-medium hover:text-orange-700" href={`/calls/workspace?organizationId=${encodeURIComponent(organization.id)}`}>{organization.phone}</Link> : null}{organization.email ? <a className="break-all font-medium hover:text-orange-700" href={`mailto:${organization.email}`}>{organization.email}</a> : null}</div> : null}
                     {websiteHref ? <a className="mt-1 block max-w-full truncate text-sm font-medium text-slate-700 hover:text-orange-700 hover:underline" href={websiteHref} rel="noreferrer" target="_blank">{organization.website}</a> : null}
-
-                    <p className="mt-2 text-xs font-medium text-slate-500">
-                      {organization.locationCount > 0 ? `${organization.locationCount} location${organization.locationCount === 1 ? "" : "s"} · ` : ""}
-                      {organization.contactCount} contact{organization.contactCount === 1 ? "" : "s"} · {organization.bookingCount} booking{organization.bookingCount === 1 ? "" : "s"}
-                    </p>
+                    <p className="mt-2 text-xs font-medium text-slate-500">{organization.locationCount > 0 ? `${organization.locationCount} location${organization.locationCount === 1 ? "" : "s"} · ` : ""}{organization.contactCount} contact{organization.contactCount === 1 ? "" : "s"} · {organization.bookingCount} booking{organization.bookingCount === 1 ? "" : "s"}</p>
                   </div>
-
-                  <div className="col-start-2 self-center sm:col-start-3 sm:row-start-1">
-                    <RatingSummary average={organization.ratingAverage} count={organization.ratingCount} />
-                  </div>
+                  <div className="col-start-2 self-center sm:col-start-3 sm:row-start-1"><RatingSummary average={organization.ratingAverage} count={organization.ratingCount} /></div>
                 </div>
               </li>
             );
           })}
         </ul>
-      ) : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="font-semibold">No profiles match these filters.</p><Link className="button-secondary mt-3 inline-flex" href="/profiles">Clear filters</Link></div>}
+      ) : <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="font-semibold">No profiles match these filters.</p><Link className="button-secondary mt-3 inline-flex" href={directoryReset}>Clear filters</Link></div>}
 
       {organizations.pageCount > 1 ? <nav aria-label="Profiles pages" className="flex items-center justify-between gap-3">{organizations.page > 1 ? <Link className="button-secondary" href={listHref({ ...query, page: organizations.page - 1 })}>Previous</Link> : <span />}<p className="text-sm font-semibold text-slate-600">Page {organizations.page} of {organizations.pageCount}</p>{organizations.page < organizations.pageCount ? <Link className="button-secondary" href={listHref({ ...query, page: organizations.page + 1 })}>Next</Link> : <span />}</nav> : null}
     </div>

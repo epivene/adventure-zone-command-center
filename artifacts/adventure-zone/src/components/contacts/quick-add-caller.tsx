@@ -47,6 +47,10 @@ function emptyMatch(): PhoneMatch {
   return { kind: "none", normalizedPhone: "" };
 }
 
+function callWorkspaceHref(contactId: string) {
+  return `/calls/workspace?contactId=${encodeURIComponent(contactId)}`;
+}
+
 export function QuickAddCaller({
   match = emptyMatch(),
   initialPhone = "",
@@ -107,7 +111,7 @@ export function QuickAddCaller({
         setError(result.error);
         return;
       }
-      navigate(`/calls/new?contactId=${result.contactId}`);
+      navigate(callWorkspaceHref(result.contactId));
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -133,7 +137,7 @@ export function QuickAddCaller({
       <section aria-labelledby="caller-match-title" className="grid gap-4">
         <h2 className="text-xl font-bold" id="caller-match-title">Caller match found</h2>
         <p className="text-slate-600">This phone number belongs to {callerName(resolvedMatch.contact.firstName, resolvedMatch.contact.lastName)}.</p>
-        <Link className="button-primary w-fit" href={`/calls/new?contactId=${resolvedMatch.contact.id}`}>
+        <Link className="button-primary w-fit" href={callWorkspaceHref(resolvedMatch.contact.id)}>
           Open {callerName(resolvedMatch.contact.firstName, resolvedMatch.contact.lastName)} in Call Workspace
         </Link>
         <button className="button-secondary w-fit" onClick={() => setResolvedMatch(emptyMatch())} type="button">Back to caller details</button>
@@ -149,7 +153,7 @@ export function QuickAddCaller({
         <ul className="grid gap-2">
           {resolvedMatch.contacts.map((contact) => (
             <li key={contact.id}>
-              <Link className="block rounded-lg border border-slate-200 p-4 font-semibold hover:bg-slate-50" href={`/calls/new?contactId=${contact.id}`}>
+              <Link className="block rounded-lg border border-slate-200 p-4 font-semibold hover:bg-slate-50" href={callWorkspaceHref(contact.id)}>
                 Open {callerName(contact.firstName, contact.lastName)} in Call Workspace
               </Link>
             </li>

@@ -20,7 +20,7 @@ const bookingPrefixes = [
 ] as const;
 
 const operationsPrefixes = [
-  "/routes",
+  "/operations",
   "/trips",
   "/manager-communications",
   "/manager-finance",

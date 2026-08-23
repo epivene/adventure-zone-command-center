@@ -18,10 +18,10 @@ type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
   { href: "/bookings", label: "Bookings" },
+  { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/office-coordinator", label: "Office Coordinator" },
   { href: "/research-sources", label: "Research Sources" },
-  { href: "/contacts", label: "All contacts" },
   { href: "/needs-answer", label: "Needs Answer" },
 ];
 
@@ -33,7 +33,7 @@ const operationsGroups: MenuGroup[] = [
   {
     label: "Legs & Operations",
     items: [
-      { href: "/routes", label: "Leg management" },
+      { href: "/operations/legs", label: "Leg management" },
       { href: "/manager-communications", label: "Communications" },
       { href: "/manager-finance", label: "Finances" },
       { href: "/manager-crew", label: "Crew" },
@@ -113,7 +113,7 @@ export function AddMenu() {
       <DropdownMenuContent align="end" className="w-52">
         <DropdownMenuItem asChild><Link href="/event-profiles/new">New event</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/contacts/new">New contact</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/quick-add">Quick add</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/calls/workspace?mode=add">New caller</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -165,6 +165,9 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
   const workspaceGroups = groupsForWorkspace(workspace);
   const groups = workspace === "command" ? [] : [...workspaceGroups, ...adminToolsGroups];
+  const bookingMenuItems = mobile
+    ? bookingItems
+    : bookingItems.filter((item) => item.label === "Office Coordinator" || item.label === "Needs Answer");
 
   function chooseAppearance(value: Appearance) {
     saveAppearance(value);
@@ -182,7 +185,7 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
       <DropdownMenuContent align="end" side={mobile ? "top" : "bottom"} className={mobile ? "max-h-[72dvh] w-[min(92vw,22rem)] overflow-y-auto p-2" : "max-h-[76vh] w-72 overflow-y-auto p-2"}>
         {workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
-            {bookingItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
+            {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
           </div>
         ) : null}
         {workspace === "booking" && groups.length > 1 ? <DropdownMenuSeparator /> : null}

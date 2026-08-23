@@ -92,7 +92,7 @@ export default function ContactDetailPage({ contactId }: { contactId: string }) 
           {callSuppressed ? (
             <button className="button-primary" disabled type="button">Call</button>
           ) : (
-            <Link className="button-primary text-center" href={`/calls/new?contactId=${contactId}`}>Call</Link>
+            <Link className="button-primary text-center" href={`/calls/workspace?contactId=${contactId}`}>Call</Link>
           )}
           {assistedCallingEnabled ? <Link className="button-secondary text-center" href={`/calls/log?contactId=${contactId}`}>Log call</Link> : null}
           <Link className="button-secondary text-center" href={`/contacts/${contactId}/edit`}>Edit contact</Link>

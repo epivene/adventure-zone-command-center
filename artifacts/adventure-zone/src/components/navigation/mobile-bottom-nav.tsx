@@ -17,7 +17,7 @@ function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
   if (workspace === "operations") {
     return [
       { href: "/command", label: "Panel", icon: LayoutGrid },
-      { href: "/routes", label: "Legs", icon: MapPinned },
+      { href: "/operations/legs", label: "Legs", icon: MapPinned },
       { href: "/manager-communications", label: "Comms", icon: MessageSquare },
       { href: "/manager-crew", label: "Crew", icon: UsersRound },
     ];

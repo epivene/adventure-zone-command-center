@@ -42,7 +42,7 @@ export default function BookingsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Bookings</h1>
           <p className="mt-2 max-w-2xl text-slate-600">Bookings, leads, and next steps.</p>
         </div>
-        <Link className="button-primary text-center" href="/quick-add">Add event</Link>
+        <Link className="button-primary text-center" href="/event-profiles/new">Add event</Link>
       </header>
 
       {loading ? (

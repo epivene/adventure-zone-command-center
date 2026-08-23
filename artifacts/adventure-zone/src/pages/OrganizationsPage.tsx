@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type MouseEvent } from "react";
-import { useSearch } from "wouter";
+import { Link, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { OrganizationList } from "@/components/organizations/organization-list";
 import { DuplicatesView, type DuplicateGroup } from "@/components/organizations/duplicates-view";
@@ -9,13 +9,20 @@ import { EventFamilySuggestions } from "@/components/event-families/event-family
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
+import { ContactDirectoryView } from "@/components/profiles/contact-directory-view";
 import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
+import { loadProfileDirectoryBucket, type ProfileDirectoryView } from "@/features/event-profiles/profile-directory-data";
 
 type LabeledProfileSheetTarget = ProfileSheetTarget & { label?: string };
+
+function directoryView(value: string | null): ProfileDirectoryView {
+  return value === "events" || value === "organizations" || value === "contacts" ? value : "all";
+}
 
 export default function OrganizationsPage() {
   const search = useSearch();
   const params = new URLSearchParams(search);
+  const view = directoryView(params.get("view"));
   const query = organizationListQuerySchema.parse({
     q: params.get("q") ?? undefined,
     lastResort: params.get("lastResort") ?? undefined,
@@ -34,9 +41,10 @@ export default function OrganizationsPage() {
     page: params.get("page") ?? undefined,
     pageSize: params.get("pageSize") ?? undefined,
   });
+  const profileQuery = { ...query, directoryView: view === "contacts" ? "all" as const : view };
 
   const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(view !== "contacts");
   const [error, setError] = useState<string | null>(null);
   const [profileTarget, setProfileTarget] = useState<LabeledProfileSheetTarget | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
@@ -46,6 +54,12 @@ export default function OrganizationsPage() {
   const [eventFamilyOpen, setEventFamilyOpen] = useState(false);
 
   const loadProfiles = useCallback(async () => {
+    if (view === "contacts") {
+      setData(null);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
     if (query.lastResort !== "all") qs.set("lastResort", query.lastResort);
@@ -58,16 +72,23 @@ export default function OrganizationsPage() {
     if (query.hasBooking) qs.set("hasBooking", "yes");
     if (query.hasLocations) qs.set("hasLocations", "yes");
     if (query.showMembers) qs.set("showMembers", "yes");
-    if (query.includeRetired) qs.set("includeRetired", "yes");
+    if (query.includeRetired) qs.set("includeRetired", "true");
     if (query.page > 1) qs.set("page", String(query.page));
     if (query.pageSize !== 50) qs.set("pageSize", String(query.pageSize));
 
     setLoading(true);
     setError(null);
-    try { setData(await apiGet<any>(`/organizations?${qs.toString()}`)); }
-    catch (e: any) { setError(e?.message ?? "Failed to load profiles"); }
-    finally { setLoading(false); }
-  }, [query.search, query.lastResort, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.includeRetired, query.page, query.pageSize]);
+    try {
+      const next = view === "events" || view === "organizations"
+        ? await loadProfileDirectoryBucket({ view, query: profileQuery, fetchPage: (path) => apiGet<any>(path) })
+        : await apiGet<any>(`/organizations?${qs.toString()}`);
+      setData(next);
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to load profiles");
+    } finally {
+      setLoading(false);
+    }
+  }, [view, query.search, query.lastResort, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.includeRetired, query.page, query.pageSize]);
 
   useEffect(() => { void loadProfiles(); }, [loadProfiles]);
 
@@ -110,13 +131,20 @@ export default function OrganizationsPage() {
     setDupGroups(null);
   }
 
+  function viewHref(next: ProfileDirectoryView) {
+    const nextParams = new URLSearchParams();
+    if (next !== "all") nextParams.set("view", next);
+    if (query.search) nextParams.set("q", query.search);
+    const suffix = nextParams.toString();
+    return suffix ? `/profiles?${suffix}` : "/profiles";
+  }
+
   const families = data?.families ?? [];
   const organizationPage = hideRetiredProfileResults(
     data?.organizations ?? data ?? { records: [] },
     query.includeRetired || query.showMembers,
   );
-
-  const familySection = !showDuplicates && families.length > 0 ? (
+  const familySection = view === "all" && !showDuplicates && families.length > 0 ? (
     <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <summary className="cursor-pointer font-bold">Event Families <span className="ml-1 text-sm font-normal text-slate-500">({families.length})</span></summary>
       <p className="mt-1 text-sm text-slate-600">Open a family to manage its related event profiles.</p>
@@ -130,10 +158,19 @@ export default function OrganizationsPage() {
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Relationships</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
-          {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Search places and people, then tap a profile to work it without losing your place.</p> : null}
+          {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Search events, organizations, and contacts from one CRM directory.</p> : null}
         </div>
-        {!showDuplicates ? <button className="button-primary" onClick={() => setEventFamilyOpen(true)} type="button">+ Event Family</button> : null}
+        {!showDuplicates && view !== "contacts" ? <button className="button-primary" onClick={() => setEventFamilyOpen(true)} type="button">+ Event Family</button> : view === "contacts" ? <Link className="button-primary" href="/contacts/new">+ Contact</Link> : null}
       </header>
+
+      {!showDuplicates ? (
+        <nav aria-label="Profile directory views" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+          {(["all", "events", "organizations", "contacts"] as ProfileDirectoryView[]).map((item) => {
+            const label = item === "all" ? "All" : item === "events" ? "Events" : item === "organizations" ? "Organizations" : "Contacts";
+            return <Link className={view === item ? "rounded-lg bg-orange-100 px-3 py-2 text-sm font-bold text-orange-900" : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"} href={viewHref(item)} key={item}>{label}</Link>;
+          })}
+        </nav>
+      ) : null}
 
       {showDuplicates ? (
         <div className="grid gap-4">
@@ -143,13 +180,14 @@ export default function OrganizationsPage() {
           </div>
           {dupLoading && dupGroups === null ? <p className="text-slate-500">Scanning for duplicates…</p> : dupGroups !== null ? <>{dupError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">Could not refresh duplicate status: {dupError}</p><button className="button-secondary mt-3" onClick={() => void loadDuplicates()}>Retry status refresh</button></div> : null}<DuplicatesView groups={dupGroups} onRefresh={loadDuplicates} /></> : dupError ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{dupError}</p><button className="button-secondary mt-3" onClick={() => void loadDuplicates()}>Retry</button></div> : null}
         </div>
+      ) : view === "contacts" ? (
+        <ContactDirectoryView search={search} basePath="/profiles" fixedParams={{ view: "contacts" }} />
       ) : (
         <div onClickCapture={handleProfileLink}>
-          {loading ? <p className="text-slate-500">Loading places…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
-
+          {loading ? <p className="text-slate-500">Loading profiles…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={profileQuery} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
-              <EventFamilySuggestions compact onChanged={loadProfiles} />
+              {view === "all" ? <EventFamilySuggestions compact onChanged={loadProfiles} /> : null}
               <button className="button-secondary text-sm" onClick={openDuplicates} type="button">Find duplicates</button>
             </div>
           </section>

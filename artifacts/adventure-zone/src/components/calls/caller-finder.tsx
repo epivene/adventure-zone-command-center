@@ -104,9 +104,11 @@ export function CallerFinder({
     };
   }, [query, onSelect]);
 
-  const createHref = query.trim()
-    ? `/quick-add?create=1&${looksLikePhone(query.trim()) ? "phone" : "q"}=${encodeURIComponent(query.trim())}`
-    : "/quick-add?create=1";
+  const createQuery = new URLSearchParams({ mode: "add" });
+  if (query.trim()) {
+    createQuery.set(looksLikePhone(query.trim()) ? "phone" : "q", query.trim());
+  }
+  const createHref = `/calls/workspace?${createQuery.toString()}`;
 
   return (
     <section aria-labelledby="caller-finder-title" className="grid gap-5">

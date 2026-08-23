@@ -61,7 +61,7 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/routes"><MapPinned className="mr-2 h-4 w-4" />Legs & Operations</Link>
+          <Link href="/operations/legs"><MapPinned className="mr-2 h-4 w-4" />Legs & Operations</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

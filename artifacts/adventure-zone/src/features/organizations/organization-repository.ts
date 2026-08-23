@@ -41,6 +41,7 @@ export type OrganizationListPage = {
 
 export type OrganizationListQuery = {
   search: string;
+  directoryView?: "all" | "events" | "organizations";
   lastResort: "all" | "only";
   travelLegId: string | null;
   placeType: string | null;

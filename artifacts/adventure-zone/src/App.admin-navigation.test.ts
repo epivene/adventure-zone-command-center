@@ -13,39 +13,42 @@ describe("admin navigation route contracts", () => {
     expect(appSource).toContain('<Route path="/command" component={AdminCommandPanelPage} />');
   });
 
-  it("mounts the dedicated Marketing workspace without moving shared CRM routes", () => {
+  it("keeps the dedicated Marketing workspace and canonical Profiles routes", () => {
     expect(appSource).toContain('<Route path="/marketing" component={MarketingHomePage} />');
     expect(appSource).toContain('<Route path="/profiles" component={OrganizationsPage} />');
     expect(appSource).toContain('<Route path="/profiles/:profileId" component={EventProfilePage} />');
   });
 
-  it("keeps Schedule, Calendar, and Routes on their existing URLs", () => {
+  it("makes Schedule canonical while preserving calendar and route aliases", () => {
     expect(appSource).toContain('<Route path="/schedule" component={SchedulePage} />');
-    expect(appSource).toContain('<Route path="/calendar" component={CalendarPage} />');
-    expect(appSource).toContain('<Route path="/routes" component={RoutesPage} />');
+    expect(appSource).toContain('<Route path="/calendar"><ScheduleRedirect /></Route>');
+    expect(appSource).toContain('<Route path="/routes"><ScheduleRedirect view="map" /></Route>');
+    expect(appSource).toContain('<Route path="/operations/legs" component={LegManagementPage} />');
   });
 
-  it("keeps maintenance destinations inside the compact Admin Tools menu", () => {
-    expect(menuSource).toContain('label: "Admin Tools"');
+  it("keeps maintenance destinations inside compact Admin Tools groups", () => {
+    expect(menuSource).toContain('label: "Data & Imports"');
     expect(menuSource).toContain('{ href: "/settings/paper-notes", label: "Paper notes" }');
-    expect(menuSource).toContain('{ href: "/settings/act-migration", label: "Act! import" }');
-    expect(menuSource).toContain('{ href: "/settings/act-recovery", label: "ACT recovery" }');
+    expect(menuSource).toContain('{ href: "/settings/act-migration", label: "ACT! import" }');
+    expect(menuSource).toContain('{ href: "/settings/act-recovery", label: "ACT Recovery" }');
     expect(menuSource).toContain('{ href: "/settings/call-scripts", label: "Call scripts" }');
     expect(menuSource).toContain('{ href: "/settings/packages-resources", label: "Packages & resources" }');
   });
 
-  it("routes Paper notes and ACT maintenance exactly as before", () => {
+  it("routes Paper notes and ACT maintenance through canonical settings URLs", () => {
     expect(appSource).toContain('<Route path="/settings/paper-notes" component={PaperNotesInboxPage} />');
     expect(appSource).toContain('<Route path="/settings/paper-notes/:batchId">');
     expect(appSource).toContain('<Route path="/settings/act-migration" component={ActMigrationPage} />');
     expect(appSource).toContain('<Route path="/settings/act-recovery" component={ActRecoveryPage} />');
+    expect(appSource).toContain('<Route path="/act-migration"><ActMigrationRedirect /></Route>');
     expect(actMigrationSource).toContain('href="/settings/act-recovery"');
     expect(actMigrationSource).toContain("Recover archived ACT data");
   });
 
-  it("keeps legacy direct URLs available", () => {
-    expect(appSource).toContain('<Route path="/organizations" component={OrganizationsPage} />');
-    expect(appSource).toContain('<Route path="/act-migration" component={ActMigrationPage} />');
+  it("keeps old profile URLs only as compatibility redirects", () => {
+    expect(appSource).toContain('<Route path="/organizations"><ProfilesRedirect /></Route>');
+    expect(appSource).toContain('<Route path="/event-profiles/:id">');
+    expect(appSource).toContain('canonicalProfilePath(params.id)');
   });
 
   it("does not alter Office Coordinator or Leg Manager route shells", () => {

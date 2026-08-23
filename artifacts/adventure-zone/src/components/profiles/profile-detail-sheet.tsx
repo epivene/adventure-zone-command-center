@@ -126,7 +126,7 @@ export function ProfileDetailSheet({
   const phoneText = formatPhoneDisplay(visiblePhone);
   const callQuery = new URLSearchParams({ organizationId: profileId });
   if (selectedContactId) callQuery.set("contactId", selectedContactId);
-  const callHref = visiblePhone ? `/calls/new?${callQuery.toString()}` : null;
+  const callHref = visiblePhone ? `/calls/workspace?${callQuery.toString()}` : null;
   const email = selectedContact?.email ?? null;
   const websiteHref = normalizeExternalWebsite(place.website);
 
