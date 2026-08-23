@@ -203,3 +203,37 @@ describe("ActivityTimeline imported ACT provenance", () => {
     expect(localCard).toHaveTextContent("Delete activity");
   });
 });
+
+describe("ActivityTimeline paper note source", () => {
+  it("shows View original note and opens the source for paper-note activities", async () => {
+    const openPaperNoteSource = vi.fn().mockResolvedValue(undefined);
+    const paperNote = activityTimelineItem({
+      body: "Imported handwritten note",
+      paperNoteSource: { activityId: "40000000-0000-4000-8000-000000000001" },
+    });
+
+    render(
+      <ActivityTimeline
+        activities={[paperNote]}
+        loadRevisions={vi.fn().mockResolvedValue({ ok: true, revisions: [], nextPage: null })}
+        openPaperNoteSource={openPaperNoteSource}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "View original note" }));
+
+    await waitFor(() => expect(openPaperNoteSource).toHaveBeenCalledWith(paperNote.id));
+  });
+
+  it("does not show a source button on ordinary notes", () => {
+    render(
+      <ActivityTimeline
+        activities={[activityTimelineItem()]}
+        loadRevisions={vi.fn().mockResolvedValue({ ok: true, revisions: [], nextPage: null })}
+        openPaperNoteSource={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "View original note" })).not.toBeInTheDocument();
+  });
+});
