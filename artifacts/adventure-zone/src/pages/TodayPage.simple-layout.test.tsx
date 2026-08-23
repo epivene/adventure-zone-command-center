@@ -5,17 +5,19 @@ const todaySource = readFileSync("src/pages/TodayPage.tsx", "utf8");
 const summarySource = readFileSync("src/components/today/summary-cards.tsx", "utf8");
 
 describe("simple Today layout", () => {
-  it("orders the main work queue around Up Next Follow-ups Upcoming Events and Needs Attention", () => {
-    const upNext = todaySource.indexOf("Up Next");
-    const upcoming = todaySource.indexOf("Upcoming Events");
-    const attention = todaySource.indexOf("NeedsAttention");
-    expect(upNext).toBeGreaterThan(-1);
+  it("organizes the daily screen around Start here, My Work, Coming up, and Later", () => {
+    const startHere = todaySource.indexOf("Start here");
+    const myWork = todaySource.indexOf("My Work");
+    const comingUp = todaySource.indexOf("Coming up");
+    const later = todaySource.indexOf("Later");
+    expect(startHere).toBeGreaterThan(-1);
+    expect(myWork).toBeGreaterThan(startHere);
+    expect(comingUp).toBeGreaterThan(myWork);
+    expect(later).toBeGreaterThan(comingUp);
     expect(todaySource).toContain("FollowUpList");
-    expect(upcoming).toBeGreaterThan(upNext);
-    expect(attention).toBeGreaterThan(upcoming);
   });
 
-  it("hides zero-value summary cards", () => {
+  it("hides zero-value summary cards in the reusable summary component", () => {
     expect(summarySource).toContain("visibleCards");
     expect(summarySource).toContain("if (!visibleCards.length) return null");
   });
