@@ -37,7 +37,7 @@ function callHref(
   profile: EventProfile,
   context: EventProfileWorkspaceContext = {},
   selectedContactId: string | null = profile.selectedContactId,
-  route = "/calls/new",
+  route = "/calls/workspace",
 ) {
   const query = new URLSearchParams({ organizationId: profile.id });
   if (selectedContactId) query.set("contactId", selectedContactId);
@@ -129,19 +129,19 @@ export function EventProfileWorkspace({
             {context.mode === "prospect" ? <span className="rounded-full bg-orange-100 px-2.5 py-1 font-semibold text-orange-900">Prospect mode</span> : null}
             {context.action ? <span className="rounded-full bg-slate-100 px-2.5 py-1 font-semibold capitalize text-slate-800">{context.action} action selected</span> : null}
             {selectedBooking ? <span className="rounded-full bg-indigo-100 px-2.5 py-1 font-semibold text-indigo-900">Selected booking context: {selectedBooking.name}</span> : null}
-            {selectedFollowUp ? <span className="rounded-full bg-rose-100 px-2.5 py-1 font-semibold text-rose-900">Selected follow-up context: {titleCase(selectedFollowUp.kind)}</span> : null}
+            {selectedFollowUp ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-900">Selected follow-up context: {titleCase(selectedFollowUp.kind)}</span> : null}
           </div>
         ) : null}
         {profile.familyContext ? (
           <p className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm font-semibold text-orange-950">
             {profile.familyContext.kind === "event_family" ? "Part of" : "Location of"}{" "}
-            <Link className="underline" href={profile.familyContext.kind === "event_family" ? `/event-families/${profile.familyContext.id}` : `/event-profiles/${profile.familyContext.id}`}>{profile.familyContext.name}</Link>
+            <Link className="underline" href={profile.familyContext.kind === "event_family" ? `/event-families/${profile.familyContext.id}` : `/profiles/${profile.familyContext.id}`}>{profile.familyContext.name}</Link>
           </p>
         ) : null}
         <div className="mt-4 grid gap-3">
           {organizationContext.parent ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm">
-              <p className="font-semibold text-sky-950">Part of <Link className="underline" href={`/event-profiles/${organizationContext.parent.id}`}>{organizationContext.parent.name}</Link></p>
+              <p className="font-semibold text-sky-950">Part of <Link className="underline" href={`/profiles/${organizationContext.parent.id}`}>{organizationContext.parent.name}</Link></p>
               <button className="button-secondary" onClick={() => setMembershipDrawer("choose-parent")} type="button">Change organization…</button>
             </div>
           ) : !organizationLike ? (
@@ -158,7 +158,7 @@ export function EventProfileWorkspace({
                 <ul className="mt-3 grid gap-2">
                   {organizationContext.children.map((child) => (
                     <li key={child.id}>
-                      <Link className="block rounded-lg bg-white px-3 py-2 font-semibold hover:text-orange-700" href={`/event-profiles/${child.id}`}>
+                      <Link className="block rounded-lg bg-white px-3 py-2 font-semibold hover:text-orange-700" href={`/profiles/${child.id}`}>
                         {child.name}{child.city || child.region ? ` — ${[child.city, child.region].filter(Boolean).join(", ")}` : ""}
                       </Link>
                     </li>
