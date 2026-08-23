@@ -4,7 +4,7 @@ import { buildGoogleScopePreview } from "./google-scope-service";
 
 const labels = [
   { id: "shows", name: "Shows", type: "user" as const },
-  { id: "receipts", name: "Receipts", type: "user" as const },
+  { id: "receipt", name: "Receipt", type: "user" as const },
   {
     id: "off-season",
     name: "Off Season Business Opportunities",
@@ -12,6 +12,7 @@ const labels = [
   },
   { id: "employees", name: "Employees", type: "user" as const },
   { id: "associations", name: "Associations", type: "user" as const },
+  { id: "SPAM", name: "SPAM", type: "system" as const },
 ];
 
 describe("Google business calendar identity", () => {
@@ -24,12 +25,12 @@ describe("Google business calendar identity", () => {
       },
       {
         id: "pirates",
-        summary: "Pirates Rebellion Calendar",
+        summary: "Pirate's Rebellion Calendar",
         primary: false,
       },
       {
         id: "warriors",
-        summary: "Warriors Playground Calendar",
+        summary: "Warrior's Playground Calendar",
         primary: false,
       },
     ]);
