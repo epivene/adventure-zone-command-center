@@ -87,6 +87,7 @@ export function ActivityTimeline({
   loadPage,
   noteComposer = false,
   collapseLongBodies = false,
+  openPaperNoteSource,
 }: {
   activities: ActivityTimelineItem[];
   parent?: ActivityParent;
@@ -98,6 +99,7 @@ export function ActivityTimeline({
   loadPage?: (page: number) => Promise<ActivityTimelinePageResult>;
   noteComposer?: boolean;
   collapseLongBodies?: boolean;
+  openPaperNoteSource?: (activityId: string) => Promise<void>;
 }) {
   const [items, setItems] = useState(activities);
   const [timelineNextPage, setTimelineNextPage] = useState<number | null>(initialNextPage);
@@ -115,6 +117,8 @@ export function ActivityTimeline({
   const [createError, setCreateError] = useState("");
   const [creating, setCreating] = useState(false);
   const [editForms, setEditForms] = useState<Record<string, EditFormState>>({});
+  const [paperSourceOpening, setPaperSourceOpening] = useState<string | null>(null);
+  const [paperSourceErrors, setPaperSourceErrors] = useState<Record<string, string>>({});
 
   type DeleteConfirmState = { open: boolean; deleting: boolean; error: string };
   const [deleteConfirm, setDeleteConfirm] = useState<Record<string, DeleteConfirmState>>({});
@@ -175,6 +179,22 @@ export function ActivityTimeline({
     setExpanded((current) => ({ ...current, [activity.id]: true }));
     if (revisions[activity.id] || loading[activity.id]) return;
     await loadHistory(activity.id);
+  }
+
+  async function openPaperSource(activity: ActivityTimelineItem) {
+    if (!openPaperNoteSource || paperSourceOpening) return;
+    setPaperSourceOpening(activity.id);
+    setPaperSourceErrors((current) => ({ ...current, [activity.id]: "" }));
+    try {
+      await openPaperNoteSource(activity.paperNoteSource?.activityId ?? activity.id);
+    } catch (error) {
+      setPaperSourceErrors((current) => ({
+        ...current,
+        [activity.id]: error instanceof Error ? error.message : "Could not open the original paper note.",
+      }));
+    } finally {
+      setPaperSourceOpening(null);
+    }
   }
 
   async function submitCreate() {
@@ -379,6 +399,19 @@ export function ActivityTimeline({
                   <p className="mt-2 text-sm text-slate-600">
                     Call outcome: <span className="font-medium text-slate-800">{formatCallOutcome(activity.callOutcome)}</span>
                   </p>
+                ) : null}
+                {activity.paperNoteSource && openPaperNoteSource ? (
+                  <div className="mt-3">
+                    <button
+                      className="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-900 hover:bg-orange-100 disabled:opacity-60"
+                      disabled={Boolean(paperSourceOpening)}
+                      onClick={() => void openPaperSource(activity)}
+                      type="button"
+                    >
+                      {paperSourceOpening === activity.id ? "Opening original note…" : "View original note"}
+                    </button>
+                    {paperSourceErrors[activity.id] ? <p className="mt-2 text-sm text-rose-800" role="alert">{paperSourceErrors[activity.id]}</p> : null}
+                  </div>
                 ) : null}
 
                 {editActivity && !activity.importedFromAct ? (
