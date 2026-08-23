@@ -45,7 +45,7 @@ describe("GoogleWorkspaceReadClient Gmail metadata discovery", () => {
       },
     });
 
-    await expect(client.listRecentMessageRefs(2)).resolves.toEqual([
+    await expect(client.listRecentMessageRefs!(2)).resolves.toEqual([
       { id: "m1", threadId: "t1" },
       { id: "m2", threadId: "t2" },
     ]);
@@ -92,7 +92,7 @@ describe("GoogleWorkspaceReadClient Gmail metadata discovery", () => {
       },
     });
 
-    await expect(client.getMessageMetadata("m1")).resolves.toEqual({
+    await expect(client.getMessageMetadata!("m1")).resolves.toEqual({
       id: "m1",
       threadId: "t1",
       labelIds: ["INBOX", "IMPORTANT"],
