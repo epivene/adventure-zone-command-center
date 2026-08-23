@@ -36,7 +36,7 @@ describe("admin workspace routing", () => {
     ["/needs-answer", "booking"],
     ["/quick-add", "booking"],
     ["/office-coordinator", "booking"],
-    ["/routes", "operations"],
+    ["/operations/legs", "operations"],
     ["/trips/abc", "operations"],
     ["/manager-communications", "operations"],
     ["/manager-finance", "operations"],
@@ -48,6 +48,7 @@ describe("admin workspace routing", () => {
     ["/settings", "admin"],
     ["/settings/paper-notes", "admin"],
     ["/act-migration", "admin"],
+    ["/routes", "admin"],
     ["/something-unclassified", "admin"],
   ] as const)("classifies %s as %s", (path, expected) => {
     expect(adminWorkspaceForPath(path)).toBe(expected);
@@ -75,7 +76,7 @@ describe("Booking return path", () => {
     expect(readBookingReturnPath(storage)).toBe("/profiles/abc?tab=notes");
   });
 
-  it.each(["/routes", "/settings", "/marketing", "https://example.com", "//example.com/evil", "profiles/no-leading-slash"])(
+  it.each(["/operations/legs", "/routes", "/settings", "/marketing", "https://example.com", "//example.com/evil", "profiles/no-leading-slash"])(
     "rejects invalid return destination %s",
     (path) => {
       expect(saveBookingReturnPath(path, storage)).toBe(false);
