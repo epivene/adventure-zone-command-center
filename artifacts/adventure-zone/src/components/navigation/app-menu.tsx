@@ -55,21 +55,37 @@ const marketingGroups: MenuGroup[] = [
   },
 ];
 
-const adminToolsGroup: MenuGroup = {
-  label: "Admin Tools",
-  items: [
-    { href: "/settings/business-sources", label: "Business sources" },
-    { href: "/imports/attendance-history", label: "Attendance history" },
-    { href: "/settings/communication-templates", label: "Email templates" },
-    { href: "/settings/paper-notes", label: "Paper notes" },
-    { href: "/settings/act-migration", label: "Act! import" },
-    { href: "/settings/act-recovery", label: "ACT recovery" },
-    { href: "/settings/call-scripts", label: "Call scripts" },
-    { href: "/settings/packages-resources", label: "Packages & resources" },
-    { href: "/settings/google-workspace", label: "Google Workspace" },
-    { href: "/settings", label: "Settings" },
-  ],
-};
+const adminToolsGroups: MenuGroup[] = [
+  {
+    label: "Data & Imports",
+    items: [
+      { href: "/settings/paper-notes", label: "Paper notes" },
+      { href: "/settings/act-migration", label: "ACT! import" },
+      { href: "/imports/attendance-history", label: "Attendance history" },
+    ],
+  },
+  {
+    label: "Business Setup",
+    items: [
+      { href: "/settings/business-sources", label: "Business sources" },
+      { href: "/settings/packages-resources", label: "Packages & resources" },
+      { href: "/settings/call-scripts", label: "Call scripts" },
+      { href: "/settings/communication-templates", label: "Email templates" },
+    ],
+  },
+  {
+    label: "Connections",
+    items: [
+      { href: "/settings/google-workspace", label: "Google Workspace" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/settings", label: "Settings" },
+    ],
+  },
+];
 
 const appearanceOptions = [
   { value: "light" as const, label: "Light", icon: Sun },
@@ -147,7 +163,7 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
   const workspaceGroups = groupsForWorkspace(workspace);
-  const groups = workspace === "command" ? [] : [...workspaceGroups, adminToolsGroup];
+  const groups = workspace === "command" ? [] : [...workspaceGroups, ...adminToolsGroups];
 
   function chooseAppearance(value: Appearance) {
     saveAppearance(value);
@@ -169,12 +185,13 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
           </div>
         ) : null}
         {workspace === "booking" && groups.length > 1 ? <DropdownMenuSeparator /> : null}
-        {groups.map((group, index) => {
+        {groups.map((group) => {
           if (workspace === "booking" && group.label === "Booking") return null;
-          const expanded = openGroups[group.label] ?? (index === 0 && workspace !== "booking");
+          const isAdminToolGroup = adminToolsGroups.some((adminGroup) => adminGroup.label === group.label);
+          const expanded = openGroups[group.label] ?? (!isAdminToolGroup && workspace !== "booking");
           return (
-            <div key={group.label} className="py-1">
-              <button aria-expanded={expanded} className="flex w-full items-center justify-between rounded-md px-2 py-2 text-left text-sm font-bold text-slate-800 hover:bg-slate-50" onClick={(event) => { event.preventDefault(); setOpenGroups((current) => ({ ...current, [group.label]: !expanded })); }} type="button">
+            <div key={group.label} className="py-0.5">
+              <button aria-expanded={expanded} className="flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm font-bold text-slate-800 hover:bg-slate-50" onClick={(event) => { event.preventDefault(); setOpenGroups((current) => ({ ...current, [group.label]: !expanded })); }} type="button">
                 {group.label}
                 <ChevronDown className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`} />
               </button>
@@ -183,7 +200,6 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
                   {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${group.label}:${item.href}:${item.label}`} />)}
                 </div>
               ) : null}
-              {index < groups.length - 1 ? <DropdownMenuSeparator /> : null}
             </div>
           );
         })}
