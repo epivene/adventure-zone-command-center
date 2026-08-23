@@ -246,6 +246,11 @@ export class GoogleScopeService {
     const allowedCalendarIds = new Set(
       preview.calendars.map((calendar) => calendar.id),
     );
+    const requiredLabelIds = new Set(
+      preview.labels
+        .filter((label) => label.id === label.rootId)
+        .map((label) => label.id),
+    );
 
     if (
       [...selectedLabelIds].some((id) => !allowedLabelIds.has(id)) ||
@@ -253,12 +258,6 @@ export class GoogleScopeService {
     ) {
       throw new Error("GOOGLE_WORKSPACE_SCOPE_SELECTION_INVALID");
     }
-
-    const requiredLabelIds = new Set(
-      preview.labels
-        .filter((label) => label.id === label.rootId)
-        .map((label) => label.id),
-    );
     if (
       [...requiredLabelIds].some((id) => !selectedLabelIds.has(id)) ||
       selectedCalendarIds.size !== allowedCalendarIds.size ||
@@ -269,7 +268,9 @@ export class GoogleScopeService {
 
     const saved = {
       labels: preview.labels.filter((label) => selectedLabelIds.has(label.id)),
-      calendars: preview.calendars,
+      calendars: preview.calendars.filter((calendar) =>
+        selectedCalendarIds.has(calendar.id),
+      ),
     };
     await this.persistence.replace({
       connectionId: connection.id,
