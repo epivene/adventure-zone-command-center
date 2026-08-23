@@ -189,7 +189,7 @@ export class PostgresGoogleConnectionRepository {
       [
         email,
         encryptedRefreshToken,
-        grantedScopes,
+        JSON.stringify(grantedScopes),
         googleSubject,
         input.now,
       ],
