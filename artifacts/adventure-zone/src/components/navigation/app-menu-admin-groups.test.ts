@@ -10,8 +10,16 @@ describe("Admin Tools menu organization", () => {
     }
   });
 
-  it("keeps ACT recovery out of the everyday Admin Tools menu", () => {
-    expect(source).not.toContain('{ href: "/settings/act-recovery", label: "ACT recovery" }');
+  it("keeps ACT recovery reachable from Data & Imports", () => {
+    const dataImportsStart = source.indexOf('label: "Data & Imports"');
+    const actImport = source.indexOf('{ href: "/settings/act-migration", label: "ACT! import" }', dataImportsStart);
+    const actRecovery = source.indexOf('{ href: "/settings/act-recovery", label: "ACT Recovery" }', dataImportsStart);
+    const attendanceHistory = source.indexOf('{ href: "/imports/attendance-history", label: "Attendance history" }', dataImportsStart);
+
+    expect(dataImportsStart).toBeGreaterThan(-1);
+    expect(actImport).toBeGreaterThan(dataImportsStart);
+    expect(actRecovery).toBeGreaterThan(actImport);
+    expect(attendanceHistory).toBeGreaterThan(actRecovery);
   });
 
   it("keeps appearance separate from the admin tool groups", () => {
