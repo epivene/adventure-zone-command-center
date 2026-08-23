@@ -126,7 +126,7 @@ export function SimpleFullProfile({
   const phoneText = formatPhoneDisplay(visiblePhone);
   const callQuery = new URLSearchParams({ organizationId: profile.id });
   if (primaryContact?.id) callQuery.set("contactId", primaryContact.id);
-  const callHref = visiblePhone ? `/calls/new?${callQuery.toString()}` : null;
+  const callHref = visiblePhone ? `/calls/workspace?${callQuery.toString()}` : null;
   const average = ratingSummary?.average ?? 0;
   const ratingCount = ratingSummary?.count ?? 0;
   const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
