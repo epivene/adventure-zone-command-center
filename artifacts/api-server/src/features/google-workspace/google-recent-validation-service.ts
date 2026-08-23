@@ -2,12 +2,38 @@ import { db as defaultDb } from "@/db/client";
 import { contacts, organizations } from "@/db/schema";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
-import type { GoogleMessageMetadata, GoogleWorkspaceReadClient } from "./google-api-types";
+import type {
+  GoogleLabelSummary,
+  GoogleMessageMetadata,
+  GoogleWorkspaceReadClient,
+} from "./google-api-types";
 import { GoogleScopeService, type GoogleSavedScope } from "./google-scope-service";
 import {
   classifyGoogleMessageRelevance,
   type GoogleRelevanceCandidate,
 } from "./google-relevance-classifier";
+
+const BUSINESS_HINT_ROOTS = [
+  "potential shows",
+  "business expenses",
+  "banking & loans",
+] as const;
+
+export function businessHintLabelIds(labels: GoogleLabelSummary[]): Set<string> {
+  const ids = new Set<string>();
+  for (const label of labels) {
+    if (label.type !== "user") continue;
+    const name = label.name.trim().toLowerCase();
+    if (
+      BUSINESS_HINT_ROOTS.some(
+        (root) => name === root || name.startsWith(`${root}/`),
+      )
+    ) {
+      ids.add(label.id);
+    }
+  }
+  return ids;
+}
 
 export type GoogleValidationEvidenceSnapshot = {
   contacts: Array<{ id: string; name: string; emails: string[] }>;
@@ -24,6 +50,7 @@ export type GoogleValidationRow = {
   date: string;
   internalDateMs: number | null;
   labelIds: string[];
+  labels: Array<{ id: string; name: string; type: "system" | "user" }>;
   hasAttachments: boolean;
   evidenceCodes: string[];
   candidates: GoogleRelevanceCandidate[];
@@ -121,6 +148,7 @@ export class PostgresGoogleValidationEvidenceRepository implements EvidenceAcces
 
 function toRow(
   message: GoogleMessageMetadata,
+  allLabels: Map<string, GoogleLabelSummary>,
   evidenceCodes: string[],
   candidates: GoogleRelevanceCandidate[],
 ): GoogleValidationRow {
@@ -133,6 +161,10 @@ function toRow(
     date: message.headers.date,
     internalDateMs: message.internalDateMs,
     labelIds: message.labelIds,
+    labels: message.labelIds.flatMap((id) => {
+      const label = allLabels.get(id);
+      return label ? [label] : [{ id, name: id, type: "system" as const }];
+    }),
     hasAttachments: message.hasAttachments,
     evidenceCodes,
     candidates,
@@ -162,11 +194,14 @@ export class GoogleRecentValidationService {
       throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
     }
 
-    const [savedScope, evidenceSnapshot] = await Promise.all([
+    const [savedScope, evidenceSnapshot, labels] = await Promise.all([
       this.scope.getSaved(),
       this.evidence.load(),
+      client.listLabels(),
     ]);
-    const approvedLabelIds = new Set(savedScope.labels.map((label) => label.id));
+    const relevanceLabelIds = new Set(savedScope.labels.map((label) => label.id));
+    for (const id of businessHintLabelIds(labels)) relevanceLabelIds.add(id);
+    const labelsById = new Map(labels.map((label) => [label.id, label]));
     const refs = await client.listRecentMessageRefs(checkedLimit);
 
     const matched: GoogleValidationRow[] = [];
@@ -178,14 +213,14 @@ export class GoogleRecentValidationService {
       const result = classifyGoogleMessageRelevance({
         message,
         evidence: {
-          approvedLabelIds,
+          approvedLabelIds: relevanceLabelIds,
           contacts: evidenceSnapshot.contacts,
           organizations: evidenceSnapshot.organizations,
           profiles: evidenceSnapshot.profiles,
           existingThreadTarget: null,
         },
       });
-      const row = toRow(message, result.evidenceCodes, result.candidates);
+      const row = toRow(message, labelsById, result.evidenceCodes, result.candidates);
       if (result.status === "matched") matched.push(row);
       else if (result.status === "review") needsReview.push(row);
       else ignored.push(row);
