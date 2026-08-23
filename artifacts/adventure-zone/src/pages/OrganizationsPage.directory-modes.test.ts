@@ -4,12 +4,12 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("src/pages/OrganizationsPage.tsx", "utf8");
 
 describe("Profiles directory modes", () => {
-  it("keeps All Events Organizations and Contacts inside Profiles", () => {
-    expect(source).toContain('["all", "events", "organizations", "contacts"]');
-    expect(source).toContain('item === "all" ? "All"');
-    expect(source).toContain('item === "events" ? "Events"');
-    expect(source).toContain('item === "organizations" ? "Organizations"');
+  it("keeps Profiles and Contacts as the only directory modes", () => {
+    expect(source).toContain('["profiles", "contacts"]');
+    expect(source).toContain('item === "profiles" ? "Profiles" : "Contacts"');
     expect(source).toContain('params.get("view")');
+    expect(source).not.toContain('"events"');
+    expect(source).not.toContain('"organizations"');
   });
 
   it("renders contacts inside Profiles instead of linking to a separate directory", () => {
@@ -18,8 +18,8 @@ describe("Profiles directory modes", () => {
     expect(source).toContain('fixedParams={{ view: "contacts" }}');
   });
 
-  it("uses composed existing API pages for broad Events and Organizations buckets", () => {
-    expect(source).toContain("loadProfileDirectoryBucket");
-    expect(source).toContain('view === "events" || view === "organizations"');
+  it("uses the normal profile type filter instead of separate event and organization buckets", () => {
+    expect(source).not.toContain("loadProfileDirectoryBucket");
+    expect(source).toContain("<OrganizationList");
   });
 });

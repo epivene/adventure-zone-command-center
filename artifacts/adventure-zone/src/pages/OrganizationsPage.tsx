@@ -11,12 +11,12 @@ import { ManualEventFamilyDialog } from "@/components/event-families/manual-even
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
 import { ContactDirectoryView } from "@/components/profiles/contact-directory-view";
 import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
-import { loadProfileDirectoryBucket, type ProfileDirectoryView } from "@/features/event-profiles/profile-directory-data";
 
 type LabeledProfileSheetTarget = ProfileSheetTarget & { label?: string };
+type ProfileDirectoryView = "profiles" | "contacts";
 
 function directoryView(value: string | null): ProfileDirectoryView {
-  return value === "events" || value === "organizations" || value === "contacts" ? value : "all";
+  return value === "contacts" ? "contacts" : "profiles";
 }
 
 export default function OrganizationsPage() {
@@ -41,7 +41,6 @@ export default function OrganizationsPage() {
     page: params.get("page") ?? undefined,
     pageSize: params.get("pageSize") ?? undefined,
   });
-  const profileQuery = { ...query, directoryView: view === "contacts" ? "all" as const : view };
 
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(view !== "contacts");
@@ -79,10 +78,7 @@ export default function OrganizationsPage() {
     setLoading(true);
     setError(null);
     try {
-      const next = view === "events" || view === "organizations"
-        ? await loadProfileDirectoryBucket({ view, query: profileQuery, fetchPage: (path) => apiGet<any>(path) })
-        : await apiGet<any>(`/organizations?${qs.toString()}`);
-      setData(next);
+      setData(await apiGet<any>(`/organizations?${qs.toString()}`));
     } catch (e: any) {
       setError(e?.message ?? "Failed to load profiles");
     } finally {
@@ -133,7 +129,7 @@ export default function OrganizationsPage() {
 
   function viewHref(next: ProfileDirectoryView) {
     const nextParams = new URLSearchParams();
-    if (next !== "all") nextParams.set("view", next);
+    if (next === "contacts") nextParams.set("view", "contacts");
     if (query.search) nextParams.set("q", query.search);
     const suffix = nextParams.toString();
     return suffix ? `/profiles?${suffix}` : "/profiles";
@@ -144,7 +140,7 @@ export default function OrganizationsPage() {
     data?.organizations ?? data ?? { records: [] },
     query.includeRetired || query.showMembers,
   );
-  const familySection = view === "all" && !showDuplicates && families.length > 0 ? (
+  const familySection = view === "profiles" && !showDuplicates && families.length > 0 ? (
     <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <summary className="cursor-pointer font-bold">Event Families <span className="ml-1 text-sm font-normal text-slate-500">({families.length})</span></summary>
       <p className="mt-1 text-sm text-slate-600">Open a family to manage its related event profiles.</p>
@@ -158,15 +154,15 @@ export default function OrganizationsPage() {
         <div>
           <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Relationships</p>
           <h1 className="mt-1 text-3xl font-bold tracking-tight">Profiles</h1>
-          {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Search events, organizations, and contacts from one CRM directory.</p> : null}
+          {!showDuplicates ? <p className="mt-2 max-w-2xl text-slate-600">Events, fairs, companies, venues, schools, cities, and other places all live together as profiles.</p> : null}
         </div>
-        {!showDuplicates && view !== "contacts" ? <button className="button-primary" onClick={() => setEventFamilyOpen(true)} type="button">+ Event Family</button> : view === "contacts" ? <Link className="button-primary" href="/contacts/new">+ Contact</Link> : null}
+        {!showDuplicates && view === "profiles" ? <button className="button-primary" onClick={() => setEventFamilyOpen(true)} type="button">+ Event Family</button> : view === "contacts" ? <Link className="button-primary" href="/contacts/new">+ Contact</Link> : null}
       </header>
 
       {!showDuplicates ? (
         <nav aria-label="Profile directory views" className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-          {(["all", "events", "organizations", "contacts"] as ProfileDirectoryView[]).map((item) => {
-            const label = item === "all" ? "All" : item === "events" ? "Events" : item === "organizations" ? "Organizations" : "Contacts";
+          {(["profiles", "contacts"] as ProfileDirectoryView[]).map((item) => {
+            const label = item === "profiles" ? "Profiles" : "Contacts";
             return <Link className={view === item ? "rounded-lg bg-orange-100 px-3 py-2 text-sm font-bold text-orange-900" : "rounded-lg px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"} href={viewHref(item)} key={item}>{label}</Link>;
           })}
         </nav>
@@ -184,10 +180,10 @@ export default function OrganizationsPage() {
         <ContactDirectoryView search={search} basePath="/profiles" fixedParams={{ view: "contacts" }} />
       ) : (
         <div onClickCapture={handleProfileLink}>
-          {loading ? <p className="text-slate-500">Loading profiles…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={profileQuery} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
+          {loading ? <p className="text-slate-500">Loading profiles…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
-              {view === "all" ? <EventFamilySuggestions compact onChanged={loadProfiles} /> : null}
+              <EventFamilySuggestions compact onChanged={loadProfiles} />
               <button className="button-secondary text-sm" onClick={openDuplicates} type="button">Find duplicates</button>
             </div>
           </section>
