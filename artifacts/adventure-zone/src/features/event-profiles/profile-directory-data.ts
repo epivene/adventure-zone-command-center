@@ -1,5 +1,4 @@
-import type { OrganizationListPage, OrganizationListRecord } from "@/features/organizations/organization-repository";
-import type { OrganizationListQuery } from "@/features/organizations/organization-repository";
+import type { OrganizationListPage, OrganizationListRecord, OrganizationListQuery } from "@/features/organizations/organization-repository";
 
 export type ProfileDirectoryView = "all" | "events" | "organizations" | "contacts";
 
@@ -48,10 +47,21 @@ export async function loadProfileDirectoryBucket(input: {
   query: OrganizationListQuery;
   fetchPage(path: string): Promise<ApiDirectoryResponse>;
 }) {
-  const types = profileTypesForDirectoryView(input.view);
+  const allowedTypes = profileTypesForDirectoryView(input.view);
+  const types = input.query.placeType
+    ? allowedTypes.includes(input.query.placeType) ? [input.query.placeType] : []
+    : allowedTypes;
   const perPage = input.query.pageSize;
   const requiredThrough = input.query.page * perPage;
   const base = commonQueryParams(input.query);
+
+  if (!types.length) {
+    return {
+      organizations: { records: [], total: 0, page: input.query.page, pageSize: perPage, pageCount: 1 },
+      families: [],
+      travelLegs: [],
+    };
+  }
 
   const firstPages = await Promise.all(types.map(async (type) => {
     const qs = new URLSearchParams(base);
@@ -77,9 +87,7 @@ export async function loadProfileDirectoryBucket(input: {
   }
   const additional = await Promise.all(additionalRequests);
   const allResponses = [...firstPages, ...additional];
-  const records = allResponses
-    .flatMap((item) => item.response.organizations.records)
-    .toSorted(recordOrder(input.query.search));
+  const records = allResponses.flatMap((item) => item.response.organizations.records).toSorted(recordOrder(input.query.search));
   const total = firstPages.reduce((sum, item) => sum + item.response.organizations.total, 0);
   const start = (input.query.page - 1) * perPage;
   const organizations: OrganizationListPage = {
