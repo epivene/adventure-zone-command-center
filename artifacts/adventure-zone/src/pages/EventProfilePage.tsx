@@ -8,11 +8,13 @@ import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-act
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
 import { ProfileSourceDocuments } from "@/components/profiles/profile-source-documents";
+import { HistoricalEventDates } from "@/components/profiles/historical-event-dates";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { PaperNoteHistorySources } from "@/components/paper-notes/paper-note-history-sources";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { DerivedFactsReview } from "@/components/assistant/derived-facts-review";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
+import { extractHistoricalEventDates } from "@/features/event-profiles/historical-event-dates";
 import { profileResearchGaps } from "@/features/profile-research/profile-research-gaps";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
@@ -141,6 +143,7 @@ export default function EventProfilePage() {
       .map((note: string) => simplifyHistoryText(note.trim()))
       .filter(Boolean),
   )];
+  const historicalEventDates = extractHistoricalEventDates(recoveredActNotes);
   const normalizedActSearch = actHistorySearch.trim().toLowerCase();
   const filteredActNotes = normalizedActSearch
     ? recoveredActNotes.filter((note) => note.toLowerCase().includes(normalizedActSearch))
@@ -215,6 +218,8 @@ export default function EventProfilePage() {
       {!profileEditing && profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
       {!profileEditing && profileId ? <PaperNoteHistorySources profileId={profileId} /> : null}
+
+      {!profileEditing ? <HistoricalEventDates dates={historicalEventDates} /> : null}
 
       {recoveredActNotes.length ? (
         <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
