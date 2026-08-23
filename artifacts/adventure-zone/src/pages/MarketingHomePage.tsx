@@ -17,8 +17,7 @@ export default function MarketingHomePage() {
     <div className="mx-auto grid max-w-6xl gap-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Marketing</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">Marketing</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Marketing</h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">Campaigns and outreach using the same Booking data.</p>
         </div>
         {bookingReturnPath ? (
