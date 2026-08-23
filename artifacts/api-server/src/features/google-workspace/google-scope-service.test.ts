@@ -11,18 +11,19 @@ const labels = [
   { id: "shows", name: "Shows", type: "user" as const },
   { id: "shows-2026", name: "Shows/2026", type: "user" as const },
   { id: "shows-west", name: "Shows/West", type: "user" as const },
-  { id: "receipts", name: "Receipts", type: "user" as const },
+  { id: "receipt", name: "Receipt", type: "user" as const },
   { id: "off-season", name: "Off Season Business Opportunities", type: "user" as const },
   { id: "employees", name: "Employees", type: "user" as const },
   { id: "associations", name: "Associations", type: "user" as const },
+  { id: "SPAM", name: "SPAM", type: "system" as const },
   { id: "personal", name: "Personal/Family", type: "user" as const },
   { id: "almost", name: "Show", type: "user" as const },
 ];
 
 const calendars = [
   { id: "az", summary: "Adventure Zone Calendar", primary: false },
-  { id: "pirates", summary: "Pirates Rebellion Calendar", primary: false },
-  { id: "warriors", summary: "Warriors Playground Calendar", primary: false },
+  { id: "pirates", summary: "Pirate's Rebellion Calendar", primary: false },
+  { id: "warriors", summary: "Warrior's Playground Calendar", primary: false },
   {
     id: "zone.pirate.warrior@gmail.com",
     summary: "A differently named fourth calendar",
@@ -46,23 +47,30 @@ function workspaceClient(options?: {
 }
 
 describe("buildGoogleScopePreview", () => {
-  it("selects exact Gmail roots and every descendant while excluding personal labels", () => {
+  it("selects exact Gmail roots, descendants, and Spam while excluding personal labels", () => {
     const preview = buildGoogleScopePreview(labels, calendars);
 
     expect(preview.labels.map((label) => label.id)).toEqual([
       "shows",
       "shows-2026",
       "shows-west",
-      "receipts",
+      "receipt",
       "off-season",
       "employees",
       "associations",
+      "SPAM",
     ]);
     expect(preview.labels.find((label) => label.id === "shows-2026")).toEqual({
       id: "shows-2026",
       name: "Shows/2026",
       rootId: "shows",
       rootName: "Shows",
+    });
+    expect(preview.labels.find((label) => label.id === "SPAM")).toEqual({
+      id: "SPAM",
+      name: "SPAM",
+      rootId: "SPAM",
+      rootName: "Spam",
     });
     expect(preview.labels.some((label) => label.id === "personal")).toBe(false);
     expect(preview.labels.some((label) => label.id === "almost")).toBe(false);
