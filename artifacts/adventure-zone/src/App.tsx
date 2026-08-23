@@ -54,6 +54,7 @@ import ContactNewPage from "@/pages/ContactNewPage";
 import OrganizationsPage from "@/pages/OrganizationsPage";
 import EventFamilyPage from "@/pages/EventFamilyPage";
 import SchedulePage from "@/pages/SchedulePage";
+import { LegManagementPage } from "@/pages/RoutesPage";
 import TripDetailPage from "@/pages/TripDetailPage";
 import CallWorkspacePage from "@/pages/CallWorkspacePage";
 import MobileCallLogPage from "@/pages/MobileCallLogPage";
@@ -280,6 +281,7 @@ function AdminProtectedApp() {
           <Route path="/schedule" component={SchedulePage} />
           <Route path="/calendar"><ScheduleRedirect /></Route>
           <Route path="/routes"><ScheduleRedirect view="map" /></Route>
+          <Route path="/operations/legs" component={LegManagementPage} />
           <Route path="/research-sources" component={ResearchSourcesPage} />
           <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
