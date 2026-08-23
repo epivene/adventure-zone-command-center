@@ -57,11 +57,8 @@ export default function NeedsAnswerPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <header>
-        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Calling</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Needs Answer</h1>
-        <p className="mt-2 text-slate-600">
-          Questions you saved during calls because Command Center couldn't support a confident answer yet.
-        </p>
+        <h1 className="text-3xl font-bold tracking-tight">Needs Answer</h1>
+        <p className="mt-2 text-slate-600">Questions saved during calls that still need an answer.</p>
       </header>
 
       {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}
@@ -85,7 +82,7 @@ export default function NeedsAnswerPage() {
                     {href ? <a className="font-semibold text-orange-700 underline" href={href}>Open related profile</a> : null}
                   </div>
                   <label className="mt-4 grid gap-1.5 text-sm font-semibold">
-                    Confirmed answer / resolution
+                    Answer
                     <textarea
                       className="min-h-24"
                       onChange={(event) => setResolutions((current) => ({ ...current, [item.id]: event.target.value }))}
