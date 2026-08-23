@@ -149,7 +149,7 @@ describe("TodayPage renewals", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
-    expect(screen.getByText("Needs a next step (1)")).toBeInTheDocument();
+    expect(screen.getByText("Needs a decision (1)")).toBeInTheDocument();
     expect(screen.getByText("Current Fair Lead")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load next-season renewals.",

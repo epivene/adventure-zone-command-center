@@ -6,11 +6,11 @@ import { CallQueueWorkspace } from "@/components/today/call-queue-workspace";
 import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { RenewalsSection } from "@/components/today/renewals-section";
-import { NeedsAttention } from "@/components/today/needs-attention";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
 import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
-import { classifyTodayEventTiming, countQueueNewLeads } from "@/features/today/today-summary-labels";
+import { classifyTodayEventTiming } from "@/features/today/today-summary-labels";
+import { deriveTodayFocus } from "@/features/today/today-focus";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
@@ -45,6 +45,13 @@ function coerceFollowUps(items: any[]) {
 
 function coerceRenewals(items: any[]) {
   return (items ?? []).map((renewal) => ({ ...renewal, dueAt: renewal.dueAt ? new Date(renewal.dueAt) : null }));
+}
+
+function FocusPrimaryAction({ href, label }: { href: string; label: string }) {
+  const classes = "inline-flex items-center justify-center rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-orange-700";
+  return href.startsWith("#")
+    ? <a className={classes} href={href}>{label}</a>
+    : <Link className={classes} href={href}>{label}</Link>;
 }
 
 export default function TodayPage() {
@@ -144,47 +151,80 @@ export default function TodayPage() {
 
   const followUps = coerceFollowUps(dashboard.followUps ?? []);
   const renewals = coerceRenewals(dashboard.renewals ?? []);
-  const upcomingEvents = (dashboard.upcomingEvents ?? []).map((e: any) => ({
-    ...e,
-    startsAt: e.startsAt ? new Date(e.startsAt) : null,
-    endsAt: e.endsAt ? new Date(e.endsAt) : null,
+  const upcomingEvents = (dashboard.upcomingEvents ?? []).map((event: any) => ({
+    ...event,
+    startsAt: event.startsAt ? new Date(event.startsAt) : null,
+    endsAt: event.endsAt ? new Date(event.endsAt) : null,
   }));
   const nextStepItems = (dashboard.needsFollowUpPlan ?? []).filter((booking: any) => !hiddenNextSteps.has(booking.id));
   const displayedNextStepItems = showAllNextSteps ? nextStepItems : nextStepItems.slice(0, 8);
   const overdueCount = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
-  const queueCount = followUps.length + nextStepItems.length;
-  const queueNewLeadCount = countQueueNewLeads(nextStepItems, followUps);
+  const contractCount = dashboard.contractCount ?? 0;
+  const visibleRouteWarningCount = dashboard.visibleRouteWarningCount ?? 0;
+  const focus = deriveTodayFocus({
+    overdueFollowUpCount: overdueCount,
+    followUpCount: followUps.length,
+    contractCount,
+    decisionCount: nextStepItems.length,
+    upcomingEventCount: upcomingEvents.length,
+  });
+  const nextEvent = upcomingEvents[0] ?? null;
 
   return (
     <div className="mx-auto grid max-w-5xl gap-6 pb-8" onClickCapture={handleProfileLink}>
-      <header className="grid gap-3 border-b border-slate-200 pb-5">
-        <div>
-          <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Command Center</p>
-          <div className="mt-1 flex flex-wrap items-end justify-between gap-2">
-            <div><h1 className="text-3xl font-bold tracking-tight">Today</h1><p className="mt-1 text-sm font-medium text-slate-500">{formatToday(now)}</p></div>
-            <p className="text-sm font-semibold text-slate-700">{queueCount} things need attention</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2" aria-label="Today summary">
-          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${overdueCount ? "bg-rose-100 text-rose-800" : "bg-slate-100 text-slate-600"}`}>{overdueCount} Overdue</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{dashboard.contractCount ?? 0} Contracts</span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">{queueNewLeadCount} New leads in queue</span>
-        </div>
+      <header className="border-b border-slate-200 pb-5">
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Command Center</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Today</h1>
+        <p className="mt-1 text-sm font-medium text-slate-500">{formatToday(now)}</p>
       </header>
 
-      <section className="grid gap-2" aria-labelledby="up-next-title">
-        <h2 className="text-2xl font-bold" id="up-next-title">Up Next</h2>
-        {callingConfig.assistedCallingEnabled ? <CallQueueWorkspace callingConfig={callingConfig} followUps={followUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 }; }} remainingCount={dashboard.followUpTotal ?? followUps.length} /> : <NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} />}
+      <section className="rounded-2xl border border-orange-200 bg-orange-50/70 p-5 shadow-sm" aria-labelledby="start-here-title">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Start here</p>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold" id="start-here-title">{focus.headline}</h2>
+            <p className="mt-1 text-sm font-medium text-slate-600">{focus.detail}</p>
+          </div>
+          <FocusPrimaryAction href={focus.primaryHref} label={focus.primaryLabel} />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold">
+          {followUps.length ? <a className="text-orange-700 hover:underline" href="#my-work-calls">Calls & follow-ups</a> : null}
+          <Link className="text-orange-700 hover:underline" href="/bookings">Booking work</Link>
+          <Link className="text-orange-700 hover:underline" href="/research-sources">Find opportunities</Link>
+          <Link className="text-orange-700 hover:underline" href="/schedule">View schedule</Link>
+        </div>
       </section>
 
-      <section className="grid gap-3" aria-labelledby="today-queue-title">
-        <h2 className="text-2xl font-bold" id="today-queue-title">Today's Queue</h2>
+      <section className="grid gap-3" aria-labelledby="my-work-title">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold" id="my-work-title">My Work</h2>
+          <span className="text-sm font-semibold text-slate-500">Only open what you want to work on</span>
+        </div>
 
-        {!callingConfig.assistedCallingEnabled ? <FollowUpList followUps={followUps} now={now} /> : null}
+        {followUps.length ? (
+          <details id="my-work-calls" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={focus.kind === "overdue_followups" || focus.kind === "followups"}>
+            <summary className="cursor-pointer font-bold">Calls & follow-ups <span className="ml-1 text-slate-500">({followUps.length})</span>{overdueCount ? <span className="ml-2 text-xs font-bold text-rose-700">{overdueCount} overdue</span> : null}</summary>
+            <div className="mt-4">
+              {callingConfig.assistedCallingEnabled
+                ? <CallQueueWorkspace callingConfig={callingConfig} followUps={followUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 }; }} remainingCount={dashboard.followUpTotal ?? followUps.length} />
+                : <div className="grid gap-4"><NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} /><FollowUpList followUps={followUps} now={now} /></div>}
+            </div>
+          </details>
+        ) : null}
+
+        {contractCount > 0 ? (
+          <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={focus.kind === "contracts"}>
+            <summary className="cursor-pointer font-bold">Contracts <span className="ml-1 text-slate-500">({contractCount})</span></summary>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">Booking and contract work that needs your attention.</p>
+              <Link className="text-sm font-bold text-orange-700 hover:underline" href="/bookings">Open booking work</Link>
+            </div>
+          </details>
+        ) : null}
 
         {nextStepItems.length || undoBookingIds.length ? (
-          <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open>
-            <summary className="cursor-pointer font-bold">Needs a next step <span className="ml-1 text-slate-500">({nextStepItems.length})</span></summary>
+          <details id="my-work-decisions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={focus.kind === "decisions"}>
+            <summary className="cursor-pointer font-bold">Needs a decision <span className="ml-1 text-slate-500">({nextStepItems.length})</span></summary>
             <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
               <p className="text-sm text-slate-600">Leads or past events with no future reminder scheduled.</p>
               {nextStepItems.length ? <button className="text-sm font-semibold text-orange-700" type="button" aria-label="Manage next steps" onClick={() => { setManageNextSteps((value) => !value); setSelectedNextSteps(new Set()); }}>{manageNextSteps ? "Done" : "Manage"}</button> : null}
@@ -208,27 +248,45 @@ export default function TodayPage() {
         ) : null}
       </section>
 
-      <section className="grid gap-3" aria-labelledby="needs-attention-title">
-        <h2 className="text-2xl font-bold" id="needs-attention-title">Needs Attention</h2>
-        <NeedsAttention contractCount={dashboard.contractCount ?? 0} followUpCount={dashboard.followUpCount ?? 0} newLeadCount={dashboard.newLeadCount ?? 0} visibleRouteWarningCount={dashboard.visibleRouteWarningCount ?? 0} />
-      </section>
+      {visibleRouteWarningCount > 0 ? (
+        <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-sm" aria-label="Needs attention">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div><p className="font-bold text-amber-950">Route planning needs attention</p><p className="mt-1 text-sm text-amber-800">{visibleRouteWarningCount} route warning{visibleRouteWarningCount === 1 ? "" : "s"} need a look.</p></div>
+            <Link className="text-sm font-bold text-amber-900 underline" href="/routes">Review routes</Link>
+          </div>
+        </section>
+      ) : null}
 
       <section className="grid gap-3" aria-labelledby="coming-up-title">
-        <h2 className="text-2xl font-bold" id="coming-up-title">Coming Up</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold" id="coming-up-title">Coming up</h2>
+          <Link className="text-sm font-bold text-orange-700 hover:underline" href="/schedule">View schedule</Link>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {nextEvent ? (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Next event</p><Link className="mt-1 block text-lg font-bold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: nextEvent.organizationId ?? null, contactId: nextEvent.primaryContactId, bookingId: nextEvent.id }) ?? `/bookings/${nextEvent.id}`}>{nextEvent.name}</Link><BookingOperations operations={nextEvent.operations} /></div>
+              {nextEvent.startsAt ? <span className="text-sm font-semibold text-slate-600">{formatEventDateRange(nextEvent.startsAt, nextEvent.endsAt)}</span> : null}
+            </div>
+          ) : <p className="text-sm text-slate-600">No upcoming event dates are set.</p>}
+          {upcomingEvents.length > 1 ? <p className="mt-3 text-xs font-semibold text-slate-500">{upcomingEvents.length - 1} more upcoming event{upcomingEvents.length - 1 === 1 ? "" : "s"}</p> : null}
+        </div>
+      </section>
 
-        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer font-bold">Current & upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary>
-          <div className="mt-3 flex justify-end"><Link className="text-sm font-semibold text-orange-700" href="/schedule">Open Schedule</Link></div>
-          {upcomingEvents.length ? <ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => {
+      <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer text-lg font-bold">Later</summary>
+        <p className="mt-1 text-sm text-slate-600">Schedule detail, trips, and renewals are here when you want them.</p>
+        <div className="mt-4 grid gap-3">
+          {upcomingEvents.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Current & upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary><ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => {
             const timing = classifyTodayEventTiming(event, now);
             return <li className="flex items-start justify-between gap-3 py-3" key={event.id}><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: event.organizationId ?? null, contactId: event.primaryContactId, bookingId: event.id }) ?? `/bookings/${event.id}`}>{event.name}</Link><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${timing === "in_progress" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{timing === "in_progress" ? "In progress" : "Upcoming"}</span></div><BookingOperations operations={event.operations} /></div>{event.startsAt ? <span className="whitespace-nowrap text-sm text-slate-600">{formatEventDateRange(event.startsAt, event.endsAt)}</span> : null}</li>;
-          })}</ul> : <p className="mt-3 text-sm text-slate-600">No current or upcoming event dates are set.</p>}
-        </details>
+          })}</ul></details> : null}
 
-        {(dashboard.todayTrips ?? []).length ? <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><summary className="cursor-pointer font-bold">Today's trips <span className="ml-1 text-slate-500">({dashboard.todayTrips.length})</span></summary><ul className="mt-3 divide-y divide-slate-100">{dashboard.todayTrips.map((trip: any) => <li className="py-3" key={trip.id}><Link className="font-semibold hover:text-orange-700" href={`/trips/${trip.id}`}>{trip.name}</Link><span className="ml-2 text-sm text-slate-600">{trip.legName ? `${trip.legName} · ` : ""}{trip.stopCount} stops</span></li>)}</ul></details> : null}
+          {(dashboard.todayTrips ?? []).length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Today's trips <span className="ml-1 text-slate-500">({dashboard.todayTrips.length})</span></summary><ul className="mt-3 divide-y divide-slate-100">{dashboard.todayTrips.map((trip: any) => <li className="py-3" key={trip.id}><Link className="font-semibold hover:text-orange-700" href={`/trips/${trip.id}`}>{trip.name}</Link><span className="ml-2 text-sm text-slate-600">{trip.legName ? `${trip.legName} · ` : ""}{trip.stopCount} stops</span></li>)}</ul></details> : null}
 
-        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><summary className="cursor-pointer font-bold">Renewals <span className="ml-1 text-slate-500">({dashboard.renewalTotal ?? renewals.length})</span></summary><div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div></details>
-      </section>
+          {(dashboard.renewalTotal ?? renewals.length) > 0 || dashboard.renewalError ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Renewals <span className="ml-1 text-slate-500">({dashboard.renewalTotal ?? renewals.length})</span></summary><div className="mt-4"><RenewalsSection error={dashboard.renewalError ?? null} prominentCount={dashboard.renewalProminentCount ?? 0} renewals={renewals} total={dashboard.renewalTotal ?? renewals.length} /></div></details> : null}
+        </div>
+      </details>
 
       {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label={profileTarget.label ?? "Side profile"} /> : null}
       <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
