@@ -8,8 +8,9 @@ import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-
 import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import { CallerFinder } from "@/components/calls/caller-finder";
 import { CallWorkspace } from "@/components/calls/call-workspace";
+import { QuickAddCaller, type QuickAddCallerSubmission } from "@/components/contacts/quick-add-caller";
 import { GuidedCallScriptOverridesProvider } from "@/features/calls/guided-call-script-settings-context";
-import { apiGet } from "@/lib/auth-token";
+import { apiGet, apiPost } from "@/lib/auth-token";
 
 function toDate(value: unknown): Date | null {
   return value ? new Date(value as string) : null;
@@ -29,6 +30,19 @@ type CallingConfig = {
   voicemailLauncherUrl: string | null;
 };
 
+type QuickAddResult =
+  | { ok: true; contactId: string }
+  | { ok: false; error: string }
+  | { ok: false; canContinueCreating: boolean; candidates: Array<{
+      contactId: string;
+      name: string;
+      organizationName: string | null;
+      city: string | null;
+      region: string | null;
+      reasons: string[];
+      kind: "exact" | "likely";
+    }> };
+
 export default function CallWorkspacePage() {
   const search = useSearch();
   const [, setLocation] = useLocation();
@@ -37,6 +51,9 @@ export default function CallWorkspacePage() {
   const bookingId = params.get("bookingId") ?? undefined;
   const contactId = params.get("contactId") ?? undefined;
   const organizationId = params.get("organizationId") ?? undefined;
+  const addMode = params.get("mode") === "add";
+  const initialPhone = params.get("phone") ?? "";
+  const initialQuery = params.get("q") ?? "";
   const hasContext = Boolean(followUpId || bookingId || contactId || organizationId);
 
   const [data, setData] = useState<any>(null);
@@ -84,7 +101,21 @@ export default function CallWorkspacePage() {
 
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading call workspace…</p></div>;
   if (!config.assistedCallingEnabled) return <AssistedCallingUnavailable />;
-  if (!hasContext) return <div className="mx-auto max-w-7xl py-8"><CallerFinder onSelect={selectCaller} /></div>;
+  if (!hasContext) {
+    return (
+      <div className="mx-auto max-w-3xl py-8">
+        {addMode ? (
+          <QuickAddCaller
+            initialPhone={initialPhone}
+            initialQuery={initialQuery}
+            onSubmit={(input: QuickAddCallerSubmission) => apiPost<QuickAddResult>("/calls/quick-caller", input)}
+          />
+        ) : (
+          <CallerFinder initialPhone={initialPhone} onSelect={selectCaller} />
+        )}
+      </div>
+    );
+  }
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
   const context = data.context ?? {};
