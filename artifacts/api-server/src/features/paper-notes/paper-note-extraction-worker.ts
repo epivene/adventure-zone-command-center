@@ -13,6 +13,8 @@ import {
   PaperNoteProviderError,
   type PaperNoteExtractionProvider,
 } from "./paper-note-extraction-provider";
+import { mergePaperNoteContinuationHints } from "./paper-note-reading-improvements";
+import { VerifyingPaperNoteExtractionProvider } from "./paper-note-verifying-provider";
 
 const LEASE_MS = 5 * 60 * 1000;
 
@@ -187,11 +189,11 @@ export class PaperNoteExtractionWorker {
         stage: "segment",
         now: new Date(),
       });
-      const segmentation = await this.dependencies.provider.segmentPage({
+      const segmentation = mergePaperNoteContinuationHints(await this.dependencies.provider.segmentPage({
         bytes: originalBytes,
         mimeType: prepared.detectedMimeType,
         rotationDegrees: claimed.rotationDegrees,
-      });
+      }));
       const resolvedPageActivityDate = resolvePaperNotePageLastContactDate(
         segmentation.pageActivityDate,
         segmentation.pageHeading,
@@ -290,9 +292,10 @@ export function createPaperNoteExtractionWorker(input: {
   storage: PaperNoteObjectStorage;
   provider?: PaperNoteExtractionProvider;
 }) {
+  const baseProvider = input.provider ?? new DefaultPaperNoteExtractionProvider();
   return new PaperNoteExtractionWorker({
     repository: input.repository,
     storage: input.storage,
-    provider: input.provider ?? new DefaultPaperNoteExtractionProvider(),
+    provider: new VerifyingPaperNoteExtractionProvider(baseProvider),
   });
 }
