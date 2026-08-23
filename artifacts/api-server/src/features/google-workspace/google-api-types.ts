@@ -45,8 +45,8 @@ export interface GoogleWorkspaceReadClient {
   accountIdentity(): Promise<GoogleWorkspaceAccountIdentity>;
   listLabels(): Promise<GoogleLabelSummary[]>;
   listCalendars(): Promise<GoogleCalendarSummary[]>;
-  listRecentMessageRefs(limit: number): Promise<GoogleMessageRef[]>;
-  getMessageMetadata(id: string): Promise<GoogleMessageMetadata>;
+  listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
+  getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
 }
 
 export type GoogleWorkspaceFetch = (
