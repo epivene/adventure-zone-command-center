@@ -12,7 +12,7 @@ const client: GoogleWorkspaceReadClient = {
   accountIdentity: async () => ({ subject: null, email: "company@example.com" }),
   listLabels: async () => [
     { id: "shows", name: "Shows", type: "user" },
-    { id: "receipts", name: "Receipts", type: "user" },
+    { id: "receipt", name: "Receipt", type: "user" },
     {
       id: "off-season",
       name: "Off Season Business Opportunities",
@@ -20,11 +20,12 @@ const client: GoogleWorkspaceReadClient = {
     },
     { id: "employees", name: "Employees", type: "user" },
     { id: "associations", name: "Associations", type: "user" },
+    { id: "SPAM", name: "SPAM", type: "system" },
   ],
   listCalendars: async () => [
     { id: "adventure", summary: "Adventure Zone Calendar", primary: false },
-    { id: "pirates", summary: "Pirates Rebellion Calendar", primary: false },
-    { id: "warriors", summary: "Warriors Playground Calendar", primary: false },
+    { id: "pirates", summary: "Pirate's Rebellion Calendar", primary: false },
+    { id: "warriors", summary: "Warrior's Playground Calendar", primary: false },
     {
       id: "zone.pirate.warrior@gmail.com",
       summary: "Zone Pirate Warrior",
@@ -34,7 +35,7 @@ const client: GoogleWorkspaceReadClient = {
 };
 
 describe("Google Workspace approved scope completeness", () => {
-  it("refuses to save when any approved business label or calendar is omitted", async () => {
+  it("refuses to save when any approved business label, Spam, or calendar is omitted", async () => {
     const replace = vi.fn(async () => undefined);
     const persistence: GoogleScopePersistence = {
       get: async () => ({ labels: [], calendars: [] }),
@@ -51,7 +52,7 @@ describe("Google Workspace approved scope completeness", () => {
 
     await expect(
       service.save({
-        labelIds: ["shows", "receipts", "off-season", "employees"],
+        labelIds: ["shows", "receipt", "off-season", "employees", "associations"],
         calendarIds: [
           "adventure",
           "pirates",
