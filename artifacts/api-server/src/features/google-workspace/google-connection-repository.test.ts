@@ -27,7 +27,8 @@ function repositoryHarness() {
           account_email: values[0],
           status: "connected",
           encrypted_refresh_token: values[1],
-          granted_scopes: values[2],
+          granted_scopes:
+            typeof values[2] === "string" ? JSON.parse(values[2]) : values[2],
           google_subject: values[3],
           connected_at: values[4],
           last_verified_at: values[4],
@@ -126,6 +127,28 @@ describe("PostgresGoogleConnectionRepository", () => {
         now: new Date("2026-08-22T18:00:00.000Z"),
       }),
     ).rejects.toThrow("GOOGLE_WORKSPACE_CONFIGURATION_INCOMPLETE");
+  });
+
+  it("serializes granted scopes as JSON for the jsonb column", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: vi.fn(() => fakeClient),
+    });
+
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: "google-subject",
+      refreshToken: "refresh-token",
+      scopes: ["scope-a", "scope-b"],
+      now: new Date("2026-08-22T18:00:00.000Z"),
+    });
+
+    const insert = harness.calls.find((call) =>
+      call.text.includes("INSERT INTO google_workspace_connections"),
+    );
+    expect(insert?.values[2]).toBe('["scope-a","scope-b"]');
   });
 
   it("encrypts refresh credentials, audits the connection, and never returns credentials", async () => {
