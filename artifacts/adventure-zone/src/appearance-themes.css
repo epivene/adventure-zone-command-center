@@ -174,7 +174,8 @@ html.dark article:has([data-testid^="paper-note-section-"]) .text-slate-600 {
 }
 
 /* Keep status surfaces meaningful without glaring pastel blocks in dark mode. */
-html.dark .bg-orange-50 { background-color: rgba(249,115,22,.12) !important; }
+html.dark .bg-orange-50,
+html.dark .bg-orange-50\/70 { background-color: rgba(249,115,22,.12) !important; }
 html.dark .bg-orange-100 { background-color: rgba(249,115,22,.18) !important; }
 html.dark .bg-blue-50,
 html.dark .bg-blue-100 { background-color: rgba(59,130,246,.14) !important; }
