@@ -25,13 +25,21 @@ import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-
 import { useState, type FormEvent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
-import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation } from "wouter";
+import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation, useSearch } from "wouter";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/navigation/app-shell";
 import { OfflineBanner } from "@/components/connectivity/offline-banner";
 import { Toaster } from "@/components/ui/toaster";
 import { AssistantContextProvider } from "@/features/assistant/assistant-context";
+import {
+  canonicalActMigrationPath,
+  canonicalCallLogPath,
+  canonicalCallsPath,
+  canonicalProfilePath,
+  canonicalProfilesPath,
+  canonicalSchedulePath,
+} from "@/lib/canonical-routes";
 
 import AdminCommandPanelPage from "@/pages/AdminCommandPanelPage";
 import MarketingHomePage from "@/pages/MarketingHomePage";
@@ -46,8 +54,6 @@ import ContactNewPage from "@/pages/ContactNewPage";
 import OrganizationsPage from "@/pages/OrganizationsPage";
 import EventFamilyPage from "@/pages/EventFamilyPage";
 import SchedulePage from "@/pages/SchedulePage";
-import CalendarPage from "@/pages/CalendarPage";
-import RoutesPage from "@/pages/RoutesPage";
 import TripDetailPage from "@/pages/TripDetailPage";
 import CallWorkspacePage from "@/pages/CallWorkspacePage";
 import MobileCallLogPage from "@/pages/MobileCallLogPage";
@@ -66,7 +72,6 @@ import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage
 import SettingsGoogleWorkspacePage from "@/pages/SettingsGoogleWorkspacePage";
 import ActMigrationPage from "@/pages/ActMigrationPage";
 import ActRecoveryPage from "@/pages/ActRecoveryPage";
-import QuickAddPage from "@/pages/QuickAddPage";
 import NotFound from "@/pages/not-found";
 
 import OfficeSignInPage from "@/pages/OfficeSignInPage";
@@ -167,6 +172,34 @@ function Protected({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function CallsRedirect({ addMode = false }: { addMode?: boolean }) {
+  const search = useSearch();
+  const params = new URLSearchParams(search);
+  if (addMode) params.set("mode", "add");
+  const value = params.toString();
+  return <Redirect to={canonicalCallsPath(value ? `?${value}` : "")} />;
+}
+
+function CallLogRedirect() {
+  const search = useSearch();
+  return <Redirect to={canonicalCallLogPath(search ? `?${search}` : "")} />;
+}
+
+function ScheduleRedirect({ view = "calendar" }: { view?: "calendar" | "map" }) {
+  const search = useSearch();
+  return <Redirect to={canonicalSchedulePath({ view, search: search ? `?${search}` : "" })} />;
+}
+
+function ProfilesRedirect() {
+  const search = useSearch();
+  return <Redirect to={canonicalProfilesPath(search ? `?${search}` : "")} />;
+}
+
+function ActMigrationRedirect() {
+  const search = useSearch();
+  return <Redirect to={canonicalActMigrationPath(search ? `?${search}` : "")} />;
+}
+
 function SettingsStub() {
   const tools = [
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
@@ -242,22 +275,22 @@ function AdminProtectedApp() {
           <Route path="/contacts" component={ContactsPage} />
           <Route path="/profiles/:profileId" component={EventProfilePage} />
           <Route path="/profiles" component={OrganizationsPage} />
-          <Route path="/organizations" component={OrganizationsPage} />
+          <Route path="/organizations"><ProfilesRedirect /></Route>
           <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
           <Route path="/schedule" component={SchedulePage} />
-          <Route path="/calendar" component={CalendarPage} />
-          <Route path="/routes" component={RoutesPage} />
+          <Route path="/calendar"><ScheduleRedirect /></Route>
+          <Route path="/routes"><ScheduleRedirect view="map" /></Route>
           <Route path="/research-sources" component={ResearchSourcesPage} />
           <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
-          <Route path="/calls/new" component={CallWorkspacePage} />
+          <Route path="/calls/new"><CallsRedirect /></Route>
           <Route path="/calls/log" component={MobileCallLogPage} />
           <Route path="/calls/workspace" component={CallWorkspacePage} />
-          <Route path="/calls/mobile" component={MobileCallLogPage} />
+          <Route path="/calls/mobile"><CallLogRedirect /></Route>
           <Route path="/needs-answer" component={NeedsAnswerPage} />
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
           <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
-          <Route path="/event-profiles/:id">{(params)=><EventProfilePage profileId={params.id}/>}</Route>
+          <Route path="/event-profiles/:id">{(params)=><Redirect to={canonicalProfilePath(params.id)} />}</Route>
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
           <Route path="/settings/business-sources" component={SettingsBusinessSourcesPage} />
@@ -268,8 +301,8 @@ function AdminProtectedApp() {
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />
           <Route path="/settings" component={SettingsStub} />
-          <Route path="/act-migration" component={ActMigrationPage} />
-          <Route path="/quick-add" component={QuickAddPage} />
+          <Route path="/act-migration"><ActMigrationRedirect /></Route>
+          <Route path="/quick-add"><CallsRedirect addMode /></Route>
           <Route path="/office-coordinator" component={OfficeCoordinatorAdminPage} />
           <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
           <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
