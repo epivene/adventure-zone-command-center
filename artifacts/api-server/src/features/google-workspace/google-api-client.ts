@@ -1,6 +1,8 @@
 import type {
   GoogleCalendarSummary,
   GoogleLabelSummary,
+  GoogleMessageMetadata,
+  GoogleMessageRef,
   GoogleWorkspaceFetch,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
@@ -17,7 +19,8 @@ export const GOOGLE_WORKSPACE_READ_SCOPES = [
 const authorizationEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
 const tokenEndpoint = "https://oauth2.googleapis.com/token";
 const userInfoEndpoint = "https://openidconnect.googleapis.com/v1/userinfo";
-const labelsEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me/labels";
+const gmailBaseEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me";
+const labelsEndpoint = `${gmailBaseEndpoint}/labels`;
 const calendarListEndpoint =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
 
@@ -54,6 +57,33 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
   } catch {
     return {};
   }
+}
+
+function partHasAttachment(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const part = value as Record<string, unknown>;
+  if (typeof part.filename === "string" && part.filename.trim()) return true;
+  if (part.body && typeof part.body === "object") {
+    const body = part.body as Record<string, unknown>;
+    if (typeof body.attachmentId === "string" && body.attachmentId.trim()) {
+      return true;
+    }
+  }
+  return Array.isArray(part.parts) && part.parts.some(partHasAttachment);
+}
+
+function headerValue(headers: unknown[], name: string): string {
+  const found = headers.find((value) => {
+    if (!value || typeof value !== "object") return false;
+    const header = value as Record<string, unknown>;
+    return (
+      typeof header.name === "string" &&
+      header.name.toLowerCase() === name.toLowerCase()
+    );
+  });
+  if (!found || typeof found !== "object") return "";
+  const value = (found as Record<string, unknown>).value;
+  return typeof value === "string" ? value : "";
 }
 
 export function createGoogleWorkspaceReadClient(input: {
@@ -242,11 +272,98 @@ export function createGoogleWorkspaceReadClient(input: {
       } while (pageToken);
       return calendars;
     },
+
+    async listRecentMessageRefs(limit: number): Promise<GoogleMessageRef[]> {
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        throw clientError("GOOGLE_WORKSPACE_MESSAGE_LIMIT_INVALID");
+      }
+      const refs: GoogleMessageRef[] = [];
+      let pageToken: string | null = null;
+      do {
+        const url = new URL(`${gmailBaseEndpoint}/messages`);
+        url.searchParams.set("includeSpamTrash", "true");
+        url.searchParams.set("maxResults", String(Math.min(100, limit - refs.length)));
+        if (pageToken) url.searchParams.set("pageToken", pageToken);
+        const payload = await authorizedJson(url.toString());
+        const messages = Array.isArray(payload.messages) ? payload.messages : [];
+        for (const value of messages) {
+          if (refs.length >= limit) break;
+          if (!value || typeof value !== "object") continue;
+          const message = value as Record<string, unknown>;
+          if (
+            typeof message.id !== "string" ||
+            !message.id.trim() ||
+            typeof message.threadId !== "string" ||
+            !message.threadId.trim()
+          ) {
+            continue;
+          }
+          refs.push({ id: message.id, threadId: message.threadId });
+        }
+        pageToken =
+          refs.length < limit && typeof payload.nextPageToken === "string" && payload.nextPageToken
+            ? payload.nextPageToken
+            : null;
+      } while (pageToken && refs.length < limit);
+      return refs;
+    },
+
+    async getMessageMetadata(id: string): Promise<GoogleMessageMetadata> {
+      const messageId = id.trim();
+      if (!messageId) {
+        throw clientError("GOOGLE_WORKSPACE_MESSAGE_ID_INVALID");
+      }
+      const url = new URL(`${gmailBaseEndpoint}/messages/${encodeURIComponent(messageId)}`);
+      url.searchParams.set("format", "metadata");
+      for (const header of ["From", "To", "Cc", "Subject", "Date"]) {
+        url.searchParams.append("metadataHeaders", header);
+      }
+      const payload = await authorizedJson(url.toString());
+      if (
+        typeof payload.id !== "string" ||
+        typeof payload.threadId !== "string"
+      ) {
+        throw clientError("GOOGLE_WORKSPACE_MESSAGE_METADATA_INVALID");
+      }
+      const messagePayload =
+        payload.payload && typeof payload.payload === "object"
+          ? (payload.payload as Record<string, unknown>)
+          : {};
+      const headers = Array.isArray(messagePayload.headers)
+        ? messagePayload.headers
+        : [];
+      const rawInternalDate =
+        typeof payload.internalDate === "string"
+          ? Number(payload.internalDate)
+          : typeof payload.internalDate === "number"
+            ? payload.internalDate
+            : NaN;
+      const parts = Array.isArray(messagePayload.parts) ? messagePayload.parts : [];
+      return {
+        id: payload.id,
+        threadId: payload.threadId,
+        labelIds: Array.isArray(payload.labelIds)
+          ? payload.labelIds.filter((label): label is string => typeof label === "string")
+          : [],
+        internalDateMs: Number.isFinite(rawInternalDate) ? rawInternalDate : null,
+        snippet: typeof payload.snippet === "string" ? payload.snippet : "",
+        headers: {
+          from: headerValue(headers, "From"),
+          to: headerValue(headers, "To"),
+          cc: headerValue(headers, "Cc"),
+          subject: headerValue(headers, "Subject"),
+          date: headerValue(headers, "Date"),
+        },
+        hasAttachments: parts.some(partHasAttachment),
+      };
+    },
   };
 }
 
 export type {
   GoogleCalendarSummary,
   GoogleLabelSummary,
+  GoogleMessageMetadata,
+  GoogleMessageRef,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
