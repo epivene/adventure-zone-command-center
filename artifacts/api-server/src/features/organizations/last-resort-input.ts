@@ -14,17 +14,6 @@ export const profileTypeValues = [
   "other",
 ] as const;
 
-export const profileDirectoryViewValues = ["all", "events", "organizations"] as const;
-export type ProfileDirectoryView = (typeof profileDirectoryViewValues)[number];
-
-export function profileTypesForDirectoryView(view: ProfileDirectoryView): readonly string[] | null {
-  if (view === "events") return ["fair", "festival_event"];
-  if (view === "organizations") {
-    return ["city_government", "venue", "school", "tribe", "association", "company", "other"];
-  }
-  return null;
-}
-
 export const setLastResortInputSchema = z
   .object({
     organizationId: organizationIdSchema,
@@ -46,7 +35,6 @@ export type SetLastResortInput = z.output<typeof setLastResortInputSchema>;
 export const organizationListQuerySchema = z
   .object({
     q: z.string().catch("").default(""),
-    view: z.enum(profileDirectoryViewValues).catch("all").default("all"),
     lastResort: z.enum(["all", "only"]).catch("all").default("all"),
     leg: z.string().catch("").default(""),
     type: z.enum(["", ...profileTypeValues]).catch("").default(""),
@@ -67,9 +55,8 @@ export const organizationListQuerySchema = z
     page: z.coerce.number().int().min(1).max(10_000).catch(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).catch(50).default(50),
   })
-  .transform(({ q, view, lastResort, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, includeRetired, page, pageSize }) => ({
+  .transform(({ q, lastResort, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, includeRetired, page, pageSize }) => ({
     search: q.trim().replace(/\s+/g, " "),
-    directoryView: view,
     lastResort,
     travelLegId: z.string().uuid().safeParse(leg).success ? leg : null,
     placeType: type || null,
