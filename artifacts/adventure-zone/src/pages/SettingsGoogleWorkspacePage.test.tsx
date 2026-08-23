@@ -125,7 +125,7 @@ describe("SettingsGoogleWorkspacePage", () => {
     );
   });
 
-  it("previews all recommended business sources and saves only checked Google IDs", async () => {
+  it("previews and saves every approved business source", async () => {
     render(<SettingsGoogleWorkspacePage />);
 
     fireEvent.click(
@@ -135,16 +135,64 @@ describe("SettingsGoogleWorkspacePage", () => {
     expect(screen.getByLabelText("Receipts")).toBeChecked();
     expect(screen.getByLabelText("Zone Pirate Warrior")).toBeChecked();
 
-    fireEvent.click(screen.getByLabelText("Receipts"));
     fireEvent.click(screen.getByRole("button", { name: "Save business scope" }));
 
     await waitFor(() =>
       expect(client.saveGoogleWorkspaceScope).toHaveBeenCalledWith({
-        labelIds: ["shows", "shows-2026"],
+        labelIds: ["shows", "shows-2026", "receipts"],
         calendarIds: ["az", "zone.pirate.warrior@gmail.com"],
       }),
     );
     expect(await screen.findByText("Business scope saved.")).toBeInTheDocument();
+  });
+
+  it("blocks saving when an approved business source is unchecked", async () => {
+    render(<SettingsGoogleWorkspacePage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Preview business scope" }),
+    );
+    fireEvent.click(await screen.findByLabelText("Receipts"));
+
+    expect(
+      screen.getByText(/All approved business labels and calendars must stay selected/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save business scope" }),
+    ).toBeDisabled();
+    expect(client.saveGoogleWorkspaceScope).not.toHaveBeenCalled();
+  });
+
+  it("blocks saving while an expected business source is missing", async () => {
+    client.previewGoogleWorkspaceScope.mockResolvedValue({
+      ...preview,
+      missingLabelRoots: ["Associations"],
+    });
+    render(<SettingsGoogleWorkspacePage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Preview business scope" }),
+    );
+
+    expect(await screen.findByText("Associations")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Resolve every missing or ambiguous business source/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save business scope" }),
+    ).toBeDisabled();
+    expect(client.saveGoogleWorkspaceScope).not.toHaveBeenCalled();
+  });
+
+  it("uses a dark-mode-aware error surface", async () => {
+    client.getGoogleWorkspaceSettings.mockRejectedValue(
+      new Error("GOOGLE_WORKSPACE_SETTINGS_LOAD_FAILED"),
+    );
+    render(<SettingsGoogleWorkspacePage />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.className).toContain("dark:bg-rose-950/40");
+    expect(alert.className).toContain("dark:border-rose-900");
   });
 
   it("requires confirmation before disconnecting", async () => {

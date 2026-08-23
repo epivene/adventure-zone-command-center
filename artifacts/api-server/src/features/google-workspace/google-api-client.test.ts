@@ -10,6 +10,7 @@ const environment: GoogleWorkspaceEnvironment = {
   clientId: "client-id.apps.googleusercontent.com",
   clientSecret: "client-secret",
   redirectUri: "https://api.example.com/api/google-workspace/oauth/callback",
+  appOrigin: "https://app.example.com",
   tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 3)),
 };
 
@@ -23,7 +24,7 @@ function response(body: unknown, status = 200) {
 }
 
 describe("GoogleWorkspaceReadClient", () => {
-  it("builds an offline authorization URL with only approved read scopes", () => {
+  it("builds an offline authorization URL isolated to approved read scopes", () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
       fetcher: async () => new Response(),
@@ -36,7 +37,7 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(url.searchParams.get("response_type")).toBe("code");
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("prompt")).toBe("consent");
-    expect(url.searchParams.get("include_granted_scopes")).toBe("true");
+    expect(url.searchParams.get("include_granted_scopes")).toBe("false");
     expect(url.searchParams.get("state")).toBe("oauth-state");
     expect(url.searchParams.get("scope")?.split(" ")).toEqual(
       GOOGLE_WORKSPACE_READ_SCOPES,
@@ -70,6 +71,24 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(body.get("grant_type")).toBe("authorization_code");
     expect(body.get("code")).toBe("authorization-code");
     expect(body.get("client_secret")).toBe(environment.clientSecret);
+  });
+
+  it("does not invent granted scopes when Google omits the scope field", async () => {
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "existing-refresh-token",
+      fetcher: async () =>
+        response({
+          access_token: "access-token",
+          expires_in: 3600,
+          token_type: "Bearer",
+        }),
+    });
+
+    await expect(client.exchangeCode("authorization-code")).resolves.toEqual({
+      refreshToken: "existing-refresh-token",
+      scopes: [],
+    });
   });
 
   it("normalizes account identity, Gmail labels, and paginated calendars", async () => {

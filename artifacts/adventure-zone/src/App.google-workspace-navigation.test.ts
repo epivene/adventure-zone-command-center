@@ -20,7 +20,7 @@ describe("Google Workspace owner navigation", () => {
     expect(genericSettingsAt).toBeGreaterThan(googleAt);
   });
 
-  it("shows Google Workspace only in the owner Imports & Data menu", () => {
+  it("shows Google Workspace only in owner navigation", () => {
     const ownerMenu = source("src/components/navigation/app-menu.tsx");
     const officeShell = source("src/components/office/office-shell.tsx");
     const managerShell = source("src/components/manager/manager-shell.tsx");

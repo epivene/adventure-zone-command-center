@@ -11,6 +11,7 @@ const migrationPath = path.join(
   repositoryRoot,
   "lib/db/migrations/20260822_google_workspace_foundation.sql",
 );
+const renderPath = path.join(repositoryRoot, "render.yaml");
 
 function source(pathname: string) {
   return readFileSync(pathname, "utf8");
@@ -59,5 +60,26 @@ describe("Google Workspace foundation schema", () => {
     expect(migration).toContain("google_workspace_label_scopes_selected_idx");
     expect(migration).toContain("google_workspace_calendar_scopes_selected_idx");
     expect(migration).toContain("google_workspace_audit_events_created_idx");
+  });
+
+  it("keeps all Google credentials server-only and historical processing disabled", () => {
+    const render = source(renderPath);
+
+    for (const key of [
+      "GOOGLE_WORKSPACE_CLIENT_ID",
+      "GOOGLE_WORKSPACE_CLIENT_SECRET",
+      "GOOGLE_WORKSPACE_REDIRECT_URI",
+      "GOOGLE_WORKSPACE_APP_ORIGIN",
+      "GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY",
+    ]) {
+      expect(render).toContain(`- key: ${key}\n        sync: false`);
+    }
+    expect(render).toContain(
+      '- key: GOOGLE_WORKSPACE_SYNC_ENABLED\n        value: "false"',
+    );
+    expect(render).toContain(
+      '- key: GOOGLE_WORKSPACE_AI_ENABLED\n        value: "false"',
+    );
+    expect(render).not.toContain("VITE_GOOGLE_WORKSPACE_");
   });
 });

@@ -58,6 +58,12 @@ describe("GoogleScopePreview", () => {
     expect(screen.getByText("Warriors Playground Calendar")).toBeInTheDocument();
     expect(screen.getByText("8 Gmail labels excluded")).toBeInTheDocument();
     expect(screen.getByText("2 calendars excluded")).toBeInTheDocument();
+
+    const warning = screen
+      .getByText("Expected business labels not found")
+      .closest("div");
+    expect(warning?.className).toContain("dark:bg-amber-950/40");
+    expect(warning?.className).toContain("dark:border-amber-900");
   });
 
   it("reports exact checkbox changes by Google ID", () => {

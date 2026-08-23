@@ -13,6 +13,7 @@ const environment: GoogleWorkspaceEnvironment = {
   clientId: "client-id.apps.googleusercontent.com",
   clientSecret: "client-secret",
   redirectUri: "https://api.example.com/api/google-workspace/oauth/callback",
+  appOrigin: "https://app.example.com",
   tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 5)),
 };
 
@@ -204,6 +205,24 @@ describe("Google Workspace owner settings routes", () => {
       .set("authorization", `Bearer ${token}`)
       .send({ labelIds: ["shows"], calendarIds: ["az"], personal: true })
       .expect(400);
+  });
+
+  it("reports missing expected business sources as a conflict", async () => {
+    const harness = dependencies();
+    harness.save.mockRejectedValue(
+      new Error("GOOGLE_WORKSPACE_SCOPE_INCOMPLETE"),
+    );
+    const { app, token } = ownerApp(harness.deps);
+
+    const response = await request(app)
+      .put("/google-workspace/scope")
+      .set("authorization", `Bearer ${token}`)
+      .send({ labelIds: ["shows"], calendarIds: ["az"] })
+      .expect(409);
+
+    expect(response.body).toEqual({
+      error: "GOOGLE_WORKSPACE_SCOPE_INCOMPLETE",
+    });
   });
 
   it("disconnects only after an explicit owner request", async () => {

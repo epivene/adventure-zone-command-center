@@ -11,6 +11,7 @@ const environment: GoogleWorkspaceEnvironment = {
   clientId: "client-id.apps.googleusercontent.com",
   clientSecret: "client-secret",
   redirectUri: "https://api.example.com/api/google-workspace/oauth/callback",
+  appOrigin: "https://app.example.com",
   tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 9)),
 };
 
@@ -68,8 +69,13 @@ const googleEnvironmentKeys = [
   "GOOGLE_WORKSPACE_CLIENT_ID",
   "GOOGLE_WORKSPACE_CLIENT_SECRET",
   "GOOGLE_WORKSPACE_REDIRECT_URI",
+  "GOOGLE_WORKSPACE_APP_ORIGIN",
   "GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY",
 ] as const;
+
+function clearGoogleEnvironment() {
+  for (const key of googleEnvironmentKeys) vi.stubEnv(key, "");
+}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -77,7 +83,7 @@ afterEach(() => {
 
 describe("PostgresGoogleConnectionRepository", () => {
   it("can be constructed and queried when Google Workspace is not configured", async () => {
-    for (const key of googleEnvironmentKeys) vi.stubEnv(key, "");
+    clearGoogleEnvironment();
     const harness = repositoryHarness();
 
     const repository = new PostgresGoogleConnectionRepository({
@@ -85,6 +91,7 @@ describe("PostgresGoogleConnectionRepository", () => {
     });
 
     await expect(repository.getCurrent()).resolves.toBeNull();
+    await expect(repository.createReadClient()).resolves.toBeNull();
     await expect(
       repository.upsertConnected({
         accountEmail: "zone@example.com",
@@ -96,7 +103,32 @@ describe("PostgresGoogleConnectionRepository", () => {
     ).rejects.toThrow("GOOGLE_WORKSPACE_NOT_CONFIGURED");
   });
 
-  it("encrypts refresh credentials and never returns them in the settings view", async () => {
+  it("does not crash route construction or read-only queries for partial configuration", async () => {
+    clearGoogleEnvironment();
+    vi.stubEnv(
+      "GOOGLE_WORKSPACE_CLIENT_ID",
+      "client-id.apps.googleusercontent.com",
+    );
+    const harness = repositoryHarness();
+
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+    });
+
+    await expect(repository.getCurrent()).resolves.toBeNull();
+    await expect(repository.createReadClient()).resolves.toBeNull();
+    await expect(
+      repository.upsertConnected({
+        accountEmail: "zone@example.com",
+        googleSubject: null,
+        refreshToken: "refresh-token",
+        scopes: [],
+        now: new Date("2026-08-22T18:00:00.000Z"),
+      }),
+    ).rejects.toThrow("GOOGLE_WORKSPACE_CONFIGURATION_INCOMPLETE");
+  });
+
+  it("encrypts refresh credentials, audits the connection, and never returns credentials", async () => {
     const harness = repositoryHarness();
     const repository = new PostgresGoogleConnectionRepository({
       pool: harness.pool,
@@ -114,6 +146,9 @@ describe("PostgresGoogleConnectionRepository", () => {
     });
 
     expect(JSON.stringify(harness.row)).not.toContain(refreshToken);
+    expect(harness.calls.some((call) =>
+      call.text.includes("'connection_connected'"),
+    )).toBe(true);
     expect(saved).toEqual({
       id: "connection-id",
       email: "zone@example.com",
@@ -125,6 +160,34 @@ describe("PostgresGoogleConnectionRepository", () => {
     });
     expect(saved).not.toHaveProperty("refreshToken");
     expect(saved).not.toHaveProperty("encryptedRefreshToken");
+  });
+
+  it("requires an explicit disconnect before replacing the active Google account", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => fakeClient,
+    });
+
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: null,
+      refreshToken: "stored-refresh-token",
+      scopes: ["scope-a"],
+      now: new Date("2026-08-22T18:00:00.000Z"),
+    });
+
+    await expect(
+      repository.upsertConnected({
+        accountEmail: "personal@example.com",
+        googleSubject: null,
+        refreshToken: "different-refresh-token",
+        scopes: ["scope-a"],
+        now: new Date("2026-08-22T18:05:00.000Z"),
+      }),
+    ).rejects.toThrow("GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT");
+    expect(harness.row.account_email).toBe("zone@example.com");
   });
 
   it("decrypts inside the repository before constructing an authenticated client", async () => {
@@ -170,9 +233,12 @@ describe("PostgresGoogleConnectionRepository", () => {
 
     expect(harness.row.status).toBe("reauthorization_required");
     expect(harness.row.granted_scopes).toEqual(["scope-a"]);
+    expect(harness.calls.some((call) =>
+      call.text.includes("'connection_reauthorization_required'"),
+    )).toBe(true);
   });
 
-  it("disconnects the connection without exposing or erasing archived business data", async () => {
+  it("disconnects and audits without exposing or erasing archived business data", async () => {
     const harness = repositoryHarness();
     const repository = new PostgresGoogleConnectionRepository({
       pool: harness.pool,
@@ -193,5 +259,8 @@ describe("PostgresGoogleConnectionRepository", () => {
     expect(harness.row.disconnected_at).toEqual(
       new Date("2026-08-22T19:00:00.000Z"),
     );
+    expect(harness.calls.some((call) =>
+      call.text.includes("'connection_disconnected'"),
+    )).toBe(true);
   });
 });

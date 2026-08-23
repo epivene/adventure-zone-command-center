@@ -31,6 +31,20 @@ const calendars = [
   { id: "personal-calendar", summary: "Family", primary: false },
 ];
 
+function workspaceClient(options?: {
+  labels?: typeof labels;
+  calendars?: typeof calendars;
+  listLabels?: GoogleWorkspaceReadClient["listLabels"];
+}): GoogleWorkspaceReadClient {
+  return {
+    authorizationUrl: () => "",
+    exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
+    accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
+    listLabels: options?.listLabels ?? (async () => options?.labels ?? labels),
+    listCalendars: async () => options?.calendars ?? calendars,
+  };
+}
+
 describe("buildGoogleScopePreview", () => {
   it("selects exact Gmail roots and every descendant while excluding personal labels", () => {
     const preview = buildGoogleScopePreview(labels, calendars);
@@ -80,22 +94,31 @@ describe("buildGoogleScopePreview", () => {
 
     expect(preview.missingLabelRoots).toEqual(["Associations"]);
   });
+
+  it("reports an ambiguous named calendar instead of selecting the first match", () => {
+    const preview = buildGoogleScopePreview(labels, [
+      ...calendars,
+      {
+        id: "az-copy",
+        summary: "Adventure Zone Calendar",
+        primary: false,
+      },
+    ]);
+
+    expect(preview.missingCalendars).toContain("Adventure Zone Calendar");
+    expect(preview.calendars.some((calendar) => calendar.id === "az")).toBe(false);
+    expect(preview.calendars.some((calendar) => calendar.id === "az-copy")).toBe(false);
+  });
 });
 
 describe("GoogleScopeService", () => {
-  it("persists only IDs that were present in the exact preview", async () => {
+  it("persists the complete exact approved preview", async () => {
     const replace = vi.fn(async () => undefined);
     const persistence: GoogleScopePersistence = {
       get: vi.fn(async () => ({ labels: [], calendars: [] })),
       replace,
     };
-    const client: GoogleWorkspaceReadClient = {
-      authorizationUrl: () => "",
-      exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
-      accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
-      listLabels: async () => labels,
-      listCalendars: async () => calendars,
-    };
+    const client = workspaceClient();
     const service = new GoogleScopeService({
       connection: {
         getCurrent: async () => ({
@@ -108,13 +131,15 @@ describe("GoogleScopeService", () => {
           lastErrorCode: null,
         }),
         createReadClient: async () => client,
+        markReauthorizationRequired: async () => undefined,
       },
       persistence,
     });
+    const preview = buildGoogleScopePreview(labels, calendars);
 
     await service.save({
-      labelIds: ["shows", "shows-2026", "receipts"],
-      calendarIds: ["az", "zone.pirate.warrior@gmail.com"],
+      labelIds: preview.labels.map((label) => label.id),
+      calendarIds: preview.calendars.map((calendar) => calendar.id),
       actorKind: "owner",
       actorId: "owner",
       now: new Date("2026-08-22T18:30:00.000Z"),
@@ -122,28 +147,8 @@ describe("GoogleScopeService", () => {
 
     expect(replace).toHaveBeenCalledWith({
       connectionId: "connection-id",
-      labels: expect.arrayContaining([
-        {
-          id: "shows",
-          name: "Shows",
-          rootId: "shows",
-          rootName: "Shows",
-        },
-        {
-          id: "shows-2026",
-          name: "Shows/2026",
-          rootId: "shows",
-          rootName: "Shows",
-        },
-      ]),
-      calendars: expect.arrayContaining([
-        { id: "az", summary: "Adventure Zone Calendar", primary: false },
-        {
-          id: "zone.pirate.warrior@gmail.com",
-          summary: "A differently named fourth calendar",
-          primary: true,
-        },
-      ]),
+      labels: preview.labels,
+      calendars: preview.calendars,
       actorKind: "owner",
       actorId: "owner",
       now: new Date("2026-08-22T18:30:00.000Z"),
@@ -151,13 +156,7 @@ describe("GoogleScopeService", () => {
   });
 
   it("rejects an ID outside the approved business preview", async () => {
-    const client: GoogleWorkspaceReadClient = {
-      authorizationUrl: () => "",
-      exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
-      accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
-      listLabels: async () => labels,
-      listCalendars: async () => calendars,
-    };
+    const client = workspaceClient();
     const service = new GoogleScopeService({
       connection: {
         getCurrent: async () => ({
@@ -170,6 +169,7 @@ describe("GoogleScopeService", () => {
           lastErrorCode: null,
         }),
         createReadClient: async () => client,
+        markReauthorizationRequired: async () => undefined,
       },
       persistence: {
         get: async () => ({ labels: [], calendars: [] }),
@@ -186,5 +186,69 @@ describe("GoogleScopeService", () => {
         now: new Date(),
       }),
     ).rejects.toThrow("GOOGLE_WORKSPACE_SCOPE_SELECTION_INVALID");
+  });
+
+  it("refuses to save while an expected business source is missing", async () => {
+    const replace = vi.fn(async () => undefined);
+    const client = workspaceClient({
+      labels: labels.filter((label) => label.name !== "Associations"),
+    });
+    const service = new GoogleScopeService({
+      connection: {
+        getCurrent: async () => ({
+          id: "connection-id",
+          status: "connected",
+        }),
+        createReadClient: async () => client,
+        markReauthorizationRequired: async () => undefined,
+      },
+      persistence: {
+        get: async () => ({ labels: [], calendars: [] }),
+        replace,
+      },
+    });
+
+    await expect(
+      service.save({
+        labelIds: ["shows"],
+        calendarIds: ["az"],
+        actorKind: "owner",
+        actorId: "owner",
+        now: new Date("2026-08-22T18:30:00.000Z"),
+      }),
+    ).rejects.toThrow("GOOGLE_WORKSPACE_SCOPE_INCOMPLETE");
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("marks the connection for reauthorization when Google revokes access", async () => {
+    const markReauthorizationRequired = vi.fn(async () => undefined);
+    const client = workspaceClient({
+      listLabels: async () => {
+        throw Object.assign(new Error("revoked"), {
+          code: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+        });
+      },
+    });
+    const service = new GoogleScopeService({
+      connection: {
+        getCurrent: async () => ({
+          id: "connection-id",
+          status: "connected",
+        }),
+        createReadClient: async () => client,
+        markReauthorizationRequired,
+      },
+      persistence: {
+        get: async () => ({ labels: [], calendars: [] }),
+        replace: async () => undefined,
+      },
+    });
+
+    await expect(service.preview()).rejects.toMatchObject({
+      code: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    });
+    expect(markReauthorizationRequired).toHaveBeenCalledWith(
+      "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    );
   });
 });

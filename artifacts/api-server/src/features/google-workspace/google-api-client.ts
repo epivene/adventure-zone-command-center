@@ -147,7 +147,7 @@ export function createGoogleWorkspaceReadClient(input: {
       url.searchParams.set("scope", GOOGLE_WORKSPACE_READ_SCOPES.join(" "));
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");
-      url.searchParams.set("include_granted_scopes", "true");
+      url.searchParams.set("include_granted_scopes", "false");
       url.searchParams.set("state", state);
       return url.toString();
     },
@@ -172,10 +172,9 @@ export function createGoogleWorkspaceReadClient(input: {
       if (!refreshToken) {
         throw clientError("GOOGLE_WORKSPACE_REFRESH_TOKEN_MISSING");
       }
-      const scopes = scopeList(payload.scope);
       return {
         refreshToken,
-        scopes: scopes.length > 0 ? scopes : [...GOOGLE_WORKSPACE_READ_SCOPES],
+        scopes: scopeList(payload.scope),
       };
     },
 
