@@ -157,11 +157,15 @@ export function SettingsGoogleWorkspacePage({
       (preview.missingLabelRoots.length > 0 ||
         preview.missingCalendars.length > 0),
   );
+  const requiredLabelIds = preview
+    ? preview.labels
+        .filter((label) => label.id === label.rootId)
+        .map((label) => label.id)
+    : [];
   const previewHasIncompleteSelection = Boolean(
     preview &&
-      (selectedLabelIds.length !== preview.labels.length ||
+      (requiredLabelIds.some((id) => !selectedLabelIds.includes(id)) ||
         selectedCalendarIds.length !== preview.calendars.length ||
-        preview.labels.some((label) => !selectedLabelIds.includes(label.id)) ||
         preview.calendars.some(
           (calendar) => !selectedCalendarIds.includes(calendar.id),
         )),
@@ -207,7 +211,7 @@ export function SettingsGoogleWorkspacePage({
     }
     if (previewHasIncompleteSelection) {
       setError(
-        "All approved business labels and calendars must stay selected. Personal sources are already excluded.",
+        "Keep the main business folders, Spam, and all approved calendars selected. Individual subfolders may be unchecked.",
       );
       return;
     }
@@ -378,7 +382,7 @@ export function SettingsGoogleWorkspacePage({
                 <div>
                   <h2 className="text-xl font-bold">Business-only scope</h2>
                   <p className="mt-1 max-w-2xl text-sm text-slate-600">
-                    Preview the account, confirm the five business label groups and four business calendars, then save their Google IDs.
+                    Preview the account, keep the main business folders and calendars selected, and uncheck any individual subfolders you do not want included.
                   </p>
                 </div>
                 <button
@@ -407,7 +411,7 @@ export function SettingsGoogleWorkspacePage({
                   ) : null}
                   {previewHasIncompleteSelection ? (
                     <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                      All approved business labels and calendars must stay selected. Personal sources are already excluded.
+                      Keep the main business folders, Spam, and all approved calendars selected. Individual subfolders may be unchecked.
                     </p>
                   ) : null}
                   <div className="flex justify-end border-t border-slate-200 pt-4">
