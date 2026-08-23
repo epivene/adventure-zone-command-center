@@ -78,7 +78,7 @@ export function OfficeShell({ children }: { children: ReactNode }) {
   return <div className="min-h-screen bg-slate-50 text-slate-950">
     <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div className="mx-auto max-w-7xl px-4 py-3 md:px-6">
-        <div className="flex items-center gap-2"><Link href="/office" className="min-w-0 flex-1 truncate font-bold">Adventure Zone <span className="ml-1 text-sm font-semibold text-orange-700">Office Coordinator</span></Link><div className="ml-auto hidden xl:block"><Nav unread={unread}/></div><OfficeAppearanceMenu onSignOut={signOut}/><button className="button-secondary hidden shrink-0 sm:inline-flex" type="button" onClick={signOut}>Sign out</button></div>
+        <div className="flex items-center gap-2"><Link href="/office" className="min-w-0 flex-1 truncate font-bold">Adventure Zone <span className="ml-1 text-sm font-semibold text-orange-700">Office Coordinator</span></Link><div className="ml-auto hidden xl:block"><Nav unread={unread}/></div><OfficeAppearanceMenu onSignOut={signOut}/><button className="button-secondary hidden shrink-0 px-2.5 py-1.5 text-xs sm:inline-flex" type="button" onClick={signOut}>Sign out</button></div>
         <form className="mt-3 flex gap-2 md:mt-2" onSubmit={submit}><input aria-label="Search profiles" className="min-w-0 flex-1" placeholder="Search profiles, contacts, cities…" value={search} onChange={(e)=>setSearch(e.target.value)}/><button className="button-secondary shrink-0" type="submit">Search</button></form>
         {office?<p className="mt-1 truncate text-xs text-slate-500">Booking Workspace · {office.displayName}</p>:null}
       </div>
