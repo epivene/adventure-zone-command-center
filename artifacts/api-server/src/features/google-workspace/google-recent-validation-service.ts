@@ -149,9 +149,8 @@ export class GoogleRecentValidationService {
     scope?: ScopeAccess;
     evidence?: EvidenceAccess;
   }) {
-    const connection = options?.connection ?? new PostgresGoogleConnectionRepository();
-    this.connection = connection;
-    this.scope = options?.scope ?? new GoogleScopeService({ connection });
+    this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
+    this.scope = options?.scope ?? new GoogleScopeService();
     this.evidence = options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
   }
 
