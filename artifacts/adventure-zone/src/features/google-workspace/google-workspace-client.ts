@@ -35,6 +35,11 @@ export type GoogleWorkspaceScopePreview = {
   calendars: GoogleWorkspaceScopeCalendar[];
   missingLabelRoots: string[];
   missingCalendars: string[];
+  excludedLabels?: Array<{
+    id: string;
+    name: string;
+    type: "user" | "system";
+  }>;
   excludedLabelCount: number;
   excludedCalendarCount: number;
 };

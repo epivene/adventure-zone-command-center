@@ -56,7 +56,7 @@ describe("GoogleScopePreview", () => {
     expect(screen.getByLabelText("Zone Pirate Warrior")).toBeChecked();
     expect(screen.getByText("Associations")).toBeInTheDocument();
     expect(screen.getByText("Warriors Playground Calendar")).toBeInTheDocument();
-    expect(screen.getByText("8 Gmail labels excluded")).toBeInTheDocument();
+    expect(screen.getByText("8 other Gmail labels not selected")).toBeInTheDocument();
     expect(screen.getByText("2 calendars excluded")).toBeInTheDocument();
 
     const warning = screen

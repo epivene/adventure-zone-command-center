@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import type { GoogleWorkspaceScopePreview } from "@/features/google-workspace/google-workspace-client";
 
 type Props = {
@@ -64,6 +66,8 @@ export function GoogleScopePreview({
 }: Props) {
   const selectedLabels = new Set(selectedLabelIds);
   const selectedCalendars = new Set(selectedCalendarIds);
+  const [showExcludedLabels, setShowExcludedLabels] = useState(false);
+  const excludedLabels = preview.excludedLabels ?? [];
 
   return (
     <div className="grid gap-5">
@@ -89,9 +93,43 @@ export function GoogleScopePreview({
             />
           ))}
         </div>
-        <p className="text-xs font-medium text-slate-500">
-          {preview.excludedLabelCount} Gmail labels excluded
-        </p>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              {preview.excludedLabelCount} other Gmail labels not selected
+            </p>
+            {excludedLabels.length > 0 ? (
+              <button
+                aria-expanded={showExcludedLabels}
+                className="text-xs font-semibold text-orange-700 underline-offset-2 hover:underline dark:text-orange-300"
+                onClick={() => setShowExcludedLabels((current) => !current)}
+                type="button"
+              >
+                {showExcludedLabels ? "Hide excluded labels" : "Review excluded labels"}
+              </button>
+            ) : null}
+          </div>
+          {showExcludedLabels ? (
+            <div className="mt-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Read-only review. These labels are not being added to the approved Google scope.
+              </p>
+              <ul className="mt-2 grid max-h-64 gap-1 overflow-y-auto sm:grid-cols-2">
+                {excludedLabels.map((label) => (
+                  <li
+                    className="rounded-md bg-white px-2.5 py-2 text-xs text-slate-700 shadow-sm dark:bg-slate-950/50 dark:text-slate-300"
+                    key={label.id}
+                  >
+                    <span className="font-medium">{label.name}</span>
+                    <span className="ml-1 text-slate-400">
+                      ({label.type === "system" ? "Gmail system" : "custom"})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
         <MissingSources
           items={preview.missingLabelRoots}
           title="Expected business labels not found"
