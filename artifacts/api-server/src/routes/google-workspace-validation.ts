@@ -7,6 +7,7 @@ import {
 } from "@/features/google-workspace/google-recent-validation-service";
 import {
   PostgresGoogleValidationRepository,
+  type GoogleValidationReviewItem,
   type GoogleValidationStatus,
 } from "@/features/google-workspace/google-validation-repository";
 
@@ -22,6 +23,12 @@ const decisionSchema = z
   })
   .strict();
 
+const resolveSchema = z
+  .object({
+    organizationId: z.string().uuid(),
+  })
+  .strict();
+
 type ValidationService = {
   run(limit: number): Promise<GoogleRecentValidationResult | unknown>;
 };
@@ -33,6 +40,18 @@ type ValidationRepository = {
     now: Date;
   }): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
+  listReviewItems(): Promise<GoogleValidationReviewItem[]>;
+  resolveReviewItem(input: {
+    messageId: string;
+    organizationId: string;
+    actorId: string;
+    now: Date;
+  }): Promise<void>;
+  ignoreReviewItem(input: {
+    messageId: string;
+    actorId: string;
+    now: Date;
+  }): Promise<void>;
 };
 
 type OwnerRequest = Request & { userId?: string };
@@ -56,7 +75,18 @@ function errorStatus(code: string): number {
     return 409;
   }
   if (code === "GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE") return 503;
-  if (code === "GOOGLE_WORKSPACE_VALIDATION_DECISION_INVALID") return 400;
+  if (
+    code === "GOOGLE_WORKSPACE_VALIDATION_DECISION_INVALID" ||
+    code === "GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID"
+  ) {
+    return 400;
+  }
+  if (
+    code === "GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND"
+  ) {
+    return 404;
+  }
   return 500;
 }
 
@@ -81,6 +111,62 @@ export function createGoogleWorkspaceValidationRouter(options?: {
       }
       try {
         res.json(await service.run(parsed.data.limit));
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/validation/review",
+    async (_req, res): Promise<void> => {
+      try {
+        res.json({ items: await validationRepository.listReviewItems() });
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.put(
+    "/google-workspace/validation/review/:messageId",
+    async (req, res): Promise<void> => {
+      const parsed = resolveSchema.safeParse(req.body ?? {});
+      if (!parsed.success || !req.params.messageId?.trim()) {
+        res.status(400).json({ error: "GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID" });
+        return;
+      }
+      try {
+        await validationRepository.resolveReviewItem({
+          messageId: req.params.messageId,
+          organizationId: parsed.data.organizationId,
+          actorId: ownerActorId(req),
+          now: now(),
+        });
+        res.json({ ok: true });
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/validation/review/:messageId/ignore",
+    async (req, res): Promise<void> => {
+      if (!req.params.messageId?.trim()) {
+        res.status(400).json({ error: "GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID" });
+        return;
+      }
+      try {
+        await validationRepository.ignoreReviewItem({
+          messageId: req.params.messageId,
+          actorId: ownerActorId(req),
+          now: now(),
+        });
+        res.json({ ok: true });
       } catch (error) {
         const code = safeError(error);
         res.status(errorStatus(code)).json({ error: code });

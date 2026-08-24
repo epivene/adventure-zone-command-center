@@ -15,6 +15,7 @@ import { GoogleScopeService, type GoogleSavedScope } from "./google-scope-servic
 import {
   PostgresGoogleValidationRepository,
   type GoogleValidationMappingInput,
+  type GoogleValidationReviewInput,
   type GoogleValidationStatus,
 } from "./google-validation-repository";
 import {
@@ -98,6 +99,7 @@ type ContactProfileResolverAccess = {
 
 type ValidationRepositoryAccess = {
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
+  upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
 };
 
@@ -218,6 +220,31 @@ function persistableMappings(rows: GoogleValidationRow[]): GoogleValidationMappi
       evidenceCodes: row.evidenceCodes,
     }];
   });
+}
+
+function reviewCandidates(row: GoogleValidationRow): Array<{ id: string; name: string }> {
+  const unique = new Map<string, { id: string; name: string }>();
+  for (const candidate of row.organizationCandidates) unique.set(candidate.id, candidate);
+  for (const candidate of row.candidates) {
+    if (candidate.kind === "organization" || candidate.kind === "profile") {
+      unique.set(candidate.id, { id: candidate.id, name: candidate.name });
+    }
+  }
+  return [...unique.values()];
+}
+
+function persistableReviewItems(rows: GoogleValidationRow[]): GoogleValidationReviewInput[] {
+  return rows.map((row) => ({
+    messageId: row.id,
+    threadId: row.threadId,
+    subject: row.subject,
+    from: row.from,
+    to: row.to,
+    internalDateMs: row.internalDateMs,
+    evidenceCodes: row.evidenceCodes,
+    candidates: reviewCandidates(row),
+    hasAttachments: row.hasAttachments,
+  }));
 }
 
 export class GoogleRecentValidationService {
@@ -350,6 +377,9 @@ export class GoogleRecentValidationService {
     }
 
     await this.validationRepository.upsertRows(persistableMappings(matched));
+    await this.validationRepository.upsertReviewItems(
+      persistableReviewItems(needsReview),
+    );
     const validationStatus = await this.validationRepository.getStatus();
 
     return {

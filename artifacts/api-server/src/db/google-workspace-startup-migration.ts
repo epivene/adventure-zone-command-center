@@ -134,6 +134,96 @@ export async function ensureGoogleWorkspaceSchema(
           CHECK (validation_status IN ('not_started', 'ready_for_review', 'approved', 'rejected'))
       );
 
+      CREATE TABLE IF NOT EXISTS google_workspace_validation_review_items (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        message_id text NOT NULL,
+        thread_id text NOT NULL,
+        subject text NOT NULL DEFAULT '',
+        from_header text NOT NULL DEFAULT '',
+        to_header text NOT NULL DEFAULT '',
+        internal_date_ms bigint,
+        evidence_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+        candidate_organizations jsonb NOT NULL DEFAULT '[]'::jsonb,
+        has_attachments boolean NOT NULL DEFAULT false,
+        review_state text NOT NULL DEFAULT 'pending',
+        resolved_organization_id uuid
+          REFERENCES organizations(id) ON DELETE RESTRICT,
+        reviewed_by text,
+        reviewed_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT google_workspace_validation_review_unique
+          UNIQUE (connection_id, message_id),
+        CONSTRAINT google_workspace_validation_review_identity_nonblank
+          CHECK (btrim(message_id) <> '' AND btrim(thread_id) <> ''),
+        CONSTRAINT google_workspace_validation_review_evidence_array
+          CHECK (jsonb_typeof(evidence_codes) = 'array'),
+        CONSTRAINT google_workspace_validation_review_candidates_array
+          CHECK (jsonb_typeof(candidate_organizations) = 'array'),
+        CONSTRAINT google_workspace_validation_review_state_valid
+          CHECK (review_state IN ('pending', 'resolved', 'ignored')),
+        CONSTRAINT google_workspace_validation_review_resolution_consistent
+          CHECK (
+            (review_state = 'resolved' AND resolved_organization_id IS NOT NULL)
+            OR (review_state <> 'resolved' AND resolved_organization_id IS NULL)
+          )
+      );
+      CREATE INDEX IF NOT EXISTS google_workspace_validation_review_pending_idx
+        ON google_workspace_validation_review_items
+          (connection_id, updated_at DESC)
+        WHERE review_state = 'pending';
+
+      CREATE TABLE IF NOT EXISTS google_workspace_profile_files (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        organization_id uuid NOT NULL
+          REFERENCES organizations(id) ON DELETE RESTRICT,
+        thread_id text NOT NULL,
+        message_id text NOT NULL,
+        attachment_id text NOT NULL,
+        filename text NOT NULL,
+        mime_type text NOT NULL,
+        size_bytes bigint NOT NULL,
+        content_sha256 text,
+        storage_object_key text,
+        availability text NOT NULL DEFAULT 'retry_required',
+        last_error_code text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT google_workspace_profile_files_source_unique
+          UNIQUE (connection_id, message_id, attachment_id),
+        CONSTRAINT google_workspace_profile_files_identity_nonblank
+          CHECK (
+            btrim(thread_id) <> '' AND
+            btrim(message_id) <> '' AND
+            btrim(attachment_id) <> '' AND
+            btrim(filename) <> '' AND
+            btrim(mime_type) <> ''
+          ),
+        CONSTRAINT google_workspace_profile_files_size_valid
+          CHECK (size_bytes >= 0),
+        CONSTRAINT google_workspace_profile_files_availability_valid
+          CHECK (availability IN ('available', 'file_unavailable', 'retry_required')),
+        CONSTRAINT google_workspace_profile_files_available_has_storage
+          CHECK (
+            availability <> 'available'
+            OR (
+              content_sha256 IS NOT NULL AND btrim(content_sha256) <> '' AND
+              storage_object_key IS NOT NULL AND btrim(storage_object_key) <> ''
+            )
+          )
+      );
+      CREATE INDEX IF NOT EXISTS google_workspace_profile_files_org_idx
+        ON google_workspace_profile_files
+          (connection_id, organization_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS google_workspace_profile_files_checksum_idx
+        ON google_workspace_profile_files
+          (connection_id, content_sha256)
+        WHERE content_sha256 IS NOT NULL;
+
       CREATE TABLE IF NOT EXISTS google_workspace_audit_events (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         actor_kind text NOT NULL,

@@ -13,9 +13,13 @@ const message = (id: string, from: string, subject: string, labelIds: string[]) 
   hasAttachments: false,
 });
 
-function validationRepository(upsertRows = vi.fn(async () => undefined)) {
+function validationRepository(
+  upsertRows = vi.fn(async () => undefined),
+  upsertReviewItems = vi.fn(async () => undefined),
+) {
   return {
     upsertRows,
+    upsertReviewItems,
     getStatus: vi.fn(async () => "ready_for_review" as const),
   };
 }
@@ -79,7 +83,7 @@ describe("GoogleRecentValidationService", () => {
     ]);
   });
 
-  it("moves an exact contact match to review when the contact belongs to multiple active profiles", async () => {
+  it("moves an exact contact match to review when the contact belongs to multiple active profiles and persists the review item", async () => {
     const client: GoogleWorkspaceReadClient = {
       authorizationUrl: () => "",
       exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
@@ -89,6 +93,7 @@ describe("GoogleRecentValidationService", () => {
       listRecentMessageRefs: async () => [{ id: "m1", threadId: "thread-m1" }],
       getMessageMetadata: async (id) => message(id, "booking@fair.org", "Hello", ["INBOX"]),
     };
+    const upsertReviewItems = vi.fn(async () => undefined);
 
     const service = new GoogleRecentValidationService({
       connection: { createReadClient: async () => client },
@@ -111,7 +116,7 @@ describe("GoogleRecentValidationService", () => {
           ],
         }),
       },
-      validationRepository: validationRepository(),
+      validationRepository: validationRepository(vi.fn(async () => undefined), upsertReviewItems),
     });
 
     const result = await service.run(100);
@@ -126,6 +131,16 @@ describe("GoogleRecentValidationService", () => {
       ],
       evidenceCodes: ["exact_contact_email", "contact_organization_ambiguous"],
     });
+    expect(upsertReviewItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        messageId: "m1",
+        threadId: "thread-m1",
+        candidates: [
+          { id: "org-1", name: "County Fair" },
+          { id: "org-2", name: "Summer Festival" },
+        ],
+      }),
+    ]);
   });
 
   it("checks at most 100 newest messages and separates profile-name review and ignored metadata without body storage", async () => {

@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, FileText, Mail } from "lucide-react";
+import { ExternalLink, FileText, Mail, Paperclip } from "lucide-react";
 
 import {
+  copyGoogleProfileThreadFiles,
   getGoogleProfileEmails,
   getGoogleProfileEmailThread,
+  getGoogleProfileFiles,
+  openGoogleProfileFile,
   type GoogleProfileEmailConversation,
+  type GoogleProfileFile,
   type GoogleThreadDetail,
 } from "@/features/google-workspace/google-workspace-client";
 
@@ -14,22 +18,60 @@ function fileSize(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
-function ThreadDetail({ thread }: { thread: GoogleThreadDetail }) {
+function ThreadDetail({
+  organizationId,
+  thread,
+  onFilesCopied,
+}: {
+  organizationId: string;
+  thread: GoogleThreadDetail;
+  onFilesCopied(files: GoogleProfileFile[]): void;
+}) {
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const attachments = thread.messages.flatMap((message) => message.attachments);
+
+  async function saveAttachments() {
+    setCopying(true);
+    setCopyError(null);
+    try {
+      const result = await copyGoogleProfileThreadFiles(organizationId, thread.id);
+      onFilesCopied(result.files);
+    } catch (caught) {
+      setCopyError(caught instanceof Error ? caught.message : "Could not save attachments.");
+    } finally {
+      setCopying(false);
+    }
+  }
+
   return (
     <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
           Complete conversation · {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"}
         </p>
-        <a
-          className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300"
-          href={thread.originalGmailUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          Open in Gmail <ExternalLink className="h-3.5 w-3.5" />
-        </a>
+        <div className="flex flex-wrap items-center gap-2">
+          {attachments.length > 0 ? (
+            <button
+              className="button-secondary px-3 py-1.5 text-xs"
+              disabled={copying}
+              onClick={() => void saveAttachments()}
+              type="button"
+            >
+              {copying ? "Saving attachments…" : "Save attachments to Files"}
+            </button>
+          ) : null}
+          <a
+            className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300"
+            href={thread.originalGmailUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            Open in Gmail <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
+      {copyError ? <p className="text-xs font-medium text-rose-700">{copyError}</p> : null}
       {thread.messages.map((message) => (
         <article
           className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40"
@@ -77,9 +119,11 @@ function ThreadDetail({ thread }: { thread: GoogleThreadDetail }) {
 function ConversationCard({
   organizationId,
   conversation,
+  onFilesCopied,
 }: {
   organizationId: string;
   conversation: GoogleProfileEmailConversation;
+  onFilesCopied(files: GoogleProfileFile[]): void;
 }) {
   const [thread, setThread] = useState<GoogleThreadDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -107,6 +151,7 @@ function ConversationCard({
     <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
       <button
         aria-expanded={Boolean(thread)}
+        aria-label={conversation.subject || "Open email conversation"}
         className="w-full text-left"
         disabled={loading}
         onClick={() => void toggle()}
@@ -132,8 +177,75 @@ function ConversationCard({
           {error}
         </p>
       ) : null}
-      {thread ? <ThreadDetail thread={thread} /> : null}
+      {thread ? (
+        <ThreadDetail
+          onFilesCopied={onFilesCopied}
+          organizationId={organizationId}
+          thread={thread}
+        />
+      ) : null}
     </article>
+  );
+}
+
+function ProfileFiles({
+  organizationId,
+  files,
+}: {
+  organizationId: string;
+  files: GoogleProfileFile[];
+}) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function open(file: GoogleProfileFile) {
+    if (file.availability !== "available") return;
+    setBusyId(file.id);
+    setError(null);
+    try {
+      const result = await openGoogleProfileFile(organizationId, file.id);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not open file.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!files.length) {
+    return (
+      <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-500 dark:bg-slate-900">
+        No Gmail attachments have been saved to this profile yet. Open an email with an attachment and choose “Save attachments to Files.”
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2">
+      {error ? <p className="text-sm font-medium text-rose-700">{error}</p> : null}
+      {files.map((file) => (
+        <article className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40" key={file.id}>
+          <Paperclip className="h-5 w-5 shrink-0 text-slate-500" />
+          <div className="min-w-0 flex-1">
+            <p className="break-words font-semibold text-slate-900 dark:text-slate-100">{file.filename}</p>
+            <p className="mt-1 text-xs text-slate-500">{file.mimeType} · {fileSize(file.sizeBytes)}</p>
+            {file.availability !== "available" ? (
+              <p className="mt-1 text-xs font-semibold text-amber-700">Attachment needs retry</p>
+            ) : null}
+          </div>
+          {file.availability === "available" ? (
+            <button
+              className="button-secondary px-3 py-1.5 text-sm"
+              disabled={busyId !== null}
+              onClick={() => void open(file)}
+              type="button"
+            >
+              {busyId === file.id ? "Opening…" : "Open file"}
+            </button>
+          ) : null}
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -142,25 +254,37 @@ export function ProfileGoogleEmailPanel({
 }: {
   organizationId: string;
 }) {
+  const [tab, setTab] = useState<"emails" | "files">("emails");
   const [conversations, setConversations] = useState<GoogleProfileEmailConversation[]>([]);
+  const [files, setFiles] = useState<GoogleProfileFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filesLoading, setFilesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
+    setFilesLoading(true);
     setError(null);
-    getGoogleProfileEmails(organizationId)
-      .then((result) => {
-        if (active) setConversations(result.conversations);
+    void Promise.all([
+      getGoogleProfileEmails(organizationId),
+      getGoogleProfileFiles(organizationId),
+    ])
+      .then(([emailResult, fileResult]) => {
+        if (!active) return;
+        setConversations(emailResult.conversations);
+        setFiles(fileResult.files);
       })
       .catch((caught) => {
         if (active) {
-          setError(caught instanceof Error ? caught.message : "Could not load Gmail conversations.");
+          setError(caught instanceof Error ? caught.message : "Could not load Google history.");
         }
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          setLoading(false);
+          setFilesLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -171,34 +295,62 @@ export function ProfileGoogleEmailPanel({
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/20">
       <div className="flex items-start gap-3">
         <Mail className="mt-0.5 h-5 w-5 shrink-0 text-orange-600 dark:text-orange-400" />
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-            Emails
+            Google history
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Gmail conversations attached to this profile from the approved validation sample. Full historical email import is still off.
+            Approved sample email and saved Gmail attachments for this profile. Full historical import is still off.
           </p>
+          <div className="mt-3 flex gap-2 border-b border-slate-200 dark:border-slate-700">
+            <button
+              className={`px-3 py-2 text-sm font-semibold ${tab === "emails" ? "border-b-2 border-orange-500 text-orange-700" : "text-slate-500"}`}
+              onClick={() => setTab("emails")}
+              type="button"
+            >
+              Emails
+            </button>
+            <button
+              className={`px-3 py-2 text-sm font-semibold ${tab === "files" ? "border-b-2 border-orange-500 text-orange-700" : "text-slate-500"}`}
+              onClick={() => setTab("files")}
+              type="button"
+            >
+              Files
+            </button>
+          </div>
         </div>
       </div>
 
-      {loading ? <p className="mt-3 text-sm text-slate-500">Loading emails…</p> : null}
       {error ? <p className="mt-3 text-sm text-rose-700 dark:text-rose-300">{error}</p> : null}
-      {!loading && !error && conversations.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500">
-          No emails from the approved validation sample are attached to this profile yet.
-        </p>
-      ) : null}
-      {conversations.length > 0 ? (
-        <div className="mt-3 grid gap-2">
-          {conversations.map((conversation) => (
-            <ConversationCard
-              conversation={conversation}
-              key={conversation.threadId}
-              organizationId={organizationId}
-            />
-          ))}
+
+      {tab === "emails" ? (
+        <>
+          {loading ? <p className="mt-3 text-sm text-slate-500">Loading emails…</p> : null}
+          {!loading && !error && conversations.length === 0 ? (
+            <p className="mt-3 text-sm text-slate-500">
+              No emails from the approved validation sample are attached to this profile yet.
+            </p>
+          ) : null}
+          {conversations.length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {conversations.map((conversation) => (
+                <ConversationCard
+                  conversation={conversation}
+                  key={conversation.threadId}
+                  onFilesCopied={setFiles}
+                  organizationId={organizationId}
+                />
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="mt-3">
+          {filesLoading ? <p className="text-sm text-slate-500">Loading files…</p> : (
+            <ProfileFiles files={files} organizationId={organizationId} />
+          )}
         </div>
-      ) : null}
+      )}
     </section>
   );
 }

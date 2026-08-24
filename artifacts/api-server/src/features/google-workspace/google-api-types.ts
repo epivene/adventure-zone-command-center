@@ -76,6 +76,7 @@ export interface GoogleWorkspaceReadClient {
   listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
+  getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
 }
 
 export type GoogleWorkspaceFetch = (
