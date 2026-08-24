@@ -58,6 +58,22 @@ export const communicationTemplateAccessValues = ["owner", "office"] as const;
 export type CommunicationTemplateAccess =
   (typeof communicationTemplateAccessValues)[number];
 
+export const communicationTemplateOwnerKindValues = [
+  "company",
+  "shared_office",
+  "office_user",
+] as const;
+export type CommunicationTemplateOwnerKind =
+  (typeof communicationTemplateOwnerKindValues)[number];
+
+export const communicationTemplateCreatedByKindValues = [
+  "system",
+  "owner",
+  "office_user",
+] as const;
+export type CommunicationTemplateCreatedByKind =
+  (typeof communicationTemplateCreatedByKindValues)[number];
+
 export const communicationTemplateChannelValues = [
   "email",
   "internal_email",
@@ -361,6 +377,17 @@ export const communicationTemplates = pgTable(
       .$type<CommunicationTemplateState>()
       .default("draft")
       .notNull(),
+    ownerKind: text("owner_kind")
+      .$type<CommunicationTemplateOwnerKind>()
+      .default("company")
+      .notNull(),
+    ownerOfficeAccountId: uuid("owner_office_account_id"),
+    createdByKind: text("created_by_kind")
+      .$type<CommunicationTemplateCreatedByKind>()
+      .default("system")
+      .notNull(),
+    createdById: uuid("created_by_id"),
+    sourceTemplateId: uuid("source_template_id"),
     sourceDocumentId: uuid("source_document_id").references(
       () => businessSourceDocuments.id,
       { onDelete: "set null" },
@@ -382,6 +409,17 @@ export const communicationTemplates = pgTable(
       table.accessScope,
       table.category,
     ),
+    index("communication_templates_state_owner_kind_idx").on(
+      table.state,
+      table.ownerKind,
+    ),
+    index("communication_templates_owner_account_state_idx").on(
+      table.ownerOfficeAccountId,
+      table.state,
+    ),
+    index("communication_templates_source_template_idx").on(
+      table.sourceTemplateId,
+    ),
     check(
       "communication_templates_channel_valid",
       sql`${table.channel} in ('email','internal_email')`,
@@ -393,6 +431,22 @@ export const communicationTemplates = pgTable(
     check(
       "communication_templates_state_valid",
       sql`${table.state} in ('draft','reviewed','active','archived')`,
+    ),
+    check(
+      "communication_templates_owner_kind_valid",
+      sql`${table.ownerKind} in ('company','shared_office','office_user')`,
+    ),
+    check(
+      "communication_templates_created_by_kind_valid",
+      sql`${table.createdByKind} in ('system','owner','office_user')`,
+    ),
+    check(
+      "communication_templates_owner_account_shape_valid",
+      sql`(
+        (${table.ownerKind} = 'office_user' and ${table.ownerOfficeAccountId} is not null)
+        or
+        (${table.ownerKind} in ('company','shared_office') and ${table.ownerOfficeAccountId} is null)
+      )`,
     ),
   ],
 );
