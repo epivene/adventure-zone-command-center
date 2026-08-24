@@ -1,3 +1,5 @@
+import type { ChangeEvent } from "react";
+
 import {
   officeTemplatePlaceholderLabels,
   parseTemplateSegments,
@@ -57,7 +59,7 @@ export function ProtectedTemplateText({
 
           const common = {
             value: segment.value,
-            onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+            onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
               const next = [...segments];
               next[index] = { kind: "text", value: event.target.value };
               commit(next);
