@@ -7,6 +7,7 @@ const client = vi.hoisted(() => ({
   previewGoogleWorkspaceScope: vi.fn(),
   saveGoogleWorkspaceScope: vi.fn(),
   runGoogleWorkspaceRecentValidation: vi.fn(),
+  decideGoogleWorkspaceValidationSample: vi.fn(),
   disconnectGoogleWorkspace: vi.fn(),
 }));
 
@@ -57,10 +58,15 @@ beforeEach(() => {
     checkedLimit: 100,
     aiEnabled: false,
     historicalImportStarted: false,
+    validationStatus: "ready_for_review",
     counts: { discovered: 0, matched: 0, needsReview: 0, ignored: 0 },
     matched: [],
     needsReview: [],
     ignored: [],
+  });
+  client.decideGoogleWorkspaceValidationSample.mockResolvedValue({
+    validationStatus: "approved",
+    historicalImportStarted: false,
   });
 });
 
