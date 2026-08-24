@@ -17,6 +17,12 @@ const acceptedMimeTypes = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ].join(",");
 
+export async function openSourceDocument(documentId: string): Promise<void> {
+  const { url } = await apiPost<{ url: string }>(`/business-sources/${documentId}/file/open`, {});
+  if (!url) throw new Error("The protected document did not return a signed file link.");
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 export function SourceDocumentFileCard({
   documentId,
   file,
@@ -75,9 +81,7 @@ export function SourceDocumentFileCard({
     setBusy(true);
     setError("");
     try {
-      const { url } = await apiPost<{ url: string }>(`/business-sources/${documentId}/file/open`, {});
-      if (!url) throw new Error("The protected document did not return a signed file link.");
-      window.open(url, "_blank", "noopener,noreferrer");
+      await openSourceDocument(documentId);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not open the source document.");
     } finally {
