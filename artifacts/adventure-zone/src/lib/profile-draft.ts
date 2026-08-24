@@ -18,6 +18,24 @@ export type ProfileDraftPlaceType =
   | "company"
   | "other";
 
+export type ProfileDraftBookingStatus =
+  | "new_lead"
+  | "researching"
+  | "contact_due"
+  | "contacted"
+  | "interested"
+  | "possible"
+  | "unlikely"
+  | "quote_sent"
+  | "pending_decision"
+  | "pending_contract"
+  | "contract_received"
+  | "confirmed"
+  | "declined"
+  | "cancelled"
+  | "completed"
+  | "renewal_due";
+
 export type ProfileDraft = {
   eventName: string;
   placeType: ProfileDraftPlaceType;
@@ -33,6 +51,9 @@ export type ProfileDraft = {
   contacts: ProfileDraftContact[];
   includeBooking: boolean;
   bookingName: string;
+  bookingStatus: ProfileDraftBookingStatus;
+  startsAt: string;
+  endsAt: string;
   travelLegId: string;
   nextActionKind: string;
   nextActionDueAt: string;
@@ -64,6 +85,9 @@ export function createProfileDraftStore(storage: Pick<Storage, "getItem" | "setI
           contacts: value.contacts,
           includeBooking: value.includeBooking ?? false,
           bookingName: value.bookingName ?? "",
+          bookingStatus: value.bookingStatus ?? "new_lead",
+          startsAt: value.startsAt ?? "",
+          endsAt: value.endsAt ?? "",
           travelLegId: value.travelLegId ?? "",
           nextActionKind: value.nextActionKind ?? "call",
           nextActionDueAt: value.nextActionDueAt ?? "",
