@@ -23,6 +23,11 @@ const router: IRouter = Router();
 
 const uuid = z.string().uuid();
 const profilePlaceType = z.enum(["fair", "city_government", "festival_event", "venue", "school", "tribe", "association", "company", "other"]);
+const bookingStatus = z.enum([
+  "new_lead", "researching", "contact_due", "contacted", "interested", "possible", "unlikely",
+  "quote_sent", "pending_decision", "pending_contract", "contract_received", "confirmed", "declined",
+  "cancelled", "completed", "renewal_due",
+]);
 const creationSchema = z.object({
   event: z.object({ id: z.string().nullable(), name: z.string(), city: z.string(), region: z.string() }),
   profile: z.object({
@@ -35,7 +40,16 @@ const creationSchema = z.object({
     postalCode: z.string().default(""),
   }).optional().default({ placeType: "festival_event", description: "", phone: "", website: "", address1: "", address2: "", postalCode: "" }),
   contacts: z.array(z.object({ id: z.string().nullable(), name: z.string(), phone: z.string(), email: z.string(), role: z.string(), primary: z.boolean().optional() })).default([]),
-  booking: z.object({ enabled: z.boolean(), name: z.string(), nextActionKind: z.string(), nextActionDueAt: z.string(), travelLegId: z.string().uuid().nullable() }),
+  booking: z.object({
+    enabled: z.boolean(),
+    name: z.string(),
+    status: bookingStatus.optional().default("new_lead"),
+    startsAt: z.string().optional().default(""),
+    endsAt: z.string().optional().default(""),
+    nextActionKind: z.string(),
+    nextActionDueAt: z.string(),
+    travelLegId: z.string().uuid().nullable(),
+  }),
   familyId: z.string().uuid().nullable().optional().default(null),
   parentOrganizationId: z.string().uuid().nullable().optional().default(null),
 }).superRefine((input, context) => {
@@ -47,7 +61,14 @@ const creationSchema = z.object({
     if (contact.id ? !uuid.safeParse(contact.id).success : !contact.name.trim()) context.addIssue({ code: "custom", message: "Choose a contact or enter a contact name." });
     if (contact.email.trim() && !z.email().safeParse(contact.email.trim()).success) context.addIssue({ code: "custom", message: "Enter a valid contact email address." });
   }
-  if (input.booking.enabled && (!input.booking.name.trim() || !parseBusinessDateInput(input.booking.nextActionDueAt))) context.addIssue({ code: "custom", message: "Enter a booking name and next follow-up date." });
+  if (input.booking.enabled && (!input.booking.name.trim() || !parseBusinessDateInput(input.booking.nextActionDueAt))) {
+    context.addIssue({ code: "custom", message: "Enter a booking name and next follow-up date." });
+  }
+  const startsAt = input.booking.startsAt ? parseBusinessDateInput(input.booking.startsAt) : null;
+  const endsAt = input.booking.endsAt ? parseBusinessDateInput(input.booking.endsAt) : null;
+  if (input.booking.startsAt && !startsAt) context.addIssue({ code: "custom", message: "Enter a valid event start date." });
+  if (input.booking.endsAt && !endsAt) context.addIssue({ code: "custom", message: "Enter a valid event end date." });
+  if (startsAt && endsAt && endsAt.getTime() < startsAt.getTime()) context.addIssue({ code: "custom", message: "Event end date cannot be before the start date." });
 });
 
 const nullableProfileText = z
@@ -247,7 +268,21 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
 
       if (parsed.data.booking.enabled) {
         if (!eventCity || eventRegion.length !== 2) throw new Error("BOOKING_EVENT_LOCATION_MISSING");
-        const [booking] = await transaction.insert(bookings).values({ organizationId, name: parsed.data.booking.name.trim(), city: eventCity, region: eventRegion, travelLegId: parsed.data.booking.travelLegId, status: "new_lead", probability: "possible", createdAt: now, updatedAt: now }).returning({ id: bookings.id });
+        const startsAt = parsed.data.booking.startsAt ? parseBusinessDateInput(parsed.data.booking.startsAt) : null;
+        const endsAt = parsed.data.booking.endsAt ? parseBusinessDateInput(parsed.data.booking.endsAt) : null;
+        const [booking] = await transaction.insert(bookings).values({
+          organizationId,
+          name: parsed.data.booking.name.trim(),
+          city: eventCity,
+          region: eventRegion,
+          startsAt,
+          endsAt,
+          travelLegId: parsed.data.booking.travelLegId,
+          status: parsed.data.booking.status,
+          probability: "possible",
+          createdAt: now,
+          updatedAt: now,
+        }).returning({ id: bookings.id });
         if (!booking) throw new Error("BOOKING_CREATE_FAILED");
         if (contactIds.length) await transaction.insert(bookingContacts).values(contactIds.map((contactId) => ({ bookingId: booking.id, contactId, isPrimary: contactId === primaryContactId, source: "local" as const, createdAt: now, updatedAt: now })));
         await transaction.update(bookings).set({ primaryContactId: primaryContactId ?? null, updatedAt: now }).where(eq(bookings.id, booking.id));
