@@ -12,6 +12,7 @@ import {
   type GoogleValidationReviewItem,
   type GoogleValidationStatus,
 } from "@/features/google-workspace/google-validation-repository";
+import { GoogleValidationReviewReconciler } from "@/features/google-workspace/google-validation-review-reconciler";
 
 const inputSchema = z
   .object({
@@ -39,6 +40,13 @@ type MappingReconciler = {
   reconcile(input: {
     messageIds: string[];
     rows: GoogleValidationMappingInput[];
+  }): Promise<void>;
+};
+
+type ReviewReconciler = {
+  reconcile(input: {
+    sampleMessageIds: string[];
+    pendingMessageIds: string[];
   }): Promise<void>;
 };
 
@@ -129,9 +137,23 @@ function reconciliationInput(result: GoogleRecentValidationResult): {
   };
 }
 
+function reviewReconciliationInput(result: GoogleRecentValidationResult): {
+  sampleMessageIds: string[];
+  pendingMessageIds: string[];
+} {
+  const allRows = [...result.matched, ...result.needsReview, ...result.ignored];
+  return {
+    sampleMessageIds: [...new Set(allRows.map((row) => row.id).filter(Boolean))],
+    pendingMessageIds: [
+      ...new Set(result.needsReview.map((row) => row.id).filter(Boolean)),
+    ],
+  };
+}
+
 export function createGoogleWorkspaceValidationRouter(options?: {
   service?: ValidationService;
   mappingReconciler?: MappingReconciler;
+  reviewReconciler?: ReviewReconciler;
   validationRepository?: ValidationRepository;
   now?: () => Date;
 }): IRouter {
@@ -139,6 +161,8 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   const service = options?.service ?? new GoogleRecentValidationService();
   const mappingReconciler =
     options?.mappingReconciler ?? new GoogleValidationMappingReconciler();
+  const reviewReconciler =
+    options?.reviewReconciler ?? new GoogleValidationReviewReconciler();
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const now = options?.now ?? (() => new Date());
@@ -155,6 +179,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         const result = await service.run(parsed.data.limit);
         if (isValidationResult(result)) {
           await mappingReconciler.reconcile(reconciliationInput(result));
+          await reviewReconciler.reconcile(reviewReconciliationInput(result));
         }
         res.json(result);
       } catch (error) {
