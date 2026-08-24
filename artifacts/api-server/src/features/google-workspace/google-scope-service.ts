@@ -15,13 +15,12 @@ import type {
 
 export const APPROVED_GMAIL_ROOTS = [
   "Shows",
-  "Receipt",
   "Off Season Business Opportunities",
   "Employees",
   "Associations",
 ] as const;
 
-export const APPROVED_GMAIL_SYSTEM_LABELS = ["Spam"] as const;
+export const APPROVED_GMAIL_SYSTEM_LABELS = [] as const;
 
 export const APPROVED_CALENDAR_NAMES = [
   "Adventure Zone Calendar",
@@ -105,26 +104,6 @@ export function buildGoogleScopePreview(
         });
       }
     }
-  }
-
-  for (const expectedSystemLabel of APPROVED_GMAIL_SYSTEM_LABELS) {
-    const expected = normalized(expectedSystemLabel);
-    const matches = labels.filter(
-      (label) =>
-        label.type === "system" &&
-        (normalized(label.id) === expected || normalized(label.name) === expected),
-    );
-    if (matches.length !== 1) {
-      missingLabelRoots.push(expectedSystemLabel);
-      continue;
-    }
-    const label = matches[0];
-    approvedLabels.push({
-      id: label.id,
-      name: label.name,
-      rootId: label.id,
-      rootName: expectedSystemLabel,
-    });
   }
 
   const deduplicatedLabels = approvedLabels.filter(
