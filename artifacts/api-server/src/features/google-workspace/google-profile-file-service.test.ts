@@ -1,17 +1,35 @@
 import { describe, expect, it, vi } from "vitest";
 
+import type { GoogleWorkspaceReadClient } from "./google-api-types";
 import { GoogleProfileFileService } from "./google-profile-file-service";
+
+function gmailClient(overrides: Partial<GoogleWorkspaceReadClient>): GoogleWorkspaceReadClient {
+  return {
+    authorizationUrl: () => "",
+    exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
+    accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
+    listLabels: async () => [],
+    listCalendars: async () => [],
+    ...overrides,
+  };
+}
 
 describe("GoogleProfileFileService", () => {
   it("copies approved thread attachments once, deduplicates storage by checksum, and lists profile files", async () => {
     const storage = {
       put: vi.fn(async () => undefined),
-      get: vi.fn(),
+      get: vi.fn(async () => new Uint8Array()),
       exists: vi.fn(async () => false),
       getSignedReadUrl: vi.fn(async () => "https://signed.example/file"),
-      delete: vi.fn(),
+      delete: vi.fn(async () => undefined),
     };
-    const saveFile = vi.fn(async (input) => ({ id: "file-1", ...input, availability: "available" as const }));
+    const saveFile = vi.fn(async (input) => ({
+      id: "file-1",
+      ...input,
+      availability: "available" as const,
+      lastErrorCode: null,
+      createdAt: "2026-08-24T18:00:00.000Z",
+    }));
     const repository = {
       saveFile,
       listForOrganization: vi.fn(async () => [{
@@ -39,7 +57,7 @@ describe("GoogleProfileFileService", () => {
     };
     const service = new GoogleProfileFileService({
       connection: {
-        createReadClient: async () => ({
+        createReadClient: async () => gmailClient({
           getThreadDetail: async () => ({
             id: "t1",
             subject: "Contract",
@@ -89,7 +107,7 @@ describe("GoogleProfileFileService", () => {
   });
 
   it("refuses cross-profile thread access before fetching file bytes", async () => {
-    const createReadClient = vi.fn(async () => ({
+    const createReadClient = vi.fn(async () => gmailClient({
       getThreadDetail: vi.fn(),
       getAttachment: vi.fn(),
     }));
