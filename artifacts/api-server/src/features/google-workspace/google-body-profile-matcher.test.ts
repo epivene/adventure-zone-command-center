@@ -53,4 +53,18 @@ describe("matchGoogleBodyToProfiles", () => {
 
     expect(result.status).toBe("none");
   });
+
+  it("does not match a shorter profile token inside a longer word", () => {
+    const result = matchGoogleBodyToProfiles({
+      bodyText: "RE: Mohave County Fair Kingman AZ Sept 17-20, 2026",
+      profiles: [
+        { id: "king", name: "County Fair - King (Enumclaw) WA" },
+        { id: "mohave", name: "County Fair - Mohave (Kingman) AZ" },
+      ],
+    });
+
+    expect(result.candidates).not.toContainEqual(
+      expect.objectContaining({ id: "king" }),
+    );
+  });
 });
