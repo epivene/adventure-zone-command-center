@@ -6,6 +6,7 @@ import { createGoogleWorkspaceValidationRouter } from "./google-workspace-valida
 
 function appWith(options: {
   run?: (limit: number) => Promise<unknown>;
+  reconcile?: (input: { messageIds: string[]; rows: any[] }) => Promise<void>;
   setDecision?: (input: {
     status: "approved" | "rejected";
     actorId: string;
@@ -33,6 +34,9 @@ function appWith(options: {
   app.use(
     createGoogleWorkspaceValidationRouter({
       service: { run: options.run ?? (async () => ({})) },
+      mappingReconciler: {
+        reconcile: options.reconcile ?? (async () => undefined),
+      },
       validationRepository: {
         setDecision: options.setDecision ?? (async () => undefined),
         getStatus: async () => "ready_for_review",
@@ -68,6 +72,46 @@ describe("Google Workspace recent validation route", () => {
     expect(response.body.aiEnabled).toBe(false);
     expect(response.body.historicalImportStarted).toBe(false);
     expect(response.body.validationStatus).toBe("ready_for_review");
+  });
+
+  it("reconciles stale stored mappings from the current sample", async () => {
+    const reconcile = vi.fn(async () => undefined);
+    const run = vi.fn(async () => ({
+      checkedLimit: 100,
+      aiEnabled: false,
+      historicalImportStarted: false,
+      validationStatus: "approved",
+      counts: { discovered: 2, matched: 1, needsReview: 0, ignored: 1 },
+      matched: [
+        {
+          id: "m1",
+          threadId: "t1",
+          evidenceCodes: ["exact_profile_name_subject"],
+          matchedContact: null,
+          resolvedOrganization: { id: "logan-pride", name: "Logan Pride Festival (Logan) UT" },
+        },
+      ],
+      needsReview: [],
+      ignored: [{ id: "m2", threadId: "t2" }],
+    }));
+
+    const response = await request(appWith({ run, reconcile }))
+      .post("/google-workspace/validation/recent")
+      .send({ limit: 100 });
+
+    expect(response.status).toBe(200);
+    expect(reconcile).toHaveBeenCalledWith({
+      messageIds: ["m1", "m2"],
+      rows: [
+        {
+          messageId: "m1",
+          threadId: "t1",
+          organizationId: "logan-pride",
+          contactId: null,
+          evidenceCodes: ["exact_profile_name_subject"],
+        },
+      ],
+    });
   });
 
   it("rejects attempts to expand the validation sample beyond 100", async () => {

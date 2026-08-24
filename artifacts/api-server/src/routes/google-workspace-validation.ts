@@ -5,8 +5,10 @@ import {
   GoogleRecentValidationService,
   type GoogleRecentValidationResult,
 } from "@/features/google-workspace/google-recent-validation-service";
+import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
 import {
   PostgresGoogleValidationRepository,
+  type GoogleValidationMappingInput,
   type GoogleValidationReviewItem,
   type GoogleValidationStatus,
 } from "@/features/google-workspace/google-validation-repository";
@@ -31,6 +33,13 @@ const resolveSchema = z
 
 type ValidationService = {
   run(limit: number): Promise<GoogleRecentValidationResult | unknown>;
+};
+
+type MappingReconciler = {
+  reconcile(input: {
+    messageIds: string[];
+    rows: GoogleValidationMappingInput[];
+  }): Promise<void>;
 };
 
 type ValidationRepository = {
@@ -90,13 +99,46 @@ function errorStatus(code: string): number {
   return 500;
 }
 
+function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
+  if (!value || typeof value !== "object") return false;
+  const result = value as Partial<GoogleRecentValidationResult>;
+  return (
+    Array.isArray(result.matched) &&
+    Array.isArray(result.needsReview) &&
+    Array.isArray(result.ignored)
+  );
+}
+
+function reconciliationInput(result: GoogleRecentValidationResult): {
+  messageIds: string[];
+  rows: GoogleValidationMappingInput[];
+} {
+  const allRows = [...result.matched, ...result.needsReview, ...result.ignored];
+  return {
+    messageIds: [...new Set(allRows.map((row) => row.id).filter(Boolean))],
+    rows: result.matched.flatMap((row) => {
+      if (!row.resolvedOrganization) return [];
+      return [{
+        messageId: row.id,
+        threadId: row.threadId,
+        organizationId: row.resolvedOrganization.id,
+        contactId: row.matchedContact?.id ?? null,
+        evidenceCodes: row.evidenceCodes,
+      }];
+    }),
+  };
+}
+
 export function createGoogleWorkspaceValidationRouter(options?: {
   service?: ValidationService;
+  mappingReconciler?: MappingReconciler;
   validationRepository?: ValidationRepository;
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
   const service = options?.service ?? new GoogleRecentValidationService();
+  const mappingReconciler =
+    options?.mappingReconciler ?? new GoogleValidationMappingReconciler();
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const now = options?.now ?? (() => new Date());
@@ -110,7 +152,11 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         return;
       }
       try {
-        res.json(await service.run(parsed.data.limit));
+        const result = await service.run(parsed.data.limit);
+        if (isValidationResult(result)) {
+          await mappingReconciler.reconcile(reconciliationInput(result));
+        }
+        res.json(result);
       } catch (error) {
         const code = safeError(error);
         res.status(errorStatus(code)).json({ error: code });
