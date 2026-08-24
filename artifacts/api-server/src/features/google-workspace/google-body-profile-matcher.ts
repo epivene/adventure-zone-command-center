@@ -1,4 +1,5 @@
 import type { GoogleRelevanceCandidate } from "./google-relevance-classifier";
+import { matchGoogleTextToProfiles } from "./google-weighted-profile-matcher";
 
 export type GoogleBodyProfileMatch = {
   status: "matched" | "review" | "none";
@@ -43,7 +44,10 @@ export function matchGoogleBodyToProfiles(input: {
   const body = canonical(input.bodyText.slice(0, 50_000));
   if (!body) return { status: "none", evidenceCodes: [], candidates: [] };
 
-  const matches = input.profiles.flatMap((profile) => {
+  const eligibleProfiles = input.profiles.filter(
+    (profile) => bodyEligibleName(profile.name) !== null,
+  );
+  const matches = eligibleProfiles.flatMap((profile) => {
     const phrase = bodyEligibleName(profile.name);
     if (!phrase || !body.includes(phrase)) return [];
     return [{ id: profile.id, name: profile.name, kind: "profile" as const }];
@@ -64,5 +68,25 @@ export function matchGoogleBodyToProfiles(input: {
       candidates: unique,
     };
   }
+
+  const weighted = matchGoogleTextToProfiles({
+    text: body,
+    profiles: eligibleProfiles,
+  });
+  if (weighted.status === "matched") {
+    return {
+      status: "matched",
+      evidenceCodes: ["weighted_profile_body_match"],
+      candidates: weighted.candidates,
+    };
+  }
+  if (weighted.status === "review") {
+    return {
+      status: "review",
+      evidenceCodes: ["weighted_profile_body_ambiguous"],
+      candidates: weighted.candidates,
+    };
+  }
+
   return { status: "none", evidenceCodes: [], candidates: [] };
 }
