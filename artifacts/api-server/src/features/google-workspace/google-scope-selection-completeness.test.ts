@@ -35,7 +35,7 @@ const client: GoogleWorkspaceReadClient = {
 };
 
 describe("Google Workspace approved scope completeness", () => {
-  it("refuses to save when any approved business label, Spam, or calendar is omitted", async () => {
+  it("refuses to save when a required business root or approved calendar is omitted", async () => {
     const replace = vi.fn(async () => undefined);
     const persistence: GoogleScopePersistence = {
       get: async () => ({ labels: [], calendars: [] }),
@@ -52,7 +52,7 @@ describe("Google Workspace approved scope completeness", () => {
 
     await expect(
       service.save({
-        labelIds: ["shows", "receipt", "off-season", "employees", "associations"],
+        labelIds: ["shows", "off-season", "employees"],
         calendarIds: [
           "adventure",
           "pirates",
