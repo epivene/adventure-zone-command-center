@@ -137,18 +137,21 @@ function ApprovalControls({
 export function GoogleRecentValidation({ result }: { result: GoogleRecentValidationResult }) {
   const [showIgnored, setShowIgnored] = useState(false);
   const [validationStatus, setValidationStatus] = useState<GoogleValidationStatus>(result.validationStatus);
+  const [unresolvedCount, setUnresolvedCount] = useState(result.counts.needsReview);
 
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">{result.counts.discovered} checked</div>
         <div className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{result.counts.matched} matched</div>
-        <div className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{result.counts.needsReview} needs review</div>
+        <div className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{unresolvedCount} needs review</div>
         <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">{result.counts.ignored} ignored</div>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">AI is off. This is only a metadata/relevance check of the newest {result.checkedLimit} messages and does not start the historical import.</p>
       <ResultSection title="Matched to profiles" rows={result.matched} />
-      {result.counts.needsReview > 0 ? <GoogleValidationReview /> : null}
+      {result.counts.needsReview > 0 ? (
+        <GoogleValidationReview onPendingCountChange={setUnresolvedCount} />
+      ) : null}
       {result.ignored.length > 0 ? (
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -160,7 +163,7 @@ export function GoogleRecentValidation({ result }: { result: GoogleRecentValidat
           {showIgnored ? <div className="mt-3 grid max-h-96 gap-2 overflow-y-auto border-t border-slate-200 pt-3 dark:border-slate-700">{result.ignored.map((row) => <ValidationRow key={row.id} row={row} />)}</div> : null}
         </section>
       ) : null}
-      <ApprovalControls status={validationStatus} unresolvedCount={result.counts.needsReview} onStatus={setValidationStatus} />
+      <ApprovalControls status={validationStatus} unresolvedCount={unresolvedCount} onStatus={setValidationStatus} />
     </div>
   );
 }
