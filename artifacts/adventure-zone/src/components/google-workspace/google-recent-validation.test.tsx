@@ -1,5 +1,13 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const client = vi.hoisted(() => ({
+  decideGoogleWorkspaceValidationSample: vi.fn(),
+}));
+vi.mock("@/features/google-workspace/google-workspace-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/google-workspace/google-workspace-client")>();
+  return { ...actual, decideGoogleWorkspaceValidationSample: client.decideGoogleWorkspaceValidationSample };
+});
 
 import { GoogleRecentValidation } from "./google-recent-validation";
 
@@ -68,7 +76,10 @@ const result = {
   ],
 };
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("GoogleRecentValidation", () => {
   it("shows bounded sample counts, contact-to-profile resolution, and keeps ignored mail collapsible", () => {
@@ -86,5 +97,21 @@ describe("GoogleRecentValidation", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /review ignored email/i }));
     expect(screen.getByText("Dinner plans")).toBeInTheDocument();
+  });
+
+  it("lets the owner approve the sample without starting historical import", async () => {
+    client.decideGoogleWorkspaceValidationSample.mockResolvedValue({
+      validationStatus: "approved",
+      historicalImportStarted: false,
+    });
+    render(<GoogleRecentValidation result={result} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Approve sample" }));
+
+    await waitFor(() =>
+      expect(client.decideGoogleWorkspaceValidationSample).toHaveBeenCalledWith("approve"),
+    );
+    expect(await screen.findByText(/Sample approved/i)).toBeInTheDocument();
+    expect(screen.getByText(/historical import is still off/i)).toBeInTheDocument();
   });
 });
