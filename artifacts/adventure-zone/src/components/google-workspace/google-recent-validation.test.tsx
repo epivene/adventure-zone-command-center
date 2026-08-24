@@ -7,6 +7,7 @@ const result = {
   checkedLimit: 100,
   aiEnabled: false as const,
   historicalImportStarted: false as const,
+  validationStatus: "ready_for_review" as const,
   counts: { discovered: 3, matched: 1, needsReview: 1, ignored: 1 },
   matched: [
     {
@@ -20,8 +21,11 @@ const result = {
       labelIds: ["INBOX"],
       labels: [{ id: "INBOX", name: "INBOX", type: "system" as const }],
       hasAttachments: true,
-      evidenceCodes: ["exact_contact_email"],
+      evidenceCodes: ["exact_contact_email", "contact_active_organization"],
       candidates: [{ id: "c1", name: "Fair Office", kind: "contact" as const }],
+      matchedContact: { id: "c1", name: "Fair Office" },
+      resolvedOrganization: { id: "org-1", name: "County Fair" },
+      organizationCandidates: [{ id: "org-1", name: "County Fair" }],
     },
   ],
   needsReview: [
@@ -38,6 +42,9 @@ const result = {
       hasAttachments: false,
       evidenceCodes: ["approved_business_label", "exact_profile_name_text"],
       candidates: [{ id: "p1", name: "Known Festival", kind: "profile" as const }],
+      matchedContact: null,
+      resolvedOrganization: null,
+      organizationCandidates: [],
     },
   ],
   ignored: [
@@ -54,6 +61,9 @@ const result = {
       hasAttachments: false,
       evidenceCodes: [],
       candidates: [],
+      matchedContact: null,
+      resolvedOrganization: null,
+      organizationCandidates: [],
     },
   ],
 };
@@ -61,7 +71,7 @@ const result = {
 afterEach(cleanup);
 
 describe("GoogleRecentValidation", () => {
-  it("shows bounded sample counts, evidence, and keeps ignored mail collapsible", () => {
+  it("shows bounded sample counts, contact-to-profile resolution, and keeps ignored mail collapsible", () => {
     render(<GoogleRecentValidation result={result} />);
 
     expect(screen.getByText("3 checked")).toBeInTheDocument();
@@ -70,6 +80,8 @@ describe("GoogleRecentValidation", () => {
     expect(screen.getByText("1 ignored")).toBeInTheDocument();
     expect(screen.getByText("County Fair contract")).toBeInTheDocument();
     expect(screen.getByText("Exact contact email")).toBeInTheDocument();
+    expect(screen.getByText("Matched contact: Fair Office")).toBeInTheDocument();
+    expect(screen.getByText("Profile: County Fair")).toBeInTheDocument();
     expect(screen.queryByText("Dinner plans")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /review ignored email/i }));
