@@ -7,6 +7,10 @@ import type {
   GoogleMessageMetadata,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
+import {
+  GoogleContactProfileResolver,
+  type ContactProfileResolution,
+} from "./google-contact-profile-resolver";
 import { GoogleScopeService, type GoogleSavedScope } from "./google-scope-service";
 import {
   classifyGoogleMessageRelevance,
@@ -50,6 +54,9 @@ export type GoogleValidationRow = {
   hasAttachments: boolean;
   evidenceCodes: string[];
   candidates: GoogleRelevanceCandidate[];
+  matchedContact: { id: string; name: string } | null;
+  resolvedOrganization: { id: string; name: string } | null;
+  organizationCandidates: Array<{ id: string; name: string }>;
 };
 
 export type GoogleRecentValidationResult = {
@@ -77,6 +84,10 @@ type ScopeAccess = {
 
 type EvidenceAccess = {
   load(): Promise<GoogleValidationEvidenceSnapshot>;
+};
+
+type ContactProfileResolverAccess = {
+  resolve(contactId: string): Promise<ContactProfileResolution>;
 };
 
 type DrizzleDb = typeof defaultDb;
@@ -142,11 +153,25 @@ export class PostgresGoogleValidationEvidenceRepository implements EvidenceAcces
   }
 }
 
+function directOrganizationCandidate(candidates: GoogleRelevanceCandidate[]) {
+  const direct = candidates.filter(
+    (candidate) => candidate.kind === "organization" || candidate.kind === "profile",
+  );
+  return direct.length === 1
+    ? { id: direct[0].id, name: direct[0].name }
+    : null;
+}
+
 function toRow(
   message: GoogleMessageMetadata,
   allLabels: Map<string, GoogleLabelSummary>,
   evidenceCodes: string[],
   candidates: GoogleRelevanceCandidate[],
+  input?: {
+    matchedContact?: { id: string; name: string } | null;
+    resolvedOrganization?: { id: string; name: string } | null;
+    organizationCandidates?: Array<{ id: string; name: string }>;
+  },
 ): GoogleValidationRow {
   return {
     id: message.id,
@@ -164,6 +189,10 @@ function toRow(
     hasAttachments: message.hasAttachments,
     evidenceCodes,
     candidates,
+    matchedContact: input?.matchedContact ?? null,
+    resolvedOrganization:
+      input?.resolvedOrganization ?? directOrganizationCandidate(candidates),
+    organizationCandidates: input?.organizationCandidates ?? [],
   };
 }
 
@@ -171,15 +200,19 @@ export class GoogleRecentValidationService {
   private readonly connection: ConnectionAccess;
   private readonly scope: ScopeAccess;
   private readonly evidence: EvidenceAccess;
+  private readonly contactProfileResolver: ContactProfileResolverAccess;
 
   constructor(options?: {
     connection?: ConnectionAccess;
     scope?: ScopeAccess;
     evidence?: EvidenceAccess;
+    contactProfileResolver?: ContactProfileResolverAccess;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.scope = options?.scope ?? new GoogleScopeService();
     this.evidence = options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
+    this.contactProfileResolver =
+      options?.contactProfileResolver ?? new GoogleContactProfileResolver();
   }
 
   async run(limit = 100): Promise<GoogleRecentValidationResult> {
@@ -216,7 +249,73 @@ export class GoogleRecentValidationService {
           existingThreadTarget: null,
         },
       });
-      const row = toRow(message, labelsById, result.evidenceCodes, result.candidates);
+
+      const contactCandidates = result.candidates.filter(
+        (candidate) => candidate.kind === "contact",
+      );
+      if (result.status === "matched" && contactCandidates.length === 1) {
+        const contact = contactCandidates[0];
+        const resolution = await this.contactProfileResolver.resolve(contact.id);
+        if (resolution.status === "resolved" && resolution.organization) {
+          matched.push(
+            toRow(
+              message,
+              labelsById,
+              [...result.evidenceCodes, "contact_active_organization"],
+              result.candidates,
+              {
+                matchedContact: { id: contact.id, name: contact.name },
+                resolvedOrganization: resolution.organization,
+                organizationCandidates: resolution.candidates,
+              },
+            ),
+          );
+          continue;
+        }
+
+        needsReview.push(
+          toRow(
+            message,
+            labelsById,
+            [
+              ...result.evidenceCodes,
+              resolution.status === "ambiguous"
+                ? "contact_organization_ambiguous"
+                : "contact_organization_unresolved",
+            ],
+            result.candidates,
+            {
+              matchedContact: { id: contact.id, name: contact.name },
+              resolvedOrganization: null,
+              organizationCandidates: resolution.candidates,
+            },
+          ),
+        );
+        continue;
+      }
+
+      if (result.status === "matched" && contactCandidates.length > 1) {
+        needsReview.push(
+          toRow(
+            message,
+            labelsById,
+            [...result.evidenceCodes, "multiple_exact_contact_matches"],
+            result.candidates,
+            {
+              resolvedOrganization: null,
+              organizationCandidates: [],
+            },
+          ),
+        );
+        continue;
+      }
+
+      const row = toRow(
+        message,
+        labelsById,
+        result.evidenceCodes,
+        result.candidates,
+      );
       if (result.status === "matched") matched.push(row);
       else if (result.status === "review") needsReview.push(row);
       else ignored.push(row);
