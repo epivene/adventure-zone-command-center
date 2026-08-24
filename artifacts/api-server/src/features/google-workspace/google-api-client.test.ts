@@ -183,6 +183,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "authorizationUrl",
       "exchangeCode",
       "getMessageMetadata",
+      "getThreadDetail",
       "listCalendars",
       "listLabels",
       "listRecentMessageRefs",
