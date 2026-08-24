@@ -6,6 +6,10 @@ import type {
   GoogleWorkspaceReadClient,
 } from "@/features/google-workspace/google-api-types";
 import {
+  GoogleProfileFileService,
+  type GoogleProfileFile,
+} from "@/features/google-workspace/google-profile-file-service";
+import {
   PostgresGoogleValidationRepository,
   type GoogleApprovedValidationMapping,
 } from "@/features/google-workspace/google-validation-repository";
@@ -24,6 +28,18 @@ type ValidationAccess = {
   }): Promise<boolean>;
 };
 
+type FileAccess = {
+  copyApprovedThreadAttachments(input: {
+    organizationId: string;
+    threadId: string;
+  }): Promise<GoogleProfileFile[]>;
+  listProfileFiles(organizationId: string): Promise<GoogleProfileFile[]>;
+  openProfileFile(input: {
+    organizationId: string;
+    fileId: string;
+  }): Promise<string>;
+};
+
 function errorCode(error: unknown): string {
   if (error instanceof Error && error.message.startsWith("GOOGLE_WORKSPACE_")) {
     return error.message;
@@ -33,7 +49,20 @@ function errorCode(error: unknown): string {
 
 function errorStatus(code: string): number {
   if (code === "GOOGLE_WORKSPACE_NOT_CONNECTED") return 409;
-  if (code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE") return 503;
+  if (
+    code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE" ||
+    code === "GOOGLE_WORKSPACE_PROFILE_FILES_UNAVAILABLE"
+  ) {
+    return 503;
+  }
+  if (
+    code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_PROFILE_THREAD_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_PROFILE_FILE_NOT_FOUND"
+  ) {
+    return 404;
+  }
+  if (code === "GOOGLE_WORKSPACE_PROFILE_FILE_UNAVAILABLE") return 409;
   return 500;
 }
 
@@ -69,11 +98,13 @@ function latestPerThread(
 export function createGoogleWorkspaceProfileEmailRouter(options?: {
   connection?: ConnectionAccess;
   validationRepository?: ValidationAccess;
+  fileService?: FileAccess;
 }): IRouter {
   const router: IRouter = Router();
   const connection = options?.connection ?? new PostgresGoogleConnectionRepository();
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
+  const fileService = options?.fileService ?? new GoogleProfileFileService();
 
   router.get(
     "/google-workspace/profiles/:organizationId/emails",
@@ -137,6 +168,50 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE");
         }
         res.json(await client.getThreadDetail(req.params.threadId));
+      } catch (error) {
+        const code = errorCode(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/profiles/:organizationId/threads/:threadId/copy-files",
+    async (req, res): Promise<void> => {
+      try {
+        const files = await fileService.copyApprovedThreadAttachments({
+          organizationId: req.params.organizationId,
+          threadId: req.params.threadId,
+        });
+        res.json({ files });
+      } catch (error) {
+        const code = errorCode(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/profiles/:organizationId/files",
+    async (req, res): Promise<void> => {
+      try {
+        res.json({ files: await fileService.listProfileFiles(req.params.organizationId) });
+      } catch (error) {
+        const code = errorCode(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/profiles/:organizationId/files/:fileId/open",
+    async (req, res): Promise<void> => {
+      try {
+        const url = await fileService.openProfileFile({
+          organizationId: req.params.organizationId,
+          fileId: req.params.fileId,
+        });
+        res.json({ url, expiresInSeconds: 900 });
       } catch (error) {
         const code = errorCode(error);
         res.status(errorStatus(code)).json({ error: code });

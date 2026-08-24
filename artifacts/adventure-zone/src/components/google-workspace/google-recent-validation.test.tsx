@@ -8,6 +8,9 @@ vi.mock("@/features/google-workspace/google-workspace-client", async (importOrig
   const actual = await importOriginal<typeof import("@/features/google-workspace/google-workspace-client")>();
   return { ...actual, decideGoogleWorkspaceValidationSample: client.decideGoogleWorkspaceValidationSample };
 });
+vi.mock("./google-validation-review", () => ({
+  GoogleValidationReview: () => <div>Actionable Needs Review panel</div>,
+}));
 
 import { GoogleRecentValidation } from "./google-recent-validation";
 
@@ -82,7 +85,7 @@ afterEach(() => {
 });
 
 describe("GoogleRecentValidation", () => {
-  it("shows bounded sample counts, contact-to-profile resolution, and keeps ignored mail collapsible", () => {
+  it("shows bounded sample counts, contact-to-profile resolution, actionable review, and collapsible ignored mail", () => {
     render(<GoogleRecentValidation result={result} />);
 
     expect(screen.getByText("3 checked")).toBeInTheDocument();
@@ -93,6 +96,7 @@ describe("GoogleRecentValidation", () => {
     expect(screen.getByText("Exact contact email")).toBeInTheDocument();
     expect(screen.getByText("Matched contact: Fair Office")).toBeInTheDocument();
     expect(screen.getByText("Profile: County Fair")).toBeInTheDocument();
+    expect(screen.getByText("Actionable Needs Review panel")).toBeInTheDocument();
     expect(screen.getByText(/1 item in Needs Review will stay unlinked/i)).toBeInTheDocument();
     expect(screen.queryByText("Dinner plans")).not.toBeInTheDocument();
 

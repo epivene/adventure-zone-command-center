@@ -40,7 +40,11 @@ services:
       # Private Google Cloud Storage bucket used for manager receipt images.
       - key: LEG_MANAGER_RECEIPT_BUCKET
         sync: false
-      # Full service-account JSON for receipt uploads/signing. Keep this server-only.
+      # Private Google Cloud Storage bucket used for approved CRM source files,
+      # including Gmail attachments copied from the Google validation sample.
+      - key: GOOGLE_CLOUD_STORAGE_BUCKET
+        sync: false
+      # Full service-account JSON for private uploads/signing. Keep this server-only.
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
       # Read-only Google Workspace OAuth. Configure all five secret values together.

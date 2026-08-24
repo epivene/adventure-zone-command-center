@@ -90,6 +90,20 @@ export type GoogleRecentValidationResult = {
   ignored: GoogleRecentValidationRow[];
 };
 
+export type GoogleValidationReviewItem = {
+  messageId: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  to: string;
+  internalDateMs: number | null;
+  evidenceCodes: string[];
+  candidates: Array<{ id: string; name: string }>;
+  hasAttachments: boolean;
+  state: "pending" | "resolved" | "ignored";
+  resolvedOrganizationId: string | null;
+};
+
 export type GoogleProfileEmailConversation = {
   threadId: string;
   subject: string;
@@ -134,6 +148,22 @@ export type GoogleThreadDetail = {
   subject: string;
   originalGmailUrl: string;
   messages: GoogleThreadMessage[];
+};
+
+export type GoogleProfileFile = {
+  id: string;
+  organizationId: string;
+  threadId: string;
+  messageId: string;
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  contentSha256: string | null;
+  storageObjectKey: string | null;
+  availability: "available" | "file_unavailable" | "retry_required";
+  lastErrorCode: string | null;
+  createdAt: string;
 };
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -203,6 +233,40 @@ export async function runGoogleWorkspaceRecentValidation(
   );
 }
 
+export async function getGoogleWorkspaceValidationReview(): Promise<{
+  items: GoogleValidationReviewItem[];
+}> {
+  return responseJson(
+    await apiFetch("/google-workspace/validation/review"),
+  );
+}
+
+export async function resolveGoogleWorkspaceValidationReview(
+  messageId: string,
+  organizationId: string,
+): Promise<{ ok: true }> {
+  return responseJson(
+    await apiFetch(
+      `/google-workspace/validation/review/${encodeURIComponent(messageId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ organizationId }),
+      },
+    ),
+  );
+}
+
+export async function ignoreGoogleWorkspaceValidationReview(
+  messageId: string,
+): Promise<{ ok: true }> {
+  return responseJson(
+    await apiFetch(
+      `/google-workspace/validation/review/${encodeURIComponent(messageId)}/ignore`,
+      { method: "POST", body: "{}" },
+    ),
+  );
+}
+
 export async function decideGoogleWorkspaceValidationSample(
   decision: "approve" | "reject",
 ): Promise<{
@@ -232,6 +296,38 @@ export async function getGoogleProfileEmailThread(
   return responseJson<GoogleThreadDetail>(
     await apiFetch(
       `/google-workspace/profiles/${encodeURIComponent(organizationId)}/emails/${encodeURIComponent(threadId)}`,
+    ),
+  );
+}
+
+export async function copyGoogleProfileThreadFiles(
+  organizationId: string,
+  threadId: string,
+): Promise<{ files: GoogleProfileFile[] }> {
+  return responseJson(
+    await apiFetch(
+      `/google-workspace/profiles/${encodeURIComponent(organizationId)}/threads/${encodeURIComponent(threadId)}/copy-files`,
+      { method: "POST", body: "{}" },
+    ),
+  );
+}
+
+export async function getGoogleProfileFiles(
+  organizationId: string,
+): Promise<{ files: GoogleProfileFile[] }> {
+  return responseJson(
+    await apiFetch(`/google-workspace/profiles/${encodeURIComponent(organizationId)}/files`),
+  );
+}
+
+export async function openGoogleProfileFile(
+  organizationId: string,
+  fileId: string,
+): Promise<{ url: string; expiresInSeconds: number }> {
+  return responseJson(
+    await apiFetch(
+      `/google-workspace/profiles/${encodeURIComponent(organizationId)}/files/${encodeURIComponent(fileId)}/open`,
+      { method: "POST", body: "{}" },
     ),
   );
 }

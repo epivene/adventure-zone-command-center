@@ -16,6 +16,27 @@ export type GoogleValidationStatus =
   | "approved"
   | "rejected";
 
+export type GoogleValidationReviewState = "pending" | "resolved" | "ignored";
+
+export type GoogleValidationReviewItem = {
+  messageId: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  to: string;
+  internalDateMs: number | null;
+  evidenceCodes: string[];
+  candidates: Array<{ id: string; name: string }>;
+  hasAttachments: boolean;
+  state: GoogleValidationReviewState;
+  resolvedOrganizationId: string | null;
+};
+
+export type GoogleValidationReviewInput = Omit<
+  GoogleValidationReviewItem,
+  "state" | "resolvedOrganizationId"
+>;
+
 type QueryResult = {
   rows: Array<Record<string, unknown>>;
 };
@@ -24,10 +45,29 @@ type SqlPool = {
   query(text: string, values?: unknown[]): Promise<QueryResult>;
 };
 
-function evidenceCodes(value: unknown): string[] {
+function stringArray(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string")
     : [];
+}
+
+function candidates(value: unknown): Array<{ id: string; name: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const item = entry as Record<string, unknown>;
+    if (typeof item.id !== "string" || typeof item.name !== "string") return [];
+    return [{ id: item.id, name: item.name }];
+  });
+}
+
+function internalDateMs(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 export class PostgresGoogleValidationRepository {
@@ -105,6 +145,237 @@ export class PostgresGoogleValidationRepository {
          END,
          updated_at = now()`,
       [connectionId],
+    );
+  }
+
+  async upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void> {
+    if (!items.length) return;
+    const connectionId = await this.currentConnectionId();
+    for (const item of items) {
+      if (!item.messageId.trim() || !item.threadId.trim()) {
+        throw new Error("GOOGLE_WORKSPACE_REVIEW_ITEM_INVALID");
+      }
+      await this.pool.query(
+        `INSERT INTO google_workspace_validation_review_items (
+           connection_id,
+           message_id,
+           thread_id,
+           subject,
+           from_header,
+           to_header,
+           internal_date_ms,
+           evidence_codes,
+           candidate_organizations,
+           has_attachments,
+           review_state,
+           created_at,
+           updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, 'pending', now(), now())
+         ON CONFLICT (connection_id, message_id) DO UPDATE SET
+           thread_id = EXCLUDED.thread_id,
+           subject = EXCLUDED.subject,
+           from_header = EXCLUDED.from_header,
+           to_header = EXCLUDED.to_header,
+           internal_date_ms = EXCLUDED.internal_date_ms,
+           evidence_codes = EXCLUDED.evidence_codes,
+           candidate_organizations = EXCLUDED.candidate_organizations,
+           has_attachments = EXCLUDED.has_attachments,
+           updated_at = now()`,
+        [
+          connectionId,
+          item.messageId,
+          item.threadId,
+          item.subject,
+          item.from,
+          item.to,
+          item.internalDateMs,
+          JSON.stringify(item.evidenceCodes),
+          JSON.stringify(item.candidates),
+          item.hasAttachments,
+        ],
+      );
+    }
+  }
+
+  async listReviewItems(): Promise<GoogleValidationReviewItem[]> {
+    const connectionId = await this.currentConnectionId();
+    const result = await this.pool.query(
+      `SELECT message_id,
+              thread_id,
+              subject,
+              from_header,
+              to_header,
+              internal_date_ms,
+              evidence_codes,
+              candidate_organizations,
+              has_attachments,
+              review_state,
+              resolved_organization_id
+         FROM google_workspace_validation_review_items
+        WHERE connection_id = $1
+        ORDER BY CASE review_state
+                   WHEN 'pending' THEN 0
+                   WHEN 'resolved' THEN 1
+                   ELSE 2
+                 END,
+                 updated_at DESC,
+                 message_id DESC`,
+      [connectionId],
+    );
+    return result.rows.flatMap((row) => {
+      if (
+        typeof row.message_id !== "string" ||
+        typeof row.thread_id !== "string" ||
+        typeof row.subject !== "string" ||
+        typeof row.from_header !== "string" ||
+        typeof row.to_header !== "string" ||
+        (row.review_state !== "pending" &&
+          row.review_state !== "resolved" &&
+          row.review_state !== "ignored")
+      ) {
+        return [];
+      }
+      return [{
+        messageId: row.message_id,
+        threadId: row.thread_id,
+        subject: row.subject,
+        from: row.from_header,
+        to: row.to_header,
+        internalDateMs: internalDateMs(row.internal_date_ms),
+        evidenceCodes: stringArray(row.evidence_codes),
+        candidates: candidates(row.candidate_organizations),
+        hasAttachments: row.has_attachments === true,
+        state: row.review_state,
+        resolvedOrganizationId:
+          typeof row.resolved_organization_id === "string"
+            ? row.resolved_organization_id
+            : null,
+      }];
+    });
+  }
+
+  async resolveReviewItem(input: {
+    messageId: string;
+    organizationId: string;
+    actorId: string;
+    now: Date;
+  }): Promise<void> {
+    if (
+      !input.messageId.trim() ||
+      !input.organizationId.trim() ||
+      !input.actorId.trim() ||
+      !Number.isFinite(input.now.getTime())
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID");
+    }
+    const connectionId = await this.currentConnectionId();
+    const target = await this.pool.query(
+      `SELECT id
+         FROM organizations
+        WHERE id = $1
+          AND consolidated_into_id IS NULL
+        LIMIT 1`,
+      [input.organizationId],
+    );
+    if (!target.rows.length) {
+      throw new Error("GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND");
+    }
+
+    const changed = await this.pool.query(
+      `UPDATE google_workspace_validation_review_items
+          SET review_state = 'resolved',
+              resolved_organization_id = $3,
+              reviewed_by = $4,
+              reviewed_at = $5,
+              updated_at = $5
+        WHERE connection_id = $1
+          AND message_id = $2
+        RETURNING thread_id, evidence_codes`,
+      [connectionId, input.messageId, input.organizationId, input.actorId, input.now],
+    );
+    const review = changed.rows[0];
+    if (!review || typeof review.thread_id !== "string") {
+      throw new Error("GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND");
+    }
+    const manualEvidence = [...new Set([
+      ...stringArray(review.evidence_codes),
+      "manual_profile_assignment",
+    ])];
+    await this.pool.query(
+      `INSERT INTO google_workspace_validation_mappings (
+         connection_id,
+         message_id,
+         thread_id,
+         organization_id,
+         contact_id,
+         evidence_codes,
+         created_at,
+         updated_at
+       ) VALUES ($1, $2, $3, $4, NULL, $5::jsonb, $6, $6)
+       ON CONFLICT (connection_id, message_id) DO UPDATE SET
+         thread_id = EXCLUDED.thread_id,
+         organization_id = EXCLUDED.organization_id,
+         contact_id = NULL,
+         evidence_codes = EXCLUDED.evidence_codes,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        connectionId,
+        input.messageId,
+        review.thread_id,
+        input.organizationId,
+        JSON.stringify(manualEvidence),
+        input.now,
+      ],
+    );
+    await this.pool.query(
+      `INSERT INTO google_workspace_audit_events (
+         actor_kind, actor_id, action, target_type, target_id, metadata, created_at
+       ) VALUES ('owner', $1, 'validation_review_resolved', 'gmail_message', $2,
+                 jsonb_build_object('organizationId', $3), $4)`,
+      [input.actorId, input.messageId, input.organizationId, input.now],
+    );
+  }
+
+  async ignoreReviewItem(input: {
+    messageId: string;
+    actorId: string;
+    now: Date;
+  }): Promise<void> {
+    if (
+      !input.messageId.trim() ||
+      !input.actorId.trim() ||
+      !Number.isFinite(input.now.getTime())
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID");
+    }
+    const connectionId = await this.currentConnectionId();
+    const changed = await this.pool.query(
+      `UPDATE google_workspace_validation_review_items
+          SET review_state = 'ignored',
+              resolved_organization_id = NULL,
+              reviewed_by = $3,
+              reviewed_at = $4,
+              updated_at = $4
+        WHERE connection_id = $1
+          AND message_id = $2
+        RETURNING message_id`,
+      [connectionId, input.messageId, input.actorId, input.now],
+    );
+    if (!changed.rows.length) {
+      throw new Error("GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND");
+    }
+    await this.pool.query(
+      `DELETE FROM google_workspace_validation_mappings
+        WHERE connection_id = $1
+          AND message_id = $2`,
+      [connectionId, input.messageId],
+    );
+    await this.pool.query(
+      `INSERT INTO google_workspace_audit_events (
+         actor_kind, actor_id, action, target_type, target_id, metadata, created_at
+       ) VALUES ('owner', $1, 'validation_review_ignored', 'gmail_message', $2,
+                 '{}'::jsonb, $3)`,
+      [input.actorId, input.messageId, input.now],
     );
   }
 
@@ -198,7 +469,7 @@ export class PostgresGoogleValidationRepository {
         threadId: row.thread_id,
         organizationId: row.organization_id,
         contactId: typeof row.contact_id === "string" ? row.contact_id : null,
-        evidenceCodes: evidenceCodes(row.evidence_codes),
+        evidenceCodes: stringArray(row.evidence_codes),
       }];
     });
   }

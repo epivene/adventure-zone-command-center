@@ -1,6 +1,6 @@
 import express from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import { createGoogleWorkspaceProfileEmailRouter } from "./google-workspace-profile-email";
@@ -57,7 +57,28 @@ function googleClient(): GoogleWorkspaceReadClient {
   };
 }
 
-function appFor(options?: { ownsThread?: boolean }) {
+const storedFile = {
+  id: "file-1",
+  organizationId: "org-1",
+  threadId: "thread-1",
+  messageId: "m1",
+  attachmentId: "a1",
+  filename: "application.pdf",
+  mimeType: "application/pdf",
+  sizeBytes: 1200,
+  contentSha256: "abc",
+  storageObjectKey: "google-workspace/attachments/ab/abc",
+  availability: "available" as const,
+  lastErrorCode: null,
+  createdAt: "2026-08-24T18:00:00.000Z",
+};
+
+function appFor(options?: {
+  ownsThread?: boolean;
+  copyFiles?: ReturnType<typeof vi.fn>;
+  listFiles?: ReturnType<typeof vi.fn>;
+  openFile?: ReturnType<typeof vi.fn>;
+}) {
   const app = express();
   app.use(express.json());
   app.use(
@@ -77,6 +98,14 @@ function appFor(options?: { ownsThread?: boolean }) {
               ]
             : [],
         organizationOwnsApprovedThread: async () => options?.ownsThread ?? true,
+      },
+      fileService: {
+        copyApprovedThreadAttachments:
+          options?.copyFiles ?? vi.fn(async () => [storedFile]),
+        listProfileFiles:
+          options?.listFiles ?? vi.fn(async () => [storedFile]),
+        openProfileFile:
+          options?.openFile ?? vi.fn(async () => "https://signed.example/file"),
       },
     }),
   );
@@ -131,5 +160,47 @@ describe("Google Workspace profile email routes", () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "GOOGLE_WORKSPACE_PROFILE_EMAIL_NOT_FOUND" });
+  });
+
+  it("copies approved conversation attachments into the profile Files area", async () => {
+    const copyFiles = vi.fn(async () => [storedFile]);
+    const response = await request(appFor({ copyFiles })).post(
+      "/google-workspace/profiles/org-1/threads/thread-1/copy-files",
+    );
+
+    expect(response.status).toBe(200);
+    expect(copyFiles).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      threadId: "thread-1",
+    });
+    expect(response.body.files[0].filename).toBe("application.pdf");
+  });
+
+  it("lists files only for the requested profile", async () => {
+    const listFiles = vi.fn(async () => [storedFile]);
+    const response = await request(appFor({ listFiles })).get(
+      "/google-workspace/profiles/org-1/files",
+    );
+
+    expect(response.status).toBe(200);
+    expect(listFiles).toHaveBeenCalledWith("org-1");
+    expect(response.body.files).toHaveLength(1);
+  });
+
+  it("opens a profile-owned file with a 15-minute signed URL", async () => {
+    const openFile = vi.fn(async () => "https://signed.example/file");
+    const response = await request(appFor({ openFile })).post(
+      "/google-workspace/profiles/org-1/files/file-1/open",
+    );
+
+    expect(response.status).toBe(200);
+    expect(openFile).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      fileId: "file-1",
+    });
+    expect(response.body).toEqual({
+      url: "https://signed.example/file",
+      expiresInSeconds: 900,
+    });
   });
 });
