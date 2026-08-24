@@ -7,6 +7,10 @@ import {
   officeTemplatePlaceholders,
   type OfficeTemplatePlaceholder,
 } from "@/features/office/template-authoring";
+import {
+  replaceTemplateLiteral,
+  suggestTemplateReplacements,
+} from "@/features/office/template-replacement-suggestions";
 
 export type OfficeTemplateEditorValue = {
   name: string;
@@ -14,15 +18,28 @@ export type OfficeTemplateEditorValue = {
   bodyTemplate: string;
 };
 
+type ReplacementContext = {
+  contactName?: string | null;
+  eventName?: string | null;
+  eventCity?: string | null;
+  eventState?: string | null;
+  eventDates?: string | null;
+  packageName?: string | null;
+  packagePrice?: string | null;
+  packageDuration?: string | null;
+};
+
 export function OfficeTemplateEditor({
   initialValue,
   previewValues = {},
+  replacementContext = {},
   onSave,
   onCancel,
   saving = false,
 }: {
   initialValue: OfficeTemplateEditorValue;
   previewValues?: Partial<Record<OfficeTemplatePlaceholder, string | null>>;
+  replacementContext?: ReplacementContext;
   onSave(value: OfficeTemplateEditorValue): void | Promise<void>;
   onCancel(): void;
   saving?: boolean;
@@ -30,6 +47,7 @@ export function OfficeTemplateEditor({
   const [name, setName] = useState(initialValue.name);
   const [subjectTemplate, setSubjectTemplate] = useState(initialValue.subjectTemplate ?? "");
   const [bodyTemplate, setBodyTemplate] = useState(initialValue.bodyTemplate);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<string[]>([]);
 
   function preview(value: string) {
     return value.replace(/\{\{([a-zA-Z][a-zA-Z0-9]*)\}\}/g, (whole, rawToken: string) => {
@@ -43,9 +61,21 @@ export function OfficeTemplateEditor({
     body: preview(bodyTemplate),
   }), [subjectTemplate, bodyTemplate, previewValues]);
 
+  const suggestions = useMemo(() => suggestTemplateReplacements({
+    subject: subjectTemplate,
+    body: bodyTemplate,
+    context: replacementContext,
+  }).filter((suggestion) => !dismissedSuggestions.includes(`${suggestion.token}:${suggestion.literal}`)), [subjectTemplate, bodyTemplate, replacementContext, dismissedSuggestions]);
+
   function insert(token: OfficeTemplatePlaceholder, target: "subject" | "body") {
     if (target === "subject") setSubjectTemplate((current) => appendTemplateToken(current, token));
     else setBodyTemplate((current) => appendTemplateToken(current, token));
+  }
+
+  function replaceSuggestion(literal: string, token: OfficeTemplatePlaceholder) {
+    setSubjectTemplate((current) => replaceTemplateLiteral(current, literal, token));
+    setBodyTemplate((current) => replaceTemplateLiteral(current, literal, token));
+    setDismissedSuggestions((current) => [...current, `${token}:${literal}`]);
   }
 
   return (
@@ -58,6 +88,24 @@ export function OfficeTemplateEditor({
       <label className="grid gap-1 text-sm font-semibold">Template name<input value={name} onChange={(event) => setName(event.target.value)} /></label>
       <ProtectedTemplateText label="Subject" value={subjectTemplate} onChange={setSubjectTemplate} />
       <ProtectedTemplateText label="Body" value={bodyTemplate} onChange={setBodyTemplate} multiline />
+
+      {suggestions.length ? (
+        <div className="grid gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-sm font-bold text-amber-950">Protect profile-specific details</p>
+          {suggestions.map((suggestion) => {
+            const key = `${suggestion.token}:${suggestion.literal}`;
+            return (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-white p-2" key={key}>
+                <p className="text-sm">Replace “{suggestion.literal}” with {suggestion.label}?</p>
+                <div className="flex gap-2">
+                  <button className="button-secondary" type="button" onClick={() => replaceSuggestion(suggestion.literal, suggestion.token)}>Replace</button>
+                  <button className="button-secondary" type="button" onClick={() => setDismissedSuggestions((current) => [...current, key])}>Keep literal</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
 
       <div>
         <p className="text-sm font-bold">Insert field</p>
