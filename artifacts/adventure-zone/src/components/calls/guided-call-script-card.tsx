@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 import type { GuidedCallScriptKind } from "@/features/calls/call-types";
 import {
   GUIDED_CALL_SCRIPT_KINDS,
@@ -9,6 +11,12 @@ import {
 } from "@/features/calls/guided-call-scripts";
 import { useGuidedCallScriptOverrides } from "@/features/calls/guided-call-script-settings-context";
 import type { GuidedCallState } from "@/features/calls/guided-call-state";
+import {
+  detectFollowUpOpeningMode,
+  followUpOpeningFor,
+  followUpOpeningLabels,
+  type FollowUpOpeningMode,
+} from "@/features/calls/follow-up-opening";
 
 const labels: Record<GuidedCallScriptKind, string> = {
   first_outreach: "First outreach",
@@ -23,18 +31,31 @@ export function GuidedCallScriptCard({
   kind,
   state,
   renderContext,
+  lastOutcome = null,
   onChooseResponse,
   onChangeKind,
 }: {
   kind: GuidedCallScriptKind;
   state: GuidedCallState;
   renderContext: GuidedCallRenderContext;
+  lastOutcome?: string | null;
   onChooseResponse: (responseId: string) => void;
   onChangeKind: (kind: GuidedCallScriptKind) => void;
 }) {
   const overrides = useGuidedCallScriptOverrides();
   const script = getConfiguredGuidedCallScript(kind, overrides);
   const node = script.nodes[state.nodeId] ?? script.nodes[script.startNodeId];
+  const [followUpOpeningMode, setFollowUpOpeningMode] = useState<FollowUpOpeningMode>("auto");
+
+  useEffect(() => {
+    setFollowUpOpeningMode("auto");
+  }, [lastOutcome]);
+
+  const autoFollowUpMode = useMemo(() => detectFollowUpOpeningMode(lastOutcome), [lastOutcome]);
+  const isFollowUpOpening = kind === "follow_up" && node.id === script.startNodeId;
+  const spokenText = isFollowUpOpening
+    ? followUpOpeningFor({ mode: followUpOpeningMode, lastOutcome }).say
+    : node.say;
 
   return (
     <section
@@ -62,10 +83,29 @@ export function GuidedCallScriptCard({
         </label>
       </div>
 
+      {isFollowUpOpening ? (
+        <label className="mt-3 grid gap-1 text-xs font-semibold text-slate-600 sm:max-w-sm">
+          Follow-up opener
+          <select
+            aria-label="Follow-up opener"
+            className="text-sm"
+            onChange={(event) => setFollowUpOpeningMode(event.target.value as FollowUpOpeningMode)}
+            value={followUpOpeningMode}
+          >
+            <option value="auto">Auto — {followUpOpeningLabels[autoFollowUpMode]}</option>
+            <option value="generic">Generic follow-up</option>
+            <option value="left_voicemail">Left voicemail last time</option>
+            <option value="no_answer">No answer last time</option>
+            <option value="spoke_before">We spoke before</option>
+            <option value="requested_callback">They asked me to call back</option>
+          </select>
+        </label>
+      ) : null}
+
       <div className="mt-3 rounded-2xl bg-slate-950 p-4 text-white sm:p-5">
         <p className="text-xs font-bold uppercase tracking-[0.12em] text-orange-300">Say this</p>
         <p className="mt-2 text-2xl font-semibold leading-snug sm:text-3xl sm:leading-tight">
-          {renderGuidedText(node.say, renderContext)}
+          {renderGuidedText(spokenText, renderContext)}
         </p>
       </div>
 
