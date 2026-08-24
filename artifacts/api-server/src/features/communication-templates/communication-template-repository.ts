@@ -32,7 +32,6 @@ type PrivateTemplateInput = {
   subjectTemplate: string | null;
   bodyTemplate: string;
   category?: string;
-  requiredPlaceholders?: TemplatePlaceholder[];
 };
 
 function mapTemplate(
@@ -100,6 +99,7 @@ export class CommunicationTemplateRepository {
           ),
         ),
         and(
+          eq(communicationTemplates.accessScope, "office"),
           eq(communicationTemplates.ownerKind, "office_user"),
           eq(communicationTemplates.ownerOfficeAccountId, officeAccountId),
           ne(communicationTemplates.state, "archived"),
@@ -122,6 +122,7 @@ export class CommunicationTemplateRepository {
     officeAccountId: string,
     input: PrivateTemplateInput,
   ): Promise<CommunicationTemplateRecord> {
+    const placeholders = validatedTokens(input);
     const [row] = await this.database
       .insert(communicationTemplates)
       .values({
@@ -131,8 +132,8 @@ export class CommunicationTemplateRepository {
         category: input.category ?? "custom",
         subjectTemplate: input.subjectTemplate,
         bodyTemplate: input.bodyTemplate,
-        allowedPlaceholders: validatedTokens(input),
-        requiredPlaceholders: input.requiredPlaceholders ?? [],
+        allowedPlaceholders: placeholders,
+        requiredPlaceholders: placeholders,
         accessScope: "office",
         state: "active",
         ownerKind: "office_user",
@@ -156,6 +157,7 @@ export class CommunicationTemplateRepository {
     officeAccountId: string,
     patch: PrivateTemplateInput,
   ): Promise<CommunicationTemplateRecord> {
+    const placeholders = validatedTokens(patch);
     const [row] = await this.database
       .update(communicationTemplates)
       .set({
@@ -163,8 +165,8 @@ export class CommunicationTemplateRepository {
         subjectTemplate: patch.subjectTemplate,
         bodyTemplate: patch.bodyTemplate,
         category: patch.category ?? "custom",
-        allowedPlaceholders: validatedTokens(patch),
-        requiredPlaceholders: patch.requiredPlaceholders ?? [],
+        allowedPlaceholders: placeholders,
+        requiredPlaceholders: placeholders,
         updatedAt: new Date(),
       })
       .where(and(
@@ -304,6 +306,7 @@ export class CommunicationTemplateRepository {
       const safeKnownSystemSeed =
         existing.ownerKind === "company"
         && existing.createdByKind === "system"
+        && existing.state !== "archived"
         && existing.sourceNote === PREVIOUS_SYSTEM_SOURCE_NOTE
         && existing.reviewedBy === PREVIOUS_SYSTEM_REVIEWER;
 
