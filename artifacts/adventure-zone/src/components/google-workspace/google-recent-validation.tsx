@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { GoogleValidationReview } from "@/components/google-workspace/google-validation-review";
 import {
   decideGoogleWorkspaceValidationSample,
   type GoogleRecentValidationResult,
@@ -147,7 +148,7 @@ export function GoogleRecentValidation({ result }: { result: GoogleRecentValidat
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">AI is off. This is only a metadata/relevance check of the newest {result.checkedLimit} messages and does not start the historical import.</p>
       <ResultSection title="Matched to profiles" rows={result.matched} />
-      <ResultSection title="Needs review" rows={result.needsReview} />
+      {result.counts.needsReview > 0 ? <GoogleValidationReview /> : null}
       {result.ignored.length > 0 ? (
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
