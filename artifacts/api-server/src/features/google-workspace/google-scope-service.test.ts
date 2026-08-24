@@ -47,18 +47,16 @@ function workspaceClient(options?: {
 }
 
 describe("buildGoogleScopePreview", () => {
-  it("selects exact Gmail roots, descendants, and Spam while excluding personal labels", () => {
+  it("selects exact Gmail business roots and descendants while excluding Receipt, Spam, and personal labels", () => {
     const preview = buildGoogleScopePreview(labels, calendars);
 
     expect(preview.labels.map((label) => label.id)).toEqual([
       "shows",
       "shows-2026",
       "shows-west",
-      "receipt",
       "off-season",
       "employees",
       "associations",
-      "SPAM",
     ]);
     expect(preview.labels.find((label) => label.id === "shows-2026")).toEqual({
       id: "shows-2026",
@@ -66,15 +64,11 @@ describe("buildGoogleScopePreview", () => {
       rootId: "shows",
       rootName: "Shows",
     });
-    expect(preview.labels.find((label) => label.id === "SPAM")).toEqual({
-      id: "SPAM",
-      name: "SPAM",
-      rootId: "SPAM",
-      rootName: "Spam",
-    });
+    expect(preview.labels.some((label) => label.id === "receipt")).toBe(false);
+    expect(preview.labels.some((label) => label.id === "SPAM")).toBe(false);
     expect(preview.labels.some((label) => label.id === "personal")).toBe(false);
     expect(preview.labels.some((label) => label.id === "almost")).toBe(false);
-    expect(preview.excludedLabelCount).toBe(2);
+    expect(preview.excludedLabelCount).toBe(4);
     expect(preview.missingLabelRoots).toEqual([]);
   });
 
@@ -187,7 +181,7 @@ describe("GoogleScopeService", () => {
 
     await expect(
       service.save({
-        labelIds: ["personal"],
+        labelIds: ["receipt"],
         calendarIds: ["az"],
         actorKind: "owner",
         actorId: "owner",

@@ -14,8 +14,8 @@ const client: GoogleWorkspaceReadClient = {
   listLabels: async () => [
     { id: "shows", name: "Shows", type: "user" },
     { id: "shows-2026", name: "Shows/2026", type: "user" },
+    { id: "shows-old", name: "Shows/Old Leads", type: "user" },
     { id: "receipt", name: "Receipt", type: "user" },
-    { id: "receipt-old", name: "Receipt/Old Vendor Receipts", type: "user" },
     { id: "off-season", name: "Off Season Business Opportunities", type: "user" },
     { id: "employees", name: "Employees", type: "user" },
     { id: "associations", name: "Associations", type: "user" },
@@ -48,11 +48,11 @@ function serviceWithPersistence(replace = vi.fn(async () => undefined)) {
 }
 
 describe("Google Workspace optional nested labels", () => {
-  it("allows a nested business label to be omitted while keeping every root, Spam, and calendar", async () => {
+  it("allows a nested business label to be omitted while keeping every required root and calendar", async () => {
     const { service, replace } = serviceWithPersistence();
     const preview = buildGoogleScopePreview(await client.listLabels(), await client.listCalendars());
     const selectedLabelIds = preview.labels
-      .filter((label) => label.id !== "receipt-old")
+      .filter((label) => label.id !== "shows-old")
       .map((label) => label.id);
 
     await expect(
@@ -65,14 +65,14 @@ describe("Google Workspace optional nested labels", () => {
       }),
     ).resolves.toMatchObject({
       labels: expect.not.arrayContaining([
-        expect.objectContaining({ id: "receipt-old" }),
+        expect.objectContaining({ id: "shows-old" }),
       ]),
     });
 
     expect(replace).toHaveBeenCalledWith(
       expect.objectContaining({
         labels: expect.not.arrayContaining([
-          expect.objectContaining({ id: "receipt-old" }),
+          expect.objectContaining({ id: "shows-old" }),
         ]),
       }),
     );
@@ -85,7 +85,7 @@ describe("Google Workspace optional nested labels", () => {
     await expect(
       service.save({
         labelIds: preview.labels
-          .filter((label) => label.id !== "receipt")
+          .filter((label) => label.id !== "shows")
           .map((label) => label.id),
         calendarIds: preview.calendars.map((calendar) => calendar.id),
         actorKind: "owner",

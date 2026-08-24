@@ -13,7 +13,7 @@ const labels = [
 ];
 
 describe("businessHintLabelIds", () => {
-  it("includes Potential shows, Business Expenses, and Banking & Loans families but not unrelated/system labels", () => {
-    expect([...businessHintLabelIds(labels)]).toEqual(["p", "p1", "e", "e1", "b"]);
+  it("uses Potential shows as a business hint but does not promote finance labels by themselves", () => {
+    expect([...businessHintLabelIds(labels)]).toEqual(["p", "p1"]);
   });
 });

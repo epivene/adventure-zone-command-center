@@ -13,11 +13,7 @@ import {
   type GoogleRelevanceCandidate,
 } from "./google-relevance-classifier";
 
-const BUSINESS_HINT_ROOTS = [
-  "potential shows",
-  "business expenses",
-  "banking & loans",
-] as const;
+const BUSINESS_HINT_ROOTS = ["potential shows"] as const;
 
 export function businessHintLabelIds(labels: GoogleLabelSummary[]): Set<string> {
   const ids = new Set<string>();

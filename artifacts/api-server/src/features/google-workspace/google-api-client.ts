@@ -281,7 +281,6 @@ export function createGoogleWorkspaceReadClient(input: {
       let pageToken: string | null = null;
       do {
         const url = new URL(`${gmailBaseEndpoint}/messages`);
-        url.searchParams.set("includeSpamTrash", "true");
         url.searchParams.set("maxResults", String(Math.min(100, limit - refs.length)));
         if (pageToken) url.searchParams.set("pageToken", pageToken);
         const payload = await authorizedJson(url.toString());

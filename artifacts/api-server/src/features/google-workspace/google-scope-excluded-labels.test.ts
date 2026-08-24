@@ -28,9 +28,13 @@ describe("Google Workspace excluded label review", () => {
     );
 
     expect(preview.excludedLabels).toEqual([
+      { id: "receipt", name: "Receipt", type: "user" },
+      { id: "SPAM", name: "SPAM", type: "system" },
       { id: "personal", name: "Personal/Family", type: "user" },
       { id: "TRASH", name: "TRASH", type: "system" },
     ]);
+    expect(preview.labels.some((label) => label.id === "receipt")).toBe(false);
+    expect(preview.labels.some((label) => label.id === "SPAM")).toBe(false);
     expect(preview.labels.some((label) => label.id === "personal")).toBe(false);
     expect(preview.labels.some((label) => label.id === "TRASH")).toBe(false);
   });
