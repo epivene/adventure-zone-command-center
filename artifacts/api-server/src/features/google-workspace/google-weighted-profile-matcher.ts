@@ -27,11 +27,11 @@ const GENERIC_EVENT_WORDS = new Set([
 ]);
 
 const STATE_CODES = new Set([
-  "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id",
-  "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms",
-  "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok",
-  "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "vt", "va", "wa", "wv",
-  "wi", "wy",
+  "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID",
+  "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS",
+  "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK",
+  "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV",
+  "WI", "WY",
 ]);
 
 function tokens(value: string): string[] {
@@ -48,18 +48,27 @@ function uniqueTokens(value: string): Set<string> {
   return new Set(tokens(value));
 }
 
-function scoreProfile(textTokens: Set<string>, profileName: string) {
-  const profileTokens = uniqueTokens(profileName);
-  const profileStates = [...profileTokens].filter((token) => STATE_CODES.has(token));
-  const textStates = [...textTokens].filter((token) => STATE_CODES.has(token));
+function explicitStates(value: string): Set<string> {
+  const matches = value.match(/\b[A-Z]{2}\b/g) ?? [];
+  return new Set(matches.filter((code) => STATE_CODES.has(code)));
+}
+
+function scoreProfile(input: {
+  textTokens: Set<string>;
+  textStates: Set<string>;
+  profileName: string;
+}) {
+  const profileTokens = uniqueTokens(input.profileName);
+  const profileStates = explicitStates(input.profileName);
 
   let score = 0;
   let distinctiveShared = 0;
   let genericShared = 0;
 
   for (const token of profileTokens) {
-    if (!textTokens.has(token)) continue;
-    if (STATE_CODES.has(token)) {
+    if (!input.textTokens.has(token)) continue;
+    const upper = token.toUpperCase();
+    if (profileStates.has(upper) && input.textStates.has(upper)) {
       score += 5;
       continue;
     }
@@ -68,14 +77,17 @@ function scoreProfile(textTokens: Set<string>, profileName: string) {
       score += 0.5;
       continue;
     }
+    if (STATE_CODES.has(upper) && profileStates.has(upper)) {
+      continue;
+    }
     distinctiveShared += 1;
     score += token.length >= 7 ? 4 : 3;
   }
 
   if (
-    profileStates.length > 0 &&
-    textStates.length > 0 &&
-    !profileStates.some((state) => textStates.includes(state))
+    profileStates.size > 0 &&
+    input.textStates.size > 0 &&
+    ![...profileStates].some((state) => input.textStates.has(state))
   ) {
     score -= 4;
   }
@@ -87,7 +99,9 @@ export function matchGoogleTextToProfiles(input: {
   text: string;
   profiles: Array<{ id: string; name: string }>;
 }): GoogleWeightedProfileMatch {
-  const textTokens = uniqueTokens(input.text.slice(0, 50_000));
+  const boundedText = input.text.slice(0, 50_000);
+  const textTokens = uniqueTokens(boundedText);
+  const textStates = explicitStates(boundedText);
   if (textTokens.size === 0) {
     return { status: "none", evidenceCodes: [], candidates: [] };
   }
@@ -95,7 +109,7 @@ export function matchGoogleTextToProfiles(input: {
   const ranked = input.profiles
     .map((profile) => ({
       profile,
-      ...scoreProfile(textTokens, profile.name),
+      ...scoreProfile({ textTokens, textStates, profileName: profile.name }),
     }))
     .filter((entry) => entry.distinctiveShared > 0 && entry.score >= 3)
     .sort((left, right) => right.score - left.score || left.profile.name.localeCompare(right.profile.name));
