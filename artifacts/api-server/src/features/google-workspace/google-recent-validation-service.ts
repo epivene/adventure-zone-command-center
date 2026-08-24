@@ -11,6 +11,7 @@ import {
   GoogleContactProfileResolver,
   type ContactProfileResolution,
 } from "./google-contact-profile-resolver";
+import { matchGoogleBodyToProfiles } from "./google-body-profile-matcher";
 import { GoogleScopeService, type GoogleSavedScope } from "./google-scope-service";
 import {
   PostgresGoogleValidationRepository,
@@ -21,9 +22,11 @@ import {
 import {
   classifyGoogleMessageRelevance,
   type GoogleRelevanceCandidate,
+  type GoogleRelevanceResult,
 } from "./google-relevance-classifier";
 
 const BUSINESS_HINT_ROOTS = ["potential shows"] as const;
+const MAX_BODY_EVIDENCE_CHARS = 50_000;
 
 export function businessHintLabelIds(labels: GoogleLabelSummary[]): Set<string> {
   const ids = new Set<string>();
@@ -247,6 +250,57 @@ function persistableReviewItems(rows: GoogleValidationRow[]): GoogleValidationRe
   }));
 }
 
+async function withTransientBodyEvidence(input: {
+  result: GoogleRelevanceResult;
+  threadId: string;
+  client: GoogleWorkspaceReadClient;
+  profiles: GoogleValidationEvidenceSnapshot["profiles"];
+}): Promise<GoogleRelevanceResult> {
+  if (input.result.status === "matched" || !input.client.getThreadDetail) {
+    return input.result;
+  }
+
+  try {
+    const thread = await input.client.getThreadDetail(input.threadId);
+    const bodyText = thread.messages
+      .map((message) => message.bodyText)
+      .join("\n")
+      .slice(0, MAX_BODY_EVIDENCE_CHARS);
+    const bodyMatch = matchGoogleBodyToProfiles({
+      bodyText,
+      profiles: input.profiles,
+    });
+
+    if (bodyMatch.status === "matched") {
+      return {
+        status: "matched",
+        evidenceCodes: bodyMatch.evidenceCodes,
+        candidates: bodyMatch.candidates,
+      };
+    }
+    if (bodyMatch.status === "review") {
+      const candidates = new Map(
+        [...input.result.candidates, ...bodyMatch.candidates].map((candidate) => [
+          `${candidate.kind}:${candidate.id}`,
+          candidate,
+        ]),
+      );
+      return {
+        status: "review",
+        evidenceCodes: [
+          ...new Set([...input.result.evidenceCodes, ...bodyMatch.evidenceCodes]),
+        ],
+        candidates: [...candidates.values()],
+      };
+    }
+  } catch {
+    // Body access is supplemental. Metadata classification remains authoritative
+    // when Gmail cannot provide a readable thread during the bounded check.
+  }
+
+  return input.result;
+}
+
 export class GoogleRecentValidationService {
   private readonly connection: ConnectionAccess;
   private readonly scope: ScopeAccess;
@@ -296,7 +350,7 @@ export class GoogleRecentValidationService {
 
     for (const ref of refs) {
       const message = await client.getMessageMetadata(ref.id);
-      const result = classifyGoogleMessageRelevance({
+      const metadataResult = classifyGoogleMessageRelevance({
         message,
         evidence: {
           approvedLabelIds: relevanceLabelIds,
@@ -306,6 +360,12 @@ export class GoogleRecentValidationService {
           profiles: evidenceSnapshot.profiles,
           existingThreadTarget: null,
         },
+      });
+      const result = await withTransientBodyEvidence({
+        result: metadataResult,
+        threadId: message.threadId,
+        client,
+        profiles: evidenceSnapshot.profiles,
       });
 
       const contactCandidates = result.candidates.filter(
