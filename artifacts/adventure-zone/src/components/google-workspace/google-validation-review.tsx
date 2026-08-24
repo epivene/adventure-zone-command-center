@@ -18,7 +18,11 @@ type SearchState = {
   searching: boolean;
 };
 
-export function GoogleValidationReview() {
+export function GoogleValidationReview({
+  onPendingCountChange,
+}: {
+  onPendingCountChange?(count: number): void;
+} = {}) {
   const [items, setItems] = useState<GoogleValidationReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
@@ -30,6 +34,9 @@ export function GoogleValidationReview() {
     try {
       const result = await getGoogleWorkspaceValidationReview();
       setItems(result.items);
+      onPendingCountChange?.(
+        result.items.filter((item) => item.state === "pending").length,
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load email review items.");
     } finally {
