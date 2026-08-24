@@ -13,8 +13,15 @@ const message = (id: string, from: string, subject: string, labelIds: string[]) 
   hasAttachments: false,
 });
 
+function validationRepository(upsertRows = vi.fn(async () => undefined)) {
+  return {
+    upsertRows,
+    getStatus: vi.fn(async () => "ready_for_review" as const),
+  };
+}
+
 describe("GoogleRecentValidationService", () => {
-  it("resolves an exact contact match onward to its one active organization profile", async () => {
+  it("resolves an exact contact match onward to its one active organization profile and persists the mapping", async () => {
     const client: GoogleWorkspaceReadClient = {
       authorizationUrl: () => "",
       exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
@@ -28,6 +35,7 @@ describe("GoogleRecentValidationService", () => {
         message(id, "booking@fair.org", "Hello", ["INBOX"]),
       ),
     };
+    const upsertRows = vi.fn(async () => undefined);
 
     const service = new GoogleRecentValidationService({
       connection: { createReadClient: async () => client },
@@ -47,10 +55,12 @@ describe("GoogleRecentValidationService", () => {
           candidates: [{ id: "org-1", name: "County Fair" }],
         }),
       },
+      validationRepository: validationRepository(upsertRows),
     });
 
     const result = await service.run(100);
 
+    expect(result.validationStatus).toBe("ready_for_review");
     expect(result.counts).toEqual({ discovered: 1, matched: 1, needsReview: 0, ignored: 0 });
     expect(result.matched[0]).toMatchObject({
       id: "m1",
@@ -58,6 +68,15 @@ describe("GoogleRecentValidationService", () => {
       resolvedOrganization: { id: "org-1", name: "County Fair" },
       evidenceCodes: ["exact_contact_email", "contact_active_organization"],
     });
+    expect(upsertRows).toHaveBeenCalledWith([
+      {
+        messageId: "m1",
+        threadId: "thread-m1",
+        organizationId: "org-1",
+        contactId: "c1",
+        evidenceCodes: ["exact_contact_email", "contact_active_organization"],
+      },
+    ]);
   });
 
   it("moves an exact contact match to review when the contact belongs to multiple active profiles", async () => {
@@ -92,6 +111,7 @@ describe("GoogleRecentValidationService", () => {
           ],
         }),
       },
+      validationRepository: validationRepository(),
     });
 
     const result = await service.run(100);
@@ -148,6 +168,7 @@ describe("GoogleRecentValidationService", () => {
           candidates: [],
         }),
       },
+      validationRepository: validationRepository(),
     });
 
     const result = await service.run(100);
@@ -179,6 +200,7 @@ describe("GoogleRecentValidationService", () => {
           candidates: [],
         }),
       },
+      validationRepository: validationRepository(),
     });
 
     await expect(service.run(100)).rejects.toThrow("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
