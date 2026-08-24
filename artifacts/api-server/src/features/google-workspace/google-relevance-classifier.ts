@@ -1,4 +1,5 @@
 import type { GoogleMessageMetadata } from "./google-api-types";
+import { matchGoogleTextToProfiles } from "./google-weighted-profile-matcher";
 
 export type GoogleRelevanceCandidate = {
   id: string;
@@ -129,6 +130,19 @@ export function classifyGoogleMessageRelevance(input: {
     }
   }
 
+  const boundedText = `${message.headers.subject}\n${message.snippet}`;
+  const weighted = matchGoogleTextToProfiles({
+    text: boundedText,
+    profiles: evidence.profiles,
+  });
+  if (weighted.status === "matched") {
+    return weighted;
+  }
+  if (weighted.status === "review") {
+    for (const code of weighted.evidenceCodes) evidenceCodes.push(code);
+    for (const candidate of weighted.candidates) addCandidate(candidate);
+  }
+
   const mailboxEmails = new Set(
     [...(evidence.mailboxEmails ?? new Set<string>())].map(normalize),
   );
@@ -170,7 +184,6 @@ export function classifyGoogleMessageRelevance(input: {
   );
   if (hasApprovedBusinessLabel) evidenceCodes.push("approved_business_label");
 
-  const boundedText = `${message.headers.subject}\n${message.snippet}`;
   if (subjectMatches.length === 0) {
     for (const profile of evidence.profiles) {
       if (exactTextContains(boundedText, profile.name)) {
@@ -184,15 +197,20 @@ export function classifyGoogleMessageRelevance(input: {
     evidenceCodes.includes("approved_business_label") ||
     evidenceCodes.includes("exact_profile_name_text") ||
     evidenceCodes.includes("ambiguous_profile_name_subject") ||
+    evidenceCodes.includes("weighted_profile_text_ambiguous") ||
     organizationMatches.length > 1
   ) {
     if (organizationMatches.length > 1) {
       evidenceCodes.push("ambiguous_organization_domain");
       for (const organization of organizationMatches) {
-        addCandidate({ id: organization.id, name: organization.name, kind: "organization" });
+        addCandidate({
+          id: organization.id,
+          name: organization.name,
+          kind: "organization",
+        });
       }
     }
-    return { status: "review", evidenceCodes, candidates };
+    return { status: "review", evidenceCodes: [...new Set(evidenceCodes)], candidates };
   }
 
   return { status: "ignored", evidenceCodes, candidates };
