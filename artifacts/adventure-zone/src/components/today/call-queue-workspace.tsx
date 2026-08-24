@@ -20,7 +20,6 @@ import {
   CopilotReason,
   type BookingCopilotReason,
 } from "@/components/today/copilot-reason";
-import { buildTelHref } from "@/features/calls/phone-launcher";
 import { apiGet } from "@/lib/auth-token";
 
 export type CallQueueItem = {
@@ -173,6 +172,18 @@ async function defaultRefreshToday() {
   return apiGet<RefreshedToday>("/today");
 }
 
+function TaskMeta({ followUp }: { followUp: CallQueueItem }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold text-slate-600">
+      {followUp.bookingStatus ? <span className="rounded-full bg-slate-100 px-2 py-1">{formatStatus(followUp.bookingStatus)}</span> : null}
+      {followUp.routeLeg ? <span className="rounded-full bg-slate-100 px-2 py-1">{followUp.routeLeg.name}</span> : null}
+      <span className="rounded-full bg-slate-100 px-2 py-1">
+        {followUp.lastContactedAt ? `Last contact ${formatDate(followUp.lastContactedAt)}` : "No prior contact"}
+      </span>
+    </div>
+  );
+}
+
 export function CallQueueWorkspace({
   followUps,
   initialFollowUpId,
@@ -189,6 +200,9 @@ export function CallQueueWorkspace({
     initialFollowUpId && followUps.some(({ id }) => id === initialFollowUpId)
       ? initialFollowUpId
       : followUps[0]?.id ?? null,
+  );
+  const [focused, setFocused] = useState(() =>
+    typeof window !== "undefined" && window.location.hash === "#today-next-task",
   );
   const [workspace, setWorkspace] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -208,7 +222,16 @@ export function CallQueueWorkspace({
   }, [followUps, remainingCount]);
 
   useEffect(() => {
-    if (!selected) {
+    function syncFocusFromHash() {
+      if (window.location.hash === "#today-next-task") setFocused(true);
+    }
+    syncFocusFromHash();
+    window.addEventListener("hashchange", syncFocusFromHash);
+    return () => window.removeEventListener("hashchange", syncFocusFromHash);
+  }, []);
+
+  useEffect(() => {
+    if (!selected || !focused) {
       setWorkspace(null);
       setLoading(false);
       setError(null);
@@ -232,7 +255,7 @@ export function CallQueueWorkspace({
     return () => {
       active = false;
     };
-  }, [selected?.id, retryKey, loadWorkspace]);
+  }, [selected?.id, focused, retryKey, loadWorkspace]);
 
   async function handleComplete(input: any): Promise<CompleteCallResult> {
     if (!selected) return { ok: false, error: "No caller is selected." };
@@ -270,77 +293,93 @@ export function CallQueueWorkspace({
     return { ok: true };
   }
 
-  return (
-    <section
-      className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(17rem,.72fr)_minmax(0,1.28fr)] lg:items-start"
-      data-testid="call-queue-layout"
-    >
-      <div className="order-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:order-1" data-testid="call-queue-panel">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold">Calls to make</h2>
-            <p className="text-xs text-slate-500">Tap a card to prep, or 📞 to start.</p>
-          </div>
-          <span className="whitespace-nowrap rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">{total} remaining</span>
-        </div>
+  function leaveFocus() {
+    setFocused(false);
+    if (typeof window !== "undefined" && window.location.hash === "#today-next-task") {
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }
+  }
 
-        {queue.length ? (
-          <ol className="mt-3 grid gap-2">
-            {queue.map((followUp) => {
-              const active = followUp.id === selectedId;
-              const label = followUp.contactName ?? followUp.bookingName;
-              const telHref = followUp.callPhone?.number
-                ? buildTelHref({ number: followUp.callPhone.number, extension: followUp.callPhone.extension })
-                : null;
-              return (
-                <li className={`rounded-xl border-2 p-3 transition ${active ? "border-orange-500 bg-orange-50 shadow-sm" : "border-slate-200 bg-white hover:border-orange-300"}`} key={followUp.id}>
-                  <div className="flex items-center gap-3">
-                    <button aria-current={active ? "true" : undefined} className="min-w-0 flex-1 text-left" onClick={() => setSelectedId(followUp.id)} type="button">
-                      <span className="flex items-center gap-2">
-                        <span className="truncate font-bold text-slate-950">{label}</span>
-                        {active ? <span className="rounded-full bg-orange-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Selected</span> : null}
-                      </span>
-                      {followUp.organizationName && followUp.organizationName !== label ? <span className="mt-0.5 block truncate text-xs text-slate-500">{followUp.organizationName}</span> : null}
-                      <span className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] font-semibold text-slate-600">
-                        {followUp.bookingStatus ? <span>{formatStatus(followUp.bookingStatus)}</span> : null}
-                        {followUp.routeLeg ? <span>{followUp.routeLeg.name}</span> : null}
-                        <span>{followUp.lastContactedAt ? `Last ${formatDate(followUp.lastContactedAt)}` : "Not contacted"}</span>
-                      </span>
-                    </button>
-                    {telHref ? (
-                      <a aria-label="Start guided call" className="inline-flex size-12 shrink-0 items-center justify-center rounded-full border-2 border-orange-600 bg-orange-600 text-xl text-white shadow-md transition hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500" href={telHref} onClick={() => setSelectedId(followUp.id)} title={`Call ${label}`}><span aria-hidden>📞</span></a>
-                    ) : (
-                      <button aria-label="No callable number" className="inline-flex size-12 shrink-0 cursor-not-allowed items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xl opacity-40" disabled type="button"><span aria-hidden>📞</span></button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        ) : <p className="mt-4 text-sm text-slate-600">No open calls.</p>}
+  if (!focused) {
+    if (!selected) {
+      return (
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" id="today-next-task">
+          <p className="font-bold text-slate-950">Calls complete</p>
+          <p className="mt-1 text-sm text-slate-600">No open calls are waiting on you.</p>
+        </section>
+      );
+    }
+
+    const label = selected.contactName ?? selected.bookingName;
+    return (
+      <section
+        className="rounded-xl border border-orange-200 bg-white p-4 shadow-sm"
+        data-testid="today-next-task"
+        id="today-next-task"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-orange-700">Next up</p>
+          <span className="whitespace-nowrap text-xs font-bold text-slate-500">
+            {total} task{total === 1 ? "" : "s"} remaining
+          </span>
+        </div>
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg font-bold text-slate-950">{label}</h3>
+            {selected.organizationName && selected.organizationName !== label ? (
+              <p className="mt-0.5 text-sm font-medium text-slate-600">{selected.organizationName}</p>
+            ) : null}
+            <TaskMeta followUp={selected} />
+            <CopilotReason copilot={selected.copilot} compact />
+          </div>
+          <button
+            className="shrink-0 rounded-lg bg-orange-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-orange-700"
+            onClick={() => setFocused(true)}
+            type="button"
+          >
+            Start
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (!selected) {
+    return (
+      <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm" id="today-next-task">
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Done</p>
+        <h3 className="mt-1 text-xl font-bold text-emerald-950">Calls complete</h3>
+        <p className="mt-1 text-sm text-emerald-800">You finished the open call queue.</p>
+        <button className="mt-4 text-sm font-bold text-emerald-900 underline" onClick={leaveFocus} type="button">Back to Today</button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="grid gap-3" data-testid="call-queue-layout" id="today-next-task">
+      <div className="sticky top-16 z-10 rounded-xl border border-slate-200 bg-white/95 p-3 shadow-sm backdrop-blur">
+        <div className="flex items-center justify-between gap-3">
+          <button className="text-sm font-bold text-orange-700 hover:underline" onClick={leaveFocus} type="button">← Back to Today</button>
+          <span className="rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-800">{total} remaining</span>
+        </div>
       </div>
 
-      <div className="order-1 grid min-w-0 gap-3 lg:order-2" data-testid="selected-call-workspace">
-        {selected ? (
-          <header className="rounded-xl border border-orange-200 bg-white p-3 shadow-sm" data-testid="call-prep-header">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-700">Call Prep</p>
-                <p className="mt-0.5 truncate text-lg font-bold text-slate-950">{selected.contactName ?? selected.bookingName}</p>
-                {selected.contactName && selected.bookingName !== selected.contactName ? <p className="truncate text-sm font-semibold text-slate-600">{selected.bookingName}</p> : null}
-              </div>
-              <div className="flex flex-wrap justify-end gap-1.5 text-[11px] font-bold text-slate-700">
-                {selected.bookingStatus ? <span className="rounded-full bg-slate-100 px-2 py-1">{formatStatus(selected.bookingStatus)}</span> : null}
-                {selected.routeLeg ? <span className="rounded-full bg-slate-100 px-2 py-1">{selected.routeLeg.name}</span> : null}
-                <span className="rounded-full bg-slate-100 px-2 py-1">{selected.lastContactedAt ? `Last contact ${formatDate(selected.lastContactedAt)}` : "No prior contact"}</span>
-              </div>
+      <div className="grid min-w-0 gap-3" data-testid="selected-call-workspace">
+        <header className="rounded-xl border border-orange-200 bg-white p-3 shadow-sm" data-testid="call-prep-header">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-orange-700">Call prep</p>
+              <p className="mt-0.5 text-lg font-bold text-slate-950">{selected.contactName ?? selected.bookingName}</p>
+              {selected.contactName && selected.bookingName !== selected.contactName ? (
+                <p className="text-sm font-semibold text-slate-600">{selected.bookingName}</p>
+              ) : null}
             </div>
-            <CopilotReason copilot={selected.copilot} compact />
-          </header>
-        ) : null}
-        {!selected ? (
-          <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Select a caller from the queue.</div>
-        ) : loading ? (
+            <TaskMeta followUp={selected} />
+          </div>
+          <CopilotReason copilot={selected.copilot} compact />
+        </header>
+
+        {loading ? (
           <div className="rounded-xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">Loading caller…</div>
         ) : error ? (
           <div className="rounded-xl border border-rose-200 bg-rose-50 p-6" role="alert">
