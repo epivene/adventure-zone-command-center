@@ -17,6 +17,14 @@ import { extractTemplateTokens } from "./communication-template-renderer";
 import { validateAuthoredTemplateText } from "./communication-template-authoring";
 import { canOfficeUseTemplate } from "./communication-template-permissions";
 
+export const PREVIOUS_SYSTEM_SOURCE_NOTE =
+  "Reviewed starting copy derived from Adventure Zone Sticky Notes; not verbatim source text.";
+export const CURRENT_SYSTEM_SOURCE_NOTE =
+  "Adventure Zone Sticky Notes base wording, lightly normalized; Amy sent-email patterns used for tone/usage corroboration. Seed revision 2026-08-24.";
+
+const CURRENT_SYSTEM_REVIEWER = "system:sticky-notes-amy-review";
+const PREVIOUS_SYSTEM_REVIEWER = "system:business-drive-review";
+
 type Database = NodePgDatabase<typeof schema>;
 
 type PrivateTemplateInput = {
@@ -255,34 +263,56 @@ export class CommunicationTemplateRepository {
     sourceDocumentId: string | null,
   ): Promise<void> {
     for (const seed of seeds) {
-      const tokens = extractTemplateTokens(
+      const allowedPlaceholders = extractTemplateTokens(
         `${seed.subjectTemplate ?? ""}\n${seed.bodyTemplate}`,
       ) as TemplatePlaceholder[];
+      const [existing] = await this.database
+        .select()
+        .from(communicationTemplates)
+        .where(eq(communicationTemplates.code, seed.code))
+        .limit(1);
+
+      const values = {
+        name: seed.name,
+        channel: seed.channel,
+        category: seed.category,
+        subjectTemplate: seed.subjectTemplate,
+        bodyTemplate: seed.bodyTemplate,
+        allowedPlaceholders,
+        requiredPlaceholders: [...seed.requiredPlaceholders],
+        accessScope: seed.accessScope,
+        state: seed.state,
+        ownerKind: "company" as const,
+        ownerOfficeAccountId: null,
+        createdByKind: "system" as const,
+        createdById: null,
+        sourceTemplateId: null,
+        sourceDocumentId,
+        sourceNote: CURRENT_SYSTEM_SOURCE_NOTE,
+        reviewedBy: CURRENT_SYSTEM_REVIEWER,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      if (!existing) {
+        await this.database
+          .insert(communicationTemplates)
+          .values({ code: seed.code, ...values });
+        continue;
+      }
+
+      const safeKnownSystemSeed =
+        existing.ownerKind === "company"
+        && existing.createdByKind === "system"
+        && existing.sourceNote === PREVIOUS_SYSTEM_SOURCE_NOTE
+        && existing.reviewedBy === PREVIOUS_SYSTEM_REVIEWER;
+
+      if (!safeKnownSystemSeed) continue;
+
       await this.database
-        .insert(communicationTemplates)
-        .values({
-          code: seed.code,
-          name: seed.name,
-          channel: seed.channel,
-          category: seed.category,
-          subjectTemplate: seed.subjectTemplate,
-          bodyTemplate: seed.bodyTemplate,
-          allowedPlaceholders: tokens,
-          requiredPlaceholders: [...seed.requiredPlaceholders],
-          accessScope: seed.accessScope,
-          state: seed.state,
-          ownerKind: "company",
-          ownerOfficeAccountId: null,
-          createdByKind: "system",
-          createdById: null,
-          sourceTemplateId: null,
-          sourceDocumentId,
-          sourceNote:
-            "Reviewed starting copy derived from Adventure Zone Sticky Notes; not verbatim source text.",
-          reviewedBy: "system:business-drive-review",
-          reviewedAt: new Date(),
-        })
-        .onConflictDoNothing({ target: communicationTemplates.code });
+        .update(communicationTemplates)
+        .set(values)
+        .where(eq(communicationTemplates.id, existing.id));
     }
   }
 }
