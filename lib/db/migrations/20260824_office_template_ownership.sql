@@ -52,7 +52,7 @@ BEGIN
       ADD CONSTRAINT communication_templates_owner_office_account_fk
       FOREIGN KEY (owner_office_account_id)
       REFERENCES office_accounts(id)
-      ON DELETE SET NULL;
+      ON DELETE RESTRICT;
   END IF;
 
   IF NOT EXISTS (
