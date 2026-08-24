@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PostgresGoogleValidationRepository } from "./google-validation-repository";
+import { GoogleValidationReviewReconciler } from "./google-validation-review-reconciler";
 
 function fakePool() {
   const queries: Array<{ text: string; values?: unknown[] }> = [];
@@ -17,9 +17,9 @@ function fakePool() {
 describe("Google validation review reconciliation", () => {
   it("removes stale pending review rows for sample messages that no longer need review", async () => {
     const pool = fakePool();
-    const repository = new PostgresGoogleValidationRepository(pool);
+    const reconciler = new GoogleValidationReviewReconciler(pool);
 
-    await repository.reconcileReviewItems({
+    await reconciler.reconcile({
       sampleMessageIds: ["matched-now", "still-review", "ignored-now"],
       pendingMessageIds: ["still-review"],
     });
@@ -37,9 +37,9 @@ describe("Google validation review reconciliation", () => {
 
   it("does not delete resolved or ignored manual decisions", async () => {
     const pool = fakePool();
-    const repository = new PostgresGoogleValidationRepository(pool);
+    const reconciler = new GoogleValidationReviewReconciler(pool);
 
-    await repository.reconcileReviewItems({
+    await reconciler.reconcile({
       sampleMessageIds: ["manual-resolved", "manual-ignored"],
       pendingMessageIds: [],
     });
