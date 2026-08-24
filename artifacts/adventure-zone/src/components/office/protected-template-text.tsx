@@ -18,6 +18,20 @@ function normalizeSegments(segments: TemplateSegment[]): TemplateSegment[] {
   return result;
 }
 
+function editableSegments(segments: TemplateSegment[]): TemplateSegment[] {
+  const result: TemplateSegment[] = [];
+  if (segments[0]?.kind === "token") result.push({ kind: "text", value: "" });
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    result.push(segment);
+    if (segment.kind === "token" && segments[index + 1]?.kind === "token") {
+      result.push({ kind: "text", value: "" });
+    }
+  }
+  if (result[result.length - 1]?.kind === "token") result.push({ kind: "text", value: "" });
+  return result.length ? result : [{ kind: "text", value: "" }];
+}
+
 export function ProtectedTemplateText({
   value,
   onChange,
@@ -31,7 +45,7 @@ export function ProtectedTemplateText({
 }) {
   let segments: TemplateSegment[];
   try {
-    segments = parseTemplateSegments(value);
+    segments = editableSegments(parseTemplateSegments(value));
   } catch {
     return <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">This template contains an invalid protected field.</div>;
   }
