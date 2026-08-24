@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildGoogleScopePreview } from "./google-scope-service";
 
 describe("Google Workspace corrected source names", () => {
-  it("includes Receipt, Spam, and the apostrophe calendar names while excluding unrelated sources", () => {
+  it("keeps the approved business roots and calendar names while excluding Receipt, Spam, Trash, and personal sources", () => {
     const preview = buildGoogleScopePreview(
       [
         { id: "shows", name: "Shows", type: "user" },
@@ -30,18 +30,12 @@ describe("Google Workspace corrected source names", () => {
 
     expect(preview.labels.map((label) => label.id)).toEqual([
       "shows",
-      "receipt",
       "off-season",
       "employees",
       "associations",
-      "SPAM",
     ]);
-    expect(preview.labels.find((label) => label.id === "SPAM")).toEqual({
-      id: "SPAM",
-      name: "SPAM",
-      rootId: "SPAM",
-      rootName: "Spam",
-    });
+    expect(preview.labels.some((label) => label.id === "receipt")).toBe(false);
+    expect(preview.labels.some((label) => label.id === "SPAM")).toBe(false);
     expect(preview.labels.some((label) => label.id === "TRASH")).toBe(false);
     expect(preview.labels.some((label) => label.id === "personal")).toBe(false);
     expect(preview.missingLabelRoots).toEqual([]);
