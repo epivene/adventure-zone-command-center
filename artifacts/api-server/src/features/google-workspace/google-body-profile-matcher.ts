@@ -1,0 +1,68 @@
+import type { GoogleRelevanceCandidate } from "./google-relevance-classifier";
+
+export type GoogleBodyProfileMatch = {
+  status: "matched" | "review" | "none";
+  evidenceCodes: string[];
+  candidates: GoogleRelevanceCandidate[];
+};
+
+const INTERNAL_PROFILE_PREFIXES = ["adventure zone"] as const;
+
+function canonical(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function coreProfileName(value: string): string {
+  return canonical(
+    value
+      .replace(/\([^)]*\)/g, " ")
+      .replace(/\b[A-Z]{2}\s*$/i, " "),
+  );
+}
+
+function bodyEligibleName(value: string): string | null {
+  const core = coreProfileName(value);
+  if (!core) return null;
+  if (INTERNAL_PROFILE_PREFIXES.some((prefix) => core.startsWith(prefix))) {
+    return null;
+  }
+  const words = core.split(" ").filter(Boolean);
+  if (core.length < 8 && words.length < 2) return null;
+  return core;
+}
+
+export function matchGoogleBodyToProfiles(input: {
+  bodyText: string;
+  profiles: Array<{ id: string; name: string }>;
+}): GoogleBodyProfileMatch {
+  const body = canonical(input.bodyText.slice(0, 50_000));
+  if (!body) return { status: "none", evidenceCodes: [], candidates: [] };
+
+  const matches = input.profiles.flatMap((profile) => {
+    const phrase = bodyEligibleName(profile.name);
+    if (!phrase || !body.includes(phrase)) return [];
+    return [{ id: profile.id, name: profile.name, kind: "profile" as const }];
+  });
+
+  const unique = [...new Map(matches.map((candidate) => [candidate.id, candidate])).values()];
+  if (unique.length === 1) {
+    return {
+      status: "matched",
+      evidenceCodes: ["exact_profile_name_body"],
+      candidates: unique,
+    };
+  }
+  if (unique.length > 1) {
+    return {
+      status: "review",
+      evidenceCodes: ["ambiguous_profile_name_body"],
+      candidates: unique,
+    };
+  }
+  return { status: "none", evidenceCodes: [], candidates: [] };
+}

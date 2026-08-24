@@ -19,6 +19,8 @@ const evidenceLabels: Record<string, string> = {
   existing_thread_association: "Previously approved thread",
   exact_profile_name_subject: "Profile name in email subject",
   ambiguous_profile_name_subject: "Multiple profile names fit subject",
+  exact_profile_name_body: "Profile name in email content",
+  ambiguous_profile_name_body: "Multiple profile names fit email content",
   exact_profile_name_text: "Exact profile name in subject/snippet",
   ambiguous_organization_domain: "Multiple organization domain matches",
 };
@@ -149,7 +151,7 @@ export function GoogleRecentValidation({ result }: { result: GoogleRecentValidat
         <div className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{unresolvedCount} needs review</div>
         <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">{result.counts.ignored} ignored</div>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400">AI is off. This is only a metadata/relevance check of the newest {result.checkedLimit} messages and does not start the historical import.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">AI is off. The newest {result.checkedLimit} messages are checked with headers first; unresolved messages may use readable Gmail thread text temporarily for profile matching. Body text is not returned or saved for ignored mail, and this does not start the historical import.</p>
       <ResultSection title="Matched to profiles" rows={result.matched} />
       {result.counts.needsReview > 0 ? (
         <GoogleValidationReview onPendingCountChange={setUnresolvedCount} />
