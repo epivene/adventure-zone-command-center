@@ -507,6 +507,7 @@ export function CallWorkspace({
       {briefing ? (
         <GuidedCallScriptCard
           kind={guidedKind}
+          lastOutcome={briefing.lastOutcome}
           onChangeKind={changeGuidedKind}
           onChooseResponse={chooseGuided}
           renderContext={guidedRenderContext}
