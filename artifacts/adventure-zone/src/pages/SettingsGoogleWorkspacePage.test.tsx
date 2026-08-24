@@ -7,6 +7,7 @@ const client = vi.hoisted(() => ({
   previewGoogleWorkspaceScope: vi.fn(),
   saveGoogleWorkspaceScope: vi.fn(),
   runGoogleWorkspaceRecentValidation: vi.fn(),
+  decideGoogleWorkspaceValidationSample: vi.fn(),
   disconnectGoogleWorkspace: vi.fn(),
 }));
 
@@ -70,6 +71,7 @@ const validation = {
   checkedLimit: 100,
   aiEnabled: false as const,
   historicalImportStarted: false as const,
+  validationStatus: "ready_for_review" as const,
   counts: { discovered: 1, matched: 1, needsReview: 0, ignored: 0 },
   matched: [
     {
@@ -83,8 +85,11 @@ const validation = {
       labelIds: ["INBOX"],
       labels: [{ id: "INBOX", name: "INBOX", type: "system" as const }],
       hasAttachments: false,
-      evidenceCodes: ["exact_contact_email"],
+      evidenceCodes: ["exact_contact_email", "contact_active_organization"],
       candidates: [{ id: "c1", name: "Fair Office", kind: "contact" as const }],
+      matchedContact: { id: "c1", name: "Fair Office" },
+      resolvedOrganization: { id: "org-1", name: "County Fair" },
+      organizationCandidates: [{ id: "org-1", name: "County Fair" }],
     },
   ],
   needsReview: [],
@@ -102,6 +107,10 @@ beforeEach(() => {
     calendars: preview.calendars,
   });
   client.runGoogleWorkspaceRecentValidation.mockResolvedValue(validation);
+  client.decideGoogleWorkspaceValidationSample.mockResolvedValue({
+    validationStatus: "approved",
+    historicalImportStarted: false,
+  });
   client.disconnectGoogleWorkspace.mockResolvedValue({ ok: true });
 });
 
@@ -187,7 +196,7 @@ describe("SettingsGoogleWorkspacePage", () => {
     ).toBeDisabled();
   });
 
-  it("runs the bounded recent Gmail check and displays deterministic evidence", async () => {
+  it("runs the bounded recent Gmail check and displays contact and resolved profile evidence", async () => {
     render(<SettingsGoogleWorkspacePage />);
 
     fireEvent.click(
@@ -199,7 +208,10 @@ describe("SettingsGoogleWorkspacePage", () => {
     );
     expect(await screen.findByText("County Fair contract")).toBeInTheDocument();
     expect(screen.getByText("Exact contact email")).toBeInTheDocument();
+    expect(screen.getByText("Matched contact: Fair Office")).toBeInTheDocument();
+    expect(screen.getByText("Profile: County Fair")).toBeInTheDocument();
     expect(screen.getByText(/does not start the historical import/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Approve sample" })).toBeInTheDocument();
   });
 
   it("blocks saving while an expected business source is missing", async () => {
