@@ -1,6 +1,8 @@
 import type {
   CommunicationTemplateAccess,
   CommunicationTemplateChannel,
+  CommunicationTemplateCreatedByKind,
+  CommunicationTemplateOwnerKind,
   CommunicationTemplateState,
 } from "@workspace/db/business-source-schema";
 
@@ -49,6 +51,11 @@ export type CommunicationTemplateRecord = {
   bodyTemplate: string;
   allowedPlaceholders: TemplatePlaceholder[];
   requiredPlaceholders: TemplatePlaceholder[];
+  ownerKind: CommunicationTemplateOwnerKind;
+  ownerOfficeAccountId: string | null;
+  createdByKind: CommunicationTemplateCreatedByKind;
+  createdById: string | null;
+  sourceTemplateId: string | null;
   sourceDocumentId: string | null;
   sourceNote: string | null;
   reviewedBy: string | null;

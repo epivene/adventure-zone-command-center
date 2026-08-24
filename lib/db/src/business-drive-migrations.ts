@@ -39,6 +39,21 @@ const migrationFiles = [
       ) AS ready`,
   },
   {
+    name: "20260824_office_template_ownership.sql",
+    markerSql: `SELECT
+      COUNT(*) = 5 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'communication_templates'
+        AND column_name IN (
+          'owner_kind',
+          'owner_office_account_id',
+          'created_by_kind',
+          'created_by_id',
+          'source_template_id'
+        )`,
+  },
+  {
     name: "20260822_package_reviewed_defaults.sql",
     markerSql: `SELECT
       EXISTS (
