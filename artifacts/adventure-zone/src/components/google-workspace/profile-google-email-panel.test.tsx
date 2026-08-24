@@ -4,11 +4,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const client = vi.hoisted(() => ({
   getGoogleProfileEmails: vi.fn(),
   getGoogleProfileEmailThread: vi.fn(),
+  copyGoogleProfileThreadFiles: vi.fn(),
+  getGoogleProfileFiles: vi.fn(),
+  openGoogleProfileFile: vi.fn(),
 }));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => client);
 
 import { ProfileGoogleEmailPanel } from "./profile-google-email-panel";
+
+const storedFile = {
+  id: "file-1",
+  organizationId: "org-1",
+  threadId: "thread-1",
+  messageId: "m1",
+  attachmentId: "a1",
+  filename: "application.pdf",
+  mimeType: "application/pdf",
+  sizeBytes: 1200,
+  contentSha256: "abc",
+  storageObjectKey: "google-workspace/attachments/ab/abc",
+  availability: "available" as const,
+  lastErrorCode: null,
+  createdAt: "2026-08-24T18:00:00.000Z",
+};
 
 beforeEach(() => {
   client.getGoogleProfileEmails.mockResolvedValue({
@@ -55,6 +74,13 @@ beforeEach(() => {
       },
     ],
   });
+  client.getGoogleProfileFiles.mockResolvedValue({ files: [] });
+  client.copyGoogleProfileThreadFiles.mockResolvedValue({ files: [storedFile] });
+  client.openGoogleProfileFile.mockResolvedValue({
+    url: "https://signed.example/application.pdf",
+    expiresInSeconds: 900,
+  });
+  vi.spyOn(window, "open").mockImplementation(() => null);
 });
 
 afterEach(() => {
@@ -63,15 +89,16 @@ afterEach(() => {
 });
 
 describe("ProfileGoogleEmailPanel", () => {
-  it("gives matched Gmail conversations their own Emails area on the profile", async () => {
+  it("gives matched Gmail conversations separate Emails and Files views", async () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 
-    expect(await screen.findByRole("heading", { name: "Emails" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Google history" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Emails" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
     expect(await screen.findByText("County Fair follow up")).toBeInTheDocument();
-    expect(screen.getByText(/approved validation sample/i)).toBeInTheDocument();
   });
 
-  it("opens the complete readable thread and lists attachments", async () => {
+  it("opens the complete readable thread and lets attachments be saved to Files", async () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 
     fireEvent.click(await screen.findByRole("button", { name: /County Fair follow up/i }));
@@ -84,6 +111,30 @@ describe("ProfileGoogleEmailPanel", () => {
     );
     expect(await screen.findByText("We would like to book you again.")).toBeInTheDocument();
     expect(screen.getByText("application.pdf")).toBeInTheDocument();
-    expect(screen.getByText(/1.2 KB/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save attachments to Files" }));
+    await waitFor(() =>
+      expect(client.copyGoogleProfileThreadFiles).toHaveBeenCalledWith(
+        "org-1",
+        "thread-1",
+      ),
+    );
+  });
+
+  it("lists durable profile files and opens them through a signed URL", async () => {
+    client.getGoogleProfileFiles.mockResolvedValue({ files: [storedFile] });
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    expect(await screen.findByText("application.pdf")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open file" }));
+
+    await waitFor(() =>
+      expect(client.openGoogleProfileFile).toHaveBeenCalledWith("org-1", "file-1"),
+    );
+    expect(window.open).toHaveBeenCalledWith(
+      "https://signed.example/application.pdf",
+      "_blank",
+      "noopener,noreferrer",
+    );
   });
 });
