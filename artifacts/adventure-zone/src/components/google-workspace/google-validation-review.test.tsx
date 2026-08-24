@@ -5,10 +5,13 @@ const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
-  searchGoogleWorkspaceReviewProfiles: vi.fn(),
+}));
+const search = vi.hoisted(() => ({
+  searchGoogleReviewProfiles: vi.fn(),
 }));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => client);
+vi.mock("@/features/google-workspace/google-review-profile-search", () => search);
 
 import { GoogleValidationReview } from "./google-validation-review";
 
@@ -30,7 +33,7 @@ beforeEach(() => {
   client.getGoogleWorkspaceValidationReview.mockResolvedValue({ items: [item] });
   client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({ ok: true });
   client.ignoreGoogleWorkspaceValidationReview.mockResolvedValue({ ok: true });
-  client.searchGoogleWorkspaceReviewProfiles.mockResolvedValue([
+  search.searchGoogleReviewProfiles.mockResolvedValue([
     { id: "22222222-2222-4222-8222-222222222222", name: "Another Fair" },
   ]);
 });
