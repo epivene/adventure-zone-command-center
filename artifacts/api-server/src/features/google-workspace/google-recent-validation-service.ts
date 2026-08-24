@@ -13,6 +13,11 @@ import {
 } from "./google-contact-profile-resolver";
 import { GoogleScopeService, type GoogleSavedScope } from "./google-scope-service";
 import {
+  PostgresGoogleValidationRepository,
+  type GoogleValidationMappingInput,
+  type GoogleValidationStatus,
+} from "./google-validation-repository";
+import {
   classifyGoogleMessageRelevance,
   type GoogleRelevanceCandidate,
 } from "./google-relevance-classifier";
@@ -63,6 +68,7 @@ export type GoogleRecentValidationResult = {
   checkedLimit: number;
   aiEnabled: false;
   historicalImportStarted: false;
+  validationStatus: GoogleValidationStatus;
   counts: {
     discovered: number;
     matched: number;
@@ -88,6 +94,11 @@ type EvidenceAccess = {
 
 type ContactProfileResolverAccess = {
   resolve(contactId: string): Promise<ContactProfileResolution>;
+};
+
+type ValidationRepositoryAccess = {
+  upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
+  getStatus(): Promise<GoogleValidationStatus>;
 };
 
 type DrizzleDb = typeof defaultDb;
@@ -196,23 +207,40 @@ function toRow(
   };
 }
 
+function persistableMappings(rows: GoogleValidationRow[]): GoogleValidationMappingInput[] {
+  return rows.flatMap((row) => {
+    if (!row.resolvedOrganization) return [];
+    return [{
+      messageId: row.id,
+      threadId: row.threadId,
+      organizationId: row.resolvedOrganization.id,
+      contactId: row.matchedContact?.id ?? null,
+      evidenceCodes: row.evidenceCodes,
+    }];
+  });
+}
+
 export class GoogleRecentValidationService {
   private readonly connection: ConnectionAccess;
   private readonly scope: ScopeAccess;
   private readonly evidence: EvidenceAccess;
   private readonly contactProfileResolver: ContactProfileResolverAccess;
+  private readonly validationRepository: ValidationRepositoryAccess;
 
   constructor(options?: {
     connection?: ConnectionAccess;
     scope?: ScopeAccess;
     evidence?: EvidenceAccess;
     contactProfileResolver?: ContactProfileResolverAccess;
+    validationRepository?: ValidationRepositoryAccess;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.scope = options?.scope ?? new GoogleScopeService();
     this.evidence = options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
     this.contactProfileResolver =
       options?.contactProfileResolver ?? new GoogleContactProfileResolver();
+    this.validationRepository =
+      options?.validationRepository ?? new PostgresGoogleValidationRepository();
   }
 
   async run(limit = 100): Promise<GoogleRecentValidationResult> {
@@ -321,10 +349,14 @@ export class GoogleRecentValidationService {
       else ignored.push(row);
     }
 
+    await this.validationRepository.upsertRows(persistableMappings(matched));
+    const validationStatus = await this.validationRepository.getStatus();
+
     return {
       checkedLimit,
       aiEnabled: false,
       historicalImportStarted: false,
+      validationStatus,
       counts: {
         discovered: refs.length,
         matched: matched.length,
