@@ -1,8 +1,10 @@
 import { useState } from "react";
 
-import type {
-  GoogleRecentValidationResult,
-  GoogleRecentValidationRow,
+import {
+  decideGoogleWorkspaceValidationSample,
+  type GoogleRecentValidationResult,
+  type GoogleRecentValidationRow,
+  type GoogleValidationStatus,
 } from "@/features/google-workspace/google-workspace-client";
 
 const evidenceLabels: Record<string, string> = {
@@ -102,12 +104,86 @@ function ResultSection({
   );
 }
 
+function ApprovalControls({
+  status,
+  onStatus,
+}: {
+  status: GoogleValidationStatus;
+  onStatus(status: GoogleValidationStatus): void;
+}) {
+  const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function decide(decision: "approve" | "reject") {
+    setBusy(decision);
+    setError(null);
+    try {
+      const result = await decideGoogleWorkspaceValidationSample(decision);
+      onStatus(result.validationStatus);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save the sample decision.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  if (status === "approved") {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+        <p className="font-bold">Sample approved</p>
+        <p className="mt-1 text-xs">
+          The matched sample conversations can now appear on their profiles. The historical import is still off.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+        {status === "rejected"
+          ? "Sample marked for more review"
+          : "Ready for your decision"}
+      </p>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        Approving makes the resolved sample conversations visible on their profiles. It does not start the full historical import.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          className="button-primary px-4 py-2"
+          disabled={busy !== null}
+          onClick={() => void decide("approve")}
+          type="button"
+        >
+          {busy === "approve" ? "Approving…" : "Approve sample"}
+        </button>
+        <button
+          className="button-secondary px-4 py-2"
+          disabled={busy !== null}
+          onClick={() => void decide("reject")}
+          type="button"
+        >
+          {busy === "reject" ? "Saving…" : "Keep reviewing"}
+        </button>
+      </div>
+      {error ? (
+        <p className="mt-2 text-xs font-medium text-rose-700 dark:text-rose-300">
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function GoogleRecentValidation({
   result,
 }: {
   result: GoogleRecentValidationResult;
 }) {
   const [showIgnored, setShowIgnored] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<GoogleValidationStatus>(
+    result.validationStatus,
+  );
 
   return (
     <div className="grid gap-4">
@@ -157,6 +233,8 @@ export function GoogleRecentValidation({
           ) : null}
         </section>
       ) : null}
+
+      <ApprovalControls status={validationStatus} onStatus={setValidationStatus} />
     </div>
   );
 }
