@@ -50,6 +50,12 @@ export type GoogleRecentValidationCandidate = {
   kind: "contact" | "organization" | "profile" | "booking";
 };
 
+export type GoogleValidationStatus =
+  | "not_started"
+  | "ready_for_review"
+  | "approved"
+  | "rejected";
+
 export type GoogleRecentValidationRow = {
   id: string;
   threadId: string;
@@ -63,12 +69,16 @@ export type GoogleRecentValidationRow = {
   hasAttachments: boolean;
   evidenceCodes: string[];
   candidates: GoogleRecentValidationCandidate[];
+  matchedContact: { id: string; name: string } | null;
+  resolvedOrganization: { id: string; name: string } | null;
+  organizationCandidates: Array<{ id: string; name: string }>;
 };
 
 export type GoogleRecentValidationResult = {
   checkedLimit: number;
   aiEnabled: false;
   historicalImportStarted: false;
+  validationStatus: GoogleValidationStatus;
   counts: {
     discovered: number;
     matched: number;
@@ -78,6 +88,52 @@ export type GoogleRecentValidationResult = {
   matched: GoogleRecentValidationRow[];
   needsReview: GoogleRecentValidationRow[];
   ignored: GoogleRecentValidationRow[];
+};
+
+export type GoogleProfileEmailConversation = {
+  threadId: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
+  internalDateMs: number | null;
+  hasAttachments: boolean;
+  contactId: string | null;
+  evidenceCodes: string[];
+  originalGmailUrl: string;
+};
+
+export type GoogleProfileEmailList = {
+  validationSampleOnly: true;
+  conversations: GoogleProfileEmailConversation[];
+};
+
+export type GoogleThreadAttachment = {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  messageId: string;
+};
+
+export type GoogleThreadMessage = {
+  id: string;
+  internalDateMs: number | null;
+  from: string;
+  to: string;
+  cc: string;
+  subject: string;
+  date: string;
+  direction: "incoming" | "outgoing" | "unknown";
+  bodyText: string;
+  attachments: GoogleThreadAttachment[];
+};
+
+export type GoogleThreadDetail = {
+  id: string;
+  subject: string;
+  originalGmailUrl: string;
+  messages: GoogleThreadMessage[];
 };
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -144,6 +200,39 @@ export async function runGoogleWorkspaceRecentValidation(
       method: "POST",
       body: JSON.stringify({ limit }),
     }),
+  );
+}
+
+export async function decideGoogleWorkspaceValidationSample(
+  decision: "approve" | "reject",
+): Promise<{
+  validationStatus: "approved" | "rejected";
+  historicalImportStarted: false;
+}> {
+  return responseJson(
+    await apiFetch("/google-workspace/validation/decision", {
+      method: "POST",
+      body: JSON.stringify({ decision }),
+    }),
+  );
+}
+
+export async function getGoogleProfileEmails(
+  organizationId: string,
+): Promise<GoogleProfileEmailList> {
+  return responseJson<GoogleProfileEmailList>(
+    await apiFetch(`/google-workspace/profiles/${encodeURIComponent(organizationId)}/emails`),
+  );
+}
+
+export async function getGoogleProfileEmailThread(
+  organizationId: string,
+  threadId: string,
+): Promise<GoogleThreadDetail> {
+  return responseJson<GoogleThreadDetail>(
+    await apiFetch(
+      `/google-workspace/profiles/${encodeURIComponent(organizationId)}/emails/${encodeURIComponent(threadId)}`,
+    ),
   );
 }
 

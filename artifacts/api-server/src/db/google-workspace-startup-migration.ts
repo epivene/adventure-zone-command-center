@@ -95,6 +95,45 @@ export async function ensureGoogleWorkspaceSchema(
         ON google_workspace_calendar_scopes (connection_id, calendar_id)
         WHERE selected = true;
 
+      CREATE TABLE IF NOT EXISTS google_workspace_validation_mappings (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        message_id text NOT NULL,
+        thread_id text NOT NULL,
+        organization_id uuid NOT NULL
+          REFERENCES organizations(id) ON DELETE RESTRICT,
+        contact_id uuid
+          REFERENCES contacts(id) ON DELETE SET NULL,
+        evidence_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT google_workspace_validation_mapping_unique
+          UNIQUE (connection_id, message_id),
+        CONSTRAINT google_workspace_validation_identity_nonblank
+          CHECK (btrim(message_id) <> '' AND btrim(thread_id) <> ''),
+        CONSTRAINT google_workspace_validation_evidence_array
+          CHECK (jsonb_typeof(evidence_codes) = 'array')
+      );
+      CREATE INDEX IF NOT EXISTS google_workspace_validation_org_idx
+        ON google_workspace_validation_mappings
+          (connection_id, organization_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS google_workspace_validation_thread_idx
+        ON google_workspace_validation_mappings
+          (connection_id, thread_id);
+
+      CREATE TABLE IF NOT EXISTS google_workspace_validation_state (
+        connection_id uuid PRIMARY KEY
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        validation_status text NOT NULL DEFAULT 'not_started',
+        reviewed_by text,
+        reviewed_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT google_workspace_validation_status_valid
+          CHECK (validation_status IN ('not_started', 'ready_for_review', 'approved', 'rejected'))
+      );
+
       CREATE TABLE IF NOT EXISTS google_workspace_audit_events (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         actor_kind text NOT NULL,
