@@ -11,6 +11,18 @@ function appWith(options: {
     actorId: string;
     now: Date;
   }) => Promise<void>;
+  listReviewItems?: () => Promise<any[]>;
+  resolveReviewItem?: (input: {
+    messageId: string;
+    organizationId: string;
+    actorId: string;
+    now: Date;
+  }) => Promise<void>;
+  ignoreReviewItem?: (input: {
+    messageId: string;
+    actorId: string;
+    now: Date;
+  }) => Promise<void>;
 }) {
   const app = express();
   app.use(express.json());
@@ -24,6 +36,9 @@ function appWith(options: {
       validationRepository: {
         setDecision: options.setDecision ?? (async () => undefined),
         getStatus: async () => "ready_for_review",
+        listReviewItems: options.listReviewItems ?? (async () => []),
+        resolveReviewItem: options.resolveReviewItem ?? (async () => undefined),
+        ignoreReviewItem: options.ignoreReviewItem ?? (async () => undefined),
       },
       now: () => new Date("2026-08-24T17:00:00.000Z"),
     }),
@@ -64,6 +79,57 @@ describe("Google Workspace recent validation route", () => {
     expect(response.status).toBe(400);
     expect(response.body).toEqual({ error: "GOOGLE_WORKSPACE_VALIDATION_INPUT_INVALID" });
     expect(run).not.toHaveBeenCalled();
+  });
+
+  it("lists durable Needs Review items", async () => {
+    const listReviewItems = vi.fn(async () => [{
+      messageId: "m1",
+      threadId: "t1",
+      subject: "County Fair application",
+      from: "fair@example.org",
+      to: "zone@example.com",
+      internalDateMs: 1,
+      evidenceCodes: [],
+      candidates: [],
+      hasAttachments: false,
+      state: "pending",
+      resolvedOrganizationId: null,
+    }]);
+
+    const response = await request(appWith({ listReviewItems }))
+      .get("/google-workspace/validation/review");
+
+    expect(response.status).toBe(200);
+    expect(response.body.items).toHaveLength(1);
+  });
+
+  it("assigns a review item to a selected live profile", async () => {
+    const resolveReviewItem = vi.fn(async () => undefined);
+    const response = await request(appWith({ resolveReviewItem }))
+      .put("/google-workspace/validation/review/m1")
+      .send({ organizationId: "11111111-1111-4111-8111-111111111111" });
+
+    expect(response.status).toBe(200);
+    expect(resolveReviewItem).toHaveBeenCalledWith({
+      messageId: "m1",
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      actorId: "owner-1",
+      now: new Date("2026-08-24T17:00:00.000Z"),
+    });
+  });
+
+  it("ignores a review item without assigning a profile", async () => {
+    const ignoreReviewItem = vi.fn(async () => undefined);
+    const response = await request(appWith({ ignoreReviewItem }))
+      .post("/google-workspace/validation/review/m1/ignore")
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(ignoreReviewItem).toHaveBeenCalledWith({
+      messageId: "m1",
+      actorId: "owner-1",
+      now: new Date("2026-08-24T17:00:00.000Z"),
+    });
   });
 
   it("records owner approval without starting historical import", async () => {
