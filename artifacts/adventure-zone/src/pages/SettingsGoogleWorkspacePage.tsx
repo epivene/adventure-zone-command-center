@@ -215,7 +215,7 @@ export function SettingsGoogleWorkspacePage({
     }
     if (previewHasIncompleteSelection) {
       setError(
-        "Keep the main business folders, Spam, and all approved calendars selected. Individual subfolders may be unchecked.",
+        "Keep the main business folders and all approved calendars selected. Individual subfolders may be unchecked.",
       );
       return;
     }
@@ -431,7 +431,7 @@ export function SettingsGoogleWorkspacePage({
                   ) : null}
                   {previewHasIncompleteSelection ? (
                     <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                      Keep the main business folders, Spam, and all approved calendars selected. Individual subfolders may be unchecked.
+                      Keep the main business folders and all approved calendars selected. Individual subfolders may be unchecked.
                     </p>
                   ) : null}
                   <div className="flex justify-end border-t border-slate-200 pt-4">
@@ -457,7 +457,7 @@ export function SettingsGoogleWorkspacePage({
                 <div>
                   <h2 className="text-xl font-bold">Recent email safety check</h2>
                   <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-                    Check the newest 100 Gmail messages across the mailbox so profile-related or clearly business-related mail is not left behind just because it lives outside one of the saved folders.
+                    Check the newest 100 normal Gmail messages, excluding Spam and Trash, so profile-related or clearly business-related mail is not left behind just because it lives outside one of the saved folders.
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     AI stays off and this does not start the historical import.
