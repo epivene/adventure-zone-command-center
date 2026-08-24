@@ -12,6 +12,10 @@ import {
   allowedTemplatePlaceholders,
   type TemplatePlaceholder,
 } from "@/features/communication-templates/communication-template-types";
+import {
+  canOfficeMutateTemplate,
+  canOfficeUseTemplate,
+} from "@/features/communication-templates/communication-template-permissions";
 
 const router: IRouter = Router();
 const requireOffice = createRequireOfficeMiddleware(new DrizzleOfficeAccountRepository(db));
@@ -26,6 +30,16 @@ const renderSchema = z
     values: z.record(z.string(), z.string().nullable()).optional(),
   })
   .strict();
+
+const authorSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  subjectTemplate: z.string().max(500).nullable(),
+  bodyTemplate: z.string().trim().min(1).max(50000),
+}).strict();
+
+const duplicateSchema = z.object({
+  name: z.string().trim().min(1).max(160).optional(),
+}).strict();
 
 function routeParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -43,14 +57,29 @@ async function activePackages(): Promise<PackageChoice[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function templateMutationError(res: any, err: unknown): boolean {
+  const code = err instanceof Error ? err.message : "";
+  if (code === "INVALID_TEMPLATE_PLACEHOLDER") {
+    res.status(400).json({ error: "Use only the protected template fields provided by the editor." });
+    return true;
+  }
+  if (code === "TEMPLATE_NOT_MUTABLE") {
+    res.status(403).json({ error: "You can only edit your own private templates." });
+    return true;
+  }
+  if (code === "TEMPLATE_NOT_AVAILABLE") {
+    res.status(404).json({ error: "That template is not available." });
+    return true;
+  }
+  return false;
+}
+
 router.get("/office/communication-templates", requireOffice, async (req, res): Promise<void> => {
   try {
     await ensureCommunicationTemplateSeed(db);
+    const repository = new CommunicationTemplateRepository(db);
     const [records, packages] = await Promise.all([
-      new CommunicationTemplateRepository(db).list({
-        state: "active",
-        accessScope: "office",
-      }),
+      repository.listForOffice(req.officeAccount!.accountId),
       activePackages(),
     ]);
     res.json({
@@ -60,13 +89,97 @@ router.get("/office/communication-templates", requireOffice, async (req, res): P
         name: template.name,
         category: template.category,
         subjectTemplate: template.subjectTemplate,
+        bodyTemplate: template.bodyTemplate,
         requiredPlaceholders: template.requiredPlaceholders,
+        ownerKind: template.ownerKind,
+        editableByOffice: canOfficeMutateTemplate(template, req.officeAccount!.accountId),
+        sourceTemplateId: template.sourceTemplateId,
       })),
       packages,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to list Office communication templates");
     res.status(500).json({ error: "Could not load email templates." });
+  }
+});
+
+router.post("/office/communication-templates", requireOffice, async (req, res): Promise<void> => {
+  const parsed = authorSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the template." });
+    return;
+  }
+  try {
+    const template = await new CommunicationTemplateRepository(db).createPrivateForOffice(
+      req.officeAccount!.accountId,
+      parsed.data,
+    );
+    res.status(201).json({ template });
+  } catch (err) {
+    if (templateMutationError(res, err)) return;
+    req.log.error({ err }, "Failed to create private Office template");
+    res.status(500).json({ error: "Could not save the template." });
+  }
+});
+
+router.patch("/office/communication-templates/:templateId", requireOffice, async (req, res): Promise<void> => {
+  const templateId = routeParam(req.params.templateId);
+  const parsed = authorSchema.safeParse(req.body);
+  if (!uuid.safeParse(templateId).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid template ID." : parsed.error.issues[0]?.message ?? "Review the template." });
+    return;
+  }
+  try {
+    const template = await new CommunicationTemplateRepository(db).updatePrivateForOffice(
+      templateId,
+      req.officeAccount!.accountId,
+      parsed.data,
+    );
+    res.json({ template });
+  } catch (err) {
+    if (templateMutationError(res, err)) return;
+    req.log.error({ err }, "Failed to update private Office template");
+    res.status(500).json({ error: "Could not update the template." });
+  }
+});
+
+router.post("/office/communication-templates/:templateId/archive", requireOffice, async (req, res): Promise<void> => {
+  const templateId = routeParam(req.params.templateId);
+  if (!uuid.safeParse(templateId).success) {
+    res.status(400).json({ error: "Invalid template ID." });
+    return;
+  }
+  try {
+    const template = await new CommunicationTemplateRepository(db).archivePrivateForOffice(
+      templateId,
+      req.officeAccount!.accountId,
+    );
+    res.json({ template });
+  } catch (err) {
+    if (templateMutationError(res, err)) return;
+    req.log.error({ err }, "Failed to archive private Office template");
+    res.status(500).json({ error: "Could not archive the template." });
+  }
+});
+
+router.post("/office/communication-templates/:templateId/duplicate", requireOffice, async (req, res): Promise<void> => {
+  const templateId = routeParam(req.params.templateId);
+  const parsed = duplicateSchema.safeParse(req.body);
+  if (!uuid.safeParse(templateId).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid template ID." : parsed.error.issues[0]?.message ?? "Review the template copy." });
+    return;
+  }
+  try {
+    const template = await new CommunicationTemplateRepository(db).duplicateForOffice(
+      templateId,
+      req.officeAccount!.accountId,
+      parsed.data,
+    );
+    res.status(201).json({ template });
+  } catch (err) {
+    if (templateMutationError(res, err)) return;
+    req.log.error({ err }, "Failed to duplicate Office template");
+    res.status(500).json({ error: "Could not copy the template." });
   }
 });
 
@@ -82,7 +195,7 @@ router.post("/office/communication-templates/:templateId/render", requireOffice,
     await ensureCommunicationTemplateSeed(db);
     const repository = new CommunicationTemplateRepository(db);
     const template = await repository.getById(templateId);
-    if (!template || template.state !== "active" || template.accessScope !== "office") {
+    if (!template || !canOfficeUseTemplate(template, req.officeAccount!.accountId)) {
       res.status(404).json({ error: "Email template not found." });
       return;
     }
