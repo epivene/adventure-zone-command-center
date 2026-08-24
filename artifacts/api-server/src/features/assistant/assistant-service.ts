@@ -129,7 +129,7 @@ export class AssistantService {
           answer: fallbackAnswer(
             context,
             brief,
-            "I can use the saved Command Center records, but I couldn't get a reliable deeper AI answer from them right now.",
+            "I can use the saved Command Terminal records, but I couldn't get a reliable deeper AI answer from them right now.",
           ),
           brief,
           context,
@@ -148,7 +148,7 @@ export class AssistantService {
           answer: fallbackAnswer(
             context,
             brief,
-            "I can't support that answer from the saved Command Center records, so I won't present it as a fact.",
+            "I can't support that answer from the saved Command Terminal records, so I won't present it as a fact.",
           ),
           brief,
           context,
@@ -174,7 +174,7 @@ export class AssistantService {
         answer: fallbackAnswer(
           context,
           brief,
-          "I can still use the saved Command Center records, but deeper AI analysis needs an available internet/provider connection right now.",
+          "I can still use the saved Command Terminal records, but deeper AI analysis needs an available internet/provider connection right now.",
         ),
         brief,
         context,

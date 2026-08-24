@@ -269,7 +269,7 @@ export default function SettingsCallScriptsPage() {
             {GUIDED_CALL_SCRIPT_KINDS.map((kind) => <option key={kind} value={kind}>{scriptLabels[kind]}</option>)}
           </select>
         </label>
-        <p className="mt-2 text-sm text-slate-500">Edit one conversation step at a time. Changes save for every device that uses Command Center.</p>
+        <p className="mt-2 text-sm text-slate-500">Edit one conversation step at a time. Changes save for every device that uses Command Terminal.</p>
       </section>
 
       {loading ? <p className="rounded-xl bg-white p-5 text-slate-500">Loading call scripts…</p> : null}

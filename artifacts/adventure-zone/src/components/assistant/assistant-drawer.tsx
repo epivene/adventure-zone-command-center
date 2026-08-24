@@ -139,7 +139,7 @@ export function AssistantDrawer() {
         generalGeneration.current += 1;
         if (!navigator.onLine) {
           setLeadScoutRun(null);
-          setGeneralResponse({ kind: "needs_context", text: "I'm offline. General profile search needs a connection because Command Center does not cache the full CRM. Previously opened profiles can still be used from their saved context." });
+          setGeneralResponse({ kind: "needs_context", text: "I'm offline. General profile search needs a connection because Command Terminal does not cache the full CRM. Previously opened profiles can still be used from their saved context." });
           return;
         }
         const result = await askGeneralAssistant(submitted);
@@ -242,16 +242,16 @@ export function AssistantDrawer() {
       <section aria-label="Booking Assistant" className="flex h-full w-full max-w-xl flex-col border-l border-slate-200 bg-slate-50 shadow-2xl">
         <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
           <div className="grid h-10 w-10 place-items-center rounded-full bg-orange-100 text-orange-700"><Bot className="h-5 w-5" /></div>
-          <div className="min-w-0 flex-1"><h2 className="font-bold text-slate-950">Booking Assistant</h2><p className="truncate text-xs text-slate-500">{activeContext?.label ?? "General Command Center · No profile selected"}</p></div>
+          <div className="min-w-0 flex-1"><h2 className="font-bold text-slate-950">Booking Assistant</h2><p className="truncate text-xs text-slate-500">{activeContext?.label ?? "General Command Terminal · No profile selected"}</p></div>
           {explicitContext ? <button className="text-xs font-semibold text-orange-700 hover:underline" onClick={clearExplicitContext} type="button">Clear selected context</button> : null}
           <button aria-label="Close Booking Assistant" className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900" onClick={closeAssistant} type="button"><X className="h-5 w-5" /></button>
         </header>
-        {offline ? <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800"><WifiOff className="h-4 w-4" />Offline — using saved Command Center data{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.</div> : null}
+        {offline ? <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800"><WifiOff className="h-4 w-4" />Offline — using saved Command Terminal data{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.</div> : null}
         <div className="flex-1 overflow-y-auto p-4">
           {generalMode ? (
             <div className="grid gap-4">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
-                <h3 className="font-bold text-slate-950">General Command Center</h3>
+                <h3 className="font-bold text-slate-950">General Command Terminal</h3>
                 <p className="mt-1 text-sm text-slate-600">Find a customer, contact, event family, seasonal event, overdue follow-up, or ask for events in a specific date/route area. Pick a result and I’ll use it for your next questions.</p>
                 <div className="mt-3 flex flex-wrap gap-2">{generalPrompts.map((prompt) => <button className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100" key={prompt} onClick={() => setQuestion(prompt)} type="button">{prompt}</button>)}</div>
               </div>
@@ -287,7 +287,7 @@ export function AssistantDrawer() {
           <label className="sr-only" htmlFor="booking-assistant-question">Ask Booking Assistant</label>
           <textarea className="min-h-20 w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200" disabled={asking} id="booking-assistant-question" maxLength={4000} onChange={(event) => setQuestion(event.currentTarget.value)} placeholder={generalMode ? "Find a profile, or ask for events by date, state, route, or leg…" : "Ask what happened last year, what they normally book, what you may be forgetting…"} value={question} />
           <div className="mt-2 flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">{generalMode ? "General search uses structured Command Center records first." : offline ? "Offline questions use the saved brief when possible." : "Routine questions use saved Command Center data first."}</p>
+            <p className="text-xs text-slate-500">{generalMode ? "General search uses structured Command Terminal records first." : offline ? "Offline questions use the saved brief when possible." : "Routine questions use saved Command Terminal data first."}</p>
             <button className="button-primary min-w-24" disabled={asking || !question.trim()} type="submit">{asking ? "Thinking…" : "Ask"}</button>
           </div>
         </form>

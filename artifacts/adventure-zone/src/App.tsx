@@ -100,8 +100,8 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">Adventure Zone</h1>
-        <p className="mt-1 text-sm font-medium text-slate-500">Command Center</p>
+        <h1 className="text-2xl font-bold tracking-tight">AdventureZone</h1>
+        <p className="mt-1 text-sm font-medium text-slate-500">Command Terminal</p>
       </div>
       {children}
     </div>
@@ -146,7 +146,7 @@ function Landing() {
       <Link aria-label="Administrator Access" className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300" href="/sign-in" title="Administrator Access">
         <Shield aria-hidden="true" className="h-5 w-5" />
       </Link>
-      <h1 className="text-3xl font-bold tracking-tight">Adventure Zone Command Center</h1>
+      <h1 className="text-3xl font-bold tracking-tight">AdventureZone Command Terminal</h1>
       <p className="mt-2 max-w-md text-center text-slate-600">Bookings, contacts, routes, and calls all in one place!</p>
       <div className="mt-8 grid w-full max-w-sm gap-3">
         <Link className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
