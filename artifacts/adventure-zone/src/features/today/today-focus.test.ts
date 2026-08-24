@@ -19,6 +19,14 @@ describe("deriveTodayFocus", () => {
     expect(deriveTodayFocus({ ...base, followUpCount: 5, contractCount: 3, decisionCount: 4 }).kind).toBe("followups");
   });
 
+  it("presents a single follow-up as one compact next task", () => {
+    expect(deriveTodayFocus({ ...base, followUpCount: 1 })).toMatchObject({
+      headline: "1 task remaining",
+      detail: "Next: follow up with your highest-priority event",
+      primaryLabel: "Start",
+    });
+  });
+
   it("uses contracts before unscheduled next-step decisions", () => {
     expect(deriveTodayFocus({ ...base, contractCount: 3, decisionCount: 4 }).kind).toBe("contracts");
   });

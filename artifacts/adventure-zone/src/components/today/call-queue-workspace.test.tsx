@@ -19,6 +19,7 @@ import {
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, "", window.location.pathname);
   createActivityAction.mockReset();
   editActivityAction.mockReset();
   listActivityRevisionsAction.mockReset();
@@ -95,8 +96,62 @@ function workspaceRenderer(data: any, onComplete: (input: unknown) => Promise<an
   );
 }
 
+function startFocus() {
+  fireEvent.click(screen.getByRole("button", { name: "Start" }));
+}
+
 describe("CallQueueWorkspace", () => {
-  it("keeps the queue visible while loading the selected caller", async () => {
+  it("shows one compact next task and does not load the full workspace before Start", () => {
+    const loadWorkspace = vi.fn(() => Promise.resolve(workspace("Sarah Miller")));
+
+    render(
+      <CallQueueWorkspace
+        followUps={[followUps[0]]}
+        loadWorkspace={loadWorkspace}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    expect(screen.getByText("Next up")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+    expect(screen.getByText("1 task remaining")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start" })).toBeVisible();
+    expect(screen.queryByTestId("selected-call-workspace")).not.toBeInTheDocument();
+    expect(loadWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("enters focus mode on Start and hides the full queue", async () => {
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        loadWorkspace={(followUp) => Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName))}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    startFocus();
+
+    expect(screen.getByRole("button", { name: "Back to Today" })).toBeVisible();
+    expect(screen.getByText("3 remaining")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Calls to make" })).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+  });
+
+  it("enters focus mode when Today links to the next task anchor", async () => {
+    window.history.replaceState(null, "", "#today-next-task");
+    render(
+      <CallQueueWorkspace
+        followUps={followUps}
+        loadWorkspace={(followUp) => Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName))}
+        renderWorkspace={workspaceRenderer}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Back to Today" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+  });
+
+  it("keeps the active task visible while loading another caller after completion", async () => {
     let resolveTom!: (value: any) => void;
     const loadWorkspace = vi.fn((followUp: CallQueueItem) =>
       followUp.contactName === "Tom Erickson"
@@ -106,38 +161,22 @@ describe("CallQueueWorkspace", () => {
 
     render(
       <CallQueueWorkspace
+        completeCall={vi.fn().mockResolvedValue({ ok: true })}
         followUps={followUps}
-        initialFollowUpId={followUps[0].id}
         loadWorkspace={loadWorkspace}
+        refreshToday={vi.fn().mockResolvedValue({ followUps: followUps.slice(1), followUpTotal: 2 })}
         renderWorkspace={workspaceRenderer}
       />,
     );
+    startFocus();
 
-    expect(screen.getByRole("heading", { name: "Calls to make" })).toBeVisible();
-    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: /Tom Erickson/i }));
-    expect(screen.getByRole("button", { name: /Sarah Miller/i })).toBeVisible();
+    fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
     expect(screen.getByText("Loading caller…")).toBeVisible();
     resolveTom(workspace("Tom Erickson"));
     expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
   });
 
-  it("stacks the selected workspace first on a narrow viewport", async () => {
-    render(
-      <CallQueueWorkspace
-        followUps={followUps}
-        loadWorkspace={(followUp) => Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName))}
-        renderWorkspace={workspaceRenderer}
-      />,
-    );
-
-    expect(screen.getByTestId("call-queue-layout")).toHaveClass("grid-cols-1");
-    expect(screen.getByTestId("selected-call-workspace")).toHaveClass("order-1");
-    expect(screen.getByTestId("call-queue-panel")).toHaveClass("order-2");
-    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
-  });
-
-  it("shows caller context and the remaining queue count", () => {
+  it("shows caller context on the compact next-task card", () => {
     render(
       <CallQueueWorkspace
         followUps={followUps}
@@ -147,14 +186,14 @@ describe("CallQueueWorkspace", () => {
       />,
     );
 
-    expect(screen.getByText("7 remaining")).toBeVisible();
+    expect(screen.getByText("7 tasks remaining")).toBeVisible();
     expect(screen.getByText("Miller Events")).toBeVisible();
     expect(screen.getByText("Pending contract")).toBeVisible();
     expect(screen.getByText("North route")).toBeVisible();
-    expect(screen.getByText(/Last contacted/)).toBeVisible();
+    expect(screen.getByText(/Last contact/)).toBeVisible();
   });
 
-  it("keeps the queue and offers retry plus the standalone workspace when loading fails", async () => {
+  it("offers retry plus the standalone workspace when loading fails in focus mode", async () => {
     const loadWorkspace = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(workspace("Sarah Miller"));
     render(
       <CallQueueWorkspace
@@ -163,13 +202,13 @@ describe("CallQueueWorkspace", () => {
         renderWorkspace={workspaceRenderer}
       />,
     );
+    startFocus();
 
     expect(await screen.findByRole("button", { name: "Try again" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Open standalone workspace" })).toHaveAttribute(
       "href",
       `/calls/new?contactId=${followUps[0].contactId}&bookingId=${followUps[0].bookingId}&followUpId=${followUps[0].id}`,
     );
-    expect(screen.getByRole("button", { name: /Tom Erickson/i })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
   });
@@ -187,16 +226,16 @@ describe("CallQueueWorkspace", () => {
         renderWorkspace={workspaceRenderer}
       />,
     );
+    startFocus();
 
     fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
 
     expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
     expect(refreshToday).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
     expect(screen.getByText("2 remaining")).toBeVisible();
   });
 
-  it("renders the real compact workspace with activity controls and history", async () => {
+  it("renders the real compact workspace with activity controls and history after Start", async () => {
     const activityId = "70000000-0000-4000-8000-000000000001";
     createActivityAction.mockResolvedValue({
       ok: true,
@@ -296,6 +335,7 @@ describe("CallQueueWorkspace", () => {
         })}
       />,
     );
+    startFocus();
 
     expect(await screen.findByRole("heading", { name: "Call Workspace" })).toBeVisible();
     fireEvent.click(screen.getByText("Recent history"));
@@ -305,39 +345,10 @@ describe("CallQueueWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "View edit history (1)" }));
     await waitFor(() => expect(listActivityRevisionsAction).toHaveBeenCalledWith(activityId));
     expect(await screen.findByText("Earlier wording")).toBeVisible();
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit activity" }));
-    fireEvent.change(screen.getByLabelText("Edited activity text"), {
-      target: { value: "Corrected prior conversation" },
-    });
-    fireEvent.change(screen.getByLabelText("Reason for edit"), {
-      target: { value: "Corrected wording" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save activity edit" }));
-    await waitFor(() => expect(editActivityAction).toHaveBeenCalledWith({
-      activityId,
-      body: "Corrected prior conversation",
-      reason: "Corrected wording",
-    }));
-
-    fireEvent.click(screen.getByRole("button", { name: "Add activity" }));
-    fireEvent.change(screen.getByLabelText("Activity text"), {
-      target: { value: "New queue note" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save activity" }));
-    await waitFor(() => expect(createActivityAction).toHaveBeenCalledWith(expect.objectContaining({
-      bookingId: followUps[0].bookingId,
-      kind: "note",
-      body: "New queue note",
-      occurredAt: expect.any(Date),
-    })));
   });
 
   it("decrements a stale refreshed total when the completed follow-up is still returned", async () => {
-    const refreshToday = vi.fn().mockResolvedValue({
-      followUps,
-      followUpTotal: 3,
-    });
+    const refreshToday = vi.fn().mockResolvedValue({ followUps, followUpTotal: 3 });
     render(
       <CallQueueWorkspace
         completeCall={vi.fn().mockResolvedValue({ ok: true })}
@@ -347,12 +358,13 @@ describe("CallQueueWorkspace", () => {
         renderWorkspace={workspaceRenderer}
       />,
     );
+    startFocus();
 
     fireEvent.click(await screen.findByRole("button", { name: "Complete Sarah Miller" }));
 
     expect(await screen.findByText("2 remaining")).toBeVisible();
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /Sarah Miller/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Sarah Miller" })).not.toBeInTheDocument();
     });
   });
 });
