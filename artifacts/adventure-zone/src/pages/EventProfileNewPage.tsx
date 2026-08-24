@@ -1,14 +1,10 @@
 import { useEffect, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { useSearch } from "wouter";
 import { apiGet, apiPost } from "@/lib/auth-token";
 import { EventProfileForm } from "@/components/event-profiles/event-profile-form";
-import {
-  loadEventProfileAction,
-  createEventProfileAction,
-} from "@/actions/event-profiles";
+import { createEventProfileAction } from "@/actions/event-profiles";
 
 export default function EventProfileNewPage() {
-  const [, navigate] = useLocation();
   const search = useSearch();
   const params = new URLSearchParams(search);
   const initialContactId = params.get("contactId") ?? "";
@@ -24,7 +20,6 @@ export default function EventProfileNewPage() {
   const sourceScoutIntake = params.get("source") === "scout";
 
   const [travelLegs, setTravelLegs] = useState<any[]>([]);
-  const [events, setEvents] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [families, setFamilies] = useState<any[]>([]);
   const [initialOrganizationName, setInitialOrganizationName] = useState("");
@@ -38,14 +33,6 @@ export default function EventProfileNewPage() {
       initialOrganizationId ? apiGet<any>(`/organizations/${initialOrganizationId}`).catch(() => null) : Promise.resolve(null),
     ]).then(([legs, orgs, contactPage, parentDetail]) => {
       setTravelLegs(legs ?? []);
-      setEvents(
-        (orgs?.organizations?.records ?? orgs?.records ?? orgs?.organizations ?? []).map((event: any) => ({
-          id: event.id,
-          name: event.name,
-          city: event.city ?? null,
-          region: event.region ?? null,
-        })),
-      );
       setFamilies((orgs?.families ?? []).map((family: any) => ({ id: family.id, name: family.name })));
       setInitialOrganizationName(parentDetail?.organization?.name ?? "");
       setContacts(
@@ -66,12 +53,11 @@ export default function EventProfileNewPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-6">
-        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Profiles & pipeline</p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">Add Event / Lead</h1>
-        <p className="mt-2 text-slate-600">Start with the name. Contacts, location, family, booking details, and follow-up can be added now or later.</p>
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Profiles</p>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight">Add a New Profile</h1>
+        <p className="mt-2 text-slate-600">Build the profile with everything you already know. Nothing is created until you press Save Profile, and unfinished work is protected on this device.</p>
       </header>
       <EventProfileForm
-        events={events}
         contacts={contacts}
         families={families}
         initialFamilyId={initialFamilyId}
@@ -87,7 +73,6 @@ export default function EventProfileNewPage() {
         initialStartsAt={initialStartsAt}
         initialEndsAt={initialEndsAt}
         sourceScoutIntake={sourceScoutIntake}
-        loadEventProfile={loadEventProfileAction}
         onSubmit={async (input) => {
           const res = await createEventProfileAction(input);
           if (res.ok && sourceScoutIntake && initialSourceUrl) {
@@ -97,7 +82,6 @@ export default function EventProfileNewPage() {
               endsAt: initialEndsAt,
             }).catch(() => null);
           }
-          if (res.ok) navigate(`/event-profiles/${res.profileId}`);
           return res;
         }}
       />
