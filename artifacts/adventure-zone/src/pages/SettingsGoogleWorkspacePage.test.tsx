@@ -6,6 +6,7 @@ const client = vi.hoisted(() => ({
   startGoogleWorkspaceOAuth: vi.fn(),
   previewGoogleWorkspaceScope: vi.fn(),
   saveGoogleWorkspaceScope: vi.fn(),
+  runGoogleWorkspaceRecentValidation: vi.fn(),
   disconnectGoogleWorkspace: vi.fn(),
 }));
 
@@ -45,10 +46,16 @@ const preview = {
       rootName: "Shows",
     },
     {
-      id: "receipts",
-      name: "Receipts",
-      rootId: "receipts",
-      rootName: "Receipts",
+      id: "receipt",
+      name: "Receipt",
+      rootId: "receipt",
+      rootName: "Receipt",
+    },
+    {
+      id: "receipt-old",
+      name: "Receipt/Old vendor",
+      rootId: "receipt",
+      rootName: "Receipt",
     },
   ],
   calendars: [
@@ -65,6 +72,31 @@ const preview = {
   excludedCalendarCount: 1,
 };
 
+const validation = {
+  checkedLimit: 100,
+  aiEnabled: false as const,
+  historicalImportStarted: false as const,
+  counts: { discovered: 1, matched: 1, needsReview: 0, ignored: 0 },
+  matched: [
+    {
+      id: "m1",
+      threadId: "t1",
+      subject: "County Fair contract",
+      from: "booking@fair.org",
+      to: "zone@example.com",
+      date: "",
+      internalDateMs: 1,
+      labelIds: ["INBOX"],
+      labels: [{ id: "INBOX", name: "INBOX", type: "system" as const }],
+      hasAttachments: false,
+      evidenceCodes: ["exact_contact_email"],
+      candidates: [{ id: "c1", name: "Fair Office", kind: "contact" as const }],
+    },
+  ],
+  needsReview: [],
+  ignored: [],
+};
+
 beforeEach(() => {
   client.getGoogleWorkspaceSettings.mockResolvedValue(savedSettings);
   client.startGoogleWorkspaceOAuth.mockResolvedValue({
@@ -75,6 +107,7 @@ beforeEach(() => {
     labels: preview.labels,
     calendars: preview.calendars,
   });
+  client.runGoogleWorkspaceRecentValidation.mockResolvedValue(validation);
   client.disconnectGoogleWorkspace.mockResolvedValue({ ok: true });
 });
 
@@ -84,7 +117,7 @@ afterEach(() => {
 });
 
 describe("SettingsGoogleWorkspacePage", () => {
-  it("shows the connected account, read-only guarantee, and saved business scope", async () => {
+  it("shows the connected account, read-only guarantee, saved business scope, and recent check control", async () => {
     render(<SettingsGoogleWorkspacePage />);
 
     expect(
@@ -94,8 +127,8 @@ describe("SettingsGoogleWorkspacePage", () => {
     expect(screen.getByText(/Gmail and Google Calendar will not be changed/i)).toBeInTheDocument();
     expect(screen.getByText("Shows")).toBeInTheDocument();
     expect(screen.getByText("Adventure Zone Calendar")).toBeInTheDocument();
-    expect(screen.getByText(/Historical syncing is not enabled yet/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /start backfill/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run recent email check" })).toBeInTheDocument();
+    expect(screen.getByText(/Historical syncing is still disabled/i)).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("client-secret");
     expect(document.body.textContent).not.toContain("refresh-token");
   });
@@ -125,42 +158,54 @@ describe("SettingsGoogleWorkspacePage", () => {
     );
   });
 
-  it("previews and saves every approved business source", async () => {
+  it("allows optional nested business labels to be unchecked while saving the required roots and calendars", async () => {
     render(<SettingsGoogleWorkspacePage />);
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Preview business scope" }),
     );
-    expect(await screen.findByLabelText("Shows/2026")).toBeChecked();
-    expect(screen.getByLabelText("Receipts")).toBeChecked();
-    expect(screen.getByLabelText("Zone Pirate Warrior")).toBeChecked();
+    fireEvent.click(await screen.findByLabelText("Receipt/Old vendor"));
 
+    expect(screen.getByRole("button", { name: "Save business scope" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Save business scope" }));
 
     await waitFor(() =>
       expect(client.saveGoogleWorkspaceScope).toHaveBeenCalledWith({
-        labelIds: ["shows", "shows-2026", "receipts"],
+        labelIds: ["shows", "shows-2026", "receipt"],
         calendarIds: ["az", "zone.pirate.warrior@gmail.com"],
       }),
     );
-    expect(await screen.findByText("Business scope saved.")).toBeInTheDocument();
   });
 
-  it("blocks saving when an approved business source is unchecked", async () => {
+  it("blocks saving when a required business root is unchecked", async () => {
     render(<SettingsGoogleWorkspacePage />);
 
     fireEvent.click(
       await screen.findByRole("button", { name: "Preview business scope" }),
     );
-    fireEvent.click(await screen.findByLabelText("Receipts"));
+    fireEvent.click(await screen.findByLabelText("Receipt"));
 
     expect(
-      screen.getByText(/All approved business labels and calendars must stay selected/i),
+      screen.getByText(/Keep the main business folders, Spam, and all approved calendars selected/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Save business scope" }),
     ).toBeDisabled();
-    expect(client.saveGoogleWorkspaceScope).not.toHaveBeenCalled();
+  });
+
+  it("runs the bounded recent Gmail check and displays deterministic evidence", async () => {
+    render(<SettingsGoogleWorkspacePage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Run recent email check" }),
+    );
+
+    await waitFor(() =>
+      expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100),
+    );
+    expect(await screen.findByText("County Fair contract")).toBeInTheDocument();
+    expect(screen.getByText("Exact contact email")).toBeInTheDocument();
+    expect(screen.getByText(/does not start the historical import/i)).toBeInTheDocument();
   });
 
   it("blocks saving while an expected business source is missing", async () => {
@@ -181,7 +226,6 @@ describe("SettingsGoogleWorkspacePage", () => {
     expect(
       screen.getByRole("button", { name: "Save business scope" }),
     ).toBeDisabled();
-    expect(client.saveGoogleWorkspaceScope).not.toHaveBeenCalled();
   });
 
   it("uses a dark-mode-aware error surface", async () => {

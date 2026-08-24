@@ -44,6 +44,42 @@ export type GoogleWorkspaceScopePreview = {
   excludedCalendarCount: number;
 };
 
+export type GoogleRecentValidationCandidate = {
+  id: string;
+  name: string;
+  kind: "contact" | "organization" | "profile" | "booking";
+};
+
+export type GoogleRecentValidationRow = {
+  id: string;
+  threadId: string;
+  subject: string;
+  from: string;
+  to: string;
+  date: string;
+  internalDateMs: number | null;
+  labelIds: string[];
+  labels: Array<{ id: string; name: string; type: "system" | "user" }>;
+  hasAttachments: boolean;
+  evidenceCodes: string[];
+  candidates: GoogleRecentValidationCandidate[];
+};
+
+export type GoogleRecentValidationResult = {
+  checkedLimit: number;
+  aiEnabled: false;
+  historicalImportStarted: false;
+  counts: {
+    discovered: number;
+    matched: number;
+    needsReview: number;
+    ignored: number;
+  };
+  matched: GoogleRecentValidationRow[];
+  needsReview: GoogleRecentValidationRow[];
+  ignored: GoogleRecentValidationRow[];
+};
+
 async function responseJson<T>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -96,6 +132,17 @@ export async function saveGoogleWorkspaceScope(input: {
     await apiFetch("/google-workspace/scope", {
       method: "PUT",
       body: JSON.stringify(input),
+    }),
+  );
+}
+
+export async function runGoogleWorkspaceRecentValidation(
+  limit = 100,
+): Promise<GoogleRecentValidationResult> {
+  return responseJson(
+    await apiFetch("/google-workspace/validation/recent", {
+      method: "POST",
+      body: JSON.stringify({ limit }),
     }),
   );
 }

@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Cloud, LockKeyhole, Unplug } from "lucide-react";
 
+import { GoogleRecentValidation } from "@/components/google-workspace/google-recent-validation";
 import { GoogleScopePreview } from "@/components/google-workspace/google-scope-preview";
 import {
   disconnectGoogleWorkspace,
   getGoogleWorkspaceSettings,
   previewGoogleWorkspaceScope,
+  runGoogleWorkspaceRecentValidation,
   saveGoogleWorkspaceScope,
   startGoogleWorkspaceOAuth,
+  type GoogleRecentValidationResult,
   type GoogleWorkspaceScopePreview as GoogleScopePreviewView,
   type GoogleWorkspaceSettingsView,
 } from "@/features/google-workspace/google-workspace-client";
@@ -123,11 +126,12 @@ export function SettingsGoogleWorkspacePage({
   );
   const [settings, setSettings] = useState<GoogleWorkspaceSettingsView | null>(null);
   const [preview, setPreview] = useState<GoogleScopePreviewView | null>(null);
+  const [validation, setValidation] = useState<GoogleRecentValidationResult | null>(null);
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<
-    "connect" | "preview" | "save" | "disconnect" | null
+    "connect" | "preview" | "save" | "validation" | "disconnect" | null
   >(null);
   const [error, setError] = useState<string | null>(oauthReturn.error);
   const [notice, setNotice] = useState<string | null>(oauthReturn.notice);
@@ -240,6 +244,21 @@ export function SettingsGoogleWorkspacePage({
     }
   }
 
+  async function runValidation() {
+    setBusy("validation");
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await runGoogleWorkspaceRecentValidation(100);
+      setValidation(result);
+      setNotice("Recent email check finished. Review the matches before historical import is enabled.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not check recent Gmail history.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function disconnect() {
     if (!confirmDisconnect()) return;
     setBusy("disconnect");
@@ -248,6 +267,7 @@ export function SettingsGoogleWorkspacePage({
     try {
       await disconnectGoogleWorkspace();
       setPreview(null);
+      setValidation(null);
       setSelectedLabelIds([]);
       setSelectedCalendarIds([]);
       setSettings((current) =>
@@ -431,10 +451,35 @@ export function SettingsGoogleWorkspacePage({
             </section>
           ) : null}
 
+          {settings.connection && settings.labels.length > 0 ? (
+            <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-950/20">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">Recent email safety check</h2>
+                  <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
+                    Check the newest 100 Gmail messages across the mailbox so profile-related or clearly business-related mail is not left behind just because it lives outside one of the saved folders.
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    AI stays off and this does not start the historical import.
+                  </p>
+                </div>
+                <button
+                  className="button-primary px-4 py-2"
+                  disabled={busy !== null}
+                  onClick={() => void runValidation()}
+                  type="button"
+                >
+                  {busy === "validation" ? "Checking 100 emails…" : "Run recent email check"}
+                </button>
+              </div>
+              {validation ? <GoogleRecentValidation result={validation} /> : null}
+            </section>
+          ) : null}
+
           <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <h2 className="font-bold text-slate-900">Historical syncing is not enabled yet</h2>
+            <h2 className="font-bold text-slate-900">Historical syncing is still disabled</h2>
             <p className="mt-1 max-w-3xl text-sm text-slate-600">
-              This phase only secures the connection and approved scope. Email, files, and calendar history will remain untouched until the recent-history validation controls are built and approved.
+              The recent email check is only a bounded validation sample. Email bodies, files, and full calendar history will remain untouched until the matching results are reviewed and the historical rollout is explicitly approved.
             </p>
           </section>
         </>

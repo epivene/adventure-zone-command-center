@@ -182,8 +182,10 @@ describe("GoogleWorkspaceReadClient", () => {
       "accountIdentity",
       "authorizationUrl",
       "exchangeCode",
+      "getMessageMetadata",
       "listCalendars",
       "listLabels",
+      "listRecentMessageRefs",
     ]);
   });
 });
