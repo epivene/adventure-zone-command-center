@@ -97,6 +97,17 @@ function decodeBase64Url(value: unknown): string {
   }
 }
 
+function decodeBase64UrlBytes(value: unknown): Uint8Array {
+  if (typeof value !== "string" || !value) {
+    throw clientError("GOOGLE_WORKSPACE_ATTACHMENT_RESPONSE_INVALID");
+  }
+  try {
+    return new Uint8Array(Buffer.from(value, "base64url"));
+  } catch {
+    throw clientError("GOOGLE_WORKSPACE_ATTACHMENT_RESPONSE_INVALID");
+  }
+}
+
 function textFromHtml(value: string): string {
   return value
     .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -439,6 +450,19 @@ export function createGoogleWorkspaceReadClient(input: {
         },
         hasAttachments: parts.some(partHasAttachment),
       };
+    },
+
+    async getAttachment({ messageId, attachmentId }): Promise<Uint8Array> {
+      const message = messageId.trim();
+      const attachment = attachmentId.trim();
+      if (!message || !attachment) {
+        throw clientError("GOOGLE_WORKSPACE_ATTACHMENT_ID_INVALID");
+      }
+      const url = new URL(
+        `${gmailBaseEndpoint}/messages/${encodeURIComponent(message)}/attachments/${encodeURIComponent(attachment)}`,
+      );
+      const payload = await authorizedJson(url.toString());
+      return decodeBase64UrlBytes(payload.data);
     },
 
     async getThreadDetail(threadId: string): Promise<GoogleThreadDetail> {
