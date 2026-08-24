@@ -112,10 +112,10 @@ export function AddMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuItem asChild><Link href="/event-profiles/new">Add a New Profile</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/profiles?focus=search">Find a Profile</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/profiles">Find a Profile</Link></DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild><Link href="/contacts/new">Add a New Contact</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/contacts?focus=search">Find a Contact</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/contacts">Find a Contact</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
