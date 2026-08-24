@@ -16,6 +16,7 @@ const appMenuSource = readFileSync("src/components/navigation/app-menu.tsx", "ut
 
 const exampleDraft: ProfileDraft = {
   eventName: "Moab Music Festival",
+  placeType: "festival_event",
   description: "Annual community music event",
   phone: "435-259-7003",
   website: "https://example.com",
