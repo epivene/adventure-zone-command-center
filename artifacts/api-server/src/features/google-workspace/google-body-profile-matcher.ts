@@ -37,6 +37,11 @@ function bodyEligibleName(value: string): string | null {
   return core;
 }
 
+function containsWholePhrase(body: string, phrase: string): boolean {
+  if (!body || !phrase) return false;
+  return ` ${body} `.includes(` ${phrase} `);
+}
+
 export function matchGoogleBodyToProfiles(input: {
   bodyText: string;
   profiles: Array<{ id: string; name: string }>;
@@ -49,7 +54,7 @@ export function matchGoogleBodyToProfiles(input: {
   );
   const matches = eligibleProfiles.flatMap((profile) => {
     const phrase = bodyEligibleName(profile.name);
-    if (!phrase || !body.includes(phrase)) return [];
+    if (!phrase || !containsWholePhrase(body, phrase)) return [];
     return [{ id: profile.id, name: profile.name, kind: "profile" as const }];
   });
 
