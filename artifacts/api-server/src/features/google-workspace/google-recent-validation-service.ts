@@ -278,14 +278,16 @@ export class GoogleRecentValidationService {
       throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
     }
 
-    const [savedScope, evidenceSnapshot, labels] = await Promise.all([
+    const [savedScope, evidenceSnapshot, labels, accountIdentity] = await Promise.all([
       this.scope.getSaved(),
       this.evidence.load(),
       client.listLabels(),
+      client.accountIdentity(),
     ]);
     const relevanceLabelIds = new Set(savedScope.labels.map((label) => label.id));
     for (const id of businessHintLabelIds(labels)) relevanceLabelIds.add(id);
     const labelsById = new Map(labels.map((label) => [label.id, label]));
+    const mailboxEmails = new Set([accountIdentity.email.trim().toLowerCase()]);
     const refs = await client.listRecentMessageRefs(checkedLimit);
 
     const matched: GoogleValidationRow[] = [];
@@ -298,6 +300,7 @@ export class GoogleRecentValidationService {
         message,
         evidence: {
           approvedLabelIds: relevanceLabelIds,
+          mailboxEmails,
           contacts: evidenceSnapshot.contacts,
           organizations: evidenceSnapshot.organizations,
           profiles: evidenceSnapshot.profiles,

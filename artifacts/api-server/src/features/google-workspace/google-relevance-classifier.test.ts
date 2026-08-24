@@ -109,7 +109,7 @@ describe("classifyGoogleMessageRelevance", () => {
     expect(result.evidenceCodes).toContain("existing_thread_association");
   });
 
-  it("queues an exact bounded profile-name subject match for review but never automatic ownership", () => {
+  it("matches one unique full profile name in the subject", () => {
     const result = classifyGoogleMessageRelevance({
       message: {
         ...baseMessage,
@@ -121,8 +121,8 @@ describe("classifyGoogleMessageRelevance", () => {
       },
     });
 
-    expect(result.status).toBe("review");
-    expect(result.evidenceCodes).toContain("exact_profile_name_text");
+    expect(result.status).toBe("matched");
+    expect(result.evidenceCodes).toContain("exact_profile_name_subject");
     expect(result.candidates).toEqual([{ id: "p1", name: "Big Sky Country Fair", kind: "profile" }]);
   });
 });

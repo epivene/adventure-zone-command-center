@@ -17,6 +17,8 @@ const evidenceLabels: Record<string, string> = {
   exact_organization_domain: "Exact organization domain",
   approved_business_label: "Business label/folder",
   existing_thread_association: "Previously approved thread",
+  exact_profile_name_subject: "Profile name in email subject",
+  ambiguous_profile_name_subject: "Multiple profile names fit subject",
   exact_profile_name_text: "Exact profile name in subject/snippet",
   ambiguous_organization_domain: "Multiple organization domain matches",
 };
