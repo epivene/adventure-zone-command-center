@@ -15,6 +15,13 @@ describe("Business Sources protected document controls", () => {
     expect(fileCard).toContain("Uploaded");
   });
 
+  it("surfaces a visible View file action before the management disclosure", () => {
+    expect(page).toContain("openSourceDocument");
+    expect(page).toContain(">View file<");
+    expect(page).toContain("source.file.originalSizeBytes");
+    expect(page).toContain("source.hasFile && source.file");
+  });
+
   it("supports explicit profile/location/booking/package linking and historical term review", () => {
     expect(page).toContain("SourceDocumentLinkEditor");
     expect(linkEditor).toContain("Historical terms");
