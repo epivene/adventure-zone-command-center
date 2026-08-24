@@ -6,6 +6,7 @@ const client = vi.hoisted(() => ({
   startGoogleWorkspaceOAuth: vi.fn(),
   previewGoogleWorkspaceScope: vi.fn(),
   saveGoogleWorkspaceScope: vi.fn(),
+  runGoogleWorkspaceRecentValidation: vi.fn(),
   disconnectGoogleWorkspace: vi.fn(),
 }));
 
@@ -15,14 +16,13 @@ import { SettingsGoogleWorkspacePage } from "./SettingsGoogleWorkspacePage";
 
 const preview = {
   labels: [
-    { id: "receipt", name: "Receipt", rootId: "receipt", rootName: "Receipt" },
+    { id: "shows", name: "Shows", rootId: "shows", rootName: "Shows" },
     {
-      id: "receipt-old",
-      name: "Receipt/Old Vendor Receipts",
-      rootId: "receipt",
-      rootName: "Receipt",
+      id: "shows-old",
+      name: "Shows/Old Leads",
+      rootId: "shows",
+      rootName: "Shows",
     },
-    { id: "SPAM", name: "SPAM", rootId: "SPAM", rootName: "Spam" },
   ],
   calendars: [
     { id: "az", summary: "Adventure Zone Calendar", primary: false },
@@ -50,8 +50,17 @@ beforeEach(() => {
   });
   client.previewGoogleWorkspaceScope.mockResolvedValue(preview);
   client.saveGoogleWorkspaceScope.mockResolvedValue({
-    labels: preview.labels.filter((label) => label.id !== "receipt-old"),
+    labels: preview.labels.filter((label) => label.id !== "shows-old"),
     calendars: preview.calendars,
+  });
+  client.runGoogleWorkspaceRecentValidation.mockResolvedValue({
+    checkedLimit: 100,
+    aiEnabled: false,
+    historicalImportStarted: false,
+    counts: { discovered: 0, matched: 0, needsReview: 0, ignored: 0 },
+    matched: [],
+    needsReview: [],
+    ignored: [],
   });
 });
 
@@ -67,7 +76,7 @@ describe("Google Workspace optional nested labels", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Preview business scope" }),
     );
-    fireEvent.click(await screen.findByLabelText("Receipt/Old Vendor Receipts"));
+    fireEvent.click(await screen.findByLabelText("Shows/Old Leads"));
 
     const save = screen.getByRole("button", { name: "Save business scope" });
     expect(save).not.toBeDisabled();
@@ -75,7 +84,7 @@ describe("Google Workspace optional nested labels", () => {
 
     await waitFor(() =>
       expect(client.saveGoogleWorkspaceScope).toHaveBeenCalledWith({
-        labelIds: ["receipt", "SPAM"],
+        labelIds: ["shows"],
         calendarIds: ["az"],
       }),
     );
@@ -87,7 +96,7 @@ describe("Google Workspace optional nested labels", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Preview business scope" }),
     );
-    fireEvent.click(await screen.findByLabelText("Receipt"));
+    fireEvent.click(await screen.findByLabelText("Shows"));
 
     expect(
       screen.getByRole("button", { name: "Save business scope" }),
