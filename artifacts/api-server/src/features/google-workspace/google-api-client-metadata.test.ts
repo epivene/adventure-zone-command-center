@@ -21,7 +21,7 @@ function response(body: unknown, status = 200) {
 }
 
 describe("GoogleWorkspaceReadClient Gmail metadata discovery", () => {
-  it("lists newest message refs with spam and trash included and enforces the requested limit", async () => {
+  it("lists newest normal-mail refs without opting into Spam or Trash and enforces the requested limit", async () => {
     const requests: string[] = [];
     const client = createGoogleWorkspaceReadClient({
       environment,
@@ -51,7 +51,7 @@ describe("GoogleWorkspaceReadClient Gmail metadata discovery", () => {
     ]);
 
     const listUrl = new URL(requests.find((url) => url.includes("/messages?")) as string);
-    expect(listUrl.searchParams.get("includeSpamTrash")).toBe("true");
+    expect(listUrl.searchParams.has("includeSpamTrash")).toBe(false);
     expect(listUrl.searchParams.get("maxResults")).toBe("2");
   });
 
