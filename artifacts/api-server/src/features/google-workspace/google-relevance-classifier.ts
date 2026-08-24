@@ -14,6 +14,7 @@ export type GoogleRelevanceResult = {
 
 type Evidence = {
   approvedLabelIds: Set<string>;
+  mailboxEmails?: Set<string>;
   contacts: Array<{ id: string; name: string; emails: string[] }>;
   organizations: Array<{ id: string; name: string; domains: string[] }>;
   profiles: Array<{ id: string; name: string }>;
@@ -43,7 +44,10 @@ function normalize(value: string): string {
 }
 
 function canonicalText(value: string): string {
-  return normalize(value).replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+  return normalize(value)
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function extractEmails(value: string): string[] {
@@ -51,13 +55,28 @@ function extractEmails(value: string): string[] {
   return [...new Set(matches.map(normalize))];
 }
 
-function participantEmails(message: GoogleMessageMetadata): string[] {
-  const fields = message.labelIds.includes("SENT")
-    ? [message.headers.to, message.headers.cc]
-    : message.labelIds.includes("INBOX")
-      ? [message.headers.from]
-      : [message.headers.from, message.headers.to, message.headers.cc];
-  return fields.flatMap(extractEmails).filter(Boolean);
+function participantEmails(
+  message: GoogleMessageMetadata,
+  mailboxEmails: Set<string>,
+): string[] {
+  const from = extractEmails(message.headers.from);
+  const to = extractEmails(message.headers.to);
+  const cc = extractEmails(message.headers.cc);
+
+  let selected: string[];
+  if (message.labelIds.includes("SENT")) {
+    selected = [...to, ...cc];
+  } else if (message.labelIds.includes("INBOX")) {
+    selected = from;
+  } else if (from.some((email) => mailboxEmails.has(email))) {
+    selected = [...to, ...cc];
+  } else if ([...to, ...cc].some((email) => mailboxEmails.has(email))) {
+    selected = from;
+  } else {
+    selected = [...from, ...to, ...cc];
+  }
+
+  return [...new Set(selected.filter((email) => !mailboxEmails.has(email)))];
 }
 
 function domainOf(email: string): string | null {
@@ -94,7 +113,10 @@ export function classifyGoogleMessageRelevance(input: {
     return { status: "matched", evidenceCodes, candidates };
   }
 
-  const emails = participantEmails(message);
+  const mailboxEmails = new Set(
+    [...(evidence.mailboxEmails ?? new Set<string>())].map(normalize),
+  );
+  const emails = participantEmails(message, mailboxEmails);
   const emailSet = new Set(emails);
 
   for (const contact of evidence.contacts) {
@@ -113,7 +135,11 @@ export function classifyGoogleMessageRelevance(input: {
   const organizationMatches = evidence.organizations.filter((organization) =>
     organization.domains.some((domain) => {
       const normalizedDomain = normalize(domain);
-      return normalizedDomain.length > 0 && !publicMailDomains.has(normalizedDomain) && participantDomains.has(normalizedDomain);
+      return (
+        normalizedDomain.length > 0 &&
+        !publicMailDomains.has(normalizedDomain) &&
+        participantDomains.has(normalizedDomain)
+      );
     }),
   );
   if (organizationMatches.length === 1) {
@@ -139,7 +165,9 @@ export function classifyGoogleMessageRelevance(input: {
     }
   }
 
-  const hasApprovedBusinessLabel = message.labelIds.some((id) => evidence.approvedLabelIds.has(id));
+  const hasApprovedBusinessLabel = message.labelIds.some((id) =>
+    evidence.approvedLabelIds.has(id),
+  );
   if (hasApprovedBusinessLabel) evidenceCodes.push("approved_business_label");
 
   const boundedText = `${message.headers.subject}\n${message.snippet}`;
