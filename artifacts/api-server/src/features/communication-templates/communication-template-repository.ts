@@ -14,6 +14,7 @@ import type {
   TemplatePlaceholder,
 } from "./communication-template-types";
 import { extractTemplateTokens } from "./communication-template-renderer";
+import { validateAuthoredTemplateText } from "./communication-template-authoring";
 import { canOfficeUseTemplate } from "./communication-template-permissions";
 
 type Database = NodePgDatabase<typeof schema>;
@@ -54,8 +55,8 @@ function mapTemplate(
   };
 }
 
-function tokensFor(input: Pick<PrivateTemplateInput, "subjectTemplate" | "bodyTemplate">) {
-  return extractTemplateTokens(`${input.subjectTemplate ?? ""}\n${input.bodyTemplate}`) as TemplatePlaceholder[];
+function validatedTokens(input: Pick<PrivateTemplateInput, "subjectTemplate" | "bodyTemplate">) {
+  return validateAuthoredTemplateText(input).placeholders;
 }
 
 export class CommunicationTemplateRepository {
@@ -122,7 +123,7 @@ export class CommunicationTemplateRepository {
         category: input.category ?? "custom",
         subjectTemplate: input.subjectTemplate,
         bodyTemplate: input.bodyTemplate,
-        allowedPlaceholders: tokensFor(input),
+        allowedPlaceholders: validatedTokens(input),
         requiredPlaceholders: input.requiredPlaceholders ?? [],
         accessScope: "office",
         state: "active",
@@ -154,7 +155,7 @@ export class CommunicationTemplateRepository {
         subjectTemplate: patch.subjectTemplate,
         bodyTemplate: patch.bodyTemplate,
         category: patch.category ?? "custom",
-        allowedPlaceholders: tokensFor(patch),
+        allowedPlaceholders: validatedTokens(patch),
         requiredPlaceholders: patch.requiredPlaceholders ?? [],
         updatedAt: new Date(),
       })
