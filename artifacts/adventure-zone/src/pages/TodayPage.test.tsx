@@ -112,7 +112,7 @@ describe("TodayPage renewals", () => {
     expect(screen.getByText("Current Fair Lead")).toBeInTheDocument();
   });
 
-  it("shows a renewal immediately when it is within 30 days", async () => {
+  it("keeps an urgent renewal collapsed until the user opens it", async () => {
     mockDashboard(
       dashboard({
         renewals: [
@@ -128,11 +128,11 @@ describe("TodayPage renewals", () => {
     render(<TodayPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("County Fair Renewal")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
-    expect(
-      screen.getByRole("button", { name: /Next Season \/ Renewals \(1\)/ }),
-    ).toHaveAttribute("aria-expanded", "true");
+    const toggle = screen.getByRole("button", { name: /Next Season \/ Renewals \(1\)/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("County Fair Renewal")).not.toBeInTheDocument();
   });
 
   it("keeps Today usable when only renewal loading fails", async () => {
@@ -150,13 +150,12 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
     expect(screen.getByText("Needs a decision (1)")).toBeInTheDocument();
-    expect(screen.getByText("Current Fair Lead")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load next-season renewals.",
     );
   });
 
-  it("explains post-event follow-up work while keeping normal lead status copy", async () => {
+  it("explains post-event follow-up work while keeping normal lead status copy after opening decisions", async () => {
     mockDashboard(
       dashboard({
         needsFollowUpPlan: [currentBooking, postEventBooking],
@@ -166,10 +165,35 @@ describe("TodayPage renewals", () => {
     render(<TodayPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
+
+    const decisionsSummary = screen.getByText("Needs a decision (2)");
+    const decisions = decisionsSummary.closest("details");
+    expect(decisions).not.toHaveAttribute("open");
+    fireEvent.click(decisionsSummary);
 
     expect(screen.getByText("Past event · Needs follow-up decision")).toBeInTheDocument();
     expect(screen.getByText("New Lead · Needs follow-up decision")).toBeInTheDocument();
+  });
+
+  it("starts the focused work disclosures closed even when contracts are the priority", async () => {
+    mockDashboard(
+      dashboard({
+        contractCount: 2,
+        needsFollowUpPlan: [],
+        needsFollowUpPlanTotal: 0,
+      }),
+    );
+    render(<TodayPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
+    });
+
+    const contracts = screen.getByText("Contracts (2)").closest("details");
+    const later = screen.getByText("Later").closest("details");
+    expect(contracts).not.toHaveAttribute("open");
+    expect(later).not.toHaveAttribute("open");
   });
 });

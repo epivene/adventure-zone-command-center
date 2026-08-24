@@ -202,7 +202,7 @@ export default function TodayPage() {
         </div>
 
         {followUps.length ? (
-          <details id="my-work-calls" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={focus.kind === "overdue_followups" || focus.kind === "followups"}>
+          <details id="my-work-calls" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <summary className="cursor-pointer font-bold">Calls & follow-ups <span className="ml-1 text-slate-500">({followUps.length})</span>{overdueCount ? <span className="ml-2 text-xs font-bold text-rose-700">{overdueCount} overdue</span> : null}</summary>
             <div className="mt-4">
               {callingConfig.assistedCallingEnabled
@@ -213,7 +213,7 @@ export default function TodayPage() {
         ) : null}
 
         {contractCount > 0 ? (
-          <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={focus.kind === "contracts"}>
+          <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <summary className="cursor-pointer font-bold">Contracts <span className="ml-1 text-slate-500">({contractCount})</span></summary>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-600">Booking and contract work that needs your attention.</p>
@@ -223,7 +223,7 @@ export default function TodayPage() {
         ) : null}
 
         {nextStepItems.length || undoBookingIds.length ? (
-          <details id="my-work-decisions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={focus.kind === "decisions"}>
+          <details id="my-work-decisions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             <summary className="cursor-pointer font-bold">Needs a decision <span className="ml-1 text-slate-500">({nextStepItems.length})</span></summary>
             <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
               <p className="text-sm text-slate-600">Leads or past events with no future reminder scheduled.</p>
