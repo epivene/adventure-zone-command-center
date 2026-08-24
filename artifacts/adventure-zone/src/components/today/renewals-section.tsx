@@ -49,7 +49,7 @@ export function RenewalsSection({
   prominentCount,
   error,
 }: RenewalsSectionProps) {
-  const [open, setOpen] = useState(() => prominentCount > 0);
+  const [open, setOpen] = useState(false);
   const overdueCount = renewals.filter(
     ({ attention }) => attention === "overdue",
   ).length;
