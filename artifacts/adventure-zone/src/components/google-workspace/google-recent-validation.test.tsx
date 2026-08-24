@@ -93,20 +93,21 @@ describe("GoogleRecentValidation", () => {
     expect(screen.getByText("Exact contact email")).toBeInTheDocument();
     expect(screen.getByText("Matched contact: Fair Office")).toBeInTheDocument();
     expect(screen.getByText("Profile: County Fair")).toBeInTheDocument();
+    expect(screen.getByText(/1 item in Needs Review will stay unlinked/i)).toBeInTheDocument();
     expect(screen.queryByText("Dinner plans")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /review ignored email/i }));
     expect(screen.getByText("Dinner plans")).toBeInTheDocument();
   });
 
-  it("lets the owner approve the sample without starting historical import", async () => {
+  it("lets the owner approve only the resolved matches without starting historical import", async () => {
     client.decideGoogleWorkspaceValidationSample.mockResolvedValue({
       validationStatus: "approved",
       historicalImportStarted: false,
     });
     render(<GoogleRecentValidation result={result} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve sample" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve resolved matches" }));
 
     await waitFor(() =>
       expect(client.decideGoogleWorkspaceValidationSample).toHaveBeenCalledWith("approve"),
