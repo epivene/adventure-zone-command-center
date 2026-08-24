@@ -42,15 +42,22 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function canonicalText(value: string): string {
+  return normalize(value).replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
 function extractEmails(value: string): string[] {
   const matches = value.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) ?? [];
   return [...new Set(matches.map(normalize))];
 }
 
 function participantEmails(message: GoogleMessageMetadata): string[] {
-  return [message.headers.from, message.headers.to, message.headers.cc]
-    .flatMap(extractEmails)
-    .filter(Boolean);
+  const fields = message.labelIds.includes("SENT")
+    ? [message.headers.to, message.headers.cc]
+    : message.labelIds.includes("INBOX")
+      ? [message.headers.from]
+      : [message.headers.from, message.headers.to, message.headers.cc];
+  return fields.flatMap(extractEmails).filter(Boolean);
 }
 
 function domainOf(email: string): string | null {
@@ -60,9 +67,9 @@ function domainOf(email: string): string | null {
 }
 
 function exactTextContains(haystack: string, needle: string): boolean {
-  const normalizedNeedle = normalize(needle);
+  const normalizedNeedle = canonicalText(needle);
   if (normalizedNeedle.length < 4) return false;
-  return normalize(haystack).includes(normalizedNeedle);
+  return canonicalText(haystack).includes(normalizedNeedle);
 }
 
 export function classifyGoogleMessageRelevance(input: {
@@ -106,52 +113,55 @@ export function classifyGoogleMessageRelevance(input: {
   const organizationMatches = evidence.organizations.filter((organization) =>
     organization.domains.some((domain) => {
       const normalizedDomain = normalize(domain);
-      return (
-        normalizedDomain.length > 0 &&
-        !publicMailDomains.has(normalizedDomain) &&
-        participantDomains.has(normalizedDomain)
-      );
+      return normalizedDomain.length > 0 && !publicMailDomains.has(normalizedDomain) && participantDomains.has(normalizedDomain);
     }),
   );
   if (organizationMatches.length === 1) {
     const organization = organizationMatches[0];
     evidenceCodes.push("exact_organization_domain");
-    addCandidate({
-      id: organization.id,
-      name: organization.name,
-      kind: "organization",
-    });
+    addCandidate({ id: organization.id, name: organization.name, kind: "organization" });
     return { status: "matched", evidenceCodes, candidates };
   }
 
-  const hasApprovedBusinessLabel = message.labelIds.some((id) =>
-    evidence.approvedLabelIds.has(id),
+  const subjectMatches = evidence.profiles.filter((profile) =>
+    exactTextContains(message.headers.subject, profile.name),
   );
-  if (hasApprovedBusinessLabel) {
-    evidenceCodes.push("approved_business_label");
+  if (subjectMatches.length === 1) {
+    const profile = subjectMatches[0];
+    evidenceCodes.push("exact_profile_name_subject");
+    addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
+    return { status: "matched", evidenceCodes, candidates };
+  }
+  if (subjectMatches.length > 1) {
+    evidenceCodes.push("ambiguous_profile_name_subject");
+    for (const profile of subjectMatches) {
+      addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
+    }
   }
 
+  const hasApprovedBusinessLabel = message.labelIds.some((id) => evidence.approvedLabelIds.has(id));
+  if (hasApprovedBusinessLabel) evidenceCodes.push("approved_business_label");
+
   const boundedText = `${message.headers.subject}\n${message.snippet}`;
-  for (const profile of evidence.profiles) {
-    if (exactTextContains(boundedText, profile.name)) {
-      evidenceCodes.push("exact_profile_name_text");
-      addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
+  if (subjectMatches.length === 0) {
+    for (const profile of evidence.profiles) {
+      if (exactTextContains(boundedText, profile.name)) {
+        evidenceCodes.push("exact_profile_name_text");
+        addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
+      }
     }
   }
 
   if (
     evidenceCodes.includes("approved_business_label") ||
     evidenceCodes.includes("exact_profile_name_text") ||
+    evidenceCodes.includes("ambiguous_profile_name_subject") ||
     organizationMatches.length > 1
   ) {
     if (organizationMatches.length > 1) {
       evidenceCodes.push("ambiguous_organization_domain");
       for (const organization of organizationMatches) {
-        addCandidate({
-          id: organization.id,
-          name: organization.name,
-          kind: "organization",
-        });
+        addCandidate({ id: organization.id, name: organization.name, kind: "organization" });
       }
     }
     return { status: "review", evidenceCodes, candidates };
