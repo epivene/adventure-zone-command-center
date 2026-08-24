@@ -4,6 +4,7 @@ import { classifyGoogleMessageRelevance } from "./google-relevance-classifier";
 
 const emptyEvidence = {
   approvedLabelIds: new Set<string>(),
+  mailboxEmails: new Set(["theadventurezone12@gmail.com"]),
   contacts: [] as Array<{ id: string; name: string; emails: string[] }>,
   organizations: [] as Array<{ id: string; name: string; domains: string[] }>,
   profiles: [] as Array<{ id: string; name: string }>,
@@ -78,5 +79,35 @@ describe("outbound Gmail profile matching", () => {
         kind: "profile",
       },
     ]);
+  });
+
+  it("does not match the connected mailbox contact when a promotion lacks INBOX/SENT labels", () => {
+    const result = classifyGoogleMessageRelevance({
+      message: {
+        ...message,
+        id: "promo",
+        labelIds: ["CATEGORY_PROMOTIONS", "UNREAD"],
+        headers: {
+          ...message.headers,
+          from: "Traeger <Traeger@email.traeger.com>",
+          to: "Adventure Zone <theadventurezone12@gmail.com>",
+          subject: "We Built a Better Griddle",
+        },
+      },
+      evidence: {
+        ...emptyEvidence,
+        contacts: [
+          {
+            id: "david",
+            name: "David Gordon",
+            emails: ["theadventurezone12@gmail.com"],
+          },
+        ],
+      },
+    });
+
+    expect(result.status).toBe("ignored");
+    expect(result.candidates).toEqual([]);
+    expect(result.evidenceCodes).not.toContain("exact_contact_email");
   });
 });
