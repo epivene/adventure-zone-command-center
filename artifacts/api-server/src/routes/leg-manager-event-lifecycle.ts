@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
+import { ensurePostEventFollowUp } from "@/features/follow-ups/post-event-follow-up";
 import { EventChecklistLifecycleService } from "@/features/leg-manager/event-checklist-lifecycle";
 import { EventChecklistService } from "@/features/leg-manager/event-checklist-service";
 import { EventLifecycleRepository, eventLocationStatuses } from "@/features/leg-manager/event-lifecycle-repository";
@@ -171,8 +172,20 @@ router.post("/manager/events/:bookingId/check-out", requireManager, async (req, 
     return;
   }
 
-  const result = await lifecycle.checkOut({ bookingId: id, legId, at: new Date(), timeZone: parsed.data.timeZone ?? null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
+  const checkedOutAt = new Date();
+  const result = await lifecycle.checkOut({ bookingId: id, legId, at: checkedOutAt, timeZone: parsed.data.timeZone ?? null, latitude: parsed.data.latitude ?? null, longitude: parsed.data.longitude ?? null, locationStatus: parsed.data.locationStatus });
   if (!result.ok) { res.status(409).json({ error: "Check in before checking out" }); return; }
+
+  // Checkout is the source of truth. Follow-up creation is best-effort so a
+  // temporary Today/task problem can never make a completed departure look
+  // unsuccessful. The helper is idempotent, so retrying safely repairs a
+  // missing follow-up without creating duplicates.
+  try {
+    await ensurePostEventFollowUp(db, id, result.lifecycle.checkedOutAt ?? checkedOutAt);
+  } catch (error) {
+    req.log.error({ error, bookingId: id, legId }, "Checkout saved but post-event follow-up could not be created");
+  }
+
   res.json({ lifecycle: await projectedLifecycle(id, legId) });
 });
 
