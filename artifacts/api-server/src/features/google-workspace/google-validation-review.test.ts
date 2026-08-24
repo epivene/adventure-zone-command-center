@@ -29,6 +29,14 @@ function fakePool() {
         }],
       };
     }
+    if (text.includes("review_state = 'resolved'") && text.includes("RETURNING thread_id")) {
+      return {
+        rows: [{ thread_id: "t1", evidence_codes: ["exact_profile_name_text"] }],
+      };
+    }
+    if (text.includes("review_state = 'ignored'") && text.includes("RETURNING message_id")) {
+      return { rows: [{ message_id: "m1" }] };
+    }
     return { rows: [] };
   });
   return { query, queries };
