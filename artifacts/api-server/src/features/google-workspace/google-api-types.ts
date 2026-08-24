@@ -36,6 +36,34 @@ export type GoogleMessageMetadata = {
   hasAttachments: boolean;
 };
 
+export type GoogleThreadAttachment = {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  messageId: string;
+};
+
+export type GoogleThreadMessage = {
+  id: string;
+  internalDateMs: number | null;
+  from: string;
+  to: string;
+  cc: string;
+  subject: string;
+  date: string;
+  direction: "incoming" | "outgoing" | "unknown";
+  bodyText: string;
+  attachments: GoogleThreadAttachment[];
+};
+
+export type GoogleThreadDetail = {
+  id: string;
+  subject: string;
+  originalGmailUrl: string;
+  messages: GoogleThreadMessage[];
+};
+
 export interface GoogleWorkspaceReadClient {
   authorizationUrl(input: { state: string }): string;
   exchangeCode(code: string): Promise<{
@@ -47,6 +75,7 @@ export interface GoogleWorkspaceReadClient {
   listCalendars(): Promise<GoogleCalendarSummary[]>;
   listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
+  getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
 }
 
 export type GoogleWorkspaceFetch = (

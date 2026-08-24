@@ -71,5 +71,7 @@ describe("ensureGoogleWorkspaceSchemaBeforeListen", () => {
     expect(source).toContain("google_workspace_connections");
     expect(source).toContain("google_workspace_label_scopes");
     expect(source).toContain("google_workspace_calendar_scopes");
+    expect(source).toContain("google_workspace_validation_mappings");
+    expect(source).toContain("google_workspace_validation_state");
   });
 });
