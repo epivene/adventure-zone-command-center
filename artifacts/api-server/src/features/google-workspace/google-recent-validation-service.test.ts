@@ -143,7 +143,7 @@ describe("GoogleRecentValidationService", () => {
     ]);
   });
 
-  it("checks at most 100 newest messages and separates profile-name review and ignored metadata without body storage", async () => {
+  it("matches a unique full profile name in the subject and ignores unrelated metadata", async () => {
     const client: GoogleWorkspaceReadClient = {
       authorizationUrl: () => "",
       exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
@@ -189,10 +189,51 @@ describe("GoogleRecentValidationService", () => {
     const result = await service.run(100);
 
     expect(client.listRecentMessageRefs).toHaveBeenCalledWith(100);
-    expect(result.counts).toEqual({ discovered: 2, matched: 0, needsReview: 1, ignored: 1 });
-    expect(result.needsReview[0]).toMatchObject({ id: "m2", evidenceCodes: ["exact_profile_name_text"] });
+    expect(result.counts).toEqual({ discovered: 2, matched: 1, needsReview: 0, ignored: 1 });
+    expect(result.matched[0]).toMatchObject({
+      id: "m2",
+      evidenceCodes: ["exact_profile_name_subject"],
+      resolvedOrganization: { id: "p1", name: "Known Festival" },
+    });
     expect(result.ignored[0]).toMatchObject({ id: "m3", subject: "Dinner plans" });
     expect(JSON.stringify(result)).not.toContain("body");
+  });
+
+  it("uses the connected mailbox identity when Gmail labels do not expose direction", async () => {
+    const client: GoogleWorkspaceReadClient = {
+      authorizationUrl: () => "",
+      exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
+      accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
+      listLabels: async () => [],
+      listCalendars: async () => [],
+      listRecentMessageRefs: async () => [{ id: "promo", threadId: "thread-promo" }],
+      getMessageMetadata: async () =>
+        message("promo", "Traeger <offers@traeger.com>", "We Built a Better Griddle", [
+          "CATEGORY_PROMOTIONS",
+          "UNREAD",
+        ]),
+    };
+    const resolve = vi.fn();
+
+    const service = new GoogleRecentValidationService({
+      connection: { createReadClient: async () => client },
+      scope: { getSaved: async () => ({ labels: [], calendars: [] }) },
+      evidence: {
+        load: async () => ({
+          contacts: [{ id: "david", name: "David Gordon", emails: ["zone@example.com"] }],
+          organizations: [],
+          profiles: [],
+        }),
+      },
+      contactProfileResolver: { resolve },
+      validationRepository: validationRepository(),
+    });
+
+    const result = await service.run(100);
+
+    expect(result.counts).toEqual({ discovered: 1, matched: 0, needsReview: 0, ignored: 1 });
+    expect(result.ignored[0]).toMatchObject({ id: "promo" });
+    expect(resolve).not.toHaveBeenCalled();
   });
 
   it("fails closed when the connected Google client does not support Gmail metadata validation", async () => {
