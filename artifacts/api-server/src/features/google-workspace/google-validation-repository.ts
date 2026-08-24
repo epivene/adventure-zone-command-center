@@ -51,7 +51,6 @@ export class PostgresGoogleValidationRepository {
   }
 
   async upsertRows(rows: GoogleValidationMappingInput[]): Promise<void> {
-    if (!rows.length) return;
     const connectionId = await this.currentConnectionId();
 
     for (const row of rows) {
