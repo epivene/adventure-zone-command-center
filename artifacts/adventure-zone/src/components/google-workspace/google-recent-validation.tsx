@@ -7,6 +7,10 @@ import type {
 
 const evidenceLabels: Record<string, string> = {
   exact_contact_email: "Exact contact email",
+  contact_active_organization: "Contact's active profile",
+  contact_organization_ambiguous: "Contact belongs to multiple profiles",
+  contact_organization_unresolved: "Contact has no active profile",
+  multiple_exact_contact_matches: "Multiple exact contact records",
   exact_organization_domain: "Exact organization domain",
   approved_business_label: "Business label/folder",
   existing_thread_association: "Previously approved thread",
@@ -56,7 +60,20 @@ function ValidationRow({ row }: { row: GoogleRecentValidationRow }) {
           ))}
         </div>
       ) : null}
-      {row.candidates.length > 0 ? (
+      {row.matchedContact ? (
+        <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
+          Matched contact: {row.matchedContact.name}
+        </p>
+      ) : null}
+      {row.resolvedOrganization ? (
+        <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+          Profile: {row.resolvedOrganization.name}
+        </p>
+      ) : row.organizationCandidates.length > 0 ? (
+        <p className="mt-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+          Possible profiles: {row.organizationCandidates.map((candidate) => candidate.name).join(", ")}
+        </p>
+      ) : row.candidates.length > 0 ? (
         <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">
           Possible match: {row.candidates.map((candidate) => candidate.name).join(", ")}
         </p>
@@ -113,7 +130,7 @@ export function GoogleRecentValidation({
         AI is off. This is only a metadata/relevance check of the newest {result.checkedLimit} messages and does not start the historical import.
       </p>
 
-      <ResultSection title="Matched to known business/profile evidence" rows={result.matched} />
+      <ResultSection title="Matched to profiles" rows={result.matched} />
       <ResultSection title="Needs review" rows={result.needsReview} />
 
       {result.ignored.length > 0 ? (
