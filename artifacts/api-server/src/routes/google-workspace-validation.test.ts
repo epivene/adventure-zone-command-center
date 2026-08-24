@@ -7,6 +7,10 @@ import { createGoogleWorkspaceValidationRouter } from "./google-workspace-valida
 function appWith(options: {
   run?: (limit: number) => Promise<unknown>;
   reconcile?: (input: { messageIds: string[]; rows: any[] }) => Promise<void>;
+  reconcileReview?: (input: {
+    sampleMessageIds: string[];
+    pendingMessageIds: string[];
+  }) => Promise<void>;
   setDecision?: (input: {
     status: "approved" | "rejected";
     actorId: string;
@@ -36,6 +40,9 @@ function appWith(options: {
       service: { run: options.run ?? (async () => ({})) },
       mappingReconciler: {
         reconcile: options.reconcile ?? (async () => undefined),
+      },
+      reviewReconciler: {
+        reconcile: options.reconcileReview ?? (async () => undefined),
       },
       validationRepository: {
         setDecision: options.setDecision ?? (async () => undefined),
@@ -111,6 +118,30 @@ describe("Google Workspace recent validation route", () => {
           evidenceCodes: ["exact_profile_name_subject"],
         },
       ],
+    });
+  });
+
+  it("removes stale pending review items when current validation no longer needs them", async () => {
+    const reconcileReview = vi.fn(async () => undefined);
+    const run = vi.fn(async () => ({
+      checkedLimit: 100,
+      aiEnabled: false,
+      historicalImportStarted: false,
+      validationStatus: "approved",
+      counts: { discovered: 3, matched: 1, needsReview: 1, ignored: 1 },
+      matched: [{ id: "matched-now", threadId: "t1" }],
+      needsReview: [{ id: "still-review", threadId: "t2" }],
+      ignored: [{ id: "ignored-now", threadId: "t3" }],
+    }));
+
+    const response = await request(appWith({ run, reconcileReview }))
+      .post("/google-workspace/validation/recent")
+      .send({ limit: 100 });
+
+    expect(response.status).toBe(200);
+    expect(reconcileReview).toHaveBeenCalledWith({
+      sampleMessageIds: ["matched-now", "still-review", "ignored-now"],
+      pendingMessageIds: ["still-review"],
     });
   });
 
