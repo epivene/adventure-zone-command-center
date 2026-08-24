@@ -65,6 +65,37 @@ describe("EventProfileForm", () => {
     })));
   });
 
+  it("captures booking stage, event dates, leg and follow-up when creating the opportunity", async () => {
+    const onSubmit = vi.fn(async () => ({ ok: true as const, profileId: "profile-4" }));
+    render(<EventProfileForm contacts={[]} travelLegs={[{ id: "leg-1", name: "Kristy", color: "orange" }]} onSubmit={onSubmit} />);
+
+    fireEvent.change(screen.getByLabelText("Profile / event name"), { target: { value: "Route Festival" } });
+    fireEvent.change(screen.getByLabelText("City"), { target: { value: "Moab" } });
+    fireEvent.change(screen.getByLabelText("State"), { target: { value: "UT" } });
+    fireEvent.click(screen.getByLabelText("Create a booking opportunity now"));
+    fireEvent.change(screen.getByLabelText("Booking name"), { target: { value: "2027 Route Festival" } });
+    fireEvent.change(screen.getByLabelText("Booking stage"), { target: { value: "contact_due" } });
+    fireEvent.change(screen.getByLabelText("Event start date"), { target: { value: "2027-08-28" } });
+    fireEvent.change(screen.getByLabelText("Event end date"), { target: { value: "2027-08-30" } });
+    fireEvent.change(screen.getByLabelText("Travel leg"), { target: { value: "leg-1" } });
+    fireEvent.change(screen.getByLabelText("Next action"), { target: { value: "email" } });
+    fireEvent.change(screen.getByLabelText("Next follow-up date"), { target: { value: "2026-09-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Profile" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      booking: expect.objectContaining({
+        enabled: true,
+        name: "2027 Route Festival",
+        status: "contact_due",
+        startsAt: "2027-08-28",
+        endsAt: "2027-08-30",
+        travelLegId: "leg-1",
+        nextActionKind: "email",
+        nextActionDueAt: "2026-09-01",
+      }),
+    })));
+  });
+
   it("creates a child profile for a preselected organization", async () => {
     const onSubmit = vi.fn(async () => ({ ok: true as const, profileId: "profile-3" }));
     render(
@@ -109,6 +140,9 @@ describe("EventProfileForm", () => {
       contacts: [{ id: "", name: "", phone: "", email: "", role: "", primary: true }],
       includeBooking: false,
       bookingName: "",
+      bookingStatus: "new_lead",
+      startsAt: "",
+      endsAt: "",
       travelLegId: "",
       nextActionKind: "call",
       nextActionDueAt: "",
