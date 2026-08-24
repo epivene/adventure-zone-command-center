@@ -113,6 +113,22 @@ export function classifyGoogleMessageRelevance(input: {
     return { status: "matched", evidenceCodes, candidates };
   }
 
+  const subjectMatches = evidence.profiles.filter((profile) =>
+    exactTextContains(message.headers.subject, profile.name),
+  );
+  if (subjectMatches.length === 1) {
+    const profile = subjectMatches[0];
+    evidenceCodes.push("exact_profile_name_subject");
+    addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
+    return { status: "matched", evidenceCodes, candidates };
+  }
+  if (subjectMatches.length > 1) {
+    evidenceCodes.push("ambiguous_profile_name_subject");
+    for (const profile of subjectMatches) {
+      addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
+    }
+  }
+
   const mailboxEmails = new Set(
     [...(evidence.mailboxEmails ?? new Set<string>())].map(normalize),
   );
@@ -147,22 +163,6 @@ export function classifyGoogleMessageRelevance(input: {
     evidenceCodes.push("exact_organization_domain");
     addCandidate({ id: organization.id, name: organization.name, kind: "organization" });
     return { status: "matched", evidenceCodes, candidates };
-  }
-
-  const subjectMatches = evidence.profiles.filter((profile) =>
-    exactTextContains(message.headers.subject, profile.name),
-  );
-  if (subjectMatches.length === 1) {
-    const profile = subjectMatches[0];
-    evidenceCodes.push("exact_profile_name_subject");
-    addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
-    return { status: "matched", evidenceCodes, candidates };
-  }
-  if (subjectMatches.length > 1) {
-    evidenceCodes.push("ambiguous_profile_name_subject");
-    for (const profile of subjectMatches) {
-      addCandidate({ id: profile.id, name: profile.name, kind: "profile" });
-    }
   }
 
   const hasApprovedBusinessLabel = message.labelIds.some((id) =>
