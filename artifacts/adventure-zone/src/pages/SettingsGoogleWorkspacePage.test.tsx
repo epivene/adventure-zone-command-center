@@ -46,16 +46,10 @@ const preview = {
       rootName: "Shows",
     },
     {
-      id: "receipt",
-      name: "Receipt",
-      rootId: "receipt",
-      rootName: "Receipt",
-    },
-    {
-      id: "receipt-old",
-      name: "Receipt/Old vendor",
-      rootId: "receipt",
-      rootName: "Receipt",
+      id: "shows-old",
+      name: "Shows/Old vendor",
+      rootId: "shows",
+      rootName: "Shows",
     },
   ],
   calendars: [
@@ -164,14 +158,14 @@ describe("SettingsGoogleWorkspacePage", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Preview business scope" }),
     );
-    fireEvent.click(await screen.findByLabelText("Receipt/Old vendor"));
+    fireEvent.click(await screen.findByLabelText("Shows/Old vendor"));
 
     expect(screen.getByRole("button", { name: "Save business scope" })).toBeEnabled();
     fireEvent.click(screen.getByRole("button", { name: "Save business scope" }));
 
     await waitFor(() =>
       expect(client.saveGoogleWorkspaceScope).toHaveBeenCalledWith({
-        labelIds: ["shows", "shows-2026", "receipt"],
+        labelIds: ["shows", "shows-2026"],
         calendarIds: ["az", "zone.pirate.warrior@gmail.com"],
       }),
     );
@@ -183,10 +177,10 @@ describe("SettingsGoogleWorkspacePage", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Preview business scope" }),
     );
-    fireEvent.click(await screen.findByLabelText("Receipt"));
+    fireEvent.click(await screen.findByLabelText("Shows"));
 
     expect(
-      screen.getByText(/Keep the main business folders, Spam, and all approved calendars selected/i),
+      screen.getByText(/Keep the main business folders and all approved calendars selected/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Save business scope" }),
