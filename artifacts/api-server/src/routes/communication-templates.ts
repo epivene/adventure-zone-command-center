@@ -1,15 +1,16 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 
 import { db } from "@workspace/db";
-import { communicationTemplates } from "@/db/schema";
+import { communicationTemplates, officeAccounts } from "@/db/schema";
+import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
+import { validateAuthoredTemplateText } from "@/features/communication-templates/communication-template-authoring";
 import {
   allowedTemplatePlaceholders,
   extractTemplateTokens,
   renderCommunicationTemplateText,
-  validateTemplatePlaceholders,
 } from "@/features/communication-templates/communication-template-renderer";
 import type { TemplatePlaceholder } from "@/features/communication-templates/communication-template-types";
 
@@ -36,13 +37,11 @@ const communicationTemplatePatchSchema = communicationTemplateWriteSchema
   .refine((value) => Object.keys(value).length > 0, "No template changes provided.");
 
 const previewSchema = z
-  .object({
-    values: z.record(z.string(), z.string().nullable()).default({}),
-  })
+  .object({ values: z.record(z.string(), z.string().nullable()).default({}) })
   .strict();
 
 function validateCopy(subjectTemplate: string | null, bodyTemplate: string) {
-  validateTemplatePlaceholders(`${subjectTemplate ?? ""}\n${bodyTemplate}`);
+  return validateAuthoredTemplateText({ subjectTemplate, bodyTemplate }).placeholders;
 }
 
 function templateId(value: string | string[] | undefined) {
@@ -57,7 +56,21 @@ router.get("/communication-templates", async (req, res): Promise<void> => {
   try {
     await seed();
     const rows = await db.select().from(communicationTemplates);
-    res.json({ templates: rows });
+    const ownerIds = [...new Set(rows.map((row) => row.ownerOfficeAccountId).filter((id): id is string => Boolean(id)))];
+    const owners = ownerIds.length
+      ? await db.select({ id: officeAccounts.id, displayName: officeAccounts.displayName })
+          .from(officeAccounts)
+          .where(inArray(officeAccounts.id, ownerIds))
+      : [];
+    const displayNameById = new Map(owners.map((owner) => [owner.id, owner.displayName]));
+    res.json({
+      templates: rows.map((template) => ({
+        ...template,
+        creatorDisplayName: template.ownerOfficeAccountId
+          ? displayNameById.get(template.ownerOfficeAccountId) ?? "Office Coordinator"
+          : null,
+      })),
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to list communication templates");
     res.status(500).json({ error: "Could not load communication templates" });
@@ -71,24 +84,26 @@ router.post("/communication-templates", async (req, res): Promise<void> => {
     return;
   }
   try {
-    validateCopy(parsed.data.subjectTemplate, parsed.data.bodyTemplate);
-    const allowedPlaceholders = extractTemplateTokens(
-      `${parsed.data.subjectTemplate ?? ""}\n${parsed.data.bodyTemplate}`,
-    ) as TemplatePlaceholder[];
+    const allowedPlaceholders = validateCopy(parsed.data.subjectTemplate, parsed.data.bodyTemplate);
     const rows = await db
       .insert(communicationTemplates)
       .values({
         ...parsed.data,
         allowedPlaceholders,
         state: "draft",
+        ownerKind: "company",
+        ownerOfficeAccountId: null,
+        createdByKind: "owner",
+        createdById: null,
+        sourceTemplateId: null,
         reviewedBy: String((req as any).userId ?? "owner"),
       })
       .returning();
     res.status(201).json({ template: rows[0] });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not create template";
-    if (message.startsWith("Unknown template placeholder")) {
-      res.status(400).json({ error: message });
+    if (message === "INVALID_TEMPLATE_PLACEHOLDER") {
+      res.status(400).json({ error: "Use only approved template placeholders." });
       return;
     }
     req.log.error({ err }, "Failed to create communication template");
@@ -115,8 +130,7 @@ router.patch("/communication-templates/:templateId", async (req, res): Promise<v
     }
     const subjectTemplate = parsed.data.subjectTemplate === undefined ? existing[0].subjectTemplate : parsed.data.subjectTemplate;
     const bodyTemplate = parsed.data.bodyTemplate ?? existing[0].bodyTemplate;
-    validateCopy(subjectTemplate, bodyTemplate);
-    const allowedPlaceholders = extractTemplateTokens(`${subjectTemplate ?? ""}\n${bodyTemplate}`) as TemplatePlaceholder[];
+    const allowedPlaceholders = validateCopy(subjectTemplate, bodyTemplate);
     const rows = await db
       .update(communicationTemplates)
       .set({
@@ -132,8 +146,8 @@ router.patch("/communication-templates/:templateId", async (req, res): Promise<v
     res.json({ template: rows[0] });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Could not update template";
-    if (message.startsWith("Unknown template placeholder")) {
-      res.status(400).json({ error: message });
+    if (message === "INVALID_TEMPLATE_PLACEHOLDER") {
+      res.status(400).json({ error: "Use only approved template placeholders." });
       return;
     }
     req.log.error({ err }, "Failed to update communication template");
@@ -168,8 +182,7 @@ router.post("/communication-templates/:templateId/activate", async (req, res): P
       .returning();
     res.json({ template: updated[0] });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Could not activate template";
-    res.status(400).json({ error: message });
+    res.status(400).json({ error: err instanceof Error ? err.message : "Could not activate template" });
   }
 });
 
@@ -189,6 +202,29 @@ router.post("/communication-templates/:templateId/archive", async (req, res): Pr
     return;
   }
   res.json({ template: rows[0] });
+});
+
+router.post("/communication-templates/:templateId/promote-shared", async (req, res): Promise<void> => {
+  const id = templateId(req.params.templateId);
+  if (!z.uuid().safeParse(id).success) {
+    res.status(400).json({ error: "Invalid template id" });
+    return;
+  }
+  try {
+    const template = await new CommunicationTemplateRepository(db).promoteToShared(
+      id,
+      String((req as any).userId ?? "owner"),
+    );
+    res.json({ template });
+  } catch (err) {
+    const code = err instanceof Error ? err.message : "";
+    if (code === "TEMPLATE_NOT_PROMOTABLE") {
+      res.status(409).json({ error: "Only private coordinator templates can be promoted to Shared Office." });
+      return;
+    }
+    req.log.error({ err }, "Failed to promote communication template");
+    res.status(500).json({ error: "Could not promote communication template" });
+  }
 });
 
 router.post("/communication-templates/:templateId/preview", async (req, res): Promise<void> => {
