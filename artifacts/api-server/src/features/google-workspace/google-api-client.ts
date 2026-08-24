@@ -3,6 +3,8 @@ import type {
   GoogleLabelSummary,
   GoogleMessageMetadata,
   GoogleMessageRef,
+  GoogleThreadAttachment,
+  GoogleThreadDetail,
   GoogleWorkspaceFetch,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
@@ -84,6 +86,88 @@ function headerValue(headers: unknown[], name: string): string {
   if (!found || typeof found !== "object") return "";
   const value = (found as Record<string, unknown>).value;
   return typeof value === "string" ? value : "";
+}
+
+function decodeBase64Url(value: unknown): string {
+  if (typeof value !== "string" || !value) return "";
+  try {
+    return Buffer.from(value, "base64url").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function textFromHtml(value: string): string {
+  return value
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p\s*>/gi, "\n\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+function bodyTextFromPart(value: unknown): { plain: string; html: string } {
+  if (!value || typeof value !== "object") return { plain: "", html: "" };
+  const part = value as Record<string, unknown>;
+  const mimeType = typeof part.mimeType === "string" ? part.mimeType.toLowerCase() : "";
+  const body = part.body && typeof part.body === "object"
+    ? (part.body as Record<string, unknown>)
+    : {};
+  const decoded = decodeBase64Url(body.data);
+  let plain = mimeType === "text/plain" ? decoded : "";
+  let html = mimeType === "text/html" ? decoded : "";
+  if (Array.isArray(part.parts)) {
+    for (const child of part.parts) {
+      const nested = bodyTextFromPart(child);
+      if (!plain && nested.plain) plain = nested.plain;
+      if (!html && nested.html) html = nested.html;
+    }
+  }
+  return { plain, html };
+}
+
+function attachmentsFromPart(
+  value: unknown,
+  messageId: string,
+): GoogleThreadAttachment[] {
+  if (!value || typeof value !== "object") return [];
+  const part = value as Record<string, unknown>;
+  const body = part.body && typeof part.body === "object"
+    ? (part.body as Record<string, unknown>)
+    : {};
+  const filename = typeof part.filename === "string" ? part.filename.trim() : "";
+  const attachmentId =
+    typeof body.attachmentId === "string" ? body.attachmentId.trim() : "";
+  const own =
+    filename && attachmentId
+      ? [{
+          attachmentId,
+          filename,
+          mimeType:
+            typeof part.mimeType === "string" && part.mimeType.trim()
+              ? part.mimeType.trim()
+              : "application/octet-stream",
+          sizeBytes:
+            typeof body.size === "number" && Number.isFinite(body.size)
+              ? Math.max(0, Math.trunc(body.size))
+              : 0,
+          messageId,
+        }]
+      : [];
+  const nested = Array.isArray(part.parts)
+    ? part.parts.flatMap((child) => attachmentsFromPart(child, messageId))
+    : [];
+  return [...own, ...nested];
 }
 
 export function createGoogleWorkspaceReadClient(input: {
@@ -356,6 +440,66 @@ export function createGoogleWorkspaceReadClient(input: {
         hasAttachments: parts.some(partHasAttachment),
       };
     },
+
+    async getThreadDetail(threadId: string): Promise<GoogleThreadDetail> {
+      const id = threadId.trim();
+      if (!id) throw clientError("GOOGLE_WORKSPACE_THREAD_ID_INVALID");
+      const url = new URL(`${gmailBaseEndpoint}/threads/${encodeURIComponent(id)}`);
+      url.searchParams.set("format", "full");
+      const payload = await authorizedJson(url.toString());
+      if (typeof payload.id !== "string" || !Array.isArray(payload.messages)) {
+        throw clientError("GOOGLE_WORKSPACE_THREAD_DETAIL_INVALID");
+      }
+
+      const messages = payload.messages.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const message = value as Record<string, unknown>;
+        if (typeof message.id !== "string") return [];
+        const messagePayload =
+          message.payload && typeof message.payload === "object"
+            ? (message.payload as Record<string, unknown>)
+            : {};
+        const headers = Array.isArray(messagePayload.headers)
+          ? messagePayload.headers
+          : [];
+        const labels = Array.isArray(message.labelIds)
+          ? message.labelIds.filter((entry): entry is string => typeof entry === "string")
+          : [];
+        const rawInternalDate =
+          typeof message.internalDate === "string"
+            ? Number(message.internalDate)
+            : typeof message.internalDate === "number"
+              ? message.internalDate
+              : NaN;
+        const bodies = bodyTextFromPart(messagePayload);
+        return [{
+          id: message.id,
+          internalDateMs: Number.isFinite(rawInternalDate) ? rawInternalDate : null,
+          from: headerValue(headers, "From"),
+          to: headerValue(headers, "To"),
+          cc: headerValue(headers, "Cc"),
+          subject: headerValue(headers, "Subject"),
+          date: headerValue(headers, "Date"),
+          direction: labels.includes("SENT")
+            ? "outgoing" as const
+            : labels.includes("INBOX")
+              ? "incoming" as const
+              : "unknown" as const,
+          bodyText: (bodies.plain || textFromHtml(bodies.html)).trim(),
+          attachments: attachmentsFromPart(messagePayload, message.id),
+        }];
+      }).sort((left, right) =>
+        (left.internalDateMs ?? 0) - (right.internalDateMs ?? 0) ||
+        left.id.localeCompare(right.id),
+      );
+
+      return {
+        id: payload.id,
+        subject: messages.find((message) => message.subject.trim())?.subject ?? "",
+        originalGmailUrl: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(payload.id)}`,
+        messages,
+      };
+    },
   };
 }
 
@@ -364,5 +508,6 @@ export type {
   GoogleLabelSummary,
   GoogleMessageMetadata,
   GoogleMessageRef,
+  GoogleThreadDetail,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
