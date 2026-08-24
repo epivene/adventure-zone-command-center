@@ -26,36 +26,36 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
   if (input.overdueFollowUpCount > 0) {
     return {
       kind: "overdue_followups",
-      headline: "Start with overdue follow-ups",
-      detail: `${input.overdueFollowUpCount} overdue · ${input.followUpCount} total follow-ups`,
-      primaryLabel: "Continue follow-ups",
-      primaryHref: "#my-work-calls",
+      headline: `${input.followUpCount} task${input.followUpCount === 1 ? "" : "s"} remaining`,
+      detail: `${input.overdueFollowUpCount} overdue · Start with your highest-priority follow-up`,
+      primaryLabel: "Start",
+      primaryHref: "#today-next-task",
     };
   }
   if (input.followUpCount > 0) {
     return {
       kind: "followups",
-      headline: "Continue your follow-ups",
-      detail: `${input.followUpCount} follow-up${input.followUpCount === 1 ? "" : "s"} ready`,
-      primaryLabel: "Start calling",
-      primaryHref: "#my-work-calls",
+      headline: `${input.followUpCount} task${input.followUpCount === 1 ? "" : "s"} remaining`,
+      detail: "Next: follow up with your highest-priority event",
+      primaryLabel: "Start",
+      primaryHref: "#today-next-task",
     };
   }
   if (input.contractCount > 0) {
     return {
       kind: "contracts",
-      headline: "Work the contracts that need attention",
-      detail: `${input.contractCount} contract${input.contractCount === 1 ? "" : "s"} in your queue`,
-      primaryLabel: "Open booking work",
+      headline: `${input.contractCount} task${input.contractCount === 1 ? "" : "s"} remaining`,
+      detail: "Next: work the booking or contract that needs attention",
+      primaryLabel: "Start",
       primaryHref: "/bookings",
     };
   }
   if (input.decisionCount > 0) {
     return {
       kind: "decisions",
-      headline: "Decide what happens next",
-      detail: `${input.decisionCount} item${input.decisionCount === 1 ? "" : "s"} need a next step`,
-      primaryLabel: "Review decisions",
+      headline: `${input.decisionCount} task${input.decisionCount === 1 ? "" : "s"} remaining`,
+      detail: "Next: decide what happens with the highest-priority lead or past event",
+      primaryLabel: "Start",
       primaryHref: "#my-work-decisions",
     };
   }
