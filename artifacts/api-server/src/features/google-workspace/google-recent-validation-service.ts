@@ -20,6 +20,10 @@ import {
   type GoogleValidationStatus,
 } from "./google-validation-repository";
 import {
+  GoogleValidationLearningRepository,
+  type GoogleValidationLearningSnapshot,
+} from "./google-validation-learning-repository";
+import {
   classifyGoogleMessageRelevance,
   type GoogleRelevanceCandidate,
   type GoogleRelevanceResult,
@@ -96,6 +100,10 @@ type EvidenceAccess = {
   load(): Promise<GoogleValidationEvidenceSnapshot>;
 };
 
+type LearningAccess = {
+  load(): Promise<GoogleValidationLearningSnapshot>;
+};
+
 type ContactProfileResolverAccess = {
   resolve(contactId: string): Promise<ContactProfileResolution>;
 };
@@ -107,6 +115,14 @@ type ValidationRepositoryAccess = {
 };
 
 type DrizzleDb = typeof defaultDb;
+
+function emptyLearning(): GoogleValidationLearningSnapshot {
+  return {
+    mailboxEmails: new Set<string>(),
+    threadTargets: new Map(),
+    addressTargets: new Map(),
+  };
+}
 
 function websiteDomain(value: string | null): string | null {
   const raw = value?.trim();
@@ -256,7 +272,13 @@ async function withTransientBodyEvidence(input: {
   client: GoogleWorkspaceReadClient;
   profiles: GoogleValidationEvidenceSnapshot["profiles"];
 }): Promise<GoogleRelevanceResult> {
-  if (input.result.status === "matched" || !input.client.getThreadDetail) {
+  const learnedAddressMatch =
+    input.result.status === "matched" &&
+    input.result.evidenceCodes.includes("learned_external_email");
+  if (
+    (input.result.status === "matched" && !learnedAddressMatch) ||
+    !input.client.getThreadDetail
+  ) {
     return input.result;
   }
 
@@ -305,6 +327,7 @@ export class GoogleRecentValidationService {
   private readonly connection: ConnectionAccess;
   private readonly scope: ScopeAccess;
   private readonly evidence: EvidenceAccess;
+  private readonly learning: LearningAccess;
   private readonly contactProfileResolver: ContactProfileResolverAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
 
@@ -312,12 +335,18 @@ export class GoogleRecentValidationService {
     connection?: ConnectionAccess;
     scope?: ScopeAccess;
     evidence?: EvidenceAccess;
+    learning?: LearningAccess;
     contactProfileResolver?: ContactProfileResolverAccess;
     validationRepository?: ValidationRepositoryAccess;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.scope = options?.scope ?? new GoogleScopeService();
     this.evidence = options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
+    this.learning =
+      options?.learning ??
+      (options
+        ? { load: async () => emptyLearning() }
+        : new GoogleValidationLearningRepository());
     this.contactProfileResolver =
       options?.contactProfileResolver ?? new GoogleContactProfileResolver();
     this.validationRepository =
@@ -332,16 +361,20 @@ export class GoogleRecentValidationService {
       throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
     }
 
-    const [savedScope, evidenceSnapshot, labels, accountIdentity] = await Promise.all([
+    const [savedScope, evidenceSnapshot, learned, labels, accountIdentity] = await Promise.all([
       this.scope.getSaved(),
       this.evidence.load(),
+      this.learning.load(),
       client.listLabels(),
       client.accountIdentity(),
     ]);
     const relevanceLabelIds = new Set(savedScope.labels.map((label) => label.id));
     for (const id of businessHintLabelIds(labels)) relevanceLabelIds.add(id);
     const labelsById = new Map(labels.map((label) => [label.id, label]));
-    const mailboxEmails = new Set([accountIdentity.email.trim().toLowerCase()]);
+    const mailboxEmails = new Set([
+      ...learned.mailboxEmails,
+      accountIdentity.email.trim().toLowerCase(),
+    ]);
     const refs = await client.listRecentMessageRefs(checkedLimit);
 
     const matched: GoogleValidationRow[] = [];
@@ -350,6 +383,7 @@ export class GoogleRecentValidationService {
 
     for (const ref of refs) {
       const message = await client.getMessageMetadata(ref.id);
+      const learnedThread = learned.threadTargets.get(message.threadId);
       const metadataResult = classifyGoogleMessageRelevance({
         message,
         evidence: {
@@ -358,7 +392,10 @@ export class GoogleRecentValidationService {
           contacts: evidenceSnapshot.contacts,
           organizations: evidenceSnapshot.organizations,
           profiles: evidenceSnapshot.profiles,
-          existingThreadTarget: null,
+          learnedAddressTargets: learned.addressTargets,
+          existingThreadTarget: learnedThread
+            ? { ...learnedThread, kind: "profile" as const }
+            : null,
         },
       });
       const result = await withTransientBodyEvidence({

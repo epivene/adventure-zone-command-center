@@ -20,9 +20,11 @@ const baseMessage = {
 
 const emptyEvidence = {
   approvedLabelIds: new Set<string>(),
+  mailboxEmails: new Set(["zone@example.com"]),
   contacts: [] as Array<{ id: string; name: string; emails: string[] }>,
   organizations: [] as Array<{ id: string; name: string; domains: string[] }>,
   profiles: [] as Array<{ id: string; name: string }>,
+  learnedAddressTargets: new Map<string, { id: string; name: string }>(),
   existingThreadTarget: null as null | { id: string; name: string; kind: "profile" | "organization" | "booking" },
 };
 
@@ -42,6 +44,57 @@ describe("classifyGoogleMessageRelevance", () => {
     expect(result.status).toBe("matched");
     expect(result.evidenceCodes).toContain("exact_contact_email");
     expect(result.candidates).toEqual([{ id: "c1", name: "Fair Office", kind: "contact" }]);
+  });
+
+  it("matches a uniquely learned external email relationship when no event text conflicts", () => {
+    const result = classifyGoogleMessageRelevance({
+      message: {
+        ...baseMessage,
+        headers: {
+          ...baseMessage.headers,
+          from: "Fair Office <fairgrounds@co.lake.or.us>",
+          subject: "Following up",
+        },
+      },
+      evidence: {
+        ...emptyEvidence,
+        learnedAddressTargets: new Map([
+          ["fairgrounds@co.lake.or.us", { id: "o1", name: "Lake County Fair" }],
+        ]),
+      },
+    });
+
+    expect(result).toEqual({
+      status: "matched",
+      evidenceCodes: ["learned_external_email"],
+      candidates: [{ id: "o1", name: "Lake County Fair", kind: "profile" }],
+    });
+  });
+
+  it("does not let a learned address override a different named event", () => {
+    const result = classifyGoogleMessageRelevance({
+      message: {
+        ...baseMessage,
+        headers: {
+          ...baseMessage.headers,
+          from: "Fair Office <fairgrounds@co.lake.or.us>",
+          subject: "Logan Pride Festival vendor information",
+        },
+      },
+      evidence: {
+        ...emptyEvidence,
+        profiles: [{ id: "p2", name: "Logan Pride Festival" }],
+        learnedAddressTargets: new Map([
+          ["fairgrounds@co.lake.or.us", { id: "o1", name: "Lake County Fair" }],
+        ]),
+      },
+    });
+
+    expect(result.status).toBe("matched");
+    expect(result.evidenceCodes).toEqual(["exact_profile_name_subject"]);
+    expect(result.candidates).toEqual([
+      { id: "p2", name: "Logan Pride Festival", kind: "profile" },
+    ]);
   });
 
   it("matches a unique non-public organization domain", () => {
