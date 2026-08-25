@@ -62,6 +62,24 @@ describe("OnDeviceAiControl", () => {
     expect(runtime.initializeOnDeviceAi).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a previously enabled device visible without auto-loading after reload", () => {
+    installState(state("available"));
+    render(<OnDeviceAiControl />);
+
+    expect(screen.getByText("On-device AI enabled")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load now" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn off" })).toBeInTheDocument();
+    expect(runtime.initializeOnDeviceAi).not.toHaveBeenCalled();
+  });
+
+  it("loads a previously enabled model only after Load now is clicked", async () => {
+    installState(state("available"));
+    render(<OnDeviceAiControl />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load now" }));
+    await waitFor(() => expect(runtime.initializeOnDeviceAi).toHaveBeenCalledTimes(1));
+  });
+
   it("shows loading progress", () => {
     installState(state("loading", { progress: 42, message: "Loading model.onnx" }));
     render(<OnDeviceAiControl />);
