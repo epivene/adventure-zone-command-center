@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import {
   approveFirstGoogleHistoricalBatch,
   getGoogleHistoricalBackfill,
-  pauseGoogleHistoricalBackfill,
   runNextGoogleHistoricalBatch,
   type GoogleHistoricalBackfillView,
   type GoogleHistoricalBatchResult,
@@ -17,7 +16,7 @@ function summaryFromBatch(batch: GoogleHistoricalBatchResult | null): string | n
 export function GoogleHistoricalBackfill() {
   const [view, setView] = useState<GoogleHistoricalBackfillView | null>(null);
   const [lastBatch, setLastBatch] = useState<GoogleHistoricalBatchResult | null>(null);
-  const [busy, setBusy] = useState<"run" | "approve" | "pause" | null>(null);
+  const [busy, setBusy] = useState<"run" | "approve" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
@@ -53,19 +52,6 @@ export function GoogleHistoricalBackfill() {
       setView((current) => current ? { ...current, state: result.state } : current);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not approve the first historical batch.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function pause() {
-    setBusy("pause");
-    setError(null);
-    try {
-      const result = await pauseGoogleHistoricalBackfill();
-      setView((current) => current ? { ...current, state: result.state } : current);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not pause historical Gmail backfill.");
     } finally {
       setBusy(null);
     }
@@ -178,11 +164,6 @@ export function GoogleHistoricalBackfill() {
                 : "Continue next 250"}
           </button>
         ) : null}
-        {view.syncEnabled && (state.status === "ready" || state.status === "running") ? (
-          <button className="button-secondary px-4 py-2" disabled={busy !== null} onClick={() => void pause()} type="button">
-            {busy === "pause" ? "Pausing…" : "Pause"}
-          </button>
-        ) : null}
       </div>
 
       {state.status === "error" ? (
@@ -192,9 +173,6 @@ export function GoogleHistoricalBackfill() {
       ) : null}
       {state.status === "complete" ? (
         <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Historical Gmail backfill reached the end of the mailbox.</p>
-      ) : null}
-      {state.status === "paused" ? (
-        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Historical Gmail backfill is paused.</p>
       ) : null}
       {error ? <p className="text-sm font-semibold text-rose-700 dark:text-rose-300">{error}</p> : null}
     </section>
