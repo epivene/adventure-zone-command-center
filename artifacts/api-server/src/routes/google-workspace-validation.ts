@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
 import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
+import { GoogleReviewAssignmentDiagnosticService } from "@/features/google-workspace/google-review-assignment-diagnostic-service";
 import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
 import {
   PostgresGoogleValidationRepository,
@@ -48,6 +49,15 @@ type ReviewReconciler = {
   }): Promise<void>;
 };
 
+type ReviewAssignmentService = {
+  resolve(input: {
+    messageId: string;
+    organizationId: string;
+    actorId: string;
+    now: Date;
+  }): Promise<void>;
+};
+
 type ValidationRepository = {
   setDecision(input: {
     status: "approved" | "rejected";
@@ -56,12 +66,6 @@ type ValidationRepository = {
   }): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
   listReviewItems(): Promise<GoogleValidationReviewItem[]>;
-  resolveReviewItem(input: {
-    messageId: string;
-    organizationId: string;
-    actorId: string;
-    now: Date;
-  }): Promise<void>;
   ignoreReviewItem(input: {
     messageId: string;
     actorId: string;
@@ -80,6 +84,21 @@ function safeError(error: unknown): string {
     return error.message;
   }
   return "GOOGLE_WORKSPACE_VALIDATION_FAILED";
+}
+
+function diagnosticFields(error: unknown): {
+  stage: string | null;
+  postgresCode: string | null;
+} {
+  if (!error || typeof error !== "object") {
+    return { stage: null, postgresCode: null };
+  }
+  const value = error as { stage?: unknown; postgresCode?: unknown };
+  return {
+    stage: typeof value.stage === "string" ? value.stage : null,
+    postgresCode:
+      typeof value.postgresCode === "string" ? value.postgresCode : null,
+  };
 }
 
 function errorStatus(code: string): number {
@@ -152,6 +171,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   service?: ValidationService;
   mappingReconciler?: MappingReconciler;
   reviewReconciler?: ReviewReconciler;
+  reviewAssignmentService?: ReviewAssignmentService;
   validationRepository?: ValidationRepository;
   now?: () => Date;
 }): IRouter {
@@ -161,6 +181,8 @@ export function createGoogleWorkspaceValidationRouter(options?: {
     options?.mappingReconciler ?? new GoogleValidationMappingReconciler();
   const reviewReconciler =
     options?.reviewReconciler ?? new GoogleValidationReviewReconciler();
+  const reviewAssignmentService =
+    options?.reviewAssignmentService ?? new GoogleReviewAssignmentDiagnosticService();
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const now = options?.now ?? (() => new Date());
@@ -208,7 +230,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         return;
       }
       try {
-        await validationRepository.resolveReviewItem({
+        await reviewAssignmentService.resolve({
           messageId: req.params.messageId,
           organizationId: parsed.data.organizationId,
           actorId: ownerActorId(req),
@@ -217,6 +239,15 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         res.json({ ok: true });
       } catch (error) {
         const code = safeError(error);
+        const diagnostics = diagnosticFields(error);
+        req.log.error(
+          {
+            code,
+            stage: diagnostics.stage,
+            postgresCode: diagnostics.postgresCode,
+          },
+          "Google Workspace review assignment failed",
+        );
         res.status(errorStatus(code)).json({ error: code });
       }
     },
