@@ -2,7 +2,10 @@ import { Router, type IRouter, type Request } from "express";
 
 import { GoogleHistoricalBackfillRepository } from "@/features/google-workspace/google-historical-backfill-repository";
 import { GoogleHistoricalBackfillService } from "@/features/google-workspace/google-historical-backfill-service";
+import { GoogleHistoricalRunLease } from "@/features/google-workspace/google-historical-run-lease";
 import { PostgresGoogleValidationRepository } from "@/features/google-workspace/google-validation-repository";
+
+type HistoricalStateView = { status?: string };
 
 type RepositoryAccess = {
   getState(): Promise<unknown>;
@@ -13,6 +16,13 @@ type RepositoryAccess = {
 type ServiceAccess = {
   runNextBatch(): Promise<unknown>;
   retryFailures(limit?: number): Promise<unknown>;
+};
+
+type LeaseAccess = {
+  recoverStale(): Promise<boolean>;
+  acquire(): Promise<boolean>;
+  heartbeat(): Promise<void>;
+  markErrorIfRunning(): Promise<void>;
 };
 
 type ValidationAccess = {
@@ -45,6 +55,7 @@ function statusFor(code: string): number {
     code === "GOOGLE_WORKSPACE_HISTORICAL_SYNC_DISABLED" ||
     code === "GOOGLE_WORKSPACE_HISTORICAL_VALIDATION_APPROVAL_REQUIRED" ||
     code === "GOOGLE_WORKSPACE_HISTORICAL_FIRST_BATCH_APPROVAL_REQUIRED" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_ALREADY_RUNNING" ||
     code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_PAUSED" ||
     code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_COMPLETE" ||
     code === "GOOGLE_WORKSPACE_NOT_CONNECTED" ||
@@ -60,6 +71,7 @@ function statusFor(code: string): number {
 export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
   repository?: RepositoryAccess;
   service?: ServiceAccess;
+  lease?: LeaseAccess;
   validation?: ValidationAccess;
   syncEnabled?: boolean;
   actorId?: (req: Request) => string;
@@ -67,6 +79,7 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
   const router: IRouter = Router();
   const repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
   const service = options?.service ?? new GoogleHistoricalBackfillService();
+  const lease = options?.lease ?? new GoogleHistoricalRunLease();
   const validation = options?.validation ?? new PostgresGoogleValidationRepository();
   const syncEnabled = options?.syncEnabled ?? syncEnabledFromEnv();
   const actorId = options?.actorId ?? ownerActorId;
@@ -78,12 +91,58 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
     }
   }
 
+  async function statusWithRecovery(): Promise<unknown> {
+    let state = (await repository.getState()) as HistoricalStateView;
+    if (state.status === "running" && (await lease.recoverStale())) {
+      state = (await repository.getState()) as HistoricalStateView;
+    }
+    return state;
+  }
+
+  async function runOneLeasedBatch(): Promise<unknown> {
+    let state = (await repository.getState()) as HistoricalStateView;
+    if (state.status === "running") {
+      const recovered = await lease.recoverStale();
+      if (!recovered) {
+        throw new Error("GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_ALREADY_RUNNING");
+      }
+      state = (await repository.getState()) as HistoricalStateView;
+    }
+
+    const leaseEligible =
+      state.status === "not_started" ||
+      state.status === "ready" ||
+      state.status === "error";
+    if (!leaseEligible) {
+      return service.runNextBatch();
+    }
+
+    if (!(await lease.acquire())) {
+      throw new Error("GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_ALREADY_RUNNING");
+    }
+
+    const heartbeatTimer = setInterval(() => {
+      void lease.heartbeat().catch(() => undefined);
+    }, 30_000);
+    heartbeatTimer.unref?.();
+
+    try {
+      await lease.heartbeat();
+      return await service.runNextBatch();
+    } catch (error) {
+      await lease.markErrorIfRunning().catch(() => undefined);
+      throw error;
+    } finally {
+      clearInterval(heartbeatTimer);
+    }
+  }
+
   router.get("/google-workspace/historical-gmail", async (_req, res): Promise<void> => {
     try {
       res.json({
         syncEnabled,
         validationStatus: await validation.getStatus(),
-        state: await repository.getState(),
+        state: await statusWithRecovery(),
       });
     } catch (error) {
       const code = safeCode(error);
@@ -96,7 +155,7 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
     async (_req, res): Promise<void> => {
       try {
         await requireRunGates();
-        res.json(await service.runNextBatch());
+        res.json(await runOneLeasedBatch());
       } catch (error) {
         const code = safeCode(error);
         res.status(statusFor(code)).json({ error: code });
