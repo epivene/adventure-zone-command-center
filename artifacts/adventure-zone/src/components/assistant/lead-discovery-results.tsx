@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type {
   AssistantLeadMatch,
+  LeadScoutCandidate,
   LeadScoutRunView,
 } from "@/features/assistant/assistant-types";
 import type {
@@ -83,6 +84,7 @@ export function LeadDiscoveryResults({
   onResearchDeeper = () => undefined,
   onNotFit = () => undefined,
   onSaveCandidate,
+  onScoutAroundCandidate,
 }: {
   run: LeadScoutRunView;
   webScoutAvailable: boolean;
@@ -94,6 +96,7 @@ export function LeadDiscoveryResults({
   onResearchDeeper?: (candidateId: string) => void;
   onNotFit?: (candidateId: string) => void;
   onSaveCandidate?: (candidateId: string, input: LeadScoutSaveSubmission) => Promise<LeadScoutSaveResult>;
+  onScoutAroundCandidate?: (candidate: LeadScoutCandidate) => void;
 }) {
   const [saveCandidateId, setSaveCandidateId] = useState<string | null>(null);
   const confirmed = run.crmMatches.filter((match) => match.dateConfidence === "confirmed");
@@ -136,6 +139,7 @@ export function LeadDiscoveryResults({
               onResearchDeeper={onResearchDeeper}
               onNotFit={onNotFit}
               onSaveAsLead={setSaveCandidateId}
+              onScoutAround={onScoutAroundCandidate}
             />
           ))}
         </section>
