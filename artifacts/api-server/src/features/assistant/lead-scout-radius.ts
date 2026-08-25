@@ -1,5 +1,6 @@
 import { PostgresLeadScoutCrmSearch, type LeadScoutCrmSearch } from "./lead-scout-crm-search";
 import { LeadScoutRepository } from "./lead-scout-repository";
+import { ScoutGeocoder } from "./scout-geography";
 import type { LeadDiscoveryCriteria, LeadScoutRunView } from "./lead-scout-types";
 
 export type ScoutEventCategory =
@@ -37,7 +38,7 @@ export type RadiusScoutRequest = {
 
 export type RadiusScoutScope = {
   mode: "radius";
-  anchor: RadiusScoutAnchorInput;
+  anchor: RadiusScoutAnchorInput & { latitude: number; longitude: number };
   radiusMiles: RadiusScoutRequest["radiusMiles"];
   dateStart: string;
   dateEnd: string;
@@ -48,6 +49,7 @@ export type RadiusScoutScope = {
 type RadiusCriteria = LeadDiscoveryCriteria & { radiusScope: RadiusScoutScope };
 
 type Repository = Pick<LeadScoutRepository, "createRun" | "setCriteria" | "setCrmReady" | "getRun" | "setFailed">;
+type Geocoder = Pick<ScoutGeocoder, "resolve">;
 
 function manualCityRegion(anchor: RadiusScoutAnchorInput) {
   if (anchor.city?.trim() || anchor.region?.trim()) {
@@ -78,16 +80,31 @@ export class RadiusLeadScoutService {
   constructor(
     private readonly repository: Repository = new LeadScoutRepository(),
     private readonly crmSearch: LeadScoutCrmSearch = new PostgresLeadScoutCrmSearch(),
+    private readonly geocoder: Geocoder = new ScoutGeocoder(),
   ) {}
 
   async create(input: { actorId: string; request: RadiusScoutRequest }): Promise<LeadScoutRunView> {
     const { city, region } = manualCityRegion(input.request.anchor);
+    let latitude = input.request.anchor.latitude;
+    let longitude = input.request.anchor.longitude;
+    if (latitude === undefined || longitude === undefined) {
+      const query = input.request.anchor.address?.trim()
+        || [city, region].filter(Boolean).join(", ")
+        || input.request.anchor.label;
+      const resolved = await this.geocoder.resolve(query);
+      if (!resolved) throw new Error("SCOUT_ANCHOR_NOT_RESOLVED");
+      latitude = resolved.latitude;
+      longitude = resolved.longitude;
+    }
+
     const scope: RadiusScoutScope = {
       mode: "radius",
       anchor: {
         ...input.request.anchor,
         city: city ?? undefined,
         region: region ?? undefined,
+        latitude,
+        longitude,
       },
       radiusMiles: input.request.radiusMiles,
       dateStart: input.request.dateStart,
