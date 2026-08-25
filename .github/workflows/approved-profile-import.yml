@@ -22,7 +22,7 @@ jobs:
       - name: Import approved profile files
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
-          API_URL: https://adventure-zone-command-center.onrender.com/api/assistant-import/event-profiles
+          API_URL: https://adventure-zone-api.onrender.com/api/assistant-import/event-profiles
           BEFORE_SHA: ${{ github.event.before }}
           CURRENT_SHA: ${{ github.sha }}
         shell: bash
@@ -44,11 +44,19 @@ jobs:
           for file in "${files[@]}"; do
             [[ -f "$file" ]] || continue
             echo "Importing $file"
-            curl --fail-with-body --silent --show-error \
+            response_file="$(mktemp)"
+            status="$(curl --silent --show-error \
+              --output "$response_file" \
+              --write-out '%{http_code}' \
               --request POST \
               --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
               --header "Content-Type: application/json" \
               --data-binary "@$file" \
-              "$API_URL"
+              "$API_URL")"
+            cat "$response_file"
             echo
+            if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+              echo "Import failed with HTTP $status"
+              exit 1
+            fi
           done
