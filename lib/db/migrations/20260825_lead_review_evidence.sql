@@ -16,13 +16,13 @@ alter table lead_import_rows
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_review_version_nonnegative') then
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_review_version_nonnegative' and conrelid = 'lead_import_rows'::regclass) then
     alter table lead_import_rows add constraint lead_import_rows_review_version_nonnegative check (review_version >= 0);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_contact_mode_valid') then
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_contact_mode_valid' and conrelid = 'lead_import_rows'::regclass) then
     alter table lead_import_rows add constraint lead_import_rows_contact_mode_valid check (contact_mode is null or contact_mode in ('existing', 'manual'));
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_confirmed_date_range_valid') then
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_confirmed_date_range_valid' and conrelid = 'lead_import_rows'::regclass) then
     alter table lead_import_rows add constraint lead_import_rows_confirmed_date_range_valid
       check (confirmed_start_date is null or confirmed_end_date is null or confirmed_end_date >= confirmed_start_date);
   end if;

@@ -1,3 +1,4 @@
+import { apiGet, apiPost } from "@/lib/auth-token";
 import type { ParsedLeadWorkbook } from "@/features/lead-intake/excel-lead-parser";
 
 export type LeadImportBatchSummary = {
@@ -76,3 +77,5 @@ export function createLeadIntakeClient(api: Api) {
     },
   };
 }
+
+export const leadIntakeClient = createLeadIntakeClient({ get: apiGet, post: apiPost });

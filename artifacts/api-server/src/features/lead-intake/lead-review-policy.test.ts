@@ -15,7 +15,7 @@ const valid: LeadReviewDecision = {
   endDate: "2026-10-04",
   emailEvidence: { sourceKind: "official_website", sourceReference: "https://aspenfilm.org/contact" },
   dateEvidence: { sourceKind: "official_website", sourceReference: "https://aspenfilm.org/festival" },
-  candidateEmails: ["lilupow@aspenfilm.org"],
+  recipientConflictResolved: false,
 };
 
 describe("evaluateLeadReview", () => {
@@ -23,6 +23,8 @@ describe("evaluateLeadReview", () => {
     expect(evaluateLeadReview({ ...valid, startDate: "", endDate: "" }).blockers).toContain("event_dates_required");
     expect(evaluateLeadReview({ ...valid, startDate: "2026-10-05", endDate: "2026-10-04" }).blockers).toContain("event_date_range_invalid");
     expect(evaluateLeadReview({ ...valid, startDate: "2027-09-29", endDate: "2027-10-04" }).blockers).toContain("event_year_not_2026");
+    expect(evaluateLeadReview({ ...valid, startDate: "2026-08-31", endDate: "2026-09-02" }).blockers).toContain("event_outside_september_october");
+    expect(evaluateLeadReview({ ...valid, startDate: "2026-10-30", endDate: "2026-11-01" }).blockers).toContain("event_outside_september_october");
   });
 
   it("does not approve a suggested website email until the reviewer confirms it", () => {
@@ -35,6 +37,8 @@ describe("evaluateLeadReview", () => {
     const candidates = ["events@aspenfilm.org", "lilupow@aspenfilm.org"];
     expect(evaluateLeadReview({ ...valid, candidateEmails: candidates, recipientEmail: "third@example.com" }).blockers)
       .toContain("recipient_conflict_unresolved");
+    expect(evaluateLeadReview({ ...valid, candidateEmails: candidates, recipientEmail: "third@example.com", recipientConflictResolved: true }).verified)
+      .toBe(true);
     expect(evaluateLeadReview({ ...valid, candidateEmails: candidates }).verified).toBe(true);
   });
 
@@ -44,6 +48,7 @@ describe("evaluateLeadReview", () => {
       contactMode: "existing",
       contactId: "20000000-0000-4000-8000-000000000001",
       contactBelongsToOrganization: false,
+      contactEmailMatchesRecipient: false,
     });
     expect(result.blockers).toContain("contact_profile_mismatch");
   });

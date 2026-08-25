@@ -108,6 +108,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
           {selected.rows.find((row) => row.id === selectedRowId) ? (
             <LeadContactDateReview
               client={client}
+              key={selectedRowId}
               onSaved={async () => {
                 const refreshed = await client.getBatch(selected.id);
                 setSelected(refreshed);

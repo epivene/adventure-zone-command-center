@@ -41,16 +41,16 @@ describe("importLeadWorkbookSchema", () => {
         contactRole: "Event organizer",
         recipientEmail: "lilupow@aspenfilm.org",
         recipientConfirmed: true,
+        recipientConflictResolved: false,
         introductionSuitable: true,
         eventName: "Aspen Filmfest (Aspen) CO",
         startDate: "2026-09-29",
         endDate: "2026-10-04",
         emailEvidence: { sourceKind: "official_website", sourceReference: "https://aspenfilm.org/contact" },
         dateEvidence: { sourceKind: "official_website", sourceReference: "https://aspenfilm.org/festival" },
-        candidateEmails: ["lilupow@aspenfilm.org"],
       },
     };
     expect(leadReviewConfirmationSchema.safeParse(review).success).toBe(true);
-    expect(leadReviewConfirmationSchema.safeParse({ ...review, decision: { ...review.decision, candidateEmails: Array(21).fill("a@example.com") } }).success).toBe(false);
+    expect(leadReviewConfirmationSchema.safeParse({ ...review, decision: { ...review.decision, candidateEmails: [] } }).success).toBe(false);
   });
 });

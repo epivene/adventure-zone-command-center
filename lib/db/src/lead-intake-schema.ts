@@ -77,6 +77,7 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_state_valid", sql`${table.state} in ('needs_review','needs_correction','verified','skipped')`),
   check("lead_import_rows_review_version_nonnegative", sql`${table.reviewVersion} >= 0`),
   check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual')`),
+  check("lead_import_rows_confirmed_date_range_valid", sql`${table.confirmedStartDate} is null or ${table.confirmedEndDate} is null or ${table.confirmedEndDate} >= ${table.confirmedStartDate}`),
 ]);
 
 export const leadImportEvidence = pgTable("lead_import_evidence", {
@@ -91,6 +92,7 @@ export const leadImportEvidence = pgTable("lead_import_evidence", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   index("lead_import_evidence_row_field_idx").on(table.rowId, table.field),
+  uniqueIndex("lead_import_evidence_one_selected_field").on(table.rowId, table.field).where(sql`${table.selected}`),
   check("lead_import_evidence_field_valid", sql`${table.field} in ('event_dates','recipient_email')`),
   check("lead_import_evidence_source_kind_valid", sql`${table.sourceKind} in ('crm_contact','act_description','official_website','manual')`),
   check("lead_import_evidence_reference_nonblank", sql`btrim(${table.sourceReference}) <> ''`),

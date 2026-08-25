@@ -37,10 +37,22 @@ export async function ensureLeadIntakeSchema(
       to_regclass(current_schema() || '.lead_import_batches') is not null
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
-      and exists (
-        select 1 from information_schema.columns
-        where table_schema = current_schema() and table_name = 'lead_import_rows' and column_name = 'review_version'
+      and (
+        select count(*) = 15 from information_schema.columns
+        where table_schema = current_schema() and table_name = 'lead_import_rows'
+          and column_name = any(array[
+            'review_version', 'selected_organization_id', 'selected_contact_id', 'contact_mode',
+            'confirmed_event_name', 'confirmed_start_date', 'confirmed_end_date', 'confirmed_contact_name',
+            'confirmed_contact_role', 'confirmed_recipient_email', 'recipient_confirmed',
+            'introduction_suitable', 'confirmed_by', 'confirmed_at', 'updated_at'
+          ])
       )
+      and exists (
+        select 1 from pg_constraint
+        where conname = 'lead_import_rows_confirmed_date_range_valid'
+          and conrelid = 'lead_import_rows'::regclass
+      )
+      and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       ) as ready
   `);
   if (marker.rows[0]?.["ready"] === true) return false;

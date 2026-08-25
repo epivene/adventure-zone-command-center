@@ -60,6 +60,8 @@ async function setup() {
       field text not null, candidate_value text not null, source_kind text not null, source_reference text not null,
       selected boolean not null default false, created_by text not null, created_at timestamptz not null default now()
     );
+    create unique index lead_import_evidence_one_selected_field
+      on lead_import_evidence(row_id, field) where selected;
   `);
   const db = drizzle(client, { schema });
   return { client, repository: new LeadIntakeRepository(db as never) };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { LeadContactOption, LeadImportReviewRow, LeadProfileOption } from "@/features/lead-intake/lead-intake-client";
 
 type ReviewClient = {
@@ -33,9 +33,24 @@ export function LeadContactDateReview({
   const [dateSourceKind, setDateSourceKind] = useState("official_website");
   const [dateSource, setDateSource] = useState("");
   const [recipientConfirmed, setRecipientConfirmed] = useState(row.recipientConfirmed);
+  const [recipientConflictResolved, setRecipientConflictResolved] = useState(false);
   const [introductionSuitable, setIntroductionSuitable] = useState(row.introductionSuitable);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setQuery([row.company, row.city, row.region].filter(Boolean).join(" "));
+    setProfiles([]); setProfile(null); setContacts([]);
+    setContactMode("existing"); setContactId("");
+    setEventName(row.confirmedEventName ?? row.company ?? "");
+    setStartDate(row.confirmedStartDate ?? ""); setEndDate(row.confirmedEndDate ?? "");
+    setContactName(row.confirmedContactName ?? ""); setContactRole(row.confirmedContactRole ?? "");
+    setRecipientEmail(row.confirmedRecipientEmail ?? "");
+    setEmailSourceKind("crm_contact"); setEmailSource("");
+    setDateSourceKind("official_website"); setDateSource("");
+    setRecipientConfirmed(row.recipientConfirmed); setRecipientConflictResolved(false);
+    setIntroductionSuitable(row.introductionSuitable); setError("");
+  }, [row.id]);
 
   async function search() {
     if (!query.trim() || busy) return;
@@ -46,7 +61,10 @@ export function LeadContactDateReview({
   }
 
   async function chooseProfile(option: LeadProfileOption) {
-    setProfile(option); setProfiles([]); setBusy(true); setError("");
+    setProfile(option); setProfiles([]); setContacts([]); setBusy(true); setError("");
+    setContactMode("existing"); setContactId(""); setContactName(""); setContactRole("");
+    setRecipientEmail(""); setEmailSourceKind("crm_contact"); setEmailSource("");
+    setRecipientConfirmed(false); setRecipientConflictResolved(false); setIntroductionSuitable(false);
     try { setContacts(await client.listProfileContacts(option.id)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load profile contacts."); }
     finally { setBusy(false); }
@@ -57,6 +75,7 @@ export function LeadContactDateReview({
     if (value === "manual") {
       setContactMode("manual"); setContactName(""); setContactRole(""); setRecipientEmail("");
       setEmailSourceKind("manual"); setEmailSource("");
+      setRecipientConfirmed(false); setRecipientConflictResolved(false); setIntroductionSuitable(false);
       return;
     }
     setContactMode("existing");
@@ -67,13 +86,21 @@ export function LeadContactDateReview({
     setRecipientEmail(contact.email ?? "");
     setEmailSourceKind("crm_contact");
     setEmailSource(`contact:${contact.id}`);
-    setRecipientConfirmed(false);
+    setRecipientConfirmed(false); setRecipientConflictResolved(false); setIntroductionSuitable(false);
   }
+
+  const candidateEmails = [...new Set(contacts.map((item) => item.email?.trim().toLowerCase()).filter((value): value is string => Boolean(value)))];
+  const normalizedRecipient = recipientEmail.trim().toLowerCase();
+  const recipientConflict = contactMode === "manual" && candidateEmails.length > 1 && !candidateEmails.includes(normalizedRecipient);
+  const selectedContact = contacts.find((item) => item.id === contactId);
+  const existingRecipientMatches = contactMode === "manual" || Boolean(
+    selectedContact?.email && selectedContact.email.trim().toLowerCase() === normalizedRecipient,
+  );
 
   const ready = Boolean(
     profile && eventName.trim() && startDate && endDate && contactName.trim() && contactRole.trim() &&
     recipientEmail.trim() && emailSource.trim() && dateSource.trim() && recipientConfirmed && introductionSuitable &&
-    (contactMode === "manual" || contactId),
+    existingRecipientMatches && (!recipientConflict || recipientConflictResolved) && (contactMode === "manual" || contactId),
   );
 
   async function save() {
@@ -90,13 +117,13 @@ export function LeadContactDateReview({
           contactRole: contactRole.trim(),
           recipientEmail: recipientEmail.trim(),
           recipientConfirmed,
+          recipientConflictResolved,
           introductionSuitable,
           eventName: eventName.trim(),
           startDate,
           endDate,
           emailEvidence: { sourceKind: emailSourceKind, sourceReference: emailSource.trim() },
           dateEvidence: { sourceKind: dateSourceKind, sourceReference: dateSource.trim() },
-          candidateEmails: contacts.map((item) => item.email).filter((value): value is string => Boolean(value)),
         },
       });
       await onSaved();
@@ -115,6 +142,7 @@ export function LeadContactDateReview({
       <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Confirmed profile/event name<input aria-label="Confirmed profile/event name" onChange={(event) => setEventName(event.currentTarget.value)} value={eventName}/></label><label className="grid gap-1 text-sm font-semibold">Contact name<input aria-label="Contact name" onChange={(event) => setContactName(event.currentTarget.value)} value={contactName}/></label><label className="grid gap-1 text-sm font-semibold">Event start date<input aria-label="Event start date" onChange={(event) => setStartDate(event.currentTarget.value)} type="date" value={startDate}/></label><label className="grid gap-1 text-sm font-semibold">Event end date<input aria-label="Event end date" onChange={(event) => setEndDate(event.currentTarget.value)} type="date" value={endDate}/></label><label className="grid gap-1 text-sm font-semibold">Contact role<input aria-label="Contact role" onChange={(event) => setContactRole(event.currentTarget.value)} value={contactRole}/></label><label className="grid gap-1 text-sm font-semibold">Recipient email<input aria-label="Recipient email" onChange={(event) => { setRecipientEmail(event.currentTarget.value); setRecipientConfirmed(false); }} type="email" value={recipientEmail}/></label></div>
       <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Date evidence type<select aria-label="Date evidence type" onChange={(event) => setDateSourceKind(event.currentTarget.value)} value={dateSourceKind}><option value="official_website">Official website</option><option value="act_description">ACT description</option><option value="crm_contact">CRM</option><option value="manual">Manual</option></select></label><label className="grid gap-1 text-sm font-semibold">Date source<input aria-label="Date source" onChange={(event) => setDateSource(event.currentTarget.value)} placeholder="URL or record reference" value={dateSource}/></label><label className="grid gap-1 text-sm font-semibold">Email evidence type<select aria-label="Email evidence type" onChange={(event) => setEmailSourceKind(event.currentTarget.value)} value={emailSourceKind}><option value="crm_contact">CRM contact</option><option value="act_description">ACT description</option><option value="official_website">Official website</option><option value="manual">Manual</option></select></label><label className="grid gap-1 text-sm font-semibold">Email source<input aria-label="Email source" onChange={(event) => setEmailSource(event.currentTarget.value)} placeholder="URL or record reference" value={emailSource}/></label></div>
       <label className="flex items-start gap-2 text-sm font-semibold"><input checked={recipientConfirmed} onChange={(event) => setRecipientConfirmed(event.currentTarget.checked)} type="checkbox"/>I confirmed this recipient email</label>
+      {recipientConflict ? <label className="flex items-start gap-2 text-sm font-semibold"><input checked={recipientConflictResolved} onChange={(event) => setRecipientConflictResolved(event.currentTarget.checked)} type="checkbox"/>I reviewed the other profile emails and deliberately selected this recipient</label> : null}
       <label className="flex items-start gap-2 text-sm font-semibold"><input checked={introductionSuitable} onChange={(event) => setIntroductionSuitable(event.currentTarget.checked)} type="checkbox"/>This contact is appropriate for an introduction email</label>
       {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p> : null}
       <button className="button-primary justify-self-start" disabled={!ready || busy} onClick={() => void save()} type="button">{busy ? "Saving…" : "Verify event and contact"}</button>

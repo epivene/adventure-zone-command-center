@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
 
 describe("ensureLeadIntakeSchema", () => {
-  it("does not run migrations when review evidence and versioning already exist", async () => {
+  it("checks every review column plus critical constraints before declaring the schema ready", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ ready: true }] });
     const loadSql = vi.fn();
 
@@ -11,6 +11,9 @@ describe("ensureLeadIntakeSchema", () => {
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
     expect(query.mock.calls[0]?.[0]).toContain("review_version");
+    expect(query.mock.calls[0]?.[0]).toContain("confirmed_recipient_email");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_confirmed_date_range_valid");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_one_selected_field");
     expect(loadSql).not.toHaveBeenCalled();
   });
 

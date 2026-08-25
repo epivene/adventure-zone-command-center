@@ -13,7 +13,7 @@ async function setup() {
   const client = new PGlite();
   await client.exec(`
     create table organizations (id uuid primary key, consolidated_into_id uuid);
-    create table contacts (id uuid primary key);
+    create table contacts (id uuid primary key, email text);
     create table organization_contacts (
       organization_id uuid not null references organizations(id),
       contact_id uuid not null references contacts(id),
@@ -42,8 +42,12 @@ async function setup() {
       field text not null, candidate_value text not null, source_kind text not null, source_reference text not null,
       selected boolean not null default false, created_by text not null, created_at timestamptz not null default now()
     );
+    alter table lead_import_rows add constraint lead_import_rows_confirmed_date_range_valid
+      check (confirmed_start_date is null or confirmed_end_date is null or confirmed_end_date >= confirmed_start_date);
+    create unique index lead_import_evidence_one_selected_field
+      on lead_import_evidence(row_id, field) where selected;
     insert into organizations(id) values ('${organizationId}');
-    insert into contacts(id) values ('${contactId}');
+    insert into contacts(id, email) values ('${contactId}', 'lilupow@aspenfilm.org');
     insert into organization_contacts(organization_id, contact_id) values ('${organizationId}', '${contactId}');
     insert into lead_import_batches(id, original_filename, file_sha256, status, row_count, imported_by)
       values ('40000000-0000-4000-8000-000000000001', 'Week 3.xls', '${"a".repeat(64)}', 'review', 1, 'owner');
@@ -61,13 +65,13 @@ const decision = {
   contactRole: "Event organizer",
   recipientEmail: "lilupow@aspenfilm.org",
   recipientConfirmed: true,
+  recipientConflictResolved: false,
   introductionSuitable: true,
   eventName: "Aspen Filmfest (Aspen) CO",
   startDate: "2026-09-29",
   endDate: "2026-10-04",
   emailEvidence: { sourceKind: "crm_contact" as const, sourceReference: `contact:${contactId}` },
   dateEvidence: { sourceKind: "official_website" as const, sourceReference: "https://aspenfilm.org/festival" },
-  candidateEmails: ["lilupow@aspenfilm.org"],
 };
 
 describe("LeadReviewService", () => {
@@ -101,5 +105,47 @@ describe("LeadReviewService", () => {
     await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision }))
       .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "REVIEW_BLOCKED" });
     expect((await client.query(`select state from lead_import_rows where id='${rowId}'`)).rows).toEqual([{ state: "needs_review" }]);
+  }, 15_000);
+
+  it("does not trust a recipient that differs from the selected existing contact", async () => {
+    const { client, service } = await setup(); clients.push(client);
+    await expect(service.confirm({
+      rowId,
+      expectedVersion: 0,
+      reviewedBy: "Desiree",
+      decision: { ...decision, recipientEmail: "other@aspenfilm.org" },
+    })).rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "REVIEW_BLOCKED" });
+  }, 15_000);
+
+  it("derives conflicting profile emails on the server and requires an explicit manual override", async () => {
+    const { client, service } = await setup(); clients.push(client);
+    const secondContact = "20000000-0000-4000-8000-000000000002";
+    await client.exec(`
+      insert into contacts(id, email) values ('${secondContact}', 'events@aspenfilm.org');
+      insert into organization_contacts(organization_id, contact_id) values ('${organizationId}', '${secondContact}');
+    `);
+    const manual = {
+      ...decision,
+      contactMode: "manual" as const,
+      contactId: null,
+      recipientEmail: "director@aspenfilm.org",
+      emailEvidence: { sourceKind: "official_website" as const, sourceReference: "https://aspenfilm.org/contact" },
+    };
+    await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision: manual }))
+      .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "REVIEW_BLOCKED" });
+    await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision: { ...manual, recipientConflictResolved: true } }))
+      .resolves.toMatchObject({ state: "verified" });
+  }, 15_000);
+
+  it("rolls back the row update if storing evidence fails", async () => {
+    const { client, service } = await setup(); clients.push(client);
+    await client.exec(`
+      create unique index force_evidence_failure on lead_import_evidence(row_id, source_reference);
+      insert into lead_import_evidence(row_id, field, candidate_value, source_kind, source_reference, selected, created_by)
+      values ('${rowId}', 'recipient_email', 'old@example.com', 'manual', 'https://aspenfilm.org/festival', false, 'owner');
+    `);
+    await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision })).rejects.toBeTruthy();
+    expect((await client.query(`select state, review_version from lead_import_rows where id='${rowId}'`)).rows)
+      .toEqual([{ state: "needs_review", review_version: 0 }]);
   }, 15_000);
 });

@@ -41,21 +41,29 @@ export class LeadReviewService {
         .limit(1);
       const profileExists = Boolean(organization);
       let contactBelongsToOrganization = input.decision.contactMode === "manual";
-      if (input.decision.contactMode === "existing" && input.decision.contactId && profileExists) {
-        const [membership] = await tx.select({ contactId: contacts.id }).from(organizationContacts)
+      let contactEmailMatchesRecipient = input.decision.contactMode === "manual";
+      const profileContacts = profileExists
+        ? await tx.select({ contactId: contacts.id, email: contacts.email }).from(organizationContacts)
           .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
           .where(and(
             eq(organizationContacts.organizationId, input.decision.organizationId!),
-            eq(organizationContacts.contactId, input.decision.contactId),
             eq(organizationContacts.active, true),
-          )).limit(1);
+          ))
+        : [];
+      if (input.decision.contactMode === "existing" && input.decision.contactId) {
+        const membership = profileContacts.find((item) => item.contactId === input.decision.contactId);
         contactBelongsToOrganization = Boolean(membership);
+        contactEmailMatchesRecipient = Boolean(
+          membership?.email && membership.email.trim().toLowerCase() === input.decision.recipientEmail.trim().toLowerCase(),
+        );
       }
 
       const review = evaluateLeadReview({
         ...input.decision,
         organizationId: profileExists ? input.decision.organizationId : null,
         contactBelongsToOrganization,
+        contactEmailMatchesRecipient,
+        candidateEmails: profileContacts.map((item) => item.email).filter((value): value is string => Boolean(value)),
       });
       if (!review.verified) {
         throw new LeadReviewServiceError("REVIEW_BLOCKED", "Complete every required review field before verifying this lead.", review.blockers);

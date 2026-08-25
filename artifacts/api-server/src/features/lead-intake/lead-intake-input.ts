@@ -47,12 +47,12 @@ export const leadReviewConfirmationSchema = z.object({
     contactRole: z.string().trim().max(200),
     recipientEmail: z.string().trim().max(320),
     recipientConfirmed: z.boolean(),
+    recipientConflictResolved: z.boolean(),
     introductionSuitable: z.boolean(),
     eventName: z.string().trim().max(500),
     startDate: z.string().trim().max(10),
     endDate: z.string().trim().max(10),
     emailEvidence: evidenceSchema,
     dateEvidence: evidenceSchema,
-    candidateEmails: z.array(z.string().trim().max(320)).max(20).default([]),
   }).strict(),
 }).strict();

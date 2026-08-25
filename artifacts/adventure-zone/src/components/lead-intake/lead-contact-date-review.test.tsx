@@ -62,4 +62,43 @@ describe("LeadContactDateReview", () => {
     })));
     expect(onSaved).toHaveBeenCalled();
   });
+
+  it("clears every prior decision when the reviewer switches to another event row", async () => {
+    const api = client();
+    const view = render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={row} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aspen Filmfest \(Aspen\) CO/ }));
+    fireEvent.change(await screen.findByLabelText("Existing contact"), { target: { value: "contact-1" } });
+    fireEvent.change(screen.getByLabelText("Event start date"), { target: { value: "2026-09-29" } });
+    fireEvent.change(screen.getByLabelText("Event end date"), { target: { value: "2026-10-04" } });
+    fireEvent.change(screen.getByLabelText("Date source"), { target: { value: "https://aspenfilm.org/festival" } });
+    fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+    fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+
+    view.rerender(<LeadContactDateReview client={api} onSaved={vi.fn()} row={{ ...row, id: "row-2", company: "Second Event" }} />);
+
+    expect(screen.getByLabelText("Confirmed profile/event name")).toHaveValue("Second Event");
+    expect(screen.getByLabelText("Event start date")).toHaveValue("");
+    expect(screen.getByLabelText("I confirmed this recipient email")).not.toBeChecked();
+    expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+    expect(screen.queryByText(/Selected profile:/)).not.toBeInTheDocument();
+  });
+
+  it("clears contact-specific approvals when switching to a manual reviewed contact", async () => {
+    const api = client();
+    render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={row} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aspen Filmfest \(Aspen\) CO/ }));
+    const contactSelect = await screen.findByLabelText("Existing contact");
+    fireEvent.change(contactSelect, { target: { value: "contact-1" } });
+    fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+    fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+
+    fireEvent.change(contactSelect, { target: { value: "manual" } });
+
+    expect(screen.getByLabelText("Contact name")).toHaveValue("");
+    expect(screen.getByLabelText("Recipient email")).toHaveValue("");
+    expect(screen.getByLabelText("I confirmed this recipient email")).not.toBeChecked();
+    expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+  });
 });
