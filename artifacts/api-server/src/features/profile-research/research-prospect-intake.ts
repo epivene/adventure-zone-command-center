@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   actContactSyncStates,
+  activities,
   bookingContacts,
   bookings,
   contacts,
@@ -31,11 +32,42 @@ export type ResearchProspectAccepted = {
   contactPhone?: string | null;
 };
 
+export type ResearchProspectNextActionKind = "call" | "email" | "prepare_quote";
+
+export type ResearchProspectScoutNoteSource = {
+  url: string;
+  title: string;
+  publisher: string | null;
+  category: string;
+  retrievedAt: string;
+};
+
+export type ResearchProspectScoutNote = {
+  type: "scout_note";
+  version: 1;
+  runId: string;
+  candidateId: string;
+  createdAt: string;
+  originalQuestion: string;
+  criteriaSummary: string | null;
+  fitScore: number | null;
+  summary: string;
+  positives: string[];
+  cautions: string[];
+  coverageGaps: string[];
+  suggestedNextAction: {
+    kind: ResearchProspectNextActionKind;
+    dueAt: string;
+  };
+  sources: ResearchProspectScoutNoteSource[];
+};
+
 export type ResearchProspectSaveInput = {
   event: RelatedEventOpportunity;
   accepted: ResearchProspectAccepted;
-  nextActionKind: "call" | "email" | "prepare_quote";
+  nextActionKind: ResearchProspectNextActionKind;
   nextActionDueAt: string;
+  scoutNote?: ResearchProspectScoutNote;
 };
 
 const researchProspectValidationCodes = new Set([
@@ -61,9 +93,10 @@ type ResearchProspectStore = {
     booking: {
       status: "new_lead";
       probability: "possible";
-      nextActionKind: ResearchProspectSaveInput["nextActionKind"];
+      nextActionKind: ResearchProspectNextActionKind;
       nextActionDueAt: string;
     };
+    scoutNote?: ResearchProspectScoutNote;
   }): Promise<{ profileId: string; bookingId: string }>;
 };
 
@@ -198,6 +231,21 @@ class DrizzleResearchProspectStore implements ResearchProspectStore {
         });
       }
 
+      if (input.scoutNote) {
+        await transaction.insert(activities).values({
+          organizationId: organization.id,
+          bookingId: booking.id,
+          contactId,
+          kind: "approved_suggestion",
+          subject: "Scout Notes",
+          body: JSON.stringify(input.scoutNote),
+          occurredAt: now,
+          timelineSortAt: now,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
       await transaction.insert(followUps).values({
         organizationId: organization.id,
         bookingId: booking.id,
@@ -252,6 +300,7 @@ export class ResearchProspectIntakeService {
         nextActionKind: input.nextActionKind,
         nextActionDueAt: input.nextActionDueAt,
       },
+      scoutNote: input.scoutNote,
     });
     return { kind: "created", ...created };
   }

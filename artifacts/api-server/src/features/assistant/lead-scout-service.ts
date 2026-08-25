@@ -5,11 +5,16 @@ import {
   PostgresLeadScoutCandidateSaveLinker,
   type LeadScoutCandidateSaveLinker,
 } from "./lead-scout-candidate-save-store";
-import type { LeadDiscoveryInterpretation, LeadScoutRunView } from "./lead-scout-types";
+import type {
+  LeadDiscoveryInterpretation,
+  LeadScoutCandidateView,
+  LeadScoutRunView,
+} from "./lead-scout-types";
 import {
   ResearchProspectIntakeService,
   type ResearchProspectAccepted,
   type ResearchProspectSaveInput,
+  type ResearchProspectScoutNote,
 } from "@/features/profile-research/research-prospect-intake";
 
 type Interpreter = (question: string, now?: Date) => LeadDiscoveryInterpretation;
@@ -50,6 +55,58 @@ export type LeadScoutCandidateSaveResult =
       match: Exclude<Awaited<ReturnType<Intake["create"]>>, { kind: "created" }> extends { match: infer Match } ? Match : never;
       run: LeadScoutRunView;
     };
+
+function uniqueText(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function candidateScoutSources(
+  run: LeadScoutRunView,
+  candidate: LeadScoutCandidateView,
+): ResearchProspectScoutNote["sources"] {
+  const citedSourceIds = new Set(candidate.facts.flatMap((fact) => fact.sourceIds));
+  const candidateWebsite = candidate.website?.trim() ?? "";
+  const sources = run.sources.filter((source) =>
+    citedSourceIds.has(source.id)
+    || (candidateWebsite !== "" && source.url === candidateWebsite),
+  );
+  const byUrl = new Map<string, (typeof sources)[number]>();
+  for (const source of sources) byUrl.set(source.url, source);
+  return [...byUrl.values()].slice(0, 12).map((source) => ({
+    url: source.url,
+    title: source.title,
+    publisher: source.publisher,
+    category: source.category,
+    retrievedAt: source.retrievedAt,
+  }));
+}
+
+function candidateScoutNote(input: {
+  run: LeadScoutRunView;
+  candidate: LeadScoutCandidateView;
+  nextActionKind: ResearchProspectSaveInput["nextActionKind"];
+  nextActionDueAt: string;
+}): ResearchProspectScoutNote {
+  return {
+    type: "scout_note",
+    version: 1,
+    runId: input.run.id,
+    candidateId: input.candidate.id,
+    createdAt: new Date().toISOString(),
+    originalQuestion: input.run.originalQuestion,
+    criteriaSummary: input.run.criteriaSummary,
+    fitScore: input.candidate.fitScore,
+    summary: input.candidate.fitRationale?.trim() || "Scout identified this as a potential booking fit.",
+    positives: uniqueText(input.candidate.fitReasons),
+    cautions: uniqueText(input.candidate.fitCautions),
+    coverageGaps: uniqueText(input.candidate.coverageGaps),
+    suggestedNextAction: {
+      kind: input.nextActionKind,
+      dueAt: input.nextActionDueAt,
+    },
+    sources: candidateScoutSources(input.run, input.candidate),
+  };
+}
 
 export class LeadScoutService {
   private readonly repository: Repository;
@@ -198,6 +255,12 @@ export class LeadScoutService {
       accepted: input.accepted,
       nextActionKind: input.nextActionKind,
       nextActionDueAt: input.nextActionDueAt,
+      scoutNote: candidateScoutNote({
+        run: current,
+        candidate,
+        nextActionKind: input.nextActionKind,
+        nextActionDueAt: input.nextActionDueAt,
+      }),
     });
 
     if (result.kind === "duplicate") {

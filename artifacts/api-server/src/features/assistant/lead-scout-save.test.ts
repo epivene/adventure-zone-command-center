@@ -3,6 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { LeadScoutService } from "./lead-scout-service";
 import type { LeadScoutRunView } from "./lead-scout-types";
 
+const source = {
+  id: "50000000-0000-4000-8000-000000000001",
+  url: "https://example.org/silver-valley-days",
+  title: "Official Silver Valley Days event page",
+  publisher: "Silver Valley Days",
+  category: "official_event" as const,
+  retrievedAt: "2026-08-19T18:05:00.000Z",
+};
+
 const candidate = {
   id: "40000000-0000-4000-8000-000000000001",
   name: "Silver Valley Days",
@@ -23,19 +32,29 @@ const candidate = {
   fitScore: 88,
   fitRationale: "Strong family fit",
   fitReasons: ["family audience"],
-  fitCautions: [],
+  fitCautions: ["Confirm that no inflatable provider is already contracted"],
   crmMatchStatus: "new_prospect" as const,
   matchedOrganizationId: null,
   matchedBookingId: null,
   reviewStatus: "unreviewed" as const,
   enrichmentStatus: "enriched" as const,
-  coverageGaps: [],
+  coverageGaps: ["Power availability has not been verified"],
   enrichmentError: null,
   enrichedAt: "2026-08-19T18:10:00.000Z",
   deepenRequestedAt: null,
   savedOrganizationId: null,
   savedBookingId: null,
-  facts: [],
+  facts: [
+    {
+      id: "60000000-0000-4000-8000-000000000001",
+      key: "family_signal",
+      value: "Family activities are promoted",
+      category: "vendor",
+      confidence: "high" as const,
+      rationale: "The official event page promotes family programming.",
+      sourceIds: [source.id],
+    },
+  ],
 };
 
 function run(overrides: Partial<LeadScoutRunView> = {}): LeadScoutRunView {
@@ -49,7 +68,7 @@ function run(overrides: Partial<LeadScoutRunView> = {}): LeadScoutRunView {
     progress: { label: "Search complete", sourcesChecked: 10, candidatesFound: 1, candidatesEnriched: 1, candidatesCompared: 1 },
     crmMatches: [],
     candidates: [candidate],
-    sources: [],
+    sources: [source],
     startedAt: "2026-08-19T18:00:00.000Z",
     completedAt: "2026-08-19T18:10:00.000Z",
     createdAt: "2026-08-19T18:00:00.000Z",
@@ -86,7 +105,7 @@ const accepted = {
 };
 
 describe("LeadScoutService.saveCandidate", () => {
-  it("uses the latest persisted candidate plus accepted edits and required first action", async () => {
+  it("uses the latest persisted candidate plus accepted edits, required first action, and Scout Notes", async () => {
     const deps = dependencies();
     const service = new LeadScoutService({ repository: deps.repository as never, intake: deps.intake as never, saveLinker: deps.saveLinker });
 
@@ -109,6 +128,28 @@ describe("LeadScoutService.saveCandidate", () => {
       accepted,
       nextActionKind: "call",
       nextActionDueAt: "2026-08-24",
+      scoutNote: expect.objectContaining({
+        type: "scout_note",
+        version: 1,
+        runId: run().id,
+        candidateId: candidate.id,
+        createdAt: expect.any(String),
+        originalQuestion: "Find events in Idaho in September 2026",
+        criteriaSummary: "Idaho · September 2026",
+        fitScore: 88,
+        summary: "Strong family fit",
+        positives: ["family audience"],
+        cautions: ["Confirm that no inflatable provider is already contracted"],
+        coverageGaps: ["Power availability has not been verified"],
+        suggestedNextAction: { kind: "call", dueAt: "2026-08-24" },
+        sources: [{
+          url: source.url,
+          title: source.title,
+          publisher: source.publisher,
+          category: source.category,
+          retrievedAt: source.retrievedAt,
+        }],
+      }),
     });
     expect(deps.saveLinker.markSaved).toHaveBeenCalledWith({
       runId: run().id,
