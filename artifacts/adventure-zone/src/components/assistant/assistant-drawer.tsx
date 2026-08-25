@@ -16,7 +16,6 @@ import {
   getLeadScoutRun,
   saveLeadScoutCandidate,
   startLeadScout,
-  startRadiusLeadScout,
   stopLeadScout,
   type LeadScoutSaveResult,
   type LeadScoutSaveSubmission,
@@ -324,6 +323,7 @@ export function AssistantDrawer() {
             region: scoutPrefill.region,
           }
         : { kind: "manual", label: submission.anchorLabel.trim() };
+      const { startRadiusLeadScout } = await import("@/features/assistant/lead-scout-api");
       const run = await startRadiusLeadScout({
         anchor,
         radiusMiles: submission.radiusMiles,
