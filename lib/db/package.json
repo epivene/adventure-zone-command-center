@@ -17,7 +17,8 @@
     "./resource-source-candidate-schema": "./src/resource-source-candidate-schema.ts",
     "./event-attendance-history-schema": "./src/event-attendance-history-schema.ts",
     "./office-coordinator-schema": "./src/office-coordinator-schema.ts",
-    "./google-workspace-schema": "./src/google-workspace-schema.ts"
+    "./google-workspace-schema": "./src/google-workspace-schema.ts",
+    "./lead-intake-schema": "./src/lead-intake-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
