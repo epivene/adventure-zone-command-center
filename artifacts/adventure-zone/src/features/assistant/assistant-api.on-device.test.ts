@@ -1,23 +1,21 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const auth = vi.hoisted(() => ({
-  apiGet: vi.fn(),
-  apiPost: vi.fn(),
-}));
 const cache = vi.hoisted(() => ({
   getAssistantSnapshot: vi.fn(),
-  saveAssistantSnapshot: vi.fn(),
 }));
 const localAnswer = vi.hoisted(() => ({
   tryOnDeviceSemanticAnswer: vi.fn(),
 }));
+const cloud = vi.hoisted(() => ({
+  askBookingAssistant: vi.fn(),
+}));
 
-vi.mock("@/lib/auth-token", () => auth);
 vi.mock("./assistant-offline-cache", () => cache);
 vi.mock("./on-device-ai-answer", () => localAnswer);
+vi.mock("./assistant-api", () => cloud);
 
-import { askBookingAssistant } from "./assistant-api";
+import { askBookingAssistantLocalFirst } from "./on-device-ai-assistant";
 
 const contextRef = {
   kind: "organization" as const,
@@ -74,25 +72,24 @@ function setOnline(value: boolean) {
   Object.defineProperty(navigator, "onLine", { configurable: true, value });
 }
 
-describe("askBookingAssistant on-device routing", () => {
+describe("local-first booking assistant routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setOnline(true);
     cache.getAssistantSnapshot.mockResolvedValue(cachedSnapshot());
-    cache.saveAssistantSnapshot.mockResolvedValue(undefined);
     localAnswer.tryOnDeviceSemanticAnswer.mockResolvedValue(null);
-    auth.apiPost.mockResolvedValue(cloudResponse());
+    cloud.askBookingAssistant.mockResolvedValue(cloudResponse());
   });
 
   it("uses an exact cached answer before calling cloud", async () => {
-    const result = await askBookingAssistant({
+    const result = await askBookingAssistantLocalFirst({
       context: contextRef,
       question: "Who is the primary contact?",
     });
 
     expect(result.answer.text).toContain("Amy Smith");
     expect(result.answer.mode).toBe("deterministic");
-    expect(auth.apiPost).not.toHaveBeenCalled();
+    expect(cloud.askBookingAssistant).not.toHaveBeenCalled();
     expect(localAnswer.tryOnDeviceSemanticAnswer).not.toHaveBeenCalled();
   });
 
@@ -105,49 +102,49 @@ describe("askBookingAssistant on-device routing", () => {
       needsAdmin: false,
     });
 
-    const result = await askBookingAssistant({
+    const result = await askBookingAssistantLocalFirst({
       context: contextRef,
       question: "Did they ever mention power?",
     });
 
     expect(result.answer.mode).toBe("on_device");
-    expect(auth.apiPost).not.toHaveBeenCalled();
+    expect(cloud.askBookingAssistant).not.toHaveBeenCalled();
   });
 
   it("falls through to cloud when semantic matching is weak", async () => {
     localAnswer.tryOnDeviceSemanticAnswer.mockResolvedValue(null);
-    const result = await askBookingAssistant({
+    const result = await askBookingAssistantLocalFirst({
       context: contextRef,
       question: "Did they ever mention power?",
     });
 
     expect(result.answer.mode).toBe("cloud");
-    expect(auth.apiPost).toHaveBeenCalledTimes(1);
+    expect(cloud.askBookingAssistant).toHaveBeenCalledTimes(1);
   });
 
   it("falls through to cloud when the local layer itself errors", async () => {
     localAnswer.tryOnDeviceSemanticAnswer.mockRejectedValue(new Error("local runtime failed"));
-    const result = await askBookingAssistant({
+    const result = await askBookingAssistantLocalFirst({
       context: contextRef,
       question: "Did they ever mention power?",
     });
 
     expect(result.answer.mode).toBe("cloud");
-    expect(auth.apiPost).toHaveBeenCalledTimes(1);
+    expect(cloud.askBookingAssistant).toHaveBeenCalledTimes(1);
   });
 
   it("does not call cloud while offline after a weak semantic match", async () => {
     setOnline(false);
     localAnswer.tryOnDeviceSemanticAnswer.mockResolvedValue(null);
 
-    const result = await askBookingAssistant({
+    const result = await askBookingAssistantLocalFirst({
       context: contextRef,
       question: "Did they ever mention power?",
     });
 
     expect(result.answer.mode).toBe("offline_cached");
     expect(result.answer.confidence).toBe("low");
-    expect(result.answer.text).toMatch(/couldn't find|saved booking brief|live connection/i);
-    expect(auth.apiPost).not.toHaveBeenCalled();
+    expect(result.answer.text).toMatch(/couldn't find|live connection/i);
+    expect(cloud.askBookingAssistant).not.toHaveBeenCalled();
   });
 });
