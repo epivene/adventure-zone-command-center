@@ -53,6 +53,7 @@ function harness(options: { areaFails?: boolean; geocodeFails?: boolean } = {}) 
       return [
         { name: "Miles City", placeType: "city", latitude: 46.4083, longitude: -105.8406, distanceMiles: 0 },
         { name: "Billings", placeType: "city", latitude: 45.7833, longitude: -108.5007, distanceMiles: 145.2 },
+        { name: "Custer County", placeType: "county", latitude: 46.2, longitude: -105.5, distanceMiles: 20.1 },
       ];
     }),
   };
@@ -61,21 +62,23 @@ function harness(options: { areaFails?: boolean; geocodeFails?: boolean } = {}) 
 }
 
 describe("RadiusLeadScoutService", () => {
-  it("expands the search across named communities inside the selected radius", async () => {
+  it("expands the search across named communities and counties inside the selected radius", async () => {
     const { service, repository, crmSearch } = harness();
 
     const run = await service.create({ actorId: "owner-1", request });
 
     expect(run.criteria?.geoMode).toBe("radius");
     expect(run.criteria?.cities).toEqual(["Miles City", "Billings"]);
+    expect(run.criteria?.eventKeywords).toContain("Custer County events");
     expect((run.criteria as any).radiusScope).toMatchObject({
       radiusMiles: 200,
       searchAreaIncomplete: false,
       anchor: { latitude: 46.4083, longitude: -105.8406 },
     });
-    expect((run.criteria as any).radiusScope.searchPlaces).toHaveLength(2);
+    expect((run.criteria as any).radiusScope.searchPlaces).toHaveLength(3);
     expect(crmSearch.search).toHaveBeenCalledWith(expect.objectContaining({ cities: ["Miles City", "Billings"] }), 10);
     expect(repository.setCrmReady).toHaveBeenCalledTimes(1);
+    expect(run.criteriaSummary).toMatch(/2 communities \+ 1 counties queued/i);
   });
 
   it("falls back to the anchor city when community enumeration is temporarily unavailable", async () => {
