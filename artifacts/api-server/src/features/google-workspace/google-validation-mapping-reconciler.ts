@@ -81,17 +81,18 @@ export class GoogleValidationMappingReconciler {
     const manualResult = await this.pool.query(
       `SELECT message_id,
               thread_id,
+              review_state,
               resolved_organization_id,
               evidence_codes
          FROM google_workspace_validation_review_items
         WHERE connection_id = $1
           AND message_id = ANY($2::text[])
-          AND review_state = 'resolved'
-          AND resolved_organization_id IS NOT NULL`,
+          AND review_state IN ('resolved', 'ignored')`,
       [connectionId, messageIds],
     );
     const manualMappings: ManualMapping[] = manualResult.rows.flatMap((row) => {
       if (
+        row.review_state !== "resolved" ||
         typeof row.message_id !== "string" ||
         typeof row.thread_id !== "string" ||
         typeof row.resolved_organization_id !== "string"
@@ -109,7 +110,11 @@ export class GoogleValidationMappingReconciler {
         evidenceCodes,
       }];
     });
-    const manualIds = new Set(manualMappings.map((row) => row.messageId));
+    const manualDecisionIds = new Set(
+      manualResult.rows.flatMap((row) =>
+        typeof row.message_id === "string" ? [row.message_id] : [],
+      ),
+    );
 
     await this.pool.query(
       `DELETE FROM google_workspace_validation_mappings
@@ -119,7 +124,7 @@ export class GoogleValidationMappingReconciler {
     );
 
     for (const row of input.rows) {
-      if (manualIds.has(row.messageId)) continue;
+      if (manualDecisionIds.has(row.messageId)) continue;
       await this.insertMapping(connectionId, row);
     }
 
