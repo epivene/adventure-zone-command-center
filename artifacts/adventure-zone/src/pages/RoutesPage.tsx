@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch, apiGet, apiPut } from "@/lib/auth-token";
 import { EventMap } from "@/components/routes/event-map";
+import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import type { FocusedTripMapData } from "@/components/routes/manager-route-map-layers";
 import { EquipmentHandoffs, type EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
 import type { LegManagerAccessStatus } from "@/components/routes/travel-leg-editor";
@@ -11,6 +12,7 @@ import { ManagerPreviewMap } from "@/components/routes/manager-preview-map";
 import { ManagerRouteReviewQueue } from "@/components/routes/manager-route-review-queue";
 import { updateTravelLegAction, reorderTravelLegsAction, addTravelLegAction, archiveTravelLegAction, restoreTravelLegAction } from "@/actions/routes";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
+import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 
 export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean };
 
@@ -76,6 +78,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
     if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
     return true;
   }), [data?.events, legId, status, season]);
+  const routeConflicts = useMemo(() => findSameLegDateConflicts(filteredEvents), [filteredEvents]);
 
   if (loading) return <p className="text-slate-500">Loading routes…</p>;
   if (error) return <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div>;
@@ -87,6 +90,7 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
         <div><h2 className={embedded ? "text-xl font-bold" : "text-2xl font-bold"} id="event-map-title">Route Map</h2><p className="mt-1 text-sm text-slate-600">Confirmed and potential route context across the selected season and leg.</p></div>
         <AdminMapViewToggle view={mapView} onChange={setMapView} />
       </div>
+      <RouteConflictWarning conflicts={routeConflicts} />
       {mapView === "manager-preview" ? (
         <div className="grid gap-3"><label className="grid max-w-sm gap-1 text-sm font-semibold">Preview manager<select aria-label="Preview manager" value={previewLegId} onChange={(event) => setPreviewLegId(event.target.value)}>{activeLegs.map((leg: any) => <option key={leg.id} value={leg.id}>{leg.name}</option>)}</select></label><ManagerPreviewMap legId={previewLegId} /></div>
       ) : <EventMap events={filteredEvents} travelLegs={data.travelLegs} handoffs={handoffs} focusedTrip={focusedTrip} focusedTripCoordinates={focusedTripCoordinates} onClearTripFocus={() => setFocusedTrip(null)} />}
