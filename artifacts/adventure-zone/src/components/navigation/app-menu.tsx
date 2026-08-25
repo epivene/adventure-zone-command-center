@@ -110,10 +110,12 @@ export function AddMenu() {
           <span className="hidden xl:inline">Add</span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuItem asChild><Link href="/event-profiles/new">New event</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/contacts/new">New contact</Link></DropdownMenuItem>
-        <DropdownMenuItem asChild><Link href="/calls/workspace?mode=add">New caller</Link></DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuItem asChild><Link href="/event-profiles/new">Add a New Profile</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/profiles">Find a Profile</Link></DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild><Link href="/contacts/new">Add a New Contact</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild><Link href="/contacts">Find a Contact</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

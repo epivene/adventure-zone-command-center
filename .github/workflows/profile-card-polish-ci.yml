@@ -1,4 +1,4 @@
-name: Profile Card Polish CI
+name: Profile UI CI
 
 on:
   pull_request:
@@ -10,11 +10,17 @@ on:
       - "artifacts/api-server/src/features/organizations/restore-profile-locations*"
       - "artifacts/api-server/src/routes/organization-locations.ts"
       - "artifacts/api-server/src/routes/organizations.ts"
+      - "artifacts/adventure-zone/src/components/event-profiles/**"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
+      - "artifacts/adventure-zone/src/lib/profile-draft.ts"
+      - "artifacts/adventure-zone/src/pages/EventProfileNewPage.tsx"
+      - "artifacts/adventure-zone/src/profile-creation-flow.test.ts"
+      - "artifacts/api-server/src/routes/event-profiles.ts"
       - ".github/workflows/profile-card-polish-ci.yml"
   workflow_dispatch:
 
 jobs:
-  profile-card-polish:
+  profile-ui:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +32,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Profile UI and restoration tests
+      - name: Profile UI, creation, draft recovery and restoration tests
         run: >-
           pnpm exec vitest run
           artifacts/api-server/src/features/organizations/restore-profile-locations.pglite.test.ts
@@ -34,6 +40,8 @@ jobs:
           artifacts/adventure-zone/src/components/organizations/possible-locations-drawer.test.tsx
           artifacts/adventure-zone/src/components/organizations/organization-list-card.test.tsx
           artifacts/adventure-zone/src/pages/EventProfilePage.derived-facts.test.ts
+          artifacts/adventure-zone/src/profile-creation-flow.test.ts
+          artifacts/adventure-zone/src/components/event-profiles/event-profile-form.test.tsx
       - name: Workspace typecheck
         run: pnpm run typecheck
       - name: Workspace build
