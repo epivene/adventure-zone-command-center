@@ -1,9 +1,18 @@
-import { GoogleAiRecentValidationService } from "./google-ai-recent-validation-service";
+import {
+  GoogleAiRecentValidationService,
+  type GoogleAiRecentValidationResult,
+} from "./google-ai-recent-validation-service";
 import type { GoogleRecentValidationResult } from "./google-recent-validation-service";
-import { GoogleValidationManualDecisionOverlay } from "./google-validation-manual-decision-overlay";
+import {
+  GoogleValidationManualDecisionOverlay,
+  type GoogleValidationResultLike,
+} from "./google-validation-manual-decision-overlay";
 
-type ValidationAccess = { run(limit: number): Promise<GoogleRecentValidationResult> };
-type OverlayAccess = { apply<T extends GoogleRecentValidationResult>(result: T): Promise<T> };
+type ValidationOutput = GoogleRecentValidationResult | GoogleAiRecentValidationResult;
+type ValidationAccess = { run(limit: number): Promise<ValidationOutput> };
+type OverlayAccess = {
+  apply<T extends GoogleValidationResultLike>(result: T): Promise<T>;
+};
 
 export class GoogleValidationWithManualOverlayService {
   constructor(
@@ -11,7 +20,8 @@ export class GoogleValidationWithManualOverlayService {
     private readonly overlay: OverlayAccess = new GoogleValidationManualDecisionOverlay(),
   ) {}
 
-  async run(limit: number): Promise<GoogleRecentValidationResult> {
-    return this.overlay.apply(await this.base.run(limit));
+  async run(limit: number): Promise<ValidationOutput> {
+    const result = await this.base.run(limit);
+    return this.overlay.apply(result);
   }
 }
