@@ -3,11 +3,12 @@ import { Bot, WifiOff, X } from "lucide-react";
 import { useLocation } from "wouter";
 
 import {
-  askBookingAssistant,
   askGeneralAssistant,
   getLatestAssistantConversation,
   loadAssistantSnapshot,
 } from "@/features/assistant/assistant-api";
+import { askBookingAssistantLocalFirst } from "@/features/assistant/on-device-ai-assistant";
+import type { ClientAssistantAnswer } from "@/features/assistant/on-device-ai-client-types";
 import {
   continueLeadScout,
   deepenLeadScoutCandidate,
@@ -22,7 +23,6 @@ import {
 } from "@/features/assistant/lead-scout-api";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import type {
-  AssistantAnswer,
   AssistantContextBundle,
   AssistantLeadMatch,
   AssistantProfileSearchResult,
@@ -33,6 +33,7 @@ import type {
 import { AssistantMessage } from "./assistant-message";
 import { BookingBriefCard } from "./booking-brief-card";
 import { LeadDiscoveryResults } from "./lead-discovery-results";
+import { OnDeviceAiControl } from "./on-device-ai-control";
 import { ProfileSearchResults } from "./profile-search-results";
 import { ScoutLaunchForm, type RadiusScoutSubmission } from "./scout-launch-form";
 
@@ -56,7 +57,7 @@ export function AssistantDrawer() {
   const [brief, setBrief] = useState<BookingBrief | null>(null);
   const [conversationId, setConversationId] = useState<string | undefined>();
   const [question, setQuestion] = useState("");
-  const [answers, setAnswers] = useState<AssistantAnswer[]>([]);
+  const [answers, setAnswers] = useState<ClientAssistantAnswer[]>([]);
   const [generalResponse, setGeneralResponse] = useState<GeneralAssistantResponse | null>(null);
   const [leadScoutRun, setLeadScoutRun] = useState<LeadScoutRunView | null>(null);
   const [drawerMode, setDrawerMode] = useState<AssistantDrawerMode>("assistant");
@@ -157,7 +158,7 @@ export function AssistantDrawer() {
         }
         return;
       }
-      const result = await askBookingAssistant({ context: activeContext, question: submitted, conversationId });
+      const result = await askBookingAssistantLocalFirst({ context: activeContext, question: submitted, conversationId });
       setContextBundle(result.context); setBrief(result.brief); setOffline(result.answer.mode === "offline_cached");
       if (result.conversationId) setConversationId(result.conversationId);
       setAnswers((current) => [...current, result.answer]);
@@ -261,6 +262,7 @@ export function AssistantDrawer() {
           <button aria-label="Close Booking Assistant" className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900" onClick={closeAssistant} type="button"><X className="h-5 w-5" /></button>
         </header>
         {offline ? <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800"><WifiOff className="h-4 w-4" />Offline — using saved Command Terminal data{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.</div> : null}
+        {activeContext ? <OnDeviceAiControl /> : null}
         <div className="flex-1 overflow-y-auto p-4">
           {generalMode ? (
             <div className="grid gap-4">
