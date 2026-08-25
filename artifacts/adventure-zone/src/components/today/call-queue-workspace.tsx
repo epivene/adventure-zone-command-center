@@ -5,6 +5,7 @@ import {
 } from "react";
 
 import { completeCallAction } from "@/actions/calls";
+import { editFollowUpAction } from "@/actions/follow-ups";
 import {
   createActivityAction,
   editActivityAction,
@@ -208,6 +209,8 @@ export function CallQueueWorkspace({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const [queueActionBusy, setQueueActionBusy] = useState(false);
+  const [queueActionError, setQueueActionError] = useState<string | null>(null);
 
   const selected = queue.find(({ id }) => id === selectedId) ?? null;
 
@@ -256,6 +259,45 @@ export function CallQueueWorkspace({
       active = false;
     };
   }, [selected?.id, focused, retryKey, loadWorkspace]);
+
+  function removeFromLocalQueue(followUpId: string) {
+    const removedIndex = queue.findIndex(({ id }) => id === followUpId);
+    const nextQueue = queue.filter(({ id }) => id !== followUpId);
+    const nextSelected = nextQueue[Math.min(Math.max(removedIndex, 0), Math.max(0, nextQueue.length - 1))] ?? null;
+    setQueue(nextQueue);
+    setTotal((current) => Math.max(0, current - 1));
+    setSelectedId(nextSelected?.id ?? null);
+    setQueueActionError(null);
+  }
+
+  function handleSkip() {
+    if (!selected || queueActionBusy) return;
+    removeFromLocalQueue(selected.id);
+  }
+
+  async function handleDismiss() {
+    if (!selected || queueActionBusy) return;
+    setQueueActionBusy(true);
+    setQueueActionError(null);
+    try {
+      const result = await editFollowUpAction({
+        followUpId: selected.id,
+        kind: selected.kind,
+        dueAt: selected.dueAt,
+        completed: true,
+        outcome: "Dismissed",
+      });
+      if (!result.ok) {
+        setQueueActionError(result.error ?? "Could not dismiss this follow-up.");
+        return;
+      }
+      removeFromLocalQueue(selected.id);
+    } catch {
+      setQueueActionError("Could not dismiss this follow-up. Please try again.");
+    } finally {
+      setQueueActionBusy(false);
+    }
+  }
 
   async function handleComplete(input: any): Promise<CompleteCallResult> {
     if (!selected) return { ok: false, error: "No caller is selected." };
@@ -331,6 +373,25 @@ export function CallQueueWorkspace({
             ) : null}
             <TaskMeta followUp={selected} />
             <CopilotReason copilot={selected.copilot} compact />
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                disabled={queueActionBusy}
+                onClick={handleSkip}
+                type="button"
+              >
+                Skip for now
+              </button>
+              <button
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                disabled={queueActionBusy}
+                onClick={() => void handleDismiss()}
+                type="button"
+              >
+                {queueActionBusy ? "Dismissing…" : "Dismiss"}
+              </button>
+            </div>
+            {queueActionError ? <p className="mt-2 text-sm font-medium text-rose-700" role="alert">{queueActionError}</p> : null}
           </div>
           <button
             className="shrink-0 rounded-lg bg-orange-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-orange-700"
@@ -377,6 +438,11 @@ export function CallQueueWorkspace({
             <TaskMeta followUp={selected} />
           </div>
           <CopilotReason copilot={selected.copilot} compact />
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="button-secondary" disabled={queueActionBusy} onClick={handleSkip} type="button">Skip for now</button>
+            <button className="button-secondary" disabled={queueActionBusy} onClick={() => void handleDismiss()} type="button">{queueActionBusy ? "Dismissing…" : "Dismiss"}</button>
+          </div>
+          {queueActionError ? <p className="mt-2 text-sm font-medium text-rose-700" role="alert">{queueActionError}</p> : null}
         </header>
 
         {loading ? (
