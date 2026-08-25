@@ -42,7 +42,13 @@ type NominatimRow = {
 type OverpassElement = {
   lat?: number;
   lon?: number;
-  tags?: { name?: string; place?: string };
+  center?: { lat?: number; lon?: number };
+  tags?: {
+    name?: string;
+    place?: string;
+    boundary?: string;
+    admin_level?: string;
+  };
 };
 
 type OverpassPayload = { elements?: OverpassElement[] };
@@ -86,7 +92,10 @@ export class ScoutAreaResolver {
 
   async listPlaces(anchor: ScoutPoint, radiusMiles: number, signal?: AbortSignal): Promise<ScoutSearchPlace[]> {
     const radiusMeters = Math.max(1, Math.round(radiusMiles * 1609.344));
-    const query = `[out:json][timeout:25];node["place"~"^(city|town|village|hamlet)$"](around:${radiusMeters},${anchor.latitude},${anchor.longitude});out body;`;
+    const query = `[out:json][timeout:25];(
+      node["place"~"^(city|town|village|hamlet)$"](around:${radiusMeters},${anchor.latitude},${anchor.longitude});
+      relation["boundary"="administrative"]["admin_level"="6"](around:${radiusMeters},${anchor.latitude},${anchor.longitude});
+    );out center tags;`;
     const response = await this.fetchFn("https://overpass-api.de/api/interpreter", {
       method: "POST",
       headers: {
@@ -102,18 +111,30 @@ export class ScoutAreaResolver {
     const unique = new Map<string, ScoutSearchPlace>();
     for (const element of payload.elements ?? []) {
       const name = element.tags?.name?.trim();
-      const placeType = element.tags?.place?.trim();
-      if (!name || !placeType || !Number.isFinite(element.lat) || !Number.isFinite(element.lon)) continue;
-      const point = { latitude: Number(element.lat), longitude: Number(element.lon) };
+      if (!name) continue;
+      const isCounty = element.tags?.boundary === "administrative" && element.tags?.admin_level === "6";
+      const placeType = isCounty ? "county" : element.tags?.place?.trim();
+      if (!placeType) continue;
+      const rawLat = element.lat ?? element.center?.lat;
+      const rawLon = element.lon ?? element.center?.lon;
+      if (!Number.isFinite(rawLat) || !Number.isFinite(rawLon)) continue;
+      const point = { latitude: Number(rawLat), longitude: Number(rawLon) };
       const miles = distanceMiles(anchor, point);
-      if (miles > radiusMiles) continue;
-      const key = name.toLowerCase();
+      // Named communities are point locations and must be inside the circle.
+      // County relations are returned by Overpass because their boundary intersects
+      // the requested circle, so keep them even when the relation center is outside it.
+      if (!isCounty && miles > radiusMiles) continue;
+      const key = `${placeType}:${name.toLowerCase()}`;
       const next: ScoutSearchPlace = { name, placeType, ...point, distanceMiles: miles };
       const current = unique.get(key);
       if (!current || next.distanceMiles < current.distanceMiles) unique.set(key, next);
     }
     return [...unique.values()]
-      .sort((a, b) => a.distanceMiles - b.distanceMiles || a.name.localeCompare(b.name))
-      .slice(0, 120);
+      .sort((a, b) => {
+        if (a.placeType === "county" && b.placeType !== "county") return 1;
+        if (b.placeType === "county" && a.placeType !== "county") return -1;
+        return a.distanceMiles - b.distanceMiles || a.name.localeCompare(b.name);
+      })
+      .slice(0, 160);
   }
 }
