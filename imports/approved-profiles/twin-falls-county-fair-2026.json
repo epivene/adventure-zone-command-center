@@ -1,0 +1,39 @@
+{
+  "event": {
+    "id": null,
+    "name": "Twin Falls County Fair",
+    "city": "Filer",
+    "region": "ID"
+  },
+  "profile": {
+    "placeType": "fair",
+    "description": "2026 county fair prospect. General fair office email: fair@tfcfair.com.",
+    "phone": "208-326-4396",
+    "website": "https://www.tfcfair.com",
+    "address1": "215 Fair Avenue",
+    "address2": "",
+    "postalCode": "83328"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Jerre Christophersen",
+      "phone": "208-326-4396",
+      "email": "jerre@tfcfair.com",
+      "role": "General Manager",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Twin Falls County Fair - 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-02",
+    "endsAt": "2026-09-07",
+    "nextActionKind": "email",
+    "nextActionDueAt": "2026-08-25",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null
+}
