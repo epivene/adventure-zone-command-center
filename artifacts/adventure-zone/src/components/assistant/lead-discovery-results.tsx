@@ -123,8 +123,8 @@ export function LeadDiscoveryResults({
       {visibleCandidates.length ? (
         <section className="grid gap-2">
           <div>
-            <h3 className="font-bold text-slate-950">Web Scout prospects</h3>
-            <p className="mt-0.5 text-xs text-slate-500">These are Scout results, not saved CRM profiles unless they already match Command Center.</p>
+            <h3 className="font-bold text-slate-950">Scout Results</h3>
+            <p className="mt-0.5 text-xs text-slate-500">These are temporary Scout results. They are not saved in Command Center until you create a profile.</p>
           </div>
           {visibleCandidates.map((candidate) => (
             <LeadScoutCandidateCard
@@ -140,14 +140,14 @@ export function LeadDiscoveryResults({
           ))}
         </section>
       ) : run.candidates.some((candidate) => candidate.reviewStatus === "dismissed") ? (
-        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">No Scout prospects remain in this review. Prospects marked Not a fit stay dismissed in this Scout run.</p>
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">No Scout Results remain in this review. Results marked Not a fit stay dismissed in this Scout run.</p>
       ) : null}
 
       {run.status === "crm_ready" ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <p className="font-semibold text-slate-950">Didn't find the right one?</p>
-          <p className="mt-1 text-sm text-slate-600">{webScoutAvailable ? "Search public event sources for new prospects using the same criteria above." : "Web scouting is not enabled yet in this release. Your search criteria have been saved."}</p>
-          <button className="button-secondary mt-3" disabled={!webScoutAvailable} onClick={onFindNewLeads} type="button">Find me new leads</button>
+          <p className="font-semibold text-slate-950">Need more options?</p>
+          <p className="mt-1 text-sm text-slate-600">{webScoutAvailable ? "Start Scout Search to check public event sources for new opportunities using the same criteria above." : "Scout Search is not enabled yet in this release. Your search criteria have been saved."}</p>
+          <button className="button-secondary mt-3" disabled={!webScoutAvailable} onClick={onFindNewLeads} type="button">Start Scout Search</button>
         </section>
       ) : null}
 
