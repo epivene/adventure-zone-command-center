@@ -143,6 +143,13 @@ export function classifyGoogleMessageRelevance(input: {
     for (const candidate of weighted.candidates) addCandidate(candidate);
   }
 
+  // Once the message text points at one or more CRM profiles, contact/domain
+  // relationships are supporting evidence only. They must not auto-attach the
+  // message to a different profile when the event evidence itself is unresolved.
+  const hasEventProfileCandidates = candidates.some(
+    (candidate) => candidate.kind === "profile",
+  );
+
   const mailboxEmails = new Set(
     [...(evidence.mailboxEmails ?? new Set<string>())].map(normalize),
   );
@@ -155,7 +162,10 @@ export function classifyGoogleMessageRelevance(input: {
       addCandidate({ id: contact.id, name: contact.name, kind: "contact" });
     }
   }
-  if (evidenceCodes.includes("exact_contact_email")) {
+  if (
+    evidenceCodes.includes("exact_contact_email") &&
+    !hasEventProfileCandidates
+  ) {
     return { status: "matched", evidenceCodes, candidates };
   }
 
@@ -176,7 +186,9 @@ export function classifyGoogleMessageRelevance(input: {
     const organization = organizationMatches[0];
     evidenceCodes.push("exact_organization_domain");
     addCandidate({ id: organization.id, name: organization.name, kind: "organization" });
-    return { status: "matched", evidenceCodes, candidates };
+    if (!hasEventProfileCandidates) {
+      return { status: "matched", evidenceCodes, candidates };
+    }
   }
 
   const hasApprovedBusinessLabel = message.labelIds.some((id) =>
@@ -194,6 +206,7 @@ export function classifyGoogleMessageRelevance(input: {
   }
 
   if (
+    hasEventProfileCandidates ||
     evidenceCodes.includes("approved_business_label") ||
     evidenceCodes.includes("exact_profile_name_text") ||
     evidenceCodes.includes("ambiguous_profile_name_subject") ||
