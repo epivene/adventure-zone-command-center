@@ -6,6 +6,7 @@ import type {
 import {
   GoogleHistoricalBackfillRepository,
   type GoogleHistoricalBackfillState,
+  type GoogleHistoricalFailedOutcome,
 } from "./google-historical-backfill-repository";
 import {
   GoogleHistoricalMessageClassifier,
@@ -35,6 +36,13 @@ type RepositoryAccess = {
     outcome: "attached" | "ignored" | "needs_review" | "failed" | "skipped";
     organizationId?: string | null;
     errorCode?: string | null;
+  }): Promise<void>;
+  listFailedOutcomes?(limit?: number): Promise<GoogleHistoricalFailedOutcome[]>;
+  applyRetrySummary?(input: {
+    resolvedFailed: number;
+    attached: number;
+    ignored: number;
+    needsReview: number;
   }): Promise<void>;
   finishBatch(input: {
     batchId: string;
@@ -110,6 +118,14 @@ export type GoogleHistoricalBatchResult = {
   state: GoogleHistoricalBackfillState["status"];
 };
 
+export type GoogleHistoricalRetryResult = {
+  attempted: number;
+  attached: number;
+  ignored: number;
+  needsReview: number;
+  failed: number;
+};
+
 export class GoogleHistoricalBackfillService {
   private readonly connection: ConnectionAccess;
   private readonly repository: RepositoryAccess;
@@ -134,6 +150,33 @@ export class GoogleHistoricalBackfillService {
       (options
         ? { copyApprovedThreadAttachments: async () => undefined }
         : new GoogleProfileFileService());
+  }
+
+  private async attach(
+    message: GoogleMessageMetadata,
+    classification: Extract<GoogleHistoricalClassification, { outcome: "attached" }>,
+  ): Promise<void> {
+    await this.validationRepository.upsertRows([{
+      messageId: message.id,
+      threadId: message.threadId,
+      organizationId: classification.organization.id,
+      contactId: null,
+      evidenceCodes: [
+        ...new Set([
+          ...classification.evidenceCodes,
+          "historical_gmail_backfill",
+        ]),
+      ],
+    }]);
+  }
+
+  private async copyThreadFiles(
+    organizationId: string,
+    threadId: string,
+  ): Promise<void> {
+    await this.fileService
+      .copyApprovedThreadAttachments({ organizationId, threadId })
+      .catch(() => undefined);
   }
 
   async runNextBatch(): Promise<GoogleHistoricalBatchResult> {
@@ -224,18 +267,7 @@ export class GoogleHistoricalBackfillService {
 
         if (classification.outcome === "attached") {
           batchThreadTargets.set(message.threadId, classification.organization);
-          await this.validationRepository.upsertRows([{
-            messageId: message.id,
-            threadId: message.threadId,
-            organizationId: classification.organization.id,
-            contactId: null,
-            evidenceCodes: [
-              ...new Set([
-                ...classification.evidenceCodes,
-                "historical_gmail_backfill",
-              ]),
-            ],
-          }]);
+          await this.attach(message, classification);
           await this.repository.recordOutcome({
             batchId,
             messageId: message.id,
@@ -247,12 +279,10 @@ export class GoogleHistoricalBackfillService {
 
           if (!copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
-            await this.fileService
-              .copyApprovedThreadAttachments({
-                organizationId: classification.organization.id,
-                threadId: message.threadId,
-              })
-              .catch(() => undefined);
+            await this.copyThreadFiles(
+              classification.organization.id,
+              message.threadId,
+            );
           }
         } else if (classification.outcome === "needs_review") {
           await this.validationRepository.upsertReviewItems([
@@ -310,5 +340,90 @@ export class GoogleHistoricalBackfillService {
       nextPageAvailable: Boolean(page.nextPageToken),
       state: resultState,
     };
+  }
+
+  async retryFailures(limit = 250): Promise<GoogleHistoricalRetryResult> {
+    if (!this.repository.listFailedOutcomes || !this.repository.applyRetrySummary) {
+      throw new Error("GOOGLE_WORKSPACE_HISTORICAL_RETRY_UNAVAILABLE");
+    }
+    const failures = await this.repository.listFailedOutcomes(limit);
+    if (!failures.length) {
+      return { attempted: 0, attached: 0, ignored: 0, needsReview: 0, failed: 0 };
+    }
+
+    const client = await this.connection.createReadClient();
+    if (!client || !client.getMessageMetadata) {
+      throw new Error("GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_UNAVAILABLE");
+    }
+
+    const result: GoogleHistoricalRetryResult = {
+      attempted: failures.length,
+      attached: 0,
+      ignored: 0,
+      needsReview: 0,
+      failed: 0,
+    };
+    const copiedFileThreads = new Set<string>();
+
+    for (const failure of failures) {
+      try {
+        const message = await client.getMessageMetadata(failure.messageId);
+        const classification = await this.classifier.classify(message, client);
+        if (classification.outcome === "attached") {
+          await this.attach(message, classification);
+          await this.repository.recordOutcome({
+            batchId: failure.batchId,
+            messageId: message.id,
+            threadId: message.threadId,
+            outcome: "attached",
+            organizationId: classification.organization.id,
+          });
+          result.attached += 1;
+          if (!copiedFileThreads.has(message.threadId)) {
+            copiedFileThreads.add(message.threadId);
+            await this.copyThreadFiles(classification.organization.id, message.threadId);
+          }
+        } else if (classification.outcome === "needs_review") {
+          await this.validationRepository.upsertReviewItems([
+            reviewInput(message, classification),
+          ]);
+          await this.repository.recordOutcome({
+            batchId: failure.batchId,
+            messageId: message.id,
+            threadId: message.threadId,
+            outcome: "needs_review",
+          });
+          result.needsReview += 1;
+        } else {
+          await this.repository.recordOutcome({
+            batchId: failure.batchId,
+            messageId: message.id,
+            threadId: message.threadId,
+            outcome: "ignored",
+          });
+          result.ignored += 1;
+        }
+      } catch (error) {
+        const code = safeErrorCode(error);
+        if (isStopError(code)) throw error;
+        result.failed += 1;
+        await this.repository.recordOutcome({
+          batchId: failure.batchId,
+          messageId: failure.messageId,
+          threadId: failure.threadId,
+          outcome: "failed",
+          errorCode: code,
+        });
+      }
+    }
+
+    const resolvedFailed = result.attached + result.ignored + result.needsReview;
+    await this.repository.applyRetrySummary({
+      resolvedFailed,
+      attached: result.attached,
+      ignored: result.ignored,
+      needsReview: result.needsReview,
+    });
+    return result;
   }
 }
