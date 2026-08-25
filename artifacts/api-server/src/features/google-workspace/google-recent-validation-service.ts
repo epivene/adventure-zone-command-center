@@ -116,6 +116,14 @@ type ValidationRepositoryAccess = {
 
 type DrizzleDb = typeof defaultDb;
 
+function emptyLearning(): GoogleValidationLearningSnapshot {
+  return {
+    mailboxEmails: new Set<string>(),
+    threadTargets: new Map(),
+    addressTargets: new Map(),
+  };
+}
+
 function websiteDomain(value: string | null): string | null {
   const raw = value?.trim();
   if (!raw) return null;
@@ -328,7 +336,11 @@ export class GoogleRecentValidationService {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.scope = options?.scope ?? new GoogleScopeService();
     this.evidence = options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
-    this.learning = options?.learning ?? new GoogleValidationLearningRepository();
+    this.learning =
+      options?.learning ??
+      (options
+        ? { load: async () => emptyLearning() }
+        : new GoogleValidationLearningRepository());
     this.contactProfileResolver =
       options?.contactProfileResolver ?? new GoogleContactProfileResolver();
     this.validationRepository =
