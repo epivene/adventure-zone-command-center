@@ -31,6 +31,7 @@ import type {
   AssistantProfileSearchResult,
   BookingBrief,
   GeneralAssistantResponse,
+  LeadScoutCandidate,
   LeadScoutRunView,
 } from "@/features/assistant/assistant-types";
 import { AssistantMessage } from "./assistant-message";
@@ -43,8 +44,8 @@ const generalPrompts = ["Find a profile", "Who needs follow-up?", "Find profiles
 type AssistantDrawerMode = "assistant" | "scout";
 
 type ScoutContextPrefill = {
-  kind: "booking" | "event_family";
-  recordId: string;
+  kind: "booking" | "event_family" | "candidate";
+  recordId?: string;
   label: string;
   city?: string;
   region?: string;
@@ -102,6 +103,21 @@ function contextualScoutPrefill(
   };
 }
 
+function candidateScoutPrefill(candidate: LeadScoutCandidate): ScoutContextPrefill {
+  const startsAt = dateOnly(candidate.startsAt);
+  const endsAt = dateOnly(candidate.endsAt) ?? startsAt;
+  return {
+    kind: "candidate",
+    recordId: candidate.id,
+    label: candidate.name,
+    city: candidate.city ?? undefined,
+    region: candidate.region ?? undefined,
+    initialDateStart: shiftDateOnly(startsAt, -7),
+    initialDateEnd: shiftDateOnly(endsAt, 7),
+    hasLocation: Boolean(candidate.city && candidate.region),
+  };
+}
+
 export function AssistantDrawer() {
   const { activeContext, explicitContext, clearExplicitContext, selectExplicitContext, closeAssistant, isOpen, prefill } = useAssistantContext();
   const [, setLocation] = useLocation();
@@ -112,6 +128,7 @@ export function AssistantDrawer() {
   const [answers, setAnswers] = useState<AssistantAnswer[]>([]);
   const [generalResponse, setGeneralResponse] = useState<GeneralAssistantResponse | null>(null);
   const [leadScoutRun, setLeadScoutRun] = useState<LeadScoutRunView | null>(null);
+  const [scoutRunHistory, setScoutRunHistory] = useState<LeadScoutRunView[]>([]);
   const [drawerMode, setDrawerMode] = useState<AssistantDrawerMode>("assistant");
   const [scoutPrefill, setScoutPrefill] = useState<ScoutContextPrefill | null>(null);
   const [loading, setLoading] = useState(false);
@@ -137,7 +154,7 @@ export function AssistantDrawer() {
   useEffect(() => {
     if (!isOpen) return;
     setAnswers([]); setConversationId(undefined); setContextBundle(null); setBrief(null); setGeneralResponse(null);
-    setLeadScoutRun(null); setError(null); setScoutPollingWarning(null); setOffline(false); setSavedAt(null); setScoutPrefill(null);
+    setLeadScoutRun(null); setScoutRunHistory([]); setError(null); setScoutPollingWarning(null); setOffline(false); setSavedAt(null); setScoutPrefill(null);
     if (activeContext) setDrawerMode("assistant");
 
     let cancelled = false;
@@ -208,6 +225,8 @@ export function AssistantDrawer() {
         if (result.kind === "lead_discovery") {
           setGeneralResponse(null);
           setLeadScoutRun(result.run);
+          setScoutPrefill(null);
+          setScoutRunHistory([]);
           setDrawerMode("scout");
         } else {
           setLeadScoutRun(null);
@@ -325,19 +344,41 @@ export function AssistantDrawer() {
   function launchContextScout() {
     if (!availableContextPrefill) return;
     setScoutPrefill(availableContextPrefill);
+    setScoutRunHistory([]);
     setLeadScoutRun(null);
     setError(availableContextPrefill.hasLocation ? null : "This event has no saved location yet. Enter a city, state, or address before scouting.");
     setDrawerMode("scout");
   }
 
+  function launchCandidateScout(candidate: LeadScoutCandidate) {
+    const nextPrefill = candidateScoutPrefill(candidate);
+    if (leadScoutRun) setScoutRunHistory((current) => [...current, leadScoutRun]);
+    setScoutPrefill(nextPrefill);
+    setLeadScoutRun(null);
+    setError(nextPrefill.hasLocation ? null : "This Scout result needs a city and state before it can be used as a new anchor.");
+    setDrawerMode("scout");
+  }
+
+  function restorePreviousScoutRun() {
+    setScoutRunHistory((current) => {
+      const previous = current[current.length - 1];
+      if (!previous) return current;
+      setLeadScoutRun(previous);
+      setScoutPrefill(null);
+      setError(null);
+      setDrawerMode("scout");
+      return current.slice(0, -1);
+    });
+  }
+
   function useResultAsContext(result: AssistantProfileSearchResult) {
     selectExplicitContext({ kind: result.kind, recordId: result.id, label: result.label });
-    setGeneralResponse(null); setLeadScoutRun(null); setQuestion("");
+    setGeneralResponse(null); setLeadScoutRun(null); setScoutRunHistory([]); setQuestion("");
   }
   function openResult(result: AssistantProfileSearchResult) { clearExplicitContext(); setLocation(resultHref(result)); }
   function useLeadMatchAsContext(match: AssistantLeadMatch) {
     selectExplicitContext({ kind: "organization", recordId: match.organizationId, label: match.label });
-    setGeneralResponse(null); setLeadScoutRun(null); setQuestion("");
+    setGeneralResponse(null); setLeadScoutRun(null); setScoutRunHistory([]); setQuestion("");
   }
   function openLeadMatch(match: AssistantLeadMatch) { clearExplicitContext(); setLocation(`/profiles/${match.organizationId}`); }
 
@@ -345,6 +386,7 @@ export function AssistantDrawer() {
   const generalMode = !activeContext;
   const contextualScoutMode = Boolean(activeContext && drawerMode === "scout");
   const results = generalResponse?.kind === "profile_results" ? generalResponse.results : [];
+  const previousScoutAvailable = scoutRunHistory.length > 0;
 
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-950/25" role="presentation">
@@ -370,14 +412,26 @@ export function AssistantDrawer() {
                   >Ask Assistant</button>
                   <button
                     className={drawerMode === "scout" ? "button-primary" : "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"}
-                    onClick={() => { setScoutPrefill(null); setDrawerMode("scout"); setError(null); }}
+                    onClick={() => { setScoutPrefill(null); setScoutRunHistory([]); setDrawerMode("scout"); setError(null); }}
                     type="button"
                   >Scout Events</button>
                 </div>
                 {drawerMode === "assistant" ? <div className="mt-3 flex flex-wrap gap-2">{generalPrompts.map((prompt) => <button className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100" key={prompt} onClick={() => setQuestion(prompt)} type="button">{prompt}</button>)}</div> : null}
               </div>
 
-              {drawerMode === "scout" && !leadScoutRun ? <ScoutLaunchForm disabled={scoutActionBusy} onSubmit={handleScoutLaunch} /> : null}
+              {drawerMode === "scout" && previousScoutAvailable ? (
+                <button className="button-secondary" onClick={restorePreviousScoutRun} type="button">Back to Previous Scout Results</button>
+              ) : null}
+              {drawerMode === "scout" && !leadScoutRun ? (
+                <ScoutLaunchForm
+                  disabled={scoutActionBusy}
+                  initialAnchor={scoutPrefill?.label ?? ""}
+                  initialDateStart={scoutPrefill?.initialDateStart ?? ""}
+                  initialDateEnd={scoutPrefill?.initialDateEnd ?? ""}
+                  key={scoutPrefill ? `${scoutPrefill.kind}:${scoutPrefill.recordId ?? scoutPrefill.label}` : "general-scout"}
+                  onSubmit={handleScoutLaunch}
+                />
+              ) : null}
               {drawerMode === "assistant" && generalResponse ? <p className="text-sm text-slate-700">{generalResponse.kind === "answer" ? generalResponse.answer.text : generalResponse.text}</p> : null}
               {drawerMode === "scout" && leadScoutRun ? (
                 <LeadDiscoveryResults
@@ -391,6 +445,7 @@ export function AssistantDrawer() {
                   onResearchDeeper={researchDeeper}
                   onNotFit={markNotFit}
                   onSaveCandidate={saveScoutCandidate}
+                  onScoutAroundCandidate={launchCandidateScout}
                 />
               ) : null}
               {drawerMode === "assistant" ? <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} /> : null}
@@ -400,16 +455,19 @@ export function AssistantDrawer() {
           ) : loading ? <p className="py-10 text-center text-sm text-slate-500">Building Booking Brief…</p> : contextualScoutMode ? (
             <div className="grid gap-4">
               <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-700">Scouting around {activeContext?.label ?? "this event"}</p>
-                <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700" onClick={() => { setDrawerMode("assistant"); setError(null); }} type="button">Back to Assistant</button>
+                <p className="text-sm font-semibold text-slate-700">Scouting around {scoutPrefill?.label ?? activeContext?.label ?? "this event"}</p>
+                <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700" onClick={() => { setDrawerMode("assistant"); setScoutRunHistory([]); setError(null); }} type="button">Back to Assistant</button>
               </div>
+              {previousScoutAvailable ? (
+                <button className="button-secondary" onClick={restorePreviousScoutRun} type="button">Back to Previous Scout Results</button>
+              ) : null}
               {!leadScoutRun ? (
                 <ScoutLaunchForm
                   disabled={scoutActionBusy}
                   initialAnchor={scoutPrefill?.label ?? availableContextPrefill?.label ?? ""}
                   initialDateStart={scoutPrefill?.initialDateStart ?? availableContextPrefill?.initialDateStart ?? ""}
                   initialDateEnd={scoutPrefill?.initialDateEnd ?? availableContextPrefill?.initialDateEnd ?? ""}
-                  key={`${activeContext?.kind}:${activeContext?.recordId}:scout`}
+                  key={`${scoutPrefill?.kind ?? activeContext?.kind}:${scoutPrefill?.recordId ?? activeContext?.recordId ?? scoutPrefill?.label ?? "scout"}`}
                   onSubmit={handleScoutLaunch}
                 />
               ) : (
@@ -424,6 +482,7 @@ export function AssistantDrawer() {
                   onResearchDeeper={researchDeeper}
                   onNotFit={markNotFit}
                   onSaveCandidate={saveScoutCandidate}
+                  onScoutAroundCandidate={launchCandidateScout}
                 />
               )}
               {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
