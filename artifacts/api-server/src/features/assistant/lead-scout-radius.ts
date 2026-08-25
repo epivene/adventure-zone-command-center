@@ -1,7 +1,7 @@
 import { PostgresLeadScoutCrmSearch, type LeadScoutCrmSearch } from "./lead-scout-crm-search";
 import { LeadScoutRepository } from "./lead-scout-repository";
 import { ScoutAreaResolver, ScoutGeocoder, type ScoutSearchPlace } from "./scout-geography";
-import type { LeadDiscoveryCriteria, LeadScoutRunView } from "./lead-scout-types";
+import type { LeadDiscoveryCriteria, LeadScoutRunView, RadiusScoutCriteriaScope } from "./lead-scout-types";
 
 export type ScoutEventCategory =
   | "fair"
@@ -35,20 +35,6 @@ export type RadiusScoutRequest = {
   categories: ScoutEventCategory[];
   historyFilter: ScoutHistoryFilter;
 };
-
-export type RadiusScoutScope = {
-  mode: "radius";
-  anchor: RadiusScoutAnchorInput & { latitude: number; longitude: number };
-  radiusMiles: RadiusScoutRequest["radiusMiles"];
-  dateStart: string;
-  dateEnd: string;
-  categories: ScoutEventCategory[];
-  historyFilter: ScoutHistoryFilter;
-  searchPlaces: Array<Pick<ScoutSearchPlace, "name" | "placeType" | "distanceMiles">>;
-  searchAreaIncomplete: boolean;
-};
-
-type RadiusCriteria = LeadDiscoveryCriteria & { radiusScope: RadiusScoutScope };
 
 type Repository = Pick<LeadScoutRepository, "createRun" | "setCriteria" | "setCrmReady" | "getRun" | "setFailed">;
 type Geocoder = Pick<ScoutGeocoder, "resolve">;
@@ -129,7 +115,7 @@ export class RadiusLeadScoutService {
       60,
     );
 
-    const scope: RadiusScoutScope = {
+    const scope: RadiusScoutCriteriaScope = {
       mode: "radius",
       anchor: {
         ...input.request.anchor,
@@ -150,7 +136,7 @@ export class RadiusLeadScoutService {
       })),
       searchAreaIncomplete,
     };
-    const criteria: RadiusCriteria = {
+    const criteria: LeadDiscoveryCriteria = {
       originalQuestion: `Scout ${input.request.radiusMiles} miles around ${input.request.anchor.label}`,
       dateFrom: input.request.dateStart,
       dateThrough: input.request.dateEnd,
