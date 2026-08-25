@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 
 import { GoogleHistoricalBackfillRepository } from "@/features/google-workspace/google-historical-backfill-repository";
 import { GoogleHistoricalBackfillService } from "@/features/google-workspace/google-historical-backfill-service";
+import { GoogleHistoricalOutcomeReconciler } from "@/features/google-workspace/google-historical-outcome-reconciler";
 import { GoogleHistoricalRunLease } from "@/features/google-workspace/google-historical-run-lease";
 import { PostgresGoogleValidationRepository } from "@/features/google-workspace/google-validation-repository";
 
@@ -23,6 +24,10 @@ type LeaseAccess = {
   acquire(): Promise<boolean>;
   heartbeat(): Promise<void>;
   markErrorIfRunning(): Promise<void>;
+};
+
+type ReconcilerAccess = {
+  reconcile(): Promise<unknown>;
 };
 
 type ValidationAccess = {
@@ -72,6 +77,7 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
   repository?: RepositoryAccess;
   service?: ServiceAccess;
   lease?: LeaseAccess;
+  reconciler?: ReconcilerAccess;
   validation?: ValidationAccess;
   syncEnabled?: boolean;
   actorId?: (req: Request) => string;
@@ -80,6 +86,8 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
   const repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
   const service = options?.service ?? new GoogleHistoricalBackfillService();
   const lease = options?.lease ?? new GoogleHistoricalRunLease();
+  const reconciler = options?.reconciler ??
+    (options ? { reconcile: async () => undefined } : new GoogleHistoricalOutcomeReconciler());
   const validation = options?.validation ?? new PostgresGoogleValidationRepository();
   const syncEnabled = options?.syncEnabled ?? syncEnabledFromEnv();
   const actorId = options?.actorId ?? ownerActorId;
@@ -96,7 +104,8 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
     if (state.status === "running" && (await lease.recoverStale())) {
       state = (await repository.getState()) as HistoricalStateView;
     }
-    return state;
+    await reconciler.reconcile();
+    return repository.getState();
   }
 
   async function runOneLeasedBatch(): Promise<unknown> {
