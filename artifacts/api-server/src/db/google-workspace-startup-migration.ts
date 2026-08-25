@@ -170,6 +170,8 @@ export async function ensureGoogleWorkspaceSchema(
             OR (review_state <> 'resolved' AND resolved_organization_id IS NULL)
           )
       );
+      ALTER TABLE google_workspace_validation_review_items ADD COLUMN IF NOT EXISTS reviewed_by text;
+      ALTER TABLE google_workspace_validation_review_items ADD COLUMN IF NOT EXISTS reviewed_at timestamptz;
       CREATE INDEX IF NOT EXISTS google_workspace_validation_review_pending_idx
         ON google_workspace_validation_review_items
           (connection_id, updated_at DESC)
