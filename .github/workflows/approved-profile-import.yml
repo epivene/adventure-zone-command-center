@@ -1,0 +1,54 @@
+name: Approved Profile Import
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "imports/approved-profiles/*.json"
+
+permissions:
+  contents: read
+
+jobs:
+  import-profiles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Import approved profile files
+        env:
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+          API_URL: https://adventure-zone-command-center.onrender.com/api/assistant-import/event-profiles
+          BEFORE_SHA: ${{ github.event.before }}
+          CURRENT_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${ASSISTANT_IMPORT_TOKEN:-}" ]]; then
+            echo "ASSISTANT_IMPORT_TOKEN is not configured."
+            exit 1
+          fi
+
+          mapfile -t files < <(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA" -- 'imports/approved-profiles/*.json')
+
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No approved profile files changed."
+            exit 0
+          fi
+
+          for file in "${files[@]}"; do
+            [[ -f "$file" ]] || continue
+            echo "Importing $file"
+            curl --fail-with-body --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data-binary "@$file" \
+              "$API_URL"
+            echo
+          done
