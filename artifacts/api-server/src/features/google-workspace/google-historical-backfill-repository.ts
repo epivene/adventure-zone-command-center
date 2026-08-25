@@ -330,4 +330,14 @@ export class GoogleHistoricalBackfillRepository {
       [connectionId],
     );
   }
+
+  async markError(_code: string): Promise<void> {
+    const connectionId = await this.connectionId();
+    await this.pool.query(
+      `UPDATE google_workspace_historical_gmail_backfill_state
+          SET status = 'error', updated_at = now()
+        WHERE connection_id = $1`,
+      [connectionId],
+    );
+  }
 }
