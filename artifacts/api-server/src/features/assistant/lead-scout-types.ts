@@ -77,6 +77,31 @@ export type LeadScoutEnrichmentStatus =
   | "enriched"
   | "enrichment_failed";
 
+export type RadiusScoutCriteriaScope = {
+  mode: "radius";
+  anchor: {
+    kind: "booking" | "event_family" | "manual" | "candidate";
+    recordId?: string;
+    label: string;
+    city?: string;
+    region?: string;
+    address?: string;
+    latitude: number;
+    longitude: number;
+  };
+  radiusMiles: 25 | 50 | 100 | 150 | 200 | 300;
+  dateStart: string;
+  dateEnd: string;
+  categories: string[];
+  historyFilter: "all" | "hide_booked" | "hide_booked_and_dismissed";
+  searchPlaces: Array<{
+    name: string;
+    placeType: string;
+    distanceMiles: number;
+  }>;
+  searchAreaIncomplete: boolean;
+};
+
 export type LeadDiscoveryCriteria = {
   originalQuestion: string;
   dateFrom: string | null;
@@ -90,6 +115,7 @@ export type LeadDiscoveryCriteria = {
   legId: string | null;
   eventKeywords: string[];
   fitIntent: "bookable_event" | "vendor_opportunity" | "either";
+  radiusScope?: RadiusScoutCriteriaScope;
 };
 
 export type LeadDiscoveryInterpretation =
