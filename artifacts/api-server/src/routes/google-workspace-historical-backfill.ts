@@ -12,6 +12,7 @@ type RepositoryAccess = {
 
 type ServiceAccess = {
   runNextBatch(): Promise<unknown>;
+  retryFailures(limit?: number): Promise<unknown>;
 };
 
 type ValidationAccess = {
@@ -49,7 +50,10 @@ function statusFor(code: string): number {
     code === "GOOGLE_WORKSPACE_NOT_CONNECTED" ||
     code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
   ) return 409;
-  if (code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_UNAVAILABLE") return 503;
+  if (
+    code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_UNAVAILABLE" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_RETRY_UNAVAILABLE"
+  ) return 503;
   return 500;
 }
 
@@ -93,6 +97,19 @@ export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
       try {
         await requireRunGates();
         res.json(await service.runNextBatch());
+      } catch (error) {
+        const code = safeCode(error);
+        res.status(statusFor(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/historical-gmail/retry-failures",
+    async (_req, res): Promise<void> => {
+      try {
+        await requireRunGates();
+        res.json(await service.retryFailures(250));
       } catch (error) {
         const code = safeCode(error);
         res.status(statusFor(code)).json({ error: code });
