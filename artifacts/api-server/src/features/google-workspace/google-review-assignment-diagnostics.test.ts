@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { GoogleReviewAssignmentDiagnosticService } from "./google-review-assignment-diagnostic-service";
 import { PostgresGoogleValidationRepository } from "./google-validation-repository";
 
 function postgresError(code: string) {
@@ -45,6 +46,24 @@ async function expectDiagnostic(stage: "update" | "mapping" | "audit", expected:
   });
 }
 
+function auditRecordingPool() {
+  const queries: string[] = [];
+  const query = vi.fn(async (text: string) => {
+    queries.push(text);
+    if (text.includes("FROM google_workspace_connections")) {
+      return { rows: [{ id: "connection-id" }] };
+    }
+    if (text.includes("SELECT id") && text.includes("FROM organizations")) {
+      return { rows: [{ id: "org-id" }] };
+    }
+    if (text.includes("UPDATE google_workspace_validation_review_items")) {
+      return { rows: [{ thread_id: "thread-id", evidence_codes: [] }] };
+    }
+    return { rows: [] };
+  });
+  return { query, queries };
+}
+
 describe("Google review assignment diagnostics", () => {
   it("identifies review-row update failures without exposing SQL/data", async () => {
     await expectDiagnostic("update", "GOOGLE_WORKSPACE_REVIEW_UPDATE_FAILED", "42703");
@@ -58,23 +77,8 @@ describe("Google review assignment diagnostics", () => {
     await expectDiagnostic("audit", "GOOGLE_WORKSPACE_REVIEW_AUDIT_FAILED", "42P01");
   });
 
-  it("casts the audit organization id before passing it to jsonb_build_object", async () => {
-    const queries: string[] = [];
-    const pool = {
-      query: vi.fn(async (text: string) => {
-        queries.push(text);
-        if (text.includes("FROM google_workspace_connections")) {
-          return { rows: [{ id: "connection-id" }] };
-        }
-        if (text.includes("SELECT id") && text.includes("FROM organizations")) {
-          return { rows: [{ id: "org-id" }] };
-        }
-        if (text.includes("UPDATE google_workspace_validation_review_items")) {
-          return { rows: [{ thread_id: "thread-id", evidence_codes: [] }] };
-        }
-        return { rows: [] };
-      }),
-    };
+  it("casts the audit organization id in the repository audit query", async () => {
+    const pool = auditRecordingPool();
     const repository = new PostgresGoogleValidationRepository(pool);
 
     await repository.resolveReviewItem({
@@ -84,7 +88,24 @@ describe("Google review assignment diagnostics", () => {
       now: new Date("2026-08-25T14:05:00Z"),
     });
 
-    const auditSql = queries.find((text) =>
+    const auditSql = pool.queries.find((text) =>
+      text.includes("INSERT INTO google_workspace_audit_events"),
+    );
+    expect(auditSql).toContain("jsonb_build_object('organizationId', $3::text)");
+  });
+
+  it("casts the audit organization id in the live diagnostic assignment query", async () => {
+    const pool = auditRecordingPool();
+    const service = new GoogleReviewAssignmentDiagnosticService(pool);
+
+    await service.resolve({
+      messageId: "message-id",
+      organizationId: "org-id",
+      actorId: "owner",
+      now: new Date("2026-08-25T14:05:00Z"),
+    });
+
+    const auditSql = pool.queries.find((text) =>
       text.includes("INSERT INTO google_workspace_audit_events"),
     );
     expect(auditSql).toContain("jsonb_build_object('organizationId', $3::text)");
