@@ -2,6 +2,7 @@ import type { MapEvent } from "@/features/routes/map-data";
 import { businessDateKey } from "@/lib/business-date";
 
 const inactiveStatuses = new Set(["declined", "cancelled", "completed"]);
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type RouteConflictEvent = Pick<
   MapEvent,
@@ -17,11 +18,25 @@ export type RouteConflict = {
   second: RouteConflictEvent;
 };
 
+function shiftBusinessDate(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setTime(date.getTime() + days * DAY_MS);
+  return date.toISOString().slice(0, 10);
+}
+
 function normalizedRange(event: RouteConflictEvent) {
   if (!event.startsAt) return null;
-  const start = businessDateKey(event.startsAt);
+  const eventStart = businessDateKey(event.startsAt);
   const candidateEnd = businessDateKey(event.endsAt ?? event.startsAt);
-  return { start, end: candidateEnd < start ? start : candidateEnd };
+  const eventEnd = candidateEnd < eventStart ? eventStart : candidateEnd;
+
+  // A travel leg is occupied for setup the day before the event and teardown
+  // the day after the event, so conflict detection must use the operational
+  // window rather than only the public event dates.
+  return {
+    start: shiftBusinessDate(eventStart, -1),
+    end: shiftBusinessDate(eventEnd, 1),
+  };
 }
 
 export function findSameLegDateConflicts(events: RouteConflictEvent[]): RouteConflict[] {
