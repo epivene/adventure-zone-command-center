@@ -32,13 +32,13 @@ The user should not have to know which layer answered. The answer metadata can s
 ## Privacy and cost rules
 
 - On-device inference sends no CRM text to Hugging Face or OpenAI after the model files have been downloaded.
-- Model files may be fetched from Hugging Face only after the user explicitly enables On-Device AI.
-- The app must not auto-download a model on first page load.
+- Model/runtime files may be fetched only after the user explicitly enables On-Device AI.
+- The app must not auto-download a model or AI runtime on first page load.
 - No API-key-backed cloud call is made when a local answer is accepted with sufficient confidence.
 - The local layer may only use data already present in the browser's assistant cache or data explicitly passed into the current assistant context.
 - The browser cache remains device-local and disposable.
 
-## Model choice
+## Model and runtime choice
 
 Use Transformers.js in the browser with a small sentence-embedding model suitable for semantic similarity.
 
@@ -48,12 +48,18 @@ Initial model:
 
 Task: `feature-extraction`
 
+Transformers.js runtime:
+
+`https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0`
+
+Version 4.2.0 is pinned rather than floating. Hugging Face documents ES-module CDN loading as a supported browser installation path. Loading the runtime from the CDN avoids modifying the application's pnpm dependency graph and therefore avoids unnecessary risk to Render's frozen-lockfile deployment.
+
 Inference settings:
 
 - pooling: `mean`
 - normalize: `true`
 - default device: WASM/CPU for broad compatibility
-- optional WebGPU may be used automatically only when the runtime reports support and initialization succeeds
+- optional WebGPU may be attempted only when browser support is present and initialization succeeds
 - browser model caching enabled
 
 The model is intentionally small enough for browser use and is not a generative LLM.
@@ -64,7 +70,7 @@ The client exposes a small local-AI runtime state machine:
 
 - `disabled` — user has not enabled local AI on this device.
 - `available` — browser can run the runtime but the model has not been loaded this session.
-- `loading` — model files/runtime are loading.
+- `loading` — runtime/model files are loading.
 - `ready` — embeddings can be generated.
 - `unavailable` — browser/runtime cannot support the model.
 - `error` — initialization failed; cloud/deterministic behavior continues normally.
@@ -106,8 +112,6 @@ Initial intents:
 - `exact_cached_answer`
 - `semantic_cached_search`
 - `cloud_required`
-
-Rules:
 
 ### exact_cached_answer
 
@@ -198,18 +202,22 @@ The local semantic layer does not synthesize unsupported facts. It returns conci
 
 Create a singleton client-side runtime so the model is loaded at most once per page session.
 
-Transformers.js configuration:
+Runtime behavior:
 
-- `env.useBrowserCache = true`
-- `env.allowRemoteModels = true` only while local AI is enabled
-- no model loading during SSR/server work
-- lazy dynamic import so normal app startup does not pay the bundle/runtime initialization cost before local AI is requested
+- lazy dynamic CDN import with Vite ignored for bundling,
+- no runtime/model download until the user presses Enable,
+- browser model caching enabled,
+- remote model loading allowed only while local AI is enabled,
+- no model loading during server-side/non-browser work,
+- normal app startup has zero Transformers.js bundle cost.
+
+The initial enable action requires internet access unless the runtime/model were already retained by browser caches. Later offline availability is best-effort and browser-cache-dependent; deterministic offline answers remain guaranteed independently of the model.
 
 Embeddings for the current snapshot can be memoized in memory using a stable fingerprint of document IDs/text. Persisting embedding vectors to IndexedDB is not required in this release.
 
 ## Dependency and deployment
 
-Add `@huggingface/transformers` to the Adventure Zone frontend package and update `pnpm-lock.yaml` because Render installs with `pnpm install --frozen-lockfile`.
+Do not add `@huggingface/transformers` to package.json in this release. Load the pinned browser ES module from jsDelivr only after explicit enable. This leaves `package.json` and `pnpm-lock.yaml` unchanged and preserves Render's existing `pnpm install --frozen-lockfile` behavior.
 
 No backend dependency or database migration is required.
 
@@ -229,10 +237,10 @@ Do not send `on_device` messages to the existing conversation persistence endpoi
 
 ## Failure handling
 
-- Model download/init failure never blocks the assistant.
+- Runtime/model download or initialization failure never blocks the assistant.
 - Unsupported WebGPU falls back to WASM rather than marking the feature unavailable.
 - Offline + model not previously cached: deterministic offline answers still work; semantic AI reports that the local model is not available offline yet.
-- Corrupt/failed model cache: show a local-AI error and let the user disable/re-enable later.
+- Corrupt/failed browser cache: show a local-AI error and let the user disable/re-enable later.
 - If semantic inference takes longer than a bounded timeout, abandon the local attempt and use the normal cloud path when online.
 
 Initial timeout: 8 seconds per semantic query after the model is ready.
@@ -248,9 +256,9 @@ Initial timeout: 8 seconds per semantic query after the model is ready.
 
 ### Runtime tests
 
-Mock the Transformers.js dynamic import and verify:
+Inject/mock the CDN module loader and verify:
 
-- disabled state never loads the package/model,
+- disabled state never loads the runtime/model,
 - enabling loads once and stores the per-device preference,
 - ready runtime embeds question/documents,
 - failed initialization falls back without throwing through the assistant UI,
@@ -259,7 +267,7 @@ Mock the Transformers.js dynamic import and verify:
 
 ### Assistant integration tests
 
-- existing deterministic offline answers still win before semantic inference,
+- existing deterministic cached answers still win before semantic inference,
 - strong semantic cached match produces an `on_device` answer without calling `/assistant/ask`,
 - weak local match falls through to `/assistant/ask` online,
 - weak local match offline returns a transparent cached answer,
