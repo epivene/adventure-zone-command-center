@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { distanceMiles, ScoutGeocoder, withinRadius } from "./scout-geography";
+import { distanceMiles, ScoutAreaResolver, ScoutGeocoder, withinRadius } from "./scout-geography";
 
 const milesCity = { latitude: 46.4083, longitude: -105.8406 };
 const billings = { latitude: 45.7833, longitude: -108.5007 };
@@ -34,5 +34,19 @@ describe("Scout geography", () => {
   it("returns null when a place cannot be resolved", async () => {
     const fetchFn = vi.fn(async () => new Response("[]", { status: 200, headers: { "content-type": "application/json" } }));
     await expect(new ScoutGeocoder(fetchFn as typeof fetch).resolve("Not a real place")).resolves.toBeNull();
+  });
+
+  it("enumerates named communities inside the selected circle and drops outside points", async () => {
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({ elements: [
+      { lat: 46.4083, lon: -105.8406, tags: { name: "Miles City", place: "city" } },
+      { lat: 45.7833, lon: -108.5007, tags: { name: "Billings", place: "city" } },
+      { lat: 42.5629, lon: -114.4609, tags: { name: "Twin Falls", place: "city" } },
+      { lat: 45.7834, lon: -108.5008, tags: { name: "Billings", place: "town" } },
+    ] }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    const places = await new ScoutAreaResolver(fetchFn as typeof fetch).listPlaces(milesCity, 200);
+
+    expect(places.map((place) => place.name)).toEqual(["Miles City", "Billings"]);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 });
